@@ -1,0 +1,224 @@
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+
+interface FetchOptions extends RequestInit {
+  token?: string;
+}
+
+async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Promise<T> {
+  const { token, headers: extraHeaders, ...rest } = options;
+
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...((extraHeaders as Record<string, string>) || {}),
+  };
+
+  if (token) {
+    headers.Authorization = `Bearer ${token}`;
+  }
+
+  const res = await fetch(`${API_URL}${path}`, { headers, ...rest });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error || `Request failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// ─── Auth ───────────────────────────────────────────────────
+
+export function login(email: string, password: string, tenantSlug: string) {
+  return apiFetch<{ token: string; user: any }>("/api/auth/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password, tenantSlug }),
+  });
+}
+
+export function getMe(token: string) {
+  return apiFetch<{ user: any }>("/api/auth/me", { token });
+}
+
+// ─── Conversations ──────────────────────────────────────────
+
+export function getConversations(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; meta: any }>(`/api/conversations${qs}`, { token });
+}
+
+export function getConversation(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}`, { token });
+}
+
+export function claimConversation(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}/claim`, {
+    token,
+    method: "POST",
+  });
+}
+
+export function releaseConversation(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}/release`, {
+    token,
+    method: "POST",
+  });
+}
+
+export function reassignConversation(token: string, id: string, agentId: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}/reassign`, {
+    token,
+    method: "POST",
+    body: JSON.stringify({ agentId }),
+  });
+}
+
+export function closeConversation(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}/close`, {
+    token,
+    method: "POST",
+  });
+}
+
+// ─── Conversation History ────────────────────────────────────
+
+export function getConversationHistory(token: string, phone: string) {
+  return apiFetch<{ data: any[] }>(`/api/conversations/history/${encodeURIComponent(phone)}`, { token });
+}
+
+// ─── Messages ───────────────────────────────────────────────
+
+export function getMessages(token: string, conversationId: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; meta: any }>(
+    `/api/conversations/${conversationId}/messages${qs}`,
+    { token }
+  );
+}
+
+export function sendMessage(token: string, conversationId: string, body: string) {
+  return apiFetch<{ data: any }>(
+    `/api/conversations/${conversationId}/messages`,
+    { token, method: "POST", body: JSON.stringify({ body }) }
+  );
+}
+
+// ─── Analytics ──────────────────────────────────────────────
+
+export function getDashboardStats(token: string) {
+  return apiFetch<{ data: any }>("/api/analytics/dashboard", { token });
+}
+
+export function getAgentStats(token: string) {
+  return apiFetch<{ data: any[] }>("/api/analytics/agents", { token });
+}
+
+export function getHourlyVolume(token: string, date?: string) {
+  const qs = date ? `?date=${date}` : "";
+  return apiFetch<{ data: any[] }>(`/api/analytics/hourly${qs}`, { token });
+}
+
+export function getDailyVolume(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: any[] }>(`/api/analytics/daily${qs}`, { token });
+}
+
+export function getQueueStats(token: string) {
+  return apiFetch<{ data: any }>("/api/analytics/queue", { token });
+}
+
+// ─── Chatbot Flows ──────────────────────────────────────────
+
+export function getChatbotFlows(token: string) {
+  return apiFetch<any[]>("/api/chatbot-flows", { token });
+}
+
+export function getChatbotFlow(token: string, id: string) {
+  return apiFetch<any>(`/api/chatbot-flows/${id}`, { token });
+}
+
+export function createChatbotFlow(token: string, data: any) {
+  return apiFetch<any>("/api/chatbot-flows", {
+    token,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateChatbotFlow(token: string, id: string, data: any) {
+  return apiFetch<any>(`/api/chatbot-flows/${id}`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteChatbotFlow(token: string, id: string) {
+  return apiFetch<any>(`/api/chatbot-flows/${id}`, { token, method: "DELETE" });
+}
+
+export function activateChatbotFlow(token: string, id: string) {
+  return apiFetch<any>(`/api/chatbot-flows/${id}/activate`, {
+    token,
+    method: "POST",
+  });
+}
+
+export function deactivateChatbotFlow(token: string, id: string) {
+  return apiFetch<any>(`/api/chatbot-flows/${id}`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify({ isActive: false }),
+  });
+}
+
+// ─── Agents ─────────────────────────────────────────────────
+
+export function getAgents(token: string) {
+  return apiFetch<any[]>("/api/agents", { token });
+}
+
+export function createAgent(token: string, data: { name: string; email: string; password: string }) {
+  return apiFetch<any>("/api/agents", {
+    token,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateAgent(token: string, id: string, data: { name?: string; isActive?: boolean }) {
+  return apiFetch<any>(`/api/agents/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Auto-Greeting Settings ────────────────────────────────
+
+export function getAutoGreeting(token: string) {
+  return apiFetch<{ template: string }>("/api/agents/settings/auto-greeting", { token });
+}
+
+export function updateAutoGreeting(token: string, template: string) {
+  return apiFetch<{ template: string }>("/api/agents/settings/auto-greeting", {
+    token,
+    method: "PUT",
+    body: JSON.stringify({ template }),
+  });
+}
+
+// ─── AI Assist ──────────────────────────────────────────────
+
+export function getAISuggestions(token: string, conversationId: string) {
+  return apiFetch<{ data: any[] }>(`/api/ai-assist/${conversationId}/suggestions`, { token });
+}
+
+export function getAISummary(token: string, conversationId: string) {
+  return apiFetch<{ data: { summary: string } }>(`/api/ai-assist/${conversationId}/summary`, { token });
+}
+
+// ─── Workload ───────────────────────────────────────────────
+
+export function getAgentWorkload(token: string) {
+  return apiFetch<{ data: any[] }>("/api/conversations/stats/workload", { token });
+}

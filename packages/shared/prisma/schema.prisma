@@ -1,0 +1,149 @@
+generator client {
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "linux-musl-openssl-3.0.x"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Multi-Tenant ────────────────────────────────────────────
+
+model Tenant {
+  id        String   @id @default(cuid())
+  name      String
+  slug      String   @unique
+  // WhatsApp config per tenant
+  waPhoneNumberId  String?  @map("wa_phone_number_id")
+  waAccessToken    String?  @map("wa_access_token")
+  waWebhookSecret  String?  @map("wa_webhook_secret")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  users         User[]
+  conversations Conversation[]
+  messages      Message[]
+  chatbotFlows  ChatbotFlow[]
+
+  @@map("tenants")
+}
+
+// ─── Auth & RBAC ─────────────────────────────────────────────
+
+enum Role {
+  ADMIN
+  AGENT
+}
+
+model User {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  email     String
+  password  String
+  name      String
+  role      Role     @default(AGENT)
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[] @relation("AssignedAgent")
+
+  @@unique([tenantId, email])
+  @@index([tenantId])
+  @@map("users")
+}
+
+// ─── Conversations ───────────────────────────────────────────
+
+enum ConversationStatus {
+  OPEN
+  WAITING
+  CLOSED
+}
+
+model Conversation {
+  id              String             @id @default(cuid())
+  tenantId        String             @map("tenant_id")
+  customerPhone   String             @map("customer_phone")
+  customerName    String?            @map("customer_name")
+  assignedAgentId String?            @map("assigned_agent_id")
+  status          ConversationStatus @default(OPEN)
+  // Chatbot state tracking
+  chatbotFlowId   String?            @map("chatbot_flow_id")
+  chatbotNodeId   String?            @map("chatbot_node_id")
+  isHandedOver    Boolean            @default(false) @map("is_handed_over")
+  lastMessageAt   DateTime?          @map("last_message_at")
+  closedAt        DateTime?          @map("closed_at")
+  createdAt       DateTime           @default(now()) @map("created_at")
+  updatedAt       DateTime           @updatedAt @map("updated_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  assignedAgent User?       @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  chatbotFlow  ChatbotFlow? @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
+  messages     Message[]
+
+  @@index([tenantId, status])
+  @@index([tenantId, assignedAgentId])
+  @@index([tenantId, customerPhone])
+  @@map("conversations")
+}
+
+// ─── Messages ────────────────────────────────────────────────
+
+enum MessageDirection {
+  INBOUND
+  OUTBOUND
+}
+
+enum MessageStatus {
+  PENDING
+  SENT
+  DELIVERED
+  READ
+  FAILED
+}
+
+model Message {
+  id              String           @id @default(cuid())
+  tenantId        String           @map("tenant_id")
+  conversationId  String           @map("conversation_id")
+  waMessageId     String?          @map("wa_message_id")
+  direction       MessageDirection
+  body            String
+  messageType     String           @default("text") @map("message_type")
+  status          MessageStatus    @default(PENDING)
+  senderName      String?          @map("sender_name")
+  metadata        Json?
+  createdAt       DateTime         @default(now()) @map("created_at")
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, createdAt])
+  @@index([waMessageId])
+  @@index([tenantId])
+  @@map("messages")
+}
+
+// ─── Chatbot Flow Builder ────────────────────────────────────
+
+model ChatbotFlow {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  isActive    Boolean  @default(false) @map("is_active")
+  // JSON definition of the flow graph
+  nodes       Json     @default("[]")
+  edges       Json     @default("[]")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@index([tenantId, isActive])
+  @@map("chatbot_flows")
+}

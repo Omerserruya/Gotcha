@@ -1,0 +1,363 @@
+"use client";
+
+import { useState, useMemo } from "react";
+import clsx from "clsx";
+
+interface CoPilotPanelProps {
+  conversation: any;
+  messages: any[];
+  onInsertReply: (text: string) => void;
+  onClose?: () => void;
+}
+
+// Demo suggested replies based on conversation context
+function getDemoSuggestions(messages: any[], conversation: any): { text: string; label: string; confidence: number }[] {
+  const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
+  const body = (lastInbound?.body || "").toLowerCase();
+
+  if (body.includes("price") || body.includes("cost") || body.includes("how much")) {
+    return [
+      { text: "Our pricing starts at $29/month for the basic plan. Would you like me to send you a detailed breakdown of all our plans?", label: "Pricing info", confidence: 95 },
+      { text: "I'd be happy to help with pricing! Could you tell me a bit more about your needs so I can recommend the best plan?", label: "Discovery", confidence: 88 },
+      { text: "Great question! Let me pull up our current pricing for you. One moment please.", label: "Quick ack", confidence: 82 },
+    ];
+  }
+  if (body.includes("help") || body.includes("issue") || body.includes("problem") || body.includes("broken") || body.includes("not working")) {
+    return [
+      { text: "I'm sorry to hear you're experiencing an issue. Could you describe what's happening in more detail so I can help resolve this quickly?", label: "Empathize & gather info", confidence: 94 },
+      { text: "Thank you for reaching out. Let me look into this right away. Can you share any error messages or screenshots?", label: "Technical follow-up", confidence: 89 },
+      { text: "I understand how frustrating that must be. Let me check our system for any known issues and get back to you.", label: "Investigate", confidence: 85 },
+    ];
+  }
+  if (body.includes("thank") || body.includes("thanks") || body.includes("great")) {
+    return [
+      { text: "You're welcome! Is there anything else I can help you with today?", label: "Positive close", confidence: 96 },
+      { text: "Happy to help! Don't hesitate to reach out if you need anything else.", label: "Friendly close", confidence: 92 },
+    ];
+  }
+  if (body.includes("cancel") || body.includes("refund") || body.includes("stop")) {
+    return [
+      { text: "I understand you'd like to discuss cancellation. Before we proceed, could I learn more about what's not working for you? I'd love the chance to address any concerns.", label: "Retention", confidence: 91 },
+      { text: "I'm sorry to hear that. Let me look into your account and see what options are available. Could you provide your account email?", label: "Process request", confidence: 87 },
+    ];
+  }
+
+  // Default suggestions
+  return [
+    { text: "Thank you for reaching out! How can I assist you today?", label: "Greeting", confidence: 90 },
+    { text: "I'd be happy to help with that. Could you provide a few more details so I can better assist you?", label: "Gather details", confidence: 85 },
+    { text: "Let me look into that for you right away. I'll get back to you shortly.", label: "Acknowledge", confidence: 80 },
+  ];
+}
+
+function getDemoKBResults(query: string): { title: string; snippet: string; source: string }[] {
+  const q = query.toLowerCase();
+  if (q.includes("refund") || q.includes("cancel")) {
+    return [
+      { title: "Refund & Cancellation Policy", snippet: "Customers are eligible for a full refund within 30 days of purchase. After 30 days, pro-rated refunds may be issued...", source: "Policies / Refund Policy" },
+      { title: "How to Process a Cancellation", snippet: "Navigate to Settings > Subscription > Cancel. Ensure all data exports are completed before...", source: "Internal Docs / Procedures" },
+    ];
+  }
+  if (q.includes("pricing") || q.includes("plan")) {
+    return [
+      { title: "Pricing Plans Overview", snippet: "Basic ($29/mo) - Up to 500 conversations. Pro ($79/mo) - Up to 2,000 conversations. Enterprise - Custom pricing...", source: "Sales / Pricing" },
+      { title: "Feature Comparison Table", snippet: "Compare features across Basic, Pro, and Enterprise plans including automation, integrations, and support levels.", source: "Sales / Plans" },
+    ];
+  }
+  if (q.includes("setup") || q.includes("start") || q.includes("install")) {
+    return [
+      { title: "Getting Started Guide", snippet: "Follow these steps to set up your WhatsApp Business integration: 1. Connect your phone number 2. Configure webhooks...", source: "Docs / Quick Start" },
+    ];
+  }
+  if (q.length > 0) {
+    return [
+      { title: "General FAQ", snippet: "Find answers to commonly asked questions about our platform, features, and support options.", source: "Help Center / FAQ" },
+    ];
+  }
+  return [];
+}
+
+function getConversationSummary(messages: any[], conversation: any): string {
+  if (messages.length === 0) return "No messages yet.";
+  const inboundCount = messages.filter((m) => m.direction === "INBOUND").length;
+  const outboundCount = messages.filter((m) => m.direction === "OUTBOUND").length;
+  const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
+
+  let summary = `${messages.length} messages (${inboundCount} from customer, ${outboundCount} from agent).`;
+  if (lastInbound) {
+    const preview = lastInbound.body.length > 80 ? lastInbound.body.slice(0, 80) + "..." : lastInbound.body;
+    summary += ` Last customer message: "${preview}"`;
+  }
+  return summary;
+}
+
+export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }: CoPilotPanelProps) {
+  const [kbQuery, setKbQuery] = useState("");
+  const [kbResults, setKbResults] = useState<{ title: string; snippet: string; source: string }[]>([]);
+  const [activeTab, setActiveTab] = useState<"suggest" | "search">("suggest");
+  const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  const suggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
+  const summary = useMemo(() => getConversationSummary(messages, conversation), [messages, conversation]);
+
+  function handleSearch() {
+    if (!kbQuery.trim()) return;
+    setKbResults(getDemoKBResults(kbQuery));
+  }
+
+  function handleInsert(text: string, idx: number) {
+    onInsertReply(text);
+    setCopiedIdx(idx);
+    setTimeout(() => setCopiedIdx(null), 2000);
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white border-s border-gray-100 flex flex-col h-full animate-slide-in-right">
+      {/* Header */}
+      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2.5">
+        <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center shadow-sm">
+          <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+          </svg>
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-semibold text-gray-900">AI Co-Pilot</p>
+          <p className="text-[10px] text-gray-400">Powered by AI</p>
+        </div>
+        <div className="flex items-center gap-2">
+          <div className="flex items-center gap-0.5">
+            <span className="relative flex h-2 w-2">
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+            </span>
+            <span className="text-[10px] text-green-600 font-medium ml-1">Live</span>
+          </div>
+          {onClose && (
+            <button
+              onClick={onClose}
+              className="md:hidden w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+              aria-label="Close Co-Pilot"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          )}
+        </div>
+      </div>
+
+      {/* Tabs */}
+      <div className="flex border-b border-gray-100">
+        <button
+          onClick={() => setActiveTab("suggest")}
+          className={clsx(
+            "flex-1 py-2.5 text-xs font-medium transition-all relative",
+            activeTab === "suggest"
+              ? "text-primary-600"
+              : "text-gray-400 hover:text-gray-600"
+          )}
+        >
+          Suggestions
+          {activeTab === "suggest" && (
+            <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
+          )}
+        </button>
+        <button
+          onClick={() => setActiveTab("search")}
+          className={clsx(
+            "flex-1 py-2.5 text-xs font-medium transition-all relative",
+            activeTab === "search"
+              ? "text-primary-600"
+              : "text-gray-400 hover:text-gray-600"
+          )}
+        >
+          Knowledge Base
+          {activeTab === "search" && (
+            <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
+          )}
+        </button>
+      </div>
+
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto">
+        {activeTab === "suggest" ? (
+          <div className="p-3 space-y-3">
+            {/* Context summary card */}
+            <div className="bg-gradient-to-br from-primary-50/80 to-violet-50/80 rounded-xl p-3 border border-primary-100/50">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <svg className="w-3.5 h-3.5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                </svg>
+                <span className="text-[10px] font-semibold text-primary-600 uppercase tracking-wider">Context</span>
+              </div>
+              <p className="text-xs text-gray-600 leading-relaxed">{summary}</p>
+            </div>
+
+            {/* Customer info card */}
+            {conversation && (
+              <div className="bg-gray-50 rounded-xl p-3 border border-gray-100">
+                <div className="flex items-center gap-1.5 mb-2">
+                  <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                  </svg>
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Customer</span>
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-400">Name</span>
+                    <span className="text-[11px] font-medium text-gray-700">{conversation.customerName || "Unknown"}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-400">Phone</span>
+                    <span className="text-[11px] font-medium text-gray-700">{conversation.customerPhone}</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-[11px] text-gray-400">Status</span>
+                    <span className={clsx(
+                      "text-[10px] font-medium px-2 py-0.5 rounded-full",
+                      conversation.status === "OPEN" ? "bg-green-50 text-green-600" :
+                      conversation.status === "WAITING" ? "bg-amber-50 text-amber-600" :
+                      "bg-gray-100 text-gray-500"
+                    )}>
+                      {conversation.status}
+                    </span>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* Suggested replies */}
+            <div>
+              <div className="flex items-center gap-1.5 mb-2 px-0.5">
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                </svg>
+                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Suggested Replies</span>
+              </div>
+              <div className="space-y-2">
+                {suggestions.map((s, i) => (
+                  <button
+                    key={i}
+                    onClick={() => handleInsert(s.text, i)}
+                    className="w-full text-start group"
+                  >
+                    <div className={clsx(
+                      "rounded-xl p-3 border transition-all",
+                      copiedIdx === i
+                        ? "bg-green-50 border-green-200"
+                        : "bg-white border-gray-100 hover:border-primary-200 hover:bg-primary-50/50 hover:shadow-sm"
+                    )}>
+                      <div className="flex items-center justify-between mb-1.5">
+                        <span className="text-[10px] font-semibold text-primary-500">{s.label}</span>
+                        <div className="flex items-center gap-1.5">
+                          <div className="flex items-center gap-0.5">
+                            <div className={clsx(
+                              "h-1 rounded-full transition-all",
+                              s.confidence >= 90 ? "bg-green-400 w-4" : s.confidence >= 85 ? "bg-amber-400 w-3" : "bg-gray-300 w-2"
+                            )} />
+                            <span className="text-[9px] text-gray-400">{s.confidence}%</span>
+                          </div>
+                          {copiedIdx === i ? (
+                            <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                            </svg>
+                          ) : (
+                            <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-400 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l6.75-6.75M12 19.5l-6.75-6.75" />
+                            </svg>
+                          )}
+                        </div>
+                      </div>
+                      <p className="text-xs text-gray-600 leading-relaxed">{s.text}</p>
+                    </div>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div className="p-3 space-y-3">
+            {/* Search input */}
+            <div className="relative">
+              <input
+                type="text"
+                value={kbQuery}
+                onChange={(e) => setKbQuery(e.target.value)}
+                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
+                placeholder="Search company docs..."
+                className="w-full pl-9 pr-3 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+              />
+              <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+            </div>
+
+            {/* Quick search tags */}
+            <div className="flex flex-wrap gap-1.5">
+              {["Refund policy", "Pricing plans", "Setup guide"].map((tag) => (
+                <button
+                  key={tag}
+                  onClick={() => { setKbQuery(tag); setKbResults(getDemoKBResults(tag)); }}
+                  className="text-[10px] px-2.5 py-1 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition font-medium"
+                >
+                  {tag}
+                </button>
+              ))}
+            </div>
+
+            {/* Results */}
+            {kbResults.length > 0 ? (
+              <div className="space-y-2">
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-0.5">
+                  {kbResults.length} result{kbResults.length !== 1 ? "s" : ""} found
+                </span>
+                {kbResults.map((r, i) => (
+                  <div key={i} className="bg-white rounded-xl p-3 border border-gray-100 hover:border-primary-200 hover:shadow-sm transition">
+                    <div className="flex items-start gap-2">
+                      <div className="w-6 h-6 bg-primary-50 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
+                        <svg className="w-3 h-3 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-xs font-medium text-gray-900">{r.title}</p>
+                        <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5">{r.snippet}</p>
+                        <p className="text-[10px] text-primary-400 mt-1">{r.source}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ) : kbQuery ? (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                </div>
+                <p className="text-xs text-gray-400">Press Enter to search</p>
+              </div>
+            ) : (
+              <div className="text-center py-8">
+                <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center mx-auto mb-2">
+                  <svg className="w-6 h-6 text-primary-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                  </svg>
+                </div>
+                <p className="text-xs text-gray-400">Search your company knowledge base</p>
+                <p className="text-[10px] text-gray-300 mt-1">Try the quick tags above</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Footer */}
+      <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50">
+        <p className="text-[10px] text-gray-400 text-center">
+          AI suggestions are for reference only. Always review before sending.
+        </p>
+      </div>
+    </div>
+  );
+}

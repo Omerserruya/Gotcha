@@ -1,0 +1,178 @@
+"use client";
+
+import Link from "next/link";
+import Image from "next/image";
+import { usePathname } from "next/navigation";
+import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
+import { Locale, localeConfig } from "@/i18n";
+import clsx from "clsx";
+
+const navItems = [
+  { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
+  { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true },
+  { href: "/chatbot", icon: BotIcon, labelKey: "nav.chatbot", adminOnly: true },
+  { href: "/agents", icon: UsersIcon, labelKey: "nav.agents", adminOnly: true },
+];
+
+interface SidebarProps {
+  collapsed: boolean;
+  onToggle: () => void;
+  onMobileClose?: () => void;
+}
+
+export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
+  const { user, logout } = useAuth();
+  const { t, locale, setLocale } = useI18n();
+  const pathname = usePathname();
+
+  return (
+    <aside
+      className={clsx(
+        "bg-white border-e border-gray-100 flex flex-col shrink-0 h-screen sticky top-0 transition-all duration-300 shadow-float",
+        collapsed ? "w-[68px]" : "w-64"
+      )}
+    >
+      {/* Logo + Collapse toggle */}
+      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
+        <div className="flex items-center gap-3 min-w-0">
+          <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 rounded-xl shrink-0" />
+          {!collapsed && (
+            <Image src="/logo.png" alt="GOTCHA" width={100} height={28} className="h-7 w-auto" />
+          )}
+        </div>
+        {/* Close button on mobile */}
+        {onMobileClose && (
+          <button
+            onClick={onMobileClose}
+            className="md:hidden w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition"
+            aria-label="Close menu"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+        )}
+        {/* Collapse toggle on desktop */}
+        <button
+          onClick={onToggle}
+          className={clsx(
+            "hidden md:flex w-7 h-7 rounded-lg items-center justify-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition",
+            collapsed && "mx-auto mt-2"
+          )}
+          title={collapsed ? "Expand" : "Collapse"}
+        >
+          <svg className={clsx("w-4 h-4 transition-transform", collapsed && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+        </button>
+      </div>
+
+      {/* Navigation */}
+      <nav className="flex-1 py-3 space-y-1 px-2">
+        {navItems
+          .filter((item) => !item.adminOnly || user?.role === "ADMIN")
+          .map((item) => {
+            const isActive = pathname.startsWith(item.href);
+            return (
+              <Link
+                key={item.href}
+                href={item.href}
+                title={collapsed ? t(item.labelKey) : undefined}
+                className={clsx(
+                  "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all",
+                  isActive
+                    ? "bg-primary-50 text-primary-600 font-medium shadow-sm"
+                    : "text-gray-500 hover:text-primary-600 hover:bg-gray-50"
+                )}
+              >
+                <item.icon className="w-5 h-5 shrink-0" />
+                {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
+              </Link>
+            );
+          })}
+      </nav>
+
+      {/* Language switcher */}
+      {!collapsed && (
+        <div className="px-3 pb-2">
+          <select
+            value={locale}
+            onChange={(e) => setLocale(e.target.value as Locale)}
+            className="w-full bg-gray-50 text-gray-600 text-xs rounded-xl px-3 py-2 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-200"
+          >
+            {Object.entries(localeConfig).map(([key, config]) => (
+              <option key={key} value={key}>{config.label}</option>
+            ))}
+          </select>
+        </div>
+      )}
+
+      {/* User & Logout */}
+      <div className="p-3 border-t border-gray-100">
+        <div className={clsx("flex items-center", collapsed ? "justify-center" : "gap-3")}>
+          <div className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
+            {user?.name?.charAt(0).toUpperCase() || "?"}
+          </div>
+          {!collapsed && (
+            <>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-400 truncate">{user?.role}</p>
+              </div>
+              <button
+                onClick={logout}
+                className="text-gray-400 hover:text-red-500 transition p-1 rounded-lg hover:bg-red-50"
+                title={t("nav.logout")}
+              >
+                <LogoutIcon className="w-4.5 h-4.5" />
+              </button>
+            </>
+          )}
+        </div>
+      </div>
+    </aside>
+  );
+}
+
+// ─── Icons ──────────────────────────────────────────────────
+
+function ChatIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+    </svg>
+  );
+}
+
+function DashboardIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25A2.25 2.25 0 0113.5 18v-2.25z" />
+    </svg>
+  );
+}
+
+function BotIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
+    </svg>
+  );
+}
+
+function UsersIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15 19.128a9.38 9.38 0 002.625.372 9.337 9.337 0 004.121-.952 4.125 4.125 0 00-7.533-2.493M15 19.128v-.003c0-1.113-.285-2.16-.786-3.07M15 19.128v.106A12.318 12.318 0 018.624 21c-2.331 0-4.512-.645-6.374-1.766l-.001-.109a6.375 6.375 0 0111.964-3.07M12 6.375a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zm8.25 2.25a2.625 2.625 0 11-5.25 0 2.625 2.625 0 015.25 0z" />
+    </svg>
+  );
+}
+
+function LogoutIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+    </svg>
+  );
+}

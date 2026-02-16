@@ -1,0 +1,223 @@
+services:
+  # ─── Infrastructure ──────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-whatsapp_cc}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── API Gateway ─────────────────────────────────────────
+  gateway:
+    image: nginx:alpine
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+    volumes:
+      - ./nginx/nginx.conf.template:/etc/nginx/nginx.conf.template:ro
+    environment:
+      AUTH_PORT: ${AUTH_PORT:-4001}
+      CONVERSATION_PORT: ${CONVERSATION_PORT:-4002}
+      WEBHOOK_PORT: ${WEBHOOK_PORT:-4003}
+      ANALYTICS_PORT: ${ANALYTICS_PORT:-4004}
+      CHATBOT_PORT: ${CHATBOT_PORT:-4005}
+      AI_PORT: ${AI_PORT:-4006}
+      FRONTEND_PORT: ${FRONTEND_PORT:-3000}
+    command: >
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT'
+      < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
+      && nginx -g 'daemon off;'"
+    depends_on:
+      - auth
+      - conversation
+      - webhook
+      - analytics
+      - chatbot
+      - ai
+      - frontend
+
+  # ─── Microservices ───────────────────────────────────────
+  auth:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${AUTH_PORT:-4001}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  conversation:
+    build:
+      context: .
+      dockerfile: services/conversation/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${CONVERSATION_PORT:-4002}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  webhook:
+    build:
+      context: .
+      dockerfile: services/webhook/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${WEBHOOK_PORT:-4003}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  analytics:
+    build:
+      context: .
+      dockerfile: services/analytics/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${ANALYTICS_PORT:-4004}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  chatbot:
+    build:
+      context: .
+      dockerfile: services/chatbot/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${CHATBOT_PORT:-4005}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  ai:
+    build:
+      context: .
+      dockerfile: services/ai/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${AI_PORT:-4006}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  # ─── Workers (independently scalable) ────────────────────
+  incoming-worker:
+    build:
+      context: .
+      dockerfile: services/incoming-worker/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: ${INCOMING_WORKER_REPLICAS:-1}
+
+  outgoing-worker:
+    build:
+      context: .
+      dockerfile: services/outgoing-worker/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      replicas: ${OUTGOING_WORKER_REPLICAS:-1}
+
+  # ─── DB Migration (run once) ─────────────────────────────
+  migrate:
+    build:
+      context: .
+      dockerfile: services/auth/Dockerfile
+    command: >
+      sh -c "cd /app/packages/shared && npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+    depends_on:
+      db:
+        condition: service_healthy
+    restart: "no"
+
+  # ─── Frontend ────────────────────────────────────────────
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+
+volumes:
+  pgdata:
