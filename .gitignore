@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+
+# Environment
+.env
+.env.*
+!.env.example
+
+# Build outputs
+dist/
+.next/
+out/
+
+# Database
+*.db
+*.sqlite
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
+
+# Docker
+pgdata/
+
+# Prisma
+packages/shared/prisma/*.db
+
+# Coverage
+coverage/

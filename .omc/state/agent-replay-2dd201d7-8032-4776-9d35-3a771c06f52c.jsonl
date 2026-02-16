@@ -1,0 +1,10 @@
+{"t":0,"agent":"a9ae5bc","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a9ae5bc","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":89024}
+{"t":0,"agent":"aab47ec","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"ada27e0","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"afe4973","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"ab061df","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"a9a224a","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:autopilot"}
+{"t":0,"agent":"afc3863","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"afc3863","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":77846}

@@ -1,0 +1,411 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771243137866,
+  "projectRoot": "/home/ocs/projects/ChatCenter",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      }
+    ],
+    "frameworks": [],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "db:generate": "npm run db:generate -w @chatcenter/shared",
+      "db:migrate": "npm run db:migrate -w @chatcenter/shared",
+      "db:seed": "npm run db:seed -w @chatcenter/shared",
+      "db:reset": "npm run db:reset -w @chatcenter/shared",
+      "dev": "docker compose up -d db redis && npm run dev --workspaces --if-present",
+      "docker:up": "docker compose up --build -d",
+      "docker:down": "docker compose down",
+      "test": "npm run test --workspaces --if-present"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": true,
+    "workspaces": [
+      "packages/*",
+      "services/*"
+    ],
+    "mainDirectories": [],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "frontend": {
+      "path": "frontend",
+      "purpose": null,
+      "fileCount": 8,
+      "lastAccessed": 1771243137849,
+      "keyFiles": [
+        "Dockerfile",
+        "next-env.d.ts",
+        "next.config.js",
+        "package-lock.json",
+        "package.json"
+      ]
+    },
+    "nginx": {
+      "path": "nginx",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1771243137849,
+      "keyFiles": [
+        "nginx.conf.template"
+      ]
+    },
+    "packages": {
+      "path": "packages",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1771243137860,
+      "keyFiles": []
+    },
+    "services": {
+      "path": "services",
+      "purpose": "Business logic services",
+      "fileCount": 0,
+      "lastAccessed": 1771243137862,
+      "keyFiles": []
+    },
+    "frontend/node_modules": {
+      "path": "frontend/node_modules",
+      "purpose": "Dependencies",
+      "fileCount": 1,
+      "lastAccessed": 1771243137863,
+      "keyFiles": []
+    },
+    "frontend/public": {
+      "path": "frontend/public",
+      "purpose": "Public files",
+      "fileCount": 3,
+      "lastAccessed": 1771243137863,
+      "keyFiles": [
+        "apple-touch-icon.png",
+        "favicon.ico",
+        "logo.png"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "frontend/src/components/conversations/ChatPanel.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1771252054434,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/conversations/ConversationList.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1771245554015,
+      "type": "file"
+    },
+    {
+      "path": "docker-compose.yml",
+      "accessCount": 5,
+      "lastAccessed": 1771246093035,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/routes/conversations.ts",
+      "accessCount": 4,
+      "lastAccessed": 1771245554645,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/src/index.ts",
+      "accessCount": 4,
+      "lastAccessed": 1771246093580,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/index.ts",
+      "accessCount": 4,
+      "lastAccessed": 1771246094035,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/services/conversation.service.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771245387241,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/lib/api.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771245400879,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/Sidebar.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771245042144,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/prisma/schema.prisma",
+      "accessCount": 2,
+      "lastAccessed": 1771245042553,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/src/routes/webhook.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771245043018,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/src/workers/incoming.worker.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771245043555,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/workers/outgoing.worker.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771245044153,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/conversations/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771245051231,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/conversations/CoPilotPanel.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771245051588,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/context/AuthContext.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771245075610,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771245905687,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 2,
+      "lastAccessed": 1771245906007,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/src/services/chatbot-engine.service.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771245913164,
+      "type": "file"
+    },
+    {
+      "path": "frontend/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771244962252,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src",
+      "accessCount": 1,
+      "lastAccessed": 1771244974101,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/lib/socket.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771244981700,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/lib/socket.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771244992240,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/AppLayout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1771244995287,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/routes/messages.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771244995609,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771244998788,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/auth.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245001629,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/services/message.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245001909,
+      "type": "file"
+    },
+    {
+      "path": "frontend",
+      "accessCount": 1,
+      "lastAccessed": 1771245075805,
+      "type": "directory"
+    },
+    {
+      "path": "services/conversation",
+      "accessCount": 1,
+      "lastAccessed": 1771245076775,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/components/conversations/HistoryPanel.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1771245451257,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1771245904345,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1771245904734,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/lib/queue.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245905287,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771245910933,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/tsconfig.json",
+      "accessCount": 1,
+      "lastAccessed": 1771245911289,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771245911718,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/tsconfig.json",
+      "accessCount": 1,
+      "lastAccessed": 1771245912104,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/lib/event-bus.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245914157,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/src/services/whatsapp.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245918564,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771245961973,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/tsconfig.json",
+      "accessCount": 1,
+      "lastAccessed": 1771245963673,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1771245967112,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245973116,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src/workers/incoming.worker.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245987436,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src/services/whatsapp.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771245993413,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src/services/chatbot-engine.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771246013996,
+      "type": "file"
+    },
+    {
+      "path": "services/outgoing-worker/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771246028250,
+      "type": "file"
+    },
+    {
+      "path": "services/outgoing-worker/tsconfig.json",
+      "accessCount": 1,
+      "lastAccessed": 1771246029847,
+      "type": "file"
+    },
+    {
+      "path": "services/outgoing-worker/Dockerfile",
+      "accessCount": 1,
+      "lastAccessed": 1771246033209,
+      "type": "file"
+    }
+  ],
+  "userDirectives": []
+}
