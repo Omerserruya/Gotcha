@@ -155,6 +155,9 @@ services:
       PORT: ${AI_PORT:-4006}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4o-mini}
     depends_on:
       db:
         condition: service_healthy

@@ -7,7 +7,7 @@ interface I18nContextType {
   locale: Locale;
   dir: Direction;
   setLocale: (locale: Locale) => void;
-  t: (key: string) => string;
+  t: (key: string, vars?: Record<string, string>) => string;
 }
 
 const I18nContext = createContext<I18nContextType>({
@@ -41,7 +41,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const t = useCallback(
-    (key: string) => translate(translations, key),
+    (key: string, vars?: Record<string, string>) => translate(translations, key, vars),
     [translations]
   );
 

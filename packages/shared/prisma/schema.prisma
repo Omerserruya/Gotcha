@@ -25,6 +25,7 @@ model Tenant {
   conversations Conversation[]
   messages      Message[]
   chatbotFlows  ChatbotFlow[]
+  copilotConfig CopilotConfig?
 
   @@map("tenants")
 }
@@ -125,6 +126,27 @@ model Message {
   @@index([waMessageId])
   @@index([tenantId])
   @@map("messages")
+}
+
+// ─── Co-Pilot Configuration (per-tenant AI agent) ───────────
+
+model CopilotConfig {
+  id           String   @id @default(cuid())
+  tenantId     String   @unique @map("tenant_id")
+  systemPrompt String   @default("") @map("system_prompt")
+  rules        Json     @default("[]")
+  tools        Json     @default("[]")
+  model        String   @default("gpt-4o-mini")
+  provider     String   @default("openai")
+  temperature  Float    @default(0.7)
+  maxTokens    Int      @default(1024) @map("max_tokens")
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("copilot_configs")
 }
 
 // ─── Chatbot Flow Builder ────────────────────────────────────

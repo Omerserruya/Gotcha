@@ -5,6 +5,14 @@ import * as aiService from "../services/ai-assist.service";
 const router = Router();
 router.use(authenticate, resolveTenant);
 
+// Static routes BEFORE parameterized routes
+router.get("/config", async (req: Request, res: Response) => {
+  try {
+    const config = await aiService.getTenantCopilotConfig(req.tenantId!);
+    res.json({ data: config });
+  } catch (err) { console.error("AI config error:", err); res.status(500).json({ error: "Failed to get config" }); }
+});
+
 router.get("/:conversationId/suggestions", async (req: Request, res: Response) => {
   try {
     const convId = req.params.conversationId as string;
@@ -17,12 +25,15 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       select: { direction: true, body: true, senderName: true, createdAt: true },
     });
 
+    const copilotConfig = await aiService.getTenantCopilotConfig(req.tenantId!);
+
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
       messages: messages.reverse().map((m: any) => ({
         direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
       })),
+      copilotConfig,
     };
     const suggestions = await aiService.getSuggestions(context);
     res.json({ data: suggestions });
@@ -41,12 +52,15 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       select: { direction: true, body: true, senderName: true, createdAt: true },
     });
 
+    const copilotConfig = await aiService.getTenantCopilotConfig(req.tenantId!);
+
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
       messages: messages.map((m: any) => ({
         direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
       })),
+      copilotConfig,
     };
     const summary = await aiService.summarizeConversation(context);
     res.json({ data: { summary } });

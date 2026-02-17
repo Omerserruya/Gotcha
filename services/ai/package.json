@@ -9,7 +9,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@chatcenter/shared": "*"
+    "@chatcenter/shared": "*",
+    "openai": "^6.22.0"
   },
   "devDependencies": {
     "@types/supertest": "^6.0.3",

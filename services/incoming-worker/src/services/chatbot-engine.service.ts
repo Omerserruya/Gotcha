@@ -111,6 +111,15 @@ async function executeFromNode(nodeId: string, flow: FlowDefinition, tenantId: s
       }
       case "handover": {
         await prisma.conversation.update({ where: { id: conversationId }, data: { isHandedOver: true, chatbotNodeId: null, status: "WAITING" } });
+        // System divider: bot transferred to agent queue
+        await prisma.message.create({
+          data: {
+            tenantId, conversationId, direction: "INBOUND",
+            body: "", messageType: "system", senderName: "System",
+            status: "DELIVERED",
+            metadata: { systemEvent: "bot_handover" },
+          },
+        });
         return true;
       }
       case "end": {

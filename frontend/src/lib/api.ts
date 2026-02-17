@@ -207,6 +207,20 @@ export function updateAutoGreeting(token: string, template: string) {
   });
 }
 
+// ─── Copilot Settings ───────────────────────────────────────
+
+export function getCopilotSettings(token: string) {
+  return apiFetch<any>("/api/agents/settings/copilot", { token });
+}
+
+export function updateCopilotSettings(token: string, data: any) {
+  return apiFetch<any>("/api/agents/settings/copilot", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── AI Assist ──────────────────────────────────────────────
 
 export function getAISuggestions(token: string, conversationId: string) {

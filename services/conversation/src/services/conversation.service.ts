@@ -67,43 +67,14 @@ export async function claim(tenantId: string, conversationId: string, agentId: s
     include: { assignedAgent: { select: { id: true, name: true, email: true } } },
   });
 
+  // System divider: agent claimed
+  const agentName = updated.assignedAgent?.name || "Agent";
+  await createSystemMessage(tenantId, conversationId, "agent_claimed", { agentName });
+
   emitToTenant(tenantId, "conversation:updated", updated);
 
-  // Auto-greeting: check tenant settings stored in Redis
-  try {
-    const { getRedis } = await import("@chatcenter/shared");
-    const redis = getRedis();
-    const template = await redis.get(`tenant:${tenantId}:autoGreeting`);
-    if (template) {
-      const agent = await prisma.user.findUnique({ where: { id: agentId }, select: { name: true } });
-      const greeting = template.replace(/\{agentName\}/g, agent?.name || "Agent");
-
-      const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-      if (tenant?.waPhoneNumberId && tenant?.waAccessToken) {
-        const message = await messageService.create({
-          tenantId,
-          conversationId,
-          direction: "OUTBOUND",
-          body: greeting,
-          senderName: agent?.name || "System",
-        });
-
-        await outgoingMessageQueue.add("send", {
-          tenantId,
-          conversationId,
-          customerPhone: conversation.customerPhone,
-          phoneNumberId: tenant.waPhoneNumberId,
-          accessToken: tenant.waAccessToken,
-          body: greeting,
-          messageType: "text",
-          senderName: agent?.name || "System",
-          messageId: message.id,
-        }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
-      }
-    }
-  } catch (err) {
-    console.error("Auto-greeting error (non-fatal):", err);
-  }
+  // Auto-greeting
+  await sendAutoGreeting(tenantId, conversationId, agentId, conversation.customerPhone);
 
   return updated;
 }
@@ -123,10 +94,16 @@ export async function release(tenantId: string, conversationId: string) {
 }
 
 export async function reassign(tenantId: string, conversationId: string, newAgentId: string) {
-  const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
+  const conversation = await prisma.conversation.findFirst({
+    where: { id: conversationId, tenantId },
+    include: { assignedAgent: { select: { name: true } } },
+  });
   if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
-  const agent = await prisma.user.findFirst({ where: { id: newAgentId, tenantId } });
-  if (!agent) throw Object.assign(new Error("Agent not found"), { status: 404 });
+  const newAgent = await prisma.user.findFirst({ where: { id: newAgentId, tenantId } });
+  if (!newAgent) throw Object.assign(new Error("Agent not found"), { status: 404 });
+
+  const fromAgentName = (conversation as any).assignedAgent?.name || "Unknown";
+  const toAgentName = newAgent.name;
 
   const updated = await prisma.conversation.update({
     where: { id: conversationId },
@@ -134,7 +111,14 @@ export async function reassign(tenantId: string, conversationId: string, newAgen
     include: { assignedAgent: { select: { id: true, name: true, email: true } } },
   });
 
+  // System divider: conversation transferred
+  await createSystemMessage(tenantId, conversationId, "agent_transferred", { fromAgentName, toAgentName });
+
   emitToTenant(tenantId, "conversation:updated", updated);
+
+  // Auto-greeting from the new agent
+  await sendAutoGreeting(tenantId, conversationId, newAgentId, conversation.customerPhone);
+
   return updated;
 }
 
@@ -184,4 +168,71 @@ export async function getHistoryByPhone(tenantId: string, customerPhone: string)
 function emitToTenant(tenantId: string, event: string, data: any) {
   try { getIO().to(`tenant:${tenantId}`).emit(event, data); } catch {}
   publishEvent({ event, tenantId, data }).catch(() => {});
+}
+
+// ─── System divider messages ────────────────────────────────
+
+async function createSystemMessage(
+  tenantId: string,
+  conversationId: string,
+  systemEvent: string,
+  eventData: Record<string, string>,
+) {
+  try {
+    await messageService.create({
+      tenantId,
+      conversationId,
+      direction: "INBOUND",
+      body: "",
+      messageType: "system",
+      senderName: "System",
+      metadata: { systemEvent, ...eventData },
+    });
+  } catch (err) {
+    console.error("System message error (non-fatal):", err);
+  }
+}
+
+// ─── Auto-greeting helper ───────────────────────────────────
+
+async function sendAutoGreeting(
+  tenantId: string,
+  conversationId: string,
+  agentId: string,
+  customerPhone: string,
+) {
+  try {
+    const { getRedis } = await import("@chatcenter/shared");
+    const redis = getRedis();
+    const template = await redis.get(`tenant:${tenantId}:autoGreeting`);
+    if (!template) return;
+
+    const agent = await prisma.user.findUnique({ where: { id: agentId }, select: { name: true } });
+    const greeting = template.replace(/\{agentName\}/g, agent?.name || "Agent");
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) return;
+
+    const message = await messageService.create({
+      tenantId,
+      conversationId,
+      direction: "OUTBOUND",
+      body: greeting,
+      senderName: agent?.name || "System",
+    });
+
+    await outgoingMessageQueue.add("send", {
+      tenantId,
+      conversationId,
+      customerPhone,
+      phoneNumberId: tenant.waPhoneNumberId,
+      accessToken: tenant.waAccessToken,
+      body: greeting,
+      messageType: "text",
+      senderName: agent?.name || "System",
+      messageId: message.id,
+    }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+  } catch (err) {
+    console.error("Auto-greeting error (non-fatal):", err);
+  }
 }

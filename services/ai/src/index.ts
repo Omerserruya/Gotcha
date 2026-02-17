@@ -1,5 +1,19 @@
 import { createServiceApp, startService } from "@chatcenter/shared";
 import aiAssistRoutes from "./routes/ai-assist";
+import { setProvider } from "./services/ai-assist.service";
+import { OpenAIProvider } from "./services/openai.provider";
+
+// Initialize AI provider from env
+if (process.env.OPENAI_API_KEY) {
+  setProvider(new OpenAIProvider(
+    process.env.OPENAI_API_KEY,
+    process.env.OPENAI_BASE_URL || undefined,
+    process.env.OPENAI_DEFAULT_MODEL || undefined,
+  ));
+  console.log("AI provider: OpenAI initialized (model: %s)", process.env.OPENAI_DEFAULT_MODEL || "gpt-4o-mini");
+} else {
+  console.warn("AI provider: No OPENAI_API_KEY set — using stub provider");
+}
 
 const config = { name: "ai-service", port: parseInt(process.env.PORT || "4006", 10) };
 const app = createServiceApp(config);

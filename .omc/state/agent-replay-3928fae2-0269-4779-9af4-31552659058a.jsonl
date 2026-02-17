@@ -12,3 +12,12 @@
 {"t":0,"agent":"a9c5e93","agent_type":"unknown","event":"agent_stop","success":true}
 {"t":0,"agent":"ac29af9","agent_type":"unknown","event":"agent_stop","success":true}
 {"t":0,"agent":"aa69b73","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"system","event":"keyword_detected","keyword":"autopilot"}
+{"t":0,"agent":"system","event":"mode_change","mode_from":"none","mode_to":"autopilot"}
+{"t":0,"agent":"a2d8233","agent_type":"Explore","event":"agent_start","parent_mode":"autopilot"}
+{"t":0,"agent":"a2d8233","agent_type":"Explore","event":"agent_stop","success":true,"duration_ms":63682}
+{"t":0,"agent":"ab24e9b","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"system","event":"skill_invoked","skill_name":"oh-my-claudecode:cancel"}
+{"t":0,"agent":"a5833c9","agent_type":"unknown","event":"agent_stop","success":true}
+{"t":0,"agent":"acc268b","agent_type":"Explore","event":"agent_start","parent_mode":"none"}
+{"t":0,"agent":"a472598","agent_type":"Explore","event":"agent_start","parent_mode":"none"}

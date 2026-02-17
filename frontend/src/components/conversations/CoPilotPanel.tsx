@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useAuth } from "@/context/AuthContext";
+import { getAISuggestions, getAISummary } from "@/lib/api";
 import clsx from "clsx";
 
 interface CoPilotPanelProps {
@@ -10,7 +12,7 @@ interface CoPilotPanelProps {
   onClose?: () => void;
 }
 
-// Demo suggested replies based on conversation context
+// Fallback demo suggested replies when AI service returns stub/error
 function getDemoSuggestions(messages: any[], conversation: any): { text: string; label: string; confidence: number }[] {
   const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
   const body = (lastInbound?.body || "").toLowerCase();
@@ -42,7 +44,6 @@ function getDemoSuggestions(messages: any[], conversation: any): { text: string;
     ];
   }
 
-  // Default suggestions
   return [
     { text: "Thank you for reaching out! How can I assist you today?", label: "Greeting", confidence: 90 },
     { text: "I'd be happy to help with that. Could you provide a few more details so I can better assist you?", label: "Gather details", confidence: 85 },
@@ -77,7 +78,7 @@ function getDemoKBResults(query: string): { title: string; snippet: string; sour
   return [];
 }
 
-function getConversationSummary(messages: any[], conversation: any): string {
+function getLocalSummary(messages: any[], conversation: any): string {
   if (messages.length === 0) return "No messages yet.";
   const inboundCount = messages.filter((m) => m.direction === "INBOUND").length;
   const outboundCount = messages.filter((m) => m.direction === "OUTBOUND").length;
@@ -92,13 +93,67 @@ function getConversationSummary(messages: any[], conversation: any): string {
 }
 
 export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }: CoPilotPanelProps) {
+  const { token } = useAuth();
   const [kbQuery, setKbQuery] = useState("");
   const [kbResults, setKbResults] = useState<{ title: string; snippet: string; source: string }[]>([]);
   const [activeTab, setActiveTab] = useState<"suggest" | "search">("suggest");
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
 
-  const suggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
-  const summary = useMemo(() => getConversationSummary(messages, conversation), [messages, conversation]);
+  // AI-powered state
+  const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number }[] | null>(null);
+  const [aiSummary, setAiSummary] = useState<string | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  const demoSuggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
+  const localSummary = useMemo(() => getLocalSummary(messages, conversation), [messages, conversation]);
+
+  // The suggestions to display: AI-powered if available, otherwise demo
+  const suggestions = aiSuggestions || demoSuggestions;
+  const summary = aiSummary || localSummary;
+
+  // Fetch AI suggestions when conversation/messages change
+  const fetchAI = useCallback(async () => {
+    if (!token || !conversation?.id) return;
+    setAiLoading(true);
+    try {
+      const [suggestionsRes, summaryRes] = await Promise.all([
+        getAISuggestions(token, conversation.id).catch(() => null),
+        getAISummary(token, conversation.id).catch(() => null),
+      ]);
+
+      if (suggestionsRes?.data && suggestionsRes.data.length > 0) {
+        // Check if it's the stub response
+        const isStub = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info";
+        if (!isStub) {
+          setAiSuggestions(suggestionsRes.data.map((s: any, i: number) => ({
+            text: s.text,
+            label: s.type === "reply" ? `AI Reply ${i + 1}` : s.type === "action" ? "Action" : "Info",
+            confidence: Math.round(s.confidence * 100),
+          })));
+        }
+      }
+
+      if (summaryRes?.data?.summary && summaryRes.data.summary !== "AI summarization not configured.") {
+        setAiSummary(summaryRes.data.summary);
+      }
+    } catch {
+      // Silently fall back to demo
+    } finally {
+      setAiLoading(false);
+    }
+  }, [token, conversation?.id]);
+
+  useEffect(() => {
+    fetchAI();
+  }, [fetchAI]);
+
+  // Re-fetch when messages change significantly
+  useEffect(() => {
+    if (messages.length > 0) {
+      const timer = setTimeout(() => fetchAI(), 1000);
+      return () => clearTimeout(timer);
+    }
+  }, [messages.length]);
 
   function handleSearch() {
     if (!kbQuery.trim()) return;
@@ -122,15 +177,21 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">AI Co-Pilot</p>
-          <p className="text-[10px] text-gray-400">Powered by AI</p>
+          <p className="text-[10px] text-gray-400">{aiSuggestions ? "AI-Powered" : "Demo Mode"}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-0.5">
-            <span className="relative flex h-2 w-2">
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
-              <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
-            </span>
-            <span className="text-[10px] text-green-600 font-medium ml-1">Live</span>
+            {aiLoading ? (
+              <div className="w-3 h-3 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+            ) : (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
+                </span>
+                <span className="text-[10px] text-green-600 font-medium ml-1">Live</span>
+              </>
+            )}
           </div>
           {onClose && (
             <button
@@ -233,6 +294,9 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                 </svg>
                 <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Suggested Replies</span>
+                {aiSuggestions && (
+                  <span className="text-[9px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full font-medium">AI</span>
+                )}
               </div>
               <div className="space-y-2">
                 {suggestions.map((s, i) => (
