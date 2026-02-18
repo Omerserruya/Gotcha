@@ -24,6 +24,7 @@ export interface CopilotConfigData {
   temperature: number;
   maxTokens: number;
   isActive: boolean;
+  copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY";
 }
 
 export interface AISuggestion {
@@ -69,7 +70,30 @@ export async function getTenantCopilotConfig(tenantId: string): Promise<CopilotC
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     isActive: config.isActive,
+    copilotMode: (config as any).copilotMode || "READY_MESSAGE",
   };
+}
+
+export async function getEffectiveCopilotConfig(tenantId: string, departmentId?: string | null): Promise<CopilotConfigData | null> {
+  // Try department config first
+  if (departmentId) {
+    const deptConfig = await prisma.departmentCopilotConfig.findUnique({ where: { departmentId } });
+    if (deptConfig) {
+      return {
+        systemPrompt: deptConfig.systemPrompt,
+        rules: deptConfig.rules as string[],
+        tools: deptConfig.tools as CopilotConfigData["tools"],
+        model: deptConfig.model,
+        provider: deptConfig.provider,
+        temperature: deptConfig.temperature,
+        maxTokens: deptConfig.maxTokens,
+        isActive: deptConfig.isActive,
+        copilotMode: deptConfig.copilotMode as "READY_MESSAGE" | "CONTEXT_ONLY",
+      };
+    }
+  }
+  // Fall back to tenant config
+  return getTenantCopilotConfig(tenantId);
 }
 
 export async function getSuggestions(context: ConversationContext): Promise<AISuggestion[]> { return provider.suggestResponse(context); }

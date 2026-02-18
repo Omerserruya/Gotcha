@@ -25,7 +25,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       select: { direction: true, body: true, senderName: true, createdAt: true },
     });
 
-    const copilotConfig = await aiService.getTenantCopilotConfig(req.tenantId!);
+    const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
 
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
@@ -36,7 +36,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       copilotConfig,
     };
     const suggestions = await aiService.getSuggestions(context);
-    res.json({ data: suggestions });
+    res.json({ data: suggestions, copilotMode: copilotConfig?.copilotMode || "READY_MESSAGE" });
   } catch (err) { console.error("AI suggestions error:", err); res.status(500).json({ error: "Failed to get suggestions" }); }
 });
 
@@ -52,7 +52,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       select: { direction: true, body: true, senderName: true, createdAt: true },
     });
 
-    const copilotConfig = await aiService.getTenantCopilotConfig(req.tenantId!);
+    const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
 
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
@@ -63,7 +63,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       copilotConfig,
     };
     const summary = await aiService.summarizeConversation(context);
-    res.json({ data: { summary } });
+    res.json({ data: { summary }, copilotMode: copilotConfig?.copilotMode || "READY_MESSAGE" });
   } catch (err) { console.error("AI summary error:", err); res.status(500).json({ error: "Failed to get summary" }); }
 });
 

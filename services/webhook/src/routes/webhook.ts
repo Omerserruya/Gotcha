@@ -1,10 +1,15 @@
 import { Router, Request, Response } from "express";
-import { prisma, incomingMessageQueue } from "@chatcenter/shared";
-import { verifyWebhookSignature } from "../services/whatsapp.service";
+import {
+  prisma,
+  incomingMessageQueue,
+  publishEvent,
+  detectInboundAdapter,
+} from "@chatcenter/shared";
+import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcenter/shared";
 
 const router = Router();
 
-// Webhook verification (GET)
+// Webhook verification (GET) - shared by WhatsApp and Messenger
 router.get("/", (req: Request, res: Response) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
@@ -19,82 +24,158 @@ router.get("/", (req: Request, res: Response) => {
   }
 });
 
-// Webhook handler (POST) - receives incoming messages and status updates
-// Pattern: handler -> queue -> worker
+// Unified webhook handler (POST) - detects platform via adapter pattern
 router.post("/", async (req: Request, res: Response) => {
-  // Always respond 200 quickly to WhatsApp
+  // Always respond 200 quickly (required by both WhatsApp and Messenger)
   res.sendStatus(200);
 
   try {
-    // Verify signature if app secret is configured
-    const appSecret = process.env.WHATSAPP_APP_SECRET;
-    if (appSecret && req.headers["x-hub-signature-256"]) {
-      const signature = req.headers["x-hub-signature-256"] as string;
+    const body = req.body;
+
+    // Step 1: Detect which platform sent this webhook
+    const adapter = detectInboundAdapter(body);
+    if (!adapter) {
+      console.warn("Webhook received from unknown platform:", body?.object);
+      return;
+    }
+
+    // Step 2: Verify signature
+    const signatureHeader = adapter.getSignatureHeader();
+    const signature = req.headers[signatureHeader] as string;
+    if (signature) {
+      // Try channel account secret first, fall back to app secret
+      const appSecret = process.env.WHATSAPP_APP_SECRET || process.env.META_APP_SECRET;
       const rawBody = (req as any).rawBody;
-      if (rawBody && !verifyWebhookSignature(appSecret, rawBody, signature)) {
-        console.error("Invalid webhook signature");
+      if (appSecret && rawBody && !adapter.verifySignature(appSecret, rawBody, signature)) {
+        console.error(`Invalid webhook signature for ${adapter.channel}`);
         return;
       }
     }
 
-    const body = req.body;
-    if (body.object !== "whatsapp_business_account") return;
+    // Step 3: Resolve tenant via ChannelAccount
+    const channelExternalId = adapter.resolveChannelAccountExternalId(body);
+    if (!channelExternalId) {
+      console.warn(`No channel account ID found in ${adapter.channel} webhook`);
+      return;
+    }
 
-    for (const entry of body.entry || []) {
-      for (const change of entry.changes || []) {
-        if (change.field !== "messages") continue;
-        const value = change.value;
-        const phoneNumberId = value.metadata?.phone_number_id;
+    const channelAccount = await prisma.channelAccount.findFirst({
+      where: { externalId: channelExternalId, channel: adapter.channel, isActive: true },
+    });
 
-        // Find tenant by phone number ID
-        const tenant = await prisma.tenant.findFirst({
-          where: { waPhoneNumberId: phoneNumberId },
-        });
-        if (!tenant) {
-          console.warn(`No tenant found for phone number ID: ${phoneNumberId}`);
-          continue;
-        }
+    // Fall back to legacy tenant lookup for WhatsApp during migration
+    let tenantId: string | null = null;
+    let channelAccountId: string | null = null;
 
-        // Enqueue incoming messages for async processing (handler -> queue -> worker)
-        if (value.messages) {
-          for (const msg of value.messages) {
-            await incomingMessageQueue.add(
-              "process",
-              { tenantId: tenant.id, phoneNumberId, message: msg, contacts: value.contacts || [] },
-              { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
-            );
-          }
-        }
-
-        // Handle status updates inline (lightweight)
-        if (value.statuses) {
-          for (const status of value.statuses) {
-            await handleStatusUpdate(tenant.id, status);
-          }
-        }
+    if (channelAccount) {
+      tenantId = channelAccount.tenantId;
+      channelAccountId = channelAccount.id;
+    } else if (adapter.channel === "WHATSAPP") {
+      // Legacy fallback: look up tenant by waPhoneNumberId
+      const tenant = await prisma.tenant.findFirst({
+        where: { waPhoneNumberId: channelExternalId },
+      });
+      if (tenant) {
+        tenantId = tenant.id;
+        console.warn(`Using legacy tenant lookup for WA phone ${channelExternalId}. Migrate to ChannelAccount.`);
       }
+    }
+
+    if (!tenantId) {
+      console.warn(`No tenant found for ${adapter.channel} account: ${channelExternalId}`);
+      return;
+    }
+
+    // Step 4: Extract and enqueue normalized messages
+    const messages = adapter.extractMessages(body);
+    for (const msg of messages) {
+      const { body: msgBody, messageType } = normalizeContentToBodyAndType(msg);
+      await incomingMessageQueue.add(
+        "process",
+        {
+          tenantId,
+          channel: adapter.channel,
+          channelAccountId: channelAccountId || "",
+          normalizedMessage: {
+            externalMessageId: msg.externalMessageId,
+            senderId: msg.senderId,
+            senderDisplayName: msg.senderDisplayName,
+            timestamp: msg.timestamp.toISOString(),
+            contentType: msg.content.type,
+            body: msgBody,
+            messageType,
+            interactiveReply: msg.content.interactiveReply,
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+
+    // Step 5: Handle status updates inline (lightweight)
+    const statusUpdates = adapter.extractStatusUpdates(body);
+    for (const status of statusUpdates) {
+      await handleStatusUpdate(tenantId, status);
     }
   } catch (err) {
     console.error("Webhook processing error:", err);
   }
 });
 
-async function handleStatusUpdate(tenantId: string, status: any) {
-  const waMessageId = status.id;
-  const statusValue = status.status;
-  const statusMap: Record<string, string> = { sent: "SENT", delivered: "DELIVERED", read: "READ", failed: "FAILED" };
-  const mappedStatus = statusMap[statusValue];
+// ─── Helpers ─────────────────────────────────────────────────
+
+function normalizeContentToBodyAndType(msg: NormalizedInboundMessage): { body: string; messageType: string } {
+  const content = msg.content;
+  if (content.interactiveReply) {
+    return { body: content.interactiveReply.title || content.text || "", messageType: "interactive" };
+  }
+  switch (content.type) {
+    case "text":
+      return { body: content.text || "", messageType: "text" };
+    case "image":
+      return { body: content.caption || "[Image]", messageType: "image" };
+    case "document":
+      return { body: content.caption || "[Document]", messageType: "document" };
+    case "audio":
+      return { body: content.text || "[Audio message]", messageType: "audio" };
+    case "video":
+      return { body: content.caption || "[Video]", messageType: "video" };
+    case "location":
+      return { body: content.text || "[Location]", messageType: "location" };
+    default:
+      return { body: content.text || `[${content.type} message]`, messageType: content.type };
+  }
+}
+
+async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpdate) {
+  const statusMap: Record<string, string> = {
+    sent: "SENT", delivered: "DELIVERED", read: "READ", failed: "FAILED",
+  };
+  const mappedStatus = statusMap[status.status];
   if (!mappedStatus) return;
 
-  const message = await prisma.message.findFirst({ where: { waMessageId } });
+  // Try new externalMessageId field first, fall back to legacy waMessageId
+  const message = await prisma.message.findFirst({
+    where: {
+      OR: [
+        { externalMessageId: status.externalMessageId },
+        { waMessageId: status.externalMessageId },
+      ],
+    },
+  });
+
   if (message) {
-    await prisma.message.update({ where: { id: message.id }, data: { status: mappedStatus as any } });
-    // Publish status event for conversation-service to relay via Socket.IO
-    const { publishEvent } = await import("@chatcenter/shared");
+    await prisma.message.update({
+      where: { id: message.id },
+      data: { status: mappedStatus as any },
+    });
     await publishEvent({
       event: "message:status",
       tenantId,
-      data: { messageId: message.id, conversationId: message.conversationId, status: mappedStatus },
+      data: {
+        messageId: message.id,
+        conversationId: message.conversationId,
+        status: mappedStatus,
+      },
     });
   }
 }

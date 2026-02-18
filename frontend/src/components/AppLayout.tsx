@@ -13,11 +13,36 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [userCollapsed, setUserCollapsed] = useState(false); // user's manual preference
+  const [panelAutoCollapsed, setPanelAutoCollapsed] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-collapsed");
-    if (stored === "true") setCollapsed(true);
+    if (stored === "true") {
+      setCollapsed(true);
+      setUserCollapsed(true);
+    }
   }, []);
+
+  // Auto-collapse sidebar when side panels open (desktop only)
+  useEffect(() => {
+    function handlePanelToggle(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      if (detail?.open) {
+        // Panel opened - auto-collapse sidebar if not already collapsed
+        setPanelAutoCollapsed(true);
+        setCollapsed(true);
+      } else {
+        // Panel closed - restore sidebar if user hadn't manually collapsed it
+        setPanelAutoCollapsed(false);
+        if (!userCollapsed) {
+          setCollapsed(false);
+        }
+      }
+    }
+    window.addEventListener("panel:toggle", handlePanelToggle);
+    return () => window.removeEventListener("panel:toggle", handlePanelToggle);
+  }, [userCollapsed]);
 
   // Close mobile sidebar on navigation
   useEffect(() => {
@@ -26,8 +51,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   function handleToggle() {
     setCollapsed((prev) => {
-      localStorage.setItem("sidebar-collapsed", String(!prev));
-      return !prev;
+      const next = !prev;
+      localStorage.setItem("sidebar-collapsed", String(next));
+      setUserCollapsed(next);
+      return next;
     });
   }
 

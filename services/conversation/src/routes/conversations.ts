@@ -17,13 +17,18 @@ router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Re
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { status, assignedAgentId, search, page, limit } = req.query;
+    const { status, assignedAgentId, channel, departmentId, search, page, limit } = req.query;
     const result = await conversationService.list(req.tenantId!, {
       status: status as string | undefined,
       assignedAgentId: assignedAgentId as string | undefined,
+      channel: channel as string | undefined,
+      departmentId: departmentId as string | undefined,
       search: search as string | undefined,
       page: page ? parseInt(page as string, 10) : undefined,
       limit: limit ? parseInt(limit as string, 10) : undefined,
+      userRole: req.user!.role,
+      userId: req.user!.userId,
+      userDepartmentId: req.user!.departmentId,
     });
     res.json(result);
   } catch (err) {
@@ -86,8 +91,8 @@ router.post("/:id/release", async (req: Request, res: Response) => {
 // Allow both ADMIN and the assigned agent to transfer/reassign
 router.post("/:id/reassign", async (req: Request, res: Response) => {
   try {
-    const { agentId } = req.body;
-    if (!agentId) { res.status(400).json({ error: "agentId is required" }); return; }
+    const { agentId, departmentId } = req.body;
+    if (!agentId && !departmentId) { res.status(400).json({ error: "agentId or departmentId is required" }); return; }
 
     const conversationId = req.params.id as string;
     const userId = req.user!.userId;
@@ -102,8 +107,14 @@ router.post("/:id/reassign", async (req: Request, res: Response) => {
       }
     }
 
-    const conversation = await conversationService.reassign(req.tenantId!, conversationId, agentId);
-    res.json({ data: conversation });
+    // Transfer to department or agent
+    if (departmentId) {
+      const conversation = await conversationService.transferToDepartment(req.tenantId!, conversationId, departmentId);
+      res.json({ data: conversation });
+    } else {
+      const conversation = await conversationService.reassign(req.tenantId!, conversationId, agentId);
+      res.json({ data: conversation });
+    }
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message || "Failed to reassign conversation" });
   }

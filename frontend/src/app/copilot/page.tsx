@@ -1,10 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getCopilotSettings, updateCopilotSettings } from "@/lib/api";
+import {
+  getCopilotSettings, updateCopilotSettings,
+  getDepartments, getDepartmentCopilot, updateDepartmentCopilot,
+  getDepartmentMembers, addDepartmentMember, removeDepartmentMember, updateDepartmentMember,
+  getAgents,
+} from "@/lib/api";
 import clsx from "clsx";
 
 interface ToolConfig {
@@ -25,6 +30,19 @@ export default function CopilotPage() {
   const { token } = useAuth();
   const { t } = useI18n();
 
+  // Department state
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [selectedDeptId, setSelectedDeptId] = useState<string | null>(null); // null = global
+  const [deptSource, setDeptSource] = useState<string>("tenant");
+
+  // Members state (for department tabs)
+  const [members, setMembers] = useState<any[]>([]);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [showAddMember, setShowAddMember] = useState(false);
+  const [membersLoading, setMembersLoading] = useState(false);
+
+  // Copilot settings state
+  const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [rules, setRules] = useState<string[]>([]);
   const [tools, setTools] = useState<ToolConfig[]>(DEFAULT_TOOLS);
@@ -36,42 +54,77 @@ export default function CopilotPage() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Load departments on mount
   useEffect(() => {
     if (!token) return;
-    fetchSettings();
+    getDepartments(token).then((res) => setDepartments(res.data || [])).catch(console.error);
   }, [token]);
 
-  async function fetchSettings() {
+  // Load copilot settings when tab changes
+  const loadSettings = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await getCopilotSettings(token);
-      setSystemPrompt(data.systemPrompt || "");
-      setRules(Array.isArray(data.rules) ? data.rules : []);
-      setTools(Array.isArray(data.tools) && data.tools.length > 0 ? data.tools : DEFAULT_TOOLS);
-      setModel(data.model || "gpt-4o-mini");
-      setProvider(data.provider || "openai");
-      setTemperature(data.temperature ?? 0.7);
-      setMaxTokens(data.maxTokens ?? 1024);
-      setIsActive(data.isActive ?? true);
+      if (selectedDeptId) {
+        const res = await getDepartmentCopilot(token, selectedDeptId);
+        setDeptSource(res.source);
+        const d = res.data || {};
+        setCopilotMode(d.copilotMode || "READY_MESSAGE");
+        setSystemPrompt(d.systemPrompt || "");
+        setRules(Array.isArray(d.rules) ? d.rules : []);
+        setTools(Array.isArray(d.tools) && d.tools.length > 0 ? d.tools : DEFAULT_TOOLS);
+        setModel(d.model || "gpt-4o-mini");
+        setProvider(d.provider || "openai");
+        setTemperature(d.temperature ?? 0.7);
+        setMaxTokens(d.maxTokens ?? 1024);
+        setIsActive(d.isActive ?? true);
+      } else {
+        const data = await getCopilotSettings(token);
+        setDeptSource("tenant");
+        setCopilotMode(data.copilotMode || "READY_MESSAGE");
+        setSystemPrompt(data.systemPrompt || "");
+        setRules(Array.isArray(data.rules) ? data.rules : []);
+        setTools(Array.isArray(data.tools) && data.tools.length > 0 ? data.tools : DEFAULT_TOOLS);
+        setModel(data.model || "gpt-4o-mini");
+        setProvider(data.provider || "openai");
+        setTemperature(data.temperature ?? 0.7);
+        setMaxTokens(data.maxTokens ?? 1024);
+        setIsActive(data.isActive ?? true);
+      }
     } catch (err) {
       console.error(err);
     }
-  }
+  }, [token, selectedDeptId]);
+
+  useEffect(() => { loadSettings(); }, [loadSettings]);
+
+  // Load members when a department is selected
+  const loadMembers = useCallback(async () => {
+    if (!token || !selectedDeptId) { setMembers([]); return; }
+    setMembersLoading(true);
+    try {
+      const [membersRes, agentsRes] = await Promise.all([
+        getDepartmentMembers(token, selectedDeptId),
+        getAgents(token),
+      ]);
+      setMembers(membersRes.data);
+      setAgents(Array.isArray(agentsRes) ? agentsRes : []);
+    } catch (err) { console.error(err); }
+    finally { setMembersLoading(false); }
+  }, [token, selectedDeptId]);
+
+  useEffect(() => { loadMembers(); }, [loadMembers]);
 
   async function handleSave() {
     if (!token) return;
     setLoading(true);
     try {
-      await updateCopilotSettings(token, {
-        systemPrompt,
-        rules,
-        tools,
-        model,
-        provider,
-        temperature,
-        maxTokens,
-        isActive,
-      });
+      const payload = { copilotMode, systemPrompt, rules, tools, model, provider, temperature, maxTokens, isActive };
+      if (selectedDeptId) {
+        await updateDepartmentCopilot(token, selectedDeptId, payload);
+        setDeptSource("department");
+      } else {
+        await updateCopilotSettings(token, payload);
+      }
       setSaved(true);
       setTimeout(() => setSaved(false), 3000);
     } catch (err) {
@@ -81,25 +134,45 @@ export default function CopilotPage() {
     }
   }
 
-  function handleAddRule() {
-    setRules([...rules, ""]);
-  }
-
-  function handleUpdateRule(index: number, value: string) {
-    const updated = [...rules];
-    updated[index] = value;
-    setRules(updated);
-  }
-
-  function handleRemoveRule(index: number) {
-    setRules(rules.filter((_, i) => i !== index));
-  }
-
+  function handleAddRule() { setRules([...rules, ""]); }
+  function handleUpdateRule(index: number, value: string) { const u = [...rules]; u[index] = value; setRules(u); }
+  function handleRemoveRule(index: number) { setRules(rules.filter((_, i) => i !== index)); }
   function handleToggleTool(toolId: string) {
-    setTools(tools.map((tool) =>
-      tool.id === toolId ? { ...tool, enabled: !tool.enabled } : tool
-    ));
+    setTools(tools.map((tool) => tool.id === toolId ? { ...tool, enabled: !tool.enabled } : tool));
   }
+
+  // Member management handlers
+  async function handleAddMember(userId: string) {
+    if (!token || !selectedDeptId) return;
+    try {
+      await addDepartmentMember(token, selectedDeptId, { userId, departmentRole: "AGENT" });
+      setShowAddMember(false);
+      loadMembers();
+      getDepartments(token).then((res) => setDepartments(res.data || [])).catch(console.error);
+    } catch (err: any) { alert(err.message); }
+  }
+
+  async function handleRemoveMember(userId: string) {
+    if (!token || !selectedDeptId) return;
+    try {
+      await removeDepartmentMember(token, selectedDeptId, userId);
+      loadMembers();
+      getDepartments(token).then((res) => setDepartments(res.data || [])).catch(console.error);
+    } catch (err: any) { alert(err.message); }
+  }
+
+  async function handleToggleRole(userId: string, currentRole: string) {
+    if (!token || !selectedDeptId) return;
+    const newRole = currentRole === "MANAGER" ? "AGENT" : "MANAGER";
+    try {
+      await updateDepartmentMember(token, selectedDeptId, userId, { departmentRole: newRole });
+      loadMembers();
+    } catch (err: any) { alert(err.message); }
+  }
+
+  const availableAgents = agents.filter((a: any) => !members.some((m: any) => m.userId === a.id));
+  const selectedDept = departments.find((d) => d.id === selectedDeptId);
+  const hasDepartments = departments.length > 0;
 
   return (
     <AppLayout>
@@ -125,6 +198,132 @@ export default function CopilotPage() {
             </div>
           </div>
 
+          {/* Department Tabs - only shown when departments exist */}
+          {hasDepartments && (
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-2">
+              <div className="flex items-center gap-1.5 overflow-x-auto pb-0.5">
+                {/* Global tab */}
+                <button
+                  onClick={() => setSelectedDeptId(null)}
+                  className={clsx(
+                    "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all shrink-0",
+                    selectedDeptId === null
+                      ? "bg-violet-500 text-white shadow-md shadow-violet-200"
+                      : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                  )}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" />
+                  </svg>
+                  {t("copilot.global")}
+                </button>
+
+                <div className="w-px h-6 bg-gray-200 shrink-0" />
+
+                {/* Department tabs */}
+                {departments.map((dept) => (
+                  <button
+                    key={dept.id}
+                    onClick={() => setSelectedDeptId(dept.id)}
+                    className={clsx(
+                      "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-medium transition-all shrink-0",
+                      selectedDeptId === dept.id
+                        ? "bg-violet-500 text-white shadow-md shadow-violet-200"
+                        : "text-gray-500 hover:bg-gray-100 hover:text-gray-700"
+                    )}
+                  >
+                    <div className={clsx(
+                      "w-5 h-5 rounded-md flex items-center justify-center text-[10px] font-bold",
+                      selectedDeptId === dept.id ? "bg-white/20 text-white" : "bg-gray-200 text-gray-500"
+                    )}>
+                      {dept.name?.charAt(0).toUpperCase()}
+                    </div>
+                    {dept.name}
+                    <span className={clsx(
+                      "text-[10px] px-1.5 py-0.5 rounded-full",
+                      selectedDeptId === dept.id ? "bg-white/20" : "bg-gray-100 text-gray-400"
+                    )}>
+                      {dept._count?.members || 0}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Source indicator for department */}
+          {selectedDeptId && (
+            <div className={clsx(
+              "flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm",
+              deptSource === "department" ? "bg-violet-50 text-violet-600" : "bg-amber-50 text-amber-600"
+            )}>
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
+              </svg>
+              {deptSource === "department" ? t("departments.copilotCustom") : t("departments.copilotInherited")}
+            </div>
+          )}
+
+          {/* Members Section - only shown when a department is selected */}
+          {selectedDeptId && selectedDept && (
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+              <div className="flex items-center justify-between mb-3">
+                <div>
+                  <h4 className="font-semibold text-gray-900">{t("copilot.departmentMembers")}</h4>
+                  <p className="text-xs text-gray-400 mt-0.5">{selectedDept.name} - {members.length} {t("departments.members").toLowerCase()}</p>
+                </div>
+                <button
+                  onClick={() => setShowAddMember(true)}
+                  className="text-xs px-3 py-1.5 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 font-medium transition flex items-center gap-1"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                  </svg>
+                  {t("departments.addMember")}
+                </button>
+              </div>
+
+              {membersLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <div className="w-5 h-5 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+                </div>
+              ) : members.length === 0 ? (
+                <p className="text-sm text-gray-300 text-center py-4 italic">{t("departments.noMembers")}</p>
+              ) : (
+                <div className="flex flex-wrap gap-2">
+                  {members.map((m: any) => (
+                    <div
+                      key={m.id}
+                      className="flex items-center gap-2 pl-1 pr-1.5 py-1 rounded-full border border-gray-200 bg-gray-50 hover:bg-gray-100 transition group"
+                    >
+                      <div className="w-6 h-6 bg-gradient-to-br from-primary-100 to-primary-200 rounded-full flex items-center justify-center">
+                        <span className="text-[10px] font-bold text-primary-600">{m.user?.name?.charAt(0).toUpperCase()}</span>
+                      </div>
+                      <span className="text-xs font-medium text-gray-700">{m.user?.name}</span>
+                      <button
+                        onClick={() => handleToggleRole(m.userId, m.departmentRole)}
+                        className={clsx(
+                          "text-[9px] px-1.5 py-0.5 rounded-full font-medium cursor-pointer transition",
+                          m.departmentRole === "MANAGER" ? "bg-violet-100 text-violet-600 hover:bg-violet-200" : "bg-gray-200 text-gray-500 hover:bg-gray-300"
+                        )}
+                      >
+                        {m.departmentRole === "MANAGER" ? t("departments.roleManager") : t("departments.roleAgent")}
+                      </button>
+                      <button
+                        onClick={() => handleRemoveMember(m.userId)}
+                        className="w-5 h-5 rounded-full flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition opacity-0 group-hover:opacity-100"
+                      >
+                        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Active Toggle */}
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
             <div className="flex items-center justify-between">
@@ -143,6 +342,33 @@ export default function CopilotPage() {
                   "absolute top-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform",
                   isActive ? "translate-x-5.5 left-auto right-0.5" : "left-0.5"
                 )} />
+              </button>
+            </div>
+          </div>
+
+          {/* Copilot Mode Toggle */}
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+            <h4 className="font-semibold text-gray-900 mb-1">{t("copilotMode.label")}</h4>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+              <button
+                onClick={() => setCopilotMode("READY_MESSAGE")}
+                className={clsx(
+                  "p-4 rounded-xl border-2 text-start transition",
+                  copilotMode === "READY_MESSAGE" ? "border-violet-500 bg-violet-50" : "border-gray-200 hover:border-gray-300"
+                )}
+              >
+                <p className="font-medium text-sm text-gray-900">{t("copilotMode.readyMessage")}</p>
+                <p className="text-xs text-gray-500 mt-1">{t("copilotMode.readyMessageDesc")}</p>
+              </button>
+              <button
+                onClick={() => setCopilotMode("CONTEXT_ONLY")}
+                className={clsx(
+                  "p-4 rounded-xl border-2 text-start transition",
+                  copilotMode === "CONTEXT_ONLY" ? "border-violet-500 bg-violet-50" : "border-gray-200 hover:border-gray-300"
+                )}
+              >
+                <p className="font-medium text-sm text-gray-900">{t("copilotMode.contextOnly")}</p>
+                <p className="text-xs text-gray-500 mt-1">{t("copilotMode.contextOnlyDesc")}</p>
               </button>
             </div>
           </div>
@@ -355,6 +581,40 @@ export default function CopilotPage() {
           </div>
         </div>
       </div>
+
+      {/* Add Member Dialog */}
+      {showAddMember && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
+            <h3 className="font-bold text-gray-900 mb-1">{t("departments.addMember")}</h3>
+            <p className="text-xs text-gray-400 mb-4">{t("departments.selectAgent")}</p>
+            <div className="space-y-2 max-h-60 overflow-y-auto">
+              {availableAgents.map((agent: any) => (
+                <button key={agent.id} onClick={() => handleAddMember(agent.id)} disabled={!agent.isActive} className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-primary-50 hover:border-primary-200 transition disabled:opacity-40">
+                  <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
+                      <span className="text-xs font-bold text-primary-600">{agent.name?.charAt(0).toUpperCase()}</span>
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <p className="font-medium text-sm text-gray-900">{agent.name}</p>
+                      <p className="text-xs text-gray-400">{agent.email}</p>
+                    </div>
+                    {agent.departmentName && (
+                      <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">{agent.departmentName}</span>
+                    )}
+                  </div>
+                </button>
+              ))}
+              {availableAgents.length === 0 && (
+                <p className="text-sm text-gray-400 text-center py-4">{t("common.noResults")}</p>
+              )}
+            </div>
+            <button onClick={() => setShowAddMember(false)} className="w-full mt-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition">
+              {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

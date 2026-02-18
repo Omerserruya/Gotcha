@@ -8,6 +8,28 @@ export type {
   AnalyticsJob,
 } from "./lib/queue";
 
+// Channel types & adapters
+export type {
+  ChannelType,
+  NormalizedInboundMessage,
+  NormalizedStatusUpdate,
+  MessageContent,
+  OutboundMessagePayload,
+  ChannelCredentials,
+  InboundAdapter,
+  OutboundAdapter,
+} from "./channels";
+export {
+  detectInboundAdapter,
+  getOutboundAdapter,
+  getInboundAdapters,
+  getSupportedChannels,
+  whatsAppInboundAdapter,
+  whatsAppOutboundAdapter,
+  messengerInboundAdapter,
+  messengerOutboundAdapter,
+} from "./channels";
+
 // Lib
 export { prisma } from "./lib/prisma";
 export { getRedis, closeRedis } from "./lib/redis";
@@ -23,7 +45,7 @@ export { createServiceApp, startService } from "./lib/service-app";
 
 // Middleware
 export { authenticate } from "./middleware/auth";
-export { requireRole } from "./middleware/rbac";
+export { requireRole, requireDepartmentRole } from "./middleware/rbac";
 export { resolveTenant } from "./middleware/tenant";
 export { validate } from "./middleware/validate";
 

@@ -1,0 +1,124 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771355060870,
+  "projectRoot": "/home/ocs/projects/ChatCenter/packages/shared",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "express",
+        "version": "4.21.0",
+        "category": "backend"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": null,
+    "testCommand": null,
+    "lintCommand": null,
+    "devCommand": null,
+    "scripts": {
+      "db:generate": "prisma generate",
+      "db:migrate": "prisma migrate deploy",
+      "db:seed": "tsx prisma/seed.ts",
+      "db:reset": "prisma migrate reset --force"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "src"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "prisma": {
+      "path": "prisma",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1771355060850,
+      "keyFiles": [
+        "schema.prisma",
+        "seed.ts"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1771355060850,
+      "keyFiles": [
+        "index.ts"
+      ]
+    },
+    "prisma/migrations": {
+      "path": "prisma/migrations",
+      "purpose": "Database migrations",
+      "fileCount": 1,
+      "lastAccessed": 1771355060860,
+      "keyFiles": [
+        "migration_lock.toml"
+      ]
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 6,
+      "lastAccessed": 1771355060861,
+      "keyFiles": [
+        "event-bus.ts",
+        "jwt.ts",
+        "prisma.ts"
+      ]
+    },
+    "src/middleware": {
+      "path": "src/middleware",
+      "purpose": "Middleware",
+      "fileCount": 4,
+      "lastAccessed": 1771355060862,
+      "keyFiles": [
+        "auth.ts",
+        "rbac.ts",
+        "tenant.ts"
+      ]
+    },
+    "src/types": {
+      "path": "src/types",
+      "purpose": "Type definitions",
+      "fileCount": 1,
+      "lastAccessed": 1771355060862,
+      "keyFiles": [
+        "express.d.ts"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

@@ -54,7 +54,19 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       select: { id: true, email: true, name: true, role: true, tenantId: true, isActive: true, createdAt: true },
     });
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
-    res.json({ user });
+
+    // Include department info
+    const member = await prisma.departmentMember.findUnique({
+      where: { userId: user.id },
+      include: { department: { select: { id: true, name: true } } },
+    });
+    const deptInfo = member ? {
+      departmentId: member.departmentId,
+      departmentRole: member.departmentRole,
+      departmentName: member.department.name,
+    } : {};
+
+    res.json({ user: { ...user, ...deptInfo } });
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 

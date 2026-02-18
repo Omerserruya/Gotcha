@@ -8,26 +8,93 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+// ─── Channel Types ───────────────────────────────────────────
+
+enum ChannelType {
+  WHATSAPP
+  MESSENGER
+}
+
+enum BotFlowMode {
+  UNIFIED
+  PER_CHANNEL
+}
+
 // ─── Multi-Tenant ────────────────────────────────────────────
 
 model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
-  // WhatsApp config per tenant
+  // Legacy WhatsApp config (kept for backward compat during migration)
   waPhoneNumberId  String?  @map("wa_phone_number_id")
   waAccessToken    String?  @map("wa_access_token")
   waWebhookSecret  String?  @map("wa_webhook_secret")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  users         User[]
-  conversations Conversation[]
-  messages      Message[]
-  chatbotFlows  ChatbotFlow[]
-  copilotConfig CopilotConfig?
+  users              User[]
+  conversations      Conversation[]
+  messages           Message[]
+  chatbotFlows       ChatbotFlow[]
+  copilotConfig      CopilotConfig?
+  channelAccounts    ChannelAccount[]
+  channelConfig      TenantChannelConfig?
+  departments        Department[]
 
   @@map("tenants")
+}
+
+// ─── Channel Accounts ────────────────────────────────────────
+
+model ChannelAccount {
+  id              String      @id @default(cuid())
+  tenantId        String      @map("tenant_id")
+  channel         ChannelType
+  externalId      String      @map("external_id")    // WA phone_number_id or FB page_id
+  displayName     String      @map("display_name")
+  credentials     Json        @default("{}")          // { accessToken, appSecret, ... }
+  isActive        Boolean     @default(true) @map("is_active")
+  createdAt       DateTime    @default(now()) @map("created_at")
+  updatedAt       DateTime    @updatedAt @map("updated_at")
+
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+
+  @@unique([channel, externalId])
+  @@index([tenantId])
+  @@map("channel_accounts")
+}
+
+// ─── Tenant Channel Config ───────────────────────────────────
+
+model TenantChannelConfig {
+  id           String      @id @default(cuid())
+  tenantId     String      @unique @map("tenant_id")
+  botFlowMode  BotFlowMode @default(UNIFIED) @map("bot_flow_mode")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_channel_configs")
+}
+
+// ─── Department Enums ────────────────────────────────────────
+
+enum DepartmentRole {
+  AGENT
+  MANAGER
+}
+
+enum DepartmentQueueMode {
+  CLAIM
+  ROUND_ROBIN
+}
+
+enum CopilotMode {
+  READY_MESSAGE
+  CONTEXT_ONLY
 }
 
 // ─── Auth & RBAC ─────────────────────────────────────────────
@@ -48,8 +115,9 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[] @relation("AssignedAgent")
+  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations    Conversation[]      @relation("AssignedAgent")
+  departmentMember DepartmentMember?
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -65,28 +133,36 @@ enum ConversationStatus {
 }
 
 model Conversation {
-  id              String             @id @default(cuid())
-  tenantId        String             @map("tenant_id")
-  customerPhone   String             @map("customer_phone")
-  customerName    String?            @map("customer_name")
-  assignedAgentId String?            @map("assigned_agent_id")
-  status          ConversationStatus @default(OPEN)
+  id                 String             @id @default(cuid())
+  tenantId           String             @map("tenant_id")
+  channel            ChannelType        @default(WHATSAPP)
+  channelAccountId   String?            @map("channel_account_id")
+  customerExternalId String             @map("customer_external_id") // Phone (WA) or PSID (Messenger)
+  customerPhone      String?            @map("customer_phone")       // Legacy, kept for backward compat
+  customerName       String?            @map("customer_name")
+  assignedAgentId    String?            @map("assigned_agent_id")
+  departmentId       String?            @map("department_id")
+  status             ConversationStatus @default(OPEN)
   // Chatbot state tracking
-  chatbotFlowId   String?            @map("chatbot_flow_id")
-  chatbotNodeId   String?            @map("chatbot_node_id")
-  isHandedOver    Boolean            @default(false) @map("is_handed_over")
-  lastMessageAt   DateTime?          @map("last_message_at")
-  closedAt        DateTime?          @map("closed_at")
-  createdAt       DateTime           @default(now()) @map("created_at")
-  updatedAt       DateTime           @updatedAt @map("updated_at")
+  chatbotFlowId      String?            @map("chatbot_flow_id")
+  chatbotNodeId      String?            @map("chatbot_node_id")
+  isHandedOver       Boolean            @default(false) @map("is_handed_over")
+  lastMessageAt      DateTime?          @map("last_message_at")
+  closedAt           DateTime?          @map("closed_at")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  assignedAgent User?       @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
-  chatbotFlow  ChatbotFlow? @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
-  messages     Message[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
+  assignedAgent  User?           @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  department     Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  chatbotFlow    ChatbotFlow?    @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
+  messages       Message[]
 
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, channel, customerExternalId])
   @@index([tenantId, customerPhone])
   @@map("conversations")
 }
@@ -107,22 +183,25 @@ enum MessageStatus {
 }
 
 model Message {
-  id              String           @id @default(cuid())
-  tenantId        String           @map("tenant_id")
-  conversationId  String           @map("conversation_id")
-  waMessageId     String?          @map("wa_message_id")
-  direction       MessageDirection
-  body            String
-  messageType     String           @default("text") @map("message_type")
-  status          MessageStatus    @default(PENDING)
-  senderName      String?          @map("sender_name")
-  metadata        Json?
-  createdAt       DateTime         @default(now()) @map("created_at")
+  id                String           @id @default(cuid())
+  tenantId          String           @map("tenant_id")
+  conversationId    String           @map("conversation_id")
+  channel           ChannelType?
+  externalMessageId String?          @map("external_message_id") // WA msg ID or Messenger mid
+  waMessageId       String?          @map("wa_message_id")       // Legacy, kept for backward compat
+  direction         MessageDirection
+  body              String
+  messageType       String           @default("text") @map("message_type")
+  status            MessageStatus    @default(PENDING)
+  senderName        String?          @map("sender_name")
+  metadata          Json?
+  createdAt         DateTime         @default(now()) @map("created_at")
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
+  @@index([externalMessageId])
   @@index([waMessageId])
   @@index([tenantId])
   @@map("messages")
@@ -131,18 +210,19 @@ model Message {
 // ─── Co-Pilot Configuration (per-tenant AI agent) ───────────
 
 model CopilotConfig {
-  id           String   @id @default(cuid())
-  tenantId     String   @unique @map("tenant_id")
-  systemPrompt String   @default("") @map("system_prompt")
-  rules        Json     @default("[]")
-  tools        Json     @default("[]")
-  model        String   @default("gpt-4o-mini")
-  provider     String   @default("openai")
-  temperature  Float    @default(0.7)
-  maxTokens    Int      @default(1024) @map("max_tokens")
-  isActive     Boolean  @default(true) @map("is_active")
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
+  id           String      @id @default(cuid())
+  tenantId     String      @unique @map("tenant_id")
+  copilotMode  CopilotMode @default(READY_MESSAGE) @map("copilot_mode")
+  systemPrompt String      @default("") @map("system_prompt")
+  rules        Json        @default("[]")
+  tools        Json        @default("[]")
+  model        String      @default("gpt-4o-mini")
+  provider     String      @default("openai")
+  temperature  Float       @default(0.7)
+  maxTokens    Int         @default(1024) @map("max_tokens")
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -152,20 +232,80 @@ model CopilotConfig {
 // ─── Chatbot Flow Builder ────────────────────────────────────
 
 model ChatbotFlow {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
+  id          String       @id @default(cuid())
+  tenantId    String       @map("tenant_id")
   name        String
   description String?
-  isActive    Boolean  @default(false) @map("is_active")
+  isActive    Boolean      @default(false) @map("is_active")
+  channel     ChannelType?                                     // null = ALL channels
   // JSON definition of the flow graph
-  nodes       Json     @default("[]")
-  edges       Json     @default("[]")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  nodes       Json         @default("[]")
+  edges       Json         @default("[]")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations Conversation[]
 
   @@index([tenantId, isActive])
+  @@index([tenantId, channel, isActive])
   @@map("chatbot_flows")
+}
+
+// ─── Departments ────────────────────────────────────────────
+
+model Department {
+  id          String              @id @default(cuid())
+  tenantId    String              @map("tenant_id")
+  name        String
+  description String?
+  queueMode   DepartmentQueueMode @default(CLAIM) @map("queue_mode")
+  isActive    Boolean             @default(true) @map("is_active")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
+
+  tenant        Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  members       DepartmentMember[]
+  conversations Conversation[]
+  copilotConfig DepartmentCopilotConfig?
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("departments")
+}
+
+model DepartmentMember {
+  id             String         @id @default(cuid())
+  userId         String         @unique @map("user_id")
+  departmentId   String         @map("department_id")
+  departmentRole DepartmentRole @default(AGENT) @map("department_role")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
+
+  user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, departmentId])
+  @@index([departmentId])
+  @@map("department_members")
+}
+
+model DepartmentCopilotConfig {
+  id           String      @id @default(cuid())
+  departmentId String      @unique @map("department_id")
+  copilotMode  CopilotMode @default(READY_MESSAGE) @map("copilot_mode")
+  systemPrompt String      @default("") @map("system_prompt")
+  rules        Json        @default("[]")
+  tools        Json        @default("[]")
+  model        String      @default("gpt-4o-mini")
+  provider     String      @default("openai")
+  temperature  Float       @default(0.7)
+  maxTokens    Int         @default(1024) @map("max_tokens")
+  isActive     Boolean     @default(true) @map("is_active")
+  createdAt    DateTime    @default(now()) @map("created_at")
+  updatedAt    DateTime    @updatedAt @map("updated_at")
+
+  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
+
+  @@map("department_copilot_configs")
 }

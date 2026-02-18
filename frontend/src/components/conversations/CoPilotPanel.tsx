@@ -103,6 +103,8 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
   const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number }[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
+  const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
+  const [paused, setPaused] = useState(false);
 
   const demoSuggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
   const localSummary = useMemo(() => getLocalSummary(messages, conversation), [messages, conversation]);
@@ -113,7 +115,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
 
   // Fetch AI suggestions when conversation/messages change
   const fetchAI = useCallback(async () => {
-    if (!token || !conversation?.id) return;
+    if (!token || !conversation?.id || paused) return;
     setAiLoading(true);
     try {
       const [suggestionsRes, summaryRes] = await Promise.all([
@@ -132,6 +134,9 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
           })));
         }
       }
+      // Read copilotMode from either response
+      if (suggestionsRes?.copilotMode) setCopilotMode(suggestionsRes.copilotMode);
+      else if (summaryRes?.copilotMode) setCopilotMode(summaryRes.copilotMode);
 
       if (summaryRes?.data?.summary && summaryRes.data.summary !== "AI summarization not configured.") {
         setAiSummary(summaryRes.data.summary);
@@ -141,7 +146,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
     } finally {
       setAiLoading(false);
     }
-  }, [token, conversation?.id]);
+  }, [token, conversation?.id, paused]);
 
   useEffect(() => {
     fetchAI();
@@ -180,8 +185,38 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
           <p className="text-[10px] text-gray-400">{aiSuggestions ? "AI-Powered" : "Demo Mode"}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Pause / Resume button */}
+          <button
+            onClick={() => setPaused(!paused)}
+            className={clsx(
+              "flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg transition",
+              paused
+                ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
+                : "bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+            )}
+            title={paused ? "Resume Co-Pilot" : "Pause Co-Pilot"}
+          >
+            {paused ? (
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+              </svg>
+            ) : (
+              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 01.75-.75H9a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H7.5a.75.75 0 01-.75-.75V5.25zm7.5 0A.75.75 0 0115 4.5h1.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H15a.75.75 0 01-.75-.75V5.25z" clipRule="evenodd" />
+              </svg>
+            )}
+            {paused ? "Paused" : "Pause"}
+          </button>
+
           <div className="flex items-center gap-0.5">
-            {aiLoading ? (
+            {paused ? (
+              <>
+                <span className="relative flex h-2 w-2">
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
+                </span>
+                <span className="text-[10px] text-amber-500 font-medium ml-1">Paused</span>
+              </>
+            ) : aiLoading ? (
               <div className="w-3 h-3 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
             ) : (
               <>
@@ -299,43 +334,51 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
                 )}
               </div>
               <div className="space-y-2">
-                {suggestions.map((s, i) => (
-                  <button
-                    key={i}
-                    onClick={() => handleInsert(s.text, i)}
-                    className="w-full text-start group"
-                  >
-                    <div className={clsx(
-                      "rounded-xl p-3 border transition-all",
-                      copiedIdx === i
-                        ? "bg-green-50 border-green-200"
-                        : "bg-white border-gray-100 hover:border-primary-200 hover:bg-primary-50/50 hover:shadow-sm"
-                    )}>
-                      <div className="flex items-center justify-between mb-1.5">
-                        <span className="text-[10px] font-semibold text-primary-500">{s.label}</span>
-                        <div className="flex items-center gap-1.5">
-                          <div className="flex items-center gap-0.5">
-                            <div className={clsx(
-                              "h-1 rounded-full transition-all",
-                              s.confidence >= 90 ? "bg-green-400 w-4" : s.confidence >= 85 ? "bg-amber-400 w-3" : "bg-gray-300 w-2"
-                            )} />
-                            <span className="text-[9px] text-gray-400">{s.confidence}%</span>
+                {suggestions.map((s, i) => {
+                  const isContextOnly = copilotMode === "CONTEXT_ONLY";
+                  const Wrapper = isContextOnly ? "div" : "button";
+                  return (
+                    <Wrapper
+                      key={i}
+                      {...(!isContextOnly ? { onClick: () => handleInsert(s.text, i) } : {})}
+                      className={clsx("w-full text-start", !isContextOnly && "group")}
+                    >
+                      <div className={clsx(
+                        "rounded-xl p-3 border transition-all",
+                        copiedIdx === i
+                          ? "bg-green-50 border-green-200"
+                          : isContextOnly
+                            ? "bg-gray-50 border-gray-100"
+                            : "bg-white border-gray-100 hover:border-primary-200 hover:bg-primary-50/50 hover:shadow-sm"
+                      )}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[10px] font-semibold text-primary-500">{s.label}</span>
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex items-center gap-0.5">
+                              <div className={clsx(
+                                "h-1 rounded-full transition-all",
+                                s.confidence >= 90 ? "bg-green-400 w-4" : s.confidence >= 85 ? "bg-amber-400 w-3" : "bg-gray-300 w-2"
+                              )} />
+                              <span className="text-[9px] text-gray-400">{s.confidence}%</span>
+                            </div>
+                            {!isContextOnly && (
+                              copiedIdx === i ? (
+                                <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                </svg>
+                              ) : (
+                                <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-400 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l6.75-6.75M12 19.5l-6.75-6.75" />
+                                </svg>
+                              )
+                            )}
                           </div>
-                          {copiedIdx === i ? (
-                            <svg className="w-3.5 h-3.5 text-green-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
-                            </svg>
-                          ) : (
-                            <svg className="w-3.5 h-3.5 text-gray-300 group-hover:text-primary-400 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m0 0l6.75-6.75M12 19.5l-6.75-6.75" />
-                            </svg>
-                          )}
                         </div>
+                        <p className="text-xs text-gray-600 leading-relaxed">{s.text}</p>
                       </div>
-                      <p className="text-xs text-gray-600 leading-relaxed">{s.text}</p>
-                    </div>
-                  </button>
-                ))}
+                    </Wrapper>
+                  );
+                })}
               </div>
             </div>
           </div>

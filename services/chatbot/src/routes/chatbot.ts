@@ -8,6 +8,7 @@ router.use(authenticate, resolveTenant);
 const flowSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().optional(),
+  channel: z.enum(["WHATSAPP", "MESSENGER"]).nullable().optional(),
   nodes: z.array(z.any()).default([]),
   edges: z.array(z.any()).default([]),
   isActive: z.boolean().optional(),
@@ -15,7 +16,14 @@ const flowSchema = z.object({
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const flows = await prisma.chatbotFlow.findMany({ where: { tenantId: req.tenantId! }, orderBy: { updatedAt: "desc" } });
+    const where: any = { tenantId: req.tenantId! };
+    const channelParam = req.query.channel as string | undefined;
+    if (channelParam === "null" || channelParam === "universal") {
+      where.channel = null;
+    } else if (channelParam) {
+      where.channel = channelParam;
+    }
+    const flows = await prisma.chatbotFlow.findMany({ where, orderBy: { updatedAt: "desc" } });
     res.json(flows);
   } catch (err) { console.error("List flows error:", err); res.status(500).json({ error: "Failed to list flows" }); }
 });
@@ -30,12 +38,13 @@ router.get("/:id", async (req: Request, res: Response) => {
 
 router.post("/", requireRole("ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
   try {
-    const { name, description, nodes, edges, isActive } = req.body;
+    const { name, description, channel, nodes, edges, isActive } = req.body;
     if (isActive) {
-      await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, isActive: true }, data: { isActive: false } });
+      // Only deactivate flows for the same channel scope
+      await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, channel: channel ?? null, isActive: true }, data: { isActive: false } });
     }
     const flow = await prisma.chatbotFlow.create({
-      data: { tenantId: req.tenantId!, name, description, nodes, edges, isActive: isActive || false },
+      data: { tenantId: req.tenantId!, name, description, channel: channel ?? null, nodes, edges, isActive: isActive || false },
     });
     res.status(201).json(flow);
   } catch (err) { console.error("Create flow error:", err); res.status(500).json({ error: "Failed to create flow" }); }
@@ -70,7 +79,8 @@ router.post("/:id/activate", requireRole("ADMIN"), async (req: Request, res: Res
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
-    await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, isActive: true }, data: { isActive: false } });
+    // Only deactivate flows for the same channel scope
+    await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, channel: existing.channel, isActive: true }, data: { isActive: false } });
     const flow = await prisma.chatbotFlow.update({ where: { id: req.params.id as string }, data: { isActive: true } });
     res.json(flow);
   } catch (err) { console.error("Activate flow error:", err); res.status(500).json({ error: "Failed to activate flow" }); }

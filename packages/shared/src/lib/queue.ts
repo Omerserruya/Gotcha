@@ -12,22 +12,43 @@ export const analyticsQueue = new Queue("analytics-aggregation", { connection: {
 
 export interface IncomingMessageJob {
   tenantId: string;
-  phoneNumberId: string;
-  message: any;
-  contacts: any[];
+  channel: "WHATSAPP" | "MESSENGER";
+  channelAccountId: string;
+  normalizedMessage: {
+    externalMessageId: string;
+    senderId: string;
+    senderDisplayName?: string;
+    timestamp: string; // ISO string (serialized for queue)
+    contentType: string;
+    body: string;
+    messageType: string;
+    interactiveReply?: {
+      type: string;
+      payload: string;
+      title: string;
+    };
+  };
+  // Legacy fields kept for backward compat during transition
+  phoneNumberId?: string;
+  message?: any;
+  contacts?: any[];
 }
 
 export interface OutgoingMessageJob {
   tenantId: string;
   conversationId: string;
-  customerPhone: string;
-  phoneNumberId: string;
-  accessToken: string;
+  channel: "WHATSAPP" | "MESSENGER";
+  channelAccountId: string;
+  recipientExternalId: string;
   body: string;
   messageType: string;
   senderName: string;
   messageId: string;
   retryCount?: number;
+  // Legacy fields kept for backward compat during transition
+  customerPhone?: string;
+  phoneNumberId?: string;
+  accessToken?: string;
 }
 
 export interface AnalyticsJob {

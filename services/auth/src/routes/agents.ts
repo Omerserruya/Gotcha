@@ -13,9 +13,22 @@ router.get("/", async (req: Request, res: Response) => {
       select: {
         id: true, name: true, email: true, isActive: true, createdAt: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
+        departmentMember: {
+          select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
+        },
       },
     });
-    res.json(agents);
+    // Flatten department info
+    const data = agents.map((a) => {
+      const { departmentMember, ...rest } = a;
+      return {
+        ...rest,
+        departmentId: departmentMember?.departmentId || null,
+        departmentRole: departmentMember?.departmentRole || null,
+        departmentName: departmentMember?.department?.name || null,
+      };
+    });
+    res.json(data);
   } catch (err) {
     console.error("List agents error:", err);
     res.status(500).json({ error: "Failed to list agents" });
@@ -95,9 +108,149 @@ router.put("/settings/auto-greeting", requireRole("ADMIN"), async (req: Request,
   }
 });
 
+// ─── Channel Account Management ─────────────────────────────
+
+router.get("/settings/channels", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const accounts = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId! },
+      select: {
+        id: true, channel: true, externalId: true, displayName: true,
+        isActive: true, createdAt: true, updatedAt: true,
+        _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ data: accounts });
+  } catch (err) {
+    console.error("List channel accounts error:", err);
+    res.status(500).json({ error: "Failed to list channel accounts" });
+  }
+});
+
+const createChannelSchema = z.object({
+  channel: z.enum(["WHATSAPP", "MESSENGER"]),
+  externalId: z.string().min(1),
+  displayName: z.string().min(1),
+  credentials: z.object({
+    accessToken: z.string().min(1),
+    appSecret: z.string().optional(),
+    webhookSecret: z.string().optional(),
+  }),
+});
+
+router.post("/settings/channels", requireRole("ADMIN"), validate(createChannelSchema), async (req: Request, res: Response) => {
+  try {
+    const { channel, externalId, displayName, credentials } = req.body;
+
+    // Check uniqueness
+    const existing = await prisma.channelAccount.findFirst({
+      where: { channel, externalId },
+    });
+    if (existing) {
+      res.status(409).json({ error: "This channel account is already registered" });
+      return;
+    }
+
+    const account = await prisma.channelAccount.create({
+      data: {
+        tenantId: req.tenantId!,
+        channel,
+        externalId,
+        displayName,
+        credentials,
+      },
+    });
+    res.status(201).json({ data: account });
+  } catch (err) {
+    console.error("Create channel account error:", err);
+    res.status(500).json({ error: "Failed to create channel account" });
+  }
+});
+
+const updateChannelSchema = z.object({
+  displayName: z.string().min(1).optional(),
+  credentials: z.object({
+    accessToken: z.string().min(1),
+    appSecret: z.string().optional(),
+    webhookSecret: z.string().optional(),
+  }).optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.patch("/settings/channels/:id", requireRole("ADMIN"), validate(updateChannelSchema), async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+    });
+    if (!account) { res.status(404).json({ error: "Channel account not found" }); return; }
+
+    const updated = await prisma.channelAccount.update({
+      where: { id: req.params.id as string },
+      data: req.body,
+    });
+    res.json({ data: updated });
+  } catch (err) {
+    console.error("Update channel account error:", err);
+    res.status(500).json({ error: "Failed to update channel account" });
+  }
+});
+
+router.delete("/settings/channels/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+    });
+    if (!account) { res.status(404).json({ error: "Channel account not found" }); return; }
+
+    await prisma.channelAccount.delete({ where: { id: req.params.id as string } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete channel account error:", err);
+    res.status(500).json({ error: "Failed to delete channel account" });
+  }
+});
+
+// ─── Tenant Channel Config (Bot Flow Mode) ─────────────────
+
+router.get("/settings/channel-config", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    let config = await prisma.tenantChannelConfig.findUnique({
+      where: { tenantId: req.tenantId! },
+    });
+    if (!config) {
+      res.json({ data: { botFlowMode: "UNIFIED" } });
+      return;
+    }
+    res.json({ data: config });
+  } catch (err) {
+    console.error("Get channel config error:", err);
+    res.status(500).json({ error: "Failed to get channel config" });
+  }
+});
+
+const channelConfigSchema = z.object({
+  botFlowMode: z.enum(["UNIFIED", "PER_CHANNEL"]),
+});
+
+router.put("/settings/channel-config", requireRole("ADMIN"), validate(channelConfigSchema), async (req: Request, res: Response) => {
+  try {
+    const config = await prisma.tenantChannelConfig.upsert({
+      where: { tenantId: req.tenantId! },
+      update: { botFlowMode: req.body.botFlowMode },
+      create: { tenantId: req.tenantId!, botFlowMode: req.body.botFlowMode },
+    });
+    res.json({ data: config });
+  } catch (err) {
+    console.error("Update channel config error:", err);
+    res.status(500).json({ error: "Failed to update channel config" });
+  }
+});
+
 // ─── Co-Pilot Settings ──────────────────────────────────────
 
 const copilotSettingsSchema = z.object({
+  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY"]).optional(),
   systemPrompt: z.string().optional(),
   rules: z.array(z.string()).optional(),
   tools: z.array(z.object({

@@ -20,6 +20,49 @@ async function main() {
   });
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
 
+  // Create channel accounts
+  const waAccount = await prisma.channelAccount.upsert({
+    where: { channel_externalId: { channel: "WHATSAPP", externalId: process.env.WHATSAPP_PHONE_NUMBER_ID || "demo-phone-id" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      channel: "WHATSAPP",
+      externalId: process.env.WHATSAPP_PHONE_NUMBER_ID || "demo-phone-id",
+      displayName: "Demo Company WhatsApp",
+      credentials: {
+        accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "demo-token",
+        webhookSecret: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "demo-secret",
+      },
+    },
+  });
+  console.log(`WhatsApp channel: ${waAccount.displayName} (${waAccount.id})`);
+
+  const msgAccount = await prisma.channelAccount.upsert({
+    where: { channel_externalId: { channel: "MESSENGER", externalId: process.env.MESSENGER_PAGE_ID || "demo-page-id" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      channel: "MESSENGER",
+      externalId: process.env.MESSENGER_PAGE_ID || "demo-page-id",
+      displayName: "Demo Company Messenger",
+      credentials: {
+        accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token",
+      },
+    },
+  });
+  console.log(`Messenger channel: ${msgAccount.displayName} (${msgAccount.id})`);
+
+  // Create tenant channel config
+  await prisma.tenantChannelConfig.upsert({
+    where: { tenantId: tenant.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      botFlowMode: "UNIFIED",
+    },
+  });
+  console.log("Tenant channel config: UNIFIED mode");
+
   // Create admin user
   const adminPassword = await bcrypt.hash("admin123", 10);
   const admin = await prisma.user.upsert({
@@ -62,10 +105,59 @@ async function main() {
   });
   console.log(`Agents: ${agent1.name}, ${agent2.name}`);
 
-  // Create sample conversations
+  // Create departments
+  const salesDept = await prisma.department.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: "Sales" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: "Sales",
+      description: "Sales and pre-sales inquiries",
+      queueMode: "ROUND_ROBIN",
+    },
+  });
+
+  const supportDept = await prisma.department.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: "Support" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: "Support",
+      description: "Technical support and troubleshooting",
+      queueMode: "CLAIM",
+    },
+  });
+  console.log(`Departments: ${salesDept.name}, ${supportDept.name}`);
+
+  // Assign agents to departments
+  await prisma.departmentMember.upsert({
+    where: { userId: agent1.id },
+    update: {},
+    create: {
+      userId: agent1.id,
+      departmentId: salesDept.id,
+      departmentRole: "MANAGER",
+    },
+  });
+
+  await prisma.departmentMember.upsert({
+    where: { userId: agent2.id },
+    update: {},
+    create: {
+      userId: agent2.id,
+      departmentId: supportDept.id,
+      departmentRole: "AGENT",
+    },
+  });
+  console.log(`Department members: ${agent1.name} -> Sales (Manager), ${agent2.name} -> Support (Agent)`);
+
+  // Create sample conversations (WhatsApp)
   const conv1 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
+      channel: "WHATSAPP",
+      channelAccountId: waAccount.id,
+      customerExternalId: "+1234567890",
       customerPhone: "+1234567890",
       customerName: "John Doe",
       status: "OPEN",
@@ -76,6 +168,9 @@ async function main() {
   const conv2 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
+      channel: "WHATSAPP",
+      channelAccountId: waAccount.id,
+      customerExternalId: "+0987654321",
       customerPhone: "+0987654321",
       customerName: "Jane Smith",
       assignedAgentId: agent1.id,
@@ -85,22 +180,40 @@ async function main() {
     },
   });
 
+  // Create sample conversation (Messenger)
   const conv3 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
-      customerPhone: "+1122334455",
+      channel: "MESSENGER",
+      channelAccountId: msgAccount.id,
+      customerExternalId: "psid_1234567890",
       customerName: "Bob Wilson",
       status: "WAITING",
       lastMessageAt: new Date(Date.now() - 3600000),
     },
   });
 
+  // Another Messenger conversation
+  const conv4 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "MESSENGER",
+      channelAccountId: msgAccount.id,
+      customerExternalId: "psid_0987654321",
+      customerName: "Alice Brown",
+      status: "OPEN",
+      lastMessageAt: new Date(Date.now() - 1800000),
+    },
+  });
+
   // Create sample messages
   await prisma.message.createMany({
     data: [
+      // WhatsApp conversations
       {
         tenantId: tenant.id,
         conversationId: conv1.id,
+        channel: "WHATSAPP",
         direction: "INBOUND",
         body: "Hi, I need help with my order #12345",
         senderName: "John Doe",
@@ -109,6 +222,7 @@ async function main() {
       {
         tenantId: tenant.id,
         conversationId: conv1.id,
+        channel: "WHATSAPP",
         direction: "INBOUND",
         body: "It's been 3 days and I haven't received it",
         senderName: "John Doe",
@@ -117,6 +231,7 @@ async function main() {
       {
         tenantId: tenant.id,
         conversationId: conv2.id,
+        channel: "WHATSAPP",
         direction: "INBOUND",
         body: "Hello, I'd like to return an item",
         senderName: "Jane Smith",
@@ -125,6 +240,7 @@ async function main() {
       {
         tenantId: tenant.id,
         conversationId: conv2.id,
+        channel: "WHATSAPP",
         direction: "OUTBOUND",
         body: "Hi Jane! I'd be happy to help you with the return. Could you provide the order number?",
         senderName: "Sarah Johnson",
@@ -133,30 +249,52 @@ async function main() {
       {
         tenantId: tenant.id,
         conversationId: conv2.id,
+        channel: "WHATSAPP",
         direction: "INBOUND",
         body: "Sure, it's order #67890",
         senderName: "Jane Smith",
         status: "DELIVERED",
       },
+      // Messenger conversations
       {
         tenantId: tenant.id,
         conversationId: conv3.id,
+        channel: "MESSENGER",
         direction: "INBOUND",
         body: "Is anyone available? I have a billing question.",
         senderName: "Bob Wilson",
         status: "DELIVERED",
       },
+      {
+        tenantId: tenant.id,
+        conversationId: conv4.id,
+        channel: "MESSENGER",
+        direction: "INBOUND",
+        body: "Hey! I saw your ad on Facebook. Do you ship internationally?",
+        senderName: "Alice Brown",
+        status: "DELIVERED",
+      },
+      {
+        tenantId: tenant.id,
+        conversationId: conv4.id,
+        channel: "MESSENGER",
+        direction: "INBOUND",
+        body: "Also, what's the return policy?",
+        senderName: "Alice Brown",
+        status: "DELIVERED",
+      },
     ],
   });
-  console.log(`Conversations: ${conv1.id}, ${conv2.id}, ${conv3.id}`);
+  console.log(`Conversations: ${conv1.id}, ${conv2.id}, ${conv3.id}, ${conv4.id}`);
 
-  // Create example chatbot flow
+  // Create example chatbot flow (universal - works for all channels)
   const chatbotFlow = await prisma.chatbotFlow.create({
     data: {
       tenantId: tenant.id,
       name: "Welcome Flow",
       description: "Greets customers and routes to appropriate department",
       isActive: true,
+      channel: null, // null = ALL channels (universal flow)
       nodes: [
         {
           id: "start-1",
@@ -221,6 +359,12 @@ async function main() {
   console.log("  Agent: agent1@demo.com / agent123");
   console.log("  Agent: agent2@demo.com / agent123");
   console.log("  Tenant slug: demo-company");
+  console.log("\nChannels:");
+  console.log(`  WhatsApp: ${waAccount.displayName} (${waAccount.externalId})`);
+  console.log(`  Messenger: ${msgAccount.displayName} (${msgAccount.externalId})`);
+  console.log("\nDepartments:");
+  console.log(`  ${salesDept.name}: ${agent1.name} (Manager)`);
+  console.log(`  ${supportDept.name}: ${agent2.name} (Agent)`);
 }
 
 main()

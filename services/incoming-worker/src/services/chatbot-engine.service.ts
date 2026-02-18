@@ -1,15 +1,16 @@
-import { prisma } from "@chatcenter/shared";
-import { sendWhatsAppMessage, sendQuickReply } from "./whatsapp.service";
+import { prisma, getOutboundAdapter } from "@chatcenter/shared";
+import type { ChannelCredentials } from "@chatcenter/shared";
 
 interface FlowNode {
   id: string;
-  type: "start" | "message" | "quick_reply" | "condition" | "handover" | "end";
+  type: "start" | "message" | "quick_reply" | "condition" | "handover" | "department_route" | "end";
   data: {
     text?: string;
     buttons?: Array<{ id: string; title: string }>;
     variable?: string;
     conditions?: Array<{ value: string; targetNodeId: string }>;
     defaultTargetNodeId?: string;
+    departmentId?: string;
   };
 }
 
@@ -25,20 +26,29 @@ interface FlowDefinition {
   edges: FlowEdge[];
 }
 
+interface ChannelSendContext {
+  channel: "WHATSAPP" | "MESSENGER";
+  channelAccountExternalId: string;
+  credentials: ChannelCredentials;
+  recipientId: string;
+}
+
 export async function processChatbotFlow(tenantId: string, conversationId: string, incomingMessage: string): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
-    include: { chatbotFlow: true },
+    include: { chatbotFlow: true, channelAccount: true },
   });
 
   if (!conversation || conversation.isHandedOver || conversation.assignedAgentId) return false;
 
-  const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-  if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) return false;
+  // Build send context from channel account or legacy tenant config
+  const sendContext = await buildSendContext(conversation, tenantId);
+  if (!sendContext) return false;
 
+  // Select the appropriate chatbot flow based on tenant's bot flow mode
   let flow = conversation.chatbotFlow;
   if (!flow) {
-    flow = await prisma.chatbotFlow.findFirst({ where: { tenantId, isActive: true } });
+    flow = await selectBotFlow(tenantId, conversation.channel as "WHATSAPP" | "MESSENGER");
     if (!flow) return false;
     await prisma.conversation.update({ where: { id: conversationId }, data: { chatbotFlowId: flow.id } });
   }
@@ -69,13 +79,71 @@ export async function processChatbotFlow(tenantId: string, conversationId: strin
     }
   }
 
-  return await executeFromNode(currentNodeId, definition, tenantId, conversationId, conversation.customerPhone, tenant.waPhoneNumberId, tenant.waAccessToken);
+  return await executeFromNode(currentNodeId, definition, tenantId, conversationId, sendContext);
 }
 
-async function executeFromNode(nodeId: string, flow: FlowDefinition, tenantId: string, conversationId: string, customerPhone: string, phoneNumberId: string, accessToken: string): Promise<boolean> {
+async function buildSendContext(conversation: any, tenantId: string): Promise<ChannelSendContext | null> {
+  // Try channel account first (new path)
+  if (conversation.channelAccount) {
+    const creds = conversation.channelAccount.credentials as any;
+    return {
+      channel: conversation.channel,
+      channelAccountExternalId: conversation.channelAccount.externalId,
+      credentials: { accessToken: creds.accessToken, appSecret: creds.appSecret },
+      recipientId: conversation.customerExternalId,
+    };
+  }
+
+  // Legacy fallback for WhatsApp: use tenant's WA config
+  if (conversation.channel === "WHATSAPP" || !conversation.channel) {
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
+    if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) return null;
+    return {
+      channel: "WHATSAPP",
+      channelAccountExternalId: tenant.waPhoneNumberId,
+      credentials: { accessToken: tenant.waAccessToken },
+      recipientId: conversation.customerExternalId || conversation.customerPhone,
+    };
+  }
+
+  return null;
+}
+
+async function selectBotFlow(tenantId: string, channel: "WHATSAPP" | "MESSENGER") {
+  // Check tenant's bot flow mode
+  const config = await prisma.tenantChannelConfig.findUnique({ where: { tenantId } });
+  const mode = config?.botFlowMode || "UNIFIED";
+
+  if (mode === "PER_CHANNEL") {
+    // Try channel-specific flow first
+    const channelFlow = await prisma.chatbotFlow.findFirst({
+      where: { tenantId, channel, isActive: true },
+    });
+    if (channelFlow) return channelFlow;
+  }
+
+  // Fall back to universal flow (channel = null means ALL)
+  return prisma.chatbotFlow.findFirst({
+    where: { tenantId, channel: null, isActive: true },
+  });
+}
+
+async function executeFromNode(
+  nodeId: string,
+  flow: FlowDefinition,
+  tenantId: string,
+  conversationId: string,
+  sendCtx: ChannelSendContext
+): Promise<boolean> {
   let currentId: string | null = nodeId;
   const maxSteps = 20;
   let steps = 0;
+
+  const adapter = getOutboundAdapter(sendCtx.channel);
+  if (!adapter) {
+    console.error(`No outbound adapter found for channel: ${sendCtx.channel}`);
+    return false;
+  }
 
   while (currentId && steps < maxSteps) {
     steps++;
@@ -85,9 +153,24 @@ async function executeFromNode(nodeId: string, flow: FlowDefinition, tenantId: s
     switch (node.type) {
       case "message": {
         if (node.data.text) {
-          const waId = await sendWhatsAppMessage(phoneNumberId, accessToken, customerPhone, node.data.text);
+          const extId = await adapter.sendTextMessage(
+            sendCtx.credentials,
+            sendCtx.channelAccountExternalId,
+            sendCtx.recipientId,
+            node.data.text
+          );
           await prisma.message.create({
-            data: { tenantId, conversationId, direction: "OUTBOUND", body: node.data.text, senderName: "Chatbot", waMessageId: waId, status: waId ? "SENT" : "FAILED" },
+            data: {
+              tenantId,
+              conversationId,
+              channel: sendCtx.channel,
+              direction: "OUTBOUND",
+              body: node.data.text,
+              senderName: "Chatbot",
+              externalMessageId: extId,
+              waMessageId: sendCtx.channel === "WHATSAPP" ? extId : undefined,
+              status: extId ? "SENT" : "FAILED",
+            },
           });
         }
         const edge = flow.edges.find((e) => e.source === currentId);
@@ -96,9 +179,27 @@ async function executeFromNode(nodeId: string, flow: FlowDefinition, tenantId: s
       }
       case "quick_reply": {
         if (node.data.text && node.data.buttons) {
-          const waId = await sendQuickReply(phoneNumberId, accessToken, customerPhone, node.data.text, node.data.buttons);
+          const extId = await adapter.sendInteractiveMessage(
+            sendCtx.credentials,
+            sendCtx.channelAccountExternalId,
+            sendCtx.recipientId,
+            node.data.text,
+            node.data.buttons
+          );
           await prisma.message.create({
-            data: { tenantId, conversationId, direction: "OUTBOUND", body: node.data.text, messageType: "interactive", senderName: "Chatbot", waMessageId: waId, status: waId ? "SENT" : "FAILED", metadata: { buttons: node.data.buttons } },
+            data: {
+              tenantId,
+              conversationId,
+              channel: sendCtx.channel,
+              direction: "OUTBOUND",
+              body: node.data.text,
+              messageType: "interactive",
+              senderName: "Chatbot",
+              externalMessageId: extId,
+              waMessageId: sendCtx.channel === "WHATSAPP" ? extId : undefined,
+              status: extId ? "SENT" : "FAILED",
+              metadata: { buttons: node.data.buttons },
+            },
           });
         }
         await prisma.conversation.update({ where: { id: conversationId }, data: { chatbotNodeId: currentId } });
@@ -109,13 +210,73 @@ async function executeFromNode(nodeId: string, flow: FlowDefinition, tenantId: s
         currentId = edge?.target || null;
         break;
       }
-      case "handover": {
-        await prisma.conversation.update({ where: { id: conversationId }, data: { isHandedOver: true, chatbotNodeId: null, status: "WAITING" } });
-        // System divider: bot transferred to agent queue
+      case "department_route": {
+        const deptId = node.data.departmentId;
+        if (!deptId) {
+          // No department configured, fall through to next node
+          const edge = flow.edges.find((e) => e.source === currentId);
+          currentId = edge?.target || null;
+          break;
+        }
+
+        const dept = await prisma.department.findFirst({
+          where: { id: deptId, isActive: true },
+          include: { members: { include: { user: { select: { id: true, isActive: true, _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } } } } } } },
+        });
+
+        let assignedAgentId: string | null = null;
+        if (dept && dept.queueMode === "ROUND_ROBIN") {
+          const activeMembers = dept.members.filter((m) => m.user.isActive);
+          if (activeMembers.length > 0) {
+            activeMembers.sort((a, b) => a.user._count.conversations - b.user._count.conversations);
+            assignedAgentId = activeMembers[0].userId;
+          }
+        }
+
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: {
+            departmentId: deptId,
+            assignedAgentId,
+            isHandedOver: true,
+            chatbotNodeId: null,
+            status: assignedAgentId ? "OPEN" : "WAITING",
+          },
+        });
+
         await prisma.message.create({
           data: {
-            tenantId, conversationId, direction: "INBOUND",
-            body: "", messageType: "system", senderName: "System",
+            tenantId,
+            conversationId,
+            channel: sendCtx.channel,
+            direction: "INBOUND",
+            body: "",
+            messageType: "system",
+            senderName: "System",
+            status: "DELIVERED",
+            metadata: {
+              systemEvent: "department_route",
+              departmentName: dept?.name || "Unknown",
+              ...(assignedAgentId ? { agentId: assignedAgentId } : {}),
+            },
+          },
+        });
+        return true;
+      }
+      case "handover": {
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { isHandedOver: true, chatbotNodeId: null, status: "WAITING" },
+        });
+        await prisma.message.create({
+          data: {
+            tenantId,
+            conversationId,
+            channel: sendCtx.channel,
+            direction: "INBOUND",
+            body: "",
+            messageType: "system",
+            senderName: "System",
             status: "DELIVERED",
             metadata: { systemEvent: "bot_handover" },
           },
@@ -123,7 +284,10 @@ async function executeFromNode(nodeId: string, flow: FlowDefinition, tenantId: s
         return true;
       }
       case "end": {
-        await prisma.conversation.update({ where: { id: conversationId }, data: { chatbotNodeId: null, status: "CLOSED", closedAt: new Date() } });
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { chatbotNodeId: null, status: "CLOSED", closedAt: new Date() },
+        });
         return true;
       }
       default: {

@@ -3,10 +3,11 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getConversations } from "@/lib/api";
+import { getConversations, getDepartments } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
+import { ChannelBadge } from "./ChannelBadge";
 
 interface Props {
   selectedId: string | null;
@@ -29,6 +30,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const { t } = useI18n();
   const [conversations, setConversations] = useState<any[]>([]);
   const [search, setSearch] = useState("");
+  const [channelFilter, setChannelFilter] = useState<string>("");
+  const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastReadMap, setLastReadMap] = useState<Record<string, string>>(getLastReadMap);
 
@@ -37,6 +41,8 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     try {
       const params: Record<string, string> = {};
       if (search) params.search = search;
+      if (channelFilter) params.channel = channelFilter;
+      if (departmentFilter) params.departmentId = departmentFilter;
       const res = await getConversations(token, params);
       setConversations(res.data);
     } catch (err) {
@@ -44,11 +50,19 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token, search]);
+  }, [token, search, channelFilter, departmentFilter]);
 
   useEffect(() => {
     fetchConversations();
   }, [fetchConversations]);
+
+  // Fetch departments for filter (admin only)
+  useEffect(() => {
+    if (!token || user?.role !== "ADMIN") return;
+    getDepartments(token).then((list) => {
+      setDepartments(Array.isArray(list) ? list : []);
+    }).catch(() => {});
+  }, [token, user?.role]);
 
   // Real-time updates
   useEffect(() => {
@@ -145,7 +159,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       {/* Header */}
       <div className="p-4 border-b border-gray-100">
         <h2 className="text-lg font-bold text-gray-900 mb-3 ps-8 md:ps-0">{t("conversations.title")}</h2>
-        <div className="relative">
+        <div className="relative mb-2">
           <svg className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
           </svg>
@@ -157,6 +171,57 @@ export function ConversationList({ selectedId, onSelect }: Props) {
             className="w-full ps-10 pe-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
           />
         </div>
+        {/* Channel filter */}
+        <div className="flex items-center gap-1.5">
+          {[
+            { value: "", label: t("conversations.channelAll") },
+            { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
+            { value: "MESSENGER", label: t("conversations.channelMessenger") },
+          ].map((opt) => (
+            <button
+              key={opt.value}
+              onClick={() => setChannelFilter(opt.value)}
+              className={clsx(
+                "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                channelFilter === opt.value
+                  ? "bg-primary-500 text-white shadow-sm"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        {/* Department filter (admin only) */}
+        {user?.role === "ADMIN" && departments.length > 0 && (
+          <div className="flex items-center gap-1.5 mt-1.5">
+            <button
+              onClick={() => setDepartmentFilter("")}
+              className={clsx(
+                "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                departmentFilter === ""
+                  ? "bg-teal-500 text-white shadow-sm"
+                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+              )}
+            >
+              {t("conversations.allDepartments")}
+            </button>
+            {departments.map((dept: any) => (
+              <button
+                key={dept.id}
+                onClick={() => setDepartmentFilter(dept.id)}
+                className={clsx(
+                  "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                  departmentFilter === dept.id
+                    ? "bg-teal-500 text-white shadow-sm"
+                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                )}
+              >
+                {dept.name}
+              </button>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* List */}
@@ -214,12 +279,15 @@ export function ConversationList({ selectedId, onSelect }: Props) {
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <p className={clsx(
-                            "font-semibold text-sm truncate",
-                            isUnread(conv, lastReadMap) ? "text-gray-900" : "text-gray-900"
-                          )}>
-                            {conv.customerName || conv.customerPhone}
-                          </p>
+                          <div className="flex items-center gap-1.5">
+                            <ChannelBadge channel={conv.channel} />
+                            <p className={clsx(
+                              "font-semibold text-sm truncate",
+                              isUnread(conv, lastReadMap) ? "text-gray-900" : "text-gray-900"
+                            )}>
+                              {conv.customerName || conv.customerExternalId || conv.customerPhone}
+                            </p>
+                          </div>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {isUnread(conv, lastReadMap) && (
                               <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-sm shadow-blue-500/30" title="Unread" />
@@ -242,6 +310,11 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                         </p>
                         <div className="flex items-center gap-2 mt-1">
                           <StatusBadge status={conv.status} t={t} />
+                          {conv.department && (
+                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-600 ring-1 ring-teal-200">
+                              {conv.department.name}
+                            </span>
+                          )}
                           {conv.assignedAgent && conv.assignedAgentId !== user?.id && (
                             <span className="text-[10px] text-gray-400">
                               {conv.assignedAgent.name}

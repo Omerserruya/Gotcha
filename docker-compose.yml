@@ -174,6 +174,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v19.0}
     depends_on:
       db:
         condition: service_healthy
@@ -208,6 +209,11 @@ services:
       sh -c "cd /app/packages/shared && npx prisma migrate deploy && npx tsx prisma/seed.ts"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      MESSENGER_PAGE_ID: ${MESSENGER_PAGE_ID:-}
+      MESSENGER_ACCESS_TOKEN: ${MESSENGER_ACCESS_TOKEN:-}
     depends_on:
       db:
         condition: service_healthy

@@ -128,8 +128,9 @@ export function getQueueStats(token: string) {
 
 // ─── Chatbot Flows ──────────────────────────────────────────
 
-export function getChatbotFlows(token: string) {
-  return apiFetch<any[]>("/api/chatbot-flows", { token });
+export function getChatbotFlows(token: string, channel?: string | null) {
+  const params = channel !== undefined ? `?channel=${channel === null ? "null" : channel}` : "";
+  return apiFetch<any[]>(`/api/chatbot-flows${params}`, { token });
 }
 
 export function getChatbotFlow(token: string, id: string) {
@@ -193,6 +194,46 @@ export function updateAgent(token: string, id: string, data: { name?: string; is
   });
 }
 
+// ─── Channel Accounts ──────────────────────────────────────
+
+export function getChannelAccounts(token: string) {
+  return apiFetch<{ data: any[] }>("/api/agents/settings/channels", { token });
+}
+
+export function createChannelAccount(token: string, data: { channel: string; externalId: string; displayName: string; credentials: any }) {
+  return apiFetch<{ data: any }>("/api/agents/settings/channels", {
+    token,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
+export function updateChannelAccount(token: string, id: string, data: any) {
+  return apiFetch<{ data: any }>(`/api/agents/settings/channels/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
+export function deleteChannelAccount(token: string, id: string) {
+  return apiFetch<any>(`/api/agents/settings/channels/${id}`, { token, method: "DELETE" });
+}
+
+// ─── Tenant Channel Config ─────────────────────────────────
+
+export function getChannelConfig(token: string) {
+  return apiFetch<{ data: any }>("/api/agents/settings/channel-config", { token });
+}
+
+export function updateChannelConfig(token: string, data: { botFlowMode: string }) {
+  return apiFetch<{ data: any }>("/api/agents/settings/channel-config", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Auto-Greeting Settings ────────────────────────────────
 
 export function getAutoGreeting(token: string) {
@@ -221,14 +262,72 @@ export function updateCopilotSettings(token: string, data: any) {
   });
 }
 
+// ─── Departments ────────────────────────────────────────────
+
+export function getDepartments(token: string) {
+  return apiFetch<{ data: any[] }>("/api/departments", { token });
+}
+
+export function createDepartment(token: string, data: { name: string; description?: string; queueMode?: string }) {
+  return apiFetch<{ data: any }>("/api/departments", {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+export function updateDepartment(token: string, id: string, data: { name?: string; description?: string; queueMode?: string; isActive?: boolean }) {
+  return apiFetch<{ data: any }>(`/api/departments/${id}`, {
+    token, method: "PATCH", body: JSON.stringify(data),
+  });
+}
+
+export function deleteDepartment(token: string, id: string) {
+  return apiFetch<any>(`/api/departments/${id}`, { token, method: "DELETE" });
+}
+
+export function getDepartmentMembers(token: string, departmentId: string) {
+  return apiFetch<{ data: any[] }>(`/api/departments/${departmentId}/members`, { token });
+}
+
+export function addDepartmentMember(token: string, departmentId: string, data: { userId: string; departmentRole?: string }) {
+  return apiFetch<{ data: any }>(`/api/departments/${departmentId}/members`, {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+export function updateDepartmentMember(token: string, departmentId: string, userId: string, data: { departmentRole: string }) {
+  return apiFetch<{ data: any }>(`/api/departments/${departmentId}/members/${userId}`, {
+    token, method: "PATCH", body: JSON.stringify(data),
+  });
+}
+
+export function removeDepartmentMember(token: string, departmentId: string, userId: string) {
+  return apiFetch<any>(`/api/departments/${departmentId}/members/${userId}`, { token, method: "DELETE" });
+}
+
+export function getDepartmentCopilot(token: string, departmentId: string) {
+  return apiFetch<{ data: any; source: string }>(`/api/departments/${departmentId}/copilot`, { token });
+}
+
+export function updateDepartmentCopilot(token: string, departmentId: string, data: any) {
+  return apiFetch<{ data: any }>(`/api/departments/${departmentId}/copilot`, {
+    token, method: "PUT", body: JSON.stringify(data),
+  });
+}
+
+export function transferToDepartment(token: string, conversationId: string, departmentId: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${conversationId}/reassign`, {
+    token, method: "POST", body: JSON.stringify({ departmentId }),
+  });
+}
+
 // ─── AI Assist ──────────────────────────────────────────────
 
 export function getAISuggestions(token: string, conversationId: string) {
-  return apiFetch<{ data: any[] }>(`/api/ai-assist/${conversationId}/suggestions`, { token });
+  return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions`, { token });
 }
 
 export function getAISummary(token: string, conversationId: string) {
-  return apiFetch<{ data: { summary: string } }>(`/api/ai-assist/${conversationId}/summary`, { token });
+  return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary`, { token });
 }
 
 // ─── Workload ───────────────────────────────────────────────

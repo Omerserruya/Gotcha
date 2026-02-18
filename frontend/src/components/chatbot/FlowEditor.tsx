@@ -25,6 +25,7 @@ import { MessageNode } from "./nodes/MessageNode";
 import { QuickReplyNode } from "./nodes/QuickReplyNode";
 import { ConditionNode } from "./nodes/ConditionNode";
 import { HandoverNode } from "./nodes/HandoverNode";
+import { DepartmentRouteNode } from "./nodes/DepartmentRouteNode";
 import { EndNode } from "./nodes/EndNode";
 
 const nodeTypes: NodeTypes = {
@@ -33,6 +34,7 @@ const nodeTypes: NodeTypes = {
   quick_reply: QuickReplyNode,
   condition: ConditionNode,
   handover: HandoverNode,
+  department_route: DepartmentRouteNode,
   end: EndNode,
 };
 
@@ -255,6 +257,7 @@ export function FlowEditor({ flowId, onBack }: Props) {
       case "quick_reply": return { text: "Choose an option:", buttons: [{ id: "opt1", title: "Option 1" }] };
       case "condition": return { conditions: [], defaultTargetNodeId: null };
       case "handover": return {};
+      case "department_route": return { departmentId: "" };
       case "end": return {};
       default: return {};
     }
@@ -373,16 +376,19 @@ export function FlowEditor({ flowId, onBack }: Props) {
           <Panel position="top-right">
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-3 space-y-1.5">
               <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wide mb-2">Add Node</p>
-              {(["message", "quick_reply", "condition", "handover", "end"] as const).map(
-                (type) => (
-                  <button
-                    key={type}
-                    onClick={() => addNode(type)}
-                    className="block w-full text-start text-xs px-3 py-2 rounded-xl bg-gray-50 hover:bg-primary-50 hover:text-primary-600 transition font-medium"
-                  >
-                    {t(`chatbot.nodeTypes.${type === "quick_reply" ? "quickReply" : type}`)}
-                  </button>
-                )
+              {(["message", "quick_reply", "condition", "handover", "department_route", "end"] as const).map(
+                (type) => {
+                  const labelMap: Record<string, string> = { quick_reply: "quickReply", department_route: "departmentRoute" };
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => addNode(type)}
+                      className="block w-full text-start text-xs px-3 py-2 rounded-xl bg-gray-50 hover:bg-primary-50 hover:text-primary-600 transition font-medium"
+                    >
+                      {t(`chatbot.nodeTypes.${labelMap[type] || type}`)}
+                    </button>
+                  );
+                }
               )}
             </div>
           </Panel>

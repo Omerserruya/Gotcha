@@ -11,10 +11,13 @@ import {
   closeConversation,
   reassignConversation,
   getAgents,
+  getDepartments,
+  transferToDepartment,
 } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { format } from "date-fns";
 import clsx from "clsx";
+import { ChannelBadge } from "./ChannelBadge";
 import { CoPilotPanel } from "./CoPilotPanel";
 import { HistoryPanel } from "./HistoryPanel";
 
@@ -31,10 +34,22 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [inputText, setInputText] = useState("");
   const [sending, setSending] = useState(false);
   const [showTransfer, setShowTransfer] = useState(false);
+  const [transferTab, setTransferTab] = useState<"agents" | "departments">("agents");
   const [agents, setAgents] = useState<any[]>([]);
+  const [departments, setDepartments] = useState<any[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+
+  // Notify AppLayout to auto-collapse sidebar when panels open
+  useEffect(() => {
+    const anyPanelOpen = copilotOpen || historyOpen;
+    window.dispatchEvent(new CustomEvent("panel:toggle", { detail: { open: anyPanelOpen } }));
+    return () => {
+      // Restore sidebar when ChatPanel unmounts
+      window.dispatchEvent(new CustomEvent("panel:toggle", { detail: { open: false } }));
+    };
+  }, [copilotOpen, historyOpen]);
 
   const fetchConversation = useCallback(async () => {
     if (!token) return;
@@ -170,15 +185,30 @@ export function ChatPanel({ conversationId, onBack }: Props) {
     }
   }
 
+  async function handleTransferToDept(departmentId: string) {
+    if (!token) return;
+    try {
+      await transferToDepartment(token, conversationId, departmentId);
+      setShowTransfer(false);
+      fetchConversation();
+    } catch (err: any) {
+      alert(err.message);
+    }
+  }
+
   async function openTransferDialog() {
     if (!token) return;
     try {
-      const list = await getAgents(token);
-      // Filter out current user from list
-      setAgents(Array.isArray(list) ? list.filter((a: any) => a.id !== user?.id) : []);
+      const [agentList, deptList] = await Promise.all([
+        getAgents(token),
+        getDepartments(token),
+      ]);
+      setAgents(Array.isArray(agentList) ? agentList.filter((a: any) => a.id !== user?.id) : []);
+      setDepartments(Array.isArray(deptList) ? deptList : []);
+      setTransferTab("agents");
       setShowTransfer(true);
     } catch (err) {
-      console.error("Failed to load agents:", err);
+      console.error("Failed to load transfer options:", err);
     }
   }
 
@@ -200,17 +230,20 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             </svg>
           </button>
 
-          {/* Customer info */}
+          {/* Customer info with channel badge */}
           <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center shrink-0">
             <span className="text-sm font-bold text-primary-600">
-              {(conversation?.customerName || conversation?.customerPhone || "?").charAt(0).toUpperCase()}
+              {(conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "?").charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <p className="font-semibold text-sm text-gray-900 truncate">
-              {conversation?.customerName || conversation?.customerPhone || "..."}
-            </p>
-            <p className="text-xs text-gray-400">{conversation?.customerPhone}</p>
+            <div className="flex items-center gap-2">
+              <ChannelBadge channel={conversation?.channel} size="md" showLabel />
+              <p className="font-semibold text-sm text-gray-900 truncate">
+                {conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "..."}
+              </p>
+            </div>
+            <p className="text-xs text-gray-400">{conversation?.customerExternalId || conversation?.customerPhone}</p>
           </div>
 
           {/* Actions */}
@@ -376,34 +409,80 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       {showTransfer && (
         <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl w-full max-w-sm p-6 shadow-xl">
-            <h3 className="font-bold text-gray-900 mb-1">{t("conversations.reassign")}</h3>
-            <p className="text-xs text-gray-400 mb-4">Select an agent to transfer this conversation to</p>
+            <h3 className="font-bold text-gray-900 mb-1">{t("conversations.transfer")}</h3>
+            <p className="text-xs text-gray-400 mb-3">Transfer this conversation to an agent or department</p>
+            {/* Tabs */}
+            <div className="flex border-b border-gray-100 mb-3">
+              <button
+                onClick={() => setTransferTab("agents")}
+                className={clsx("flex-1 py-2 text-xs font-medium transition relative", transferTab === "agents" ? "text-primary-600" : "text-gray-400 hover:text-gray-600")}
+              >
+                {t("conversations.reassign")}
+                {transferTab === "agents" && <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />}
+              </button>
+              <button
+                onClick={() => setTransferTab("departments")}
+                className={clsx("flex-1 py-2 text-xs font-medium transition relative", transferTab === "departments" ? "text-primary-600" : "text-gray-400 hover:text-gray-600")}
+              >
+                {t("conversations.transferToDepartment")}
+                {transferTab === "departments" && <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />}
+              </button>
+            </div>
             <div className="space-y-2 max-h-60 overflow-y-auto">
-              {agents.map((agent: any) => (
-                <button
-                  key={agent.id}
-                  onClick={() => handleTransfer(agent.id)}
-                  disabled={!agent.isActive}
-                  className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-primary-50 hover:border-primary-200 transition disabled:opacity-40 disabled:hover:bg-white"
-                >
-                  <div className="flex items-center gap-3">
-                    <div className="w-8 h-8 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
-                      <span className="text-xs font-bold text-primary-600">{agent.name?.charAt(0).toUpperCase()}</span>
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <p className="font-medium text-sm text-gray-900">{agent.name}</p>
-                      <p className="text-xs text-gray-400">{agent.email}</p>
-                    </div>
-                    {agent._count?.conversations > 0 && (
-                      <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
-                        {agent._count.conversations} chats
-                      </span>
-                    )}
-                  </div>
-                </button>
-              ))}
-              {agents.length === 0 && (
-                <p className="text-sm text-gray-400 text-center py-4">{t("common.noResults")}</p>
+              {transferTab === "agents" ? (
+                <>
+                  {agents.map((agent: any) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => handleTransfer(agent.id)}
+                      disabled={!agent.isActive}
+                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-primary-50 hover:border-primary-200 transition disabled:opacity-40 disabled:hover:bg-white"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
+                          <span className="text-xs font-bold text-primary-600">{agent.name?.charAt(0).toUpperCase()}</span>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-gray-900">{agent.name}</p>
+                          <p className="text-xs text-gray-400">{agent.email}</p>
+                        </div>
+                        {agent._count?.conversations > 0 && (
+                          <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
+                            {agent._count.conversations} chats
+                          </span>
+                        )}
+                      </div>
+                    </button>
+                  ))}
+                  {agents.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-4">{t("common.noResults")}</p>
+                  )}
+                </>
+              ) : (
+                <>
+                  {departments.map((dept: any) => (
+                    <button
+                      key={dept.id}
+                      onClick={() => handleTransferToDept(dept.id)}
+                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-teal-50 hover:border-teal-200 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 bg-gradient-to-br from-teal-100 to-teal-200 rounded-lg flex items-center justify-center">
+                          <svg className="w-4 h-4 text-teal-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+                          </svg>
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-gray-900">{dept.name}</p>
+                          <p className="text-xs text-gray-400">{dept.queueMode === "ROUND_ROBIN" ? "Round Robin" : "Claim"} &middot; {dept._count?.members || 0} members</p>
+                        </div>
+                      </div>
+                    </button>
+                  ))}
+                  {departments.length === 0 && (
+                    <p className="text-sm text-gray-400 text-center py-4">{t("common.noResults")}</p>
+                  )}
+                </>
               )}
             </div>
             <button
@@ -477,6 +556,24 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
       );
       label = t("conversations.systemAgentTransferred", { fromAgent: metadata?.fromAgentName || "Agent", toAgent: metadata?.toAgentName || "Agent" });
       colors = "bg-blue-50 text-blue-600 border-blue-200";
+      break;
+    case "department_route":
+      icon = (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75" />
+        </svg>
+      );
+      label = t("conversations.systemDepartmentRoute", { departmentName: metadata?.departmentName || "Department" });
+      colors = "bg-teal-50 text-teal-600 border-teal-200";
+      break;
+    case "department_transferred":
+      icon = (
+        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75" />
+        </svg>
+      );
+      label = t("conversations.systemDepartmentTransferred", { departmentName: metadata?.departmentName || "Department" });
+      colors = "bg-teal-50 text-teal-600 border-teal-200";
       break;
     default:
       icon = null;

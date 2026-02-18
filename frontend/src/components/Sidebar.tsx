@@ -12,6 +12,8 @@ const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
   { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true },
   { href: "/chatbot", icon: BotIcon, labelKey: "nav.chatbot", adminOnly: true },
+  { href: "/channels", icon: ChannelsIcon, labelKey: "nav.channels", adminOnly: true },
+  { href: "/departments", icon: DepartmentsIcon, labelKey: "nav.departments", adminOnly: true },
   { href: "/agents", icon: UsersIcon, labelKey: "nav.agents", adminOnly: true },
   { href: "/copilot", icon: CopilotIcon, labelKey: "nav.copilot", adminOnly: true },
 ];
@@ -35,8 +37,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       )}
     >
       {/* Logo + Collapse toggle */}
-      <div className="p-4 border-b border-gray-100 flex items-center justify-between">
-        <div className="flex items-center gap-3 min-w-0">
+      <div className={clsx(
+        "border-b border-gray-100",
+        collapsed ? "flex flex-col items-center py-3 gap-2" : "p-4 flex items-center justify-between"
+      )}>
+        <div className={clsx("flex items-center min-w-0", collapsed ? "justify-center" : "gap-3")}>
           <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 rounded-xl shrink-0" />
           {!collapsed && (
             <Image src="/logo.png" alt="GOTCHA" width={100} height={28} className="h-7 w-auto" />
@@ -54,19 +59,18 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
             </svg>
           </button>
         )}
-        {/* Collapse toggle on desktop */}
-        <button
-          onClick={onToggle}
-          className={clsx(
-            "hidden md:flex w-7 h-7 rounded-lg items-center justify-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition",
-            collapsed && "mx-auto mt-2"
-          )}
-          title={collapsed ? "Expand" : "Collapse"}
-        >
-          <svg className={clsx("w-4 h-4 transition-transform", collapsed && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-          </svg>
-        </button>
+        {/* Collapse toggle on desktop - moves below logo when collapsed */}
+        {!collapsed && (
+          <button
+            onClick={onToggle}
+            className="hidden md:flex w-7 h-7 rounded-lg items-center justify-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition"
+            title="Collapse"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
+        )}
       </div>
 
       {/* Navigation */}
@@ -106,6 +110,21 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               <option key={key} value={key}>{config.label}</option>
             ))}
           </select>
+        </div>
+      )}
+
+      {/* Expand toggle - shown above avatar when collapsed */}
+      {collapsed && (
+        <div className="px-3 pb-1 hidden md:flex justify-center">
+          <button
+            onClick={onToggle}
+            className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition"
+            title="Expand"
+          >
+            <svg className="w-4 h-4 rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+            </svg>
+          </button>
         </div>
       )}
 
@@ -174,6 +193,22 @@ function CopilotIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+    </svg>
+  );
+}
+
+function ChannelsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+    </svg>
+  );
+}
+
+function DepartmentsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
     </svg>
   );
 }

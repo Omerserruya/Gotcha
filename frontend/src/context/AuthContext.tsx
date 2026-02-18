@@ -10,6 +10,9 @@ interface User {
   name: string;
   role: string;
   tenantId: string;
+  departmentId?: string;
+  departmentRole?: string;
+  departmentName?: string;
 }
 
 interface AuthContextType {

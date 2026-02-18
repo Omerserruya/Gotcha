@@ -32,15 +32,65 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
 
     const conversation = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId: req.tenantId! },
+      include: { channelAccount: true },
     });
     if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
 
-    const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! } });
-    if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) {
-      res.status(400).json({ error: "WhatsApp not configured for this tenant" }); return;
+    // Resolve channel credentials - try channel account first, then legacy tenant config
+    const channel = conversation.channel || "WHATSAPP";
+    const recipientId = conversation.customerExternalId || conversation.customerPhone;
+
+    let channelAccountId = conversation.channelAccountId;
+    let hasCredentials = false;
+
+    if (conversation.channelAccount) {
+      const creds = conversation.channelAccount.credentials as any;
+      hasCredentials = !!creds?.accessToken;
     }
 
-    // Create message in PENDING state
+    // Legacy fallback for WhatsApp
+    if (!hasCredentials && channel === "WHATSAPP") {
+      const tenant = await prisma.tenant.findUnique({ where: { id: req.tenantId! } });
+      if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) {
+        res.status(400).json({ error: "Channel not configured for this tenant" }); return;
+      }
+
+      // Create message in PENDING state
+      const message = await messageService.create({
+        tenantId: req.tenantId!,
+        conversationId,
+        direction: "OUTBOUND",
+        body,
+        messageType,
+        senderName: req.user!.email,
+      });
+
+      // Queue with legacy fields for backward compat
+      await outgoingMessageQueue.add("send", {
+        tenantId: req.tenantId!,
+        conversationId,
+        channel: "WHATSAPP",
+        channelAccountId: channelAccountId || "",
+        recipientExternalId: recipientId,
+        body,
+        messageType: messageType || "text",
+        senderName: req.user!.email,
+        messageId: message.id,
+        // Legacy
+        customerPhone: conversation.customerPhone || recipientId,
+        phoneNumberId: tenant.waPhoneNumberId,
+        accessToken: tenant.waAccessToken,
+      }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
+
+      res.status(201).json({ data: message });
+      return;
+    }
+
+    if (!hasCredentials) {
+      res.status(400).json({ error: "Channel not configured for this tenant" }); return;
+    }
+
+    // New channel-aware path
     const message = await messageService.create({
       tenantId: req.tenantId!,
       conversationId,
@@ -50,13 +100,12 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       senderName: req.user!.email,
     });
 
-    // Queue for async sending via outgoing worker
     await outgoingMessageQueue.add("send", {
       tenantId: req.tenantId!,
       conversationId,
-      customerPhone: conversation.customerPhone,
-      phoneNumberId: tenant.waPhoneNumberId,
-      accessToken: tenant.waAccessToken,
+      channel,
+      channelAccountId: channelAccountId!,
+      recipientExternalId: recipientId,
       body,
       messageType: messageType || "text",
       senderName: req.user!.email,
