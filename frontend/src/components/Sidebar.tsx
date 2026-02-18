@@ -10,6 +10,7 @@ import clsx from "clsx";
 
 const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
+  { href: "/history", icon: HistoryIcon, labelKey: "nav.history", managerOrAdmin: true },
   { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true },
   { href: "/chatbot", icon: BotIcon, labelKey: "nav.chatbot", adminOnly: true },
   { href: "/channels", icon: ChannelsIcon, labelKey: "nav.channels", adminOnly: true },
@@ -76,7 +77,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       {/* Navigation */}
       <nav className="flex-1 py-3 space-y-1 px-2">
         {navItems
-          .filter((item) => !item.adminOnly || user?.role === "ADMIN")
+          .filter((item) => {
+            if (item.adminOnly) return user?.role === "ADMIN";
+            if ((item as any).managerOrAdmin) return user?.role === "ADMIN" || user?.departmentRole === "MANAGER";
+            return true;
+          })
           .map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
@@ -209,6 +214,14 @@ function DepartmentsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 21h19.5m-18-18v18m10.5-18v18m6-13.5V21M6.75 6.75h.75m-.75 3h.75m-.75 3h.75m3-6h.75m-.75 3h.75m-.75 3h.75M6.75 21v-3.375c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21M3 3h12m-.75 4.5H21m-3.75 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008zm0 3h.008v.008h-.008v-.008z" />
+    </svg>
+  );
+}
+
+function HistoryIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
     </svg>
   );
 }

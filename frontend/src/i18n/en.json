@@ -11,6 +11,7 @@
     "copilot": "Co-Pilot",
     "channels": "Channels",
     "departments": "Departments",
+    "history": "Chat History",
     "settings": "Settings",
     "logout": "Logout"
   },
@@ -229,6 +230,16 @@
     "readyMessageDesc": "AI generates clickable reply suggestions that agents can insert directly",
     "contextOnly": "Context Only",
     "contextOnlyDesc": "AI provides summary and text tips without insert buttons"
+  },
+  "history": {
+    "title": "Chat History",
+    "adminDesc": "View all conversation history across departments",
+    "managerDesc": "View conversation history for your department",
+    "searchPlaceholder": "Search by name or phone...",
+    "selectCustomer": "Select a customer to view their chat history",
+    "chats": "chats",
+    "timeline": "Conversations",
+    "next": "Next"
   },
   "common": {
     "save": "Save",
