@@ -330,6 +330,20 @@ export function getAISummary(token: string, conversationId: string) {
   return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary`, { token });
 }
 
+// ─── Business Hours Settings ────────────────────────────────
+
+export function getBusinessHours(token: string) {
+  return apiFetch<any>("/api/agents/settings/business-hours", { token });
+}
+
+export function updateBusinessHours(token: string, data: any) {
+  return apiFetch<any>("/api/agents/settings/business-hours", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Workload ───────────────────────────────────────────────
 
 export function getAgentWorkload(token: string) {

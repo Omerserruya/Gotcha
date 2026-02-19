@@ -241,6 +241,32 @@
     "timeline": "שיחות",
     "next": "הבא"
   },
+  "settings": {
+    "title": "הגדרות",
+    "subtitle": "ניהול שעות פעילות והודעת תגובה אוטומטית",
+    "businessHours": "שעות פעילות",
+    "businessHoursDesc": "הגדר מתי הצוות שלך זמין לטפל בשיחות",
+    "enabled": "הפעל שעות פעילות",
+    "timezone": "אזור זמן",
+    "schedule": "לוח זמנים שבועי",
+    "days": {
+      "sunday": "ראשון",
+      "monday": "שני",
+      "tuesday": "שלישי",
+      "wednesday": "רביעי",
+      "thursday": "חמישי",
+      "friday": "שישי",
+      "saturday": "שבת"
+    },
+    "open": "פתיחה",
+    "close": "סגירה",
+    "dayEnabled": "פעיל",
+    "autoResponse": "תגובה אוטומטית בסגירה",
+    "autoResponseDesc": "הודעה זו נשלחת אוטומטית ללקוחות כאשר הצ'אטבוט מעביר לנציג מחוץ לשעות הפעילות.",
+    "autoResponsePlaceholder": "אנחנו כרגע סגורים. נחזור אליך בשעות הפעילות שלנו.",
+    "save": "שמור הגדרות",
+    "saved": "ההגדרות נשמרו בהצלחה"
+  },
   "common": {
     "save": "שמור",
     "cancel": "ביטול",

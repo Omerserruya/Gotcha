@@ -1,4 +1,4 @@
-import { prisma, getOutboundAdapter } from "@chatcenter/shared";
+import { prisma, getOutboundAdapter, getRedis } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 
 interface FlowNode {
@@ -219,6 +219,30 @@ async function executeFromNode(
           break;
         }
 
+        // Check business hours before department routing
+        const deptHours = await isBusinessClosed(tenantId);
+        if (deptHours.closed && deptHours.autoResponse) {
+          const closedExtId = await adapter.sendTextMessage(
+            sendCtx.credentials,
+            sendCtx.channelAccountExternalId,
+            sendCtx.recipientId,
+            deptHours.autoResponse
+          );
+          await prisma.message.create({
+            data: {
+              tenantId,
+              conversationId,
+              channel: sendCtx.channel,
+              direction: "OUTBOUND",
+              body: deptHours.autoResponse,
+              senderName: "Chatbot",
+              externalMessageId: closedExtId,
+              waMessageId: sendCtx.channel === "WHATSAPP" ? closedExtId : undefined,
+              status: closedExtId ? "SENT" : "FAILED",
+            },
+          });
+        }
+
         const dept = await prisma.department.findFirst({
           where: { id: deptId, isActive: true },
           include: { members: { include: { user: { select: { id: true, isActive: true, _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } } } } } } },
@@ -264,6 +288,30 @@ async function executeFromNode(
         return true;
       }
       case "handover": {
+        // Check business hours before handover
+        const handoverHours = await isBusinessClosed(tenantId);
+        if (handoverHours.closed && handoverHours.autoResponse) {
+          const closedExtId = await adapter.sendTextMessage(
+            sendCtx.credentials,
+            sendCtx.channelAccountExternalId,
+            sendCtx.recipientId,
+            handoverHours.autoResponse
+          );
+          await prisma.message.create({
+            data: {
+              tenantId,
+              conversationId,
+              channel: sendCtx.channel,
+              direction: "OUTBOUND",
+              body: handoverHours.autoResponse,
+              senderName: "Chatbot",
+              externalMessageId: closedExtId,
+              waMessageId: sendCtx.channel === "WHATSAPP" ? closedExtId : undefined,
+              status: closedExtId ? "SENT" : "FAILED",
+            },
+          });
+        }
+
         await prisma.conversation.update({
           where: { id: conversationId },
           data: { isHandedOver: true, chatbotNodeId: null, status: "WAITING" },
@@ -301,6 +349,50 @@ async function executeFromNode(
     await prisma.conversation.update({ where: { id: conversationId }, data: { chatbotNodeId: currentId } });
   }
   return true;
+}
+
+async function isBusinessClosed(tenantId: string): Promise<{ closed: boolean; autoResponse: string | null }> {
+  try {
+    const redis = getRedis();
+    const raw = await redis.get(`tenant:${tenantId}:businessHours`);
+    if (!raw) return { closed: false, autoResponse: null };
+
+    const config = JSON.parse(raw);
+    if (!config.enabled) return { closed: false, autoResponse: null };
+
+    const tz = config.timezone || "Asia/Jerusalem";
+    const now = new Date();
+    // Get current time in the configured timezone
+    const formatter = new Intl.DateTimeFormat("en-US", {
+      timeZone: tz,
+      weekday: "long",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    });
+    const parts = formatter.formatToParts(now);
+    const weekday = parts.find((p) => p.type === "weekday")!.value.toLowerCase();
+    const hour = parts.find((p) => p.type === "hour")!.value;
+    const minute = parts.find((p) => p.type === "minute")!.value;
+    const currentTime = `${hour.padStart(2, "0")}:${minute.padStart(2, "0")}`;
+
+    const daySchedule = config.schedule?.[weekday];
+    if (!daySchedule || !daySchedule.enabled) {
+      return { closed: true, autoResponse: config.autoResponse || null };
+    }
+
+    const isOpen = daySchedule.open && daySchedule.close &&
+      currentTime >= daySchedule.open && currentTime < daySchedule.close;
+
+    if (!isOpen) {
+      return { closed: true, autoResponse: config.autoResponse || null };
+    }
+
+    return { closed: false, autoResponse: null };
+  } catch (err) {
+    console.error("isBusinessClosed error:", err);
+    return { closed: false, autoResponse: null };
+  }
 }
 
 function resolveCondition(node: FlowNode, userInput: string, edges: FlowEdge[]): string | null {

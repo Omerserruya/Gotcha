@@ -247,6 +247,68 @@ router.put("/settings/channel-config", requireRole("ADMIN"), validate(channelCon
   }
 });
 
+// ─── Business Hours Settings ─────────────────────────────────
+
+const dayScheduleSchema = z.object({
+  enabled: z.boolean(),
+  open: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+  close: z.string().regex(/^\d{2}:\d{2}$/).optional(),
+});
+
+const businessHoursSchema = z.object({
+  enabled: z.boolean(),
+  timezone: z.string().min(1),
+  autoResponse: z.string().optional().default(""),
+  schedule: z.object({
+    sunday: dayScheduleSchema,
+    monday: dayScheduleSchema,
+    tuesday: dayScheduleSchema,
+    wednesday: dayScheduleSchema,
+    thursday: dayScheduleSchema,
+    friday: dayScheduleSchema,
+    saturday: dayScheduleSchema,
+  }),
+});
+
+router.get("/settings/business-hours", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    const raw = await redis.get(`tenant:${req.tenantId!}:businessHours`);
+    if (!raw) {
+      res.json({
+        enabled: false,
+        timezone: "Asia/Jerusalem",
+        autoResponse: "",
+        schedule: {
+          sunday:    { enabled: true,  open: "09:00", close: "18:00" },
+          monday:    { enabled: true,  open: "09:00", close: "18:00" },
+          tuesday:   { enabled: true,  open: "09:00", close: "18:00" },
+          wednesday: { enabled: true,  open: "09:00", close: "18:00" },
+          thursday:  { enabled: true,  open: "09:00", close: "18:00" },
+          friday:    { enabled: false },
+          saturday:  { enabled: false },
+        },
+      });
+      return;
+    }
+    res.json(JSON.parse(raw));
+  } catch (err) {
+    console.error("Get business hours error:", err);
+    res.status(500).json({ error: "Failed to get business hours" });
+  }
+});
+
+router.put("/settings/business-hours", requireRole("ADMIN"), validate(businessHoursSchema), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    await redis.set(`tenant:${req.tenantId!}:businessHours`, JSON.stringify(req.body));
+    res.json(req.body);
+  } catch (err) {
+    console.error("Update business hours error:", err);
+    res.status(500).json({ error: "Failed to update business hours" });
+  }
+});
+
 // ─── Co-Pilot Settings ──────────────────────────────────────
 
 const copilotSettingsSchema = z.object({

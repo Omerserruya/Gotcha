@@ -241,6 +241,32 @@
     "timeline": "Conversations",
     "next": "Next"
   },
+  "settings": {
+    "title": "Settings",
+    "subtitle": "Manage business hours and auto-response settings",
+    "businessHours": "Business Hours",
+    "businessHoursDesc": "Configure when your team is available to handle conversations",
+    "enabled": "Enable Business Hours",
+    "timezone": "Timezone",
+    "schedule": "Weekly Schedule",
+    "days": {
+      "sunday": "Sunday",
+      "monday": "Monday",
+      "tuesday": "Tuesday",
+      "wednesday": "Wednesday",
+      "thursday": "Thursday",
+      "friday": "Friday",
+      "saturday": "Saturday"
+    },
+    "open": "Open",
+    "close": "Close",
+    "dayEnabled": "Active",
+    "autoResponse": "Closed Auto-Response",
+    "autoResponseDesc": "This message is automatically sent to customers when the chatbot hands over to an agent outside business hours.",
+    "autoResponsePlaceholder": "We're currently closed. We'll get back to you during our business hours.",
+    "save": "Save Settings",
+    "saved": "Settings saved successfully"
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",

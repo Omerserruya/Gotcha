@@ -292,7 +292,16 @@ async function sendAutoGreeting(
     const recipientId = conversation.customerExternalId || conversation.customerPhone;
     let channelAccountId: string | null = conversation.channelAccountId;
 
-    // Try to resolve credentials from channel account
+    // If no channelAccountId on conversation, try to find one for this tenant+channel
+    if (!channelAccountId) {
+      const fallbackAccount = await prisma.channelAccount.findFirst({
+        where: { tenantId, channel, isActive: true },
+        select: { id: true },
+      });
+      if (fallbackAccount) channelAccountId = fallbackAccount.id;
+    }
+
+    // Send via channel account (new path)
     if (channelAccountId) {
       const message = await messageService.create({
         tenantId,
