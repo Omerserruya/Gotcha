@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getBusinessHours, updateBusinessHours } from "@/lib/api";
+import { getBusinessHours, updateBusinessHours, getAutoGreeting, updateAutoGreeting } from "@/lib/api";
 import { AppLayout } from "@/components/AppLayout";
 import clsx from "clsx";
 
@@ -60,14 +60,19 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
+  const [greetingTemplate, setGreetingTemplate] = useState("");
 
   const fetchData = useCallback(async () => {
     if (!token) return;
     try {
-      const data = await getBusinessHours(token);
+      const [data, greetingData] = await Promise.all([
+        getBusinessHours(token),
+        getAutoGreeting(token).catch(() => ({ template: "" })),
+      ]);
       setConfig(data);
+      setGreetingTemplate(greetingData.template || "");
     } catch (err) {
-      console.error("Failed to load business hours:", err);
+      console.error("Failed to load settings:", err);
     } finally {
       setLoading(false);
     }
@@ -79,7 +84,10 @@ export default function SettingsPage() {
     if (!token) return;
     setSaving(true);
     try {
-      await updateBusinessHours(token, config);
+      await Promise.all([
+        updateBusinessHours(token, config),
+        updateAutoGreeting(token, greetingTemplate),
+      ]);
       setMessage(t("settings.saved"));
     } catch (err: any) {
       setMessage(err.message || "Error");
@@ -145,7 +153,7 @@ export default function SettingsPage() {
                   )}
                 >
                   <span className={clsx(
-                    "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                    "absolute left-0 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
                     config.enabled ? "translate-x-5" : "translate-x-0.5"
                   )} />
                 </button>
@@ -186,7 +194,7 @@ export default function SettingsPage() {
                             )}
                           >
                             <span className={clsx(
-                              "absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
+                              "absolute left-0 top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform",
                               dayConfig.enabled ? "translate-x-4" : "translate-x-0.5"
                             )} />
                           </button>
@@ -234,6 +242,19 @@ export default function SettingsPage() {
               value={config.autoResponse}
               onChange={(e) => setConfig((prev) => ({ ...prev, autoResponse: e.target.value }))}
               placeholder={t("settings.autoResponsePlaceholder")}
+              rows={3}
+              className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
+            />
+          </div>
+
+          {/* Auto-Greeting */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="font-semibold text-gray-900 mb-1">{t("settings.autoGreeting")}</h2>
+            <p className="text-xs text-gray-500 mb-4">{t("settings.autoGreetingDesc")}</p>
+            <textarea
+              value={greetingTemplate}
+              onChange={(e) => setGreetingTemplate(e.target.value)}
+              placeholder={t("settings.autoGreetingPlaceholder")}
               rows={3}
               className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
             />

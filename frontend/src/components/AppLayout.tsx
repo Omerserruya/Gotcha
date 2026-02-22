@@ -62,7 +62,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (!isLoading && !user) {
       router.replace("/login");
     }
-  }, [user, isLoading, router]);
+    // Redirect SYSTEM_ADMIN to system panel if they're on a tenant route
+    if (!isLoading && user?.role === "SYSTEM_ADMIN" && !pathname.startsWith("/system")) {
+      router.replace("/system");
+    }
+  }, [user, isLoading, router, pathname]);
 
   if (isLoading) {
     return (

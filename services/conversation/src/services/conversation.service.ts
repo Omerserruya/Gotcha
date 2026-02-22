@@ -123,27 +123,48 @@ export async function transferToDepartment(tenantId: string, conversationId: str
   });
 
   emitToTenant(tenantId, "conversation:updated", updated);
+
+  // Auto-greeting if agent was auto-assigned via round-robin
+  if (assignedAgentId) {
+    await sendAutoGreeting(tenantId, conversationId, assignedAgentId, conversation);
+  }
+
   return updated;
 }
 
 export async function claim(tenantId: string, conversationId: string, agentId: string) {
   const conversation = await prisma.conversation.findFirst({ where: { id: conversationId, tenantId } });
   if (!conversation) throw Object.assign(new Error("Conversation not found"), { status: 404 });
-  if (conversation.assignedAgentId) throw Object.assign(new Error("Conversation already assigned"), { status: 409 });
 
-  const updated = await prisma.conversation.update({
-    where: { id: conversationId },
-    data: { assignedAgentId: agentId, isHandedOver: true },
-    include: { assignedAgent: { select: { id: true, name: true, email: true } } },
-  });
+  // Allow reclaim if already assigned to the same agent (e.g. after transfer)
+  if (conversation.assignedAgentId && conversation.assignedAgentId !== agentId) {
+    throw Object.assign(new Error("Conversation already assigned"), { status: 409 });
+  }
 
-  // System divider: agent claimed
-  const agentName = updated.assignedAgent?.name || "Agent";
-  await createSystemMessage(tenantId, conversationId, "agent_claimed", { agentName });
+  const alreadyAssigned = conversation.assignedAgentId === agentId;
+
+  const updated = alreadyAssigned
+    ? await prisma.conversation.findFirst({
+        where: { id: conversationId, tenantId },
+        include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+      })
+    : await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { assignedAgentId: agentId, isHandedOver: true },
+        include: { assignedAgent: { select: { id: true, name: true, email: true } } },
+      });
+
+  if (!updated) throw Object.assign(new Error("Conversation not found"), { status: 404 });
+
+  if (!alreadyAssigned) {
+    // System divider: agent claimed
+    const agentName = updated.assignedAgent?.name || "Agent";
+    await createSystemMessage(tenantId, conversationId, "agent_claimed", { agentName });
+  }
 
   emitToTenant(tenantId, "conversation:updated", updated);
 
-  // Auto-greeting
+  // Auto-greeting (send on both claim and reclaim)
   await sendAutoGreeting(tenantId, conversationId, agentId, conversation);
 
   return updated;

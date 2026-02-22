@@ -4,7 +4,7 @@ import { useState, useEffect, FormEvent } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getAgents, createAgent, updateAgent, getAutoGreeting, updateAutoGreeting } from "@/lib/api";
+import { getAgents, createAgent, updateAgent } from "@/lib/api";
 import clsx from "clsx";
 
 export default function AgentsPage() {
@@ -13,7 +13,6 @@ export default function AgentsPage() {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [showRegister, setShowRegister] = useState(false);
-  const [activeTab, setActiveTab] = useState<"agents" | "settings">("agents");
 
   // Register form
   const [regName, setRegName] = useState("");
@@ -23,15 +22,9 @@ export default function AgentsPage() {
   const [regError, setRegError] = useState("");
   const [regSuccess, setRegSuccess] = useState(false);
 
-  // Auto-greeting
-  const [greetingTemplate, setGreetingTemplate] = useState("");
-  const [greetingLoading, setGreetingLoading] = useState(false);
-  const [greetingSaved, setGreetingSaved] = useState(false);
-
   useEffect(() => {
     if (!token) return;
     fetchAgents();
-    fetchGreeting();
   }, [token]);
 
   async function fetchAgents() {
@@ -43,16 +36,6 @@ export default function AgentsPage() {
       console.error(err);
     } finally {
       setLoading(false);
-    }
-  }
-
-  async function fetchGreeting() {
-    if (!token) return;
-    try {
-      const data = await getAutoGreeting(token);
-      setGreetingTemplate(data.template || "");
-    } catch (err) {
-      console.error(err);
     }
   }
 
@@ -87,20 +70,6 @@ export default function AgentsPage() {
     }
   }
 
-  async function handleSaveGreeting() {
-    if (!token) return;
-    setGreetingLoading(true);
-    try {
-      await updateAutoGreeting(token, greetingTemplate);
-      setGreetingSaved(true);
-      setTimeout(() => setGreetingSaved(false), 3000);
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setGreetingLoading(false);
-    }
-  }
-
   return (
     <AppLayout>
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
@@ -118,32 +87,9 @@ export default function AgentsPage() {
           </button>
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 mb-6 bg-gray-100 rounded-xl p-1 w-fit">
-          <button
-            onClick={() => setActiveTab("agents")}
-            className={clsx(
-              "px-4 py-2 text-sm rounded-lg font-medium transition",
-              activeTab === "agents" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            )}
-          >
-            {t("agents.title")}
-          </button>
-          <button
-            onClick={() => setActiveTab("settings")}
-            className={clsx(
-              "px-4 py-2 text-sm rounded-lg font-medium transition",
-              activeTab === "settings" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
-            )}
-          >
-            {t("agents.settings")}
-          </button>
-        </div>
-
-        {activeTab === "agents" ? (
-          /* Agent List */
-          <>
-            {/* Desktop table */}
+        {/* Agent List */}
+        <>
+          {/* Desktop table */}
             <div className="hidden md:block bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
               <table className="w-full text-sm">
                 <thead className="bg-gray-50/80">
@@ -258,39 +204,6 @@ export default function AgentsPage() {
               )}
             </div>
           </>
-        ) : (
-          /* Settings Tab - Auto Greeting */
-          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-4 md:p-6 max-w-2xl">
-            <h3 className="font-bold text-gray-900 mb-1">{t("agents.autoGreeting")}</h3>
-            <p className="text-sm text-gray-400 mb-4">{t("agents.autoGreetingDesc")}</p>
-
-            <textarea
-              value={greetingTemplate}
-              onChange={(e) => setGreetingTemplate(e.target.value)}
-              placeholder={t("agents.autoGreetingPlaceholder")}
-              rows={4}
-              className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition resize-none"
-            />
-
-            <div className="flex items-center gap-3 mt-4">
-              <button
-                onClick={handleSaveGreeting}
-                disabled={greetingLoading}
-                className="bg-primary-500 hover:bg-primary-600 text-white px-5 py-2.5 rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50"
-              >
-                {greetingLoading ? t("common.loading") : t("agents.saveGreeting")}
-              </button>
-              {greetingSaved && (
-                <span className="text-sm text-green-600 flex items-center gap-1">
-                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  {t("agents.greetingSaved")}
-                </span>
-              )}
-            </div>
-          </div>
-        )}
 
         {/* Register Agent Modal */}
         {showRegister && (

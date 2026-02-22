@@ -18,3 +18,4 @@ export {
 
 export { whatsAppInboundAdapter, whatsAppOutboundAdapter } from "./whatsapp.adapter";
 export { messengerInboundAdapter, messengerOutboundAdapter } from "./messenger.adapter";
+export { instagramInboundAdapter, instagramOutboundAdapter } from "./instagram.adapter";

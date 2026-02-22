@@ -1,8 +1,0 @@
-{
-  "active": true,
-  "started_at": "2026-02-17T18:34:31.864Z",
-  "original_prompt": "autopilot - \nadd department hierarchy - agent in, manager, and admin.\nalso should be able to route the customer to the deparment according the chatbot , and also transfer between departments (agent able transfer between department to other agent or to another department at all.)\nalso. i want to be able for those who are only one department.\nalso - i want copilot config for each department - and add toggle for co-pilot mode - as context view and recomendation (only text) or as ready message like now.",
-  "session_id": "fb519208-a047-4c75-a521-2ad2d8f249f5",
-  "reinforcement_count": 0,
-  "last_checked_at": "2026-02-17T18:34:31.864Z"
-}

@@ -119,6 +119,31 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "src/middleware/rbac.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771580870442,
+      "type": "file"
+    },
+    {
+      "path": "src/middleware/tenant.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771580880994,
+      "type": "file"
+    },
+    {
+      "path": "src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771580885746,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/jwt.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771580892605,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }

@@ -177,6 +177,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
             { value: "", label: t("conversations.channelAll") },
             { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
             { value: "MESSENGER", label: t("conversations.channelMessenger") },
+            { value: "INSTAGRAM", label: t("conversations.channelInstagram") },
           ].map((opt) => (
             <button
               key={opt.value}

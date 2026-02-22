@@ -12,6 +12,13 @@ export interface JwtPayload {
   departmentRole?: string;
 }
 
+export interface SystemAdminJwtPayload {
+  userId: string;
+  role: "SYSTEM_ADMIN";
+  email: string;
+  tenantId: string; // system tenant
+}
+
 export function signToken(payload: JwtPayload): string {
   return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as any);
 }

@@ -28,16 +28,20 @@ export {
   whatsAppOutboundAdapter,
   messengerInboundAdapter,
   messengerOutboundAdapter,
+  instagramInboundAdapter,
+  instagramOutboundAdapter,
 } from "./channels";
 
 // Lib
 export { prisma } from "./lib/prisma";
 export { getRedis, closeRedis } from "./lib/redis";
 export { signToken, verifyToken } from "./lib/jwt";
+export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
 export {
   incomingMessageQueue,
   outgoingMessageQueue,
   analyticsQueue,
+  channelHealthQueue,
   createWorker,
 } from "./lib/queue";
 export { publishEvent, subscribeToEvents, closeEventBus } from "./lib/event-bus";
@@ -45,7 +49,7 @@ export { createServiceApp, startService } from "./lib/service-app";
 
 // Middleware
 export { authenticate } from "./middleware/auth";
-export { requireRole, requireDepartmentRole } from "./middleware/rbac";
+export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
 export { resolveTenant } from "./middleware/tenant";
 export { validate } from "./middleware/validate";
 

@@ -64,6 +64,13 @@ services:
       PORT: ${AUTH_PORT:-4001}
       JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
     depends_on:
       db:
         condition: service_healthy
@@ -174,7 +181,10 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
-      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v19.0}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -224,9 +234,11 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    environment:
-      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
-      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+        NEXT_PUBLIC_META_APP_ID: ${META_APP_ID:-}
+        NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
 
 volumes:
   pgdata:

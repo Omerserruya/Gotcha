@@ -1,8 +1,12 @@
 import { startIncomingWorker } from "./workers/incoming.worker";
+import { startChannelHealthWorker } from "./workers/channel-health.worker";
 
 console.log("[incoming-worker] Starting standalone incoming message worker...");
 
 startIncomingWorker();
+startChannelHealthWorker().catch((err) => {
+  console.error("[incoming-worker] Failed to start channel health worker:", err);
+});
 
 // Graceful shutdown
 process.on("SIGTERM", () => {

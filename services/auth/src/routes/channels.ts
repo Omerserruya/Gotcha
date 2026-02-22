@@ -1,0 +1,1116 @@
+import { Router, Request, Response } from "express";
+import { z } from "zod";
+import axios from "axios";
+import jwt from "jsonwebtoken";
+import {
+  prisma,
+  authenticate,
+  resolveTenant,
+  requireRole,
+  validate,
+  getRedis,
+  encryptCredentials,
+  decryptCredentials,
+} from "@chatcenter/shared";
+
+const router = Router();
+
+const META_APP_ID = process.env.META_APP_ID || "";
+const META_APP_SECRET = process.env.META_APP_SECRET || "";
+const EMBEDDED_SIGNUP_CONFIG_ID = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID || "";
+const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || "";
+const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
+const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+
+// ─── List Connected Channels ─────────────────────────────────
+
+router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const accounts = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId! },
+      select: {
+        id: true,
+        channel: true,
+        externalId: true,
+        displayName: true,
+        isActive: true,
+        connectionStatus: true,
+        connectedAt: true,
+        tokenExpiresAt: true,
+        lastError: true,
+        lastHealthCheck: true,
+        platformMeta: true,
+        createdAt: true,
+        updatedAt: true,
+        _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
+      },
+      orderBy: { createdAt: "asc" },
+    });
+    res.json({ data: accounts });
+  } catch (err) {
+    console.error("List channels error:", err);
+    res.status(500).json({ error: "Failed to list channels" });
+  }
+});
+
+// ─── WhatsApp Embedded Signup Connect ────────────────────────
+
+const whatsappConnectSchema = z.object({
+  code: z.string().min(1),
+  wabaId: z.string().optional(),       // From Embedded Signup session info
+  phoneNumberId: z.string().optional(), // From Embedded Signup session info
+});
+
+router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN"), validate(whatsappConnectSchema), async (req: Request, res: Response) => {
+  try {
+    const { code, wabaId: sessionWabaId, phoneNumberId: sessionPhoneNumberId } = req.body;
+    console.log("[WA-CONNECT] Starting. Session WABA:", sessionWabaId, "Session Phone:", sessionPhoneNumberId);
+
+    // Step 1: Exchange code for business token
+    // Per Meta Tech Provider docs: GET /oauth/access_token with client_id, client_secret, code
+    // FB.login popup may require redirect_uri matching, so try multiple approaches
+    let accessToken: string | undefined;
+
+    // Try exchanging the popup code with various redirect_uri values and API versions
+    const v25 = "https://graph.facebook.com/v25.0";
+    const exchangeAttempts: Array<{ label: string; method: "get" | "post"; url: string; data: any }> = [
+      // Official docs method: GET, no redirect_uri
+      { label: "GET no redirect_uri", method: "get", url: `${FB_API_URL}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
+      // Same but v25.0 (SDK uses v25.0)
+      { label: "GET no redirect_uri v25", method: "get", url: `${v25}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
+      // POST no redirect_uri
+      { label: "POST no redirect_uri", method: "post", url: `${FB_API_URL}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, code } },
+      // POST with grant_type
+      { label: "POST grant_type v25", method: "post", url: `${v25}/oauth/access_token`, data: { client_id: META_APP_ID, client_secret: META_APP_SECRET, grant_type: "authorization_code", code } },
+    ];
+
+    for (const attempt of exchangeAttempts) {
+      try {
+        console.log(`[WA-CONNECT] Trying: ${attempt.label}`);
+        let tokenResponse;
+        if (attempt.method === "get") {
+          tokenResponse = await axios.get(attempt.url, { params: attempt.data });
+        } else {
+          tokenResponse = await axios.post(attempt.url, attempt.data, {
+            headers: { "Content-Type": "application/json" },
+          });
+        }
+        const tokenData = tokenResponse.data;
+        accessToken = typeof tokenData === "string" ? tokenData : tokenData.access_token;
+        if (accessToken && typeof accessToken === "string" && accessToken.length > 10) {
+          console.log(`[WA-CONNECT] Business token obtained with: ${attempt.label}`);
+          break;
+        }
+        accessToken = undefined;
+      } catch (err: any) {
+        console.warn(`[WA-CONNECT] Failed ${attempt.label}:`, err.response?.data?.error?.message);
+      }
+    }
+
+    if (!accessToken) {
+      res.status(400).json({ error: "Failed to exchange code for business token. Check Facebook App redirect_uri settings." });
+      return;
+    }
+
+    // Determine WABA ID: prefer session info from Embedded Signup, fall back to debug_token
+    let wabaId = sessionWabaId;
+    let phoneNumberIds: string[] = sessionPhoneNumberId ? [sessionPhoneNumberId] : [];
+
+    if (!wabaId) {
+      // Fallback: debug_token to discover WABA IDs from granular_scopes
+      console.log("[WA-CONNECT] No session WABA ID, trying debug_token...");
+      try {
+        const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
+          params: { input_token: accessToken },
+          headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
+        });
+        console.log("[WA-CONNECT] debug_token:", JSON.stringify(debugResponse.data?.data?.granular_scopes, null, 2));
+        const granularScopes = debugResponse.data?.data?.granular_scopes || [];
+        const wabaScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
+        const wabaIds = wabaScope?.target_ids || [];
+        if (wabaIds.length > 0) wabaId = wabaIds[0];
+      } catch (debugErr: any) {
+        console.warn("[WA-CONNECT] debug_token failed:", debugErr.response?.data?.error?.message);
+      }
+    }
+
+    if (!wabaId) {
+      res.status(400).json({ error: "No WhatsApp Business Account found. Please complete the Embedded Signup flow." });
+      return;
+    }
+
+    // Step 2: Subscribe app to webhooks on customer's WABA
+    console.log("[WA-CONNECT] Subscribing app to WABA webhooks:", wabaId);
+    try {
+      await axios.post(
+        `${FB_API_URL}/${wabaId}/subscribed_apps`,
+        {},
+        { headers: { Authorization: `Bearer ${accessToken}` } }
+      );
+    } catch (subErr: any) {
+      console.warn(`[WA-CONNECT] Webhook subscription warning for WABA ${wabaId}:`, subErr.response?.data?.error?.message);
+    }
+
+    // If we don't have phone number IDs from session info, fetch them from the WABA
+    if (phoneNumberIds.length === 0) {
+      console.log("[WA-CONNECT] Fetching phone numbers for WABA:", wabaId);
+      const phonesResponse = await axios.get(`${FB_API_URL}/${wabaId}/phone_numbers`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      phoneNumberIds = (phonesResponse.data?.data || []).map((p: any) => p.id);
+    }
+
+    if (phoneNumberIds.length === 0) {
+      res.status(400).json({ error: "No phone numbers found in the WhatsApp Business Account." });
+      return;
+    }
+
+    const connectedAccounts: any[] = [];
+    const redis = getRedis();
+
+    for (const phoneNumberId of phoneNumberIds) {
+      // Get phone number details
+      let phoneDetails: any = { id: phoneNumberId };
+      try {
+        const phoneResponse = await axios.get(`${FB_API_URL}/${phoneNumberId}`, {
+          params: { fields: "id,display_phone_number,verified_name,quality_rating" },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        phoneDetails = phoneResponse.data;
+      } catch (err: any) {
+        console.warn(`[WA-CONNECT] Failed to get details for phone ${phoneNumberId}:`, err.response?.data?.error?.message);
+      }
+
+      const displayPhone = phoneDetails.display_phone_number || phoneDetails.verified_name || phoneNumberId;
+
+      // Step 3: Register customer's phone number
+      try {
+        await axios.post(
+          `${FB_API_URL}/${phoneNumberId}/register`,
+          { messaging_product: "whatsapp", pin: "000000" },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+        console.log(`[WA-CONNECT] Registered phone ${phoneNumberId}`);
+      } catch (regErr: any) {
+        // Phone may already be registered - that's OK
+        console.warn(`[WA-CONNECT] Phone registration note for ${phoneNumberId}:`, regErr.response?.data?.error?.message);
+      }
+
+      // Check if already connected
+      const existing = await prisma.channelAccount.findFirst({
+        where: { channel: "WHATSAPP", externalId: phoneNumberId },
+      });
+
+      if (existing && existing.tenantId !== req.tenantId!) {
+        console.warn(`[WA-CONNECT] Phone ${phoneNumberId} already connected to another tenant`);
+        continue;
+      }
+
+      const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
+      const tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
+
+      if (existing) {
+        const updated = await prisma.channelAccount.update({
+          where: { id: existing.id },
+          data: {
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: req.user?.userId,
+            tokenExpiresAt,
+            isActive: true,
+            lastError: null,
+            displayName: phoneDetails.verified_name || displayPhone,
+            platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
+          },
+        });
+        connectedAccounts.push(updated);
+      } else {
+        const account = await prisma.channelAccount.create({
+          data: {
+            tenantId: req.tenantId!,
+            channel: "WHATSAPP",
+            externalId: phoneNumberId,
+            displayName: phoneDetails.verified_name || displayPhone,
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: req.user?.userId,
+            tokenExpiresAt,
+            isActive: true,
+            platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
+          },
+        });
+        connectedAccounts.push(account);
+      }
+
+      await redis.del(`channel_account:WHATSAPP:${phoneNumberId}`);
+    }
+
+    if (connectedAccounts.length === 0) {
+      res.status(400).json({ error: "Could not connect any phone numbers." });
+      return;
+    }
+
+    console.log(`[WA-CONNECT] Successfully connected ${connectedAccounts.length} account(s)`);
+    res.status(201).json({ data: connectedAccounts });
+  } catch (err: any) {
+    console.error("[WA-CONNECT] Error:", err.response?.data || err.message);
+    const metaError = err.response?.data?.error;
+    if (metaError) {
+      res.status(400).json({ error: metaError.message || "Meta API error", code: metaError.code });
+    } else {
+      res.status(500).json({ error: "Failed to connect WhatsApp" });
+    }
+  }
+});
+
+// ─── WhatsApp Session Completion (from popup session info) ────
+
+const whatsappSessionSchema = z.object({
+  wabaId: z.string().min(1),
+  phoneNumberId: z.string().optional(),
+});
+
+router.post("/connect/whatsapp-session", authenticate, resolveTenant, requireRole("ADMIN"), validate(whatsappSessionSchema), async (req: Request, res: Response) => {
+  try {
+    const { wabaId, phoneNumberId } = req.body;
+    const redis = getRedis();
+
+    // Retrieve pending token from Redis
+    const accessToken = await redis.get(`wa_pending_token:${req.tenantId!}`);
+    if (!accessToken) {
+      res.status(400).json({ error: "No pending WhatsApp token. Please reconnect." });
+      return;
+    }
+    await redis.del(`wa_pending_token:${req.tenantId!}`);
+
+    console.log("[WA-SESSION] Completing setup with WABA:", wabaId, "Phone:", phoneNumberId);
+
+    // Subscribe app to WABA webhooks
+    try {
+      await axios.post(`${FB_API_URL}/${wabaId}/subscribed_apps`, {}, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+    } catch (subErr: any) {
+      console.warn("[WA-SESSION] Webhook subscription warning:", subErr.response?.data?.error?.message);
+    }
+
+    // Get phone numbers
+    let phoneNumberIds: string[] = phoneNumberId ? [phoneNumberId] : [];
+    if (phoneNumberIds.length === 0) {
+      const phonesResponse = await axios.get(`${FB_API_URL}/${wabaId}/phone_numbers`, {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      phoneNumberIds = (phonesResponse.data?.data || []).map((p: any) => p.id);
+    }
+
+    const connectedAccounts: any[] = [];
+    const tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
+    for (const pnId of phoneNumberIds) {
+      let phoneDetails: any = { id: pnId };
+      try {
+        const resp = await axios.get(`${FB_API_URL}/${pnId}`, {
+          params: { fields: "id,display_phone_number,verified_name,quality_rating" },
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+        phoneDetails = resp.data;
+      } catch {}
+
+      const displayPhone = phoneDetails.display_phone_number || phoneDetails.verified_name || pnId;
+
+      try {
+        await axios.post(`${FB_API_URL}/${pnId}/register`,
+          { messaging_product: "whatsapp", pin: "000000" },
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        );
+      } catch {}
+
+      const existing = await prisma.channelAccount.findFirst({
+        where: { channel: "WHATSAPP", externalId: pnId },
+      });
+      if (existing && existing.tenantId !== req.tenantId!) continue;
+
+      const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
+
+      if (existing) {
+        const updated = await prisma.channelAccount.update({
+          where: { id: existing.id },
+          data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+        });
+        connectedAccounts.push(updated);
+      } else {
+        const account = await prisma.channelAccount.create({
+          data: { tenantId: req.tenantId!, channel: "WHATSAPP", externalId: pnId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: req.user?.userId, tokenExpiresAt, isActive: true, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+        });
+        connectedAccounts.push(account);
+      }
+
+      await redis.del(`channel_account:WHATSAPP:${pnId}`);
+    }
+
+    console.log(`[WA-SESSION] Connected ${connectedAccounts.length} account(s)`);
+    res.status(201).json({ data: connectedAccounts });
+  } catch (err: any) {
+    console.error("[WA-SESSION] Error:", err.response?.data || err.message);
+    res.status(500).json({ error: "Failed to complete WhatsApp setup" });
+  }
+});
+
+// ─── OAuth Init ──────────────────────────────────────────────
+
+router.get("/oauth/init", async (req: Request, res: Response) => {
+  // Special handling: accept token from query param since this is a redirect from frontend
+  // The authenticate middleware reads from Bearer header, so we manually verify here
+  const tokenParam = req.query.token as string;
+  if (!tokenParam) {
+    res.status(401).json({ error: "Missing token" });
+    return;
+  }
+
+  let tokenPayload: any;
+  try {
+    tokenPayload = jwt.verify(tokenParam, JWT_SECRET);
+  } catch {
+    res.status(401).json({ error: "Invalid token" });
+    return;
+  }
+
+  // Inject tenant/user context like middleware would
+  req.tenantId = tokenPayload.tenantId;
+  (req as any).userId = tokenPayload.userId;
+
+  if (tokenPayload.role !== "ADMIN") {
+    res.status(403).json({ error: "Admin access required" });
+    return;
+  }
+
+  try {
+    const platform = req.query.platform as string;
+    if (!platform || !["messenger", "instagram", "whatsapp"].includes(platform)) {
+      res.status(400).json({ error: "Invalid platform. Must be 'messenger', 'instagram', or 'whatsapp'" });
+      return;
+    }
+
+    if (!META_APP_ID || !OAUTH_REDIRECT_URI) {
+      res.status(500).json({ error: "OAuth not configured. META_APP_ID and OAUTH_REDIRECT_URI are required." });
+      return;
+    }
+
+    // Capture session info from popup (passed as query params for WhatsApp)
+    const wabaId = req.query.wabaId as string || "";
+    const phoneNumberId = req.query.phoneNumberId as string || "";
+
+    // Generate signed state JWT (anti-CSRF + tenant context + session info)
+    const state = jwt.sign(
+      {
+        tenantId: req.tenantId!,
+        userId: tokenPayload.userId,
+        platform,
+        wabaId,        // From Embedded Signup popup session info
+        phoneNumberId, // From Embedded Signup popup session info
+        nonce: Math.random().toString(36).substring(2),
+      },
+      JWT_SECRET,
+      { expiresIn: "10m" }
+    );
+
+    let oauthUrl: string;
+
+    if (platform === "whatsapp") {
+      // WhatsApp Embedded Signup: config_id + extras triggers the signup wizard
+      const extras = encodeURIComponent(JSON.stringify({ setup: {} }));
+      oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&config_id=${EMBEDDED_SIGNUP_CONFIG_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&response_type=code&override_default_response_type=true&extras=${extras}`;
+    } else {
+      const scopes: Record<string, string> = {
+        messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
+        instagram: "pages_show_list,instagram_basic,instagram_manage_messages,pages_manage_metadata,pages_read_engagement",
+      };
+      oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
+    }
+
+    res.redirect(oauthUrl);
+  } catch (err) {
+    console.error("OAuth init error:", err);
+    res.status(500).json({ error: "Failed to initialize OAuth" });
+  }
+});
+
+// ─── OAuth Callback ──────────────────────────────────────────
+
+router.get("/oauth/callback", async (req: Request, res: Response) => {
+  // Note: This endpoint does NOT use authenticate middleware since it's a redirect from Meta
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+
+  try {
+    const { code, state, error: oauthError } = req.query;
+
+    if (oauthError) {
+      res.redirect(`${frontendUrl}/channels?error=${encodeURIComponent(oauthError as string)}`);
+      return;
+    }
+
+    if (!code || !state) {
+      res.redirect(`${frontendUrl}/channels?error=missing_params`);
+      return;
+    }
+
+    // Verify state JWT
+    let statePayload: any;
+    try {
+      statePayload = jwt.verify(state as string, JWT_SECRET);
+    } catch {
+      res.redirect(`${frontendUrl}/channels?error=invalid_state`);
+      return;
+    }
+
+    const { tenantId, userId, platform } = statePayload;
+
+    let accessToken: string;
+    let tokenExpiresAt: Date;
+
+    if (platform === "whatsapp") {
+      // WhatsApp Embedded Signup: exchange code for business token
+      // Try GET first (per official docs), then POST with grant_type as fallback
+      console.log("[WA-CALLBACK] Exchanging code for WhatsApp business token...");
+      let token: string | undefined;
+
+      // Try GET (official docs method)
+      try {
+        const resp = await axios.get(`${FB_API_URL}/oauth/access_token`, {
+          params: { client_id: META_APP_ID, client_secret: META_APP_SECRET, redirect_uri: OAUTH_REDIRECT_URI, code },
+        });
+        token = resp.data.access_token || (typeof resp.data === "string" ? resp.data : undefined);
+      } catch (e: any) {
+        console.warn("[WA-CALLBACK] GET exchange failed:", e.response?.data?.error?.message);
+      }
+
+      // Fallback: POST with grant_type
+      if (!token) {
+        try {
+          const resp = await axios.post(`${FB_API_URL}/oauth/access_token`, {
+            client_id: META_APP_ID, client_secret: META_APP_SECRET,
+            grant_type: "authorization_code", redirect_uri: OAUTH_REDIRECT_URI, code,
+          }, { headers: { "Content-Type": "application/json" } });
+          token = resp.data.access_token;
+        } catch (e: any) {
+          console.warn("[WA-CALLBACK] POST exchange failed:", e.response?.data?.error?.message);
+        }
+      }
+
+      if (!token) {
+        res.redirect(`${frontendUrl}/channels?error=token_exchange_failed`);
+        return;
+      }
+      accessToken = token;
+      tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
+      console.log("[WA-CALLBACK] Business token obtained successfully");
+    } else {
+      // Messenger/Instagram: standard OAuth token exchange
+      const tokenResponse = await axios.get(`${FB_API_URL}/oauth/access_token`, {
+        params: {
+          client_id: META_APP_ID,
+          client_secret: META_APP_SECRET,
+          redirect_uri: OAUTH_REDIRECT_URI,
+          code,
+        },
+      });
+      const shortLivedToken = tokenResponse.data.access_token;
+
+      // Exchange for long-lived token (60 days)
+      let longLivedToken = shortLivedToken;
+      let expiresIn = 5184000;
+      try {
+        const longLivedResponse = await axios.get(`${FB_API_URL}/oauth/access_token`, {
+          params: {
+            grant_type: "fb_exchange_token",
+            client_id: META_APP_ID,
+            client_secret: META_APP_SECRET,
+            fb_exchange_token: shortLivedToken,
+          },
+        });
+        longLivedToken = longLivedResponse.data.access_token || shortLivedToken;
+        expiresIn = longLivedResponse.data.expires_in || 5184000;
+      } catch (exchangeErr: any) {
+        console.warn("Long-lived token exchange failed:", exchangeErr.response?.data?.error?.message);
+      }
+      accessToken = longLivedToken;
+      tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+    }
+
+    const connectedAccounts: string[] = [];
+    const redis = getRedis();
+
+    if (platform === "whatsapp") {
+      // ─── WHATSAPP ──────────────────────────────────────
+      // Get session info from state JWT (passed from popup → redirect)
+      let wabaId = statePayload.wabaId || "";
+      let phoneNumberIds: string[] = statePayload.phoneNumberId ? [statePayload.phoneNumberId] : [];
+
+      // If no session info, try debug_token discovery
+      if (!wabaId) {
+        console.log("[WA-CALLBACK] No session WABA ID, trying debug_token...");
+        try {
+          const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
+            params: { input_token: accessToken },
+            headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
+          });
+          const debugData = debugResponse.data?.data;
+          console.log("[WA-CALLBACK] debug_token:", JSON.stringify(debugData?.granular_scopes, null, 2));
+          const granularScopes = debugData?.granular_scopes || [];
+          const wabaScope = granularScopes.find((s: any) => s.scope === "whatsapp_business_management");
+          const wabaIds = wabaScope?.target_ids || [];
+          if (wabaIds.length > 0) wabaId = wabaIds[0];
+        } catch (debugErr: any) {
+          console.warn("[WA-CALLBACK] debug_token failed:", debugErr.response?.data?.error?.message);
+        }
+      }
+
+      if (!wabaId) {
+        // Store the token in Redis for later completion (when session info arrives from popup)
+        console.log("[WA-CALLBACK] No WABA found. Storing token for session completion...");
+        await redis.set(`wa_pending_token:${tenantId}`, accessToken, "EX", 300); // 5 min TTL
+        res.redirect(`${frontendUrl}/channels?connected=whatsapp&pending=true`);
+        return;
+      }
+
+      console.log("[WA-CALLBACK] Using WABA:", wabaId);
+
+      // Subscribe app to WABA webhooks
+      try {
+        await axios.post(`${FB_API_URL}/${wabaId}/subscribed_apps`, {}, {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+      } catch (subErr: any) {
+        console.warn("[WA-CALLBACK] Webhook subscription warning:", subErr.response?.data?.error?.message);
+      }
+
+      // If we don't have phone number IDs, fetch from WABA
+      if (phoneNumberIds.length === 0) {
+        try {
+          const phonesResponse = await axios.get(`${FB_API_URL}/${wabaId}/phone_numbers`, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          phoneNumberIds = (phonesResponse.data?.data || []).map((p: any) => p.id);
+        } catch (phonesErr: any) {
+          console.warn("[WA-CALLBACK] Phone numbers fetch failed:", phonesErr.response?.data?.error?.message);
+        }
+      }
+
+      for (const phoneNumberId of phoneNumberIds) {
+        let phoneDetails: any = { id: phoneNumberId };
+        try {
+          const resp = await axios.get(`${FB_API_URL}/${phoneNumberId}`, {
+            params: { fields: "id,display_phone_number,verified_name,quality_rating" },
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          phoneDetails = resp.data;
+        } catch {}
+
+        const displayPhone = phoneDetails.display_phone_number || phoneDetails.verified_name || phoneNumberId;
+
+        // Register phone number
+        try {
+          await axios.post(`${FB_API_URL}/${phoneNumberId}/register`,
+            { messaging_product: "whatsapp", pin: "000000" },
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+        } catch (regErr: any) {
+          console.warn(`[WA-CALLBACK] Phone reg note ${phoneNumberId}:`, regErr.response?.data?.error?.message);
+        }
+
+        const existing = await prisma.channelAccount.findFirst({
+          where: { channel: "WHATSAPP", externalId: phoneNumberId },
+        });
+        if (existing && existing.tenantId !== tenantId) continue;
+
+        const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
+
+        if (existing) {
+          await prisma.channelAccount.update({
+            where: { id: existing.id },
+            data: { credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, lastError: null, displayName: phoneDetails.verified_name || displayPhone, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+          });
+        } else {
+          await prisma.channelAccount.create({
+            data: { tenantId, channel: "WHATSAPP", externalId: phoneNumberId, displayName: phoneDetails.verified_name || displayPhone, credentials, connectionStatus: "CONNECTED", connectedAt: new Date(), connectedBy: userId, tokenExpiresAt, isActive: true, platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating } },
+          });
+        }
+
+        await redis.del(`channel_account:WHATSAPP:${phoneNumberId}`);
+        connectedAccounts.push(phoneDetails.verified_name || displayPhone);
+      }
+
+      if (connectedAccounts.length === 0) {
+        res.redirect(`${frontendUrl}/channels?error=no_whatsapp_numbers`);
+        return;
+      }
+    } else if (platform === "messenger") {
+      // ─── MESSENGER ──────────────────────────────────────
+      // Try /me/accounts first (standard Facebook Login)
+      const pagesResponse = await axios.get(`${FB_API_URL}/me/accounts`, {
+        params: { access_token: accessToken, fields: "id,name,access_token,category" },
+      });
+      let pages: any[] = pagesResponse.data?.data || [];
+      console.log("[MESSENGER-CALLBACK] /me/accounts returned", pages.length, "pages");
+
+      // If empty, token may be from Facebook Login for Business.
+      // Fall back to debug_token to discover granted page IDs from granular_scopes.
+      if (pages.length === 0) {
+        console.log("[MESSENGER-CALLBACK] /me/accounts empty, trying debug_token to discover pages...");
+        try {
+          const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
+            params: { input_token: accessToken },
+            headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
+          });
+          const granularScopes = debugResponse.data?.data?.granular_scopes || [];
+          console.log("[MESSENGER-CALLBACK] debug_token granular_scopes:", JSON.stringify(granularScopes));
+
+          // Collect page IDs from any page-related scope
+          const pageIdSet = new Set<string>();
+          for (const scope of granularScopes) {
+            if (scope.target_ids && Array.isArray(scope.target_ids)) {
+              for (const id of scope.target_ids) pageIdSet.add(id);
+            }
+          }
+          const discoveredPageIds = Array.from(pageIdSet);
+          console.log("[MESSENGER-CALLBACK] Discovered page IDs:", discoveredPageIds);
+
+          // Fetch each page's details + page access token
+          for (const pageId of discoveredPageIds) {
+            try {
+              const pageResp = await axios.get(`${FB_API_URL}/${pageId}`, {
+                params: { fields: "id,name,access_token,category", access_token: accessToken },
+              });
+              if (pageResp.data?.id) {
+                pages.push(pageResp.data);
+              }
+            } catch (pageErr: any) {
+              console.warn(`[MESSENGER-CALLBACK] Failed to fetch page ${pageId}:`, pageErr.response?.data?.error?.message);
+            }
+          }
+          console.log("[MESSENGER-CALLBACK] Resolved", pages.length, "pages from debug_token");
+        } catch (debugErr: any) {
+          console.warn("[MESSENGER-CALLBACK] debug_token failed:", debugErr.response?.data?.error?.message);
+        }
+      }
+
+      if (pages.length === 0) {
+        console.error("[MESSENGER-CALLBACK] No pages found via /me/accounts or debug_token");
+        res.redirect(`${frontendUrl}/channels?error=no_pages`);
+        return;
+      }
+
+      for (const page of pages) {
+        const pageId = page.id;
+        const pageAccessToken = page.access_token;
+        const pageName = page.name || pageId;
+
+        if (!pageAccessToken) {
+          console.warn(`[MESSENGER-CALLBACK] No access_token for page ${pageId}, skipping`);
+          continue;
+        }
+
+        // Subscribe page to webhooks
+        try {
+          await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
+            params: {
+              subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads",
+              access_token: pageAccessToken,
+            },
+          });
+        } catch (subErr: any) {
+          console.warn(`[MESSENGER-CALLBACK] Webhook subscription warning for page ${pageId}:`, subErr.response?.data?.error?.message);
+        }
+
+        // Check if already connected
+        const existing = await prisma.channelAccount.findFirst({
+          where: { channel: "MESSENGER", externalId: pageId },
+        });
+
+        if (existing && existing.tenantId !== tenantId) {
+          console.warn(`Messenger page ${pageId} already connected to another tenant`);
+          continue;
+        }
+
+        const credentials = encryptCredentials({
+          accessToken: pageAccessToken,
+          userId,
+          pageId,
+          pageName,
+        });
+
+        if (existing) {
+          await prisma.channelAccount.update({
+            where: { id: existing.id },
+            data: {
+              credentials,
+              connectionStatus: "CONNECTED",
+              connectedAt: new Date(),
+              connectedBy: userId,
+              tokenExpiresAt,
+              isActive: true,
+              lastError: null,
+              displayName: pageName,
+            },
+          });
+        } else {
+          await prisma.channelAccount.create({
+            data: {
+              tenantId,
+              channel: "MESSENGER",
+              externalId: pageId,
+              displayName: pageName,
+              credentials,
+              connectionStatus: "CONNECTED",
+              connectedAt: new Date(),
+              connectedBy: userId,
+              tokenExpiresAt,
+              isActive: true,
+            },
+          });
+        }
+
+        await redis.del(`channel_account:MESSENGER:${pageId}`);
+        connectedAccounts.push(pageName);
+      }
+    } else if (platform === "instagram") {
+      // ─── INSTAGRAM ──────────────────────────────────────
+      const igPagesResponse = await axios.get(`${FB_API_URL}/me/accounts`, {
+        params: { access_token: accessToken, fields: "id,name,access_token,instagram_business_account" },
+      });
+      let pages: any[] = igPagesResponse.data?.data || [];
+      console.log("[INSTAGRAM-CALLBACK] /me/accounts returned", pages.length, "pages");
+
+      // If empty, fall back to debug_token (Facebook Login for Business)
+      if (pages.length === 0) {
+        console.log("[INSTAGRAM-CALLBACK] /me/accounts empty, trying debug_token to discover pages...");
+        try {
+          const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
+            params: { input_token: accessToken },
+            headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
+          });
+          const granularScopes = debugResponse.data?.data?.granular_scopes || [];
+          console.log("[INSTAGRAM-CALLBACK] debug_token granular_scopes:", JSON.stringify(granularScopes));
+
+          const pageIdSet = new Set<string>();
+          for (const scope of granularScopes) {
+            if (scope.target_ids && Array.isArray(scope.target_ids)) {
+              for (const id of scope.target_ids) pageIdSet.add(id);
+            }
+          }
+          const discoveredPageIds = Array.from(pageIdSet);
+          console.log("[INSTAGRAM-CALLBACK] Discovered page IDs:", discoveredPageIds);
+
+          for (const pageId of discoveredPageIds) {
+            try {
+              const pageResp = await axios.get(`${FB_API_URL}/${pageId}`, {
+                params: { fields: "id,name,access_token,instagram_business_account", access_token: accessToken },
+              });
+              if (pageResp.data?.id) {
+                pages.push(pageResp.data);
+              }
+            } catch (pageErr: any) {
+              console.warn(`[INSTAGRAM-CALLBACK] Failed to fetch page ${pageId}:`, pageErr.response?.data?.error?.message);
+            }
+          }
+          console.log("[INSTAGRAM-CALLBACK] Resolved", pages.length, "pages from debug_token");
+        } catch (debugErr: any) {
+          console.warn("[INSTAGRAM-CALLBACK] debug_token failed:", debugErr.response?.data?.error?.message);
+        }
+      }
+
+      if (pages.length === 0) {
+        console.error("[INSTAGRAM-CALLBACK] No pages found via /me/accounts or debug_token");
+        res.redirect(`${frontendUrl}/channels?error=no_pages`);
+        return;
+      }
+
+      for (const page of pages) {
+        const pageId = page.id;
+        const pageAccessToken = page.access_token;
+        const pageName = page.name || pageId;
+
+        // Get Instagram Business Account linked to this page
+        let igResponse;
+        try {
+          igResponse = await axios.get(`${FB_API_URL}/${pageId}`, {
+            params: {
+              fields: "instagram_business_account",
+              access_token: pageAccessToken,
+            },
+          });
+        } catch {
+          continue; // Page has no IG business account
+        }
+
+        const igBusinessId = igResponse.data?.instagram_business_account?.id;
+        if (!igBusinessId) continue;
+
+        // Get Instagram username
+        let igUsername = "";
+        try {
+          const igProfileResponse = await axios.get(`${FB_API_URL}/${igBusinessId}`, {
+            params: { fields: "username,name", access_token: pageAccessToken },
+          });
+          igUsername = igProfileResponse.data?.username || igProfileResponse.data?.name || igBusinessId;
+        } catch {
+          igUsername = igBusinessId;
+        }
+
+        // Subscribe page to Instagram webhooks
+        try {
+          await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
+            params: {
+              subscribed_fields: "messages,messaging_postbacks,message_reads",
+              access_token: pageAccessToken,
+            },
+          });
+        } catch (subErr: any) {
+          console.warn(`[INSTAGRAM-CALLBACK] Page subscription warning for ${pageId}:`, subErr.response?.data?.error?.message);
+        }
+
+        // Subscribe app to Instagram webhooks (required for receiving DMs)
+        const WEBHOOK_URL = process.env.WEBHOOK_URL || process.env.OAUTH_REDIRECT_URI?.replace("/api/channels/oauth/callback", "/api/webhook") || "";
+        const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "";
+        if (WEBHOOK_URL && WEBHOOK_VERIFY_TOKEN) {
+          try {
+            await axios.post(`${FB_API_URL}/${META_APP_ID}/subscriptions`, null, {
+              params: {
+                object: "instagram",
+                callback_url: WEBHOOK_URL,
+                verify_token: WEBHOOK_VERIFY_TOKEN,
+                fields: "messages,messaging_postbacks",
+                access_token: `${META_APP_ID}|${META_APP_SECRET}`,
+              },
+            });
+            console.log("[INSTAGRAM-CALLBACK] App-level Instagram webhook subscription created");
+          } catch (appSubErr: any) {
+            console.warn("[INSTAGRAM-CALLBACK] App-level subscription warning:", appSubErr.response?.data?.error?.message);
+          }
+        }
+
+        // Check if already connected
+        const existing = await prisma.channelAccount.findFirst({
+          where: { channel: "INSTAGRAM", externalId: igBusinessId },
+        });
+
+        if (existing && existing.tenantId !== tenantId) {
+          console.warn(`Instagram account ${igBusinessId} already connected to another tenant`);
+          continue;
+        }
+
+        const credentials = encryptCredentials({
+          accessToken: pageAccessToken,
+          pageId,
+          igBusinessId,
+          igUsername,
+        });
+
+        if (existing) {
+          await prisma.channelAccount.update({
+            where: { id: existing.id },
+            data: {
+              credentials,
+              connectionStatus: "CONNECTED",
+              connectedAt: new Date(),
+              connectedBy: userId,
+              tokenExpiresAt,
+              isActive: true,
+              lastError: null,
+              displayName: `@${igUsername}`,
+            },
+          });
+        } else {
+          await prisma.channelAccount.create({
+            data: {
+              tenantId,
+              channel: "INSTAGRAM",
+              externalId: igBusinessId,
+              displayName: `@${igUsername}`,
+              credentials,
+              connectionStatus: "CONNECTED",
+              connectedAt: new Date(),
+              connectedBy: userId,
+              tokenExpiresAt,
+              isActive: true,
+              platformMeta: { pageId, pageName },
+            },
+          });
+        }
+
+        await redis.del(`channel_account:INSTAGRAM:${igBusinessId}`);
+        connectedAccounts.push(`@${igUsername}`);
+      }
+
+      if (connectedAccounts.length === 0) {
+        res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
+        return;
+      }
+    }
+
+    res.redirect(`${frontendUrl}/channels?connected=${platform}&count=${connectedAccounts.length}`);
+  } catch (err: any) {
+    console.error("OAuth callback error:", err.response?.data || err.message);
+    res.redirect(`${frontendUrl}/channels?error=connection_failed`);
+  }
+});
+
+// ─── Disconnect Channel ──────────────────────────────────────
+
+router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+    });
+
+    if (!account) {
+      res.status(404).json({ error: "Channel not found" });
+      return;
+    }
+
+    // Attempt platform-specific cleanup
+    try {
+      const credentials = typeof account.credentials === "string"
+        ? decryptCredentials(account.credentials as string)
+        : (account.credentials as any);
+
+      const accessToken = credentials?.accessToken;
+
+      if (accessToken) {
+        if (account.channel === "WHATSAPP") {
+          const wabaId = credentials.wabaId;
+          if (wabaId) {
+            await axios.delete(`${FB_API_URL}/${wabaId}/subscribed_apps`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+          }
+        } else if (account.channel === "MESSENGER") {
+          const pageId = account.externalId;
+          await axios.delete(`${FB_API_URL}/${pageId}/subscribed_apps`, {
+            params: { access_token: accessToken },
+          });
+        } else if (account.channel === "INSTAGRAM") {
+          const pageId = credentials.pageId || (account.platformMeta as any)?.pageId;
+          if (pageId) {
+            await axios.delete(`${FB_API_URL}/${pageId}/subscribed_apps`, {
+              params: { access_token: accessToken },
+            });
+          }
+        }
+      }
+    } catch (cleanupErr: any) {
+      // Log but don't fail - we still want to disconnect locally even if Meta API fails
+      console.warn("Channel disconnect cleanup warning:", cleanupErr.response?.data || cleanupErr.message);
+    }
+
+    // Soft disconnect: keep record, clear credentials
+    await prisma.channelAccount.update({
+      where: { id: account.id },
+      data: {
+        connectionStatus: "DISCONNECTED",
+        isActive: false,
+        credentials: {},
+        lastError: null,
+      },
+    });
+
+    // Invalidate Redis cache
+    const redis = getRedis();
+    await redis.del(`channel_account:${account.channel}:${account.externalId}`);
+
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Disconnect channel error:", err);
+    res.status(500).json({ error: "Failed to disconnect channel" });
+  }
+});
+
+// ─── Channel Health Check ────────────────────────────────────
+
+router.get("/:id/status", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+    });
+
+    if (!account) {
+      res.status(404).json({ error: "Channel not found" });
+      return;
+    }
+
+    if (account.connectionStatus === "DISCONNECTED") {
+      res.json({ data: { status: "DISCONNECTED", tokenValid: false } });
+      return;
+    }
+
+    let tokenValid = false;
+    let tokenExpiresAt = account.tokenExpiresAt;
+
+    try {
+      const credentials = typeof account.credentials === "string"
+        ? decryptCredentials(account.credentials as string)
+        : (account.credentials as any);
+
+      const accessToken = credentials?.accessToken;
+
+      if (accessToken) {
+        const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
+          params: { input_token: accessToken },
+          headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
+        });
+
+        const tokenData = debugResponse.data?.data;
+        tokenValid = tokenData?.is_valid === true;
+
+        if (tokenData?.expires_at && tokenData.expires_at > 0) {
+          tokenExpiresAt = new Date(tokenData.expires_at * 1000);
+        }
+      }
+    } catch (debugErr: any) {
+      console.warn("Token debug error:", debugErr.response?.data || debugErr.message);
+    }
+
+    const newStatus = tokenValid ? "CONNECTED" : "ERROR";
+    const lastError = tokenValid ? null : "Token is invalid or expired";
+
+    await prisma.channelAccount.update({
+      where: { id: account.id },
+      data: {
+        connectionStatus: newStatus,
+        lastHealthCheck: new Date(),
+        lastError,
+        tokenExpiresAt,
+      },
+    });
+
+    res.json({
+      data: {
+        status: newStatus,
+        tokenValid,
+        tokenExpiresAt,
+        lastHealthCheck: new Date(),
+      },
+    });
+  } catch (err) {
+    console.error("Channel status check error:", err);
+    res.status(500).json({ error: "Failed to check channel status" });
+  }
+});
+
+// ─── Get OAuth Config (for frontend) ─────────────────────────
+
+router.get("/config", authenticate, resolveTenant, requireRole("ADMIN"), async (_req: Request, res: Response) => {
+  res.json({
+    data: {
+      metaAppId: META_APP_ID,
+      embeddedSignupConfigId: EMBEDDED_SIGNUP_CONFIG_ID,
+      oauthConfigured: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
+      whatsappConfigured: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
+    },
+  });
+});
+
+export default router;

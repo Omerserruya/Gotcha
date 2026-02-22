@@ -13,6 +13,14 @@ datasource db {
 enum ChannelType {
   WHATSAPP
   MESSENGER
+  INSTAGRAM
+}
+
+enum ChannelConnectionStatus {
+  PENDING
+  CONNECTED
+  ERROR
+  DISCONNECTED
 }
 
 enum BotFlowMode {
@@ -26,6 +34,7 @@ model Tenant {
   id        String   @id @default(cuid())
   name      String
   slug      String   @unique
+  isActive  Boolean  @default(true) @map("is_active")
   // Legacy WhatsApp config (kept for backward compat during migration)
   waPhoneNumberId  String?  @map("wa_phone_number_id")
   waAccessToken    String?  @map("wa_access_token")
@@ -51,10 +60,20 @@ model ChannelAccount {
   id              String      @id @default(cuid())
   tenantId        String      @map("tenant_id")
   channel         ChannelType
-  externalId      String      @map("external_id")    // WA phone_number_id or FB page_id
+  externalId      String      @map("external_id")    // WA phone_number_id, FB page_id, or IG business_id
   displayName     String      @map("display_name")
   credentials     Json        @default("{}")          // { accessToken, appSecret, ... }
   isActive        Boolean     @default(true) @map("is_active")
+
+  // Connection lifecycle
+  connectionStatus ChannelConnectionStatus @default(CONNECTED) @map("connection_status")
+  connectedAt      DateTime?              @map("connected_at")
+  connectedBy      String?                @map("connected_by")   // userId who connected
+  tokenExpiresAt   DateTime?              @map("token_expires_at")
+  platformMeta     Json?                  @map("platform_meta")  // platform-specific metadata
+  lastError        String?                @map("last_error")
+  lastHealthCheck  DateTime?              @map("last_health_check")
+
   createdAt       DateTime    @default(now()) @map("created_at")
   updatedAt       DateTime    @updatedAt @map("updated_at")
 
@@ -63,6 +82,8 @@ model ChannelAccount {
 
   @@unique([channel, externalId])
   @@index([tenantId])
+  @@index([connectionStatus])
+  @@index([tokenExpiresAt])
   @@map("channel_accounts")
 }
 
@@ -100,6 +121,7 @@ enum CopilotMode {
 // ─── Auth & RBAC ─────────────────────────────────────────────
 
 enum Role {
+  SYSTEM_ADMIN
   ADMIN
   AGENT
 }

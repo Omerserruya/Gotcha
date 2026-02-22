@@ -1,6 +1,6 @@
 // ─── Channel Types & Interfaces ──────────────────────────────
 
-export type ChannelType = "WHATSAPP" | "MESSENGER";
+export type ChannelType = "WHATSAPP" | "MESSENGER" | "INSTAGRAM";
 
 export interface NormalizedInboundMessage {
   externalMessageId: string;

@@ -5,7 +5,7 @@ import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { login as apiLogin } from "@/lib/api";
+import { login as apiLogin, systemLogin as apiSystemLogin } from "@/lib/api";
 import { LanguageSwitcher } from "@/components/LanguageSwitcher";
 
 export default function LoginPage() {
@@ -16,6 +16,7 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [tenantSlug, setTenantSlug] = useState("");
+  const [isSystemAdmin, setIsSystemAdmin] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -25,9 +26,15 @@ export default function LoginPage() {
     setLoading(true);
 
     try {
-      const result = await apiLogin(email, password, tenantSlug);
-      login(result.token, result.user);
-      router.push("/conversations");
+      if (isSystemAdmin) {
+        const result = await apiSystemLogin(email, password);
+        login(result.token, result.user);
+        router.push("/system");
+      } else {
+        const result = await apiLogin(email, password, tenantSlug);
+        login(result.token, result.user);
+        router.push("/conversations");
+      }
     } catch (err: any) {
       setError(err.message || t("auth.loginError"));
     } finally {
@@ -66,21 +73,34 @@ export default function LoginPage() {
             </div>
           )}
 
+          {/* System Admin Toggle */}
+          <div className="flex items-center justify-center mb-2">
+            <button
+              type="button"
+              onClick={() => setIsSystemAdmin(!isSystemAdmin)}
+              className="text-xs text-gray-400 hover:text-primary-500 transition"
+            >
+              {isSystemAdmin ? "Back to tenant login" : "System Admin Login"}
+            </button>
+          </div>
+
           {/* Form */}
           <form onSubmit={handleSubmit} className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                {t("auth.tenant")}
-              </label>
-              <input
-                type="text"
-                value={tenantSlug}
-                onChange={(e) => setTenantSlug(e.target.value)}
-                placeholder="demo-company"
-                required
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
-              />
-            </div>
+            {!isSystemAdmin && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                  {t("auth.tenant")}
+                </label>
+                <input
+                  type="text"
+                  value={tenantSlug}
+                  onChange={(e) => setTenantSlug(e.target.value)}
+                  placeholder="demo-company"
+                  required
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
+                />
+              </div>
+            )}
 
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1.5">

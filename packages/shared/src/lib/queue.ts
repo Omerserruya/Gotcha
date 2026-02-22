@@ -7,12 +7,13 @@ const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 export const incomingMessageQueue = new Queue("incoming-messages", { connection: { url: REDIS_URL } });
 export const outgoingMessageQueue = new Queue("outgoing-messages", { connection: { url: REDIS_URL } });
 export const analyticsQueue = new Queue("analytics-aggregation", { connection: { url: REDIS_URL } });
+export const channelHealthQueue = new Queue("channel-health", { connection: { url: REDIS_URL } });
 
 // ─── Job types ──────────────────────────────────────────────
 
 export interface IncomingMessageJob {
   tenantId: string;
-  channel: "WHATSAPP" | "MESSENGER";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM";
   channelAccountId: string;
   normalizedMessage: {
     externalMessageId: string;
@@ -37,7 +38,7 @@ export interface IncomingMessageJob {
 export interface OutgoingMessageJob {
   tenantId: string;
   conversationId: string;
-  channel: "WHATSAPP" | "MESSENGER";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM";
   channelAccountId: string;
   recipientExternalId: string;
   body: string;

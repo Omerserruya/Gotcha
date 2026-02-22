@@ -194,7 +194,7 @@ export function updateAgent(token: string, id: string, data: { name?: string; is
   });
 }
 
-// ─── Channel Accounts ──────────────────────────────────────
+// ─── Channel Accounts (legacy) ─────────────────────────────
 
 export function getChannelAccounts(token: string) {
   return apiFetch<{ data: any[] }>("/api/agents/settings/channels", { token });
@@ -218,6 +218,43 @@ export function updateChannelAccount(token: string, id: string, data: any) {
 
 export function deleteChannelAccount(token: string, id: string) {
   return apiFetch<any>(`/api/agents/settings/channels/${id}`, { token, method: "DELETE" });
+}
+
+// ─── Channel Connection (OAuth / Embedded Signup) ───────────
+
+export function getChannels(token: string) {
+  return apiFetch<{ data: any[] }>("/api/channels", { token });
+}
+
+export function getChannelConfig2(token: string) {
+  return apiFetch<{ data: any }>("/api/channels/config", { token });
+}
+
+export function connectWhatsApp(
+  token: string,
+  code: string,
+  sessionInfo?: { wabaId?: string; phoneNumberId?: string },
+) {
+  return apiFetch<{ data: any[] }>("/api/channels/connect/whatsapp", {
+    token,
+    method: "POST",
+    body: JSON.stringify({
+      code,
+      wabaId: sessionInfo?.wabaId,
+      phoneNumberId: sessionInfo?.phoneNumberId,
+    }),
+  });
+}
+
+export function disconnectChannel(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/channels/${id}/disconnect`, {
+    token,
+    method: "POST",
+  });
+}
+
+export function getChannelStatus(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/channels/${id}/status`, { token });
 }
 
 // ─── Tenant Channel Config ─────────────────────────────────
@@ -348,4 +385,46 @@ export function updateBusinessHours(token: string, data: any) {
 
 export function getAgentWorkload(token: string) {
   return apiFetch<{ data: any[] }>("/api/conversations/stats/workload", { token });
+}
+
+// ─── System Admin ───────────────────────────────────────────
+
+export function systemLogin(email: string, password: string) {
+  return apiFetch<{ token: string; user: any }>("/api/system/login", {
+    method: "POST",
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export function getSystemStats(token: string) {
+  return apiFetch<{ data: any }>("/api/system/stats", { token });
+}
+
+export function getSystemTenants(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; meta: any }>(`/api/system/tenants${qs}`, { token });
+}
+
+export function getSystemTenant(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token });
+}
+
+export function createTenant(token: string, data: { name: string; slug: string; adminEmail: string; adminPassword: string; adminName: string }) {
+  return apiFetch<{ data: any }>("/api/system/tenants", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateTenant(token: string, id: string, data: { name?: string; isActive?: boolean }) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function createTenantUser(token: string, tenantId: string, data: { email: string; password: string; name: string; role?: string }) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users`, { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string }) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function seedSystemAdmin(data: { email: string; password: string; name: string; setupSecret: string }) {
+  return apiFetch<{ data: any }>("/api/system/seed", { method: "POST", body: JSON.stringify(data) });
 }

@@ -16,6 +16,12 @@ export function resolveTenant(req: Request, res: Response, next: NextFunction): 
     req.tenantId = req.user.tenantId;
   }
 
+  // SYSTEM_ADMIN can operate without a tenant context (for system-level routes)
+  if (!req.tenantId && req.user?.role === "SYSTEM_ADMIN") {
+    next();
+    return;
+  }
+
   if (!req.tenantId) {
     res.status(400).json({ error: "Tenant context required" });
     return;

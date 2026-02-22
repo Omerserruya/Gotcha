@@ -1,17 +1,20 @@
 import type { InboundAdapter, OutboundAdapter, ChannelType } from "./types";
 import { whatsAppInboundAdapter, whatsAppOutboundAdapter } from "./whatsapp.adapter";
 import { messengerInboundAdapter, messengerOutboundAdapter } from "./messenger.adapter";
+import { instagramInboundAdapter, instagramOutboundAdapter } from "./instagram.adapter";
 
 // ─── Channel Registry ────────────────────────────────────────
 
 const inboundAdapters: InboundAdapter[] = [
   whatsAppInboundAdapter,
   messengerInboundAdapter,
+  instagramInboundAdapter,
 ];
 
 const outboundAdapters: Map<ChannelType, OutboundAdapter> = new Map([
   ["WHATSAPP", whatsAppOutboundAdapter],
   ["MESSENGER", messengerOutboundAdapter],
+  ["INSTAGRAM", instagramOutboundAdapter],
 ]);
 
 /**

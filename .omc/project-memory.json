@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1771501189021,
+  "lastScanned": 1771750683326,
   "projectRoot": "/home/ocs/projects/ChatCenter",
   "techStack": {
     "languages": [
@@ -56,14 +56,14 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 0,
-      "lastAccessed": 1771501189002,
+      "lastAccessed": 1771750683281,
       "keyFiles": []
     },
     "frontend": {
       "path": "frontend",
       "purpose": null,
       "fileCount": 9,
-      "lastAccessed": 1771501189002,
+      "lastAccessed": 1771750683282,
       "keyFiles": [
         "Dockerfile",
         "next-env.d.ts",
@@ -76,7 +76,7 @@
       "path": "nginx",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1771501189003,
+      "lastAccessed": 1771750683311,
       "keyFiles": [
         "nginx.conf.template"
       ]
@@ -85,28 +85,28 @@
       "path": "packages",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1771501189015,
+      "lastAccessed": 1771750683321,
       "keyFiles": []
     },
     "services": {
       "path": "services",
       "purpose": "Business logic services",
       "fileCount": 0,
-      "lastAccessed": 1771501189015,
+      "lastAccessed": 1771750683322,
       "keyFiles": []
     },
     "frontend/node_modules": {
       "path": "frontend/node_modules",
       "purpose": "Dependencies",
       "fileCount": 1,
-      "lastAccessed": 1771501189018,
+      "lastAccessed": 1771750683323,
       "keyFiles": []
     },
     "frontend/public": {
       "path": "frontend/public",
       "purpose": "Public files",
       "fileCount": 3,
-      "lastAccessed": 1771501189018,
+      "lastAccessed": 1771750683323,
       "keyFiles": [
         "apple-touch-icon.png",
         "favicon.ico",
@@ -114,6 +114,103 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "services/auth/src/routes/channels.ts",
+      "accessCount": 12,
+      "lastAccessed": 1771752000818,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src/workers/incoming.worker.ts",
+      "accessCount": 9,
+      "lastAccessed": 1771754999220,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook/src/routes/webhook.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771752970706,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker",
+      "accessCount": 2,
+      "lastAccessed": 1771751825153,
+      "type": "directory"
+    },
+    {
+      "path": "services",
+      "accessCount": 1,
+      "lastAccessed": 1771750818375,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/app/channels/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1771750845971,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src",
+      "accessCount": 1,
+      "lastAccessed": 1771751580312,
+      "type": "directory"
+    },
+    {
+      "path": "packages/shared/src/channels/messenger.adapter.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751580652,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/services/conversation.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751586931,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/lib/encryption.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751615987,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751642674,
+      "type": "directory"
+    },
+    {
+      "path": "packages/shared/src/channels/instagram.adapter.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751823252,
+      "type": "file"
+    },
+    {
+      "path": "services/webhook",
+      "accessCount": 1,
+      "lastAccessed": 1771751824453,
+      "type": "directory"
+    },
+    {
+      "path": "services/webhook/src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751852157,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/channels/registry.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771751862708,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 1,
+      "lastAccessed": 1771752019175,
+      "type": "directory"
+    }
+  ],
   "userDirectives": []
 }

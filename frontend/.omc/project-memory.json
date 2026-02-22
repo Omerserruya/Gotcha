@@ -1,0 +1,199 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771588021375,
+  "projectRoot": "/home/ocs/projects/ChatCenter/frontend",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "next",
+        "version": "14.2.0",
+        "category": "fullstack"
+      },
+      {
+        "name": "react",
+        "version": "18.3.0",
+        "category": "frontend"
+      },
+      {
+        "name": "react-dom",
+        "version": "18.3.0",
+        "category": "frontend"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": null,
+    "lintCommand": "npm run lint",
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "next dev --port 3000",
+      "build": "next build",
+      "start": "next start",
+      "lint": "next lint"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": "type-based"
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "public",
+      "src"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "public": {
+      "path": "public",
+      "purpose": "Public files",
+      "fileCount": 3,
+      "lastAccessed": 1771588021359,
+      "keyFiles": [
+        "apple-touch-icon.png",
+        "favicon.ico",
+        "logo.png"
+      ]
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 0,
+      "lastAccessed": 1771588021359,
+      "keyFiles": []
+    },
+    "src/app": {
+      "path": "src/app",
+      "purpose": "Application code",
+      "fileCount": 4,
+      "lastAccessed": 1771588021361,
+      "keyFiles": [
+        "globals.css",
+        "layout.tsx",
+        "page.tsx"
+      ]
+    },
+    "src/components": {
+      "path": "src/components",
+      "purpose": "UI components",
+      "fileCount": 4,
+      "lastAccessed": 1771588021369,
+      "keyFiles": [
+        "AppLayout.tsx",
+        "LanguageSwitcher.tsx",
+        "Sidebar.tsx"
+      ]
+    },
+    "src/lib": {
+      "path": "src/lib",
+      "purpose": "Library code",
+      "fileCount": 2,
+      "lastAccessed": 1771588021370,
+      "keyFiles": [
+        "api.ts",
+        "socket.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/app/agents/page.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1771589365950,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/SystemLayout.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1771588857810,
+      "type": "file"
+    },
+    {
+      "path": "src/app/settings/page.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1771589320911,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/en.json",
+      "accessCount": 5,
+      "lastAccessed": 1771589283843,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1771588861424,
+      "type": "file"
+    },
+    {
+      "path": "src/app/system/onboarding/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771588399541,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppLayout.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771588702178,
+      "type": "directory"
+    },
+    {
+      "path": "src/i18n/he.json",
+      "accessCount": 2,
+      "lastAccessed": 1771589290351,
+      "type": "file"
+    },
+    {
+      "path": "src/components",
+      "accessCount": 1,
+      "lastAccessed": 1771588705895,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/settings",
+      "accessCount": 1,
+      "lastAccessed": 1771589137538,
+      "type": "directory"
+    },
+    {
+      "path": "src/i18n",
+      "accessCount": 1,
+      "lastAccessed": 1771589212772,
+      "type": "directory"
+    },
+    {
+      "path": "src/lib/api.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771589214128,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}

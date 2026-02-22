@@ -148,10 +148,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               </div>
               <button
                 onClick={logout}
-                className="text-gray-400 hover:text-red-500 transition p-1 rounded-lg hover:bg-red-50"
+                className="text-red-400 hover:text-red-600 transition p-1.5 rounded-lg hover:bg-red-50"
                 title={t("nav.logout")}
               >
-                <LogoutIcon className="w-4.5 h-4.5" />
+                <LogoutIcon className="w-5 h-5" />
               </button>
             </>
           )}

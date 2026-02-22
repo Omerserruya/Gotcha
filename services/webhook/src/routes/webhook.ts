@@ -31,6 +31,7 @@ router.post("/", async (req: Request, res: Response) => {
 
   try {
     const body = req.body;
+    console.log(`[WEBHOOK] Incoming: object=${body?.object}, entries=${body?.entry?.length || 0}`, JSON.stringify(body).slice(0, 500));
 
     // Step 1: Detect which platform sent this webhook
     const adapter = detectInboundAdapter(body);

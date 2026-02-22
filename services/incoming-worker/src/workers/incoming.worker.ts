@@ -1,24 +1,50 @@
 import { Job } from "bullmq";
 import axios from "axios";
-import { prisma, createWorker, IncomingMessageJob, analyticsQueue, publishEvent } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, analyticsQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
 import { processChatbotFlow } from "../services/chatbot-engine.service";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
 
-async function fetchMessengerProfile(psid: string, accessToken: string): Promise<string | null> {
+async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string): Promise<string | null> {
+  // Try direct profile lookup first
   try {
-    const res = await axios.get(`${FB_API_URL}/${psid}`, {
-      params: { fields: "first_name,last_name", access_token: accessToken },
+    const fields = channel === "INSTAGRAM" ? "name,username" : "first_name,last_name,name";
+    const res = await axios.get(`${FB_API_URL}/${senderId}`, {
+      params: { fields, access_token: accessToken },
     });
-    const { first_name, last_name } = res.data;
-    if (first_name || last_name) {
-      return [first_name, last_name].filter(Boolean).join(" ");
+    if (channel === "INSTAGRAM") {
+      return res.data.name || res.data.username || null;
     }
-    return null;
+    const { first_name, last_name, name } = res.data;
+    if (first_name || last_name) return [first_name, last_name].filter(Boolean).join(" ");
+    if (name) return name;
   } catch (err: any) {
-    console.warn(`Failed to fetch Messenger profile for ${psid}:`, err.response?.data?.error?.message || err.message);
-    return null;
+    console.warn(`[PROFILE] Direct lookup failed for ${senderId}:`, err.response?.data?.error?.message || err.message);
   }
+
+  // Fallback for Messenger: use Conversations API to get participant name
+  if (channel === "MESSENGER" && pageId) {
+    try {
+      const res = await axios.get(`${FB_API_URL}/${pageId}/conversations`, {
+        params: {
+          platform: "messenger",
+          user_id: senderId,
+          fields: "participants",
+          access_token: accessToken,
+        },
+      });
+      const participants = res.data?.data?.[0]?.participants?.data || [];
+      const sender = participants.find((p: any) => p.id === senderId);
+      if (sender?.name) {
+        console.log(`[PROFILE] Messenger name via conversations API: ${sender.name}`);
+        return sender.name;
+      }
+    } catch (convErr: any) {
+      console.warn(`[PROFILE] Conversations API fallback failed:`, convErr.response?.data?.error?.message || convErr.message);
+    }
+  }
+
+  return null;
 }
 
 async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<void> {
@@ -60,13 +86,16 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     orderBy: { createdAt: "desc" },
   });
 
-  // For Messenger, fetch display name from Graph API if not provided
+  // For Messenger/Instagram, fetch display name from Graph API if not provided
   let displayName = senderDisplayName || null;
-  if (!displayName && channel === "MESSENGER" && channelAccountId) {
+  if (!displayName && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
     const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
-    const accessToken = (channelAccount?.credentials as any)?.accessToken;
+    const creds = channelAccount?.credentials;
+    const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);
+    const accessToken = decrypted?.accessToken;
+    const pageId = decrypted?.pageId || channelAccount?.externalId;
     if (accessToken) {
-      displayName = await fetchMessengerProfile(senderId, accessToken);
+      displayName = await fetchMetaProfile(senderId, accessToken, channel, pageId);
     }
   }
 
