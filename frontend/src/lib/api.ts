@@ -285,6 +285,46 @@ export function updateAutoGreeting(token: string, template: string) {
   });
 }
 
+// ─── SLA Settings ───────────────────────────────────────────
+
+export function getSlaSettings(token: string) {
+  return apiFetch<any>("/api/agents/settings/sla", { token });
+}
+
+export function updateSlaSettings(token: string, data: any) {
+  return apiFetch<any>("/api/agents/settings/sla", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export function getDepartmentSla(token: string, departmentId: string) {
+  return apiFetch<any>(`/api/agents/settings/sla/department/${departmentId}`, { token });
+}
+
+export function updateDepartmentSla(token: string, departmentId: string, data: any) {
+  return apiFetch<any>(`/api/agents/settings/sla/department/${departmentId}`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+// ─── Idle Automation Settings ───────────────────────────────
+
+export function getIdleAutomation(token: string) {
+  return apiFetch<any>("/api/agents/settings/idle-automation", { token });
+}
+
+export function updateIdleAutomation(token: string, data: any) {
+  return apiFetch<any>("/api/agents/settings/idle-automation", {
+    token,
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Copilot Settings ───────────────────────────────────────
 
 export function getCopilotSettings(token: string) {

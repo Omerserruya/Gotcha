@@ -13,9 +13,6 @@ async function main() {
     create: {
       name: "Demo Company",
       slug: "demo-company",
-      waPhoneNumberId: process.env.WHATSAPP_PHONE_NUMBER_ID || "demo-phone-id",
-      waAccessToken: process.env.WHATSAPP_ACCESS_TOKEN || "demo-token",
-      waWebhookSecret: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "demo-secret",
     },
   });
   console.log(`Tenant: ${tenant.name} (${tenant.id})`);
@@ -158,7 +155,6 @@ async function main() {
       channel: "WHATSAPP",
       channelAccountId: waAccount.id,
       customerExternalId: "+1234567890",
-      customerPhone: "+1234567890",
       customerName: "John Doe",
       status: "OPEN",
       lastMessageAt: new Date(),
@@ -171,7 +167,6 @@ async function main() {
       channel: "WHATSAPP",
       channelAccountId: waAccount.id,
       customerExternalId: "+0987654321",
-      customerPhone: "+0987654321",
       customerName: "Jane Smith",
       assignedAgentId: agent1.id,
       status: "OPEN",

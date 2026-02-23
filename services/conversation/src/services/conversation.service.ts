@@ -37,7 +37,6 @@ export async function list(tenantId: string, filters: ConversationFilters) {
     where.AND = where.AND || [];
     where.AND.push({
       OR: [
-        { customerPhone: { contains: search, mode: "insensitive" } },
         { customerExternalId: { contains: search, mode: "insensitive" } },
         { customerName: { contains: search, mode: "insensitive" } },
       ],
@@ -238,15 +237,11 @@ export async function getAgentWorkload(tenantId: string) {
   return agents.map((a) => ({ agentId: a.id, name: a.name, email: a.email, activeCount: a._count.conversations }));
 }
 
-export async function getHistoryByPhone(tenantId: string, customerPhone: string) {
-  // Search by both customerPhone (legacy) and customerExternalId (new)
+export async function getHistoryByPhone(tenantId: string, customerExternalId: string) {
   const conversations = await prisma.conversation.findMany({
     where: {
       tenantId,
-      OR: [
-        { customerPhone },
-        { customerExternalId: customerPhone },
-      ],
+      customerExternalId,
     },
     include: {
       assignedAgent: { select: { id: true, name: true } },
@@ -308,9 +303,8 @@ async function sendAutoGreeting(
     const agent = await prisma.user.findUnique({ where: { id: agentId }, select: { name: true } });
     const greeting = template.replace(/\{agentName\}/g, agent?.name || "Agent");
 
-    // Resolve channel credentials
     const channel = conversation.channel || "WHATSAPP";
-    const recipientId = conversation.customerExternalId || conversation.customerPhone;
+    const recipientId = conversation.customerExternalId;
     let channelAccountId: string | null = conversation.channelAccountId;
 
     // If no channelAccountId on conversation, try to find one for this tenant+channel
@@ -322,33 +316,7 @@ async function sendAutoGreeting(
       if (fallbackAccount) channelAccountId = fallbackAccount.id;
     }
 
-    // Send via channel account (new path)
-    if (channelAccountId) {
-      const message = await messageService.create({
-        tenantId,
-        conversationId,
-        direction: "OUTBOUND",
-        body: greeting,
-        senderName: agent?.name || "System",
-      });
-
-      await outgoingMessageQueue.add("send", {
-        tenantId,
-        conversationId,
-        channel,
-        channelAccountId,
-        recipientExternalId: recipientId,
-        body: greeting,
-        messageType: "text",
-        senderName: agent?.name || "System",
-        messageId: message.id,
-      }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
-      return;
-    }
-
-    // Legacy fallback: use tenant WA config
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) return;
+    if (!channelAccountId) return;
 
     const message = await messageService.create({
       tenantId,
@@ -361,17 +329,13 @@ async function sendAutoGreeting(
     await outgoingMessageQueue.add("send", {
       tenantId,
       conversationId,
-      channel: "WHATSAPP",
-      channelAccountId: "",
-      recipientExternalId: conversation.customerPhone || recipientId,
+      channel,
+      channelAccountId,
+      recipientExternalId: recipientId,
       body: greeting,
       messageType: "text",
       senderName: agent?.name || "System",
       messageId: message.id,
-      // Legacy fields
-      customerPhone: conversation.customerPhone,
-      phoneNumberId: tenant.waPhoneNumberId,
-      accessToken: tenant.waAccessToken,
     }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
   } catch (err) {
     console.error("Auto-greeting error (non-fatal):", err);

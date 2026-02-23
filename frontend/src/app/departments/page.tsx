@@ -127,8 +127,8 @@ export default function DepartmentsPage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         <div className="flex items-center justify-between mb-4 md:mb-6">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 ps-10 md:ps-0">{t("departments.title")}</h1>
-            <p className="text-sm text-gray-400 mt-0.5 ps-10 md:ps-0">{t("departments.subtitle")}</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900 ">{t("departments.title")}</h1>
+            <p className="text-sm text-gray-400 mt-0.5 ">{t("departments.subtitle")}</p>
           </div>
           <button onClick={openCreate} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

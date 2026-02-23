@@ -241,7 +241,7 @@ function ChannelsPageContent() {
         response_type: "code",
         override_default_response_type: true,
         extras: {
-          setup: {},
+          setup: { channel: "WHATSAPP" },
           sessionInfoVersion: "3",
         },
       }

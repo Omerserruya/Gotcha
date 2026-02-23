@@ -13,6 +13,7 @@
     "departments": "מחלקות",
     "history": "היסטוריית שיחות",
     "settings": "הגדרות",
+    "more": "עוד",
     "logout": "התנתק"
   },
   "auth": {
@@ -79,6 +80,10 @@
     "messageVolume": "נפח הודעות",
     "hourlyTraffic": "תנועה שעתית",
     "conversationVolume": "נפח שיחות (30 יום)",
+    "inbound": "נכנסות",
+    "outbound": "יוצאות",
+    "messages": "הודעות",
+    "closed": "נסגרו",
     "noData": "אין נתונים"
   },
   "chatbot": {
@@ -292,7 +297,31 @@
     "autoGreetingDesc": "הודעה זו נשלחת אוטומטית כשנציג מקבל או מוקצה לשיחה. השתמש ב-{agentName} כמציין מיקום לשם הנציג.",
     "autoGreetingPlaceholder": "שלום! אני {agentName} ואשמח לעזור לך היום.",
     "save": "שמור הגדרות",
-    "saved": "ההגדרות נשמרו בהצלחה"
+    "saved": "ההגדרות נשמרו בהצלחה",
+    "sla": "SLA (הסכם רמת שירות)",
+    "slaDesc": "הגדר זמן תגובה מקסימלי לשיחות בתור. סטטוס SLA יוצג על שיחות בתור.",
+    "slaEnabled": "הפעל מעקב SLA",
+    "slaMinutes": "זמן SLA (דקות)",
+    "slaWarning": "סף אזהרה (%)",
+    "slaWarningDesc": "הצג אזהרה כשאחוז זה מזמן ה-SLA חלף",
+    "slaDepartmentOverride": "דריסות מחלקתיות",
+    "slaDepartmentOverrideDesc": "הגדר זמני SLA מותאמים למחלקה (דורס את ברירת המחדל)",
+    "slaBreached": "SLA חורג",
+    "slaWarningLabel": "אזהרת SLA",
+    "slaOk": "בתוך SLA",
+    "idleAutomation": "אוטומציית שיחה לא פעילה",
+    "idleAutomationDesc": "שלח תזכורות או סגור שיחות אוטומטית כשממתינים לתגובת לקוח",
+    "reminderEnabled": "הפעל תזכורת אוטומטית",
+    "reminderDelay": "השהיית תזכורת (דקות)",
+    "reminderDelayDesc": "זמן המתנה לאחר ההודעה האחרונה של הנציג לפני שליחת תזכורת",
+    "reminderMessage": "הודעת תזכורת",
+    "reminderMessagePlaceholder": "שלום! אנחנו עדיין כאן ומחכים לתגובתך. האם יש עוד משהו שנוכל לעזור בו?",
+    "autoCloseEnabled": "הפעל סגירה אוטומטית",
+    "autoCloseDelay": "השהיית סגירה אוטומטית (דקות)",
+    "autoCloseDelayDesc": "זמן המתנה לאחר ההודעה האחרונה של הנציג לפני סגירת השיחה",
+    "autoCloseMessage": "הודעת סגירה אוטומטית",
+    "autoCloseMessagePlaceholder": "בשל חוסר מענה, השיחה נסגרה. אל תהסס לפנות אלינו שוב בכל עת!",
+    "minutes": "דק׳"
   },
   "common": {
     "save": "שמור",

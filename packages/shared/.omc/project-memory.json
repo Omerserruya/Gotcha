@@ -121,6 +121,18 @@
   },
   "hotPaths": [
     {
+      "path": "src/index.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771766702372,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/queue.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771766652368,
+      "type": "file"
+    },
+    {
       "path": "src/middleware/rbac.ts",
       "accessCount": 1,
       "lastAccessed": 1771580870442,
@@ -133,16 +145,22 @@
       "type": "file"
     },
     {
-      "path": "src/index.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771580885746,
-      "type": "file"
-    },
-    {
       "path": "src/lib/jwt.ts",
       "accessCount": 1,
       "lastAccessed": 1771580892605,
       "type": "file"
+    },
+    {
+      "path": "prisma/migrations/0008_add_reminder_sent_at/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1771766491418,
+      "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 1,
+      "lastAccessed": 1771766683931,
+      "type": "directory"
     }
   ],
   "userDirectives": []

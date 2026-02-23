@@ -83,7 +83,7 @@ describe("Conversation Service", () => {
   describe("GET /api/conversations", () => {
     it("should list conversations with pagination", async () => {
       const mockConvos = [
-        { id: "c1", customerPhone: "+123", status: "OPEN", assignedAgent: null, _count: { messages: 3 } },
+        { id: "c1", customerExternalId: "+123", status: "OPEN", assignedAgent: null, _count: { messages: 3 } },
       ];
       (prisma.conversation.findMany as any).mockResolvedValue(mockConvos);
       (prisma.conversation.count as any).mockResolvedValue(1);
@@ -110,7 +110,7 @@ describe("Conversation Service", () => {
 
   describe("GET /api/conversations/:id", () => {
     it("should return conversation by ID", async () => {
-      const mockConvo = { id: "c1", customerPhone: "+123", status: "OPEN", messages: [] };
+      const mockConvo = { id: "c1", customerExternalId: "+123", status: "OPEN", messages: [] };
       (prisma.conversation.findFirst as any).mockResolvedValue(mockConvo);
 
       const app = createTestApp();

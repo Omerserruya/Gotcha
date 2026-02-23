@@ -8,6 +8,7 @@ export const incomingMessageQueue = new Queue("incoming-messages", { connection:
 export const outgoingMessageQueue = new Queue("outgoing-messages", { connection: { url: REDIS_URL } });
 export const analyticsQueue = new Queue("analytics-aggregation", { connection: { url: REDIS_URL } });
 export const channelHealthQueue = new Queue("channel-health", { connection: { url: REDIS_URL } });
+export const idleConversationQueue = new Queue("idle-conversations", { connection: { url: REDIS_URL } });
 
 // ─── Job types ──────────────────────────────────────────────
 
@@ -29,10 +30,6 @@ export interface IncomingMessageJob {
       title: string;
     };
   };
-  // Legacy fields kept for backward compat during transition
-  phoneNumberId?: string;
-  message?: any;
-  contacts?: any[];
 }
 
 export interface OutgoingMessageJob {
@@ -46,10 +43,6 @@ export interface OutgoingMessageJob {
   senderName: string;
   messageId: string;
   retryCount?: number;
-  // Legacy fields kept for backward compat during transition
-  customerPhone?: string;
-  phoneNumberId?: string;
-  accessToken?: string;
 }
 
 export interface AnalyticsJob {

@@ -42,6 +42,7 @@ export {
   outgoingMessageQueue,
   analyticsQueue,
   channelHealthQueue,
+  idleConversationQueue,
   createWorker,
 } from "./lib/queue";
 export { publishEvent, subscribeToEvents, closeEventBus } from "./lib/event-bus";

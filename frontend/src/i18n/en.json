@@ -13,6 +13,7 @@
     "departments": "Departments",
     "history": "Chat History",
     "settings": "Settings",
+    "more": "More",
     "logout": "Logout"
   },
   "auth": {
@@ -79,6 +80,10 @@
     "messageVolume": "Message Volume",
     "hourlyTraffic": "Hourly Traffic",
     "conversationVolume": "Conversation Volume (30 Days)",
+    "inbound": "Inbound",
+    "outbound": "Outbound",
+    "messages": "Messages",
+    "closed": "Closed",
     "noData": "No data available"
   },
   "chatbot": {
@@ -292,7 +297,31 @@
     "autoGreetingDesc": "This message is sent automatically when an agent claims or is assigned a conversation. Use {agentName} as a placeholder for the agent's name.",
     "autoGreetingPlaceholder": "Hi! I'm {agentName} and I'll be helping you today.",
     "save": "Save Settings",
-    "saved": "Settings saved successfully"
+    "saved": "Settings saved successfully",
+    "sla": "SLA (Service Level Agreement)",
+    "slaDesc": "Set maximum response time for queued conversations. SLA status will be shown on conversations in the queue.",
+    "slaEnabled": "Enable SLA Tracking",
+    "slaMinutes": "SLA Time (minutes)",
+    "slaWarning": "Warning Threshold (%)",
+    "slaWarningDesc": "Show warning when this percentage of SLA time has elapsed",
+    "slaDepartmentOverride": "Department Overrides",
+    "slaDepartmentOverrideDesc": "Set custom SLA times per department (overrides tenant default)",
+    "slaBreached": "SLA Breached",
+    "slaWarningLabel": "SLA Warning",
+    "slaOk": "Within SLA",
+    "idleAutomation": "Idle Conversation Automation",
+    "idleAutomationDesc": "Automatically send reminders or close conversations when waiting for customer response",
+    "reminderEnabled": "Enable Auto-Reminder",
+    "reminderDelay": "Reminder Delay (minutes)",
+    "reminderDelayDesc": "Time to wait after the agent's last message before sending a reminder",
+    "reminderMessage": "Reminder Message",
+    "reminderMessagePlaceholder": "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
+    "autoCloseEnabled": "Enable Auto-Close",
+    "autoCloseDelay": "Auto-Close Delay (minutes)",
+    "autoCloseDelayDesc": "Time to wait after the agent's last message before closing the conversation",
+    "autoCloseMessage": "Auto-Close Message",
+    "autoCloseMessagePlaceholder": "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
+    "minutes": "min"
   },
   "common": {
     "save": "Save",

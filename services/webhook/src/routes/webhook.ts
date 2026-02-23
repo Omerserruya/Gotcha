@@ -64,28 +64,13 @@ router.post("/", async (req: Request, res: Response) => {
       where: { externalId: channelExternalId, channel: adapter.channel, isActive: true },
     });
 
-    // Fall back to legacy tenant lookup for WhatsApp during migration
-    let tenantId: string | null = null;
-    let channelAccountId: string | null = null;
-
-    if (channelAccount) {
-      tenantId = channelAccount.tenantId;
-      channelAccountId = channelAccount.id;
-    } else if (adapter.channel === "WHATSAPP") {
-      // Legacy fallback: look up tenant by waPhoneNumberId
-      const tenant = await prisma.tenant.findFirst({
-        where: { waPhoneNumberId: channelExternalId },
-      });
-      if (tenant) {
-        tenantId = tenant.id;
-        console.warn(`Using legacy tenant lookup for WA phone ${channelExternalId}. Migrate to ChannelAccount.`);
-      }
-    }
-
-    if (!tenantId) {
-      console.warn(`No tenant found for ${adapter.channel} account: ${channelExternalId}`);
+    if (!channelAccount) {
+      console.warn(`No channel account found for ${adapter.channel} account: ${channelExternalId}`);
       return;
     }
+
+    const tenantId = channelAccount.tenantId;
+    const channelAccountId = channelAccount.id;
 
     // Step 4: Extract and enqueue normalized messages
     const messages = adapter.extractMessages(body);
@@ -96,7 +81,7 @@ router.post("/", async (req: Request, res: Response) => {
         {
           tenantId,
           channel: adapter.channel,
-          channelAccountId: channelAccountId || "",
+          channelAccountId,
           normalizedMessage: {
             externalMessageId: msg.externalMessageId,
             senderId: msg.senderId,
@@ -154,14 +139,8 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
   const mappedStatus = statusMap[status.status];
   if (!mappedStatus) return;
 
-  // Try new externalMessageId field first, fall back to legacy waMessageId
   const message = await prisma.message.findFirst({
-    where: {
-      OR: [
-        { externalMessageId: status.externalMessageId },
-        { waMessageId: status.externalMessageId },
-      ],
-    },
+    where: { externalMessageId: status.externalMessageId },
   });
 
   if (message) {

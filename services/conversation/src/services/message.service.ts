@@ -8,7 +8,6 @@ interface CreateMessageData {
   body: string;
   messageType?: string;
   senderName?: string;
-  waMessageId?: string;
   externalMessageId?: string;
   channel?: "WHATSAPP" | "MESSENGER";
   metadata?: any;
@@ -33,7 +32,7 @@ export async function create(data: CreateMessageData) {
         body: data.body, messageType: data.messageType ?? "text", senderName: data.senderName,
         channel: data.channel ?? undefined,
         externalMessageId: data.externalMessageId,
-        waMessageId: data.waMessageId, metadata: data.metadata ?? undefined,
+        metadata: data.metadata ?? undefined,
         status: data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED",
       },
     });
@@ -48,14 +47,8 @@ export async function create(data: CreateMessageData) {
 }
 
 export async function updateStatus(messageId: string, status: "SENT" | "DELIVERED" | "READ" | "FAILED") {
-  // Try finding by externalMessageId first, then waMessageId (legacy)
   const message = await prisma.message.findFirst({
-    where: {
-      OR: [
-        { externalMessageId: messageId },
-        { waMessageId: messageId },
-      ],
-    },
+    where: { externalMessageId: messageId },
   });
   if (!message) return null;
   const statusOrder = ["PENDING", "SENT", "DELIVERED", "READ"] as const;

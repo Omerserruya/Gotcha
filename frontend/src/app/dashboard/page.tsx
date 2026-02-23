@@ -44,7 +44,7 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6 ps-10 md:ps-0">{t("dashboard.title")}</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6 ">{t("dashboard.title")}</h1>
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-6 md:mb-8">
@@ -70,8 +70,8 @@ export default function DashboardPage() {
                 <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
                 <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0" }} />
                 <Legend />
-                <Bar dataKey="inbound" fill="#7c5cfc" name="Inbound" radius={[4, 4, 0, 0]} />
-                <Bar dataKey="outbound" fill="#a78bfa" name="Outbound" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="inbound" fill="#7c5cfc" name={t("dashboard.inbound")} radius={[4, 4, 0, 0]} />
+                <Bar dataKey="outbound" fill="#a78bfa" name={t("dashboard.outbound")} radius={[4, 4, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -86,8 +86,8 @@ export default function DashboardPage() {
                 <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
                 <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0" }} />
                 <Legend />
-                <Line type="monotone" dataKey="total" stroke="#7c5cfc" name="Messages" strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="closed" stroke="#ef4444" name="Closed" strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="total" stroke="#7c5cfc" name={t("dashboard.messages")} strokeWidth={2} dot={false} />
+                <Line type="monotone" dataKey="closed" stroke="#ef4444" name={t("dashboard.closed")} strokeWidth={2} dot={false} />
               </LineChart>
             </ResponsiveContainer>
           </div>

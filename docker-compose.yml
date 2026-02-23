@@ -90,6 +90,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
     depends_on:
       db:
         condition: service_healthy
@@ -202,6 +203,8 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
     depends_on:
       db:
         condition: service_healthy

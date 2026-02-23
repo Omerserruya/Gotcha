@@ -309,6 +309,117 @@ router.put("/settings/business-hours", requireRole("ADMIN"), validate(businessHo
   }
 });
 
+// ─── SLA Settings ───────────────────────────────────────────
+
+const slaSettingsSchema = z.object({
+  enabled: z.boolean(),
+  slaMinutes: z.number().min(1).max(1440).optional(),
+  warningThreshold: z.number().min(0).max(100).optional(), // percentage of SLA time before warning
+});
+
+router.get("/settings/sla", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    const raw = await redis.get(`tenant:${req.tenantId!}:sla`);
+    if (!raw) {
+      res.json({ enabled: false, slaMinutes: 30, warningThreshold: 70 });
+      return;
+    }
+    res.json(JSON.parse(raw));
+  } catch (err) {
+    console.error("Get SLA settings error:", err);
+    res.status(500).json({ error: "Failed to get SLA settings" });
+  }
+});
+
+router.put("/settings/sla", requireRole("ADMIN"), validate(slaSettingsSchema), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    await redis.set(`tenant:${req.tenantId!}:sla`, JSON.stringify(req.body));
+    res.json(req.body);
+  } catch (err) {
+    console.error("Update SLA settings error:", err);
+    res.status(500).json({ error: "Failed to update SLA settings" });
+  }
+});
+
+// Department-level SLA override
+router.get("/settings/sla/department/:departmentId", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    const raw = await redis.get(`department:${req.params.departmentId}:sla`);
+    if (!raw) {
+      res.json({ enabled: false, slaMinutes: null, warningThreshold: null });
+      return;
+    }
+    res.json(JSON.parse(raw));
+  } catch (err) {
+    console.error("Get department SLA error:", err);
+    res.status(500).json({ error: "Failed to get department SLA settings" });
+  }
+});
+
+router.put("/settings/sla/department/:departmentId", requireRole("ADMIN"), validate(slaSettingsSchema), async (req: Request, res: Response) => {
+  try {
+    // Verify department belongs to tenant
+    const dept = await prisma.department.findFirst({
+      where: { id: req.params.departmentId, tenantId: req.tenantId! },
+    });
+    if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
+
+    const redis = getRedis();
+    await redis.set(`department:${req.params.departmentId}:sla`, JSON.stringify(req.body));
+    res.json(req.body);
+  } catch (err) {
+    console.error("Update department SLA error:", err);
+    res.status(500).json({ error: "Failed to update department SLA settings" });
+  }
+});
+
+// ─── Idle Automation Settings (Auto-Reminder & Auto-Close) ──
+
+const idleAutomationSchema = z.object({
+  reminderEnabled: z.boolean(),
+  reminderDelayMinutes: z.number().min(1).max(10080).optional(), // up to 7 days
+  reminderMessage: z.string().max(1000).optional(),
+  autoCloseEnabled: z.boolean(),
+  autoCloseDelayMinutes: z.number().min(1).max(10080).optional(),
+  autoCloseMessage: z.string().max(1000).optional(),
+});
+
+router.get("/settings/idle-automation", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    const raw = await redis.get(`tenant:${req.tenantId!}:idleAutomation`);
+    if (!raw) {
+      res.json({
+        reminderEnabled: false,
+        reminderDelayMinutes: 60,
+        reminderMessage: "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
+        autoCloseEnabled: false,
+        autoCloseDelayMinutes: 1440,
+        autoCloseMessage: "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
+      });
+      return;
+    }
+    res.json(JSON.parse(raw));
+  } catch (err) {
+    console.error("Get idle automation error:", err);
+    res.status(500).json({ error: "Failed to get idle automation settings" });
+  }
+});
+
+router.put("/settings/idle-automation", requireRole("ADMIN"), validate(idleAutomationSchema), async (req: Request, res: Response) => {
+  try {
+    const redis = getRedis();
+    await redis.set(`tenant:${req.tenantId!}:idleAutomation`, JSON.stringify(req.body));
+    res.json(req.body);
+  } catch (err) {
+    console.error("Update idle automation error:", err);
+    res.status(500).json({ error: "Failed to update idle automation settings" });
+  }
+});
+
 // ─── Co-Pilot Settings ──────────────────────────────────────
 
 const copilotSettingsSchema = z.object({

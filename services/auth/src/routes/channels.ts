@@ -421,7 +421,7 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 
     if (platform === "whatsapp") {
       // WhatsApp Embedded Signup: config_id + extras triggers the signup wizard
-      const extras = encodeURIComponent(JSON.stringify({ setup: {} }));
+      const extras = encodeURIComponent(JSON.stringify({ setup: { channel: "WHATSAPP" } }));
       oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&config_id=${EMBEDDED_SIGNUP_CONFIG_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&response_type=code&override_default_response_type=true&extras=${extras}`;
     } else {
       const scopes: Record<string, string> = {

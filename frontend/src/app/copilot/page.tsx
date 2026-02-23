@@ -179,7 +179,7 @@ export default function CopilotPage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         {/* Header */}
         <div className="flex items-center justify-between mb-4 md:mb-6">
-          <h1 className="text-xl md:text-2xl font-bold text-gray-900 ps-10 md:ps-0">{t("copilot.title")}</h1>
+          <h1 className="text-xl md:text-2xl font-bold text-gray-900 ">{t("copilot.title")}</h1>
         </div>
 
         <div className="max-w-3xl space-y-6">

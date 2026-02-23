@@ -1,4 +1,4 @@
-import { prisma, getOutboundAdapter, getRedis } from "@chatcenter/shared";
+import { prisma, getOutboundAdapter, getRedis, decryptCredentials } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 
 interface FlowNode {
@@ -83,30 +83,16 @@ export async function processChatbotFlow(tenantId: string, conversationId: strin
 }
 
 async function buildSendContext(conversation: any, tenantId: string): Promise<ChannelSendContext | null> {
-  // Try channel account first (new path)
-  if (conversation.channelAccount) {
-    const creds = conversation.channelAccount.credentials as any;
-    return {
-      channel: conversation.channel,
-      channelAccountExternalId: conversation.channelAccount.externalId,
-      credentials: { accessToken: creds.accessToken, appSecret: creds.appSecret },
-      recipientId: conversation.customerExternalId,
-    };
-  }
+  if (!conversation.channelAccount) return null;
 
-  // Legacy fallback for WhatsApp: use tenant's WA config
-  if (conversation.channel === "WHATSAPP" || !conversation.channel) {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    if (!tenant?.waPhoneNumberId || !tenant?.waAccessToken) return null;
-    return {
-      channel: "WHATSAPP",
-      channelAccountExternalId: tenant.waPhoneNumberId,
-      credentials: { accessToken: tenant.waAccessToken },
-      recipientId: conversation.customerExternalId || conversation.customerPhone,
-    };
-  }
-
-  return null;
+  const rawCreds = conversation.channelAccount.credentials;
+  const creds = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
+  return {
+    channel: conversation.channel,
+    channelAccountExternalId: conversation.channelAccount.externalId,
+    credentials: { accessToken: creds.accessToken, appSecret: creds.appSecret },
+    recipientId: conversation.customerExternalId,
+  };
 }
 
 async function selectBotFlow(tenantId: string, channel: "WHATSAPP" | "MESSENGER") {
@@ -168,7 +154,7 @@ async function executeFromNode(
               body: node.data.text,
               senderName: "Chatbot",
               externalMessageId: extId,
-              waMessageId: sendCtx.channel === "WHATSAPP" ? extId : undefined,
+
               status: extId ? "SENT" : "FAILED",
             },
           });
@@ -196,7 +182,7 @@ async function executeFromNode(
               messageType: "interactive",
               senderName: "Chatbot",
               externalMessageId: extId,
-              waMessageId: sendCtx.channel === "WHATSAPP" ? extId : undefined,
+
               status: extId ? "SENT" : "FAILED",
               metadata: { buttons: node.data.buttons },
             },
@@ -237,7 +223,7 @@ async function executeFromNode(
               body: deptHours.autoResponse,
               senderName: "Chatbot",
               externalMessageId: closedExtId,
-              waMessageId: sendCtx.channel === "WHATSAPP" ? closedExtId : undefined,
+
               status: closedExtId ? "SENT" : "FAILED",
             },
           });
@@ -306,7 +292,7 @@ async function executeFromNode(
               body: handoverHours.autoResponse,
               senderName: "Chatbot",
               externalMessageId: closedExtId,
-              waMessageId: sendCtx.channel === "WHATSAPP" ? closedExtId : undefined,
+
               status: closedExtId ? "SENT" : "FAILED",
             },
           });

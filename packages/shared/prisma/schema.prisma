@@ -35,10 +35,6 @@ model Tenant {
   name      String
   slug      String   @unique
   isActive  Boolean  @default(true) @map("is_active")
-  // Legacy WhatsApp config (kept for backward compat during migration)
-  waPhoneNumberId  String?  @map("wa_phone_number_id")
-  waAccessToken    String?  @map("wa_access_token")
-  waWebhookSecret  String?  @map("wa_webhook_secret")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -160,7 +156,6 @@ model Conversation {
   channel            ChannelType        @default(WHATSAPP)
   channelAccountId   String?            @map("channel_account_id")
   customerExternalId String             @map("customer_external_id") // Phone (WA) or PSID (Messenger)
-  customerPhone      String?            @map("customer_phone")       // Legacy, kept for backward compat
   customerName       String?            @map("customer_name")
   assignedAgentId    String?            @map("assigned_agent_id")
   departmentId       String?            @map("department_id")
@@ -170,6 +165,7 @@ model Conversation {
   chatbotNodeId      String?            @map("chatbot_node_id")
   isHandedOver       Boolean            @default(false) @map("is_handed_over")
   lastMessageAt      DateTime?          @map("last_message_at")
+  reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
@@ -185,7 +181,6 @@ model Conversation {
   @@index([tenantId, assignedAgentId])
   @@index([tenantId, departmentId])
   @@index([tenantId, channel, customerExternalId])
-  @@index([tenantId, customerPhone])
   @@map("conversations")
 }
 
@@ -210,7 +205,6 @@ model Message {
   conversationId    String           @map("conversation_id")
   channel           ChannelType?
   externalMessageId String?          @map("external_message_id") // WA msg ID or Messenger mid
-  waMessageId       String?          @map("wa_message_id")       // Legacy, kept for backward compat
   direction         MessageDirection
   body              String
   messageType       String           @default("text") @map("message_type")
@@ -224,7 +218,6 @@ model Message {
 
   @@index([conversationId, createdAt])
   @@index([externalMessageId])
-  @@index([waMessageId])
   @@index([tenantId])
   @@map("messages")
 }

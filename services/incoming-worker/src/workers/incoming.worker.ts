@@ -50,11 +50,6 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
 async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<void> {
   const { tenantId, channel, channelAccountId, normalizedMessage } = job.data;
 
-  // Support legacy job format during migration
-  if (!normalizedMessage && job.data.message) {
-    return processLegacyMessage(job);
-  }
-
   const {
     externalMessageId,
     senderId,
@@ -66,12 +61,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
 
   // Idempotency check
   const existing = await prisma.message.findFirst({
-    where: {
-      OR: [
-        { externalMessageId },
-        { waMessageId: externalMessageId }, // legacy compat
-      ],
-    },
+    where: { externalMessageId },
   });
   if (existing) return;
 
@@ -106,7 +96,6 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         channel,
         channelAccountId: channelAccountId || undefined,
         customerExternalId: senderId,
-        customerPhone: channel === "WHATSAPP" ? senderId : undefined,
         customerName: displayName,
         status: "OPEN",
       },
@@ -125,7 +114,6 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       conversationId: conversation.id,
       channel,
       externalMessageId,
-      waMessageId: externalMessageId, // legacy compat
       direction: "INBOUND",
       body,
       messageType,
@@ -169,82 +157,6 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       console.error("Chatbot flow error:", err);
     }
   }
-}
-
-// Legacy message processing for backward compat during migration
-async function processLegacyMessage(job: Job<IncomingMessageJob>): Promise<void> {
-  const { tenantId, message: msg, contacts } = job.data;
-  const from = msg.from;
-  const waMessageId = msg.id;
-  const contactName = contacts?.[0]?.profile?.name || null;
-  const { body, messageType } = extractLegacyMessageBody(msg);
-
-  const existing = await prisma.message.findFirst({ where: { waMessageId } });
-  if (existing) return;
-
-  let conversation = await prisma.conversation.findFirst({
-    where: { tenantId, customerPhone: from, status: { not: "CLOSED" } },
-    orderBy: { createdAt: "desc" },
-  });
-
-  if (!conversation) {
-    conversation = await prisma.conversation.create({
-      data: {
-        tenantId,
-        channel: "WHATSAPP",
-        customerExternalId: from,
-        customerPhone: from,
-        customerName: contactName,
-        status: "OPEN",
-      },
-    });
-  } else if (contactName && !conversation.customerName) {
-    await prisma.conversation.update({ where: { id: conversation.id }, data: { customerName: contactName } });
-  }
-
-  const message = await prisma.message.create({
-    data: {
-      tenantId,
-      conversationId: conversation.id,
-      channel: "WHATSAPP",
-      direction: "INBOUND",
-      body,
-      messageType,
-      waMessageId,
-      externalMessageId: waMessageId,
-      senderName: contactName,
-      status: "DELIVERED",
-    },
-  });
-
-  await prisma.conversation.update({ where: { id: conversation.id }, data: { lastMessageAt: new Date() } });
-  await publishEvent({ event: "message:new", tenantId, data: { message, conversationId: conversation.id } });
-  await publishEvent({ event: "conversation:updated", tenantId, data: conversation });
-
-  await analyticsQueue.add("message-received", {
-    tenantId, event: "message_received",
-    data: { conversationId: conversation.id, messageId: message.id },
-    timestamp: new Date().toISOString(),
-  });
-
-  if (!conversation.assignedAgentId && !conversation.isHandedOver) {
-    try { await processChatbotFlow(tenantId, conversation.id, body); } catch (err) { console.error("Chatbot flow error:", err); }
-  }
-}
-
-function extractLegacyMessageBody(msg: any): { body: string; messageType: string } {
-  const messageType = msg.type || "text";
-  let body = "";
-  switch (msg.type) {
-    case "text": body = msg.text?.body || ""; break;
-    case "interactive": body = msg.interactive?.button_reply?.title || msg.interactive?.list_reply?.title || ""; break;
-    case "image": body = msg.image?.caption || "[Image]"; break;
-    case "document": body = msg.document?.caption || "[Document]"; break;
-    case "audio": body = "[Audio message]"; break;
-    case "video": body = msg.video?.caption || "[Video]"; break;
-    default: body = `[${msg.type || "unknown"} message]`;
-  }
-  return { body, messageType };
 }
 
 let worker: any;

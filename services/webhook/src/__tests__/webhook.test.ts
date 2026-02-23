@@ -4,7 +4,7 @@ import express from "express";
 
 vi.mock("@chatcenter/shared", () => {
   const mockPrisma = {
-    tenant: { findFirst: vi.fn() },
+    channelAccount: { findFirst: vi.fn() },
     message: { findFirst: vi.fn(), update: vi.fn() },
   };
 
@@ -12,6 +12,7 @@ vi.mock("@chatcenter/shared", () => {
     prisma: mockPrisma,
     incomingMessageQueue: { add: vi.fn().mockResolvedValue(undefined) },
     publishEvent: vi.fn().mockResolvedValue(undefined),
+    detectInboundAdapter: vi.fn(),
     createServiceApp: (config: any) => {
       const app = express();
       app.use(express.json());
@@ -24,7 +25,7 @@ vi.mock("@chatcenter/shared", () => {
 });
 
 import webhookRoutes from "../routes/webhook";
-import { prisma, incomingMessageQueue } from "@chatcenter/shared";
+import { prisma, incomingMessageQueue, detectInboundAdapter } from "@chatcenter/shared";
 
 function createTestApp() {
   const app = express();
@@ -70,9 +71,25 @@ describe("Webhook Service", () => {
   });
 
   describe("POST /api/webhook (handler -> queue)", () => {
-    it("should respond 200 immediately and queue messages", async () => {
-      const mockTenant = { id: "tenant-1", waPhoneNumberId: "phone-1" };
-      (prisma.tenant.findFirst as any).mockResolvedValue(mockTenant);
+    it("should respond 200 immediately and queue messages via adapter", async () => {
+      const mockChannelAccount = { id: "ca-1", tenantId: "tenant-1", externalId: "phone-1" };
+      (prisma.channelAccount.findFirst as any).mockResolvedValue(mockChannelAccount);
+
+      const mockAdapter = {
+        channel: "WHATSAPP",
+        getSignatureHeader: () => "x-hub-signature-256",
+        verifySignature: vi.fn().mockReturnValue(true),
+        resolveChannelAccountExternalId: vi.fn().mockReturnValue("phone-1"),
+        extractMessages: vi.fn().mockReturnValue([{
+          externalMessageId: "wa-msg-1",
+          senderId: "+123",
+          senderDisplayName: "John",
+          timestamp: new Date(),
+          content: { type: "text", text: "Hello" },
+        }]),
+        extractStatusUpdates: vi.fn().mockReturnValue([]),
+      };
+      (detectInboundAdapter as any).mockReturnValue(mockAdapter);
 
       const app = createTestApp();
       const res = await request(app)
@@ -96,12 +113,23 @@ describe("Webhook Service", () => {
       await new Promise((r) => setTimeout(r, 100));
       expect(incomingMessageQueue.add).toHaveBeenCalledWith(
         "process",
-        expect.objectContaining({ tenantId: "tenant-1", phoneNumberId: "phone-1" }),
+        expect.objectContaining({
+          tenantId: "tenant-1",
+          channel: "WHATSAPP",
+          channelAccountId: "ca-1",
+          normalizedMessage: expect.objectContaining({
+            externalMessageId: "wa-msg-1",
+            senderId: "+123",
+            body: "Hello",
+          }),
+        }),
         expect.any(Object)
       );
     });
 
-    it("should ignore non-whatsapp payloads", async () => {
+    it("should ignore payloads from unknown platforms", async () => {
+      (detectInboundAdapter as any).mockReturnValue(null);
+
       const app = createTestApp();
       const res = await request(app)
         .post("/api/webhook")

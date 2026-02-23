@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useI18n } from "@/context/I18nContext";
 import { AppLayout } from "@/components/AppLayout";
 import { ConversationList } from "@/components/conversations/ConversationList";
@@ -10,9 +10,35 @@ export default function ConversationsPage() {
   const { t } = useI18n();
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
+  // Handle browser back button: push state when selecting a chat, pop to deselect
+  useEffect(() => {
+    if (selectedId) {
+      window.history.pushState({ chatOpen: true }, "");
+    }
+  }, [selectedId]);
+
+  useEffect(() => {
+    function handlePopState(e: PopStateEvent) {
+      if (selectedId) {
+        e.preventDefault();
+        setSelectedId(null);
+      }
+    }
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
+  }, [selectedId]);
+
+  // Notify layout that a chat is open (to hide mobile header/bottom nav)
+  useEffect(() => {
+    window.dispatchEvent(new CustomEvent("chat:toggle", { detail: { open: !!selectedId } }));
+    return () => {
+      window.dispatchEvent(new CustomEvent("chat:toggle", { detail: { open: false } }));
+    };
+  }, [selectedId]);
+
   return (
     <AppLayout>
-      <div className="flex h-screen">
+      <div className={`flex ${selectedId ? "h-screen" : "h-[calc(100vh-48px)]"} md:h-screen`}>
         {/* Conversation list - hidden on mobile when chat is selected */}
         <div className={`w-full md:w-[380px] border-e border-gray-100 bg-white flex-shrink-0 ${selectedId ? "hidden md:flex" : "flex"} flex-col`}>
           <ConversationList

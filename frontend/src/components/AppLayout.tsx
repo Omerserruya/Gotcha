@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Sidebar } from "./Sidebar";
+import { MobileHeader, MobileBottomNav } from "./MobileNav";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, isLoading } = useAuth();
@@ -12,9 +13,9 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(false);
-  const [mobileOpen, setMobileOpen] = useState(false);
-  const [userCollapsed, setUserCollapsed] = useState(false); // user's manual preference
+  const [userCollapsed, setUserCollapsed] = useState(false);
   const [panelAutoCollapsed, setPanelAutoCollapsed] = useState(false);
+  const [chatOpen, setChatOpen] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("sidebar-collapsed");
@@ -24,16 +25,24 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Listen for chat open/close on mobile (to hide header/bottom nav)
+  useEffect(() => {
+    function handleChatToggle(e: Event) {
+      const detail = (e as CustomEvent).detail;
+      setChatOpen(!!detail?.open);
+    }
+    window.addEventListener("chat:toggle", handleChatToggle);
+    return () => window.removeEventListener("chat:toggle", handleChatToggle);
+  }, []);
+
   // Auto-collapse sidebar when side panels open (desktop only)
   useEffect(() => {
     function handlePanelToggle(e: Event) {
       const detail = (e as CustomEvent).detail;
       if (detail?.open) {
-        // Panel opened - auto-collapse sidebar if not already collapsed
         setPanelAutoCollapsed(true);
         setCollapsed(true);
       } else {
-        // Panel closed - restore sidebar if user hadn't manually collapsed it
         setPanelAutoCollapsed(false);
         if (!userCollapsed) {
           setCollapsed(false);
@@ -43,11 +52,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     window.addEventListener("panel:toggle", handlePanelToggle);
     return () => window.removeEventListener("panel:toggle", handlePanelToggle);
   }, [userCollapsed]);
-
-  // Close mobile sidebar on navigation
-  useEffect(() => {
-    setMobileOpen(false);
-  }, [pathname]);
 
   function handleToggle() {
     setCollapsed((prev) => {
@@ -62,7 +66,6 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     if (!isLoading && !user) {
       router.replace("/login");
     }
-    // Redirect SYSTEM_ADMIN to system panel if they're on a tenant route
     if (!isLoading && user?.role === "SYSTEM_ADMIN" && !pathname.startsWith("/system")) {
       router.replace("/system");
     }
@@ -81,40 +84,29 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   if (!user) return null;
 
+  // Check if current page is conversations with a selected chat (to hide bottom nav)
+  const isConversationPage = pathname === "/conversations";
+
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Mobile hamburger button */}
-      <button
-        onClick={() => setMobileOpen(true)}
-        className="md:hidden fixed top-3 start-3 z-40 w-10 h-10 bg-white rounded-xl shadow-md flex items-center justify-center text-gray-600 hover:text-primary-600 transition"
-        aria-label="Open menu"
-      >
-        <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
-        </svg>
-      </button>
-
-      {/* Mobile overlay */}
-      {mobileOpen && (
-        <div
-          className="md:hidden fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-          onClick={() => setMobileOpen(false)}
-        />
-      )}
-
-      {/* Sidebar - desktop: normal flow, mobile: fixed overlay */}
+      {/* Desktop sidebar - hidden on mobile */}
       <div className="hidden md:block">
         <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       </div>
-      <div className={`
-        md:hidden fixed inset-y-0 start-0 z-50
-        transition-transform duration-300 ease-in-out
-        ${mobileOpen ? "translate-x-0" : "ltr:-translate-x-full rtl:translate-x-full"}
-      `}>
-        <Sidebar collapsed={false} onToggle={handleToggle} onMobileClose={() => setMobileOpen(false)} />
-      </div>
 
-      <main className="flex-1 overflow-hidden w-full">{children}</main>
+      {/* Mobile layout */}
+      <div className="flex-1 flex flex-col md:contents overflow-hidden">
+        {/* Mobile header - hidden when chat is open on mobile */}
+        {!chatOpen && <MobileHeader />}
+
+        {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
+        <main className={`flex-1 overflow-hidden w-full ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
+          {children}
+        </main>
+
+        {/* Mobile bottom nav - admin only, hidden on desktop and when chat is open */}
+        {!chatOpen && <MobileBottomNav />}
+      </div>
     </div>
   );
 }

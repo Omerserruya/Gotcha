@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { SystemMobileHeader, SystemMobileBottomNav } from "./MobileNav";
 import clsx from "clsx";
 
 const navItems = [
@@ -39,8 +40,8 @@ export function SystemLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen bg-gray-50">
-      {/* Sidebar */}
-      <aside className="bg-white border-e border-gray-100 flex flex-col shrink-0 h-screen sticky top-0 w-64 shadow-sm">
+      {/* Desktop sidebar - hidden on mobile */}
+      <aside className="hidden md:flex bg-white border-e border-gray-100 flex-col shrink-0 h-screen sticky top-0 w-64 shadow-sm">
         {/* Header */}
         <div className="p-4 flex items-center gap-3 border-b border-gray-100">
           <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 rounded-xl shrink-0" />
@@ -93,7 +94,12 @@ export function SystemLayout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-hidden w-full">{children}</main>
+      {/* Mobile layout */}
+      <div className="flex-1 flex flex-col md:contents overflow-hidden">
+        <SystemMobileHeader />
+        <main className="flex-1 overflow-hidden w-full md:pb-0 pb-[68px]">{children}</main>
+        <SystemMobileBottomNav />
+      </div>
     </div>
   );
 }

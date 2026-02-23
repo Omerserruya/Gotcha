@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getConversations, getDepartments } from "@/lib/api";
+import { getConversations, getDepartments, getSlaSettings, getDepartmentSla } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
@@ -35,6 +35,8 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [lastReadMap, setLastReadMap] = useState<Record<string, string>>(getLastReadMap);
+  const [slaConfig, setSlaConfig] = useState<{ enabled: boolean; slaMinutes: number; warningThreshold: number } | null>(null);
+  const [deptSlaMap, setDeptSlaMap] = useState<Record<string, { enabled: boolean; slaMinutes: number }>>({});
 
   const fetchConversations = useCallback(async () => {
     if (!token) return;
@@ -60,9 +62,30 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   useEffect(() => {
     if (!token || user?.role !== "ADMIN") return;
     getDepartments(token).then((list) => {
-      setDepartments(Array.isArray(list) ? list : []);
+      const depts = Array.isArray(list) ? list : (list as any)?.data || [];
+      setDepartments(depts);
     }).catch(() => {});
   }, [token, user?.role]);
+
+  // Fetch SLA settings
+  useEffect(() => {
+    if (!token) return;
+    getSlaSettings(token).then((data) => {
+      setSlaConfig(data);
+      // Fetch department SLA overrides if SLA enabled
+      if (data.enabled && departments.length > 0) {
+        Promise.all(
+          departments.map((d: any) => getDepartmentSla(token, d.id).catch(() => ({ enabled: false, slaMinutes: null })))
+        ).then((results) => {
+          const map: Record<string, { enabled: boolean; slaMinutes: number }> = {};
+          departments.forEach((d: any, i: number) => {
+            if (results[i]?.enabled) map[d.id] = results[i];
+          });
+          setDeptSlaMap(map);
+        });
+      }
+    }).catch(() => {});
+  }, [token, departments.length]);
 
   // Real-time updates
   useEffect(() => {
@@ -168,13 +191,13 @@ export function ConversationList({ selectedId, onSelect }: Props) {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder={t("conversations.search")}
-            className="w-full ps-10 pe-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+            className="w-full ps-9 pe-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
           />
         </div>
         {/* Channel filter */}
         <div className="flex items-center gap-1.5">
           {[
-            { value: "", label: t("conversations.channelAll") },
+            { value: "", label: t("conversations.filterAll") },
             { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
             { value: "MESSENGER", label: t("conversations.channelMessenger") },
             { value: "INSTAGRAM", label: t("conversations.channelInstagram") },
@@ -309,8 +332,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                         )}>
                           {conv.lastMessageBody || conv.customerPhone}
                         </p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
                           <StatusBadge status={conv.status} t={t} />
+                          <SlaChip conv={conv} slaConfig={slaConfig} deptSlaMap={deptSlaMap} t={t} />
                           {conv.department && (
                             <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-600 ring-1 ring-teal-200">
                               {conv.department.name}
@@ -347,4 +371,52 @@ function StatusBadge({ status, t }: { status: string; t: (key: string) => string
       {c.label}
     </span>
   );
+}
+
+function SlaChip({ conv, slaConfig, deptSlaMap, t }: {
+  conv: any;
+  slaConfig: { enabled: boolean; slaMinutes: number; warningThreshold: number } | null;
+  deptSlaMap: Record<string, { enabled: boolean; slaMinutes: number }>;
+  t: (key: string) => string;
+}) {
+  if (!slaConfig?.enabled) return null;
+  // Only show SLA for non-closed conversations
+  if (conv.status === "CLOSED") return null;
+
+  // Determine SLA minutes: use department override if exists, else tenant default
+  let slaMinutes = slaConfig.slaMinutes;
+  if (conv.departmentId && deptSlaMap[conv.departmentId]?.enabled) {
+    slaMinutes = deptSlaMap[conv.departmentId].slaMinutes;
+  }
+
+  // Calculate elapsed time since conversation entered queue (createdAt or lastMessageAt)
+  const referenceTime = conv.lastMessageAt || conv.createdAt;
+  if (!referenceTime) return null;
+
+  const elapsed = (Date.now() - new Date(referenceTime).getTime()) / 60000; // in minutes
+  const percentage = (elapsed / slaMinutes) * 100;
+
+  if (percentage >= 100) {
+    // SLA breached
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600 ring-1 ring-red-200 flex items-center gap-1">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+        </svg>
+        {t("settings.slaBreached")}
+      </span>
+    );
+  } else if (percentage >= slaConfig.warningThreshold) {
+    // SLA warning
+    const remaining = Math.max(0, Math.ceil(slaMinutes - elapsed));
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-600 ring-1 ring-amber-200 flex items-center gap-1">
+        <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+        </svg>
+        {remaining}m
+      </span>
+    );
+  }
+  return null;
 }

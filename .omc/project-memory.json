@@ -116,21 +116,135 @@
   },
   "hotPaths": [
     {
-      "path": "services/auth/src/routes/channels.ts",
-      "accessCount": 12,
-      "lastAccessed": 1771752000818,
+      "path": "services/incoming-worker/src/workers/incoming.worker.ts",
+      "accessCount": 17,
+      "lastAccessed": 1771765943987,
       "type": "file"
     },
     {
-      "path": "services/incoming-worker/src/workers/incoming.worker.ts",
+      "path": "services/auth/src/routes/channels.ts",
+      "accessCount": 15,
+      "lastAccessed": 1771766009334,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 13,
+      "lastAccessed": 1771763813374,
+      "type": "directory"
+    },
+    {
+      "path": "services/incoming-worker/src/services/chatbot-engine.service.ts",
+      "accessCount": 11,
+      "lastAccessed": 1771764284181,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/prisma/schema.prisma",
+      "accessCount": 10,
+      "lastAccessed": 1771766466423,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/routes/messages.ts",
       "accessCount": 9,
-      "lastAccessed": 1771754999220,
+      "lastAccessed": 1771765941566,
       "type": "file"
     },
     {
       "path": "services/webhook/src/routes/webhook.ts",
+      "accessCount": 8,
+      "lastAccessed": 1771764084024,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/services/conversation.service.ts",
+      "accessCount": 8,
+      "lastAccessed": 1771766009650,
+      "type": "file"
+    },
+    {
+      "path": "services/outgoing-worker/src/workers/outgoing.worker.ts",
+      "accessCount": 7,
+      "lastAccessed": 1771765944266,
+      "type": "file"
+    },
+    {
+      "path": "docker-compose.yml",
+      "accessCount": 6,
+      "lastAccessed": 1771763517227,
+      "type": "directory"
+    },
+    {
+      "path": "services/webhook/src",
+      "accessCount": 5,
+      "lastAccessed": 1771764004800,
+      "type": "directory"
+    },
+    {
+      "path": "packages/shared/prisma/seed.ts",
+      "accessCount": 5,
+      "lastAccessed": 1771764060051,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/services/message.service.ts",
+      "accessCount": 5,
+      "lastAccessed": 1771764193294,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/login/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1771766138748,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/lib/queue.ts",
+      "accessCount": 4,
+      "lastAccessed": 1771764063066,
+      "type": "file"
+    },
+    {
+      "path": ".env.example",
+      "accessCount": 4,
+      "lastAccessed": 1771764065776,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/app/agents/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1771766158173,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/settings/page.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1771766390249,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src",
       "accessCount": 3,
-      "lastAccessed": 1771752970706,
+      "lastAccessed": 1771764004108,
+      "type": "directory"
+    },
+    {
+      "path": "services/webhook/src/__tests__/webhook.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771764241109,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/__tests__/conversation.test.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771764248117,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/lib/api.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771766257386,
       "type": "file"
     },
     {
@@ -140,15 +254,39 @@
       "type": "directory"
     },
     {
+      "path": "frontend/src/app/channels/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771755537832,
+      "type": "file"
+    },
+    {
       "path": "services",
-      "accessCount": 1,
-      "lastAccessed": 1771750818375,
+      "accessCount": 2,
+      "lastAccessed": 1771763050073,
       "type": "directory"
     },
     {
-      "path": "frontend/src/app/channels/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1771750845971,
+      "path": "services/webhook/src/services/chatbot-engine.service.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771763976561,
+      "type": "file"
+    },
+    {
+      "path": "services/conversation/src/workers/outgoing.worker.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771763977469,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771765948930,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/app/conversations/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1771766002037,
       "type": "file"
     },
     {
@@ -164,22 +302,10 @@
       "type": "file"
     },
     {
-      "path": "services/conversation/src/services/conversation.service.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771751586931,
-      "type": "file"
-    },
-    {
       "path": "packages/shared/src/lib/encryption.ts",
       "accessCount": 1,
       "lastAccessed": 1771751615987,
       "type": "file"
-    },
-    {
-      "path": "packages/shared/src/index.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771751642674,
-      "type": "directory"
     },
     {
       "path": "packages/shared/src/channels/instagram.adapter.ts",
@@ -206,10 +332,88 @@
       "type": "file"
     },
     {
-      "path": ".env.example",
+      "path": "services/webhook/src/services/whatsapp.service.ts",
       "accessCount": 1,
-      "lastAccessed": 1771752019175,
+      "lastAccessed": 1771763804152,
+      "type": "file"
+    },
+    {
+      "path": "services/incoming-worker/src/services/whatsapp.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771763804431,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/prisma/migrations/0001_init/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1771763808464,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/prisma/migrations/0003_add_omnichannel_support/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1771763812687,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared",
+      "accessCount": 1,
+      "lastAccessed": 1771763820022,
       "type": "directory"
+    },
+    {
+      "path": "services/webhook/src/workers/incoming.worker.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771763999135,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/prisma/migrations/0007_remove_legacy_whatsapp_fields/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1771764049210,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771765932327,
+      "type": "file"
+    },
+    {
+      "path": "frontend/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1771765937051,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/layout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1771765939454,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/auth.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771765946617,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/context/AuthContext.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1771765949182,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/middleware/auth.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771765951396,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/middleware/rbac.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771765951620,
+      "type": "file"
     }
   ],
   "userDirectives": []

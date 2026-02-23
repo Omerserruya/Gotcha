@@ -1,0 +1,8 @@
+{
+  "active": true,
+  "started_at": "2026-02-22T13:11:10.150Z",
+  "original_prompt": "autopilot - pls complete the next bullets:\n- Add setting for SLA (according each tenant, and if there is department to each department) - for QUEUED conversation. if you seeas needed - add a status chip for sla on the conversation in the queue.\n- add automtion and setting for - if chat is open, and the agent wait to the user answer (last massage is of the agent) - set remider auto time + message (we are waiting to you response). also make a setting for auto-closing the conversation with auto message (due the lack of response the conversaion is closed... eg)\n- add feature to see the password typing (in the enter to the portal + create new tenant / agent)\n",
+  "session_id": "e785ff6b-40f4-4eea-9660-368f5f211988",
+  "reinforcement_count": 0,
+  "last_checked_at": "2026-02-22T13:11:10.150Z"
+}
