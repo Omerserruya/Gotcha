@@ -1,9 +1,60 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
+import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 
 const router = Router();
-router.use(authenticate, resolveTenant);
+
+// ─── Config Generation Endpoints (called during onboarding - tenant may not be active yet) ───
+
+router.post("/generate-configs", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    await generateAllAgentConfigs(req.tenantId!);
+    const configs = await prisma.departmentCopilotConfig.findMany({
+      where: { department: { tenantId: req.tenantId! } },
+      include: { department: { select: { name: true } } },
+    });
+    res.json({
+      data: {
+        departmentsConfigured: configs.length,
+        configs: configs.map(c => ({
+          departmentId: c.departmentId,
+          departmentName: c.department.name,
+          systemPrompt: c.systemPrompt.substring(0, 200) + "...",
+          hasIdentity: !!c.identity,
+          hasGoals: !!c.goals,
+          hasTone: !!c.tone,
+          hasBehavioral: !!c.behavioral,
+        })),
+      },
+    });
+  } catch (err) {
+    console.error("Generate all configs error:", err);
+    res.status(500).json({ error: "Failed to generate configurations" });
+  }
+});
+
+router.post("/generate-config/:departmentId", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { departmentId } = req.params;
+    const dept = await prisma.department.findFirst({
+      where: { id: departmentId, tenantId: req.tenantId! },
+    });
+    if (!dept) {
+      res.status(404).json({ error: "Department not found" });
+      return;
+    }
+    await generateAgentConfig(req.tenantId!, departmentId);
+    res.json({ data: { departmentId, status: "generated" } });
+  } catch (err) {
+    console.error("Generate config error:", err);
+    res.status(500).json({ error: "Failed to generate configuration" });
+  }
+});
+
+// ─── Main AI Routes (require active tenant) ─────────────────
+
+router.use(authenticate, resolveTenant, requireActiveTenant());
 
 // Static routes BEFORE parameterized routes
 router.get("/config", async (req: Request, res: Response) => {
@@ -65,6 +116,32 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
     const summary = await aiService.summarizeConversation(context);
     res.json({ data: { summary }, copilotMode: copilotConfig?.copilotMode || "READY_MESSAGE" });
   } catch (err) { console.error("AI summary error:", err); res.status(500).json({ error: "Failed to get summary" }); }
+});
+
+// Get effective copilot config for a department (SYSTEM_ADMIN only)
+router.get("/prompt/:departmentId", requireRole("SYSTEM_ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const config = await aiService.getEffectiveCopilotConfig(
+      req.tenantId!,
+      req.params.departmentId as string,
+    );
+    if (!config) {
+      res.status(404).json({ error: "No copilot configuration found for this department" });
+      return;
+    }
+    res.json({
+      data: {
+        systemPrompt: config.systemPrompt,
+        model: config.model,
+        temperature: config.temperature,
+        maxTokens: config.maxTokens,
+        copilotMode: config.copilotMode,
+      },
+    });
+  } catch (err) {
+    console.error("Get assembled prompt error:", err);
+    res.status(500).json({ error: "Failed to get copilot config" });
+  }
 });
 
 export default router;

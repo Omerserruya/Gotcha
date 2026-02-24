@@ -128,6 +128,7 @@ router.post("/:id/members", requireRole("ADMIN"), validate(addMemberSchema), asy
 
     const member = await prisma.departmentMember.create({
       data: {
+        tenantId: req.tenantId!,
         userId: req.body.userId,
         departmentId: req.params.id,
         departmentRole: req.body.departmentRole || "AGENT",
@@ -227,7 +228,7 @@ router.put("/:id/copilot", requireDepartmentRole("MANAGER"), validate(deptCopilo
     const config = await prisma.departmentCopilotConfig.upsert({
       where: { departmentId: req.params.id },
       update: req.body,
-      create: { departmentId: req.params.id, ...req.body },
+      create: { tenantId: req.tenantId!, departmentId: req.params.id, ...req.body },
     });
     res.json({ data: config });
   } catch (err) {

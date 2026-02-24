@@ -29,9 +29,16 @@ async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Prom
 // ─── Auth ───────────────────────────────────────────────────
 
 export function login(email: string, password: string, tenantSlug: string) {
-  return apiFetch<{ token: string; user: any }>("/api/auth/login", {
+  return apiFetch<{ token: string; refreshToken: string; user: any }>("/api/auth/login", {
     method: "POST",
     body: JSON.stringify({ email, password, tenantSlug }),
+  });
+}
+
+export function refreshAccessToken(refreshToken: string) {
+  return apiFetch<{ token: string; refreshToken: string; expiresIn: number }>("/api/auth/refresh", {
+    method: "POST",
+    body: JSON.stringify({ refreshToken }),
   });
 }
 
@@ -81,8 +88,8 @@ export function closeConversation(token: string, id: string) {
 
 // ─── Conversation History ────────────────────────────────────
 
-export function getConversationHistory(token: string, phone: string) {
-  return apiFetch<{ data: any[] }>(`/api/conversations/history/${encodeURIComponent(phone)}`, { token });
+export function getConversationHistory(token: string, customerExternalId: string) {
+  return apiFetch<{ data: any[] }>(`/api/conversations/history/${encodeURIComponent(customerExternalId)}`, { token });
 }
 
 // ─── Messages ───────────────────────────────────────────────
@@ -403,6 +410,10 @@ export function getAISuggestions(token: string, conversationId: string) {
   return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions`, { token });
 }
 
+export function getAIPrompt(token: string, departmentId: string) {
+  return apiFetch<{ data: any }>(`/api/ai-assist/prompt/${departmentId}`, { token });
+}
+
 export function getAISummary(token: string, conversationId: string) {
   return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary`, { token });
 }
@@ -465,6 +476,108 @@ export function updateTenantUser(token: string, tenantId: string, userId: string
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
 
+export function resendOnboardingLink(token: string, tenantId: string) {
+  return apiFetch<{ data: { message: string; sentTo: string } }>(`/api/system/tenants/${tenantId}/resend-onboarding`, {
+    token, method: "POST",
+  });
+}
+
 export function seedSystemAdmin(data: { email: string; password: string; name: string; setupSecret: string }) {
   return apiFetch<{ data: any }>("/api/system/seed", { method: "POST", body: JSON.stringify(data) });
+}
+
+// ─── Magic Link ────────────────────────────────────────────
+
+export function verifyMagicLink(token: string) {
+  return apiFetch<{ token: string; refreshToken: string; user: any; tenantStatus: string }>("/api/auth/verify-magic-link", {
+    method: "POST",
+    body: JSON.stringify({ token }),
+  });
+}
+
+// ─── Onboarding ────────────────────────────────────────────
+
+export function getOnboardingStatus(token: string) {
+  return apiFetch<{ data: any }>("/api/onboarding/status", { token });
+}
+
+export function saveBusinessProfile(token: string, data: {
+  organizationName: string;
+  industry: string;
+  businessDescription: string;
+  businessPriority: string;
+  estimatedDailyConversations: number;
+  numberOfAgents: number;
+}) {
+  return apiFetch<{ data: any }>("/api/onboarding/business-profile", {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+export function getBusinessProfile(token: string) {
+  return apiFetch<{ data: any }>("/api/onboarding/business-profile", { token });
+}
+
+export function saveOnboardingDepartments(token: string, data: { departments: any[] }) {
+  return apiFetch<{ data: any[] }>("/api/onboarding/departments", {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+export function getOnboardingDepartments(token: string) {
+  return apiFetch<{ data: any[] }>("/api/onboarding/departments", { token });
+}
+
+export function completeOnboarding(token: string) {
+  return apiFetch<{ data: any }>("/api/onboarding/complete", {
+    token, method: "POST",
+  });
+}
+
+// ─── First-Take-Care AI Agent ──────────────────────────────
+
+export function getFirstTakeCareSettings(token: string) {
+  return apiFetch<{ data: any; enabled: boolean }>("/api/agents/settings/first-take-care", { token });
+}
+
+export function updateFirstTakeCareSettings(token: string, data: any) {
+  return apiFetch<{ data: any }>("/api/agents/settings/first-take-care", {
+    token, method: "PUT", body: JSON.stringify(data),
+  });
+}
+
+export function toggleFirstTakeCare(token: string, tenantId: string, enabled: boolean) {
+  return apiFetch<{ data: { enabled: boolean } }>(`/api/system/tenants/${tenantId}/first-take-care`, {
+    token, method: "PATCH", body: JSON.stringify({ enabled }),
+  });
+}
+
+// ─── Onboarding AI Chat ────────────────────────────────────
+
+export function sendOnboardingChatMessage(token: string, data: { message: string; context?: any }) {
+  return apiFetch<{ data: { reply: string; readyToGenerate?: boolean } }>("/api/onboarding/ai-chat", {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+export function generateOnboardingConfigs(token: string) {
+  return apiFetch<{ data: any }>("/api/onboarding/generate-configs", {
+    token, method: "POST",
+  });
+}
+
+// ─── Delete Operations ──────────────────────────────────────
+
+export function deleteTenant(token: string, id: string, force?: boolean) {
+  const qs = force ? "?force=true" : "";
+  return apiFetch<{ data: any }>(`/api/system/tenants/${id}${qs}`, { token, method: "DELETE" });
+}
+
+export function deleteConversation(token: string, id: string, force?: boolean) {
+  const qs = force ? "?force=true" : "";
+  return apiFetch<{ data: any }>(`/api/conversations/${id}${qs}`, { token, method: "DELETE" });
+}
+
+export function deleteMessage(token: string, conversationId: string, messageId: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${conversationId}/messages/${messageId}`, { token, method: "DELETE" });
 }

@@ -1,5 +1,5 @@
 import bcrypt from "bcryptjs";
-import { prisma, signToken } from "@chatcenter/shared";
+import { prisma, signToken, generateRefreshToken } from "@chatcenter/shared";
 
 const SALT_ROUNDS = 10;
 
@@ -30,7 +30,13 @@ export async function register(tenantId: string, email: string, password: string
     userId: user.id, tenantId: user.tenantId, role: user.role, email: user.email,
     departmentId: deptInfo.departmentId, departmentRole: deptInfo.departmentRole,
   });
-  return { token, user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, ...deptInfo } };
+
+  const refresh = generateRefreshToken();
+  await prisma.refreshToken.create({
+    data: { token: refresh.token, userId: user.id, tenantId: user.tenantId, expiresAt: refresh.expiresAt },
+  });
+
+  return { token, refreshToken: refresh.token, user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, ...deptInfo } };
 }
 
 export async function login(tenantId: string, email: string, password: string) {
@@ -40,10 +46,35 @@ export async function login(tenantId: string, email: string, password: string) {
   const isValid = await bcrypt.compare(password, user.password);
   if (!isValid) throw new Error("Invalid email or password");
 
+  // Get tenant status for onboarding redirect
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { status: true },
+  });
+
   const deptInfo = await getDepartmentInfo(user.id);
   const token = signToken({
     userId: user.id, tenantId: user.tenantId, role: user.role, email: user.email,
     departmentId: deptInfo.departmentId, departmentRole: deptInfo.departmentRole,
   });
-  return { token, user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, ...deptInfo } };
+
+  const refresh = generateRefreshToken();
+  await prisma.refreshToken.create({
+    data: { token: refresh.token, userId: user.id, tenantId: user.tenantId, expiresAt: refresh.expiresAt },
+  });
+
+  // Update tenant status from PENDING_ADMIN_SETUP to PENDING_ONBOARDING on first admin login
+  if (user.role === "ADMIN" && tenant?.status === "PENDING_ADMIN_SETUP") {
+    await prisma.tenant.update({
+      where: { id: tenantId },
+      data: { status: "PENDING_ONBOARDING" },
+    });
+  }
+
+  return {
+    token,
+    refreshToken: refresh.token,
+    user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, ...deptInfo },
+    tenantStatus: tenant?.status || "ACTIVE",
+  };
 }

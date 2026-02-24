@@ -1,10 +1,10 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, validate, outgoingMessageQueue, decryptCredentials, requireActiveTenant } from "@chatcenter/shared";
 import * as messageService from "../services/message.service";
 
 const router = Router();
-router.use(authenticate, resolveTenant);
+router.use(authenticate, resolveTenant, requireActiveTenant());
 
 const sendMessageSchema = z.object({
   body: z.string().min(1),
@@ -74,6 +74,37 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
   } catch (err) {
     console.error("Send message error:", err);
     res.status(500).json({ error: "Failed to send message" });
+  }
+});
+
+// ─── Delete Message ──────────────────────────────────────────
+router.delete("/:conversationId/messages/:messageId", async (req: Request, res: Response) => {
+  try {
+    const userRole = (req as any).user?.role;
+
+    if (userRole !== "ADMIN" && userRole !== "SYSTEM_ADMIN") {
+      res.status(403).json({ error: "Insufficient permissions" });
+      return;
+    }
+
+    const message = await prisma.message.findFirst({
+      where: {
+        id: req.params.messageId as string,
+        tenantId: req.tenantId!,
+        conversationId: req.params.conversationId as string,
+      },
+    });
+
+    if (!message) {
+      res.status(404).json({ error: "Message not found" });
+      return;
+    }
+
+    await prisma.message.delete({ where: { id: message.id } });
+
+    res.json({ data: { deleted: true, messageId: message.id } });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to delete message" });
   }
 });
 

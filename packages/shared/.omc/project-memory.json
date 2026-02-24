@@ -121,6 +121,12 @@
   },
   "hotPaths": [
     {
+      "path": "prisma/schema.prisma",
+      "accessCount": 7,
+      "lastAccessed": 1771856583046,
+      "type": "directory"
+    },
+    {
       "path": "src/index.ts",
       "accessCount": 3,
       "lastAccessed": 1771766702372,

@@ -15,6 +15,7 @@ import {
 import { AppLayout } from "@/components/AppLayout";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
 import clsx from "clsx";
+import ConfirmModal from "@/components/ConfirmModal";
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 const META_APP_ID = process.env.NEXT_PUBLIC_META_APP_ID || "";
@@ -96,6 +97,8 @@ function ChannelsPageContent() {
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
+  const [disconnectConfirm, setDisconnectConfirm] = useState<{ open: boolean; id: string }>({ open: false, id: "" });
+  const [disconnecting, setDisconnecting] = useState(false);
   const showMessage = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
     setMessageType(type);
@@ -257,14 +260,22 @@ function ChannelsPageContent() {
 
   // ─── Disconnect ─────────────────────────────────────────
 
-  async function handleDisconnect(id: string) {
-    if (!token || !confirm(t("channels.confirmDisconnect"))) return;
+  function openDisconnectConfirm(id: string) {
+    setDisconnectConfirm({ open: true, id });
+  }
+
+  async function confirmDisconnect() {
+    if (!token) return;
+    setDisconnecting(true);
     try {
-      await disconnectChannel(token, id);
+      await disconnectChannel(token, disconnectConfirm.id);
+      setDisconnectConfirm({ open: false, id: "" });
       showMessage(t("channels.disconnected"), "success");
       fetchData();
     } catch (err: any) {
       showMessage(err.message || t("common.error"), "error");
+    } finally {
+      setDisconnecting(false);
     }
   }
 
@@ -415,7 +426,7 @@ function ChannelsPageContent() {
                   {/* Disconnect / Reconnect button */}
                   {account.connectionStatus === "CONNECTED" || account.connectionStatus === "ERROR" ? (
                     <button
-                      onClick={() => handleDisconnect(account.id)}
+                      onClick={() => openDisconnectConfirm(account.id)}
                       className="text-xs text-red-500 hover:text-red-700 transition p-1"
                       title={t("channels.disconnect")}
                     >
@@ -462,6 +473,17 @@ function ChannelsPageContent() {
         </div>
       </div>
     </div>
+
+    <ConfirmModal
+      isOpen={disconnectConfirm.open}
+      title={t("confirm.disconnectTitle")}
+      message={t("confirm.disconnectChannelMsg")}
+      confirmText={t("common.disconnect")}
+      danger
+      loading={disconnecting}
+      onConfirm={confirmDisconnect}
+      onCancel={() => setDisconnectConfirm({ open: false, id: "" })}
+    />
     </AppLayout>
   );
 }

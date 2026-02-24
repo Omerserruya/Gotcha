@@ -487,4 +487,98 @@ router.put("/settings/copilot", requireRole("ADMIN"), validate(copilotSettingsSc
   }
 });
 
+// ─── First-Take-Care AI Agent Settings ──────────────────────
+
+const firstTakeCareSettingsSchema = z.object({
+  isActive: z.boolean().optional(),
+  systemPrompt: z.string().optional(),
+  rules: z.array(z.string()).optional(),
+  tools: z.array(z.object({
+    id: z.string(),
+    name: z.string(),
+    enabled: z.boolean(),
+    config: z.record(z.any()).optional(),
+  })).optional(),
+  model: z.string().optional(),
+  provider: z.string().optional(),
+  temperature: z.number().min(0).max(2).optional(),
+  maxTokens: z.number().min(1).max(8192).optional(),
+  identity: z.any().optional(),
+  goals: z.any().optional(),
+  tone: z.any().optional(),
+  behavioral: z.any().optional(),
+  maxAutonomousMessages: z.number().min(1).optional(),
+  maxAutonomousMinutes: z.number().min(1).optional(),
+  confidenceThreshold: z.number().min(0).max(1).optional(),
+  escalationMessage: z.string().optional(),
+});
+
+router.get("/settings/first-take-care", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const [config, tenant] = await Promise.all([
+      prisma.firstTakeCareConfig.findUnique({ where: { tenantId: req.tenantId! } }),
+      prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { firstTakeCareEnabled: true } }),
+    ]);
+
+    if (!config) {
+      res.json({
+        data: {
+          isActive: false,
+          systemPrompt: "",
+          rules: [],
+          tools: [],
+          model: "gpt-4o-mini",
+          provider: "openai",
+          temperature: 0.7,
+          maxTokens: 1024,
+          identity: null,
+          goals: null,
+          tone: null,
+          behavioral: null,
+          maxAutonomousMessages: 10,
+          maxAutonomousMinutes: 15,
+          confidenceThreshold: 0.6,
+          escalationMessage: "Let me connect you with a team member who can help further.",
+        },
+        enabled: tenant?.firstTakeCareEnabled ?? false,
+      });
+      return;
+    }
+
+    res.json({ data: config, enabled: tenant?.firstTakeCareEnabled ?? false });
+  } catch (err) {
+    console.error("Get first-take-care settings error:", err);
+    res.status(500).json({ error: "Failed to get First-Take-Care settings" });
+  }
+});
+
+router.put("/settings/first-take-care", requireRole("ADMIN"), validate(firstTakeCareSettingsSchema), async (req: Request, res: Response) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.tenantId! },
+      select: { firstTakeCareEnabled: true },
+    });
+
+    if (!tenant?.firstTakeCareEnabled) {
+      res.status(403).json({ error: "First-Take-Care is not enabled for this tenant. Contact system administrator." });
+      return;
+    }
+
+    const config = await prisma.firstTakeCareConfig.upsert({
+      where: { tenantId: req.tenantId! },
+      update: req.body,
+      create: {
+        tenantId: req.tenantId!,
+        ...req.body,
+      },
+    });
+
+    res.json({ data: config });
+  } catch (err) {
+    console.error("Update first-take-care settings error:", err);
+    res.status(500).json({ error: "Failed to update First-Take-Care settings" });
+  }
+});
+
 export default router;
+

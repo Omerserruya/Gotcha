@@ -333,7 +333,6 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                           {conv.lastMessageBody || conv.customerPhone}
                         </p>
                         <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <StatusBadge status={conv.status} t={t} />
                           <SlaChip conv={conv} slaConfig={slaConfig} deptSlaMap={deptSlaMap} t={t} />
                           {conv.department && (
                             <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-600 ring-1 ring-teal-200">

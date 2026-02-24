@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { getSystemTenants, createTenant, updateTenant } from "@/lib/api";
+import { getSystemTenants, createTenant, updateTenant, resendOnboardingLink } from "@/lib/api";
 import { SystemLayout } from "@/components/SystemLayout";
 import clsx from "clsx";
 
@@ -24,6 +24,7 @@ export default function TenantsPage() {
   const [formAdminName, setFormAdminName] = useState("");
   const [creating, setCreating] = useState(false);
   const [showAdminPassword, setShowAdminPassword] = useState(false);
+  const [resending, setResending] = useState<string | null>(null);
 
   const showMsg = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
@@ -76,6 +77,19 @@ export default function TenantsPage() {
       fetchTenants();
     } catch (err: any) {
       showMsg(err.message || "Failed to update tenant", "error");
+    }
+  }
+
+  async function handleResendOnboarding(id: string) {
+    if (!token) return;
+    setResending(id);
+    try {
+      const res = await resendOnboardingLink(token, id);
+      showMsg(`Onboarding link resent to ${res.data.sentTo}`);
+    } catch (err: any) {
+      showMsg(err.message || "Failed to resend onboarding link", "error");
+    } finally {
+      setResending(null);
     }
   }
 
@@ -239,11 +253,13 @@ export default function TenantsPage() {
                     <td className="px-5 py-3 text-sm text-gray-600">{t._count?.channelAccounts || 0}</td>
                     <td className="px-5 py-3">
                       <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
-                        t.isActive
+                        t.status === "ACTIVE"
                           ? "bg-green-50 text-green-600 ring-green-200"
-                          : "bg-red-50 text-red-600 ring-red-200"
+                          : t.status === "SUSPENDED" || !t.isActive
+                          ? "bg-red-50 text-red-600 ring-red-200"
+                          : "bg-amber-50 text-amber-600 ring-amber-200"
                       }`}>
-                        {t.isActive ? "Active" : "Disabled"}
+                        {t.status === "ACTIVE" ? "Active" : t.status === "PENDING_ADMIN_SETUP" ? "Pending Setup" : t.status === "PENDING_ONBOARDING" ? "Onboarding" : !t.isActive ? "Disabled" : t.status}
                       </span>
                     </td>
                     <td className="px-5 py-3">
@@ -263,6 +279,15 @@ export default function TenantsPage() {
                         >
                           {t.isActive ? "Disable" : "Enable"}
                         </button>
+                        {t.status !== "ACTIVE" && (
+                          <button
+                            onClick={() => handleResendOnboarding(t.id)}
+                            disabled={resending === t.id}
+                            className="text-xs text-blue-400 hover:text-blue-600 transition disabled:opacity-40"
+                          >
+                            {resending === t.id ? "Sending..." : "Resend Link"}
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>

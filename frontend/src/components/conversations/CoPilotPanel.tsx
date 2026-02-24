@@ -106,6 +106,10 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [paused, setPaused] = useState(false);
 
+  // Determine if last message is outbound (skip auto-fetch in that case)
+  const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
+  const lastIsOutbound = lastMessage?.direction === "OUTBOUND";
+
   const demoSuggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
   const localSummary = useMemo(() => getLocalSummary(messages, conversation), [messages, conversation]);
 
@@ -149,16 +153,16 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
   }, [token, conversation?.id, paused]);
 
   useEffect(() => {
-    fetchAI();
-  }, [fetchAI]);
+    if (!lastIsOutbound) fetchAI();
+  }, [fetchAI, lastIsOutbound]);
 
-  // Re-fetch when messages change significantly
+  // Re-fetch when messages change significantly (only on INBOUND)
   useEffect(() => {
-    if (messages.length > 0) {
+    if (messages.length > 0 && !lastIsOutbound) {
       const timer = setTimeout(() => fetchAI(), 1000);
       return () => clearTimeout(timer);
     }
-  }, [messages.length]);
+  }, [messages.length, lastIsOutbound]);
 
   function handleSearch() {
     if (!kbQuery.trim()) return;
@@ -185,6 +189,19 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
           <p className="text-[10px] text-gray-400">{aiSuggestions ? "AI-Powered" : "Demo Mode"}</p>
         </div>
         <div className="flex items-center gap-2">
+          {/* Regenerate button (shown when last message is outbound) */}
+          {lastIsOutbound && !paused && (
+            <button
+              onClick={() => fetchAI()}
+              className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-violet-50 text-violet-600 hover:bg-violet-100 transition"
+              title="Regenerate suggestions"
+            >
+              <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M2.985 14.652" />
+              </svg>
+              Regenerate
+            </button>
+          )}
           {/* Pause / Resume button */}
           <button
             onClick={() => setPaused(!paused)}

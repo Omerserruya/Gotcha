@@ -1,9 +1,38 @@
 import { Router, Request, Response } from "express";
-import { authenticate, resolveTenant, requireRole } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireRole, requireActiveTenant, prisma } from "@chatcenter/shared";
 import * as conversationService from "../services/conversation.service";
 
+async function generateAndSaveSummary(tenantId: string, conversationId: string, authHeader?: string) {
+  if (!authHeader) return;
+
+  const aiServiceUrl = process.env.AI_SERVICE_URL || `http://ai:${process.env.AI_PORT || 4006}`;
+
+  try {
+    const response = await fetch(`${aiServiceUrl}/api/ai-assist/${conversationId}/summary`, {
+      headers: {
+        'Authorization': authHeader,
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) return;
+
+    const data = await response.json() as any;
+    const summary = data?.data?.summary;
+
+    if (summary && summary.trim()) {
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { aiSummary: summary },
+      });
+    }
+  } catch (err) {
+    console.error("Summary generation failed:", err);
+  }
+}
+
 const router = Router();
-router.use(authenticate, resolveTenant);
+router.use(authenticate, resolveTenant, requireActiveTenant());
 
 router.get("/stats/workload", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
@@ -37,10 +66,10 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.get("/history/:phone", async (req: Request, res: Response) => {
+router.get("/history/:customerExternalId", async (req: Request, res: Response) => {
   try {
-    const phone = req.params.phone as string;
-    const data = await conversationService.getHistoryByPhone(req.tenantId!, phone);
+    const customerExternalId = req.params.customerExternalId as string;
+    const data = await conversationService.getHistoryByCustomerExternalId(req.tenantId!, customerExternalId);
     res.json({ data });
   } catch (err) {
     console.error("Conversation history error:", err);
@@ -124,8 +153,53 @@ router.post("/:id/close", async (req: Request, res: Response) => {
   try {
     const conversation = await conversationService.close(req.tenantId!, req.params.id as string);
     res.json({ data: conversation });
+
+    // Non-blocking: generate AI summary after response is sent
+    generateAndSaveSummary(req.tenantId!, conversation.id, req.headers.authorization).catch(err => {
+      console.error("Failed to generate conversation summary:", err.message);
+    });
   } catch (err: any) {
     res.status(err.status || 500).json({ error: err.message || "Failed to close conversation" });
+  }
+});
+
+// ─── Delete Conversation (cascade messages) ──────────────────
+router.delete("/:id", async (req: Request, res: Response) => {
+  try {
+    const conversationId = req.params.id as string;
+    const force = req.query.force === "true";
+    const userRole = (req as any).user?.role;
+
+    // Only ADMIN and SYSTEM_ADMIN can delete
+    if (userRole !== "ADMIN" && userRole !== "SYSTEM_ADMIN") {
+      res.status(403).json({ error: "Insufficient permissions" });
+      return;
+    }
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId: req.tenantId! },
+    });
+
+    if (!conversation) {
+      res.status(404).json({ error: "Conversation not found" });
+      return;
+    }
+
+    // Must be closed unless force
+    if (conversation.status !== "CLOSED" && !force) {
+      res.status(400).json({ error: "Conversation must be closed before deletion. Use ?force=true to override." });
+      return;
+    }
+
+    // Delete messages first, then conversation
+    await prisma.$transaction([
+      prisma.message.deleteMany({ where: { conversationId } }),
+      prisma.conversation.delete({ where: { id: conversationId } }),
+    ]);
+
+    res.json({ data: { deleted: true, conversationId } });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to delete conversation" });
   }
 });
 

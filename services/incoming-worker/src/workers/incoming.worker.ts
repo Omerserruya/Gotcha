@@ -50,6 +50,16 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
 async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<void> {
   const { tenantId, channel, channelAccountId, normalizedMessage } = job.data;
 
+  // Block message processing for non-active tenants
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { status: true },
+  });
+  if (!tenant || tenant.status !== "ACTIVE") {
+    console.log(`[incoming-worker] Skipping message for non-active tenant ${tenantId} (status: ${tenant?.status})`);
+    return;
+  }
+
   const {
     externalMessageId,
     senderId,
@@ -78,7 +88,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
 
   // For Messenger/Instagram, fetch display name from Graph API if not provided
   let displayName = senderDisplayName || null;
-  if (!displayName && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
+  if (!displayName && !conversation?.customerName && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
     const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
     const creds = channelAccount?.credentials;
     const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1771588021375,
+  "lastScanned": 1771858605904,
   "projectRoot": "/home/ocs/projects/ChatCenter/frontend",
   "techStack": {
     "languages": [
@@ -74,7 +74,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 3,
-      "lastAccessed": 1771588021359,
+      "lastAccessed": 1771858605887,
       "keyFiles": [
         "apple-touch-icon.png",
         "favicon.ico",
@@ -85,14 +85,14 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1771588021359,
+      "lastAccessed": 1771858605887,
       "keyFiles": []
     },
     "src/app": {
       "path": "src/app",
       "purpose": "Application code",
       "fileCount": 4,
-      "lastAccessed": 1771588021361,
+      "lastAccessed": 1771858605888,
       "keyFiles": [
         "globals.css",
         "layout.tsx",
@@ -102,19 +102,19 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 4,
-      "lastAccessed": 1771588021369,
+      "fileCount": 5,
+      "lastAccessed": 1771858605888,
       "keyFiles": [
         "AppLayout.tsx",
         "LanguageSwitcher.tsx",
-        "Sidebar.tsx"
+        "MobileNav.tsx"
       ]
     },
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
       "fileCount": 2,
-      "lastAccessed": 1771588021370,
+      "lastAccessed": 1771858605889,
       "keyFiles": [
         "api.ts",
         "socket.ts"
@@ -123,76 +123,28 @@
   },
   "hotPaths": [
     {
-      "path": "src/app/agents/page.tsx",
-      "accessCount": 10,
-      "lastAccessed": 1771589365950,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/SystemLayout.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1771588857810,
+      "path": "src/app/setup/page.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1771864022202,
       "type": "file"
     },
     {
-      "path": "src/app/settings/page.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1771589320911,
+      "path": "src/lib/api.ts",
+      "accessCount": 4,
+      "lastAccessed": 1771864002240,
       "type": "file"
     },
     {
       "path": "src/i18n/en.json",
-      "accessCount": 5,
-      "lastAccessed": 1771589283843,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/Sidebar.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1771588861424,
+      "accessCount": 1,
+      "lastAccessed": 1771864027268,
       "type": "file"
-    },
-    {
-      "path": "src/app/system/onboarding/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1771588399541,
-      "type": "file"
-    },
-    {
-      "path": "src/components/AppLayout.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1771588702178,
-      "type": "directory"
     },
     {
       "path": "src/i18n/he.json",
-      "accessCount": 2,
-      "lastAccessed": 1771589290351,
+      "accessCount": 1,
+      "lastAccessed": 1771864032507,
       "type": "file"
-    },
-    {
-      "path": "src/components",
-      "accessCount": 1,
-      "lastAccessed": 1771588705895,
-      "type": "directory"
-    },
-    {
-      "path": "src/app/settings",
-      "accessCount": 1,
-      "lastAccessed": 1771589137538,
-      "type": "directory"
-    },
-    {
-      "path": "src/i18n",
-      "accessCount": 1,
-      "lastAccessed": 1771589212772,
-      "type": "directory"
-    },
-    {
-      "path": "src/lib/api.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771589214128,
-      "type": "directory"
     }
   ],
   "userDirectives": []

@@ -35,7 +35,7 @@ export {
 // Lib
 export { prisma } from "./lib/prisma";
 export { getRedis, closeRedis } from "./lib/redis";
-export { signToken, verifyToken } from "./lib/jwt";
+export { signToken, verifyToken, generateRefreshToken, getJwtExpiresInMs } from "./lib/jwt";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
 export {
   incomingMessageQueue,
@@ -52,6 +52,7 @@ export { createServiceApp, startService } from "./lib/service-app";
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
 export { resolveTenant } from "./middleware/tenant";
+export { requireActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 
 // Types import (side-effect for Express augmentation)

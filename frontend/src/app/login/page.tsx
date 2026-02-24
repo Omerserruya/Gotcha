@@ -29,12 +29,21 @@ export default function LoginPage() {
     try {
       if (isSystemAdmin) {
         const result = await apiSystemLogin(email, password);
-        login(result.token, result.user);
+        login(result.token, result.user, (result as any).refreshToken);
         router.push("/system");
       } else {
         const result = await apiLogin(email, password, tenantSlug);
-        login(result.token, result.user);
-        router.push("/conversations");
+        login(result.token, result.user, result.refreshToken);
+        // Redirect to setup wizard if tenant onboarding is not complete
+        const tenantStatus = (result as any).tenantStatus;
+        if (tenantStatus && tenantStatus !== "ACTIVE" && result.user.role === "ADMIN") {
+          router.push("/setup");
+        } else if (tenantStatus && tenantStatus !== "ACTIVE") {
+          setError("Your organization setup is not complete. Please contact your admin.");
+          return;
+        } else {
+          router.push("/conversations");
+        }
       }
     } catch (err: any) {
       setError(err.message || t("auth.loginError"));

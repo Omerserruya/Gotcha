@@ -1,0 +1,468 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-02-24T00:00:00.000Z" agent="ChatCenter" etag="lld-er" version="24.0.0" type="device">
+  <diagram id="lld-er" name="LLD - Data Model (Entity Relationship)">
+    <mxGraphModel dx="2000" dy="1400" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="2000" pageHeight="1600" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="ChatCenter - Entity Relationship Diagram" style="text;html=1;fontSize=24;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="550" y="20" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== TENANT (Root) ==================== -->
+        <mxCell id="tenant" value="Tenant" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#1a1a2e;fontColor=#ffffff;strokeColor=#16213e;fontSize=14;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="100" width="280" height="230" as="geometry" />
+        </mxCell>
+        <mxCell id="t-id" value="id          cuid    PK" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-name" value="name        String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-slug" value="slug        String  UNIQUE" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="tenant">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-status" value="status      TenantStatus (enum)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="94" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-active" value="isActive    Boolean  default=true" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="116" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-ftc" value="firstTakeCareEnabled  Boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="138" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-dates" value="createdAt   DateTime" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="160" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="t-rel" value="--- Relations ---" style="text;strokeColor=none;fillColor=#e8eaf6;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="tenant">
+          <mxGeometry y="182" width="280" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="t-rels" value="1:N Users, Conversations, Messages&#xa;1:1 CopilotConfig, BusinessProfile..." style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=9;fontFamily=Courier New;" vertex="1" parent="tenant">
+          <mxGeometry y="200" width="280" height="30" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== USER ==================== -->
+        <mxCell id="user" value="User" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=14;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="400" width="280" height="220" as="geometry" />
+        </mxCell>
+        <mxCell id="u-id" value="id          cuid    PK" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="user">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-tid" value="tenantId    String  FK -> Tenant" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="user">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-email" value="email       String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="user">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-pw" value="password    String  (bcrypt)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="user">
+          <mxGeometry y="94" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-name" value="name        String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="user">
+          <mxGeometry y="116" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-role" value="role        Role (SYSTEM_ADMIN|ADMIN|AGENT)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="user">
+          <mxGeometry y="138" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-active" value="isActive    Boolean  default=true" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="user">
+          <mxGeometry y="160" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="u-uniq" value="UNIQUE(tenantId, email)" style="text;strokeColor=none;fillColor=#fff3e0;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="user">
+          <mxGeometry y="182" width="280" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="u-rels" value="1:N Conversations (assigned)&#xa;1:1 DepartmentMember" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=9;fontFamily=Courier New;" vertex="1" parent="user">
+          <mxGeometry y="200" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- Tenant -> User -->
+        <mxCell id="r-t-u" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#333;strokeWidth=2;fontSize=11;fontStyle=1;" edge="1" parent="1" source="tenant" target="user">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== DEPARTMENT ==================== -->
+        <mxCell id="dept" value="Department" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=14;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="100" width="280" height="260" as="geometry" />
+        </mxCell>
+        <mxCell id="d-id" value="id              cuid    PK" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="dept">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-tid" value="tenantId        FK -> Tenant" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="dept">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-name" value="name            String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="dept">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-queue" value="queueMode       CLAIM | ROUND_ROBIN" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="dept">
+          <mxGeometry y="94" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-ai" value="aiMode          COPILOT|AUTONOMOUS|HYBRID" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="dept">
+          <mxGeometry y="116" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-sla" value="slaTarget       Int? (minutes)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="dept">
+          <mxGeometry y="138" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-esc" value="escalationPolicy  Json?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="dept">
+          <mxGeometry y="160" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-auto" value="autoGreetingEnabled  Boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="dept">
+          <mxGeometry y="182" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="d-uniq" value="UNIQUE(tenantId, name)" style="text;strokeColor=none;fillColor=#fff3e0;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="dept">
+          <mxGeometry y="204" width="280" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="d-rels" value="1:N Members, Conversations&#xa;1:1 DeptCopilotConfig, AgentConfig" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=9;fontFamily=Courier New;" vertex="1" parent="dept">
+          <mxGeometry y="222" width="280" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- Tenant -> Department -->
+        <mxCell id="r-t-d" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#333;strokeWidth=2;fontSize=11;fontStyle=1;" edge="1" parent="1" source="tenant" target="dept">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== DEPARTMENT MEMBER ==================== -->
+        <mxCell id="dm" value="DepartmentMember" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=12;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="430" width="280" height="120" as="geometry" />
+        </mxCell>
+        <mxCell id="dm-uid" value="userId          FK -> User  UNIQUE" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=5;" vertex="1" parent="dm">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dm-did" value="departmentId    FK -> Department" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="dm">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dm-role" value="departmentRole  AGENT | MANAGER" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="dm">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dm-uniq" value="UNIQUE(userId, departmentId)" style="text;strokeColor=none;fillColor=#fff3e0;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="dm">
+          <mxGeometry y="94" width="280" height="26" as="geometry" />
+        </mxCell>
+
+        <!-- User -> DepartmentMember -->
+        <mxCell id="r-u-dm" value="1:1" style="endArrow=ERone;startArrow=ERone;endFill=0;startFill=0;strokeColor=#333;strokeWidth=1.5;fontSize=10;" edge="1" parent="1" source="user" target="dm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Department -> DepartmentMember -->
+        <mxCell id="r-d-dm" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#333;strokeWidth=1.5;fontSize=10;" edge="1" parent="1" source="dept" target="dm">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== CHANNEL ACCOUNT ==================== -->
+        <mxCell id="channel" value="ChannelAccount" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=13;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="800" y="100" width="280" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-id" value="id               cuid    PK" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="channel">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-tid" value="tenantId         FK -> Tenant" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="channel">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-type" value="channel          WHATSAPP|MESSENGER|INSTAGRAM" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="channel">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-ext" value="externalId       String (phone/page/biz ID)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="channel">
+          <mxGeometry y="94" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-cred" value="credentials      Json (ENCRYPTED)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="channel">
+          <mxGeometry y="116" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-status" value="connectionStatus PENDING|CONNECTED|ERROR|DISC" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="channel">
+          <mxGeometry y="138" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-token" value="tokenExpiresAt   DateTime?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="channel">
+          <mxGeometry y="160" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-meta" value="platformMeta     Json?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="channel">
+          <mxGeometry y="182" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-uniq" value="UNIQUE(channel, externalId)" style="text;strokeColor=none;fillColor=#fff3e0;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="channel">
+          <mxGeometry y="204" width="280" height="18" as="geometry" />
+        </mxCell>
+        <mxCell id="ch-rels" value="1:N Conversations" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=9;fontFamily=Courier New;" vertex="1" parent="channel">
+          <mxGeometry y="222" width="280" height="28" as="geometry" />
+        </mxCell>
+
+        <!-- Tenant -> ChannelAccount -->
+        <mxCell id="r-t-ch" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#333;strokeWidth=2;fontSize=11;fontStyle=1;" edge="1" parent="1" source="tenant" target="channel">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== CONVERSATION ==================== -->
+        <mxCell id="conv" value="Conversation" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="800" y="430" width="280" height="320" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-id" value="id               cuid    PK" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="28" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-tid" value="tenantId         FK -> Tenant" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="conv">
+          <mxGeometry y="48" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-ch" value="channel          ChannelType" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="68" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-chid" value="channelAccountId FK -> ChannelAccount?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="conv">
+          <mxGeometry y="88" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-cust" value="customerExternalId  String (phone/PSID)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="108" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-name" value="customerName     String?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="128" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-agent" value="assignedAgentId  FK -> User?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="conv">
+          <mxGeometry y="148" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-dept" value="departmentId     FK -> Department?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="conv">
+          <mxGeometry y="168" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-status" value="status           OPEN | WAITING | CLOSED" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="conv">
+          <mxGeometry y="188" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-ho" value="isHandedOver     Boolean (chatbot->agent)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="208" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-bot" value="chatbotFlowId    FK -> ChatbotFlow?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="conv">
+          <mxGeometry y="228" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-last" value="lastMessageAt    DateTime?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="248" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-summary" value="aiSummary        String? (AI generated)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="conv">
+          <mxGeometry y="268" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cv-idx" value="IDX(tenantId+status)(tenantId+agentId)" style="text;strokeColor=none;fillColor=#fff3e0;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="conv">
+          <mxGeometry y="288" width="280" height="18" as="geometry" />
+        </mxCell>
+
+        <!-- ChannelAccount -> Conversation -->
+        <mxCell id="r-ch-cv" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#333;strokeWidth=1.5;fontSize=10;" edge="1" parent="1" source="channel" target="conv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- User -> Conversation (assigned) -->
+        <mxCell id="r-u-cv" value="1:N (assigned)" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#82b366;strokeWidth=1.5;fontSize=9;dashed=1;" edge="1" parent="1" source="user" target="conv">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+        <!-- Department -> Conversation -->
+        <mxCell id="r-d-cv" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#d6b656;strokeWidth=1.5;fontSize=10;" edge="1" parent="1" source="dept" target="conv">
+          <mxGeometry relative="1" as="geometry">
+            <Array as="points">
+              <mxPoint x="760" y="330" />
+              <mxPoint x="760" y="540" />
+            </Array>
+          </mxGeometry>
+        </mxCell>
+
+        <!-- ==================== MESSAGE ==================== -->
+        <mxCell id="msg" value="Message" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#f8cecc;strokeColor=#b85450;fontSize=14;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="430" width="280" height="250" as="geometry" />
+        </mxCell>
+        <mxCell id="m-id" value="id               cuid    PK" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="msg">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-tid" value="tenantId         FK -> Tenant" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="msg">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-cid" value="conversationId   FK -> Conversation" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=4;" vertex="1" parent="msg">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-ext" value="externalMessageId  String? (indexed)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="msg">
+          <mxGeometry y="94" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-dir" value="direction        INBOUND | OUTBOUND" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="msg">
+          <mxGeometry y="116" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-body" value="body             String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="msg">
+          <mxGeometry y="138" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-type" value="messageType      String (text/image/system)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="msg">
+          <mxGeometry y="160" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-status" value="status  PENDING|SENT|DELIVERED|READ|FAILED" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="msg">
+          <mxGeometry y="182" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-meta" value="metadata         Json? (system events)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="msg">
+          <mxGeometry y="204" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="m-idx" value="IDX(conversationId+createdAt)" style="text;strokeColor=none;fillColor=#fff3e0;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="msg">
+          <mxGeometry y="226" width="280" height="24" as="geometry" />
+        </mxCell>
+
+        <!-- Conversation -> Message -->
+        <mxCell id="r-cv-m" value="1:N" style="endArrow=ERmany;startArrow=ERone;endFill=0;startFill=0;strokeColor=#b85450;strokeWidth=2;fontSize=11;fontStyle=1;" edge="1" parent="1" source="conv" target="msg">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== AI CONFIGS (Bottom) ==================== -->
+
+        <!-- CopilotConfig -->
+        <mxCell id="copilot" value="CopilotConfig (1:1 Tenant)" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=12;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="700" width="280" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-model" value="model        gpt-4o-mini (default)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="28" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-temp" value="temperature  0.7 (default)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="48" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-prompt" value="systemPrompt String?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="68" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-mode" value="copilotMode  READY_MESSAGE|CONTEXT_ONLY" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="copilot">
+          <mxGeometry y="88" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-rules" value="rules        Json (array of strings)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="108" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-tools" value="tools        Json (id, name, enabled)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="128" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-blocks" value="identity, goals, tone, behavioral  Json" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="148" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="cp-active" value="isActive     Boolean  default=true" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="copilot">
+          <mxGeometry y="168" width="280" height="32" as="geometry" />
+        </mxCell>
+
+        <!-- DepartmentCopilotConfig -->
+        <mxCell id="deptcopilot" value="DepartmentCopilotConfig (1:1 Dept)" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="700" width="280" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="dc-sys" value="systemPrompt  String? (pre-assembled)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="deptcopilot">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dc-blocks" value="identity, goals, tone, behavioral" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="deptcopilot">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dc-model" value="model, temperature, maxTokens" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="deptcopilot">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="dc-note" value="Overrides CopilotConfig at dept level" style="text;strokeColor=none;fillColor=#e8eaf6;align=center;verticalAlign=middle;fontSize=9;fontStyle=2;" vertex="1" parent="deptcopilot">
+          <mxGeometry y="94" width="280" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- AgentConfig -->
+        <mxCell id="agentcfg" value="AgentConfig (1:1 Department)" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="420" y="880" width="280" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="ac-ver" value="version         Int (autoincrement)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="agentcfg">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ac-blocks" value="identity  Json {role, responsibility}" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="agentcfg">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ac-goals" value="goals, tone, behavioral, tools  Json" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="agentcfg">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ac-mode" value="modeConstraints  Json {mode, rules[]}" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="agentcfg">
+          <mxGeometry y="94" width="280" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- FirstTakeCareConfig -->
+        <mxCell id="ftc" value="FirstTakeCareConfig (1:1 Tenant)" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=11;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="40" y="950" width="280" height="130" as="geometry" />
+        </mxCell>
+        <mxCell id="ftc-max" value="maxAutonomousMessages  10 (default)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="ftc">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ftc-min" value="maxAutonomousMinutes   15 (default)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="ftc">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ftc-conf" value="confidenceThreshold    0.6" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="ftc">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ftc-esc" value="escalationMessage      String?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="ftc">
+          <mxGeometry y="94" width="280" height="36" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== ONBOARDING ENTITIES ==================== -->
+
+        <!-- BusinessProfile -->
+        <mxCell id="bp" value="BusinessProfile (1:1 Tenant)" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#c8e6c9;strokeColor=#82b366;fontSize=11;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="750" width="280" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="bp-org" value="organizationName   String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="bp">
+          <mxGeometry y="28" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="bp-ind" value="industry           String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="bp">
+          <mxGeometry y="48" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="bp-pri" value="businessPriority   BusinessPriority" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="bp">
+          <mxGeometry y="68" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="bp-ai" value="aiMode             AIMode" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="bp">
+          <mxGeometry y="88" width="280" height="20" as="geometry" />
+        </mxCell>
+        <mxCell id="bp-est" value="estimatedDailyConversations  Int?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="bp">
+          <mxGeometry y="108" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="bp-agents" value="numberOfAgents     Int?" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="bp">
+          <mxGeometry y="130" width="280" height="20" as="geometry" />
+        </mxCell>
+
+        <!-- ChatbotFlow -->
+        <mxCell id="flow" value="ChatbotFlow" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#c8e6c9;strokeColor=#82b366;fontSize=12;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="1180" y="950" width="280" height="150" as="geometry" />
+        </mxCell>
+        <mxCell id="fl-name" value="name        String" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="flow">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fl-active" value="isActive    Boolean" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="flow">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fl-ch" value="channel     ChannelType? (null=all)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="flow">
+          <mxGeometry y="72" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fl-nodes" value="nodes       Json (graph nodes)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="flow">
+          <mxGeometry y="94" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="fl-edges" value="edges       Json (graph edges)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="flow">
+          <mxGeometry y="116" width="280" height="34" as="geometry" />
+        </mxCell>
+
+        <!-- MagicLink -->
+        <mxCell id="ml" value="MagicLink" style="shape=table;startSize=28;container=1;collapsible=0;childLayout=tableLayout;fixedRows=1;rowLines=1;fontStyle=1;align=center;fillColor=#c8e6c9;strokeColor=#82b366;fontSize=12;rounded=1;arcSize=8;" vertex="1" parent="1">
+          <mxGeometry x="800" y="820" width="280" height="110" as="geometry" />
+        </mxCell>
+        <mxCell id="ml-tok" value="token       String  UNIQUE" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;fontStyle=1;" vertex="1" parent="ml">
+          <mxGeometry y="28" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ml-exp" value="expiresAt   DateTime (48h)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="ml">
+          <mxGeometry y="50" width="280" height="22" as="geometry" />
+        </mxCell>
+        <mxCell id="ml-used" value="usedAt      DateTime? (one-time use)" style="text;strokeColor=none;fillColor=none;align=left;verticalAlign=middle;spacingLeft=4;fontSize=10;fontFamily=Courier New;" vertex="1" parent="ml">
+          <mxGeometry y="72" width="280" height="38" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== ENUMS REFERENCE ==================== -->
+        <mxCell id="enums-box" value="" style="rounded=1;whiteSpace=wrap;fillColor=#fafafa;strokeColor=#ccc;strokeWidth=2;" vertex="1" parent="1">
+          <mxGeometry x="40" y="1140" width="700" height="200" as="geometry" />
+        </mxCell>
+        <mxCell id="enums-title" value="Enum Reference" style="text;html=1;fontSize=16;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="300" y="1145" width="160" height="25" as="geometry" />
+        </mxCell>
+
+        <mxCell id="e1" value="TenantStatus:&#xa;PENDING_ADMIN_SETUP&#xa;PENDING_ONBOARDING&#xa;ACTIVE&#xa;SUSPENDED" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="1180" width="155" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="e2" value="ConversationStatus:&#xa;OPEN&#xa;WAITING&#xa;CLOSED" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="225" y="1180" width="130" height="70" as="geometry" />
+        </mxCell>
+        <mxCell id="e3" value="MessageStatus:&#xa;PENDING&#xa;SENT&#xa;DELIVERED&#xa;READ&#xa;FAILED" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="370" y="1180" width="110" height="95" as="geometry" />
+        </mxCell>
+        <mxCell id="e4" value="BusinessPriority:&#xa;MAXIMIZE_SALES&#xa;FAST_RESPONSE&#xa;PREMIUM_EXPERIENCE&#xa;REDUCE_WORKLOAD" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="495" y="1180" width="150" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="e5" value="ChannelType:&#xa;WHATSAPP&#xa;MESSENGER&#xa;INSTAGRAM" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="55" y="1275" width="120" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e6" value="Role:&#xa;SYSTEM_ADMIN&#xa;ADMIN&#xa;AGENT" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="190" y="1275" width="110" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="e7" value="QueueMode:&#xa;CLAIM&#xa;ROUND_ROBIN&#xa;&#xa;AIMode:&#xa;COPILOT&#xa;AUTONOMOUS&#xa;HYBRID" style="rounded=1;whiteSpace=wrap;fillColor=#e8eaf6;strokeColor=#9673a6;fontSize=9;align=left;spacingLeft=8;" vertex="1" parent="1">
+          <mxGeometry x="315" y="1275" width="120" height="60" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

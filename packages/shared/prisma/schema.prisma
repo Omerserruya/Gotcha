@@ -28,25 +28,65 @@ enum BotFlowMode {
   PER_CHANNEL
 }
 
+// ─── Tenant Status & AI Mode ────────────────────────────────
+
+enum TenantStatus {
+  PENDING_ADMIN_SETUP
+  PENDING_ONBOARDING
+  ACTIVE
+  SUSPENDED
+}
+
+enum BotType {
+  CHATBOT_FLOW
+  AUTONOMOUS_AI
+}
+
+enum BusinessPriority {
+  MAXIMIZE_SALES
+  FAST_RESPONSE
+  PREMIUM_EXPERIENCE
+  REDUCE_WORKLOAD
+}
+
+enum OnboardingStep {
+  BUSINESS_PROFILE
+  DEPARTMENTS
+  AI_CONFIG
+  COMPLETED
+}
+
 // ─── Multi-Tenant ────────────────────────────────────────────
 
 model Tenant {
-  id        String   @id @default(cuid())
+  id        String       @id @default(cuid())
   name      String
-  slug      String   @unique
-  isActive  Boolean  @default(true) @map("is_active")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  slug      String       @unique
+  status    TenantStatus @default(PENDING_ADMIN_SETUP)
+  isActive  Boolean      @default(true) @map("is_active")
+  createdAt DateTime     @default(now()) @map("created_at")
+  updatedAt DateTime     @updatedAt @map("updated_at")
+
+  // Feature flags (set by SYSTEM_ADMIN)
+  botEnabled           Boolean  @default(false) @map("bot_enabled")
+  botType              BotType? @map("bot_type")
+  firstTakeCareEnabled Boolean  @default(false) @map("first_take_care_enabled")
 
   users              User[]
   conversations      Conversation[]
   messages           Message[]
   chatbotFlows       ChatbotFlow[]
   copilotConfig      CopilotConfig?
+  firstTakeCareConfig FirstTakeCareConfig?
   channelAccounts    ChannelAccount[]
   channelConfig      TenantChannelConfig?
   departments        Department[]
+  departmentMembers  DepartmentMember[]
+  departmentCopilotConfigs DepartmentCopilotConfig[]
+  businessProfile    BusinessProfile?
+  onboarding         TenantOnboarding?
 
+  @@index([status])
   @@map("tenants")
 }
 
@@ -167,6 +207,7 @@ model Conversation {
   lastMessageAt      DateTime?          @map("last_message_at")
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
+  aiSummary          String?            @map("ai_summary")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
@@ -236,6 +277,13 @@ model CopilotConfig {
   temperature  Float       @default(0.7)
   maxTokens    Int         @default(1024) @map("max_tokens")
   isActive     Boolean     @default(true) @map("is_active")
+
+  // Structured AI personality blocks (tenant-level defaults)
+  identity     Json?       // { role, responsibility, representationGuidelines[] }
+  goals        Json?       // { focus, slaAwareness, conversionObjective, qualityExpectations[] }
+  tone         Json?       // { formalityLevel, empathyLevel, assertiveness, brandAlignment }
+  behavioral   Json?       // { escalationTriggers[], noAutoReplyConditions[], forbiddenActions[], safetyBoundaries[], confidenceHandling }
+
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
@@ -276,6 +324,20 @@ model Department {
   description String?
   queueMode   DepartmentQueueMode @default(CLAIM) @map("queue_mode")
   isActive    Boolean             @default(true) @map("is_active")
+
+  // Working hours & SLA
+  workingHours   Json?   @map("working_hours")    // { timezone, schedule: { monday: { enabled, open, close }, ... } }
+  slaTarget      Int?    @map("sla_target")        // Response SLA in minutes
+  escalationPolicy Json? @map("escalation_policy") // { escalateOnBreach, escalateTo, maxWaitMinutes }
+
+  // Automation settings
+  autoGreetingEnabled Boolean @default(false) @map("auto_greeting_enabled")
+  autoGreetingMessage String? @map("auto_greeting_message")
+  autoCloseMinutes    Int?    @map("auto_close_minutes")     // Auto-close after X inactivity minutes
+  escalateOnSlaBreach Boolean @default(false) @map("escalate_on_sla_breach")
+  aiSuggestionsEnabled Boolean @default(true) @map("ai_suggestions_enabled")
+  autoRepliesEnabled  Boolean @default(false) @map("auto_replies_enabled")
+
   createdAt   DateTime            @default(now()) @map("created_at")
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
@@ -291,22 +353,26 @@ model Department {
 
 model DepartmentMember {
   id             String         @id @default(cuid())
+  tenantId       String         @map("tenant_id")
   userId         String         @unique @map("user_id")
   departmentId   String         @map("department_id")
   departmentRole DepartmentRole @default(AGENT) @map("department_role")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   user       User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
   @@unique([userId, departmentId])
   @@index([departmentId])
+  @@index([tenantId])
   @@map("department_members")
 }
 
 model DepartmentCopilotConfig {
   id           String      @id @default(cuid())
+  tenantId     String      @map("tenant_id")
   departmentId String      @unique @map("department_id")
   copilotMode  CopilotMode @default(READY_MESSAGE) @map("copilot_mode")
   systemPrompt String      @default("") @map("system_prompt")
@@ -317,10 +383,141 @@ model DepartmentCopilotConfig {
   temperature  Float       @default(0.7)
   maxTokens    Int         @default(1024) @map("max_tokens")
   isActive     Boolean     @default(true) @map("is_active")
+
+  // Structured AI personality blocks (per-department overrides)
+  identity     Json?       // { role, responsibility, representationGuidelines[] }
+  goals        Json?       // { focus, slaAwareness, conversionObjective, qualityExpectations[] }
+  tone         Json?       // { formalityLevel, empathyLevel, assertiveness, brandAlignment }
+  behavioral   Json?       // { escalationTriggers[], noAutoReplyConditions[], forbiddenActions[], safetyBoundaries[], confidenceHandling }
+
   createdAt    DateTime    @default(now()) @map("created_at")
   updatedAt    DateTime    @updatedAt @map("updated_at")
 
+  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
 
+  @@index([tenantId])
   @@map("department_copilot_configs")
+}
+
+// ─── Business Profile (Onboarding Step A) ───────────────────
+
+model BusinessProfile {
+  id                     String           @id @default(cuid())
+  tenantId               String           @unique @map("tenant_id")
+  organizationName       String           @map("organization_name")
+  industry               String
+  businessDescription    String           @map("business_description")
+  businessPriority       BusinessPriority @map("business_priority")
+  estimatedDailyConversations Int         @map("estimated_daily_conversations")
+  numberOfAgents         Int              @map("number_of_agents")
+  createdAt              DateTime         @default(now()) @map("created_at")
+  updatedAt              DateTime         @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("business_profiles")
+}
+
+// ─── Tenant Onboarding Tracker ──────────────────────────────
+
+model TenantOnboarding {
+  id            String         @id @default(cuid())
+  tenantId      String         @unique @map("tenant_id")
+  currentStep   OnboardingStep @default(BUSINESS_PROFILE) @map("current_step")
+  completedAt   DateTime?      @map("completed_at")
+  createdAt     DateTime       @default(now()) @map("created_at")
+  updatedAt     DateTime       @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_onboardings")
+}
+
+// ─── First-Take-Care AI Agent Config (tenant-level, premium) ─
+
+model FirstTakeCareConfig {
+  id           String  @id @default(cuid())
+  tenantId     String  @unique @map("tenant_id")
+  isActive     Boolean @default(true) @map("is_active")
+
+  // LLM settings
+  systemPrompt String  @default("") @map("system_prompt")
+  rules        Json    @default("[]")
+  tools        Json    @default("[]")
+  model        String  @default("gpt-4o-mini")
+  provider     String  @default("openai")
+  temperature  Float   @default(0.7)
+  maxTokens    Int     @default(1024) @map("max_tokens")
+
+  // Structured AI personality blocks
+  identity     Json?   // { role, responsibility, representationGuidelines[] }
+  goals        Json?   // { focus, slaAwareness, conversionObjective, qualityExpectations[] }
+  tone         Json?   // { formalityLevel, empathyLevel, assertiveness, brandAlignment }
+  behavioral   Json?   // { escalationTriggers[], noAutoReplyConditions[], forbiddenActions[], safetyBoundaries[], confidenceHandling }
+
+  // Autonomous behavior settings
+  maxAutonomousMessages Int @default(10) @map("max_autonomous_messages")  // Max AI messages before force-escalation
+  maxAutonomousMinutes  Int @default(15) @map("max_autonomous_minutes")   // Max minutes before force-escalation
+  confidenceThreshold   Float @default(0.6) @map("confidence_threshold")  // Below this, escalate to human
+  escalationMessage     String @default("Let me connect you with a team member who can help further.") @map("escalation_message")
+
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("first_take_care_configs")
+}
+
+// ─── Magic Links (passwordless onboarding) ──────────────────
+
+model MagicLink {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  expiresAt DateTime @map("expires_at")
+  usedAt    DateTime? @map("used_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([tenantId])
+  @@map("magic_links")
+}
+
+// ─── Refresh Tokens ─────────────────────────────────────────
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  token     String   @unique
+  userId    String   @map("user_id")
+  tenantId  String   @map("tenant_id")
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([token])
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+// ─── Notification Log ───────────────────────────────────────
+
+model NotificationLog {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  channel    String   // email, slack, webhook, internal
+  type       String   // onboarding_email, activation_confirmation, etc.
+  recipient  String   // email address or channel ID
+  subject    String?
+  body       String?
+  status     String   @default("pending") // pending, sent, failed
+  error      String?
+  metadata   Json?
+  sentAt     DateTime? @map("sent_at")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([type, status])
+  @@map("notification_logs")
 }

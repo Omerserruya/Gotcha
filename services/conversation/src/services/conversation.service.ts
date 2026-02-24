@@ -24,10 +24,10 @@ export async function list(tenantId: string, filters: ConversationFilters) {
   if (channel) where.channel = channel;
   if (departmentId) where.departmentId = departmentId;
 
-  // Scope by department: ADMIN sees all, others see their dept + unassigned
+  // Scope: ADMIN sees all, agents see only unassigned + assigned to them
   if (userRole && userRole !== "ADMIN" && userDepartmentId) {
     where.OR = [
-      { departmentId: userDepartmentId },
+      { departmentId: userDepartmentId, assignedAgentId: null },
       { departmentId: null, assignedAgentId: null },
       { assignedAgentId: userId },
     ];
@@ -237,7 +237,7 @@ export async function getAgentWorkload(tenantId: string) {
   return agents.map((a) => ({ agentId: a.id, name: a.name, email: a.email, activeCount: a._count.conversations }));
 }
 
-export async function getHistoryByPhone(tenantId: string, customerExternalId: string) {
+export async function getHistoryByCustomerExternalId(tenantId: string, customerExternalId: string) {
   const conversations = await prisma.conversation.findMany({
     where: {
       tenantId,

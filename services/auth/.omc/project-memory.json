@@ -1,0 +1,178 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1771841234817,
+  "projectRoot": "/home/ocs/projects/ChatCenter/services/auth",
+  "techStack": {
+    "languages": [
+      {
+        "name": "JavaScript/TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "package.json"
+        ]
+      },
+      {
+        "name": "TypeScript",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "tsconfig.json"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "vitest",
+        "version": "2.1.0",
+        "category": "testing"
+      }
+    ],
+    "packageManager": "npm",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
+    "lintCommand": null,
+    "devCommand": "npm run dev",
+    "scripts": {
+      "dev": "tsx watch src/index.ts",
+      "build": "tsc",
+      "start": "node dist/index.js",
+      "test": "vitest run"
+    }
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": "ES modules",
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "src"
+    ],
+    "gitBranches": null
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 1,
+      "lastAccessed": 1771841234794,
+      "keyFiles": [
+        "index.ts"
+      ]
+    },
+    "src/__tests__": {
+      "path": "src/__tests__",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1771841234796,
+      "keyFiles": [
+        "auth.test.ts"
+      ]
+    },
+    "src/routes": {
+      "path": "src/routes",
+      "purpose": "Route handlers",
+      "fileCount": 6,
+      "lastAccessed": 1771841234797,
+      "keyFiles": [
+        "agents.ts",
+        "auth.ts",
+        "channels.ts"
+      ]
+    },
+    "src/services": {
+      "path": "src/services",
+      "purpose": "Business logic services",
+      "fileCount": 3,
+      "lastAccessed": 1771841234811,
+      "keyFiles": [
+        "agent-config-generator.ts",
+        "auth.service.ts",
+        "notification.service.ts"
+      ]
+    }
+  },
+  "hotPaths": [
+    {
+      "path": "src/routes/onboarding.ts",
+      "accessCount": 16,
+      "lastAccessed": 1771950818988,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/auth.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771842195928,
+      "type": "file"
+    },
+    {
+      "path": "src/services/notification.service.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771843278921,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/system.ts",
+      "accessCount": 3,
+      "lastAccessed": 1771950818984,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/channels.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771845613442,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 2,
+      "lastAccessed": 1771859725749,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/agents.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771950822442,
+      "type": "file"
+    },
+    {
+      "path": "src/services/auth.service.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771842025016,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1771842049168,
+      "type": "directory"
+    },
+    {
+      "path": "src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771842171065,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/departments.ts",
+      "accessCount": 1,
+      "lastAccessed": 1771950817773,
+      "type": "file"
+    },
+    {
+      "path": "src/routes",
+      "accessCount": 1,
+      "lastAccessed": 1771950823321,
+      "type": "directory"
+    }
+  ],
+  "userDirectives": []
+}

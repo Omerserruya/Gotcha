@@ -7,7 +7,9 @@ import {
   requireSystemAdmin,
   validate,
   signToken,
+  publishEvent,
 } from "@chatcenter/shared";
+import { sendOnboardingEmail } from "../services/notification.service";
 
 const router = Router();
 const SALT_ROUNDS = 10;
@@ -120,6 +122,7 @@ router.get("/tenants", authenticate, requireSystemAdmin(), async (req: Request, 
           id: true,
           name: true,
           slug: true,
+          status: true,
           isActive: true,
           createdAt: true,
           updatedAt: true,
@@ -180,11 +183,19 @@ router.get("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Reque
       select: { id: true, channel: true, displayName: true, connectionStatus: true, isActive: true },
     });
 
+    // Get departments
+    const departments = await prisma.department.findMany({
+      where: { tenantId: tenant.id },
+      select: { id: true, name: true, isActive: true },
+      orderBy: { name: "asc" },
+    });
+
     res.json({
       data: {
         ...tenant,
         users,
         channels,
+        departments,
       },
     });
   } catch (err) {
@@ -214,10 +225,10 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       return;
     }
 
-    // Create tenant + admin user in transaction
+    // Create tenant + admin user + onboarding tracker in transaction
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
-        data: { name, slug },
+        data: { name, slug, status: "PENDING_ADMIN_SETUP" },
       });
 
       const hashedPassword = await bcrypt.hash(adminPassword, SALT_ROUNDS);
@@ -231,18 +242,137 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
         },
       });
 
+      // Initialize onboarding tracker
+      await tx.tenantOnboarding.create({
+        data: { tenantId: tenant.id, currentStep: "BUSINESS_PROFILE" },
+      });
+
       return { tenant, admin };
+    });
+
+    // Publish TenantCreated event
+    await publishEvent({
+      event: "tenant:created",
+      tenantId: result.tenant.id,
+      data: {
+        tenantName: name,
+        tenantSlug: slug,
+        adminEmail,
+        adminName,
+      },
+    });
+
+    // Send onboarding email with magic link (non-blocking)
+    sendOnboardingEmail(result.tenant.id, adminEmail, adminName, name, slug, result.admin.id).catch((err) => {
+      console.error("Failed to send onboarding email:", err);
     });
 
     res.status(201).json({
       data: {
-        tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug },
+        tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug, status: result.tenant.status },
         admin: { id: result.admin.id, email: result.admin.email, name: result.admin.name },
       },
     });
   } catch (err) {
     console.error("Create tenant error:", err);
     res.status(500).json({ error: "Failed to create tenant" });
+  }
+});
+
+// ─── Resend Onboarding Link ─────────────────────────────────
+
+router.post("/tenants/:id/resend-onboarding", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.params.id as string },
+      select: { id: true, name: true, slug: true, status: true },
+    });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    if (tenant.status === "ACTIVE") {
+      res.status(400).json({ error: "Tenant has already completed onboarding" });
+      return;
+    }
+
+    // Find the admin user for this tenant
+    const admin = await prisma.user.findFirst({
+      where: { tenantId: tenant.id, role: "ADMIN", isActive: true },
+      select: { id: true, email: true, name: true },
+    });
+    if (!admin) {
+      res.status(400).json({ error: "No active admin user found for this tenant" });
+      return;
+    }
+
+    // Invalidate previous unused magic links
+    await prisma.magicLink.updateMany({
+      where: { tenantId: tenant.id, usedAt: null },
+      data: { expiresAt: new Date() },
+    });
+
+    // Send new onboarding email with fresh magic link
+    await sendOnboardingEmail(tenant.id, admin.email, admin.name, tenant.name, tenant.slug, admin.id);
+
+    res.json({
+      data: {
+        message: "Onboarding link resent successfully",
+        sentTo: admin.email,
+      },
+    });
+  } catch (err) {
+    console.error("Resend onboarding error:", err);
+    res.status(500).json({ error: "Failed to resend onboarding link" });
+  }
+});
+
+// ─── Delete Tenant (hierarchical cascade) ──────────────────
+router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.params.id as string;
+    const force = req.query.force === "true";
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { id: true, name: true, status: true },
+    });
+
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    // Must be disabled unless force
+    if (tenant.status === "ACTIVE" && !force) {
+      res.status(400).json({ error: "Tenant must be disabled before deletion. Use ?force=true to override." });
+      return;
+    }
+
+    // Cascade delete everything in a transaction
+    await prisma.$transaction([
+      prisma.magicLink.deleteMany({ where: { tenantId } }),
+      prisma.notificationLog.deleteMany({ where: { tenantId } }),
+      prisma.message.deleteMany({ where: { tenantId } }),
+      prisma.conversation.deleteMany({ where: { tenantId } }),
+      prisma.departmentCopilotConfig.deleteMany({ where: { department: { tenantId } } }),
+      prisma.departmentMember.deleteMany({ where: { department: { tenantId } } }),
+      prisma.department.deleteMany({ where: { tenantId } }),
+      prisma.channelAccount.deleteMany({ where: { tenantId } }),
+      prisma.copilotConfig.deleteMany({ where: { tenantId } }),
+      prisma.firstTakeCareConfig.deleteMany({ where: { tenantId } }),
+      prisma.businessProfile.deleteMany({ where: { tenantId } }),
+      prisma.tenantOnboarding.deleteMany({ where: { tenantId } }),
+      prisma.chatbotFlow.deleteMany({ where: { tenantId } }),
+      prisma.user.deleteMany({ where: { tenantId } }),
+      prisma.tenant.delete({ where: { id: tenantId } }),
+    ]);
+
+    res.json({ data: { deleted: true, tenantId, tenantName: tenant.name } });
+  } catch (err: any) {
+    console.error("Delete tenant error:", err);
+    res.status(500).json({ error: "Failed to delete tenant" });
   }
 });
 
@@ -339,6 +469,44 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), a
   } catch (err) {
     console.error("Update user error:", err);
     res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+// ─── Toggle First-Take-Care Feature ─────────────────────────
+
+router.patch("/tenants/:id/first-take-care", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { enabled } = req.body;
+    if (typeof enabled !== "boolean") {
+      res.status(400).json({ error: "enabled must be a boolean" });
+      return;
+    }
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id as string } });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    const updated = await prisma.tenant.update({
+      where: { id: req.params.id as string },
+      data: { firstTakeCareEnabled: enabled },
+      select: { id: true, firstTakeCareEnabled: true },
+    });
+
+    // If enabling for the first time, create a default FirstTakeCareConfig if none exists
+    if (enabled) {
+      await prisma.firstTakeCareConfig.upsert({
+        where: { tenantId: req.params.id as string },
+        update: {},
+        create: { tenantId: req.params.id as string },
+      });
+    }
+
+    res.json({ data: { enabled: updated.firstTakeCareEnabled } });
+  } catch (err) {
+    console.error("Toggle first-take-care error:", err);
+    res.status(500).json({ error: "Failed to toggle First-Take-Care" });
   }
 });
 

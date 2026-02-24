@@ -1,0 +1,218 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mxfile host="app.diagrams.net" modified="2026-02-24T00:00:00.000Z" agent="ChatCenter" etag="lld-outbound" version="24.0.0" type="device">
+  <diagram id="lld-outbound" name="LLD - Outbound Message Flow">
+    <mxGraphModel dx="1400" dy="1000" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1400" pageHeight="1200" math="0" shadow="0">
+      <root>
+        <mxCell id="0" />
+        <mxCell id="1" parent="0" />
+
+        <!-- Title -->
+        <mxCell id="title" value="LLD - Outbound Message Flow (Agent Sends Message)" style="text;html=1;fontSize=20;fontStyle=1;align=center;" vertex="1" parent="1">
+          <mxGeometry x="300" y="20" width="500" height="40" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== FLOW ==================== -->
+
+        <!-- Step 1 -->
+        <mxCell id="s1" value="Agent types message&#xa;in ChatPanel and clicks Send" style="rounded=1;whiteSpace=wrap;fillColor=#4A90D9;fontColor=#ffffff;strokeColor=#3A7BC8;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="100" y="90" width="250" height="50" as="geometry" />
+        </mxCell>
+
+        <!-- Step 2 -->
+        <mxCell id="s2" value="POST /api/conversations/:id/messages&#xa;{body, messageType: &quot;text&quot;}" style="rounded=0;whiteSpace=wrap;fillColor=#4A90D9;fontColor=#ffffff;strokeColor=#3A7BC8;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="100" y="170" width="250" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a1" value="HTTP POST" style="endArrow=block;endFill=1;strokeColor=#333;fontSize=9;" edge="1" parent="1" source="s1" target="s2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 3: Nginx -->
+        <mxCell id="s3" value="Nginx Gateway&#xa;Route to :4002" style="rounded=0;whiteSpace=wrap;fillColor=#1a1a2e;fontColor=#ffffff;strokeColor=#16213e;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="450" y="170" width="150" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a2" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s2" target="s3">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 4: Conversation Service -->
+        <mxCell id="s4" value="Conversation Service&#xa;Messages Route" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="260" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a3" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s3" target="s4">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 5: Validate -->
+        <mxCell id="s5" value="Validate:&#xa;- Conversation exists&#xa;- Channel configured&#xa;- Decrypt credentials" style="rhombus;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="435" y="340" width="210" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a4" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s4" target="s5">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- DB read -->
+        <mxCell id="db1" value="SELECT Conversation&#xa;+ ChannelAccount&#xa;+ credentials" style="shape=cylinder3;size=8;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="720" y="340" width="140" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a4b" value="" style="endArrow=block;endFill=1;strokeColor=#9673a6;dashed=1;" edge="1" parent="1" source="s5" target="db1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 6: Create message -->
+        <mxCell id="s6" value="Create Message in DB&#xa;direction=OUTBOUND&#xa;status=PENDING" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="450" y="460" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a5" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s5" target="s6">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- DB write -->
+        <mxCell id="db2" value="INSERT Message&#xa;UPDATE conv&#xa;.lastMessageAt" style="shape=cylinder3;size=8;whiteSpace=wrap;fillColor=#e1d5e7;strokeColor=#9673a6;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="720" y="460" width="140" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a5b" value="Transaction" style="endArrow=block;endFill=1;strokeColor=#9673a6;dashed=1;fontSize=9;" edge="1" parent="1" source="s6" target="db2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 7: Emit event -->
+        <mxCell id="s7" value="Emit message:new event&#xa;via Socket.IO + Event Bus" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="450" y="550" width="180" height="45" as="geometry" />
+        </mxCell>
+        <mxCell id="a6" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s6" target="s7">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Frontend receives -->
+        <mxCell id="fe1" value="Frontend: message&#xa;appears in ChatPanel&#xa;(status: sending...)" style="rounded=1;whiteSpace=wrap;fillColor=#4A90D9;fontColor=#ffffff;strokeColor=#3A7BC8;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="100" y="540" width="200" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a6b" value="WebSocket" style="endArrow=block;endFill=1;strokeColor=#4A90D9;strokeWidth=2;fontSize=9;" edge="1" parent="1" source="s7" target="fe1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 8: Enqueue -->
+        <mxCell id="s8" value="Enqueue OutgoingMessageJob&#xa;attempts: 3&#xa;backoff: exponential (1s)" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="430" y="630" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a7" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s7" target="s8">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Redis queue -->
+        <mxCell id="q1" value="outgoing-messages&#xa;queue (Redis)" style="shape=parallelogram;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="453" y="720" width="175" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a8" value="" style="endArrow=block;endFill=1;strokeColor=#d6b656;strokeWidth=2;" edge="1" parent="1" source="s8" target="q1">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Return to client -->
+        <mxCell id="s8b" value="Return 201&#xa;{message}" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="150" y="650" width="120" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a8c" value="Response" style="endArrow=block;endFill=1;strokeColor=#82b366;fontSize=9;" edge="1" parent="1" source="s8" target="s8b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- ==================== OUTGOING WORKER ==================== -->
+
+        <!-- Step 9: Worker consumes -->
+        <mxCell id="s9" value="Outgoing Worker&#xa;consumes job" style="rounded=1;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="730" y="720" width="180" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a9" value="BullMQ" style="endArrow=block;endFill=1;strokeColor=#b85450;strokeWidth=2;fontSize=9;" edge="1" parent="1" source="q1" target="s9">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 10: Select adapter -->
+        <mxCell id="s10" value="Select channel adapter:&#xa;WhatsApp / Messenger / IG" style="rhombus;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="720" y="800" width="200" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a10" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s9" target="s10">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 11: Send via Meta API -->
+        <mxCell id="s11" value="Send message via&#xa;Meta Graph API&#xa;POST /{phone_id}/messages" style="rounded=0;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="730" y="895" width="180" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a11" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s10" target="s11">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Meta API -->
+        <mxCell id="meta" value="Meta Platform&#xa;(Graph API)" style="shape=cloud;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1020" y="880" width="160" height="80" as="geometry" />
+        </mxCell>
+        <mxCell id="a11b" value="HTTP POST" style="endArrow=block;endFill=1;strokeColor=#6c8ebf;strokeWidth=2;fontSize=9;" edge="1" parent="1" source="s11" target="meta">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 12: Success? -->
+        <mxCell id="s12" value="Success?" style="rhombus;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=11;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="760" y="985" width="100" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a12" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s11" target="s12">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Success path -->
+        <mxCell id="s13" value="Update message&#xa;status = SENT" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="600" y="1000" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a13" value="yes" style="endArrow=block;endFill=1;strokeColor=#82b366;fontSize=9;" edge="1" parent="1" source="s12" target="s13">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Failure path -->
+        <mxCell id="s14" value="Retry?&#xa;(attempts &lt; 3)" style="rhombus;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="920" y="990" width="110" height="60" as="geometry" />
+        </mxCell>
+        <mxCell id="a14" value="no" style="endArrow=block;endFill=1;strokeColor=#b85450;fontSize=9;" edge="1" parent="1" source="s12" target="s14">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Retry -->
+        <mxCell id="s14b" value="Re-enqueue with&#xa;exponential backoff" style="rounded=0;whiteSpace=wrap;fillColor=#fff2cc;strokeColor=#d6b656;fontSize=9;" vertex="1" parent="1">
+          <mxGeometry x="1060" y="995" width="130" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a14b" value="yes" style="endArrow=block;endFill=1;strokeColor=#d6b656;fontSize=9;" edge="1" parent="1" source="s14" target="s14b">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Final failure -->
+        <mxCell id="s14c" value="status = FAILED" style="rounded=0;whiteSpace=wrap;fillColor=#f8cecc;strokeColor=#b85450;fontSize=10;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="925" y="1080" width="100" height="35" as="geometry" />
+        </mxCell>
+        <mxCell id="a14c" value="no (3 failed)" style="endArrow=block;endFill=1;strokeColor=#b85450;fontSize=9;" edge="1" parent="1" source="s14" target="s14c">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Step 15: Emit status -->
+        <mxCell id="s15" value="Publish message:status event&#xa;via Event Bus" style="rounded=0;whiteSpace=wrap;fillColor=#d5e8d4;strokeColor=#82b366;fontSize=11;" vertex="1" parent="1">
+          <mxGeometry x="580" y="1080" width="200" height="40" as="geometry" />
+        </mxCell>
+        <mxCell id="a15" value="" style="endArrow=block;endFill=1;strokeColor=#333;" edge="1" parent="1" source="s13" target="s15">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Frontend status update -->
+        <mxCell id="fe2" value="Frontend: message&#xa;status updates&#xa;(sent / delivered / read / failed)" style="rounded=1;whiteSpace=wrap;fillColor=#4A90D9;fontColor=#ffffff;strokeColor=#3A7BC8;fontSize=10;" vertex="1" parent="1">
+          <mxGeometry x="130" y="1070" width="220" height="55" as="geometry" />
+        </mxCell>
+        <mxCell id="a15b" value="WebSocket" style="endArrow=block;endFill=1;strokeColor=#4A90D9;strokeWidth=2;fontSize=9;" edge="1" parent="1" source="s15" target="fe2">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+        <!-- Customer receives -->
+        <mxCell id="customer" value="Customer receives&#xa;message on channel" style="rounded=1;whiteSpace=wrap;fillColor=#dae8fc;strokeColor=#6c8ebf;fontSize=12;fontStyle=1;" vertex="1" parent="1">
+          <mxGeometry x="1030" y="1080" width="160" height="50" as="geometry" />
+        </mxCell>
+        <mxCell id="a16" value="Delivered" style="endArrow=block;endFill=1;strokeColor=#25D366;strokeWidth=2;fontSize=9;" edge="1" parent="1" source="meta" target="customer">
+          <mxGeometry relative="1" as="geometry" />
+        </mxCell>
+
+      </root>
+    </mxGraphModel>
+  </diagram>
+</mxfile>

@@ -105,26 +105,39 @@ export class OpenAIProvider implements AIProvider {
       prompt += "\n\nRules you must follow:\n" + config.rules.map((r) => `- ${r}`).join("\n");
     }
 
-    prompt += '\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the suggested reply), "confidence" (0-1), and "type" ("reply", "action", or "info"). Provide 2-3 suggestions.';
-
     return prompt;
+  }
+
+  private getModeInstruction(copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY"): string {
+    if (copilotMode === "CONTEXT_ONLY") {
+      return 'Analyze this conversation. Provide key points, sentiment, and suggested next actions. Do NOT draft replies.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the analysis point), "confidence" (0-1), and "type" ("info"). Provide 2-4 insights.';
+    }
+    // READY_MESSAGE (default)
+    return 'Based on this conversation, suggest 2-3 reply options the agent could send next.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the suggested reply), "confidence" (0-1), and "type" ("reply", "action", or "info"). Provide 2-3 suggestions.';
   }
 
   private buildChatMessages(context: ConversationContext, systemPrompt: string): OpenAI.ChatCompletionMessageParam[] {
     const messages: OpenAI.ChatCompletionMessageParam[] = [{ role: "system", content: systemPrompt }];
 
-    // Add conversation history
-    for (const msg of context.messages) {
-      if (!msg.body?.trim()) continue;
-      if (msg.direction === "INBOUND") {
-        messages.push({ role: "user", content: `[Customer${context.customerName ? ` - ${context.customerName}` : ""}]: ${msg.body}` });
-      } else {
-        messages.push({ role: "assistant", content: `[Agent${msg.senderName ? ` - ${msg.senderName}` : ""}]: ${msg.body}` });
-      }
+    // Build conversation transcript as a single user message with labels
+    // This prevents OpenAI from confusing agent messages with its own prior responses
+    const transcript = context.messages
+      .filter((msg) => msg.body?.trim())
+      .map((msg) => {
+        if (msg.direction === "INBOUND") {
+          return `[Customer${context.customerName ? ` - ${context.customerName}` : ""}]: ${msg.body}`;
+        }
+        return `[Agent${msg.senderName ? ` - ${msg.senderName}` : ""}]: ${msg.body}`;
+      })
+      .join("\n");
+
+    if (transcript) {
+      messages.push({ role: "user", content: `## Conversation Transcript\n${transcript}` });
     }
 
-    // Final instruction
-    messages.push({ role: "user", content: "Based on this conversation, suggest 2-3 reply options the agent could send next." });
+    // Mode-specific instruction as final user message
+    const copilotMode = context.copilotConfig?.copilotMode || "READY_MESSAGE";
+    messages.push({ role: "user", content: this.getModeInstruction(copilotMode) });
 
     return messages;
   }

@@ -26,6 +26,169 @@ const DEFAULT_TOOLS: ToolConfig[] = [
   { id: "order_status", name: "Order Status", enabled: false, config: {} },
 ];
 
+// Default initialization values for structured personality blocks
+const DEFAULT_IDENTITY = { role: "", responsibility: "", representationGuidelines: [] as string[] };
+const DEFAULT_GOALS = { focus: "", slaAwareness: "", conversionObjective: "", qualityExpectations: [] as string[] };
+const DEFAULT_TONE = { formalityLevel: "professional_friendly", empathyLevel: "moderate", assertiveness: "moderate", brandAlignment: "" };
+const DEFAULT_BEHAVIORAL = {
+  escalationTriggers: [] as string[],
+  noAutoReplyConditions: [] as string[],
+  forbiddenActions: [] as string[],
+  safetyBoundaries: [] as string[],
+  confidenceHandling: {
+    highConfidence: "Respond directly with the information",
+    mediumConfidence: "Provide answer with appropriate caveats",
+    lowConfidence: "Flag for human review before sending",
+  },
+};
+
+// Collapsible card wrapper component
+function CollapsibleCard({
+  title,
+  children,
+  defaultOpen = false,
+  headerRight,
+}: {
+  title: string;
+  children: React.ReactNode;
+  defaultOpen?: boolean;
+  headerRight?: React.ReactNode;
+}) {
+  const [open, setOpen] = useState(defaultOpen);
+  return (
+    <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+      <div className="flex items-center justify-between cursor-pointer select-none" onClick={() => setOpen(!open)}>
+        <h4 className="font-semibold text-gray-900 flex items-center gap-2">
+          <svg
+            className={clsx("w-4 h-4 text-violet-400 transition-transform", open ? "rotate-90" : "")}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+          </svg>
+          {title}
+        </h4>
+        <div onClick={(e) => e.stopPropagation()}>
+          {headerRight}
+        </div>
+      </div>
+      {open && <div className="mt-4">{children}</div>}
+    </div>
+  );
+}
+
+// Editable string list (add/remove items)
+function EditableStringList({
+  label,
+  items,
+  onChange,
+  placeholder,
+}: {
+  label: string;
+  items: string[];
+  onChange: (items: string[]) => void;
+  placeholder?: string;
+}) {
+  function handleAdd() { onChange([...items, ""]); }
+  function handleUpdate(i: number, v: string) { const u = [...items]; u[i] = v; onChange(u); }
+  function handleRemove(i: number) { onChange(items.filter((_, idx) => idx !== i)); }
+  return (
+    <div>
+      <div className="flex items-center justify-between mb-1">
+        <label className="text-sm font-medium text-gray-700">{label}</label>
+        <button
+          onClick={handleAdd}
+          className="text-xs px-2.5 py-1 bg-violet-50 text-violet-600 rounded-lg hover:bg-violet-100 font-medium transition flex items-center gap-1"
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+          </svg>
+          Add
+        </button>
+      </div>
+      <div className="space-y-2">
+        {items.length === 0 ? (
+          <p className="text-xs text-gray-300 italic py-2 text-center">No items yet</p>
+        ) : (
+          items.map((item, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <span className="text-xs text-gray-400 font-mono w-5 shrink-0 text-end">{i + 1}</span>
+              <input
+                type="text"
+                value={item}
+                onChange={(e) => handleUpdate(i, e.target.value)}
+                placeholder={placeholder || "Enter item..."}
+                className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+              />
+              <button
+                onClick={() => handleRemove(i)}
+                className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-300 hover:text-red-500 hover:bg-red-50 transition shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// Shared text input row
+function LabeledInput({ label, value, onChange, placeholder }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <input
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+      />
+    </div>
+  );
+}
+
+// Shared select row
+function LabeledSelect({ label, value, onChange, options }: { label: string; value: string; onChange: (v: string) => void; options: { value: string; label: string }[] }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}</label>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+      >
+        {options.map((o) => (
+          <option key={o.value} value={o.value}>{o.label}</option>
+        ))}
+      </select>
+    </div>
+  );
+}
+
+// "Initialize / Clear" button pair for null-state blocks
+function InitClearButtons({ onInit, onClear }: { onInit: () => void; onClear: () => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        onClick={onInit}
+        className="text-xs px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg hover:bg-violet-100 font-medium transition"
+      >
+        Initialize
+      </button>
+      <button
+        onClick={onClear}
+        className="text-xs px-3 py-1.5 bg-gray-100 text-gray-500 rounded-lg hover:bg-gray-200 font-medium transition"
+      >
+        Clear
+      </button>
+    </div>
+  );
+}
+
 export default function CopilotPage() {
   const { token } = useAuth();
   const { t } = useI18n();
@@ -54,6 +217,12 @@ export default function CopilotPage() {
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
 
+  // Structured AI personality blocks
+  const [identity, setIdentity] = useState<any>(null);
+  const [goals, setGoals] = useState<any>(null);
+  const [tone, setTone] = useState<any>(null);
+  const [behavioral, setBehavioral] = useState<any>(null);
+
   // Load departments on mount
   useEffect(() => {
     if (!token) return;
@@ -77,6 +246,10 @@ export default function CopilotPage() {
         setTemperature(d.temperature ?? 0.7);
         setMaxTokens(d.maxTokens ?? 1024);
         setIsActive(d.isActive ?? true);
+        setIdentity(d.identity || null);
+        setGoals(d.goals || null);
+        setTone(d.tone || null);
+        setBehavioral(d.behavioral || null);
       } else {
         const data = await getCopilotSettings(token);
         setDeptSource("tenant");
@@ -89,6 +262,10 @@ export default function CopilotPage() {
         setTemperature(data.temperature ?? 0.7);
         setMaxTokens(data.maxTokens ?? 1024);
         setIsActive(data.isActive ?? true);
+        setIdentity(data.identity || null);
+        setGoals(data.goals || null);
+        setTone(data.tone || null);
+        setBehavioral(data.behavioral || null);
       }
     } catch (err) {
       console.error(err);
@@ -118,7 +295,7 @@ export default function CopilotPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const payload = { copilotMode, systemPrompt, rules, tools, model, provider, temperature, maxTokens, isActive };
+      const payload = { copilotMode, systemPrompt, rules, tools, model, provider, temperature, maxTokens, isActive, identity, goals, tone, behavioral };
       if (selectedDeptId) {
         await updateDepartmentCopilot(token, selectedDeptId, payload);
         setDeptSource("department");
@@ -385,6 +562,231 @@ export default function CopilotPage() {
               className="w-full px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none font-mono"
             />
           </div>
+
+          {/* Card A: Identity */}
+          <CollapsibleCard
+            title="AI Identity"
+            headerRight={
+              <InitClearButtons
+                onInit={() => setIdentity({ ...DEFAULT_IDENTITY, representationGuidelines: [] })}
+                onClear={() => setIdentity(null)}
+              />
+            }
+          >
+            {identity === null ? (
+              <p className="text-sm text-gray-400 italic text-center py-3">
+                Not configured. Click <span className="font-medium text-violet-600">Initialize</span> to define the AI identity, or leave as null to use auto-generated defaults.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <LabeledInput
+                  label="Role"
+                  value={identity.role || ""}
+                  onChange={(v) => setIdentity({ ...identity, role: v })}
+                  placeholder="e.g. Customer Support Specialist"
+                />
+                <LabeledInput
+                  label="Responsibility"
+                  value={identity.responsibility || ""}
+                  onChange={(v) => setIdentity({ ...identity, responsibility: v })}
+                  placeholder="e.g. Handle customer inquiries and resolve issues"
+                />
+                <EditableStringList
+                  label="Representation Guidelines"
+                  items={Array.isArray(identity.representationGuidelines) ? identity.representationGuidelines : []}
+                  onChange={(items) => setIdentity({ ...identity, representationGuidelines: items })}
+                  placeholder="e.g. Always introduce yourself by name"
+                />
+              </div>
+            )}
+          </CollapsibleCard>
+
+          {/* Card B: Goals */}
+          <CollapsibleCard
+            title="AI Goals"
+            headerRight={
+              <InitClearButtons
+                onInit={() => setGoals({ ...DEFAULT_GOALS, qualityExpectations: [] })}
+                onClear={() => setGoals(null)}
+              />
+            }
+          >
+            {goals === null ? (
+              <p className="text-sm text-gray-400 italic text-center py-3">
+                Not configured. Click <span className="font-medium text-violet-600">Initialize</span> to define goals, or leave as null to use auto-generated defaults.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <LabeledInput
+                  label="Focus"
+                  value={goals.focus || ""}
+                  onChange={(v) => setGoals({ ...goals, focus: v })}
+                  placeholder="e.g. First-contact resolution"
+                />
+                <LabeledInput
+                  label="SLA Awareness"
+                  value={goals.slaAwareness || ""}
+                  onChange={(v) => setGoals({ ...goals, slaAwareness: v })}
+                  placeholder="e.g. Respond within 2 minutes during business hours"
+                />
+                <LabeledInput
+                  label="Conversion Objective"
+                  value={goals.conversionObjective || ""}
+                  onChange={(v) => setGoals({ ...goals, conversionObjective: v })}
+                  placeholder="e.g. Guide customer to self-service portal"
+                />
+                <EditableStringList
+                  label="Quality Expectations"
+                  items={Array.isArray(goals.qualityExpectations) ? goals.qualityExpectations : []}
+                  onChange={(items) => setGoals({ ...goals, qualityExpectations: items })}
+                  placeholder="e.g. Always verify understanding before closing"
+                />
+              </div>
+            )}
+          </CollapsibleCard>
+
+          {/* Card C: Tone */}
+          <CollapsibleCard
+            title="AI Tone"
+            headerRight={
+              <InitClearButtons
+                onInit={() => setTone({ ...DEFAULT_TONE })}
+                onClear={() => setTone(null)}
+              />
+            }
+          >
+            {tone === null ? (
+              <p className="text-sm text-gray-400 italic text-center py-3">
+                Not configured. Click <span className="font-medium text-violet-600">Initialize</span> to configure tone, or leave as null to use auto-generated defaults.
+              </p>
+            ) : (
+              <div className="space-y-4">
+                <LabeledSelect
+                  label="Formality Level"
+                  value={tone.formalityLevel || "professional_friendly"}
+                  onChange={(v) => setTone({ ...tone, formalityLevel: v })}
+                  options={[
+                    { value: "professional_friendly", label: "Professional Friendly" },
+                    { value: "warm_professional", label: "Warm Professional" },
+                    { value: "precise_professional", label: "Precise Professional" },
+                    { value: "business_formal", label: "Business Formal" },
+                    { value: "concise_professional", label: "Concise Professional" },
+                    { value: "efficient_professional", label: "Efficient Professional" },
+                    { value: "professional", label: "Professional" },
+                  ]}
+                />
+                <LabeledSelect
+                  label="Empathy Level"
+                  value={tone.empathyLevel || "moderate"}
+                  onChange={(v) => setTone({ ...tone, empathyLevel: v })}
+                  options={[
+                    { value: "low", label: "Low" },
+                    { value: "moderate", label: "Moderate" },
+                    { value: "high", label: "High" },
+                    { value: "very_high", label: "Very High" },
+                  ]}
+                />
+                <LabeledSelect
+                  label="Assertiveness"
+                  value={tone.assertiveness || "moderate"}
+                  onChange={(v) => setTone({ ...tone, assertiveness: v })}
+                  options={[
+                    { value: "low", label: "Low" },
+                    { value: "moderate", label: "Moderate" },
+                    { value: "high", label: "High" },
+                  ]}
+                />
+                <LabeledInput
+                  label="Brand Alignment"
+                  value={tone.brandAlignment || ""}
+                  onChange={(v) => setTone({ ...tone, brandAlignment: v })}
+                  placeholder="e.g. Friendly and approachable, consistent with brand voice"
+                />
+              </div>
+            )}
+          </CollapsibleCard>
+
+          {/* Card D: Behavioral Rules */}
+          <CollapsibleCard
+            title="Behavioral Rules"
+            headerRight={
+              <InitClearButtons
+                onInit={() => setBehavioral({
+                  escalationTriggers: [],
+                  noAutoReplyConditions: [],
+                  forbiddenActions: [],
+                  safetyBoundaries: [],
+                  confidenceHandling: { ...DEFAULT_BEHAVIORAL.confidenceHandling },
+                })}
+                onClear={() => setBehavioral(null)}
+              />
+            }
+          >
+            {behavioral === null ? (
+              <p className="text-sm text-gray-400 italic text-center py-3">
+                Not configured. Click <span className="font-medium text-violet-600">Initialize</span> to define behavioral rules, or leave as null to use auto-generated defaults.
+              </p>
+            ) : (
+              <div className="space-y-5">
+                <EditableStringList
+                  label="Escalation Triggers"
+                  items={Array.isArray(behavioral.escalationTriggers) ? behavioral.escalationTriggers : []}
+                  onChange={(items) => setBehavioral({ ...behavioral, escalationTriggers: items })}
+                  placeholder="e.g. Customer expresses frustration or anger"
+                />
+                <EditableStringList
+                  label="No Auto-Reply Conditions"
+                  items={Array.isArray(behavioral.noAutoReplyConditions) ? behavioral.noAutoReplyConditions : []}
+                  onChange={(items) => setBehavioral({ ...behavioral, noAutoReplyConditions: items })}
+                  placeholder="e.g. Legal or compliance-related inquiries"
+                />
+                <EditableStringList
+                  label="Forbidden Actions"
+                  items={Array.isArray(behavioral.forbiddenActions) ? behavioral.forbiddenActions : []}
+                  onChange={(items) => setBehavioral({ ...behavioral, forbiddenActions: items })}
+                  placeholder="e.g. Never share internal pricing strategies"
+                />
+                <EditableStringList
+                  label="Safety Boundaries"
+                  items={Array.isArray(behavioral.safetyBoundaries) ? behavioral.safetyBoundaries : []}
+                  onChange={(items) => setBehavioral({ ...behavioral, safetyBoundaries: items })}
+                  placeholder="e.g. Do not provide medical or legal advice"
+                />
+                <div>
+                  <p className="text-sm font-medium text-gray-700 mb-2">Confidence Handling</p>
+                  <div className="space-y-3 pl-3 border-l-2 border-violet-100">
+                    <LabeledInput
+                      label="High Confidence"
+                      value={behavioral.confidenceHandling?.highConfidence || ""}
+                      onChange={(v) => setBehavioral({
+                        ...behavioral,
+                        confidenceHandling: { ...behavioral.confidenceHandling, highConfidence: v },
+                      })}
+                      placeholder="e.g. Respond directly with the information"
+                    />
+                    <LabeledInput
+                      label="Medium Confidence"
+                      value={behavioral.confidenceHandling?.mediumConfidence || ""}
+                      onChange={(v) => setBehavioral({
+                        ...behavioral,
+                        confidenceHandling: { ...behavioral.confidenceHandling, mediumConfidence: v },
+                      })}
+                      placeholder="e.g. Provide answer with appropriate caveats"
+                    />
+                    <LabeledInput
+                      label="Low Confidence"
+                      value={behavioral.confidenceHandling?.lowConfidence || ""}
+                      onChange={(v) => setBehavioral({
+                        ...behavioral,
+                        confidenceHandling: { ...behavioral.confidenceHandling, lowConfidence: v },
+                      })}
+                      placeholder="e.g. Flag for human review before sending"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </CollapsibleCard>
 
           {/* Rules */}
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">

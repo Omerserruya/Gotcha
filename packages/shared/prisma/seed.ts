@@ -132,6 +132,7 @@ async function main() {
     update: {},
     create: {
       userId: agent1.id,
+      tenantId: tenant.id,
       departmentId: salesDept.id,
       departmentRole: "MANAGER",
     },
@@ -142,6 +143,7 @@ async function main() {
     update: {},
     create: {
       userId: agent2.id,
+      tenantId: tenant.id,
       departmentId: supportDept.id,
       departmentRole: "AGENT",
     },

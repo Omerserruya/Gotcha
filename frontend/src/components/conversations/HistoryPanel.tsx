@@ -26,18 +26,23 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
   const [notes, setNotes] = useState<Note[]>([]);
   const [noteText, setNoteText] = useState("");
 
+  const customerKey = conversation?.customerExternalId;
+
   const fetchHistory = useCallback(async () => {
-    if (!token || !conversation?.customerPhone) return;
+    if (!token || !customerKey) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
-      const res = await getConversationHistory(token, conversation.customerPhone);
+      const res = await getConversationHistory(token, customerKey);
       setHistory(res.data);
     } catch (err) {
       console.error("Failed to load history:", err);
     } finally {
       setLoading(false);
     }
-  }, [token, conversation?.customerPhone]);
+  }, [token, customerKey]);
 
   useEffect(() => {
     fetchHistory();
@@ -65,7 +70,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">History & Notes</p>
-          <p className="text-[10px] text-gray-400 truncate">{conversation?.customerPhone}</p>
+          <p className="text-[10px] text-gray-400 truncate">{conversation?.customerExternalId}</p>
         </div>
         {onClose && (
           <button
@@ -169,6 +174,17 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
                             <span className="text-[10px] text-gray-600">
                               {format(new Date(conv.closedAt), "MMM d, yyyy HH:mm")}
                             </span>
+                          </div>
+                        )}
+                        {conv.aiSummary && (
+                          <div className="mt-2 p-2.5 bg-violet-50 border border-violet-100 rounded-lg">
+                            <div className="flex items-center gap-1.5 mb-1">
+                              <svg className="w-3.5 h-3.5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                              </svg>
+                              <span className="text-[10px] font-semibold text-violet-600 uppercase tracking-wide">AI Summary</span>
+                            </div>
+                            <p className="text-xs text-gray-600 leading-relaxed">{conv.aiSummary}</p>
                           </div>
                         )}
                         {conv.lastMessageAt && (

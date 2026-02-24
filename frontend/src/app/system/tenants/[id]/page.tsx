@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser } from "@/lib/api";
+import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser, toggleFirstTakeCare, getAIPrompt } from "@/lib/api";
 import { SystemLayout } from "@/components/SystemLayout";
 import clsx from "clsx";
 
@@ -28,6 +28,11 @@ export default function TenantDetailPage() {
   const [newUserRole, setNewUserRole] = useState("AGENT");
   const [addingUser, setAddingUser] = useState(false);
   const [showUserPassword, setShowUserPassword] = useState(false);
+  const [ftcEnabled, setFtcEnabled] = useState(false);
+  const [ftcToggling, setFtcToggling] = useState(false);
+  const [aiPromptDeptId, setAiPromptDeptId] = useState<string | null>(null);
+  const [aiPromptData, setAiPromptData] = useState<any>(null);
+  const [aiPromptLoading, setAiPromptLoading] = useState(false);
 
   const showMsg = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
@@ -41,6 +46,7 @@ export default function TenantDetailPage() {
       const res = await getSystemTenant(token, tenantId);
       setTenant(res.data);
       setEditName(res.data.name);
+      setFtcEnabled(!!res.data.firstTakeCareEnabled);
     } catch (err) {
       console.error("Failed to load tenant:", err);
     } finally {
@@ -74,6 +80,20 @@ export default function TenantDetailPage() {
     }
   }
 
+  async function handleToggleFtc() {
+    if (!token) return;
+    setFtcToggling(true);
+    try {
+      await toggleFirstTakeCare(token, tenantId, !ftcEnabled);
+      setFtcEnabled(!ftcEnabled);
+      showMsg(ftcEnabled ? "First-Take-Care disabled" : "First-Take-Care enabled");
+    } catch (err: any) {
+      showMsg(err.message || "Failed to update First-Take-Care", "error");
+    } finally {
+      setFtcToggling(false);
+    }
+  }
+
   async function handleAddUser(e: React.FormEvent) {
     e.preventDefault();
     if (!token) return;
@@ -93,6 +113,25 @@ export default function TenantDetailPage() {
       showMsg(err.message || "Failed to create user", "error");
     } finally {
       setAddingUser(false);
+    }
+  }
+
+  async function handleViewAIPrompt(departmentId: string) {
+    if (!token) return;
+    if (aiPromptDeptId === departmentId) {
+      setAiPromptDeptId(null);
+      setAiPromptData(null);
+      return;
+    }
+    setAiPromptDeptId(departmentId);
+    setAiPromptLoading(true);
+    try {
+      const res = await getAIPrompt(token, departmentId);
+      setAiPromptData(res.data);
+    } catch (err: any) {
+      setAiPromptData({ error: err.message || "Failed to load AI prompt" });
+    } finally {
+      setAiPromptLoading(false);
     }
   }
 
@@ -222,6 +261,95 @@ export default function TenantDetailPage() {
                   }`}>
                     {ch.connectionStatus}
                   </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* First-Take-Care */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900">First-Take-Care AI Agent</h2>
+                <p className="text-xs text-gray-400 mt-0.5">Premium autonomous AI agent that handles initial customer conversations</p>
+              </div>
+            </div>
+            <div className="flex items-center gap-3">
+              <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
+                ftcEnabled ? "bg-green-50 text-green-600 ring-green-200" : "bg-gray-100 text-gray-500 ring-gray-200"
+              }`}>
+                {ftcEnabled ? "Enabled" : "Disabled"}
+              </span>
+              <button
+                onClick={handleToggleFtc}
+                disabled={ftcToggling}
+                className={clsx(
+                  "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50",
+                  ftcEnabled ? "bg-orange-500" : "bg-gray-200"
+                )}
+                role="switch"
+                aria-checked={ftcEnabled}
+              >
+                <span className={clsx(
+                  "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out",
+                  ftcEnabled ? "translate-x-5" : "translate-x-0"
+                )} />
+              </button>
+            </div>
+          </div>
+        </div>
+
+        {/* AI Prompt Viewer */}
+        {tenant.departments && tenant.departments.length > 0 && (
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <div className="flex items-center gap-3 mb-4">
+              <div className="w-9 h-9 rounded-xl bg-violet-100 flex items-center justify-center">
+                <svg className="w-5 h-5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                </svg>
+              </div>
+              <div>
+                <h2 className="font-semibold text-gray-900">AI Prompt Viewer</h2>
+                <p className="text-xs text-gray-400 mt-0.5">View assembled AI agent prompts per department</p>
+              </div>
+            </div>
+            <div className="space-y-2">
+              {tenant.departments.map((dept: any) => (
+                <div key={dept.id}>
+                  <button
+                    onClick={() => handleViewAIPrompt(dept.id)}
+                    className={clsx(
+                      "w-full flex items-center justify-between p-3 rounded-xl transition text-start",
+                      aiPromptDeptId === dept.id ? "bg-violet-50 border border-violet-200" : "bg-gray-50 hover:bg-gray-100"
+                    )}
+                  >
+                    <span className="text-sm font-medium text-gray-700">{dept.name}</span>
+                    <span className="text-xs text-violet-500 font-medium">
+                      {aiPromptDeptId === dept.id ? "Hide" : "View Prompt"}
+                    </span>
+                  </button>
+                  {aiPromptDeptId === dept.id && (
+                    <div className="mt-2 p-4 bg-gray-900 rounded-xl overflow-auto max-h-96">
+                      {aiPromptLoading ? (
+                        <div className="flex items-center justify-center py-4">
+                          <div className="w-5 h-5 border-2 border-violet-400 border-t-violet-200 rounded-full animate-spin" />
+                        </div>
+                      ) : aiPromptData?.error ? (
+                        <p className="text-sm text-red-400">{aiPromptData.error}</p>
+                      ) : (
+                        <pre className="text-xs text-gray-300 whitespace-pre-wrap font-mono leading-relaxed">
+                          {aiPromptData?.systemPrompt || JSON.stringify(aiPromptData, null, 2)}
+                        </pre>
+                      )}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

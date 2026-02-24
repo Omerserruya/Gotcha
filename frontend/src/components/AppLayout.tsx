@@ -6,9 +6,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Sidebar } from "./Sidebar";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
+import { getOnboardingStatus } from "@/lib/api";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();
@@ -61,6 +62,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
       return next;
     });
   }
+
+  // Check tenant onboarding status and redirect if needed
+  useEffect(() => {
+    if (!isLoading && user && user.role === "ADMIN" && token && !pathname.startsWith("/setup")) {
+      getOnboardingStatus(token)
+        .then((res) => {
+          if (res.data.tenant.status !== "ACTIVE") {
+            router.replace("/setup");
+          }
+        })
+        .catch(() => {}); // Ignore errors (e.g. system admin)
+    }
+  }, [user, isLoading, token, router, pathname]);
 
   useEffect(() => {
     if (!isLoading && !user) {
