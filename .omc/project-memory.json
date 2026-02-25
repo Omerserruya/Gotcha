@@ -119,15 +119,21 @@
   },
   "hotPaths": [
     {
+      "path": "packages/shared/prisma/schema.prisma",
+      "accessCount": 34,
+      "lastAccessed": 1772002834368,
+      "type": "file"
+    },
+    {
       "path": "services/auth/src/routes/onboarding.ts",
       "accessCount": 25,
       "lastAccessed": 1771947788803,
       "type": "directory"
     },
     {
-      "path": "packages/shared/prisma/schema.prisma",
-      "accessCount": 23,
-      "lastAccessed": 1771947827376,
+      "path": "frontend/src/lib/api.ts",
+      "accessCount": 19,
+      "lastAccessed": 1771961906373,
       "type": "file"
     },
     {
@@ -143,27 +149,57 @@
       "type": "file"
     },
     {
+      "path": "",
+      "accessCount": 14,
+      "lastAccessed": 1772002860961,
+      "type": "directory"
+    },
+    {
       "path": "services/auth/src/services/agent-config-generator.ts",
       "accessCount": 13,
       "lastAccessed": 1771935873827,
       "type": "file"
     },
     {
-      "path": "",
-      "accessCount": 12,
-      "lastAccessed": 1771947566382,
-      "type": "directory"
-    },
-    {
       "path": "services/ai/src/routes/ai-assist.ts",
-      "accessCount": 11,
-      "lastAccessed": 1771947788134,
+      "accessCount": 12,
+      "lastAccessed": 1771952362278,
       "type": "file"
     },
     {
-      "path": "frontend/src/lib/api.ts",
+      "path": "services/ai/src/index.ts",
+      "accessCount": 12,
+      "lastAccessed": 1771961875231,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/system/tenants/[id]/page.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1771961974546,
+      "type": "file"
+    },
+    {
+      "path": "services/ai/src/services/openai.provider.ts",
+      "accessCount": 11,
+      "lastAccessed": 1771959451427,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/system.ts",
       "accessCount": 10,
-      "lastAccessed": 1771947790190,
+      "lastAccessed": 1771951959240,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src",
+      "accessCount": 8,
+      "lastAccessed": 1771956554763,
+      "type": "directory"
+    },
+    {
+      "path": "services/incoming-worker/src/workers/incoming.worker.ts",
+      "accessCount": 7,
+      "lastAccessed": 1771952709973,
       "type": "file"
     },
     {
@@ -173,27 +209,33 @@
       "type": "file"
     },
     {
-      "path": "services/auth/src/routes/system.ts",
+      "path": "services/auth/src/routes/auth.ts",
       "accessCount": 6,
-      "lastAccessed": 1771947789705,
-      "type": "directory"
-    },
-    {
-      "path": "frontend/src/app/system/tenants/[id]/page.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1771935493962,
+      "lastAccessed": 1771956553033,
       "type": "file"
-    },
-    {
-      "path": "frontend/src",
-      "accessCount": 5,
-      "lastAccessed": 1771936298730,
-      "type": "directory"
     },
     {
       "path": "services/ai/src/services/agent-config-generator.ts",
       "accessCount": 5,
       "lastAccessed": 1771947783626,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/departments.ts",
+      "accessCount": 5,
+      "lastAccessed": 1771951708538,
+      "type": "file"
+    },
+    {
+      "path": "services/ai/src/services/ai-assist.service.ts",
+      "accessCount": 5,
+      "lastAccessed": 1771951711955,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/copilot/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1771951850663,
       "type": "file"
     },
     {
@@ -209,27 +251,21 @@
       "type": "file"
     },
     {
-      "path": "services/auth/src/routes/auth.ts",
-      "accessCount": 4,
-      "lastAccessed": 1771936236892,
-      "type": "file"
-    },
-    {
-      "path": "services/auth/src/routes/departments.ts",
-      "accessCount": 4,
-      "lastAccessed": 1771947558857,
-      "type": "file"
-    },
-    {
       "path": "services/ai/src/services/prompt-assembler.ts",
       "accessCount": 4,
       "lastAccessed": 1771947787420,
       "type": "file"
     },
     {
-      "path": "services/ai/src/services/ai-assist.service.ts",
+      "path": "services/auth/src/routes/agents.ts",
       "accessCount": 4,
-      "lastAccessed": 1771947795777,
+      "lastAccessed": 1771951890067,
+      "type": "file"
+    },
+    {
+      "path": "services/ai/package.json",
+      "accessCount": 4,
+      "lastAccessed": 1771962585419,
       "type": "file"
     },
     {
@@ -239,33 +275,15 @@
       "type": "file"
     },
     {
-      "path": "services/ai/src/index.ts",
-      "accessCount": 3,
-      "lastAccessed": 1771947560594,
-      "type": "file"
-    },
-    {
       "path": "packages/shared/src/index.ts",
       "accessCount": 3,
       "lastAccessed": 1771947565565,
       "type": "file"
     },
     {
-      "path": "services/ai/src/services/openai.provider.ts",
-      "accessCount": 3,
-      "lastAccessed": 1771947800130,
-      "type": "file"
-    },
-    {
       "path": "services/conversation/src/routes/conversations.ts",
       "accessCount": 2,
       "lastAccessed": 1771935202276,
-      "type": "file"
-    },
-    {
-      "path": "services/incoming-worker/src/workers/incoming.worker.ts",
-      "accessCount": 2,
-      "lastAccessed": 1771935207187,
       "type": "file"
     },
     {
@@ -323,27 +341,39 @@
       "type": "file"
     },
     {
-      "path": "frontend/src/app/copilot/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1771947553014,
-      "type": "file"
-    },
-    {
       "path": "frontend/src/app/departments/[id]/copilot/page.tsx",
       "accessCount": 2,
       "lastAccessed": 1771947573423,
       "type": "file"
     },
     {
-      "path": "frontend",
-      "accessCount": 1,
-      "lastAccessed": 1771935186987,
+      "path": "services/ai",
+      "accessCount": 2,
+      "lastAccessed": 1771952357324,
+      "type": "directory"
+    },
+    {
+      "path": "services/auth/src/routes/channels.ts",
+      "accessCount": 2,
+      "lastAccessed": 1771956553575,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src",
+      "accessCount": 2,
+      "lastAccessed": 1771956554211,
       "type": "directory"
     },
     {
       "path": "services",
+      "accessCount": 2,
+      "lastAccessed": 1772002862227,
+      "type": "directory"
+    },
+    {
+      "path": "frontend",
       "accessCount": 1,
-      "lastAccessed": 1771935187150,
+      "lastAccessed": 1771935186987,
       "type": "directory"
     },
     {
@@ -359,12 +389,6 @@
       "type": "file"
     },
     {
-      "path": "services/ai",
-      "accessCount": 1,
-      "lastAccessed": 1771935432329,
-      "type": "directory"
-    },
-    {
       "path": "packages/shared/prisma/migrations/0014_refactor_ai_mode_bot_copilot/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1771935567073,
@@ -377,18 +401,6 @@
       "type": "file"
     },
     {
-      "path": "services/auth/src/routes/channels.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771935911421,
-      "type": "file"
-    },
-    {
-      "path": "services/ai/package.json",
-      "accessCount": 1,
-      "lastAccessed": 1771935911499,
-      "type": "file"
-    },
-    {
       "path": "packages/shared/src/types/express.d.ts",
       "accessCount": 1,
       "lastAccessed": 1771936105635,
@@ -398,18 +410,6 @@
       "path": "packages/shared/prisma/migrations/0015_add_refresh_tokens/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1771936174498,
-      "type": "file"
-    },
-    {
-      "path": "services/auth/src",
-      "accessCount": 1,
-      "lastAccessed": 1771936297843,
-      "type": "directory"
-    },
-    {
-      "path": "services/auth/src/routes/agents.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771947559450,
       "type": "file"
     },
     {

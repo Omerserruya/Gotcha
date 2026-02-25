@@ -1,0 +1,8 @@
+{
+  "active": true,
+  "started_at": "2026-02-25T06:57:26.824Z",
+  "original_prompt": "no, for siplify the rag query and avoid waste of data, i want a seprate db for vector (vector DB) !",
+  "session_id": "0779ecea-3ba4-4ea5-8e26-78071f7be8cb",
+  "reinforcement_count": 0,
+  "last_checked_at": "2026-02-25T06:57:26.824Z"
+}

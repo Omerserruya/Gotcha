@@ -486,6 +486,57 @@ export function seedSystemAdmin(data: { email: string; password: string; name: s
   return apiFetch<{ data: any }>("/api/system/seed", { method: "POST", body: JSON.stringify(data) });
 }
 
+// ─── System Admin Chat (RAG) ────────────────────────────────
+
+export function getSystemKnowledgeBases(token: string) {
+  return apiFetch<{ data: any[] }>("/api/system-chat/knowledge-bases", { token });
+}
+
+export function createSystemKnowledgeBase(token: string, data: { name: string; description?: string }) {
+  return apiFetch<{ data: any }>("/api/system-chat/knowledge-bases", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function deleteSystemKnowledgeBase(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/system-chat/knowledge-bases/${id}`, { token, method: "DELETE" });
+}
+
+export function uploadSystemDocument(token: string, kbId: string, data: { title: string; content: string }) {
+  return apiFetch<{ data: any }>(`/api/system-chat/knowledge-bases/${kbId}/documents`, { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export async function uploadSystemFile(token: string, kbId: string, file: File, title: string) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("title", title);
+
+  const res = await fetch(`${API_URL}/api/system-chat/knowledge-bases/${kbId}/documents/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error || `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+export function processSystemDocument(token: string, kbId: string, docId: string) {
+  return apiFetch<{ data: any }>(`/api/system-chat/knowledge-bases/${kbId}/documents/${docId}/process`, { token, method: "POST" });
+}
+
+export function deleteSystemDocument(token: string, kbId: string, docId: string) {
+  return apiFetch<{ data: any }>(`/api/system-chat/knowledge-bases/${kbId}/documents/${docId}`, { token, method: "DELETE" });
+}
+
+export function askSystemChat(token: string, data: { question: string; history: { role: string; content: string }[] }) {
+  return apiFetch<{ answer: string; sources: { documentTitle: string; score: number }[] }>("/api/system-chat/ask", {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
 // ─── Magic Link ────────────────────────────────────────────
 
 export function verifyMagicLink(token: string) {
@@ -546,6 +597,18 @@ export function updateFirstTakeCareSettings(token: string, data: any) {
   });
 }
 
+// ─── Bot Config ─────────────────────────────────────────────
+
+export function getBotConfig(token: string) {
+  return apiFetch<{ data: { botEnabled: boolean; botType: string | null } }>("/api/agents/settings/bot-config", { token });
+}
+
+export function updateBotConfig(token: string, tenantId: string, data: { botEnabled: boolean; botType?: string }) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/bot-config`, {
+    token, method: "PATCH", body: JSON.stringify(data),
+  });
+}
+
 export function toggleFirstTakeCare(token: string, tenantId: string, enabled: boolean) {
   return apiFetch<{ data: { enabled: boolean } }>(`/api/system/tenants/${tenantId}/first-take-care`, {
     token, method: "PATCH", body: JSON.stringify({ enabled }),
@@ -563,6 +626,98 @@ export function sendOnboardingChatMessage(token: string, data: { message: string
 export function generateOnboardingConfigs(token: string) {
   return apiFetch<{ data: any }>("/api/onboarding/generate-configs", {
     token, method: "POST",
+  });
+}
+
+// ─── Knowledge Base ─────────────────────────────────────────
+
+export function getKnowledgeBases(token: string) {
+  return apiFetch<{ data: any[] }>("/api/knowledge-bases", { token });
+}
+
+export function createKnowledgeBase(token: string, data: { name: string; description?: string }) {
+  return apiFetch<{ data: any }>("/api/knowledge-bases", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateKnowledgeBase(token: string, id: string, data: { name?: string; description?: string; isActive?: boolean }) {
+  return apiFetch<{ data: any }>(`/api/knowledge-bases/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteKnowledgeBase(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/knowledge-bases/${id}`, { token, method: "DELETE" });
+}
+
+export function uploadKnowledgeDocument(token: string, kbId: string, data: { title: string; content: string; sourceType?: string; sourceUrl?: string }) {
+  return apiFetch<{ data: any }>(`/api/knowledge-bases/${kbId}/documents`, { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function deleteKnowledgeDocument(token: string, kbId: string, docId: string) {
+  return apiFetch<{ data: any }>(`/api/knowledge-bases/${kbId}/documents/${docId}`, { token, method: "DELETE" });
+}
+
+export function processKnowledgeDocument(token: string, kbId: string, docId: string) {
+  return apiFetch<{ data: any }>(`/api/knowledge-bases/${kbId}/documents/${docId}/process`, { token, method: "POST" });
+}
+
+export async function uploadKnowledgeFile(token: string, kbId: string, file: File, title: string) {
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("title", title);
+
+  const res = await fetch(`${API_URL}/api/knowledge-bases/${kbId}/documents/upload`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error || `Upload failed: ${res.status}`);
+  }
+
+  return res.json();
+}
+
+// ─── Knowledge Integrations ─────────────────────────────────
+
+export function getKnowledgeIntegrations(token: string, kbId: string) {
+  return apiFetch<{ data: any[] }>(`/api/knowledge/kb/${kbId}/integrations`, { token });
+}
+
+export function deleteKnowledgeIntegration(token: string, intId: string) {
+  return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}`, { token, method: "DELETE" });
+}
+
+export function initConfluenceOAuth(token: string, kbId: string) {
+  return apiFetch<{ url: string }>(`/api/knowledge/oauth/confluence/init?kbId=${kbId}`, { token });
+}
+
+export function initGoogleDriveOAuth(token: string, kbId: string) {
+  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?kbId=${kbId}`, { token });
+}
+
+export function getConfluenceSpaces(token: string, intId: string) {
+  return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/confluence/spaces`, { token });
+}
+
+export function getConfluencePages(token: string, intId: string, spaceKey: string) {
+  return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/confluence/spaces/${spaceKey}/pages`, { token });
+}
+
+export function syncConfluenceSpaces(token: string, intId: string, spaceKeys: string[]) {
+  return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/confluence/sync`, {
+    token, method: "POST", body: JSON.stringify({ spaceKeys }),
+  });
+}
+
+export function getDriveFiles(token: string, intId: string, folderId?: string) {
+  const qs = folderId ? `?folderId=${folderId}` : "";
+  return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/drive/files${qs}`, { token });
+}
+
+export function syncDriveFiles(token: string, intId: string, fileIds: string[]) {
+  return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/drive/sync`, {
+    token, method: "POST", body: JSON.stringify({ fileIds }),
   });
 }
 

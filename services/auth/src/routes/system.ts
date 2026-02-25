@@ -472,6 +472,57 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), a
   }
 });
 
+// ─── Bot Configuration (SysAdmin) ───────────────────────────
+
+const botConfigSchema = z.object({
+  botEnabled: z.boolean(),
+  botType: z.enum(["CHATBOT_FLOW", "AUTONOMOUS_AI"]).optional(),
+});
+
+router.patch("/tenants/:id/bot-config", authenticate, requireSystemAdmin(), validate(botConfigSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { botEnabled, botType } = req.body;
+
+    const tenant = await prisma.tenant.findUnique({ where: { id: req.params.id as string } });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    const data: any = { botEnabled };
+    if (botEnabled && botType) {
+      data.botType = botType;
+      if (botType === "AUTONOMOUS_AI") {
+        data.firstTakeCareEnabled = true;
+      } else {
+        data.firstTakeCareEnabled = false;
+      }
+    } else if (!botEnabled) {
+      // When disabling, keep botType as-is but don't clear it
+    }
+
+    const updated = await prisma.tenant.update({
+      where: { id: req.params.id as string },
+      data,
+      select: { id: true, botEnabled: true, botType: true, firstTakeCareEnabled: true },
+    });
+
+    // If enabling AUTONOMOUS_AI, auto-create FirstTakeCareConfig if missing
+    if (botEnabled && botType === "AUTONOMOUS_AI") {
+      await prisma.firstTakeCareConfig.upsert({
+        where: { tenantId: req.params.id as string },
+        update: {},
+        create: { tenantId: req.params.id as string },
+      });
+    }
+
+    res.json({ data: updated });
+  } catch (err) {
+    console.error("Update bot config error:", err);
+    res.status(500).json({ error: "Failed to update bot configuration" });
+  }
+});
+
 // ─── Toggle First-Take-Care Feature ─────────────────────────
 
 router.patch("/tenants/:id/first-take-care", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {

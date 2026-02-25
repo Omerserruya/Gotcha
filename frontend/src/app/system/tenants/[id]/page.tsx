@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { useParams } from "next/navigation";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser, toggleFirstTakeCare, getAIPrompt } from "@/lib/api";
+import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser, toggleFirstTakeCare, updateBotConfig, getAIPrompt } from "@/lib/api";
 import { SystemLayout } from "@/components/SystemLayout";
 import clsx from "clsx";
 
@@ -30,6 +30,9 @@ export default function TenantDetailPage() {
   const [showUserPassword, setShowUserPassword] = useState(false);
   const [ftcEnabled, setFtcEnabled] = useState(false);
   const [ftcToggling, setFtcToggling] = useState(false);
+  const [botEnabled, setBotEnabled] = useState(false);
+  const [botType, setBotType] = useState<string | null>(null);
+  const [botConfigSaving, setBotConfigSaving] = useState(false);
   const [aiPromptDeptId, setAiPromptDeptId] = useState<string | null>(null);
   const [aiPromptData, setAiPromptData] = useState<any>(null);
   const [aiPromptLoading, setAiPromptLoading] = useState(false);
@@ -47,6 +50,8 @@ export default function TenantDetailPage() {
       setTenant(res.data);
       setEditName(res.data.name);
       setFtcEnabled(!!res.data.firstTakeCareEnabled);
+      setBotEnabled(!!res.data.botEnabled);
+      setBotType(res.data.botType || null);
     } catch (err) {
       console.error("Failed to load tenant:", err);
     } finally {
@@ -91,6 +96,27 @@ export default function TenantDetailPage() {
       showMsg(err.message || "Failed to update First-Take-Care", "error");
     } finally {
       setFtcToggling(false);
+    }
+  }
+
+  async function handleSaveBotConfig(enabled: boolean, type: string | null) {
+    if (!token) return;
+    setBotConfigSaving(true);
+    try {
+      await updateBotConfig(token, tenantId, {
+        botEnabled: enabled,
+        ...(type ? { botType: type } : {}),
+      });
+      setBotEnabled(enabled);
+      if (type) setBotType(type);
+      // Sync FTC enabled state
+      if (type === "AUTONOMOUS_AI" && enabled) setFtcEnabled(true);
+      if (type === "CHATBOT_FLOW" && enabled) setFtcEnabled(false);
+      showMsg("Bot configuration updated");
+    } catch (err: any) {
+      showMsg(err.message || "Failed to update bot configuration", "error");
+    } finally {
+      setBotConfigSaving(false);
     }
   }
 
@@ -267,43 +293,92 @@ export default function TenantDetailPage() {
           </div>
         )}
 
-        {/* First-Take-Care */}
+        {/* Bot Configuration */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
-                <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                </svg>
-              </div>
-              <div>
-                <h2 className="font-semibold text-gray-900">First-Take-Care AI Agent</h2>
-                <p className="text-xs text-gray-400 mt-0.5">Premium autonomous AI agent that handles initial customer conversations</p>
-              </div>
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 rounded-xl bg-orange-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Bot Configuration</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Configure the bot type for this tenant</p>
+            </div>
+          </div>
+
+          {/* Bot Enabled Toggle */}
+          <div className="flex items-center justify-between mb-4 pb-4 border-b border-gray-100">
+            <div>
+              <p className="text-sm font-medium text-gray-700">Bot Enabled</p>
+              <p className="text-xs text-gray-400">Master switch for bot functionality</p>
             </div>
             <div className="flex items-center gap-3">
               <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
-                ftcEnabled ? "bg-green-50 text-green-600 ring-green-200" : "bg-gray-100 text-gray-500 ring-gray-200"
+                botEnabled ? "bg-green-50 text-green-600 ring-green-200" : "bg-gray-100 text-gray-500 ring-gray-200"
               }`}>
-                {ftcEnabled ? "Enabled" : "Disabled"}
+                {botEnabled ? "Enabled" : "Disabled"}
               </span>
               <button
-                onClick={handleToggleFtc}
-                disabled={ftcToggling}
+                onClick={() => handleSaveBotConfig(!botEnabled, botType)}
+                disabled={botConfigSaving}
                 className={clsx(
                   "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50",
-                  ftcEnabled ? "bg-orange-500" : "bg-gray-200"
+                  botEnabled ? "bg-orange-500" : "bg-gray-200"
                 )}
                 role="switch"
-                aria-checked={ftcEnabled}
+                aria-checked={botEnabled}
               >
                 <span className={clsx(
                   "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out",
-                  ftcEnabled ? "translate-x-5" : "translate-x-0"
+                  botEnabled ? "translate-x-5" : "translate-x-0"
                 )} />
               </button>
             </div>
           </div>
+
+          {/* Bot Type Selection - only shown when enabled */}
+          {botEnabled && (
+            <div>
+              <p className="text-sm font-medium text-gray-700 mb-3">Bot Type</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <button
+                  onClick={() => handleSaveBotConfig(true, "CHATBOT_FLOW")}
+                  disabled={botConfigSaving}
+                  className={clsx(
+                    "p-4 rounded-xl border-2 text-start transition",
+                    botType === "CHATBOT_FLOW" ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:border-gray-300"
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6z" />
+                    </svg>
+                    <p className="font-medium text-sm text-gray-900">Chatbot Flow</p>
+                  </div>
+                  <p className="text-xs text-gray-500">Visual flow builder with decision trees and automated responses</p>
+                </button>
+                <button
+                  onClick={() => handleSaveBotConfig(true, "AUTONOMOUS_AI")}
+                  disabled={botConfigSaving}
+                  className={clsx(
+                    "p-4 rounded-xl border-2 text-start transition",
+                    botType === "AUTONOMOUS_AI" ? "border-orange-400 bg-orange-50" : "border-gray-200 hover:border-gray-300"
+                  )}
+                >
+                  <div className="flex items-center gap-2 mb-1">
+                    <svg className="w-4 h-4 text-orange-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                    </svg>
+                    <p className="font-medium text-sm text-gray-900">Autonomous AI</p>
+                  </div>
+                  <p className="text-xs text-gray-500">AI-powered agent that autonomously handles customer conversations</p>
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* AI Prompt Viewer */}

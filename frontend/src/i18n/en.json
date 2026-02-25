@@ -6,13 +6,13 @@
   "nav": {
     "conversations": "Conversations",
     "dashboard": "Dashboard",
-    "chatbot": "Chatbot Builder",
+    "bot": "Bot",
     "agents": "Agents",
     "copilot": "Co-Pilot",
-    "firstTakeCare": "First-Take-Care",
     "channels": "Channels",
     "departments": "Departments",
     "history": "Chat History",
+    "knowledge": "Knowledge",
     "settings": "Settings",
     "more": "More",
     "logout": "Logout"
@@ -175,8 +175,10 @@
     "maxTokens": "Max Tokens",
     "save": "Save Settings",
     "saved": "Co-Pilot settings saved",
-    "global": "Global",
-    "departmentMembers": "Department Members"
+    "global": "Default Template",
+    "globalHelperText": "The Default Template is inherited by departments that don't have custom settings.",
+    "departmentMembers": "Department Members",
+    "usingDefaultTemplate": "Using Default Template"
   },
   "channels": {
     "title": "Channels",
@@ -271,6 +273,44 @@
     "timeline": "Conversations",
     "next": "Next"
   },
+  "knowledge": {
+    "title": "Knowledge Base",
+    "subtitle": "Manage organizational knowledge for AI-powered responses",
+    "createKb": "New Knowledge Base",
+    "kbName": "Name",
+    "kbDescription": "Description",
+    "empty": "No knowledge bases yet. Create one to get started.",
+    "selectKb": "Select a knowledge base to view its documents",
+    "addDocument": "Add Document",
+    "noDocuments": "No documents yet. Add one to start building your knowledge base.",
+    "docTitle": "Document Title",
+    "sourceType": "Source Type",
+    "content": "Content",
+    "upload": "Upload & Process",
+    "pasteText": "Paste Text",
+    "uploadFile": "Upload File",
+    "connectSource": "Connect Source",
+    "confluence": "Confluence",
+    "googleDrive": "Google Drive",
+    "browseSpaces": "Browse Spaces",
+    "browseFiles": "Browse Files",
+    "sync": "Import",
+    "syncing": "Importing...",
+    "lastSync": "Last sync",
+    "disconnect": "Disconnect",
+    "connected": "Connected",
+    "fileUpload": "File Upload",
+    "maxFileSize": "Max file size: 10MB",
+    "supportedFormats": "PDF, DOCX, DOC, MD, TXT",
+    "documents": "Documents",
+    "integrations": "Integrations",
+    "noIntegrations": "No integrations connected yet.",
+    "selectFiles": "Select files to import",
+    "selectSpaces": "Select spaces to import",
+    "importSelected": "Import Selected",
+    "connecting": "Connecting...",
+    "oauthNotConfigured": "This integration is not configured. Contact your administrator."
+  },
   "settings": {
     "title": "Settings",
     "subtitle": "Manage business hours and auto-response settings",
@@ -348,7 +388,9 @@
     "close": "Close",
     "disconnect": "Disconnect",
     "disable": "Disable",
-    "enable": "Enable"
+    "enable": "Enable",
+    "create": "Create",
+    "saving": "Saving..."
   },
   "setup": {
     "title": "Organization Setup",
@@ -471,6 +513,21 @@
       "Operations": "Operations",
       "OperationsDesc": "Manage operational requests and workflows"
     }
+  },
+  "systemChat": {
+    "title": "AI Chat",
+    "subtitle": "Ask questions against your knowledge base",
+    "placeholder": "Ask a question...",
+    "send": "Send",
+    "clear": "Clear Chat",
+    "emptyState": "Ask a question to get started. Upload documents to the knowledge base for contextual answers.",
+    "noKb": "No knowledge bases yet. Create one and upload documents to enable RAG-powered answers.",
+    "sources": "Sources",
+    "thinking": "Thinking...",
+    "knowledgeBase": "Knowledge Base",
+    "createKb": "New KB",
+    "addDocument": "Add Document",
+    "documents": "documents"
   },
   "confirm": {
     "deleteTitle": "Confirm Deletion",

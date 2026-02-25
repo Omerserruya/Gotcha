@@ -2,6 +2,7 @@ import { Job } from "bullmq";
 import axios from "axios";
 import { prisma, createWorker, IncomingMessageJob, analyticsQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
 import { processChatbotFlow } from "../services/chatbot-engine.service";
+import { processAIBot } from "../services/ai-bot.service";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
 
@@ -159,12 +160,22 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     timestamp: new Date().toISOString(),
   });
 
-  // Process chatbot flow if no agent assigned
+  // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
-      await processChatbotFlow(tenantId, conversation.id, body);
+      const botTenant = await prisma.tenant.findUnique({
+        where: { id: tenantId },
+        select: { botEnabled: true, botType: true },
+      });
+
+      if (botTenant?.botEnabled && botTenant.botType === "AUTONOMOUS_AI") {
+        await processAIBot(tenantId, conversation.id, body);
+      } else {
+        // Default: chatbot flow (works even if botType not set)
+        await processChatbotFlow(tenantId, conversation.id, body);
+      }
     } catch (err) {
-      console.error("Chatbot flow error:", err);
+      console.error("Bot processing error:", err);
     }
   }
 }

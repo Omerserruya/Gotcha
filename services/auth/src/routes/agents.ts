@@ -420,6 +420,21 @@ router.put("/settings/idle-automation", requireRole("ADMIN"), validate(idleAutom
   }
 });
 
+// ─── Bot Config (for tenant admins) ─────────────────────────
+
+router.get("/settings/bot-config", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: req.tenantId! },
+      select: { botEnabled: true, botType: true },
+    });
+    res.json({ data: { botEnabled: tenant?.botEnabled ?? false, botType: tenant?.botType ?? null } });
+  } catch (err) {
+    console.error("Get bot config error:", err);
+    res.status(500).json({ error: "Failed to get bot configuration" });
+  }
+});
+
 // ─── Co-Pilot Settings ──────────────────────────────────────
 
 const copilotSettingsSchema = z.object({

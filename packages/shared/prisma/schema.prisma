@@ -85,6 +85,7 @@ model Tenant {
   departmentCopilotConfigs DepartmentCopilotConfig[]
   businessProfile    BusinessProfile?
   onboarding         TenantOnboarding?
+  knowledgeBases     KnowledgeBase[]
 
   @@index([status])
   @@map("tenants")
@@ -468,6 +469,81 @@ model FirstTakeCareConfig {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("first_take_care_configs")
+}
+
+// ─── Knowledge Base (RAG) ───────────────────────────────────
+
+model KnowledgeBase {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  isActive    Boolean  @default(true) @map("is_active")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents    KnowledgeDocument[]
+  integrations KnowledgeIntegration[]
+
+  @@index([tenantId])
+  @@map("knowledge_bases")
+}
+
+model KnowledgeIntegration {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  knowledgeBaseId String   @map("knowledge_base_id")
+  provider        String   // "confluence" | "google_drive"
+  credentials     Json     // encrypted { accessToken, refreshToken, cloudId, ... }
+  displayName     String   @map("display_name")
+  config          Json?    // { spaceKeys: [], lastSyncAt, ... }
+  isActive        Boolean  @default(true) @map("is_active")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([knowledgeBaseId])
+  @@map("knowledge_integrations")
+}
+
+model KnowledgeDocument {
+  id              String   @id @default(cuid())
+  knowledgeBaseId String   @map("knowledge_base_id")
+  tenantId        String   @map("tenant_id")
+  title           String
+  content         String
+  sourceType      String   @default("text") @map("source_type")
+  sourceUrl       String?  @map("source_url")
+  chunkCount      Int      @default(0) @map("chunk_count")
+  status          String   @default("pending")
+  metadata        Json?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  knowledgeBase KnowledgeBase  @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  chunks        KnowledgeChunk[]
+
+  @@index([knowledgeBaseId])
+  @@index([tenantId])
+  @@map("knowledge_documents")
+}
+
+model KnowledgeChunk {
+  id         String   @id @default(cuid())
+  documentId String   @map("document_id")
+  tenantId   String   @map("tenant_id")
+  content    String
+  chunkIndex Int      @map("chunk_index")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  document KnowledgeDocument @relation(fields: [documentId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("knowledge_chunks")
 }
 
 // ─── Magic Links (passwordless onboarding) ──────────────────

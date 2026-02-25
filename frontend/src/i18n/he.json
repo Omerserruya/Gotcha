@@ -6,13 +6,13 @@
   "nav": {
     "conversations": "שיחות",
     "dashboard": "לוח בקרה",
-    "chatbot": "בונה בוט",
+    "bot": "בוט",
     "agents": "נציגים",
     "copilot": "עוזר AI",
-    "firstTakeCare": "First-Take-Care",
     "channels": "ערוצים",
     "departments": "מחלקות",
     "history": "היסטוריית שיחות",
+    "knowledge": "בסיס ידע",
     "settings": "הגדרות",
     "more": "עוד",
     "logout": "התנתק"
@@ -175,8 +175,10 @@
     "maxTokens": "מקסימום טוקנים",
     "save": "שמור הגדרות",
     "saved": "הגדרות העוזר נשמרו",
-    "global": "כללי",
-    "departmentMembers": "חברי מחלקה"
+    "global": "תבנית ברירת מחדל",
+    "globalHelperText": "תבנית ברירת המחדל עוברת בירושה למחלקות שאין להן הגדרות מותאמות.",
+    "departmentMembers": "חברי מחלקה",
+    "usingDefaultTemplate": "משתמש בתבנית ברירת מחדל"
   },
   "channels": {
     "title": "ערוצים",
@@ -271,6 +273,44 @@
     "timeline": "שיחות",
     "next": "הבא"
   },
+  "knowledge": {
+    "title": "בסיס ידע",
+    "subtitle": "ניהול ידע ארגוני לתשובות מבוססות AI",
+    "createKb": "בסיס ידע חדש",
+    "kbName": "שם",
+    "kbDescription": "תיאור",
+    "empty": "אין עדיין בסיסי ידע. צור אחד כדי להתחיל.",
+    "selectKb": "בחר בסיס ידע כדי לצפות במסמכים שלו",
+    "addDocument": "הוסף מסמך",
+    "noDocuments": "אין עדיין מסמכים. הוסף אחד כדי להתחיל לבנות את בסיס הידע.",
+    "docTitle": "כותרת מסמך",
+    "sourceType": "סוג מקור",
+    "content": "תוכן",
+    "upload": "העלה ועבד",
+    "pasteText": "הדבק טקסט",
+    "uploadFile": "העלה קובץ",
+    "connectSource": "חבר מקור",
+    "confluence": "Confluence",
+    "googleDrive": "Google Drive",
+    "browseSpaces": "עיין ב-Spaces",
+    "browseFiles": "עיין בקבצים",
+    "sync": "ייבא",
+    "syncing": "מייבא...",
+    "lastSync": "סנכרון אחרון",
+    "disconnect": "נתק",
+    "connected": "מחובר",
+    "fileUpload": "העלאת קובץ",
+    "maxFileSize": "גודל קובץ מקסימלי: 10MB",
+    "supportedFormats": "PDF, DOCX, DOC, MD, TXT",
+    "documents": "מסמכים",
+    "integrations": "אינטגרציות",
+    "noIntegrations": "אין עדיין אינטגרציות מחוברות.",
+    "selectFiles": "בחר קבצים לייבוא",
+    "selectSpaces": "בחר spaces לייבוא",
+    "importSelected": "ייבא נבחרים",
+    "connecting": "מתחבר...",
+    "oauthNotConfigured": "אינטגרציה זו לא מוגדרת. פנה למנהל המערכת."
+  },
   "settings": {
     "title": "הגדרות",
     "subtitle": "ניהול שעות פעילות והודעת תגובה אוטומטית",
@@ -348,7 +388,9 @@
     "close": "סגור",
     "disconnect": "נתק",
     "disable": "השבת",
-    "enable": "הפעל"
+    "enable": "הפעל",
+    "create": "צור",
+    "saving": "שומר..."
   },
   "setup": {
     "title": "הגדרת ארגון",
@@ -471,6 +513,21 @@
       "Operations": "תפעול",
       "OperationsDesc": "ניהול בקשות תפעוליות ותהליכי עבודה"
     }
+  },
+  "systemChat": {
+    "title": "צ'אט AI",
+    "subtitle": "שאל שאלות מול בסיס הידע שלך",
+    "placeholder": "שאל שאלה...",
+    "send": "שלח",
+    "clear": "נקה צ'אט",
+    "emptyState": "שאל שאלה כדי להתחיל. העלה מסמכים לבסיס הידע לתשובות מבוססות הקשר.",
+    "noKb": "אין עדיין בסיסי ידע. צור אחד והעלה מסמכים כדי לאפשר תשובות מבוססות RAG.",
+    "sources": "מקורות",
+    "thinking": "חושב...",
+    "knowledgeBase": "בסיס ידע",
+    "createKb": "בסיס ידע חדש",
+    "addDocument": "הוסף מסמך",
+    "documents": "מסמכים"
   },
   "confirm": {
     "deleteTitle": "אישור מחיקה",

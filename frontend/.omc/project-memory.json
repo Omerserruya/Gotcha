@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1771858605904,
+  "lastScanned": 1771958999845,
   "projectRoot": "/home/ocs/projects/ChatCenter/frontend",
   "techStack": {
     "languages": [
@@ -74,7 +74,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 3,
-      "lastAccessed": 1771858605887,
+      "lastAccessed": 1771958999826,
       "keyFiles": [
         "apple-touch-icon.png",
         "favicon.ico",
@@ -85,14 +85,14 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1771858605887,
+      "lastAccessed": 1771958999827,
       "keyFiles": []
     },
     "src/app": {
       "path": "src/app",
       "purpose": "Application code",
       "fileCount": 4,
-      "lastAccessed": 1771858605888,
+      "lastAccessed": 1771958999839,
       "keyFiles": [
         "globals.css",
         "layout.tsx",
@@ -102,19 +102,19 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 5,
-      "lastAccessed": 1771858605888,
+      "fileCount": 6,
+      "lastAccessed": 1771958999841,
       "keyFiles": [
         "AppLayout.tsx",
-        "LanguageSwitcher.tsx",
-        "MobileNav.tsx"
+        "ConfirmModal.tsx",
+        "LanguageSwitcher.tsx"
       ]
     },
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
       "fileCount": 2,
-      "lastAccessed": 1771858605889,
+      "lastAccessed": 1771958999842,
       "keyFiles": [
         "api.ts",
         "socket.ts"
@@ -123,28 +123,28 @@
   },
   "hotPaths": [
     {
-      "path": "src/app/setup/page.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1771864022202,
+      "path": "src/components/SystemLayout.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772020024945,
       "type": "file"
     },
     {
-      "path": "src/lib/api.ts",
+      "path": "src/app/system/chat/page.tsx",
       "accessCount": 4,
-      "lastAccessed": 1771864002240,
+      "lastAccessed": 1772019084009,
       "type": "file"
     },
     {
-      "path": "src/i18n/en.json",
-      "accessCount": 1,
-      "lastAccessed": 1771864027268,
+      "path": "tailwind.config.ts",
+      "accessCount": 3,
+      "lastAccessed": 1772019110694,
       "type": "file"
     },
     {
-      "path": "src/i18n/he.json",
+      "path": "src/app/system/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1771864032507,
-      "type": "file"
+      "lastAccessed": 1772020011756,
+      "type": "directory"
     }
   ],
   "userDirectives": []

@@ -1,5 +1,8 @@
 import { createServiceApp, startService } from "@chatcenter/shared";
 import aiAssistRoutes from "./routes/ai-assist";
+import knowledgeRoutes from "./routes/knowledge";
+import knowledgeOauthRoutes from "./routes/knowledge-oauth";
+import systemChatRoutes from "./routes/system-chat";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 
@@ -19,6 +22,9 @@ const config = { name: "ai-service", port: parseInt(process.env.PORT || "4006", 
 const app = createServiceApp(config);
 
 app.use("/api/ai-assist", aiAssistRoutes);
+app.use("/api/knowledge-bases", knowledgeRoutes);
+app.use("/api/knowledge", knowledgeOauthRoutes);
+app.use("/api/system-chat", systemChatRoutes);
 
 startService(app, config);
 export { app };

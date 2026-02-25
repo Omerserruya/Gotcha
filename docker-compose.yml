@@ -24,6 +24,19 @@ services:
       timeout: 5s
       retries: 5
 
+  qdrant:
+    image: qdrant/qdrant:latest
+    volumes:
+      - qdrant_data:/qdrant/storage
+    ports:
+      - "${QDRANT_PORT:-6333}:6333"
+      - "${QDRANT_GRPC_PORT:-6334}:6334"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/localhost/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   # ─── API Gateway ─────────────────────────────────────────
   gateway:
     image: nginx:alpine
@@ -175,10 +188,24 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-500}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-50}
+      CONFLUENCE_CLIENT_ID: ${CONFLUENCE_CLIENT_ID:-}
+      CONFLUENCE_CLIENT_SECRET: ${CONFLUENCE_CLIENT_SECRET:-}
+      CONFLUENCE_REDIRECT_URI: ${CONFLUENCE_REDIRECT_URI:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
 
   # ─── Workers (independently scalable) ────────────────────
@@ -195,10 +222,15 @@ services:
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
     depends_on:
       db:
         condition: service_healthy
       redis:
+        condition: service_healthy
+      qdrant:
         condition: service_healthy
     deploy:
       replicas: ${INCOMING_WORKER_REPLICAS:-1}
@@ -254,3 +286,4 @@ services:
 
 volumes:
   pgdata:
+  qdrant_data:

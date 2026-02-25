@@ -1,5 +1,6 @@
 import OpenAI from "openai";
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification } from "./ai-assist.service";
+import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -16,7 +17,22 @@ export class OpenAIProvider implements AIProvider {
       return [{ id: "disabled", text: "Co-Pilot is disabled for this tenant.", confidence: 0, type: "info" }];
     }
 
-    const systemPrompt = this.buildSystemPrompt(config);
+    let systemPrompt = this.buildSystemPrompt(config);
+
+    // RAG: Retrieve relevant knowledge base context
+    if (context.tenantId) {
+      const lastInbound = [...context.messages].reverse().find((m) => m.direction === "INBOUND");
+      if (lastInbound?.body) {
+        try {
+          const chunks = await retrieveRelevantChunks(context.tenantId, lastInbound.body, 5);
+          const kbContext = buildKnowledgeContext(chunks);
+          if (kbContext) systemPrompt += "\n\n" + kbContext;
+        } catch (err: any) {
+          console.warn("[RAG] Knowledge retrieval failed:", err.message);
+        }
+      }
+    }
+
     const chatMessages = this.buildChatMessages(context, systemPrompt);
     const model = config?.model || this.defaultModel;
     const temperature = config?.temperature ?? 0.7;
@@ -104,6 +120,8 @@ export class OpenAIProvider implements AIProvider {
     if (config?.rules && Array.isArray(config.rules) && config.rules.length > 0) {
       prompt += "\n\nRules you must follow:\n" + config.rules.map((r) => `- ${r}`).join("\n");
     }
+
+    prompt += "\n\n## Truthfulness & Knowledge Base Rules\n- When knowledge base context is provided, base your suggestions on that information.\n- NEVER suggest responses that fabricate information not present in the knowledge base or conversation context.\n- If there is insufficient information to answer, suggest the agent tell the customer they will look into it.\n- Accuracy is more important than sounding helpful — do not invent details.";
 
     return prompt;
   }
