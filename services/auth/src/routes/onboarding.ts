@@ -39,9 +39,9 @@ IMPORTANT RULES — follow these exactly:
 5. Ask ONE question at a time. Keep it short (2-4 sentences max).
 6. You need to understand these 4 things:
    a) Communication tone — formal vs casual vs friendly
-   b) Escalation — when should AI hand off to a human agent
+   b) Agent workflow — when should conversations be transferred to a specialist or supervisor
    c) Common customer topics — what do customers usually ask about
-   d) Restrictions — topics AI should never handle alone
+   d) Restrictions — topics agents should never handle without supervisor approval
 7. After collecting answers on at least 3 of these areas, set "readyToGenerate": true and tell the user you're generating their configs.
 8. If the user says "skip", "just do it", "go ahead", "I don't care", or anything impatient — immediately set "readyToGenerate": true.
 9. Do NOT use emojis. Do NOT give generic greetings. Do NOT ask "how can I help you". You already know what to do — configure their AI.
@@ -178,7 +178,7 @@ function fallbackReply(
   }
   if (exchanges === 1) {
     return {
-      reply: `Got it!\n\n**How should the AI handle situations it's unsure about?** Should it escalate to a human quickly, or try to resolve more on its own first?`,
+      reply: `Got it!\n\n**When should conversations be transferred to a specialist or supervisor?** For example — after a certain time, for specific topics, or when the customer requests it?`,
       readyToGenerate: false,
     };
   }
@@ -190,7 +190,7 @@ function fallbackReply(
   }
   if (exchanges === 3) {
     return {
-      reply: `Thanks! Last one — **are there any topics the AI should NOT handle on its own?** (e.g. refunds, legal, complaints)\n\nIf nothing specific, just say "none".`,
+      reply: `Thanks! Last one — **are there any topics that should always require supervisor approval?** (e.g. refunds, legal, complaints)\n\nIf nothing specific, just say "none".`,
       readyToGenerate: false,
     };
   }
@@ -215,7 +215,7 @@ function fallbackReplyHebrew(
   }
   if (exchanges === 1) {
     return {
-      reply: `הבנתי!\n\n**איך ה-AI צריך להתמודד עם מצבים שהוא לא בטוח לגביהם?** להעביר לנציג אנושי מהר, או לנסות לפתור בעצמו קודם?`,
+      reply: `הבנתי!\n\n**מתי צריך להעביר שיחות למומחה או למנהל?** למשל — אחרי זמן מסוים, לנושאים ספציפיים, או כשהלקוח מבקש?`,
       readyToGenerate: false,
     };
   }
@@ -227,7 +227,7 @@ function fallbackReplyHebrew(
   }
   if (exchanges === 3) {
     return {
-      reply: `תודה! שאלה אחרונה — **האם יש נושאים שה-AI לא צריך לטפל בהם לבד?** (למשל: החזרים, משפטי, תלונות)\n\nאם אין משהו ספציפי, פשוט אמרו "אין".`,
+      reply: `תודה! שאלה אחרונה — **האם יש נושאים שתמיד דורשים אישור מנהל?** (למשל: החזרים, משפטי, תלונות)\n\nאם אין משהו ספציפי, פשוט אמרו "אין".`,
       readyToGenerate: false,
     };
   }

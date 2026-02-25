@@ -46,7 +46,7 @@ export function QuickReplyNode({ data }: NodeProps) {
           placeholder="Question text..."
         />
         {buttons.map((btn, i) => (
-          <div key={btn.id} className="flex items-center gap-1">
+          <div key={btn.id} className="relative flex items-center gap-1 pr-3">
             <input
               type="text"
               value={btn.title}
@@ -61,10 +61,10 @@ export function QuickReplyNode({ data }: NodeProps) {
             </button>
             <Handle
               type="source"
-              position={Position.Bottom}
+              position={Position.Right}
               id={btn.id}
-              className="!bg-purple-500"
-              style={{ left: `${((i + 1) / (buttons.length + 1)) * 100}%` }}
+              className="!bg-purple-500 !w-2.5 !h-2.5"
+              style={{ top: "50%", right: "-5px" }}
             />
           </div>
         ))}
@@ -75,7 +75,9 @@ export function QuickReplyNode({ data }: NodeProps) {
           + Add button
         </button>
       </div>
-      <Handle type="source" position={Position.Bottom} className="!bg-purple-500" />
+      {buttons.length === 0 && (
+        <Handle type="source" position={Position.Bottom} className="!bg-purple-500" />
+      )}
     </div>
   );
 }

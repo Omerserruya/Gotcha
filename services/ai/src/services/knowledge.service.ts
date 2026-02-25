@@ -10,7 +10,7 @@ export async function retrieveRelevantChunks(
   limit = 5
 ): Promise<SearchResult[]> {
   try {
-    const queryEmbedding = await generateEmbedding(query);
+    const queryEmbedding = await generateEmbedding(query, { tenantId });
 
     // Get active knowledge base IDs for this tenant
     const activeKBs = await prisma.knowledgeBase.findMany({

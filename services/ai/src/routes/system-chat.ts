@@ -4,6 +4,7 @@ import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "../services/knowledge.service";
+import { logTokenUsage } from "../services/tokenlog.service";
 import OpenAI from "openai";
 import multer from "multer";
 
@@ -243,6 +244,17 @@ ${knowledgeContext ? `\n${knowledgeContext}` : "\nNo knowledge base documents ar
       max_tokens: 1024,
     });
 
+    if (completion.usage) {
+      logTokenUsage({
+        tenantId: req.tenantId!,
+        type: "chat",
+        model: CHAT_MODEL,
+        promptTokens: completion.usage.prompt_tokens,
+        completionTokens: completion.usage.completion_tokens,
+        totalTokens: completion.usage.total_tokens,
+      });
+    }
+
     const answer = completion.choices[0]?.message?.content || "I was unable to generate a response.";
 
     const sources = chunks
@@ -253,6 +265,139 @@ ${knowledgeContext ? `\n${knowledgeContext}` : "\nNo knowledge base documents ar
   } catch (err: any) {
     console.error("[SystemChat] Ask error:", err.message);
     res.status(500).json({ error: "Failed to generate answer" });
+  }
+});
+
+// ─── Token Usage Analytics ───────────────────────────────────
+
+router.get("/token-usage", async (req: Request, res: Response) => {
+  try {
+    const { from, to, type, groupBy } = req.query;
+    const tenantId = (req.query.tenantId as string) || req.tenantId!;
+
+    const where: any = { tenantId };
+    if (type) where.type = type as string;
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from as string);
+      if (to) where.createdAt.lte = new Date(to as string);
+    }
+
+    // Totals
+    const totals = await prisma.tokenLog.aggregate({
+      where,
+      _sum: { promptTokens: true, completionTokens: true, totalTokens: true },
+      _count: { id: true },
+    });
+
+    // Breakdown by groupBy
+    let breakdown: any[] = [];
+    if (groupBy === "type") {
+      breakdown = await prisma.tokenLog.groupBy({
+        by: ["type"],
+        where,
+        orderBy: { type: "asc" },
+        _sum: { promptTokens: true, completionTokens: true, totalTokens: true },
+        _count: { id: true },
+      });
+    } else if (groupBy === "model") {
+      breakdown = await prisma.tokenLog.groupBy({
+        by: ["model"],
+        where,
+        orderBy: { model: "asc" },
+        _sum: { promptTokens: true, completionTokens: true, totalTokens: true },
+        _count: { id: true },
+      });
+    } else if (groupBy === "day") {
+      // Raw query for daily aggregation
+      const fromDate = from ? new Date(from as string) : new Date(Date.now() - 30 * 86400000);
+      const toDate = to ? new Date(to as string) : new Date();
+      if (type) {
+        breakdown = await prisma.$queryRaw`
+          SELECT DATE(created_at) as date,
+                 SUM(prompt_tokens)::int as "promptTokens",
+                 SUM(completion_tokens)::int as "completionTokens",
+                 SUM(total_tokens)::int as "totalTokens",
+                 COUNT(*)::int as count
+          FROM token_logs
+          WHERE tenant_id = ${tenantId}
+            AND created_at >= ${fromDate}
+            AND created_at <= ${toDate}
+            AND type = ${type as string}
+          GROUP BY DATE(created_at)
+          ORDER BY date DESC
+        `;
+      } else {
+        breakdown = await prisma.$queryRaw`
+          SELECT DATE(created_at) as date,
+                 SUM(prompt_tokens)::int as "promptTokens",
+                 SUM(completion_tokens)::int as "completionTokens",
+                 SUM(total_tokens)::int as "totalTokens",
+                 COUNT(*)::int as count
+          FROM token_logs
+          WHERE tenant_id = ${tenantId}
+            AND created_at >= ${fromDate}
+            AND created_at <= ${toDate}
+          GROUP BY DATE(created_at)
+          ORDER BY date DESC
+        `;
+      }
+    }
+
+    res.json({
+      totals: {
+        promptTokens: totals._sum.promptTokens || 0,
+        completionTokens: totals._sum.completionTokens || 0,
+        totalTokens: totals._sum.totalTokens || 0,
+        count: totals._count.id || 0,
+      },
+      breakdown,
+    });
+  } catch (err: any) {
+    console.error("[SystemChat] Token usage error:", err.message);
+    res.status(500).json({ error: "Failed to fetch token usage" });
+  }
+});
+
+router.get("/token-usage/tenants", async (req: Request, res: Response) => {
+  try {
+    const { from, to } = req.query;
+    const where: any = {};
+    if (from || to) {
+      where.createdAt = {};
+      if (from) where.createdAt.gte = new Date(from as string);
+      if (to) where.createdAt.lte = new Date(to as string);
+    }
+
+    const perTenant = await prisma.tokenLog.groupBy({
+      by: ["tenantId"],
+      where,
+      orderBy: { tenantId: "asc" },
+      _sum: { promptTokens: true, completionTokens: true, totalTokens: true },
+      _count: { id: true },
+    });
+
+    // Enrich with tenant names
+    const tenantIds = perTenant.map((t) => t.tenantId);
+    const tenants = tenantIds.length > 0
+      ? await prisma.tenant.findMany({ where: { id: { in: tenantIds } }, select: { id: true, name: true, slug: true } })
+      : [];
+    const tenantMap = Object.fromEntries(tenants.map((t) => [t.id, t]));
+
+    const data = perTenant.map((row) => ({
+      tenantId: row.tenantId,
+      tenantName: tenantMap[row.tenantId]?.name || "Unknown",
+      tenantSlug: tenantMap[row.tenantId]?.slug || "",
+      promptTokens: row._sum.promptTokens || 0,
+      completionTokens: row._sum.completionTokens || 0,
+      totalTokens: row._sum.totalTokens || 0,
+      count: row._count.id || 0,
+    }));
+
+    res.json({ data });
+  } catch (err: any) {
+    console.error("[SystemChat] Tenant token usage error:", err.message);
+    res.status(500).json({ error: "Failed to fetch tenant token usage" });
   }
 });
 

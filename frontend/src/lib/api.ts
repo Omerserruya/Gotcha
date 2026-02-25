@@ -537,6 +537,19 @@ export function askSystemChat(token: string, data: { question: string; history: 
   });
 }
 
+export function getTokenUsage(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{
+    totals: { promptTokens: number; completionTokens: number; totalTokens: number; count: number };
+    breakdown: any[];
+  }>(`/api/system-chat/token-usage${qs}`, { token });
+}
+
+export function getTokenUsageByTenants(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[] }>(`/api/system-chat/token-usage/tenants${qs}`, { token });
+}
+
 // ─── Magic Link ────────────────────────────────────────────
 
 export function verifyMagicLink(token: string) {

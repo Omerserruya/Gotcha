@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
-import { getSystemStats } from "@/lib/api";
+import { getSystemStats, getTokenUsage } from "@/lib/api";
 import { SystemLayout } from "@/components/SystemLayout";
 
 function StatCard({ label, value, sub }: { label: string; value: string | number; sub?: string }) {
@@ -19,13 +19,24 @@ function StatCard({ label, value, sub }: { label: string; value: string | number
 export default function SystemDashboardPage() {
   const { token } = useAuth();
   const [stats, setStats] = useState<any>(null);
+  const [tokenUsage, setTokenUsage] = useState<{ totalTokens: number; count: number; breakdown: any[] } | null>(null);
   const [loading, setLoading] = useState(true);
 
   const fetchStats = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await getSystemStats(token);
-      setStats(res.data);
+      const [statsRes, tokenRes] = await Promise.all([
+        getSystemStats(token),
+        getTokenUsage(token, { groupBy: "type" }).catch(() => null),
+      ]);
+      setStats(statsRes.data);
+      if (tokenRes) {
+        setTokenUsage({
+          totalTokens: tokenRes.totals.totalTokens,
+          count: tokenRes.totals.count,
+          breakdown: tokenRes.breakdown,
+        });
+      }
     } catch (err) {
       console.error("Failed to load system stats:", err);
     } finally {
@@ -57,6 +68,53 @@ export default function SystemDashboardPage() {
               <StatCard label="Messages" value={stats.messages || 0} />
               <StatCard label="Channels" value={stats.connectedChannels || 0} sub="connected" />
             </div>
+
+            {/* Token Usage */}
+            {tokenUsage && tokenUsage.totalTokens > 0 && (
+              <div className="bg-white rounded-2xl border border-gray-200 p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="font-semibold text-gray-900">AI Token Usage</h2>
+                  <Link href="/system/token-usage" className="text-xs text-orange-500 hover:text-orange-600 font-medium">
+                    View Details
+                  </Link>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+                  <div>
+                    <p className="text-xs text-gray-500">Total Tokens</p>
+                    <p className="text-lg font-bold text-gray-900">{tokenUsage.totalTokens.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">API Calls</p>
+                    <p className="text-lg font-bold text-gray-900">{tokenUsage.count.toLocaleString()}</p>
+                  </div>
+                  <div>
+                    <p className="text-xs text-gray-500">Est. Cost</p>
+                    <p className="text-lg font-bold text-green-600">
+                      {(() => {
+                        const cost = (tokenUsage.totalTokens / 1_000_000) * 0.15;
+                        return cost < 0.01 ? "<$0.01" : `$${cost.toFixed(2)}`;
+                      })()}
+                    </p>
+                  </div>
+                </div>
+                {tokenUsage.breakdown.length > 0 && (
+                  <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-500">By Type</p>
+                    <div className="flex flex-wrap gap-2">
+                      {tokenUsage.breakdown.map((row: any) => (
+                        <span
+                          key={row.type}
+                          className="inline-flex items-center gap-1.5 text-xs bg-orange-50 text-orange-700 rounded-full px-3 py-1"
+                        >
+                          <span className="font-medium">{row.type}</span>
+                          <span className="text-orange-400">{(row._sum?.totalTokens || 0).toLocaleString()}</span>
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
 
             {/* Recent Tenants */}
             <div className="bg-white rounded-2xl border border-gray-200 p-6">

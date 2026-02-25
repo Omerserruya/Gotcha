@@ -1,6 +1,7 @@
 import OpenAI from "openai";
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
+import { logTokenUsage } from "./tokenlog.service";
 
 export class OpenAIProvider implements AIProvider {
   private client: OpenAI;
@@ -47,6 +48,18 @@ export class OpenAIProvider implements AIProvider {
         response_format: { type: "json_object" },
       });
 
+      if (response.usage && context.tenantId) {
+        logTokenUsage({
+          tenantId: context.tenantId,
+          type: "suggestion",
+          model,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+          conversationId: context.conversationId,
+        });
+      }
+
       const content = response.choices[0]?.message?.content;
       if (!content) return [{ id: "empty", text: "No suggestions available.", confidence: 0, type: "info" }];
 
@@ -87,6 +100,18 @@ export class OpenAIProvider implements AIProvider {
           { role: "user", content: messagesText },
         ],
       });
+      if (response.usage && context.tenantId) {
+        logTokenUsage({
+          tenantId: context.tenantId,
+          type: "summary",
+          model,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+          conversationId: context.conversationId,
+        });
+      }
+
       return response.choices[0]?.message?.content || "Unable to generate summary.";
     } catch (err: any) {
       console.error("OpenAI summary error:", err.message);

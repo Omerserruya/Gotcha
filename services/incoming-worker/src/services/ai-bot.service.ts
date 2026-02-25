@@ -85,6 +85,20 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
       messages: chatMessages,
     });
 
+    if (response.usage) {
+      prisma.tokenLog.create({
+        data: {
+          tenantId,
+          type: "chat",
+          model: config.model || "gpt-4o-mini",
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+          conversationId,
+        },
+      }).catch((err: any) => console.error("[AI-Bot] Token log failed:", err.message));
+    }
+
     const replyText = response.choices[0]?.message?.content?.trim();
     if (!replyText) return false;
 

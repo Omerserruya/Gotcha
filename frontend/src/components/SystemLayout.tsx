@@ -13,6 +13,7 @@ const navItems = [
   { href: "/system/tenants", icon: TenantsIcon, label: "Tenants" },
   { href: "/system/onboarding", icon: OnboardingIcon, label: "Onboarding" },
   { href: "/system/chat", icon: ChatIcon, label: "AI Chat" },
+  { href: "/system/token-usage", icon: TokenUsageIcon, label: "Token Usage" },
 ];
 
 export function SystemLayout({ children }: { children: React.ReactNode }) {
@@ -98,7 +99,7 @@ export function SystemLayout({ children }: { children: React.ReactNode }) {
       {/* Mobile layout */}
       <div className="flex-1 flex flex-col md:contents overflow-hidden">
         <SystemMobileHeader />
-        <main className="flex-1 min-h-0 w-full md:pb-0 pb-[68px]">{children}</main>
+        <main className="flex-1 min-h-0 w-full md:pb-0 pb-[68px] overflow-y-auto">{children}</main>
         <SystemMobileBottomNav />
       </div>
     </div>
@@ -135,6 +136,14 @@ function ChatIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+    </svg>
+  );
+}
+
+function TokenUsageIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
     </svg>
   );
 }

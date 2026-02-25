@@ -11,6 +11,7 @@ import {
   processSystemDocument,
   deleteSystemDocument,
   askSystemChat,
+  getTokenUsage,
 } from "@/lib/api";
 import { SystemLayout } from "@/components/SystemLayout";
 import ReactMarkdown from "react-markdown";
@@ -52,6 +53,9 @@ export default function SystemChatPage() {
   const [selectedKbId, setSelectedKbId] = useState<string | null>(null);
   const [kbLoading, setKbLoading] = useState(true);
 
+  // Token usage
+  const [tokenCount, setTokenCount] = useState(0);
+
   // Toast
   const [toast, setToast] = useState<{ message: string; type: "error" | "success" } | null>(null);
   const showToast = (message: string, type: "error" | "success" = "error") => {
@@ -85,6 +89,19 @@ export default function SystemChatPage() {
   }, [token]);
 
   useEffect(() => { loadKBs(); }, [loadKBs]);
+
+  // Load token usage
+  const loadTokenUsage = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await getTokenUsage(token);
+      setTokenCount(res.totals.totalTokens);
+    } catch {
+      // silently ignore
+    }
+  }, [token]);
+
+  useEffect(() => { loadTokenUsage(); }, [loadTokenUsage]);
 
   // Auto-scroll
   useEffect(() => {
@@ -189,6 +206,7 @@ export default function SystemChatPage() {
       const history = messages.map((m) => ({ role: m.role, content: m.content }));
       const res = await askSystemChat(token, { question: q, history });
       setMessages((prev) => [...prev, { role: "assistant", content: res.answer, sources: res.sources }]);
+      loadTokenUsage();
     } catch (err) {
       setMessages((prev) => [...prev, { role: "assistant", content: "Sorry, an error occurred. Please try again." }]);
     } finally {
@@ -344,14 +362,21 @@ export default function SystemChatPage() {
               <h1 className="text-base font-semibold text-gray-900">AI Chat</h1>
               <p className="text-xs text-gray-400">Ask questions against your knowledge base</p>
             </div>
-            {messages.length > 0 && (
-              <button
-                onClick={() => setMessages([])}
-                className="text-xs font-medium text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition"
-              >
-                Clear Chat
-              </button>
-            )}
+            <div className="flex items-center gap-3">
+              {tokenCount > 0 && (
+                <span className="text-[10px] font-medium text-gray-400 bg-gray-100 rounded-full px-2.5 py-1">
+                  {tokenCount.toLocaleString()} tokens used
+                </span>
+              )}
+              {messages.length > 0 && (
+                <button
+                  onClick={() => setMessages([])}
+                  className="text-xs font-medium text-gray-400 hover:text-gray-600 px-3 py-1.5 rounded-lg hover:bg-gray-100 transition"
+                >
+                  Clear Chat
+                </button>
+              )}
+            </div>
           </div>
 
           {/* Messages */}

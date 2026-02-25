@@ -546,6 +546,28 @@ model KnowledgeChunk {
   @@map("knowledge_chunks")
 }
 
+// ─── Token Usage Logs ────────────────────────────────────────
+
+model TokenLog {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  type             String   // "chat" | "embedding" | "suggestion" | "summary" | "classification"
+  model            String   // "gpt-4o-mini", "text-embedding-3-small", etc.
+  promptTokens     Int      @map("prompt_tokens")
+  completionTokens Int      @default(0) @map("completion_tokens")
+  totalTokens      Int      @map("total_tokens")
+  conversationId   String?  @map("conversation_id")
+  documentId       String?  @map("document_id")
+  metadata         Json?
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@map("token_logs")
+}
+
 // ─── Magic Links (passwordless onboarding) ──────────────────
 
 model MagicLink {
