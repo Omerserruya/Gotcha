@@ -123,6 +123,12 @@
   },
   "hotPaths": [
     {
+      "path": "src/components/conversations/CoPilotPanel.tsx",
+      "accessCount": 24,
+      "lastAccessed": 1772038448168,
+      "type": "file"
+    },
+    {
       "path": "src",
       "accessCount": 16,
       "lastAccessed": 1772036443366,
@@ -147,9 +153,21 @@
       "type": "file"
     },
     {
+      "path": "src/lib/api.ts",
+      "accessCount": 7,
+      "lastAccessed": 1772037676984,
+      "type": "directory"
+    },
+    {
       "path": "src/app/bot/page.tsx",
       "accessCount": 5,
       "lastAccessed": 1772036413177,
+      "type": "file"
+    },
+    {
+      "path": "src/app/copilot/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772037096421,
       "type": "file"
     },
     {
@@ -171,10 +189,16 @@
       "type": "file"
     },
     {
-      "path": "src/lib/api.ts",
+      "path": "src/i18n/en.json",
       "accessCount": 4,
-      "lastAccessed": 1772036471181,
-      "type": "directory"
+      "lastAccessed": 1772037065741,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/he.json",
+      "accessCount": 4,
+      "lastAccessed": 1772037082864,
+      "type": "file"
     },
     {
       "path": "tailwind.config.ts",
@@ -201,6 +225,12 @@
       "type": "directory"
     },
     {
+      "path": "src/components",
+      "accessCount": 2,
+      "lastAccessed": 1772039092931,
+      "type": "directory"
+    },
+    {
       "path": "src/app/conversations/page.tsx",
       "accessCount": 1,
       "lastAccessed": 1772026230452,
@@ -222,18 +252,6 @@
       "path": "src/components/conversations/ConversationList.tsx",
       "accessCount": 1,
       "lastAccessed": 1772026233639,
-      "type": "file"
-    },
-    {
-      "path": "src/i18n/en.json",
-      "accessCount": 1,
-      "lastAccessed": 1772026240333,
-      "type": "file"
-    },
-    {
-      "path": "src/i18n/he.json",
-      "accessCount": 1,
-      "lastAccessed": 1772026240670,
       "type": "file"
     },
     {
@@ -306,6 +324,12 @@
       "path": "src/app/system/chat",
       "accessCount": 1,
       "lastAccessed": 1772036427477,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/conversations",
+      "accessCount": 1,
+      "lastAccessed": 1772039093875,
       "type": "directory"
     }
   ],

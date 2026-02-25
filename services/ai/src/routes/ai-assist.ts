@@ -118,6 +118,64 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
   } catch (err) { console.error("AI summary error:", err); res.status(500).json({ error: "Failed to get summary" }); }
 });
 
+// ─── Agent Chat with AI (CHAT mode) ──────────────────────────
+router.post("/:conversationId/chat", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const { message, history } = req.body;
+
+    if (!message || typeof message !== "string") {
+      res.status(400).json({ error: "message is required" });
+      return;
+    }
+
+    const conversation = await prisma.conversation.findFirst({
+      where: { id: convId, tenantId: req.tenantId! },
+      include: {
+        department: { select: { id: true, name: true } },
+        assignedAgent: { select: { name: true } },
+      },
+    });
+    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+
+    const messages = await prisma.message.findMany({
+      where: { conversationId: convId, tenantId: req.tenantId! },
+      orderBy: { createdAt: "asc" },
+      select: { direction: true, body: true, senderName: true, createdAt: true },
+    });
+
+    const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
+
+    const reply = await aiService.chatWithAgent({
+      tenantId: req.tenantId!,
+      conversationId: conversation.id,
+      customerName: conversation.customerName || undefined,
+      messages: messages.map((m: any) => ({
+        direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
+      })),
+      copilotConfig,
+      agentMessage: message,
+      chatHistory: Array.isArray(history) ? history : [],
+      customerData: {
+        externalId: conversation.customerExternalId,
+        name: conversation.customerName || undefined,
+        channel: conversation.channel,
+        status: conversation.status,
+        department: (conversation as any).department?.name || undefined,
+        assignedAgent: (conversation as any).assignedAgent?.name || undefined,
+        createdAt: conversation.createdAt.toISOString(),
+        lastMessageAt: conversation.lastMessageAt?.toISOString() || undefined,
+        isHandedOver: conversation.isHandedOver,
+      },
+    });
+
+    res.json({ data: { reply } });
+  } catch (err) {
+    console.error("AI chat error:", err);
+    res.status(500).json({ error: "Failed to get AI response" });
+  }
+});
+
 // Get effective copilot config for a department (SYSTEM_ADMIN only)
 router.get("/prompt/:departmentId", requireRole("SYSTEM_ADMIN"), async (req: Request, res: Response) => {
   try {

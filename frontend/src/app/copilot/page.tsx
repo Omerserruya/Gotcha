@@ -542,7 +542,7 @@ export default function CopilotPage() {
           {/* Copilot Mode Toggle */}
           <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
             <h4 className="font-semibold text-gray-900 mb-1">{t("copilotMode.label")}</h4>
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mt-3">
               <button
                 onClick={() => setCopilotMode("READY_MESSAGE")}
                 className={clsx(
@@ -562,6 +562,16 @@ export default function CopilotPage() {
               >
                 <p className="font-medium text-sm text-gray-900">{t("copilotMode.contextOnly")}</p>
                 <p className="text-xs text-gray-500 mt-1">{t("copilotMode.contextOnlyDesc")}</p>
+              </button>
+              <button
+                onClick={() => setCopilotMode("CHAT")}
+                className={clsx(
+                  "p-4 rounded-xl border-2 text-start transition",
+                  copilotMode === "CHAT" ? "border-violet-500 bg-violet-50" : "border-gray-200 hover:border-gray-300"
+                )}
+              >
+                <p className="font-medium text-sm text-gray-900">{t("copilotMode.chat")}</p>
+                <p className="text-xs text-gray-500 mt-1">{t("copilotMode.chatDesc")}</p>
               </button>
             </div>
           </div>

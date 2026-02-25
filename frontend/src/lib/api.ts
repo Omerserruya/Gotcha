@@ -418,6 +418,12 @@ export function getAISummary(token: string, conversationId: string) {
   return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary`, { token });
 }
 
+export function sendCopilotChat(token: string, conversationId: string, data: { message: string; history?: Array<{ role: string; content: string }> }) {
+  return apiFetch<{ data: { reply: string } }>(`/api/ai-assist/${conversationId}/chat`, {
+    token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
 // ─── Business Hours Settings ────────────────────────────────
 
 export function getBusinessHours(token: string) {

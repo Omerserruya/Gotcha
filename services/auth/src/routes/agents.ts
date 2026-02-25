@@ -438,7 +438,7 @@ router.get("/settings/bot-config", requireRole("ADMIN"), async (req: Request, re
 // ─── Co-Pilot Settings ──────────────────────────────────────
 
 const copilotSettingsSchema = z.object({
-  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY"]).optional(),
+  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY", "CHAT"]).optional(),
   systemPrompt: z.string().optional(),
   rules: z.array(z.string()).optional(),
   tools: z.array(z.object({

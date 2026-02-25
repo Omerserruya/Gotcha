@@ -204,7 +204,7 @@ router.get("/:id/copilot", requireDepartmentRole("MANAGER"), async (req: Request
 
 // PUT /:id/copilot - Update department copilot config (ADMIN or MANAGER)
 const deptCopilotSchema = z.object({
-  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY"]).optional(),
+  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY", "CHAT"]).optional(),
   systemPrompt: z.string().optional(),
   rules: z.array(z.string()).optional(),
   tools: z.array(z.object({

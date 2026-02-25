@@ -261,7 +261,9 @@
     "readyMessage": "Ready Message",
     "readyMessageDesc": "AI generates clickable reply suggestions that agents can insert directly",
     "contextOnly": "Context Only",
-    "contextOnlyDesc": "AI provides summary and text tips without insert buttons"
+    "contextOnlyDesc": "AI provides summary and text tips without insert buttons",
+    "chat": "AI Chat",
+    "chatDesc": "Agents can ask the AI anything — queries, lookups, and analysis using knowledge base and tools"
   },
   "history": {
     "title": "Chat History",

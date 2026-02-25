@@ -24,7 +24,7 @@ export interface CopilotConfigData {
   temperature: number;
   maxTokens: number;
   isActive: boolean;
-  copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY";
+  copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT";
 }
 
 export interface AISuggestion {
@@ -145,7 +145,7 @@ export async function getTenantCopilotConfig(tenantId: string): Promise<CopilotC
     temperature: config.temperature,
     maxTokens: config.maxTokens,
     isActive: config.isActive,
-    copilotMode: config.copilotMode as "READY_MESSAGE" | "CONTEXT_ONLY",
+    copilotMode: config.copilotMode as "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT",
   };
 }
 
@@ -181,7 +181,7 @@ export async function getEffectiveCopilotConfig(tenantId: string, departmentId?:
         temperature: deptConfig.temperature,
         maxTokens: deptConfig.maxTokens,
         isActive: deptConfig.isActive,
-        copilotMode: deptConfig.copilotMode as "READY_MESSAGE" | "CONTEXT_ONLY",
+        copilotMode: deptConfig.copilotMode as "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT",
       };
     }
   }
@@ -194,3 +194,26 @@ export async function getEffectiveCopilotConfig(tenantId: string, departmentId?:
 export async function getSuggestions(context: ConversationContext): Promise<AISuggestion[]> { return provider.suggestResponse(context); }
 export async function summarizeConversation(context: ConversationContext): Promise<string> { return provider.summarize(context); }
 export async function classifyMessage(message: string): Promise<IntentClassification> { return provider.classifyIntent(message); }
+
+export interface AgentChatParams extends ConversationContext {
+  agentMessage: string;
+  chatHistory: Array<{ role: "user" | "assistant"; content: string }>;
+  customerData?: {
+    externalId: string;
+    name?: string;
+    channel: string;
+    status: string;
+    department?: string;
+    assignedAgent?: string;
+    createdAt: string;
+    lastMessageAt?: string;
+    isHandedOver: boolean;
+  };
+}
+
+export async function chatWithAgent(params: AgentChatParams): Promise<string> {
+  if ("chatWithAgent" in provider && typeof (provider as any).chatWithAgent === "function") {
+    return (provider as any).chatWithAgent(params);
+  }
+  return "AI Chat is not available. Please configure an AI provider.";
+}

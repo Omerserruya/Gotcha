@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import type { AIProvider, ConversationContext, AISuggestion, IntentClassification } from "./ai-assist.service";
+import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { logTokenUsage } from "./tokenlog.service";
 
@@ -139,6 +139,101 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
+  async chatWithAgent(params: AgentChatParams): Promise<string> {
+    const config = params.copilotConfig;
+    if (config && !config.isActive) return "Co-Pilot is disabled.";
+
+    const model = config?.model || this.defaultModel;
+    const systemPrompt = this.buildSystemPrompt(config);
+    const chatMode = this.getModeInstruction("CHAT");
+
+    const messages: OpenAI.ChatCompletionMessageParam[] = [
+      { role: "system", content: systemPrompt + "\n\n" + chatMode },
+    ];
+
+    // Add conversation transcript as context
+    const transcript = params.messages
+      .filter((m) => m.body?.trim())
+      .map((m) => {
+        if (m.direction === "INBOUND") {
+          return `[Customer${params.customerName ? ` - ${params.customerName}` : ""}]: ${m.body}`;
+        }
+        return `[Agent${m.senderName ? ` - ${m.senderName}` : ""}]: ${m.body}`;
+      })
+      .join("\n");
+
+    // Add customer data context
+    if (params.customerData) {
+      const cd = params.customerData;
+      const customerBlock = [
+        `- Name: ${cd.name || "Unknown"}`,
+        `- External ID / Phone: ${cd.externalId}`,
+        `- Channel: ${cd.channel}`,
+        `- Conversation Status: ${cd.status}`,
+        cd.department && `- Department: ${cd.department}`,
+        cd.assignedAgent && `- Assigned Agent: ${cd.assignedAgent}`,
+        `- Conversation Started: ${cd.createdAt}`,
+        cd.lastMessageAt && `- Last Message: ${cd.lastMessageAt}`,
+        `- Handed Over to Human: ${cd.isHandedOver ? "Yes" : "No"}`,
+      ].filter(Boolean).join("\n");
+      messages.push({ role: "user", content: `## Customer & Conversation Info\n${customerBlock}` });
+      messages.push({ role: "assistant", content: "Noted. I have the customer and conversation details." });
+    }
+
+    if (transcript) {
+      messages.push({ role: "user", content: `## Conversation Transcript\n${transcript}` });
+      messages.push({ role: "assistant", content: "I've reviewed the conversation. How can I help you?" });
+    }
+
+    // Add KB context if available
+    try {
+      const lastCustomerMsg = [...params.messages].reverse().find((m) => m.direction === "INBOUND");
+      const query = params.agentMessage || lastCustomerMsg?.body || "";
+      if (query) {
+        const chunks = await retrieveRelevantChunks(params.tenantId, query, 5);
+        if (chunks.length > 0) {
+          const kbContext = buildKnowledgeContext(chunks);
+          messages.push({ role: "user", content: `## Knowledge Base\n${kbContext}` });
+          messages.push({ role: "assistant", content: "I've reviewed the knowledge base context. What would you like to know?" });
+        }
+      }
+    } catch { /* KB not available, continue without */ }
+
+    // Add agent chat history
+    for (const msg of params.chatHistory) {
+      messages.push({ role: msg.role === "user" ? "user" : "assistant", content: msg.content });
+    }
+
+    // Add current agent message
+    messages.push({ role: "user", content: params.agentMessage });
+
+    try {
+      const response = await this.client.chat.completions.create({
+        model,
+        temperature: config?.temperature ?? 0.7,
+        max_tokens: config?.maxTokens ?? 1024,
+        messages,
+      });
+
+      if (response.usage && params.tenantId) {
+        logTokenUsage({
+          tenantId: params.tenantId,
+          type: "chat",
+          model,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+          conversationId: params.conversationId,
+        });
+      }
+
+      return response.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
+    } catch (err: any) {
+      console.error("OpenAI agent chat error:", err.message);
+      return "Failed to get AI response. Please check API configuration.";
+    }
+  }
+
   private buildSystemPrompt(config?: ConversationContext["copilotConfig"] | null): string {
     let prompt = config?.systemPrompt || "You are a helpful customer support co-pilot. Suggest professional, empathetic replies for the agent to send to the customer.";
 
@@ -151,9 +246,12 @@ export class OpenAIProvider implements AIProvider {
     return prompt;
   }
 
-  private getModeInstruction(copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY"): string {
+  private getModeInstruction(copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT"): string {
     if (copilotMode === "CONTEXT_ONLY") {
       return 'Analyze this conversation. Provide key points, sentiment, and suggested next actions. Do NOT draft replies.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the analysis point), "confidence" (0-1), and "type" ("info"). Provide 2-4 insights.';
+    }
+    if (copilotMode === "CHAT") {
+      return 'You are an AI assistant for the agent. The agent can ask you anything about this conversation, the customer, or for help drafting responses. Use the knowledge base and available tools to provide accurate, helpful answers. Respond naturally in plain text — do NOT use JSON format. Be concise and actionable.';
     }
     // READY_MESSAGE (default)
     return 'Based on this conversation, suggest 2-3 reply options the agent could send next.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the suggested reply), "confidence" (0-1), and "type" ("reply", "action", or "info"). Provide 2-3 suggestions.';

@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
-import { getAISuggestions, getAISummary } from "@/lib/api";
+import { getAISuggestions, getAISummary, sendCopilotChat } from "@/lib/api";
 import clsx from "clsx";
 
 interface CoPilotPanelProps {
@@ -96,8 +96,14 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
   const { token } = useAuth();
   const [kbQuery, setKbQuery] = useState("");
   const [kbResults, setKbResults] = useState<{ title: string; snippet: string; source: string }[]>([]);
-  const [activeTab, setActiveTab] = useState<"suggest" | "search">("suggest");
+  const [activeTab, setActiveTab] = useState<"suggest" | "search" | "chat">("suggest");
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
+
+  // Chat mode state
+  type ChatMsg = { role: "user" | "assistant"; content: string };
+  const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput] = useState("");
+  const [chatLoading, setChatLoading] = useState(false);
 
   // AI-powered state
   const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number }[] | null>(null);
@@ -105,6 +111,11 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
   const [aiLoading, setAiLoading] = useState(false);
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [paused, setPaused] = useState(false);
+
+  // Auto-switch to chat tab when copilotMode is CHAT
+  useEffect(() => {
+    if (copilotMode === "CHAT") setActiveTab("chat");
+  }, [copilotMode]);
 
   // Determine if last message is outbound (skip auto-fetch in that case)
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
@@ -173,6 +184,24 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
     onInsertReply(text);
     setCopiedIdx(idx);
     setTimeout(() => setCopiedIdx(null), 2000);
+  }
+
+  async function handleChatSubmit(e: { preventDefault: () => void }) {
+    e.preventDefault();
+    if (!chatInput.trim() || chatLoading || !token || !conversation?.id) return;
+    const msg = chatInput.trim();
+    setChatInput("");
+    const updated = [...chatMessages, { role: "user" as const, content: msg }];
+    setChatMessages(updated);
+    setChatLoading(true);
+    try {
+      const res = await sendCopilotChat(token, conversation.id, { message: msg, history: chatMessages });
+      setChatMessages([...updated, { role: "assistant" as const, content: res.data.reply }]);
+    } catch (_err) {
+      setChatMessages([...updated, { role: "assistant" as const, content: "Failed to get response. Please try again." }]);
+    } finally {
+      setChatLoading(false);
+    }
   }
 
   return (
@@ -289,6 +318,20 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
             <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
           )}
         </button>
+        <button
+          onClick={() => setActiveTab("chat")}
+          className={clsx(
+            "flex-1 py-2.5 text-xs font-medium transition-all relative",
+            activeTab === "chat"
+              ? "text-primary-600"
+              : "text-gray-400 hover:text-gray-600"
+          )}
+        >
+          AI Chat
+          {activeTab === "chat" && (
+            <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
+          )}
+        </button>
       </div>
 
       {/* Content */}
@@ -399,7 +442,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
               </div>
             </div>
           </div>
-        ) : (
+        ) : activeTab === "search" ? (
           <div className="p-3 space-y-3">
             {/* Search input */}
             <div className="relative">
@@ -473,7 +516,71 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
               </div>
             )}
           </div>
-        )}
+        ) : activeTab === "chat" ? (
+          <div className="flex flex-col h-full">
+            {/* Chat messages */}
+            <div className="flex-1 overflow-y-auto p-3 space-y-2.5">
+              {chatMessages.length === 0 && (
+                <div className="text-center py-8">
+                  <div className="w-12 h-12 bg-violet-50 rounded-xl flex items-center justify-center mx-auto mb-2">
+                    <svg className="w-6 h-6 text-violet-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+                    </svg>
+                  </div>
+                  <p className="text-xs text-gray-500 font-medium">Ask the AI anything</p>
+                  <p className="text-[10px] text-gray-400 mt-1">Questions about the conversation, customer, KB lookups, draft replies...</p>
+                </div>
+              )}
+              {chatMessages.map((msg, i) => (
+                <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                  <div className={clsx(
+                    "max-w-[85%] rounded-xl px-3 py-2 text-xs leading-relaxed",
+                    msg.role === "user"
+                      ? "bg-violet-500 text-white rounded-br-sm"
+                      : "bg-gray-100 text-gray-700 rounded-bl-sm"
+                  )}>
+                    {msg.content.split("\n").map((line, li) => (
+                      <span key={li}>{line}{li < msg.content.split("\n").length - 1 && <br />}</span>
+                    ))}
+                  </div>
+                </div>
+              ))}
+              {chatLoading && (
+                <div className="flex justify-start">
+                  <div className="bg-gray-100 rounded-xl rounded-bl-sm px-3 py-2">
+                    <div className="flex gap-1">
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "0ms" }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }} />
+                      <div className="w-1.5 h-1.5 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }} />
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+            {/* Chat input */}
+            <div className="border-t border-gray-100 p-2.5">
+              <form onSubmit={handleChatSubmit} className="flex items-center gap-1.5">
+                <input
+                  type="text"
+                  value={chatInput}
+                  onChange={(e) => setChatInput(e.target.value)}
+                  placeholder="Ask the AI..."
+                  disabled={chatLoading}
+                  className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition disabled:opacity-50"
+                />
+                <button
+                  type="submit"
+                  disabled={chatLoading || !chatInput.trim()}
+                  className="w-8 h-8 bg-violet-500 hover:bg-violet-600 text-white rounded-lg flex items-center justify-center transition disabled:opacity-40 shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" />
+                  </svg>
+                </button>
+              </form>
+            </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Footer */}
