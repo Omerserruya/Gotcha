@@ -65,7 +65,12 @@
     "channelWhatsApp": "WhatsApp",
     "channelMessenger": "Messenger",
     "channelInstagram": "Instagram",
-    "channelFilter": "Channel"
+    "channelFilter": "Channel",
+    "markUnread": "Mark as unread",
+    "deleteChat": "Delete chat",
+    "deleteConfirmTitle": "Delete chat?",
+    "deleteConfirmMsg": "This chat and all its messages will be permanently deleted.",
+    "chatDeleted": "Chat deleted"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -530,6 +535,86 @@
     "createKb": "New KB",
     "addDocument": "Add Document",
     "documents": "documents"
+  },
+  "landing": {
+    "nav": {
+      "features": "Features",
+      "channels": "Channels",
+      "pricing": "Pricing",
+      "login": "Login",
+      "getStarted": "Get Started"
+    },
+    "hero": {
+      "badge": "AI-Powered Communication Platform",
+      "title1": "Turn every conversation",
+      "title2": "into a relationship",
+      "subtitle": "GOTCHA unifies WhatsApp, Messenger & Instagram into one AI-powered workspace. Your agents get smarter, your customers get happier.",
+      "cta": "Start Free",
+      "ctaSecondary": "See How It Works",
+      "trustedBy": "Supported Integrations"
+    },
+    "features": {
+      "label": "Features",
+      "title": "Everything you need to delight customers",
+      "subtitle": "One platform to manage all conversations, powered by AI that actually helps.",
+      "copilot": {
+        "title": "AI Co-Pilot",
+        "desc": "Smart reply suggestions, context summaries, and knowledge-powered answers — your agents are never alone."
+      },
+      "channels": {
+        "title": "Multi-Channel Inbox",
+        "desc": "WhatsApp, Messenger, and Instagram in one unified inbox. No more switching between apps."
+      },
+      "routing": {
+        "title": "Smart Routing",
+        "desc": "Auto-assign conversations to the right department and agent with SLA tracking built in."
+      },
+      "knowledge": {
+        "title": "Knowledge Base",
+        "desc": "Upload documents, connect Confluence or Drive — your AI learns your business and answers accurately."
+      },
+      "analytics": {
+        "title": "Real-Time Analytics",
+        "desc": "Monitor response times, agent workload, conversation volume, and SLA compliance in real time."
+      },
+      "botBuilder": {
+        "title": "Visual Bot Builder",
+        "desc": "Design conversation flows with a drag-and-drop builder. Automate FAQs and route to agents when needed."
+      }
+    },
+    "howItWorks": {
+      "label": "How It Works",
+      "title": "Up and running in minutes",
+      "subtitle": "Three simple steps to transform your customer communication.",
+      "step1": {
+        "title": "Connect your channels",
+        "desc": "Link WhatsApp, Messenger, or Instagram in one click. Messages flow into your unified inbox instantly."
+      },
+      "step2": {
+        "title": "Configure your AI",
+        "desc": "Set up your knowledge base and co-pilot rules. The AI adapts to your brand voice and business logic."
+      },
+      "step3": {
+        "title": "Start conversations",
+        "desc": "Your team handles conversations with AI assistance. Smart routing ensures no customer waits too long."
+      }
+    },
+    "cta": {
+      "title": "Ready to transform your customer communication?",
+      "subtitle": "Join teams who deliver faster, smarter, and more personal support with GOTCHA.",
+      "button": "Get Started Free"
+    },
+    "footer": {
+      "product": "Product",
+      "company": "Company",
+      "legal": "Legal",
+      "about": "About",
+      "blog": "Blog",
+      "careers": "Careers",
+      "privacy": "Privacy Policy",
+      "terms": "Terms of Service",
+      "copyright": "All rights reserved."
+    }
   },
   "confirm": {
     "deleteTitle": "Confirm Deletion",

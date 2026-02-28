@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1772022848850,
+  "lastScanned": 1772197440846,
   "projectRoot": "/home/ocs/projects/ChatCenter",
   "techStack": {
     "languages": [
@@ -56,7 +56,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 3,
-      "lastAccessed": 1772022848814,
+      "lastAccessed": 1772197440808,
       "keyFiles": [
         "SERVICE_REFERENCE.md",
         "SYSTEM_ARCHITECTURE.md",
@@ -67,7 +67,7 @@
       "path": "frontend",
       "purpose": null,
       "fileCount": 9,
-      "lastAccessed": 1772022848814,
+      "lastAccessed": 1772197440808,
       "keyFiles": [
         "Dockerfile",
         "next-env.d.ts",
@@ -80,7 +80,7 @@
       "path": "nginx",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1772022848815,
+      "lastAccessed": 1772197440809,
       "keyFiles": [
         "nginx.conf.template"
       ]
@@ -89,28 +89,28 @@
       "path": "packages",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1772022848815,
+      "lastAccessed": 1772197440809,
       "keyFiles": []
     },
     "services": {
       "path": "services",
       "purpose": "Business logic services",
       "fileCount": 0,
-      "lastAccessed": 1772022848815,
+      "lastAccessed": 1772197440809,
       "keyFiles": []
     },
     "frontend/node_modules": {
       "path": "frontend/node_modules",
       "purpose": "Dependencies",
       "fileCount": 1,
-      "lastAccessed": 1772022848816,
+      "lastAccessed": 1772197440813,
       "keyFiles": []
     },
     "frontend/public": {
       "path": "frontend/public",
       "purpose": "Public files",
       "fileCount": 3,
-      "lastAccessed": 1772022848816,
+      "lastAccessed": 1772197440813,
       "keyFiles": [
         "apple-touch-icon.png",
         "favicon.ico",
@@ -120,87 +120,141 @@
   },
   "hotPaths": [
     {
-      "path": "frontend/src/app/system/chat/page.tsx",
+      "path": "frontend/src/app/globals.css",
       "accessCount": 6,
-      "lastAccessed": 1772023086677,
+      "lastAccessed": 1772281597639,
       "type": "file"
     },
     {
-      "path": "services/ai/src/routes/system-chat.ts",
+      "path": "frontend/src/i18n/en.json",
       "accessCount": 5,
-      "lastAccessed": 1772022999001,
+      "lastAccessed": 1772281604044,
       "type": "file"
     },
     {
-      "path": "services/ai/src/services/openai.provider.ts",
+      "path": "frontend/src/i18n/he.json",
+      "accessCount": 5,
+      "lastAccessed": 1772281604269,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/landing/LandingPage.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772282030291,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/page.tsx",
       "accessCount": 4,
-      "lastAccessed": 1772022948801,
+      "lastAccessed": 1772281597248,
       "type": "file"
     },
     {
-      "path": "services/ai/src/services/embedding.service.ts",
-      "accessCount": 4,
-      "lastAccessed": 1772023019487,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/system/page.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1772023108529,
-      "type": "file"
-    },
-    {
-      "path": "packages/shared/prisma/schema.prisma",
+      "path": "frontend/src/app/layout.tsx",
       "accessCount": 2,
-      "lastAccessed": 1772022890548,
+      "lastAccessed": 1772197572772,
       "type": "file"
     },
     {
-      "path": "services",
+      "path": "frontend/tailwind.config.ts",
       "accessCount": 2,
-      "lastAccessed": 1772023023502,
-      "type": "directory"
-    },
-    {
-      "path": "services/ai/src/services/knowledge.service.ts",
-      "accessCount": 2,
-      "lastAccessed": 1772023032243,
+      "lastAccessed": 1772197574097,
       "type": "file"
     },
     {
-      "path": "services/incoming-worker/src/services/ai-bot.service.ts",
+      "path": "frontend/src/context/I18nContext.tsx",
       "accessCount": 2,
-      "lastAccessed": 1772023042651,
+      "lastAccessed": 1772197589929,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/i18n/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772197595023,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772197522454,
+      "type": "file"
+    },
+    {
+      "path": "frontend/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772197524775,
+      "type": "file"
+    },
+    {
+      "path": "frontend/next.config.js",
+      "accessCount": 1,
+      "lastAccessed": 1772197524985,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/providers.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772197531447,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/context/AuthContext.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772197531790,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/AppLayout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772197534918,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/Sidebar.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772197535196,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/login/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772197537507,
+      "type": "file"
+    },
+    {
+      "path": "frontend/tsconfig.json",
+      "accessCount": 1,
+      "lastAccessed": 1772197538183,
       "type": "file"
     },
     {
       "path": "frontend/src/lib/api.ts",
-      "accessCount": 2,
-      "lastAccessed": 1772023056480,
+      "accessCount": 1,
+      "lastAccessed": 1772197540241,
       "type": "file"
     },
     {
-      "path": "packages/shared/prisma/migrations/0020_add_token_logs/migration.sql",
+      "path": "frontend/src/app/setup/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1772022907811,
+      "lastAccessed": 1772197540591,
       "type": "file"
     },
     {
-      "path": "services/ai/src",
+      "path": "frontend/src/app/conversations/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1772022914999,
-      "type": "directory"
-    },
-    {
-      "path": "services/ai/src/services/tokenlog.service.ts",
-      "accessCount": 1,
-      "lastAccessed": 1772022920391,
+      "lastAccessed": 1772197540855,
       "type": "file"
     },
     {
-      "path": "services/ai/src/services/ai-assist.service.ts",
+      "path": "frontend/src/app/en/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1772022927314,
+      "lastAccessed": 1772197879151,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/he/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772197879871,
       "type": "file"
     }
   ],

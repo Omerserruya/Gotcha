@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getConversations, getDepartments, getSlaSettings, getDepartmentSla } from "@/lib/api";
+import { getConversations, getDepartments, getSlaSettings, getDepartmentSla, deleteConversation } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
 import { formatDistanceToNow } from "date-fns";
 import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
+import ConfirmModal from "@/components/ConfirmModal";
 
 interface Props {
   selectedId: string | null;
@@ -18,7 +19,16 @@ function getLastReadMap(): Record<string, string> {
   try { return JSON.parse(localStorage.getItem("chatcenter:lastRead") || "{}"); } catch { return {}; }
 }
 
-function isUnread(conv: any, lastReadMap: Record<string, string>): boolean {
+function getMarkedUnread(): Set<string> {
+  try { return new Set(JSON.parse(localStorage.getItem("chatcenter:markedUnread") || "[]")); } catch { return new Set(); }
+}
+
+function saveMarkedUnread(set: Set<string>) {
+  localStorage.setItem("chatcenter:markedUnread", JSON.stringify(Array.from(set)));
+}
+
+function isUnread(conv: any, lastReadMap: Record<string, string>, markedUnread: Set<string>): boolean {
+  if (markedUnread.has(conv.id)) return true;
   if (!conv.lastMessageAt || conv.lastMessageDirection !== "INBOUND") return false;
   const lastRead = lastReadMap[conv.id];
   if (!lastRead) return true;
@@ -37,6 +47,71 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [lastReadMap, setLastReadMap] = useState<Record<string, string>>(getLastReadMap);
   const [slaConfig, setSlaConfig] = useState<{ enabled: boolean; slaMinutes: number; warningThreshold: number } | null>(null);
   const [deptSlaMap, setDeptSlaMap] = useState<Record<string, { enabled: boolean; slaMinutes: number }>>({});
+  const [markedUnread, setMarkedUnread] = useState<Set<string>>(getMarkedUnread);
+  const [contextMenu, setContextMenu] = useState<{ convId: string; x: number; y: number } | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const contextMenuRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLDivElement>(null);
+
+  const handleSelect = useCallback((id: string) => {
+    // Clear markedUnread when opening a conversation
+    setMarkedUnread((prev) => {
+      if (!prev.has(id)) return prev;
+      const next = new Set(prev);
+      next.delete(id);
+      saveMarkedUnread(next);
+      return next;
+    });
+    onSelect(id);
+  }, [onSelect]);
+
+  const handleContextMenu = useCallback((e: React.MouseEvent, convId: string) => {
+    e.preventDefault();
+    setContextMenu({ convId, x: e.clientX, y: e.clientY });
+  }, []);
+
+  const closeContextMenu = useCallback(() => setContextMenu(null), []);
+
+  const handleMarkUnread = useCallback(() => {
+    if (!contextMenu) return;
+    setMarkedUnread((prev) => {
+      const next = new Set(prev);
+      next.add(contextMenu.convId);
+      saveMarkedUnread(next);
+      return next;
+    });
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  const handleDeleteClick = useCallback(() => {
+    if (!contextMenu) return;
+    setDeleteTarget(contextMenu.convId);
+    setContextMenu(null);
+  }, [contextMenu]);
+
+  // Close context menu on click outside, scroll, or Escape
+  useEffect(() => {
+    if (!contextMenu) return;
+    const handleClick = (e: MouseEvent) => {
+      if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+        closeContextMenu();
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closeContextMenu();
+    };
+    const handleScroll = () => closeContextMenu();
+    document.addEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKeyDown);
+    listRef.current?.addEventListener("scroll", handleScroll);
+    const listEl = listRef.current;
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKeyDown);
+      listEl?.removeEventListener("scroll", handleScroll);
+    };
+  }, [contextMenu, closeContextMenu]);
 
   const fetchConversations = useCallback(async () => {
     if (!token) return;
@@ -53,6 +128,20 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       setLoading(false);
     }
   }, [token, search, channelFilter, departmentFilter]);
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!token || !deleteTarget) return;
+    setDeleteLoading(true);
+    try {
+      await deleteConversation(token, deleteTarget, true);
+      setDeleteTarget(null);
+      fetchConversations();
+    } catch (err) {
+      console.error("Failed to delete conversation:", err);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [token, deleteTarget, fetchConversations]);
 
   useEffect(() => {
     fetchConversations();
@@ -249,7 +338,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto">
+      <div className="flex-1 overflow-y-auto" ref={listRef}>
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
@@ -287,7 +376,8 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                 section.items.map((conv) => (
                   <button
                     key={conv.id}
-                    onClick={() => onSelect(conv.id)}
+                    onClick={() => handleSelect(conv.id)}
+                    onContextMenu={(e) => handleContextMenu(e, conv.id)}
                     className={clsx(
                       "w-full text-start px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors",
                       selectedId === conv.id && "bg-primary-50 border-e-2 border-e-primary-500"
@@ -307,19 +397,19 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                             <ChannelBadge channel={conv.channel} />
                             <p className={clsx(
                               "font-semibold text-sm truncate",
-                              isUnread(conv, lastReadMap) ? "text-gray-900" : "text-gray-900"
+                              isUnread(conv, lastReadMap, markedUnread) ? "text-gray-900" : "text-gray-900"
                             )}>
                               {conv.customerName || conv.customerExternalId || conv.customerPhone}
                             </p>
                           </div>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {isUnread(conv, lastReadMap) && (
+                            {isUnread(conv, lastReadMap, markedUnread) && (
                               <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-sm shadow-blue-500/30" title="Unread" />
                             )}
                             {conv.lastMessageAt && (
                               <span className={clsx(
                                 "text-[10px] shrink-0",
-                                isUnread(conv, lastReadMap) ? "text-blue-500 font-semibold" : "text-gray-400"
+                                isUnread(conv, lastReadMap, markedUnread) ? "text-blue-500 font-semibold" : "text-gray-400"
                               )}>
                                 {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
                               </span>
@@ -328,7 +418,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                         </div>
                         <p className={clsx(
                           "text-xs truncate mt-0.5",
-                          isUnread(conv, lastReadMap) ? "text-gray-700 font-medium" : "text-gray-500"
+                          isUnread(conv, lastReadMap, markedUnread) ? "text-gray-700 font-medium" : "text-gray-500"
                         )}>
                           {conv.lastMessageBody || conv.customerPhone}
                         </p>
@@ -354,6 +444,48 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           ))
         )}
       </div>
+
+      {/* Context menu */}
+      {contextMenu && (
+        <div
+          ref={contextMenuRef}
+          className="fixed z-50 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[180px] animate-in fade-in zoom-in-95 duration-150"
+          style={{ top: contextMenu.y, left: contextMenu.x }}
+        >
+          <button
+            onClick={handleMarkUnread}
+            className="w-full text-start px-4 py-2.5 text-sm text-gray-700 hover:bg-gray-50 flex items-center gap-2.5 transition-colors"
+          >
+            <svg className="w-4 h-4 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21.75 9v.906a2.25 2.25 0 01-1.183 1.981l-6.478 3.488M2.25 9v.906a2.25 2.25 0 001.183 1.981l6.478 3.488m8.839 2.51l-4.66-2.51m0 0l-1.023-.55a2.25 2.25 0 00-2.134 0l-1.022.55m0 0l-4.661 2.51m16.5 1.615a2.25 2.25 0 01-2.25 2.25h-15a2.25 2.25 0 01-2.25-2.25V8.844a2.25 2.25 0 011.183-1.981l7.5-4.039a2.25 2.25 0 012.134 0l7.5 4.039a2.25 2.25 0 011.183 1.98V19.5z" />
+            </svg>
+            {t("conversations.markUnread")}
+          </button>
+          {user?.role === "ADMIN" && (
+            <button
+              onClick={handleDeleteClick}
+              className="w-full text-start px-4 py-2.5 text-sm text-red-600 hover:bg-red-50 flex items-center gap-2.5 transition-colors"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+              {t("conversations.deleteChat")}
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Delete confirmation modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        title={t("conversations.deleteConfirmTitle")}
+        message={t("conversations.deleteConfirmMsg")}
+        confirmText={t("common.delete")}
+        danger
+        loading={deleteLoading}
+        onConfirm={handleDeleteConfirm}
+        onCancel={() => setDeleteTarget(null)}
+      />
     </>
   );
 }

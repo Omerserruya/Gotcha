@@ -159,6 +159,12 @@
       "type": "directory"
     },
     {
+      "path": "src/components/landing/LandingPage.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1772202525993,
+      "type": "file"
+    },
+    {
       "path": "src/app/bot/page.tsx",
       "accessCount": 5,
       "lastAccessed": 1772036413177,
@@ -168,6 +174,12 @@
       "path": "src/app/copilot/page.tsx",
       "accessCount": 5,
       "lastAccessed": 1772037096421,
+      "type": "file"
+    },
+    {
+      "path": "src/components/conversations/ConversationList.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772046488472,
       "type": "file"
     },
     {
@@ -198,6 +210,12 @@
       "path": "src/i18n/he.json",
       "accessCount": 4,
       "lastAccessed": 1772037082864,
+      "type": "file"
+    },
+    {
+      "path": "src/app/globals.css",
+      "accessCount": 4,
+      "lastAccessed": 1772202233887,
       "type": "file"
     },
     {
@@ -247,12 +265,6 @@
       "accessCount": 1,
       "lastAccessed": 1772026231253,
       "type": "directory"
-    },
-    {
-      "path": "src/components/conversations/ConversationList.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772026233639,
-      "type": "file"
     },
     {
       "path": "src/i18n",
