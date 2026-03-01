@@ -242,6 +242,41 @@ body {
     landing-platform-shine 0.6s ease-in-out 0.3s forwards;
 }
 
+/* ───── Early Access form transitions ───── */
+@keyframes ea-slide-in-from-right {
+  from { transform: translateX(40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+@keyframes ea-slide-in-from-left {
+  from { transform: translateX(-40px); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.ea-step-forward { animation: ea-slide-in-from-right 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+.ea-step-backward { animation: ea-slide-in-from-left 0.35s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+[dir="rtl"] .ea-step-forward { animation-name: ea-slide-in-from-left; }
+[dir="rtl"] .ea-step-backward { animation-name: ea-slide-in-from-right; }
+
+.ea-progress-fill {
+  transform-origin: left;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+[dir="rtl"] .ea-progress-fill { transform-origin: right; }
+
+@keyframes ea-pop-in {
+  0% { transform: scale(0.8); opacity: 0; }
+  60% { transform: scale(1.05); opacity: 1; }
+  100% { transform: scale(1); opacity: 1; }
+}
+.ea-pop-in { animation: ea-pop-in 0.5s cubic-bezier(0.16, 1, 0.3, 1) both; }
+
+@keyframes ea-check-draw {
+  from { stroke-dashoffset: 48; }
+  to { stroke-dashoffset: 0; }
+}
+.ea-check-draw { stroke-dasharray: 48; animation: ea-check-draw 0.5s ease-out 0.3s both; }
+
 /* Dark section with vignette (Kinso-style) */
 .landing-dark-section {
   background: linear-gradient(180deg, #333 0%, #121212 8%, #121212 92%, #333 100%);

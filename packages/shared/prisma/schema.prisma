@@ -584,6 +584,24 @@ model MagicLink {
   @@map("magic_links")
 }
 
+// ─── Waitlist ───────────────────────────────────────────────
+
+model WaitlistEntry {
+  id          String    @id @default(cuid())
+  firstName   String    @map("first_name")
+  email       String    @unique
+  phone       String?
+  role        String
+  companySize String    @map("company_size")
+  frustration String?
+  source      String    @default("early-access-form")
+  convertedAt DateTime? @map("converted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  @@index([createdAt])
+  @@map("waitlist_entries")
+}
+
 // ─── Refresh Tokens ─────────────────────────────────────────
 
 model RefreshToken {

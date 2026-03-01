@@ -120,15 +120,237 @@
   },
   "hotPaths": [
     {
+      "path": "frontend/src/components/landing/LandingPage.tsx",
+      "accessCount": 32,
+      "lastAccessed": 1772394317414,
+      "type": "file"
+    },
+    {
       "path": "frontend/src/i18n/en.json",
-      "accessCount": 1,
-      "lastAccessed": 1772391470703,
+      "accessCount": 9,
+      "lastAccessed": 1772394197878,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/index.ts",
+      "accessCount": 7,
+      "lastAccessed": 1772394161984,
       "type": "file"
     },
     {
       "path": "frontend/src/i18n/he.json",
+      "accessCount": 6,
+      "lastAccessed": 1772394230845,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/prisma/schema.prisma",
+      "accessCount": 5,
+      "lastAccessed": 1772394116801,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/globals.css",
+      "accessCount": 5,
+      "lastAccessed": 1772394248957,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/lib/api.ts",
+      "accessCount": 5,
+      "lastAccessed": 1772394258197,
+      "type": "file"
+    },
+    {
+      "path": "nginx/nginx.conf.template",
+      "accessCount": 4,
+      "lastAccessed": 1772394168042,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/ConfirmModal.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1772393765423,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/en/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1772394091467,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/onboarding.ts",
+      "accessCount": 3,
+      "lastAccessed": 1772394100007,
+      "type": "file"
+    },
+    {
+      "path": "frontend/package.json",
+      "accessCount": 2,
+      "lastAccessed": 1772393644221,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/setup/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772393737455,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/context/I18nContext.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772393737615,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772393738129,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/auth.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772393765918,
+      "type": "file"
+    },
+    {
+      "path": "frontend",
+      "accessCount": 2,
+      "lastAccessed": 1772393774715,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/tailwind.config.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772393790390,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src/middleware/validate.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772393978250,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/i18n/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772394315832,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/layout.tsx",
       "accessCount": 1,
-      "lastAccessed": 1772391471236,
+      "lastAccessed": 1772393637163,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/he/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772393637601,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/providers.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772393640653,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 1,
+      "lastAccessed": 1772393641364,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/context/AuthContext.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772393643746,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772393644001,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components",
+      "accessCount": 1,
+      "lastAccessed": 1772393646431,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/app/setup/verify/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772393647751,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772393655180,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772393656224,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app",
+      "accessCount": 1,
+      "lastAccessed": 1772393659747,
+      "type": "directory"
+    },
+    {
+      "path": "frontend/src/components/conversations/ChatPanel.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772393665492,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src",
+      "accessCount": 1,
+      "lastAccessed": 1772393761203,
+      "type": "directory"
+    },
+    {
+      "path": "packages/shared",
+      "accessCount": 1,
+      "lastAccessed": 1772393775584,
+      "type": "directory"
+    },
+    {
+      "path": "packages/shared/src/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772393780463,
+      "type": "file"
+    },
+    {
+      "path": "packages/shared/src",
+      "accessCount": 1,
+      "lastAccessed": 1772393973455,
+      "type": "directory"
+    },
+    {
+      "path": "services/auth/src/routes/waitlist.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772394143880,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/early-access/EarlyAccessForm.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772394373156,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/early-access/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772394380097,
       "type": "file"
     }
   ],

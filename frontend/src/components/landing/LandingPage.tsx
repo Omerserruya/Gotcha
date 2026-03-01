@@ -184,7 +184,7 @@ function MobileMenu({
           <Link href="/login" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
             {t("landing.nav.login")}
           </Link>
-          <Link href="/login" onClick={onClose} className="mt-2 px-4 py-3 text-[15px] font-semibold text-white bg-primary-500 rounded-xl text-center hover:bg-primary-600 transition-colors">
+          <Link href="/early-access" onClick={onClose} className="mt-2 px-4 py-3 text-[15px] font-semibold text-white bg-primary-500 rounded-xl text-center hover:bg-primary-600 transition-colors">
             {t("landing.nav.getStarted")}
           </Link>
         </nav>
@@ -548,7 +548,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
                 {t("landing.nav.login")}
               </Link>
             </div>
-            <Link href="/login" className="hidden sm:inline-flex px-5 py-2 text-[13px] font-semibold text-white bg-primary-500 rounded-full hover:bg-primary-600 transition-all">
+            <Link href="/early-access" className="hidden sm:inline-flex px-5 py-2 text-[13px] font-semibold text-white bg-primary-500 rounded-full hover:bg-primary-600 transition-all">
               {t("landing.nav.getStarted")}
             </Link>
             {/* Mobile hamburger */}
@@ -594,7 +594,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
             </p>
             <div className="flex flex-wrap gap-3 landing-fade-in landing-delay-2 justify-center lg:justify-start">
               <Link
-                href="/login"
+                href="/early-access"
                 className="px-6 py-3 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-colors"
                 style={{ boxShadow: "0 2px 8px rgba(124,92,252,0.25)" }}
               >
@@ -902,7 +902,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
             {t("landing.cta.subtitle")}
           </p>
           <Link
-            href="/login"
+            href="/early-access"
             className="inline-flex px-8 py-3.5 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-colors"
             style={{ boxShadow: "0 2px 12px rgba(124,92,252,0.3)" }}
           >

@@ -108,15 +108,21 @@
       "type": "file"
     },
     {
-      "path": "src/routes/auth.ts",
-      "accessCount": 3,
-      "lastAccessed": 1771842195928,
+      "path": "src/services/notification.service.ts",
+      "accessCount": 10,
+      "lastAccessed": 1772396291706,
       "type": "file"
     },
     {
-      "path": "src/services/notification.service.ts",
+      "path": "src/routes/waitlist.ts",
+      "accessCount": 5,
+      "lastAccessed": 1772395938364,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/auth.ts",
       "accessCount": 3,
-      "lastAccessed": 1771843278921,
+      "lastAccessed": 1771842195928,
       "type": "file"
     },
     {
@@ -171,6 +177,12 @@
       "path": "src/routes",
       "accessCount": 1,
       "lastAccessed": 1771950823321,
+      "type": "directory"
+    },
+    {
+      "path": "src",
+      "accessCount": 1,
+      "lastAccessed": 1772395564899,
       "type": "directory"
     }
   ],

@@ -542,14 +542,14 @@
       "channels": "How It Works",
       "pricing": "Pricing",
       "login": "Login",
-      "getStarted": "Get Started"
+      "getStarted": "Get Early Access"
     },
     "hero": {
       "badge": "Where conversations become customers",
       "title1": "Stop losing customers on",
       "title2": "One inbox. Every channel. AI that actually works.",
       "subtitle": "Your team juggles WhatsApp, Messenger, and Instagram in separate tabs. Customers wait. Context gets lost. GOTCHA fixes that.",
-      "cta": "Start Free",
+      "cta": "Get Early Access",
       "ctaSecondary": "See How It Works",
       "trustedBy": "Works with your channels"
     },
@@ -636,7 +636,7 @@
     "cta": {
       "title": "Your customers are already messaging you. Are you keeping up?",
       "subtitle": "Join the teams that reply faster, sell more, and never lose a conversation again.",
-      "button": "Start Free"
+      "button": "Get Early Access"
     },
     "footer": {
       "product": "Product",
@@ -648,6 +648,76 @@
       "privacy": "Privacy Policy",
       "terms": "Terms of Service",
       "copyright": "All rights reserved."
+    }
+  },
+  "earlyAccess": {
+    "title": "Get Early Access",
+    "stepOf": "Step {current} of {total}",
+    "pressEnter": "Press Enter",
+    "ok": "OK",
+    "submit": "Submit",
+    "skip": "Skip",
+    "back": "Back",
+    "steps": {
+      "firstName": {
+        "label": "What's your first name?",
+        "placeholder": "Jane",
+        "micro": "So we know what to call you."
+      },
+      "email": {
+        "label": "What's your work email?",
+        "placeholder": "jane@company.com",
+        "micro": "We'll send your invite here. No spam, ever."
+      },
+      "phone": {
+        "label": "Your phone number?",
+        "placeholder": "+1 (555) 000-0000",
+        "micro": "Optional. For WhatsApp-based onboarding support."
+      },
+      "role": {
+        "label": "What's your role?",
+        "placeholder": "Select your role...",
+        "micro": "Helps us tailor your experience.",
+        "options": {
+          "founder": "Founder / CEO",
+          "head_cx": "Head of CX / Support",
+          "ops_manager": "Operations Manager",
+          "product": "Product Manager",
+          "developer": "Developer / Engineer",
+          "marketing": "Marketing",
+          "other": "Other"
+        }
+      },
+      "companySize": {
+        "label": "How big is your team?",
+        "placeholder": "Select company size...",
+        "micro": "So we prepare the right plan for you.",
+        "options": {
+          "solo": "Just me",
+          "2_10": "2-10",
+          "11_50": "11-50",
+          "51_200": "51-200",
+          "201_plus": "201+"
+        }
+      },
+      "frustration": {
+        "label": "Biggest frustration with customer comms?",
+        "placeholder": "e.g., Switching between 5 apps...",
+        "micro": "One sentence. Helps us build what you actually need."
+      }
+    },
+    "errors": {
+      "required": "This field is required.",
+      "invalidEmail": "Please enter a valid email address.",
+      "alreadyOnWaitlist": "You're already on the waitlist! Check your inbox.",
+      "generic": "Something went wrong. Please try again."
+    },
+    "thankYou": {
+      "badge": "Early Access Member",
+      "title": "You're on the list!",
+      "subtitle": "Welcome to the inner circle.",
+      "message": "We're rolling out access in waves. Expect your invite within 48 hours.",
+      "backHome": "Back to Home"
     }
   },
   "confirm": {

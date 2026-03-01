@@ -87,6 +87,16 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Waitlist (public, no auth) ───────────────────
+        location /api/waitlist {
+            limit_req zone=api burst=10 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── System Admin Service ─────────────────────────
         location /api/system {
             limit_req zone=api burst=20 nodelay;

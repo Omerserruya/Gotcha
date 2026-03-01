@@ -360,7 +360,257 @@ function activationEmailHtml(
   `);
 }
 
+// ─── Waitlist Welcome Email ──────────────────────────────────
+
+function waitlistWelcomeHtml(firstName: string, position: number): string {
+  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+  const logoUrl = `${frontendUrl}/logo.png`;
+
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>You're in &mdash; GOTCHA.</title>
+  <!--[if mso]>
+  <style>table,td{font-family:Arial,sans-serif;}</style>
+  <![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
+    <tr>
+      <td align="center" style="padding:40px 16px 20px;">
+
+        <!-- ━━━ Logo ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding-bottom:32px;">
+              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Hero Banner ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
+              <!-- Checkmark circle -->
+              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
+                <span style="font-size:34px;color:#ffffff;">&#10003;</span>
+              </div>
+              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
+                You're in, ${firstName}.
+              </h1>
+              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
+                Welcome to the inner circle.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Position Badge ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="padding:28px 0;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">
+                    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="margin:0 auto;background:linear-gradient(135deg,rgba(124,50,145,0.12) 0%,rgba(109,206,217,0.08) 100%);border:1px solid rgba(124,50,145,0.25);border-radius:14px;">
+                      <tr>
+                        <td style="padding:16px 32px;text-align:center;">
+                          <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#6DCED9;text-transform:uppercase;letter-spacing:1.5px;">Your position</p>
+                          <p style="margin:0;font-size:36px;font-weight:800;color:#ffffff;letter-spacing:-1px;">#${position}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Body Content ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:28px 40px 8px;">
+              <p style="margin:0;font-size:15px;color:#a1a1aa;line-height:1.75;">
+                You just secured early access to <span style="color:#e4e4e7;font-weight:600;">GOTCHA.</span> &mdash; the unified inbox that brings WhatsApp, Messenger &amp; Instagram into one screen, powered by AI that actually helps your team close faster.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Timeline Steps ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:28px 40px 32px;">
+              <p style="margin:0 0 22px;font-size:11px;font-weight:700;color:#7C3291;text-transform:uppercase;letter-spacing:1.2px;">What happens next</p>
+
+              <!-- Step 1 -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
+                <tr>
+                  <td style="width:40px;vertical-align:top;padding-top:2px;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#7C3291,#5A72B3);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">1</div>
+                  </td>
+                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(124,50,145,0.2);padding-left:20px;">
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">We're preparing your spot</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Rolling out in small waves to ensure every team gets a white-glove experience.</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Step 2 -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
+                <tr>
+                  <td style="width:40px;vertical-align:top;padding-top:2px;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#5A72B3,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">2</div>
+                  </td>
+                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(90,114,179,0.2);padding-left:20px;">
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Your invite lands in your inbox</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Within <strong style="color:#6DCED9;">48 hours</strong> you'll get a personal setup link. No passwords needed.</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Step 3 -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="width:40px;vertical-align:top;padding-top:2px;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#10b981,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:15px;font-weight:800;">&#10003;</div>
+                  </td>
+                  <td style="vertical-align:top;padding-left:20px;">
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Go live in 15 minutes</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Connect your channels, upload your knowledge base, and start handling every conversation from one place.</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Feature Pills ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
+                <tr>
+                  <td style="padding:20px 24px 12px;">
+                    <p style="margin:0;font-size:10px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:1px;">What you'll unlock</p>
+                  </td>
+                </tr>
+                <tr>
+                  <td style="padding:0 24px 20px;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                      <tr>
+                        <td style="padding:7px 0;">
+                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
+                            <span style="color:#7C3291;margin-right:8px;">&#9670;</span> Unified inbox &mdash; WhatsApp, Messenger, Instagram
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:7px 0;">
+                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
+                            <span style="color:#5A72B3;margin-right:8px;">&#9670;</span> AI co-pilot trained on your knowledge base
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:7px 0;">
+                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
+                            <span style="color:#6DCED9;margin-right:8px;">&#9670;</span> Smart routing &amp; SLA tracking
+                          </span>
+                        </td>
+                      </tr>
+                      <tr>
+                        <td style="padding:7px 0;">
+                          <span style="display:inline-block;font-size:13px;color:#a1a1aa;line-height:1;">
+                            <span style="color:#7C3291;margin-right:8px;">&#9670;</span> Visual bot builder &mdash; no code needed
+                          </span>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Closing + Reply CTA ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
+                <tr>
+                  <td style="padding:28px 0 0;text-align:center;">
+                    <p style="margin:0 0 20px;font-size:14px;color:#71717a;line-height:1.6;">
+                      Got questions before your invite arrives?<br>
+                      Just hit reply &mdash; a real human reads every message.
+                    </p>
+                    <p style="margin:0;font-size:14px;color:#52525b;">
+                      Talk soon,<br>
+                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Footer ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding:28px 16px 12px;">
+              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
+                GOTCHA. &mdash; Smart messaging for modern teams.
+              </p>
+              <p style="margin:8px 0 0;color:#27272a;font-size:11px;">
+                You're receiving this because you signed up at gotcha.co.il
+              </p>
+            </td>
+          </tr>
+        </table>
+
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+}
+
 // ─── Public API ─────────────────────────────────────────────
+
+/**
+ * Send welcome email to new waitlist subscriber.
+ */
+export async function sendWaitlistWelcomeEmail(email: string, firstName: string, position: number): Promise<void> {
+  const subject = `You're in, ${firstName} — welcome to Gotcha. early access`;
+  const html = waitlistWelcomeHtml(firstName, position);
+  const text = [
+    `Hey ${firstName}!`,
+    "",
+    "Thanks for signing up for early access to Gotcha.",
+    "",
+    "What happens next:",
+    "1. We review your request — we're rolling out in small batches",
+    "2. You get your invite — expect an email within 48 hours",
+    "3. Go live in 15 minutes — connect channels, upload knowledge base, start chatting",
+    "",
+    "In the meantime, hit reply if you have any questions — we read every message.",
+    "",
+    "— The Gotcha. Team",
+  ].join("\n");
+
+  try {
+    await sendHtmlEmail(email, subject, html, text);
+    console.log(`[WAITLIST] Welcome email sent to ${email}`);
+  } catch (err: any) {
+    console.error(`[WAITLIST] Failed to send welcome email to ${email}:`, err.message);
+  }
+}
 
 /**
  * Send onboarding email with magic link (no login required).

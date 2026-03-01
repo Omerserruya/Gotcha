@@ -26,6 +26,22 @@ async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Prom
   return res.json();
 }
 
+// ─── Waitlist (public, no auth) ──────────────────────────────
+
+export function submitWaitlistEntry(data: {
+  firstName: string;
+  email: string;
+  phone?: string;
+  role: string;
+  companySize: string;
+  frustration?: string;
+}) {
+  return apiFetch<{ data: { id: string } }>("/api/waitlist", {
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Auth ───────────────────────────────────────────────────
 
 export function login(email: string, password: string, tenantSlug: string) {
