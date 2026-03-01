@@ -45,7 +45,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         collapsed ? "flex flex-col items-center py-3 gap-2" : "p-4 flex items-center justify-between"
       )}>
         <div className={clsx("flex items-center min-w-0", collapsed ? "justify-center" : "gap-3")}>
-          <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 rounded-xl shrink-0" />
+          <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 shrink-0" />
           {!collapsed && (
             <Image src="/logo.png" alt="GOTCHA" width={100} height={28} className="h-7 w-auto" />
           )}

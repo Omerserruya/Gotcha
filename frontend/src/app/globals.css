@@ -155,6 +155,93 @@ body {
   to { transform: translateX(25%); }
 }
 
+/* ───── Hero grid (static, light) ───── */
+.landing-hero-grid {
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(0, 0, 0, 0.04) 0px,
+      rgba(0, 0, 0, 0.04) 1px,
+      transparent 1px,
+      transparent 60px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0.04) 0px,
+      rgba(0, 0, 0, 0.04) 1px,
+      transparent 1px,
+      transparent 60px
+    );
+}
+
+/* ───── Features section: dark + grid + rotating gradients ───── */
+.landing-features {
+  background: #0e0e12;
+}
+
+.landing-features-gradients {
+  transform: rotate(calc(var(--fp, 0) * 360deg));
+  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.landing-features-grid {
+  background:
+    repeating-linear-gradient(
+      to right,
+      rgba(255, 255, 255, 0.08) 0px,
+      rgba(255, 255, 255, 0.08) 1px,
+      transparent 1px,
+      transparent 60px
+    ),
+    repeating-linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0.08) 0px,
+      rgba(255, 255, 255, 0.08) 1px,
+      transparent 1px,
+      transparent 60px
+    );
+  z-index: 1;
+}
+
+/* Rotating platform name animation + shine wave */
+@keyframes landing-platform-in {
+  from {
+    transform: translateY(70%);
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+@keyframes landing-platform-shine {
+  from { background-position: 100% 0; }
+  to { background-position: -50% 0; }
+}
+
+.landing-platform-rotate {
+  display: block;
+  color: transparent;
+  background: linear-gradient(
+    110deg,
+    #7c5cfc 0%,
+    #7c5cfc 40%,
+    #c4b5fd 50%,
+    #7c5cfc 60%,
+    #7c5cfc 100%
+  );
+  background-size: 200% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation:
+    landing-platform-in 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards,
+    landing-platform-shine 0.6s ease-in-out 0.3s forwards;
+}
+
 /* Dark section with vignette (Kinso-style) */
 .landing-dark-section {
   background: linear-gradient(180deg, #333 0%, #121212 8%, #121212 92%, #333 100%);

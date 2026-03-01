@@ -68,7 +68,7 @@ export default function LoginPage() {
         <div className="bg-white rounded-3xl shadow-2xl p-8">
           {/* Logo / Header */}
           <div className="text-center mb-8">
-            <Image src="/apple-touch-icon.png" alt="GOTCHA" width={64} height={64} className="w-16 h-16 rounded-2xl mx-auto mb-4 shadow-lg shadow-primary-500/25" />
+            <Image src="/apple-touch-icon.png" alt="GOTCHA" width={64} height={64} className="w-16 h-16 mx-auto mb-4" />
             <h1 className="text-2xl font-bold text-gray-900">{t("app.name")}</h1>
             <p className="text-gray-400 mt-1 text-sm">{t("auth.welcome")}</p>
           </div>

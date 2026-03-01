@@ -46,7 +46,7 @@ export function SystemLayout({ children }: { children: React.ReactNode }) {
       <aside className="hidden md:flex bg-white border-e border-gray-100 flex-col shrink-0 h-screen sticky top-0 w-64 shadow-sm">
         {/* Header */}
         <div className="p-4 flex items-center gap-3 border-b border-gray-100">
-          <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 rounded-xl shrink-0" />
+          <Image src="/apple-touch-icon.png" alt="GOTCHA" width={36} height={36} className="w-9 h-9 shrink-0" />
           <div>
             <Image src="/logo.png" alt="GOTCHA" width={100} height={28} className="h-7 w-auto" />
             <span className="text-[10px] font-medium text-orange-500 uppercase tracking-wider">System Admin</span>

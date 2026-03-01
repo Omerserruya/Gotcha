@@ -1,0 +1,40 @@
+# GOTCHA
+
+> AI-powered customer communication platform
+
+## What is GOTCHA?
+
+GOTCHA is a multi-channel customer communication platform that unifies WhatsApp, Facebook Messenger, Instagram DMs, and email into a single AI-powered inbox. It helps customer support teams respond faster, route smarter, and deliver better experiences.
+
+## Key Features
+
+- **AI Co-Pilot**: Real-time reply suggestions, conversation summaries, and knowledge-powered answers for support agents.
+- **Unified Multi-Channel Inbox**: WhatsApp, Messenger, Instagram, and email in one place.
+- **Smart Routing**: Auto-assign conversations to the right department and agent with SLA tracking.
+- **Knowledge Base**: Upload documents or connect Confluence/Google Drive — the AI learns your business.
+- **Visual Bot Builder**: Drag-and-drop conversation flow builder with FAQ automation and agent handover.
+- **Real-Time Analytics**: Monitor response times, agent workload, conversation volume, and SLA compliance.
+- **Department Management**: Organize teams with role-based access, queue modes, and per-department AI configuration.
+- **Business Hours & SLA**: Set schedules, auto-responses, idle reminders, and auto-close rules.
+
+## Supported Channels
+
+- WhatsApp Business (via Embedded Signup)
+- Facebook Messenger
+- Instagram DMs
+- Email
+
+## Use Cases
+
+- Customer support teams managing high-volume messaging
+- Sales teams qualifying leads across messaging platforms
+- Businesses automating FAQ responses with AI chatbots
+- Organizations needing SLA-tracked, department-routed communication
+
+## Website
+
+https://gotcha.co.il
+
+## Pricing
+
+Free tier available. Upgrade for more seats, channels, and advanced features.

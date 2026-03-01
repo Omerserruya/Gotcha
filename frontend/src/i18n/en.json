@@ -546,9 +546,9 @@
     },
     "hero": {
       "badge": "AI-Powered Communication Platform",
-      "title1": "Turn every conversation",
-      "title2": "into a relationship",
-      "subtitle": "GOTCHA unifies WhatsApp, Messenger & Instagram into one AI-powered workspace. Your agents get smarter, your customers get happier.",
+      "title1": "Never miss a message on",
+      "title2": "All your conversations. One smart inbox.",
+      "subtitle": "One AI-powered workspace where your agents get smarter and your customers get happier.",
       "cta": "Start Free",
       "ctaSecondary": "See How It Works",
       "trustedBy": "Supported Integrations"
@@ -584,20 +584,54 @@
     },
     "howItWorks": {
       "label": "How It Works",
-      "title": "Up and running in minutes",
-      "subtitle": "Three simple steps to transform your customer communication.",
+      "title": "From zero to conversations in minutes",
+      "subtitle": "Four steps. No code. No headaches.",
       "step1": {
-        "title": "Connect your channels",
-        "desc": "Link WhatsApp, Messenger, or Instagram in one click. Messages flow into your unified inbox instantly."
+        "title": "Set up your workspace",
+        "desc": "Create your tenant, invite your team, and connect WhatsApp, Messenger, Instagram or email — all in a single setup flow."
       },
       "step2": {
-        "title": "Configure your AI",
-        "desc": "Set up your knowledge base and co-pilot rules. The AI adapts to your brand voice and business logic."
+        "title": "Train your AI",
+        "desc": "Feed it your knowledge base, FAQs, and brand voice. Your co-pilot learns how you talk so it sounds like you, not a robot."
       },
       "step3": {
-        "title": "Start conversations",
-        "desc": "Your team handles conversations with AI assistance. Smart routing ensures no customer waits too long."
+        "title": "Deploy your agents",
+        "desc": "Assign agents to channels, set routing rules, and define escalation paths. The right message reaches the right person, every time."
+      },
+      "step4": {
+        "title": "Engage everywhere",
+        "desc": "Customers reach you on their favorite platform. Your team replies from one inbox with AI suggestions, smart templates, and real-time analytics."
       }
+    },
+    "faq": {
+      "label": "FAQ",
+      "title": "Frequently asked questions",
+      "items": [
+        {
+          "q": "What is GOTCHA?",
+          "a": "GOTCHA is an AI-powered customer communication platform that unifies WhatsApp, Facebook Messenger, Instagram, and email into a single inbox — so your team never misses a message."
+        },
+        {
+          "q": "Which messaging channels do you support?",
+          "a": "We currently support WhatsApp, Facebook Messenger, Instagram DMs, and email. More channels are on the way."
+        },
+        {
+          "q": "How does the AI co-pilot work?",
+          "a": "The co-pilot reads incoming messages and suggests replies based on your knowledge base and brand voice. Your agents can accept, edit, or dismiss suggestions with one click."
+        },
+        {
+          "q": "How long does setup take?",
+          "a": "Most teams are up and running in under 15 minutes. Connect your channels, upload your knowledge base, and you're ready to go."
+        },
+        {
+          "q": "Is there a free plan?",
+          "a": "Yes — GOTCHA offers a free tier so you can explore the platform with no commitment. Upgrade when you need more seats or channels."
+        },
+        {
+          "q": "Is my data secure?",
+          "a": "Absolutely. All data is encrypted in transit and at rest. We follow industry-standard security practices and never share your data with third parties."
+        }
+      ]
     },
     "cta": {
       "title": "Ready to transform your customer communication?",

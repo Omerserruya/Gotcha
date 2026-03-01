@@ -33,7 +33,7 @@ export function MobileHeader() {
     <header className="md:hidden bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30">
       {/* Logo */}
       <div className="flex items-center gap-2">
-        <Image src="/apple-touch-icon.png" alt="GOTCHA" width={32} height={32} className="w-8 h-8 rounded-lg" />
+        <Image src="/apple-touch-icon.png" alt="GOTCHA" width={32} height={32} className="w-8 h-8" />
         <Image src="/logo.png" alt="GOTCHA" width={80} height={22} className="h-5 w-auto" />
       </div>
 
@@ -251,7 +251,7 @@ export function SystemMobileHeader() {
   return (
     <header className="md:hidden bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30">
       <div className="flex items-center gap-2">
-        <Image src="/apple-touch-icon.png" alt="GOTCHA" width={32} height={32} className="w-8 h-8 rounded-lg" />
+        <Image src="/apple-touch-icon.png" alt="GOTCHA" width={32} height={32} className="w-8 h-8" />
         <div>
           <Image src="/logo.png" alt="GOTCHA" width={80} height={22} className="h-5 w-auto" />
           <span className="text-[9px] font-medium text-orange-500 uppercase tracking-wider">System Admin</span>
