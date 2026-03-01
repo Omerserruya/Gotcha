@@ -539,104 +539,104 @@
   "landing": {
     "nav": {
       "features": "Features",
-      "channels": "Channels",
+      "channels": "How It Works",
       "pricing": "Pricing",
       "login": "Login",
       "getStarted": "Get Started"
     },
     "hero": {
-      "badge": "AI-Powered Communication Platform",
-      "title1": "Never miss a message on",
-      "title2": "All your conversations. One smart inbox.",
-      "subtitle": "One AI-powered workspace where your agents get smarter and your customers get happier.",
+      "badge": "Where conversations become customers",
+      "title1": "Stop losing customers on",
+      "title2": "One inbox. Every channel. AI that actually works.",
+      "subtitle": "Your team juggles WhatsApp, Messenger, and Instagram in separate tabs. Customers wait. Context gets lost. GOTCHA fixes that.",
       "cta": "Start Free",
       "ctaSecondary": "See How It Works",
-      "trustedBy": "Supported Integrations"
+      "trustedBy": "Works with your channels"
     },
     "features": {
-      "label": "Features",
-      "title": "Everything you need to delight customers",
-      "subtitle": "One platform to manage all conversations, powered by AI that actually helps.",
+      "label": "What you get",
+      "title": "Less tab-switching. More closing.",
+      "subtitle": "Six things that make your support team dangerous (in a good way).",
       "copilot": {
         "title": "AI Co-Pilot",
-        "desc": "Smart reply suggestions, context summaries, and knowledge-powered answers — your agents are never alone."
+        "desc": "Suggests replies your agents actually want to send. Trained on your knowledge base, not generic fluff."
       },
       "channels": {
-        "title": "Multi-Channel Inbox",
-        "desc": "WhatsApp, Messenger, and Instagram in one unified inbox. No more switching between apps."
+        "title": "Unified Inbox",
+        "desc": "WhatsApp, Messenger, Instagram — one screen. Your agents stop context-switching, customers stop repeating themselves."
       },
       "routing": {
         "title": "Smart Routing",
-        "desc": "Auto-assign conversations to the right department and agent with SLA tracking built in."
+        "desc": "Messages land with the right agent, in the right department, before the customer notices."
       },
       "knowledge": {
         "title": "Knowledge Base",
-        "desc": "Upload documents, connect Confluence or Drive — your AI learns your business and answers accurately."
+        "desc": "Upload your docs. Connect Confluence or Drive. The AI reads them so your agents don't have to memorize everything."
       },
       "analytics": {
-        "title": "Real-Time Analytics",
-        "desc": "Monitor response times, agent workload, conversation volume, and SLA compliance in real time."
+        "title": "Live Dashboard",
+        "desc": "Response times, agent load, SLA tracking — all real-time. No more guessing who's drowning."
       },
       "botBuilder": {
-        "title": "Visual Bot Builder",
-        "desc": "Design conversation flows with a drag-and-drop builder. Automate FAQs and route to agents when needed."
+        "title": "Bot Builder",
+        "desc": "Drag. Drop. Automate. Handle the repetitive stuff so your humans can handle the human stuff."
       }
     },
     "howItWorks": {
       "label": "How It Works",
-      "title": "From zero to conversations in minutes",
-      "subtitle": "Four steps. No code. No headaches.",
+      "title": "Live in under 15 minutes",
+      "subtitle": "Four steps. No code. No consultants.",
       "step1": {
-        "title": "Set up your workspace",
-        "desc": "Create your tenant, invite your team, and connect WhatsApp, Messenger, Instagram or email — all in a single setup flow."
+        "title": "Connect your channels",
+        "desc": "Link WhatsApp, Messenger, Instagram — one setup flow, done in minutes."
       },
       "step2": {
-        "title": "Train your AI",
-        "desc": "Feed it your knowledge base, FAQs, and brand voice. Your co-pilot learns how you talk so it sounds like you, not a robot."
+        "title": "Feed the AI your knowledge",
+        "desc": "Upload docs, FAQs, brand guidelines. The co-pilot learns your voice so it sounds like you, not a chatbot."
       },
       "step3": {
-        "title": "Deploy your agents",
-        "desc": "Assign agents to channels, set routing rules, and define escalation paths. The right message reaches the right person, every time."
+        "title": "Set the rules",
+        "desc": "Define routing, assign departments, set SLA targets. The right message hits the right person, every time."
       },
       "step4": {
-        "title": "Engage everywhere",
-        "desc": "Customers reach you on their favorite platform. Your team replies from one inbox with AI suggestions, smart templates, and real-time analytics."
+        "title": "Go live",
+        "desc": "Customers message you anywhere. Your team replies from one place with AI-powered suggestions and full context."
       }
     },
     "faq": {
       "label": "FAQ",
-      "title": "Frequently asked questions",
+      "title": "Questions you're probably asking",
       "items": [
         {
-          "q": "What is GOTCHA?",
-          "a": "GOTCHA is an AI-powered customer communication platform that unifies WhatsApp, Facebook Messenger, Instagram, and email into a single inbox — so your team never misses a message."
+          "q": "What exactly is GOTCHA?",
+          "a": "A single inbox for all your customer messaging — WhatsApp, Messenger, Instagram, email — with an AI co-pilot that helps your agents respond faster and smarter."
         },
         {
-          "q": "Which messaging channels do you support?",
-          "a": "We currently support WhatsApp, Facebook Messenger, Instagram DMs, and email. More channels are on the way."
+          "q": "Which channels does it support?",
+          "a": "WhatsApp, Facebook Messenger, Instagram DMs, and email. More coming soon."
         },
         {
-          "q": "How does the AI co-pilot work?",
-          "a": "The co-pilot reads incoming messages and suggests replies based on your knowledge base and brand voice. Your agents can accept, edit, or dismiss suggestions with one click."
+          "q": "What does the AI co-pilot actually do?",
+          "a": "It reads incoming messages, pulls relevant info from your knowledge base, and suggests replies your agents can send with one click. Think autocomplete, but for customer support."
         },
         {
-          "q": "How long does setup take?",
-          "a": "Most teams are up and running in under 15 minutes. Connect your channels, upload your knowledge base, and you're ready to go."
+          "q": "How fast can we get started?",
+          "a": "Most teams go live in under 15 minutes. Connect channels, upload your knowledge base, invite your team — done."
         },
         {
           "q": "Is there a free plan?",
-          "a": "Yes — GOTCHA offers a free tier so you can explore the platform with no commitment. Upgrade when you need more seats or channels."
+          "a": "Yes. Start free, no credit card required. Upgrade when you need more agents or channels."
         },
         {
-          "q": "Is my data secure?",
-          "a": "Absolutely. All data is encrypted in transit and at rest. We follow industry-standard security practices and never share your data with third parties."
+          "q": "Is our data safe?",
+          "a": "Encrypted in transit and at rest. We don't sell or share your data. Ever."
         }
       ]
     },
     "cta": {
-      "title": "Ready to transform your customer communication?",
-      "subtitle": "Join teams who deliver faster, smarter, and more personal support with GOTCHA.",
-      "button": "Get Started Free"
+      "title": "Your customers are already messaging you. Are you keeping up?",
+      "subtitle": "Join the teams that reply faster, sell more, and never lose a conversation again.",
+      "button": "Start Free"
     },
     "footer": {
       "product": "Product",

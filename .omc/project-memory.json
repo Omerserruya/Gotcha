@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1772291832243,
+  "lastScanned": 1772391416110,
   "projectRoot": "/home/ocs/projects/ChatCenter",
   "techStack": {
     "languages": [
@@ -56,7 +56,7 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 3,
-      "lastAccessed": 1772291832228,
+      "lastAccessed": 1772391416092,
       "keyFiles": [
         "SERVICE_REFERENCE.md",
         "SYSTEM_ARCHITECTURE.md",
@@ -67,7 +67,7 @@
       "path": "frontend",
       "purpose": null,
       "fileCount": 9,
-      "lastAccessed": 1772291832228,
+      "lastAccessed": 1772391416103,
       "keyFiles": [
         "Dockerfile",
         "next-env.d.ts",
@@ -80,7 +80,7 @@
       "path": "nginx",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1772291832237,
+      "lastAccessed": 1772391416103,
       "keyFiles": [
         "nginx.conf.template"
       ]
@@ -89,142 +89,46 @@
       "path": "packages",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1772291832237,
+      "lastAccessed": 1772391416104,
       "keyFiles": []
     },
     "services": {
       "path": "services",
       "purpose": "Business logic services",
       "fileCount": 0,
-      "lastAccessed": 1772291832238,
+      "lastAccessed": 1772391416104,
       "keyFiles": []
     },
     "frontend/node_modules": {
       "path": "frontend/node_modules",
       "purpose": "Dependencies",
       "fileCount": 1,
-      "lastAccessed": 1772291832241,
+      "lastAccessed": 1772391416107,
       "keyFiles": []
     },
     "frontend/public": {
       "path": "frontend/public",
       "purpose": "Public files",
-      "fileCount": 8,
-      "lastAccessed": 1772291832241,
+      "fileCount": 5,
+      "lastAccessed": 1772391416108,
       "keyFiles": [
         "apple-touch-icon.png",
-        "favicon copy.ico",
-        "favicon.ico"
+        "favicon.ico",
+        "llms.txt"
       ]
     }
   },
   "hotPaths": [
     {
-      "path": "frontend/src/components/landing/LandingPage.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1772383825555,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/components/MobileNav.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1772385315486,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/login/page.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1772384346773,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/components/Sidebar.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1772385314121,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/components/SystemLayout.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1772385316909,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/layout.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1772383825373,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/en/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772291879504,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/he/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772291884863,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/sitemap.ts",
-      "accessCount": 2,
-      "lastAccessed": 1772382949708,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src",
-      "accessCount": 2,
-      "lastAccessed": 1772383819712,
-      "type": "directory"
-    },
-    {
       "path": "frontend/src/i18n/en.json",
       "accessCount": 1,
-      "lastAccessed": 1772291838426,
+      "lastAccessed": 1772391470703,
       "type": "file"
     },
     {
       "path": "frontend/src/i18n/he.json",
       "accessCount": 1,
-      "lastAccessed": 1772291838878,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/robots.ts",
-      "accessCount": 1,
-      "lastAccessed": 1772291886543,
-      "type": "file"
-    },
-    {
-      "path": "frontend/public/llms.txt",
-      "accessCount": 1,
-      "lastAccessed": 1772291899027,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/components/JsonLd.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291924240,
-      "type": "file"
-    },
-    {
-      "path": "business_list_250.csv",
-      "accessCount": 1,
-      "lastAccessed": 1772375424269,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/components/AppLayout.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772383825114,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/context/AuthContext.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772383828179,
+      "lastAccessed": 1772391471236,
       "type": "file"
     }
   ],
