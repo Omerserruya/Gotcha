@@ -126,32 +126,44 @@
   "hotPaths": [
     {
       "path": "src/components/landing/LandingPage.tsx",
-      "accessCount": 47,
-      "lastAccessed": 1772463250184,
+      "accessCount": 51,
+      "lastAccessed": 1772465306196,
       "type": "file"
     },
     {
-      "path": "src/i18n/en.json",
-      "accessCount": 3,
-      "lastAccessed": 1772452052561,
+      "path": "src/i18n/he.json",
+      "accessCount": 7,
+      "lastAccessed": 1772465985505,
       "type": "directory"
     },
     {
-      "path": "src/i18n/he.json",
-      "accessCount": 3,
-      "lastAccessed": 1772452055739,
+      "path": "src/i18n/en.json",
+      "accessCount": 4,
+      "lastAccessed": 1772465121306,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1772465680809,
       "type": "directory"
     },
     {
       "path": "src/app/globals.css",
-      "accessCount": 2,
-      "lastAccessed": 1772451684107,
+      "accessCount": 4,
+      "lastAccessed": 1772465688362,
       "type": "file"
     },
     {
       "path": "",
-      "accessCount": 1,
-      "lastAccessed": 1772455254601,
+      "accessCount": 2,
+      "lastAccessed": 1772465664054,
+      "type": "directory"
+    },
+    {
+      "path": "src/app",
+      "accessCount": 2,
+      "lastAccessed": 1772465666045,
       "type": "directory"
     }
   ],

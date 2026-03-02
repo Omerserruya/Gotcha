@@ -17,8 +17,13 @@ html {
 }
 
 body {
-  font-family: Inter, "Inter Placeholder", sans-serif;
+  font-family: var(--font-inter), Inter, sans-serif;
   background: var(--bg-secondary);
+}
+
+[dir="rtl"] body,
+[dir="rtl"] {
+  font-family: var(--font-assistant), Assistant, sans-serif;
 }
 
 /* RTL support */

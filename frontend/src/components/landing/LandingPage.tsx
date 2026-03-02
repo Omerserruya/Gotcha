@@ -567,67 +567,215 @@ function Logo({ light }: { light?: boolean }) {
 
 /* ───── Product Mockup ───── */
 
-function ProductMockup({ dark }: { dark?: boolean }) {
-  const bg = dark ? "bg-[#1a1a2e]" : "bg-white";
-  const border = dark ? "border-white/[0.06]" : "border-gray-200";
-  const chrome = dark ? "bg-[#12121f]" : "bg-gray-50";
-  const chromeBorder = dark ? "border-white/[0.04]" : "border-gray-100";
-  const sidebarBg = dark ? "bg-white/[0.03]" : "bg-gray-50";
-  const cardBg = dark ? "bg-white/[0.04]" : "bg-gray-100";
-  const activeBg = dark ? "bg-primary-500/20" : "bg-primary-100";
-  const chatItemBg = dark ? "bg-white/[0.02]" : "bg-white";
-  const chatItemBorder = dark ? "border-white/[0.03]" : "border-gray-100";
-  const chatActiveBg = dark ? "bg-primary-500/10" : "bg-primary-50";
-  const chatActiveBorder = dark ? "border-primary-500/20" : "border-primary-100";
-  const bubbleIn = dark ? "bg-white/[0.06]" : "bg-gray-100";
-  const bubbleOut = dark ? "bg-primary-500/50" : "bg-primary-500";
-  const inputBg = dark ? "bg-white/[0.03] border-white/[0.06]" : "bg-white border-gray-200";
-
+function ProductMockup() {
   return (
-    <div className={`${bg} rounded-2xl border ${border} overflow-hidden`}
+    <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden"
       style={{ boxShadow: "0 6px 40px rgba(0,0,0,0.12), 0 2px 8px rgba(0,0,0,0.06)" }}
     >
       {/* Browser chrome */}
-      <div className={`flex items-center gap-2 px-4 py-2.5 ${chrome} border-b ${chromeBorder}`}>
+      <div className="flex items-center gap-2 px-4 py-2 bg-gray-50 border-b border-gray-100">
         <div className="flex gap-1.5">
           <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
           <div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
           <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
         </div>
         <div className="flex-1 mx-8">
-          <div className={`h-5 ${cardBg} rounded max-w-[200px] mx-auto`} />
+          <div className="h-5 bg-gray-100 rounded-full max-w-[200px] mx-auto flex items-center justify-center">
+            <div className="h-1.5 w-20 bg-gray-200 rounded-full" />
+          </div>
         </div>
       </div>
+
       {/* App UI */}
-      <div className="p-3 sm:p-4">
-        <div className="flex gap-3 h-52 sm:h-72">
-          {/* Sidebar */}
-          <div className={`hidden sm:flex flex-col w-40 ${sidebarBg} rounded-xl p-2.5 gap-1.5`}>
-            <div className={`h-7 ${activeBg} rounded-lg`} />
-            <div className={`h-5 ${cardBg} rounded-lg`} />
-            <div className={`h-5 ${cardBg} rounded-lg`} />
-            <div className={`h-5 ${cardBg} rounded-lg`} />
-            <div className="flex-1" />
-            <div className={`h-7 ${cardBg} rounded-lg`} />
+      <div className="flex h-56 sm:h-72">
+        {/* Sidebar — icon nav */}
+        <div className="hidden sm:flex flex-col w-12 bg-gray-50/80 border-e border-gray-100 items-center py-3 gap-1">
+          <div className="w-7 h-7 rounded-lg bg-primary-500/15 flex items-center justify-center mb-2">
+            <div className="w-3.5 h-3.5 rounded bg-primary-500/40" />
           </div>
-          {/* Chat list */}
-          <div className={`flex-1 flex flex-col ${sidebarBg} rounded-xl p-2.5 gap-1.5 min-w-0`}>
-            <div className={`h-7 ${cardBg} rounded-lg`} />
-            <div className={`h-12 ${chatItemBg} rounded-lg border ${chatItemBorder}`} />
-            <div className={`h-12 ${chatActiveBg} rounded-lg border ${chatActiveBorder}`} />
-            <div className={`h-12 ${chatItemBg} rounded-lg border ${chatItemBorder}`} />
-            <div className="flex-1" />
+          <div className="w-7 h-7 rounded-lg bg-primary-100 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-500"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
           </div>
-          {/* Chat area */}
-          <div className={`hidden md:flex flex-[1.6] flex-col ${sidebarBg} rounded-xl p-2.5 gap-1.5`}>
-            <div className={`h-7 ${cardBg} rounded-lg`} />
-            <div className="flex-1 flex flex-col gap-1.5 py-1">
-              <div className={`self-start w-3/5 h-7 ${bubbleIn} rounded-xl rounded-tl-sm`} />
-              <div className={`self-end w-2/5 h-7 ${bubbleOut} rounded-xl rounded-tr-sm`} />
-              <div className={`self-start w-2/5 h-7 ${bubbleIn} rounded-xl rounded-tl-sm`} />
-              <div className={`self-end w-3/5 h-7 ${bubbleOut} rounded-xl rounded-tr-sm`} />
+          <div className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+          </div>
+          <div className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/></svg>
+          </div>
+          <div className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25"/></svg>
+          </div>
+          <div className="flex-1" />
+          <div className="w-7 h-7 rounded-lg hover:bg-gray-100 flex items-center justify-center">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+          </div>
+        </div>
+
+        {/* Chat list */}
+        <div className="flex-1 flex flex-col border-e border-gray-100 min-w-0 max-w-[180px]">
+          {/* Search */}
+          <div className="px-2.5 py-2 border-b border-gray-50">
+            <div className="h-7 bg-gray-50 rounded-lg flex items-center px-2 gap-1.5">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-gray-300 flex-shrink-0"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+              <div className="h-1.5 w-12 bg-gray-200 rounded-full" />
             </div>
-            <div className={`h-8 ${inputBg} rounded-lg border`} />
+          </div>
+          {/* Chat items */}
+          <div className="flex-1 overflow-hidden flex flex-col">
+            {/* Active chat */}
+            <div className="px-2 py-2 bg-primary-50/60 border-s-2 border-primary-500">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-white">SM</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#25D366]" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="h-1.5 w-14 bg-gray-800/70 rounded-full" />
+                    <div className="h-1.5 w-6 bg-gray-300 rounded-full" />
+                  </div>
+                  <div className="h-1.5 w-20 bg-gray-400/50 rounded-full mt-1.5" />
+                </div>
+              </div>
+            </div>
+            {/* Chat 2 */}
+            <div className="px-2 py-2 border-b border-gray-50">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-white">DK</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#E1306C]" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="h-1.5 w-12 bg-gray-700/60 rounded-full" />
+                    <div className="w-4 h-4 rounded-full bg-primary-500 flex items-center justify-center">
+                      <span className="text-[7px] font-bold text-white">2</span>
+                    </div>
+                  </div>
+                  <div className="h-1.5 w-16 bg-gray-400/40 rounded-full mt-1.5" />
+                </div>
+              </div>
+            </div>
+            {/* Chat 3 */}
+            <div className="px-2 py-2 border-b border-gray-50">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-white">RB</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#0084FF]" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="h-1.5 w-16 bg-gray-700/60 rounded-full" />
+                    <div className="h-1.5 w-6 bg-gray-300 rounded-full" />
+                  </div>
+                  <div className="h-1.5 w-14 bg-gray-400/40 rounded-full mt-1.5" />
+                </div>
+              </div>
+            </div>
+            {/* Chat 4 */}
+            <div className="px-2 py-2">
+              <div className="flex items-center gap-2">
+                <div className="relative flex-shrink-0">
+                  <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-red-500 flex items-center justify-center">
+                    <span className="text-[9px] font-bold text-white">MJ</span>
+                  </div>
+                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
+                    <div className="w-2.5 h-2.5 rounded-full bg-[#EA4335]" />
+                  </div>
+                </div>
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center justify-between">
+                    <div className="h-1.5 w-18 bg-gray-700/60 rounded-full" />
+                    <div className="h-1.5 w-6 bg-gray-300 rounded-full" />
+                  </div>
+                  <div className="h-1.5 w-20 bg-gray-400/40 rounded-full mt-1.5" />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Chat area */}
+        <div className="hidden md:flex flex-[1.8] flex-col min-w-0">
+          {/* Chat header */}
+          <div className="flex items-center gap-2.5 px-3 py-2 border-b border-gray-100">
+            <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
+              <span className="text-[8px] font-bold text-white">SM</span>
+            </div>
+            <div>
+              <div className="h-1.5 w-16 bg-gray-700/60 rounded-full" />
+              <div className="h-1.5 w-10 bg-green-400/50 rounded-full mt-1" />
+            </div>
+            <div className="flex-1" />
+            <div className="flex gap-1">
+              <div className="w-5 h-5 rounded bg-gray-50 flex items-center justify-center">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0" /></svg>
+              </div>
+              <div className="w-5 h-5 rounded bg-gray-50 flex items-center justify-center">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-gray-400"><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/></svg>
+              </div>
+            </div>
+          </div>
+          {/* Messages */}
+          <div className="flex-1 px-3 py-2 flex flex-col gap-2 overflow-hidden">
+            {/* Incoming bubble */}
+            <div className="self-start max-w-[75%]">
+              <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2">
+                <div className="h-1.5 w-28 bg-gray-300/70 rounded-full" />
+                <div className="h-1.5 w-20 bg-gray-300/50 rounded-full mt-1.5" />
+              </div>
+              <div className="h-1 w-8 bg-gray-200 rounded-full mt-1 ms-1" />
+            </div>
+            {/* Outgoing bubble */}
+            <div className="self-end max-w-[70%]">
+              <div className="bg-primary-500 rounded-2xl rounded-tr-sm px-3 py-2">
+                <div className="h-1.5 w-24 bg-white/40 rounded-full" />
+                <div className="h-1.5 w-16 bg-white/30 rounded-full mt-1.5" />
+              </div>
+              <div className="h-1 w-6 bg-gray-200 rounded-full mt-1 me-1 self-end ms-auto" />
+            </div>
+            {/* Incoming bubble */}
+            <div className="self-start max-w-[65%]">
+              <div className="bg-gray-100 rounded-2xl rounded-tl-sm px-3 py-2">
+                <div className="h-1.5 w-16 bg-gray-300/70 rounded-full" />
+              </div>
+            </div>
+            {/* AI Copilot suggestion */}
+            <div className="self-end max-w-[80%] mt-auto">
+              <div className="bg-primary-50 border border-primary-200/60 rounded-xl px-2.5 py-2">
+                <div className="flex items-center gap-1.5 mb-1.5">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400"><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25"/></svg>
+                  <div className="h-1.5 w-10 bg-primary-300/60 rounded-full" />
+                </div>
+                <div className="h-1.5 w-full bg-primary-200/50 rounded-full" />
+                <div className="h-1.5 w-3/4 bg-primary-200/40 rounded-full mt-1" />
+                <div className="flex justify-end mt-2">
+                  <div className="h-4 w-12 bg-primary-500 rounded text-[6px] text-white flex items-center justify-center font-medium">Insert</div>
+                </div>
+              </div>
+            </div>
+          </div>
+          {/* Input */}
+          <div className="px-3 py-2 border-t border-gray-100">
+            <div className="h-8 bg-gray-50 border border-gray-200 rounded-xl flex items-center px-2.5 gap-2">
+              <div className="h-1.5 w-20 bg-gray-200 rounded-full" />
+              <div className="flex-1" />
+              <div className="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
+                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-white"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+              </div>
+            </div>
           </div>
         </div>
       </div>

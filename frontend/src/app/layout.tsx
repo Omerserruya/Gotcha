@@ -1,6 +1,10 @@
 import type { Metadata } from "next";
+import { Inter, Assistant } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+
+const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
+const assistant = Assistant({ subsets: ["hebrew", "latin"], variable: "--font-assistant", display: "swap" });
 
 export const metadata: Metadata = {
   metadataBase: new URL("https://gotcha.co.il"),
@@ -44,7 +48,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" dir="ltr">
-      <body className="bg-gray-50 text-gray-900 min-h-screen">
+      <body className={`${inter.variable} ${assistant.variable} bg-gray-50 text-gray-900 min-h-screen`}>
         <Providers>{children}</Providers>
       </body>
     </html>

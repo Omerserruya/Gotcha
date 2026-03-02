@@ -650,10 +650,6 @@
           "a": "Most teams go live in under 15 minutes. Connect channels, upload your knowledge base, invite your team — done."
         },
         {
-          "q": "Is there a free plan?",
-          "a": "Yes. Start free, no credit card required. Upgrade when you need more agents or channels."
-        },
-        {
           "q": "Is our data safe?",
           "a": "Encrypted in transit and at rest. We don't sell or share your data. Ever."
         }
