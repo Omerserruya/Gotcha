@@ -35,13 +35,13 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   return (
     <aside
       className={clsx(
-        "bg-white border-e border-gray-100 flex flex-col shrink-0 h-screen sticky top-0 transition-all duration-300 shadow-float",
+        "bg-white flex flex-col shrink-0 h-screen md:h-[calc(100vh-16px)] sticky top-0 transition-all duration-300 shadow-float md:rounded-2xl md:overflow-hidden",
         collapsed ? "w-[68px]" : "w-64"
       )}
     >
       {/* Logo + Collapse toggle */}
       <div className={clsx(
-        "border-b border-gray-100",
+        "bg-gray-50/50",
         collapsed ? "flex flex-col items-center py-3 gap-2" : "p-4 flex items-center justify-between"
       )}>
         <div className={clsx("flex items-center min-w-0", collapsed ? "justify-center" : "gap-3")}>
@@ -94,8 +94,8 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                 className={clsx(
                   "flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all",
                   isActive
-                    ? "bg-primary-50 text-primary-600 font-medium shadow-sm"
-                    : "text-gray-500 hover:text-primary-600 hover:bg-gray-50"
+                    ? "bg-primary-50/70 text-primary-600 font-medium"
+                    : "text-gray-500 hover:text-primary-600 hover:bg-gray-50/80"
                 )}
               >
                 <item.icon className="w-5 h-5 shrink-0" />
@@ -111,7 +111,7 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
           <select
             value={locale}
             onChange={(e) => setLocale(e.target.value as Locale)}
-            className="w-full bg-gray-50 text-gray-600 text-xs rounded-xl px-3 py-2 border border-gray-200 focus:outline-none focus:ring-2 focus:ring-primary-200"
+            className="w-full bg-gray-50 text-gray-600 text-xs rounded-xl px-3 py-2 border-0 ring-1 ring-gray-200/60 focus:outline-none focus:ring-2 focus:ring-primary-200"
           >
             {Object.entries(localeConfig).map(([key, config]) => (
               <option key={key} value={key}>{config.label}</option>
@@ -136,9 +136,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       )}
 
       {/* User & Logout */}
-      <div className="p-3 border-t border-gray-100">
+      <div className="p-3 bg-gray-50/30">
         <div className={clsx("flex items-center", collapsed ? "justify-center" : "gap-3")}>
-          <div className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
+          <div className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-lg flex items-center justify-center text-xs font-bold text-white shrink-0 shadow-sm">
             {user?.name?.charAt(0).toUpperCase() || "?"}
           </div>
           {!collapsed && (

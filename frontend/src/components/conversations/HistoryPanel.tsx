@@ -60,10 +60,10 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
   }
 
   return (
-    <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white border-s border-gray-100 flex flex-col h-full animate-slide-in-right">
+    <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white flex flex-col h-full animate-slide-in-right">
       {/* Header */}
-      <div className="px-4 py-3 border-b border-gray-100 flex items-center gap-2.5">
-        <div className="w-8 h-8 bg-gradient-to-br from-blue-500 to-cyan-600 rounded-xl flex items-center justify-center shadow-sm">
+      <div className="px-4 py-3 shadow-subtle flex items-center gap-2.5">
+        <div className="w-8 h-8 bg-gradient-to-br from-primary-500 to-primary-600 rounded-xl flex items-center justify-center shadow-sm">
           <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
           </svg>
@@ -100,7 +100,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
 
           {loading ? (
             <div className="flex items-center justify-center py-8">
-              <div className="w-5 h-5 border-2 border-blue-200 border-t-blue-500 rounded-full animate-spin" />
+              <div className="w-5 h-5 border-2 border-gray-200 border-t-primary-500 rounded-full animate-spin" />
             </div>
           ) : history.length === 0 ? (
             <div className="text-center py-6">
@@ -115,10 +115,10 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
                   <div
                     key={conv.id}
                     className={clsx(
-                      "rounded-xl border transition-all",
+                      "rounded-xl transition-all",
                       isCurrent
-                        ? "bg-blue-50/50 border-blue-200"
-                        : "bg-white border-gray-100 hover:border-gray-200"
+                        ? "bg-primary-50/40"
+                        : "bg-gray-50/50 hover:bg-gray-50/80"
                     )}
                   >
                     <button
@@ -152,7 +152,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
                           </span>
                         )}
                         {isCurrent && (
-                          <span className="text-[9px] font-semibold text-blue-500 bg-blue-100 px-1.5 py-0.5 rounded-full ms-auto">
+                          <span className="text-[9px] font-semibold text-primary-500 bg-primary-100 px-1.5 py-0.5 rounded-full ms-auto">
                             CURRENT
                           </span>
                         )}
@@ -177,7 +177,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
                           </div>
                         )}
                         {conv.aiSummary && (
-                          <div className="mt-2 p-2.5 bg-violet-50 border border-violet-100 rounded-lg">
+                          <div className="mt-2 p-2.5 bg-violet-50 rounded-lg">
                             <div className="flex items-center gap-1.5 mb-1">
                               <svg className="w-3.5 h-3.5 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                                 <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
@@ -198,7 +198,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
                         {!isCurrent && onSelectConversation && (
                           <button
                             onClick={() => onSelectConversation(conv.id)}
-                            className="w-full mt-1 text-[10px] text-blue-600 hover:text-blue-700 font-medium py-1.5 bg-blue-50 hover:bg-blue-100 rounded-lg transition"
+                            className="w-full mt-1 text-[10px] text-primary-600 hover:text-primary-700 font-medium py-1.5 bg-primary-50 hover:bg-primary-100 rounded-lg transition"
                           >
                             View conversation
                           </button>
@@ -213,7 +213,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
         </div>
 
         {/* Notes Section */}
-        <div className="p-3 border-t border-gray-100">
+        <div className="p-3 bg-gray-50/30">
           <div className="flex items-center gap-1.5 mb-2 px-0.5">
             <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
@@ -234,12 +234,12 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
               onChange={(e) => setNoteText(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && handleAddNote()}
               placeholder="Add a note..."
-              className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs focus:ring-2 focus:ring-blue-200 focus:border-blue-300 focus:bg-white outline-none transition"
+              className="flex-1 px-3 py-2 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl text-xs focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
             />
             <button
               onClick={handleAddNote}
               disabled={!noteText.trim()}
-              className="px-3 py-2 bg-blue-500 hover:bg-blue-600 text-white rounded-xl text-xs font-medium transition disabled:opacity-40"
+              className="px-3 py-2 bg-primary-500 hover:bg-primary-600 text-white rounded-xl text-xs font-medium transition disabled:opacity-40"
             >
               Add
             </button>
@@ -257,7 +257,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
                 <div key={note.id} className="flex gap-2.5">
                   {/* Timeline line */}
                   <div className="flex flex-col items-center">
-                    <div className="w-2 h-2 bg-blue-400 rounded-full mt-1.5 shrink-0" />
+                    <div className="w-2 h-2 bg-primary-400 rounded-full mt-1.5 shrink-0" />
                     {idx < notes.length - 1 && <div className="w-px flex-1 bg-gray-200 my-0.5" />}
                   </div>
                   {/* Note content */}
@@ -275,7 +275,7 @@ export function HistoryPanel({ conversation, onClose, onSelectConversation }: Hi
       </div>
 
       {/* Footer */}
-      <div className="px-4 py-2.5 border-t border-gray-100 bg-gray-50/50">
+      <div className="px-4 py-2.5 bg-gray-50/30">
         <p className="text-[10px] text-gray-400 text-center">
           Notes are stored locally (demo mode). Full integration coming soon.
         </p>

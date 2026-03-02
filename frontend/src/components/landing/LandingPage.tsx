@@ -37,7 +37,7 @@ const STACKED_POSITIONS = [
 const PRODUCT_FEATURES = [
   {
     key: "unifiedInbox",
-    gradient: "from-primary-500/10 to-purple-500/10",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
     iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
@@ -48,8 +48,8 @@ const PRODUCT_FEATURES = [
   },
   {
     key: "aiCopilot",
-    gradient: "from-cyan-500/10 to-blue-500/10",
-    iconColor: "text-cyan-500",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
+    iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
@@ -59,8 +59,8 @@ const PRODUCT_FEATURES = [
   },
   {
     key: "smartBot",
-    gradient: "from-amber-500/10 to-orange-500/10",
-    iconColor: "text-amber-500",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
+    iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
@@ -69,8 +69,8 @@ const PRODUCT_FEATURES = [
   },
   {
     key: "knowledgeBase",
-    gradient: "from-green-500/10 to-emerald-500/10",
-    iconColor: "text-green-500",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
+    iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
@@ -79,8 +79,8 @@ const PRODUCT_FEATURES = [
   },
   {
     key: "smartRouting",
-    gradient: "from-blue-500/10 to-indigo-500/10",
-    iconColor: "text-blue-500",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
+    iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
@@ -89,8 +89,8 @@ const PRODUCT_FEATURES = [
   },
   {
     key: "analytics",
-    gradient: "from-rose-500/10 to-pink-500/10",
-    iconColor: "text-rose-500",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
+    iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
@@ -788,24 +788,24 @@ function ProductMockup() {
 function FaqItem({ question, answer }: { question: string; answer: string }) {
   const [open, setOpen] = useState(false);
   return (
-    <div className="border-b border-gray-100 last:border-0">
+    <div className="border-b border-gray-100/80 last:border-0">
       <button
         onClick={() => setOpen(!open)}
-        className="w-full flex items-center justify-between py-4 sm:py-5 text-start gap-3 sm:gap-4 group min-h-[48px]"
+        className="w-full flex items-center justify-between py-5 sm:py-6 text-start gap-4 group"
       >
-        <span className="text-sm sm:text-[15px] font-medium text-black group-hover:text-primary-500 transition-colors">{question}</span>
+        <span className="text-[14px] sm:text-[15px] font-medium text-gray-900 group-hover:text-primary-500 transition-colors duration-200">{question}</span>
         <svg
-          width="24" height="24" viewBox="0 0 24 24" fill="none"
-          className={`flex-shrink-0 text-gray-400 transition-transform duration-300 ${open ? "rotate-45" : ""}`}
+          width="20" height="20" viewBox="0 0 24 24" fill="none"
+          className={`flex-shrink-0 text-gray-300 transition-transform duration-300 ${open ? "rotate-45" : ""}`}
         >
           <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
         </svg>
       </button>
       <div
-        className={`grid transition-all duration-300 ease-out ${open ? "grid-rows-[1fr] opacity-100 pb-4 sm:pb-5" : "grid-rows-[0fr] opacity-0"}`}
+        className={`grid transition-all duration-300 ease-out ${open ? "grid-rows-[1fr] opacity-100 pb-5 sm:pb-6" : "grid-rows-[0fr] opacity-0"}`}
       >
         <div className="overflow-hidden">
-          <p className="text-[#757575] text-sm leading-[1.7]">{answer}</p>
+          <p className="text-[#9a9a9a] text-[13px] sm:text-sm leading-[1.8]">{answer}</p>
         </div>
       </div>
     </div>
@@ -942,7 +942,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} t={t} locale={locale} setLocale={setLocale} navDark={navDark} />
 
       {/* ───── Hero: Split Layout ───── */}
-      <section className="relative min-h-[80vh] sm:min-h-[95vh] flex items-center px-4 sm:px-12 lg:px-20 pt-20 sm:pt-24 pb-12 sm:pb-0 overflow-hidden bg-white">
+      <section className="relative min-h-[80vh] sm:min-h-[95vh] flex items-center px-4 sm:px-12 lg:px-20 pt-24 sm:pt-28 pb-16 sm:pb-0 overflow-hidden bg-white">
         {/* Subtle gradient spots */}
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -top-32 -left-32 w-[400px] sm:w-[600px] h-[400px] sm:h-[600px] rounded-full opacity-[0.08]" style={{ background: "radial-gradient(circle, #9b59b6 0%, #7c3aed 40%, transparent 70%)", filter: "blur(80px)" }} />
@@ -959,24 +959,24 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
                 {t("landing.hero.title1")}{" "}
                 <RotatingPlatform locale={locale} />
               </span>
-              <span className="block text-[clamp(1.15rem,3.5vw,2rem)] font-extralight leading-[1.2] tracking-[-0.02em] text-[#757575] mt-2 sm:mt-3">
+              <span className="block text-[clamp(1.15rem,3.5vw,2rem)] font-extralight leading-[1.2] tracking-[-0.02em] text-[#9a9a9a] mt-3 sm:mt-4">
                 {t("landing.hero.title2")}
               </span>
             </h1>
-            <p className="text-[15px] sm:text-[17px] leading-[1.6] font-light text-[#757575] mb-6 sm:mb-8 landing-fade-in landing-delay-1">
+            <p className="text-[15px] sm:text-[17px] leading-[1.7] font-light text-[#9a9a9a] mb-8 sm:mb-10 landing-fade-in landing-delay-1">
               {t("landing.hero.subtitle")}
             </p>
             <div className="flex flex-wrap gap-3 landing-fade-in landing-delay-2 justify-center lg:justify-start">
               <Link
                 href="/early-access"
-                className="px-6 py-3 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-colors"
-                style={{ boxShadow: "0 2px 8px rgba(124,92,252,0.25)" }}
+                className="px-8 py-3.5 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-all duration-200 hover:scale-[1.02]"
+                style={{ boxShadow: "0 4px 20px rgba(124,92,252,0.25)" }}
               >
                 {t("landing.hero.cta")}
               </Link>
               <a
                 href="#how-it-works"
-                className="px-6 py-3 text-[15px] font-medium text-[#757575] hover:text-black transition-colors"
+                className="px-6 py-3.5 text-[15px] font-medium text-[#9a9a9a] hover:text-black transition-colors duration-200"
               >
                 {t("landing.hero.ctaSecondary")} &rarr;
               </a>
@@ -991,9 +991,9 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       </section>
 
       {/* ───── Supported Integrations (marquee) ───── */}
-      <section className="py-10 sm:py-14 px-4 sm:px-6 border-t border-gray-100">
+      <section className="py-12 sm:py-16 px-4 sm:px-6">
         <div className="max-w-[1240px] mx-auto">
-          <p className="text-xs font-medium text-[#a3a3a3] uppercase tracking-[0.15em] mb-6 sm:mb-8 text-center">{t("landing.hero.trustedBy")}</p>
+          <p className="text-[11px] font-medium text-[#c0c0c0] uppercase tracking-[0.2em] mb-6 sm:mb-8 text-center">{t("landing.hero.trustedBy")}</p>
           <div className="landing-marquee">
           <div className="landing-marquee-track">
             {[0, 1, 2, 3].map((copy) => (
@@ -1133,32 +1133,32 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       </section>
 
       {/* ───── Features: 2x3 Grid ───── */}
-      <section id="product-features" className="py-14 sm:py-28 px-4 sm:px-12 lg:px-20 bg-gray-50/50">
+      <section id="product-features" className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
         <div className="max-w-[1240px] mx-auto">
-          <div className="text-center max-w-xl mx-auto mb-10 sm:mb-16">
-            <p className="text-xs font-medium text-primary-500 uppercase tracking-[0.15em] mb-3">
+          <div className="text-center max-w-xl mx-auto mb-12 sm:mb-20">
+            <p className="text-[11px] font-medium text-primary-500 uppercase tracking-[0.2em] mb-4">
               {t("landing.productFeatures.label")}
             </p>
-            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-4">
+            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
               {t("landing.productFeatures.title")}
             </h2>
-            <p className="text-[#757575] text-sm sm:text-base">
+            <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed">
               {t("landing.productFeatures.subtitle")}
             </p>
           </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
             {PRODUCT_FEATURES.map((feature) => (
               <div
                 key={feature.key}
-                className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 hover:shadow-lg hover:shadow-gray-200/50 transition-all duration-300"
+                className="bg-white rounded-2xl p-6 sm:p-7 hover:shadow-sm transition-shadow duration-200 group"
               >
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4`}>
+                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 group-hover:scale-105 transition-transform duration-200`}>
                   <span className={feature.iconColor}>{feature.icon}</span>
                 </div>
-                <h3 className="text-[15px] sm:text-base font-semibold text-black mb-2">
+                <h3 className="text-[15px] font-semibold text-gray-900 mb-2">
                   {t(`landing.productFeatures.${feature.key}.title`)}
                 </h3>
-                <p className="text-sm text-[#757575] leading-[1.6]">
+                <p className="text-[13px] sm:text-sm text-[#9a9a9a] leading-[1.7]">
                   {t(`landing.productFeatures.${feature.key}.desc`)}
                 </p>
               </div>
@@ -1168,17 +1168,17 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       </section>
 
       {/* ───── Get Started: Zigzag ───── */}
-      <section id="get-started" className="py-14 sm:py-28 px-4 sm:px-12 lg:px-20 bg-white">
+      <section id="get-started" className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-white">
         <div className="max-w-[1240px] mx-auto">
           {/* Header */}
-          <div className="text-center max-w-xl mx-auto mb-10 sm:mb-20">
-            <p className="text-xs font-medium text-primary-500 uppercase tracking-[0.15em] mb-3">
+          <div className="text-center max-w-xl mx-auto mb-12 sm:mb-24">
+            <p className="text-[11px] font-medium text-primary-500 uppercase tracking-[0.2em] mb-4">
               {t("landing.howItWorks.label")}
             </p>
-            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-4">
+            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
               {t("landing.howItWorks.title")}
             </h2>
-            <p className="text-[#757575] text-sm sm:text-base">
+            <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed">
               {t("landing.howItWorks.subtitle")}
             </p>
           </div>
@@ -1201,25 +1201,22 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
                 >
                   {/* Text */}
                   <div className="flex-1 max-w-lg">
-                    <div className="flex items-center gap-3 mb-3 sm:mb-4">
-                      <div className="flex-shrink-0 w-9 sm:w-10 h-9 sm:h-10 rounded-full bg-primary-500 text-white flex items-center justify-center text-sm font-bold">
+                    <div className="flex items-center gap-3.5 mb-4 sm:mb-5">
+                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-500/10 text-primary-500 flex items-center justify-center text-[13px] font-semibold">
                         {i + 1}
                       </div>
-                      <h3 className="text-lg sm:text-2xl font-semibold tracking-[-0.02em]">
+                      <h3 className="text-lg sm:text-xl font-semibold tracking-[-0.02em] text-gray-900">
                         {t(`landing.howItWorks.${step}.title`)}
                       </h3>
                     </div>
-                    <p className="text-[#757575] text-sm sm:text-base leading-[1.7] ps-12 sm:ps-[52px]">
+                    <p className="text-[#9a9a9a] text-sm sm:text-[15px] leading-[1.75] ps-[46px]">
                       {t(`landing.howItWorks.${step}.desc`)}
                     </p>
                   </div>
 
                   {/* Visual */}
                   <div className="flex-1 w-full max-w-md">
-                    <div
-                      className="bg-[#1a1a2e] rounded-2xl border border-white/[0.06] overflow-hidden"
-                      style={{ boxShadow: "0 6px 30px rgba(0,0,0,0.15)" }}
-                    >
+                    <div className="rounded-2xl overflow-hidden shadow-sm">
                       <img
                         src={["/get_gifs/connect.gif", "/get_gifs/knowladge.gif", "/get_gifs/ai.gif", "/get_gifs/chat.gif"][i]}
                         alt={t(`landing.howItWorks.${step}.title`) as string}
@@ -1236,17 +1233,17 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       </section>
 
       {/* ───── FAQ ───── */}
-      <section className="py-14 sm:py-28 px-4 sm:px-12 lg:px-20 bg-gray-50/50">
+      <section className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
         <div className="max-w-[720px] mx-auto">
-          <div className="text-center mb-8 sm:mb-12">
-            <p className="text-xs font-medium text-primary-500 uppercase tracking-[0.15em] mb-3">
+          <div className="text-center mb-10 sm:mb-14">
+            <p className="text-[11px] font-medium text-primary-500 uppercase tracking-[0.2em] mb-4">
               {t("landing.faq.label")}
             </p>
             <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15]">
               {t("landing.faq.title")}
             </h2>
           </div>
-          <div className="bg-white rounded-2xl border border-gray-100 px-4 sm:px-8 shadow-[0_2px_12px_rgba(0,0,0,0.04)]">
+          <div className="bg-white rounded-2xl px-5 sm:px-8 shadow-sm">
             {((t("landing.faq.items") as unknown) as { q: string; a: string }[])?.map?.((item, i) => (
               <FaqItem key={i} question={item.q} answer={item.a} />
             )) ?? null}
@@ -1255,18 +1252,18 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       </section>
 
       {/* ───── CTA ───── */}
-      <section className="py-14 sm:py-28 px-4 sm:px-6">
+      <section className="py-20 sm:py-36 px-4 sm:px-6">
         <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-4">
+          <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
             {t("landing.cta.title")}
           </h2>
-          <p className="text-[#757575] text-base mb-8">
+          <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed mb-10">
             {t("landing.cta.subtitle")}
           </p>
           <Link
             href="/early-access"
-            className="inline-flex px-8 py-3.5 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-colors"
-            style={{ boxShadow: "0 2px 12px rgba(124,92,252,0.3)" }}
+            className="inline-flex px-10 py-4 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-all duration-200 hover:scale-[1.02]"
+            style={{ boxShadow: "0 4px 20px rgba(124,92,252,0.25)" }}
           >
             {t("landing.cta.button")}
           </Link>
@@ -1274,44 +1271,44 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       </section>
 
       {/* ───── Footer ───── */}
-      <footer className="border-t border-gray-100 py-8 sm:py-10 px-4 sm:px-12 lg:px-20">
+      <footer className="py-10 sm:py-14 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
         <div className="max-w-[1240px] mx-auto">
-          <div className="flex flex-col md:flex-row justify-between gap-8">
+          <div className="flex flex-col md:flex-row justify-between gap-10">
             <div className="max-w-xs">
               <Logo />
-              <p className="mt-3 text-sm text-[#a3a3a3] leading-relaxed">
+              <p className="mt-4 text-[13px] text-[#b0b0b0] leading-relaxed">
                 {t("landing.hero.subtitle").slice(0, 80)}...
               </p>
             </div>
 
-            <div className="grid grid-cols-3 gap-6 sm:gap-8 text-sm">
+            <div className="grid grid-cols-3 gap-8 sm:gap-12 text-sm">
               <div>
-                <h4 className="font-semibold text-black mb-2.5 sm:mb-3 text-[13px]">{t("landing.footer.product")}</h4>
-                <ul className="space-y-1.5 sm:space-y-2 text-[#757575]">
-                  <li><a href="#how-it-works" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.nav.howItWorks")}</a></li>
-                  <li><a href="#product-features" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.nav.features")}</a></li>
+                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.product")}</h4>
+                <ul className="space-y-2.5 text-[#b0b0b0]">
+                  <li><a href="#how-it-works" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.howItWorks")}</a></li>
+                  <li><a href="#product-features" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.nav.features")}</a></li>
                 </ul>
               </div>
               <div>
-                <h4 className="font-semibold text-black mb-2.5 sm:mb-3 text-[13px]">{t("landing.footer.company")}</h4>
-                <ul className="space-y-1.5 sm:space-y-2 text-[#757575]">
-                  <li><a href="#" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.footer.about")}</a></li>
-                  <li><a href="#" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.footer.blog")}</a></li>
+                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.company")}</h4>
+                <ul className="space-y-2.5 text-[#b0b0b0]">
+                  <li><a href="#" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.about")}</a></li>
+                  <li><a href="#" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.blog")}</a></li>
                 </ul>
               </div>
               <div>
-                <h4 className="font-semibold text-black mb-2.5 sm:mb-3 text-[13px]">{t("landing.footer.legal")}</h4>
-                <ul className="space-y-1.5 sm:space-y-2 text-[#757575]">
-                  <li><Link href="/privacy-policy" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.footer.privacy")}</Link></li>
-                  <li><Link href="/terms" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.footer.terms")}</Link></li>
+                <h4 className="font-medium text-gray-900 mb-3 sm:mb-4 text-[13px]">{t("landing.footer.legal")}</h4>
+                <ul className="space-y-2.5 text-[#b0b0b0]">
+                  <li><Link href="/privacy-policy" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.privacy")}</Link></li>
+                  <li><Link href="/terms" className="hover:text-gray-900 transition-colors duration-200 text-[13px]">{t("landing.footer.terms")}</Link></li>
                 </ul>
               </div>
             </div>
           </div>
 
-          <div className="mt-6 sm:mt-8 pt-5 sm:pt-6 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] text-[#a3a3a3]">
+          <div className="mt-8 sm:mt-10 pt-6 sm:pt-8 border-t border-gray-200/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] text-[#b0b0b0]">
             <p>&copy; {new Date().getFullYear()} GOTCHA. {t("landing.footer.copyright")}</p>
-            <Link href={otherPath} className="hover:text-black transition-colors">
+            <Link href={otherPath} className="hover:text-gray-900 transition-colors duration-200">
               {otherLabel}
             </Link>
           </div>

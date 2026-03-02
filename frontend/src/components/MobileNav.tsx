@@ -30,7 +30,7 @@ export function MobileHeader() {
   }, [showMenu]);
 
   return (
-    <header className="md:hidden bg-white border-b border-gray-100 px-4 py-2.5 flex items-center justify-between sticky top-0 z-30">
+    <header className="md:hidden bg-white shadow-subtle px-4 py-2.5 flex items-center justify-between sticky top-0 z-30">
       {/* Logo */}
       <div className="flex items-center gap-2">
         <Image src="/apple-touch-icon.png" alt="GOTCHA" width={32} height={32} className="w-8 h-8" />
@@ -47,7 +47,7 @@ export function MobileHeader() {
         </button>
 
         {showMenu && (
-          <div className="absolute end-0 top-12 bg-white rounded-2xl shadow-lg border border-gray-100 py-2 w-56 z-50">
+          <div className="absolute end-0 top-12 bg-white rounded-2xl shadow-float py-2 w-56 z-50">
             {/* User info */}
             <div className="px-4 py-2 border-b border-gray-100">
               <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
@@ -59,7 +59,7 @@ export function MobileHeader() {
               <select
                 value={locale}
                 onChange={(e) => { setLocale(e.target.value as Locale); setShowMenu(false); }}
-                className="w-full bg-gray-50 text-gray-600 text-xs rounded-lg px-3 py-2 border border-gray-200 focus:outline-none"
+                className="w-full bg-gray-50 text-gray-600 text-xs rounded-lg px-3 py-2 border-0 ring-1 ring-gray-200/60 focus:outline-none focus:ring-2 focus:ring-primary-200"
               >
                 {Object.entries(localeConfig).map(([key, config]) => (
                   <option key={key} value={key}>{config.label}</option>
@@ -124,8 +124,8 @@ export function MobileBottomNav() {
 
       {/* More sheet */}
       {showMore && (
-        <div className="md:hidden fixed bottom-[68px] inset-x-0 bg-white rounded-t-2xl shadow-lg border-t border-gray-200 z-50 pb-safe animate-slide-up">
-          <div className="px-4 py-3 border-b border-gray-100">
+        <div className="md:hidden fixed bottom-[68px] inset-x-0 bg-white rounded-t-2xl shadow-float z-50 pb-safe animate-slide-up">
+          <div className="px-4 py-3">
             <div className="w-10 h-1 bg-gray-200 rounded-full mx-auto mb-2" />
           </div>
           <nav className="grid grid-cols-3 gap-1 p-3">
@@ -153,7 +153,7 @@ export function MobileBottomNav() {
       )}
 
       {/* Bottom tab bar */}
-      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white border-t border-gray-200 z-40 pb-safe">
+      <nav className="md:hidden fixed bottom-0 inset-x-0 bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)] z-40 pb-safe">
         <div className="flex items-center justify-around h-[60px]">
           {adminNavItems.map((item) => {
             const isActive = item.isMore ? isMoreActive : pathname.startsWith(item.href);

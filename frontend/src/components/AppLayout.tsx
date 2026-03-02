@@ -89,7 +89,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <div className="flex flex-col items-center gap-3">
-          <div className="w-10 h-10 border-3 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+          <div className="w-10 h-10 border-3 border-gray-200 border-t-primary-500 rounded-full animate-spin" />
           <span className="text-sm text-gray-400">{t("app.loading")}</span>
         </div>
       </div>
@@ -102,19 +102,19 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isConversationPage = pathname === "/conversations";
 
   return (
-    <div className="flex min-h-screen bg-gray-50">
+    <div className="flex min-h-screen app-bg md:p-2 md:gap-2">
       {/* Desktop sidebar - hidden on mobile */}
-      <div className="hidden md:block">
+      <div className="hidden md:block relative z-10">
         <Sidebar collapsed={collapsed} onToggle={handleToggle} />
       </div>
 
       {/* Mobile layout */}
-      <div className="flex-1 flex flex-col md:contents overflow-hidden">
+      <div className="flex-1 flex flex-col md:contents overflow-hidden relative z-10">
         {/* Mobile header - hidden when chat is open on mobile */}
         {!chatOpen && <MobileHeader />}
 
         {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
-        <main className={`flex-1 overflow-hidden w-full ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
+        <main className={`flex-1 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
           {children}
         </main>
 

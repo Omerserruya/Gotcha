@@ -126,9 +126,39 @@
   "hotPaths": [
     {
       "path": "src/components/landing/LandingPage.tsx",
-      "accessCount": 51,
-      "lastAccessed": 1772465306196,
+      "accessCount": 76,
+      "lastAccessed": 1772466525945,
       "type": "file"
+    },
+    {
+      "path": "src/components/conversations/ConversationList.tsx",
+      "accessCount": 18,
+      "lastAccessed": 1772474014286,
+      "type": "file"
+    },
+    {
+      "path": "src/app/globals.css",
+      "accessCount": 10,
+      "lastAccessed": 1772471697059,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppLayout.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1772473273246,
+      "type": "file"
+    },
+    {
+      "path": "src/app/conversations/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1772472899701,
+      "type": "file"
+    },
+    {
+      "path": "",
+      "accessCount": 8,
+      "lastAccessed": 1772466871902,
+      "type": "directory"
     },
     {
       "path": "src/i18n/he.json",
@@ -137,33 +167,105 @@
       "type": "directory"
     },
     {
+      "path": "src/components/conversations/ChatPanel.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1772472099950,
+      "type": "file"
+    },
+    {
+      "path": "src/app/layout.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772466864820,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772471711935,
+      "type": "file"
+    },
+    {
+      "path": "src/app/history/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1772472900699,
+      "type": "file"
+    },
+    {
       "path": "src/i18n/en.json",
       "accessCount": 4,
       "lastAccessed": 1772465121306,
       "type": "directory"
     },
     {
-      "path": "src/app/layout.tsx",
+      "path": "tailwind.config.ts",
       "accessCount": 4,
-      "lastAccessed": 1772465680809,
-      "type": "directory"
-    },
-    {
-      "path": "src/app/globals.css",
-      "accessCount": 4,
-      "lastAccessed": 1772465688362,
+      "lastAccessed": 1772467027962,
       "type": "file"
     },
     {
-      "path": "",
-      "accessCount": 2,
-      "lastAccessed": 1772465664054,
-      "type": "directory"
+      "path": "src/components/conversations/ChannelBadge.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1772473706809,
+      "type": "file"
+    },
+    {
+      "path": "src/components/MobileNav.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1772467026928,
+      "type": "file"
     },
     {
       "path": "src/app",
       "accessCount": 2,
       "lastAccessed": 1772465666045,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/ConfirmModal.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772466879644,
+      "type": "file"
+    },
+    {
+      "path": "src/components/conversations/CoPilotPanel.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772467021290,
+      "type": "file"
+    },
+    {
+      "path": "src/components/conversations/HistoryPanel.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772467026478,
+      "type": "file"
+    },
+    {
+      "path": "src/app/dashboard/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772472914351,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1772466885931,
+      "type": "file"
+    },
+    {
+      "path": "src/app/settings/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772472915296,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/agents/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772472916669,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/channels/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1772472917378,
       "type": "directory"
     }
   ],

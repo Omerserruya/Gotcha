@@ -14,6 +14,13 @@
 
 html {
   scroll-behavior: smooth;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Premium global transitions */
+*, *::before, *::after {
+  transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 body {
@@ -51,7 +58,7 @@ body {
 
 /* Chat bubble styles */
 .chat-bubble-inbound {
-  @apply bg-white text-gray-900 rounded-2xl rounded-tl-sm shadow-sm border border-gray-100;
+  @apply bg-white text-gray-900 rounded-2xl rounded-tl-sm shadow-sm;
 }
 
 .chat-bubble-outbound {
@@ -308,4 +315,61 @@ body {
 .landing-dark-section {
   background: linear-gradient(180deg, #333 0%, #121212 8%, #121212 92%, #333 100%);
   box-shadow: inset 0 0 100px 10px #000;
+}
+
+/* ───── Premium app background (mirrors hero gradient blobs, no grid) ───── */
+.app-bg {
+  background: #ffffff;
+  position: relative;
+}
+.app-bg::before,
+.app-bg::after {
+  content: "";
+  position: fixed;
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 0;
+}
+.app-bg::before {
+  top: -120px;
+  left: -120px;
+  width: 600px;
+  height: 600px;
+  background: radial-gradient(circle, #9b59b6 0%, #7c3aed 40%, transparent 70%);
+  opacity: 0.06;
+  filter: blur(80px);
+}
+.app-bg::after {
+  top: 25%;
+  right: -160px;
+  width: 650px;
+  height: 650px;
+  background: radial-gradient(circle, #06b6d4 0%, #3b82f6 40%, transparent 70%);
+  opacity: 0.05;
+  filter: blur(90px);
+}
+
+/* ───── Premium app surfaces ───── */
+.surface-primary {
+  @apply bg-white shadow-subtle;
+}
+.surface-elevated {
+  @apply bg-white shadow-panel;
+}
+.surface-inset {
+  @apply bg-gray-50/70;
+}
+
+/* Premium input style */
+.input-premium {
+  @apply bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl text-sm
+         focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition-all;
+}
+
+/* Smooth hover lift for cards */
+.hover-lift {
+  @apply transition-all duration-200;
+}
+.hover-lift:hover {
+  @apply shadow-panel -translate-y-px;
 }

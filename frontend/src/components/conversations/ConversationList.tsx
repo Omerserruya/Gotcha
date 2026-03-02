@@ -50,6 +50,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [markedUnread, setMarkedUnread] = useState<Set<string>>(getMarkedUnread);
   const [contextMenu, setContextMenu] = useState<{ convId: string; x: number; y: number } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
@@ -269,70 +270,101 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   return (
     <>
       {/* Header */}
-      <div className="p-4 border-b border-gray-100">
+      <div className="p-4 shadow-subtle">
         <h2 className="text-lg font-bold text-gray-900 mb-3 ps-8 md:ps-0">{t("conversations.title")}</h2>
-        <div className="relative mb-2">
-          <svg className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("conversations.search")}
-            className="w-full ps-9 pe-4 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
-          />
+        <div className="flex items-center gap-2">
+          <div className="relative flex-1">
+            <svg className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("conversations.search")}
+              className="w-full ps-9 pe-4 py-2.5 text-sm bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
+            />
+          </div>
+          {/* Filter toggle */}
+          <button
+            onClick={() => setShowFilters(!showFilters)}
+            className={clsx(
+              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all relative",
+              showFilters || channelFilter || departmentFilter
+                ? "bg-primary-50 text-primary-600"
+                : "bg-gray-50/80 text-gray-400 ring-1 ring-gray-200/60 hover:bg-gray-100"
+            )}
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+            </svg>
+            {(channelFilter || departmentFilter) && (
+              <span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-primary-500 rounded-full" />
+            )}
+          </button>
         </div>
-        {/* Channel filter */}
-        <div className="flex items-center gap-1.5">
-          {[
-            { value: "", label: t("conversations.filterAll") },
-            { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
-            { value: "MESSENGER", label: t("conversations.channelMessenger") },
-            { value: "INSTAGRAM", label: t("conversations.channelInstagram") },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => setChannelFilter(opt.value)}
-              className={clsx(
-                "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
-                channelFilter === opt.value
-                  ? "bg-primary-500 text-white shadow-sm"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              )}
-            >
-              {opt.label}
-            </button>
-          ))}
-        </div>
-        {/* Department filter (admin only) */}
-        {user?.role === "ADMIN" && departments.length > 0 && (
-          <div className="flex items-center gap-1.5 mt-1.5">
-            <button
-              onClick={() => setDepartmentFilter("")}
-              className={clsx(
-                "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
-                departmentFilter === ""
-                  ? "bg-teal-500 text-white shadow-sm"
-                  : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-              )}
-            >
-              {t("conversations.allDepartments")}
-            </button>
-            {departments.map((dept: any) => (
-              <button
-                key={dept.id}
-                onClick={() => setDepartmentFilter(dept.id)}
-                className={clsx(
-                  "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
-                  departmentFilter === dept.id
-                    ? "bg-teal-500 text-white shadow-sm"
-                    : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                )}
-              >
-                {dept.name}
-              </button>
-            ))}
+
+        {/* Collapsible filters */}
+        {showFilters && (
+          <div className="mt-3 pt-3 border-t border-gray-100/60 space-y-2.5">
+            {/* Channel filter */}
+            <div>
+              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 block">{t("conversations.filterAll")}</span>
+              <div className="flex items-center gap-1.5 flex-wrap">
+                {[
+                  { value: "", label: t("conversations.filterAll") },
+                  { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
+                  { value: "MESSENGER", label: t("conversations.channelMessenger") },
+                  { value: "INSTAGRAM", label: t("conversations.channelInstagram") },
+                ].map((opt) => (
+                  <button
+                    key={opt.value}
+                    onClick={() => setChannelFilter(opt.value)}
+                    className={clsx(
+                      "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                      channelFilter === opt.value
+                        ? "bg-primary-500 text-white shadow-sm"
+                        : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
+                    )}
+                  >
+                    {opt.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+            {/* Department filter (admin only) */}
+            {user?.role === "ADMIN" && departments.length > 0 && (
+              <div>
+                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 block">{t("conversations.allDepartments")}</span>
+                <div className="flex items-center gap-1.5 flex-wrap">
+                  <button
+                    onClick={() => setDepartmentFilter("")}
+                    className={clsx(
+                      "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                      departmentFilter === ""
+                        ? "bg-primary-500 text-white shadow-sm"
+                        : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
+                    )}
+                  >
+                    {t("conversations.allDepartments")}
+                  </button>
+                  {departments.map((dept: any) => (
+                    <button
+                      key={dept.id}
+                      onClick={() => setDepartmentFilter(dept.id)}
+                      className={clsx(
+                        "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                        departmentFilter === dept.id
+                          ? "bg-primary-500 text-white shadow-sm"
+                          : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
+                      )}
+                    >
+                      {dept.name}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -354,14 +386,14 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           sections.map((section) => (
             <div key={section.key}>
               {/* Section header */}
-              <div className={clsx("px-4 py-2.5 flex items-center gap-2 border-b border-gray-100", section.bgColor)}>
+              <div className="px-4 py-2.5 flex items-center gap-2 bg-gray-50/50">
                 <span className={section.color}>{section.icon}</span>
-                <span className={clsx("text-xs font-semibold uppercase tracking-wide", section.color)}>
+                <span className={clsx("text-[10px] font-semibold uppercase tracking-widest", section.color)}>
                   {section.label}
                 </span>
                 <span className={clsx(
                   "text-[10px] font-bold px-1.5 py-0.5 rounded-full ms-auto",
-                  section.items.length > 0 ? `${section.bgColor} ${section.color}` : "bg-gray-100 text-gray-400"
+                  section.items.length > 0 ? "bg-gray-100 " + section.color : "bg-gray-100 text-gray-400"
                 )}>
                   {section.items.length}
                 </span>
@@ -379,29 +411,26 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                     onClick={() => handleSelect(conv.id)}
                     onContextMenu={(e) => handleContextMenu(e, conv.id)}
                     className={clsx(
-                      "w-full text-start px-4 py-3 border-b border-gray-50 hover:bg-gray-50 transition-colors",
-                      selectedId === conv.id && "bg-primary-50 border-e-2 border-e-primary-500"
+                      "w-full text-start px-4 py-3 hover:bg-gray-50/80 transition-colors",
+                      selectedId === conv.id && "bg-primary-50/60 rounded-lg mx-2"
                     )}
                   >
                     <div className="flex items-start gap-3">
                       {/* Avatar */}
-                      <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center shrink-0">
-                        <span className="text-sm font-bold text-primary-600">
+                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+                        <span className="text-sm font-bold text-gray-600">
                           {(conv.customerName || conv.customerPhone || "?").charAt(0).toUpperCase()}
                         </span>
                       </div>
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
-                          <div className="flex items-center gap-1.5">
-                            <ChannelBadge channel={conv.channel} />
-                            <p className={clsx(
-                              "font-semibold text-sm truncate",
-                              isUnread(conv, lastReadMap, markedUnread) ? "text-gray-900" : "text-gray-900"
-                            )}>
-                              {conv.customerName || conv.customerExternalId || conv.customerPhone}
-                            </p>
-                          </div>
+                          <p className={clsx(
+                            "font-semibold text-sm truncate",
+                            isUnread(conv, lastReadMap, markedUnread) ? "text-gray-900" : "text-gray-900"
+                          )}>
+                            {conv.customerName || conv.customerExternalId || conv.customerPhone}
+                          </p>
                           <div className="flex items-center gap-1.5 shrink-0">
                             {isUnread(conv, lastReadMap, markedUnread) && (
                               <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-sm shadow-blue-500/30" title="Unread" />
@@ -409,7 +438,22 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                             {conv.lastMessageAt && (
                               <span className={clsx(
                                 "text-[10px] shrink-0",
-                                isUnread(conv, lastReadMap, markedUnread) ? "text-blue-500 font-semibold" : "text-gray-400"
+                                (() => {
+                                  // SLA color takes priority over unread
+                                  if (slaConfig?.enabled && conv.status !== "CLOSED") {
+                                    let slaMins = slaConfig.slaMinutes;
+                                    if (conv.departmentId && deptSlaMap[conv.departmentId]?.enabled) {
+                                      slaMins = deptSlaMap[conv.departmentId].slaMinutes;
+                                    }
+                                    const ref = conv.lastMessageAt || conv.createdAt;
+                                    if (ref) {
+                                      const pct = ((Date.now() - new Date(ref).getTime()) / 60000 / slaMins) * 100;
+                                      if (pct >= 100) return "text-red-500 font-semibold";
+                                      if (pct >= slaConfig.warningThreshold) return "text-amber-500 font-semibold";
+                                    }
+                                  }
+                                  return isUnread(conv, lastReadMap, markedUnread) ? "text-blue-500 font-semibold" : "text-gray-400";
+                                })()
                               )}>
                                 {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
                               </span>
@@ -422,18 +466,20 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                         )}>
                           {conv.lastMessageBody || conv.customerPhone}
                         </p>
-                        <div className="flex items-center gap-2 mt-1 flex-wrap">
-                          <SlaChip conv={conv} slaConfig={slaConfig} deptSlaMap={deptSlaMap} t={t} />
-                          {conv.department && (
-                            <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-teal-50 text-teal-600 ring-1 ring-teal-200">
-                              {conv.department.name}
-                            </span>
-                          )}
-                          {conv.assignedAgent && conv.assignedAgentId !== user?.id && (
-                            <span className="text-[10px] text-gray-400">
-                              {conv.assignedAgent.name}
-                            </span>
-                          )}
+                        <div className="flex items-center justify-between mt-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            {conv.department && (
+                              <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
+                                {conv.department.name}
+                              </span>
+                            )}
+                            {conv.assignedAgent && conv.assignedAgentId !== user?.id && (
+                              <span className="text-[10px] text-gray-400">
+                                {conv.assignedAgent.name}
+                              </span>
+                            )}
+                          </div>
+                          <ChannelBadge channel={conv.channel} size="sm" />
                         </div>
                       </div>
                     </div>
@@ -449,7 +495,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       {contextMenu && (
         <div
           ref={contextMenuRef}
-          className="fixed z-50 bg-white rounded-xl shadow-lg border border-gray-100 py-1 min-w-[180px] animate-in fade-in zoom-in-95 duration-150"
+          className="fixed z-50 bg-white rounded-xl shadow-float py-1 min-w-[180px] animate-in fade-in zoom-in-95 duration-150"
           style={{ top: contextMenu.y, left: contextMenu.x }}
         >
           <button
@@ -492,8 +538,8 @@ export function ConversationList({ selectedId, onSelect }: Props) {
 
 function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
   const config: Record<string, { class: string; label: string }> = {
-    OPEN: { class: "bg-green-50 text-green-600 ring-1 ring-green-200", label: t("conversations.filterOpen") },
-    WAITING: { class: "bg-amber-50 text-amber-600 ring-1 ring-amber-200", label: t("conversations.filterWaiting") },
+    OPEN: { class: "bg-green-50 text-green-600", label: t("conversations.filterOpen") },
+    WAITING: { class: "bg-amber-50 text-amber-600", label: t("conversations.filterWaiting") },
     CLOSED: { class: "bg-gray-100 text-gray-500", label: t("conversations.filterClosed") },
   };
   const c = config[status] || config.OPEN;
@@ -530,7 +576,7 @@ function SlaChip({ conv, slaConfig, deptSlaMap, t }: {
   if (percentage >= 100) {
     // SLA breached
     return (
-      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600 ring-1 ring-red-200 flex items-center gap-1">
+      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600 flex items-center gap-1">
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
         </svg>
@@ -541,7 +587,7 @@ function SlaChip({ conv, slaConfig, deptSlaMap, t }: {
     // SLA warning
     const remaining = Math.max(0, Math.ceil(slaMinutes - elapsed));
     return (
-      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-600 ring-1 ring-amber-200 flex items-center gap-1">
+      <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-amber-50 text-amber-600 flex items-center gap-1">
         <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>

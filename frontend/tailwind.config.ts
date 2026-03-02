@@ -23,6 +23,9 @@ const config: Config = {
       boxShadow: {
         card: "0 2px 12px 0 rgba(124, 92, 252, 0.08)",
         float: "0 8px 30px rgba(0, 0, 0, 0.06)",
+        subtle: "0 1px 3px rgba(0, 0, 0, 0.04)",
+        panel: "0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 16px rgba(0, 0, 0, 0.04)",
+        "inner-glow": "inset 0 1px 0 rgba(255,255,255,0.8)",
       },
     },
   },

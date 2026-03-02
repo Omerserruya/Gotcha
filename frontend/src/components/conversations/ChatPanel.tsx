@@ -219,11 +219,11 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const canTransfer = !isClosed && (isAssignedToMe || user?.role === "ADMIN");
 
   return (
-    <div className="flex h-full w-full">
+    <div className="flex h-full w-full bg-white">
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="bg-white border-b border-gray-100 px-4 py-3 flex items-center gap-3 shadow-sm">
+        <div className="bg-white px-4 py-3 flex items-center gap-3 shadow-subtle">
           <button onClick={onBack} className="md:hidden text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={dir === "rtl" ? "M8.25 4.5l7.5 7.5-7.5 7.5" : "M15.75 19.5L8.25 12l7.5-7.5"} />
@@ -231,8 +231,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           </button>
 
           {/* Customer info with channel badge */}
-          <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center shrink-0">
-            <span className="text-sm font-bold text-primary-600">
+          <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+            <span className="text-sm font-bold text-gray-600">
               {(conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "?").charAt(0).toUpperCase()}
             </span>
           </div>
@@ -284,8 +284,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               className={clsx(
                 "flex items-center gap-1.5 text-xs px-2 md:px-3 py-1.5 rounded-lg font-medium transition shrink-0",
                 historyOpen
-                  ? "bg-gradient-to-r from-blue-500 to-cyan-600 text-white shadow-sm shadow-blue-500/25"
-                  : "bg-gradient-to-r from-blue-50 to-cyan-50 text-blue-600 hover:from-blue-100 hover:to-cyan-100 border border-blue-200/50"
+                  ? "bg-primary-500 text-white shadow-sm"
+                  : "bg-gray-50 text-gray-500 hover:bg-gray-100"
               )}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -300,8 +300,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               className={clsx(
                 "flex items-center gap-1.5 text-xs px-2 md:px-3 py-1.5 rounded-lg font-medium transition shrink-0",
                 copilotOpen
-                  ? "bg-gradient-to-r from-violet-500 to-purple-600 text-white shadow-sm shadow-purple-500/25"
-                  : "bg-gradient-to-r from-violet-50 to-purple-50 text-purple-600 hover:from-violet-100 hover:to-purple-100 border border-purple-200/50"
+                  ? "bg-primary-500 text-white shadow-sm"
+                  : "bg-gray-50 text-gray-500 hover:bg-gray-100"
               )}
             >
               <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -357,19 +357,19 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
         {/* Input area */}
         {canSend ? (
-          <form onSubmit={handleSend} className="bg-white border-t border-gray-100 p-3 flex items-center gap-3">
+          <form onSubmit={handleSend} className="bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)] p-3 flex items-center gap-3">
             <input
               type="text"
               value={inputText}
               onChange={(e) => setInputText(e.target.value)}
               placeholder={t("conversations.typeMessage")}
-              className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+              className="flex-1 px-4 py-2.5 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
               disabled={sending}
             />
             <button
               type="submit"
               disabled={sending || !inputText.trim()}
-              className="w-10 h-10 bg-primary-500 hover:bg-primary-600 text-white rounded-xl flex items-center justify-center transition disabled:opacity-40 shadow-sm"
+              className="w-10 h-10 bg-primary-500 hover:bg-primary-600 text-white rounded-xl flex items-center justify-center transition disabled:opacity-40 shadow-sm shadow-primary-500/20"
             >
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d={dir === "rtl" ? "M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" : "M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"} />
@@ -377,11 +377,11 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             </button>
           </form>
         ) : isClosed ? (
-          <div className="bg-gray-50 border-t border-gray-100 p-4 text-center text-sm text-gray-400">
+          <div className="bg-gray-50 shadow-[0_-1px_3px_rgba(0,0,0,0.04)] p-4 text-center text-sm text-gray-400">
             {t("conversations.filterClosed")}
           </div>
         ) : (
-          <div className="bg-amber-50 border-t border-amber-100 p-4 text-center text-sm text-amber-600">
+          <div className="bg-amber-50 shadow-[0_-1px_3px_rgba(0,0,0,0.04)] p-4 text-center text-sm text-amber-600">
             {t("conversations.waitingForAgent")}
           </div>
         )}
@@ -436,7 +436,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                       key={agent.id}
                       onClick={() => handleTransfer(agent.id)}
                       disabled={!agent.isActive}
-                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-primary-50 hover:border-primary-200 transition disabled:opacity-40 disabled:hover:bg-white"
+                      className="w-full text-start p-3 rounded-xl bg-gray-50/50 hover:bg-primary-50/50 transition disabled:opacity-40 disabled:hover:bg-gray-50/50"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
@@ -464,7 +464,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     <button
                       key={dept.id}
                       onClick={() => handleTransferToDept(dept.id)}
-                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-teal-50 hover:border-teal-200 transition"
+                      className="w-full text-start p-3 rounded-xl bg-gray-50/50 hover:bg-primary-50/50 transition"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 bg-gradient-to-br from-teal-100 to-teal-200 rounded-lg flex items-center justify-center">
@@ -510,8 +510,8 @@ function ActionButton({
   const styles = {
     primary: "bg-primary-500 text-white hover:bg-primary-600 shadow-sm",
     secondary: "bg-primary-50 text-primary-600 hover:bg-primary-100",
-    ghost: "bg-gray-100 text-gray-700 hover:bg-gray-200 ring-1 ring-gray-300",
-    danger: "bg-red-50 text-red-600 hover:bg-red-100 ring-1 ring-red-200",
+    ghost: "bg-gray-100 text-gray-700 hover:bg-gray-200",
+    danger: "bg-red-50 text-red-600 hover:bg-red-100",
   };
   return (
     <button
@@ -537,7 +537,7 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         </svg>
       );
       label = t("conversations.systemBotHandover");
-      colors = "bg-amber-50 text-amber-600 border-amber-200";
+      colors = "bg-amber-50 text-amber-600";
       break;
     case "agent_claimed":
       icon = (
@@ -546,7 +546,7 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         </svg>
       );
       label = t("conversations.systemAgentClaimed", { agentName: metadata?.agentName || "Agent" });
-      colors = "bg-green-50 text-green-600 border-green-200";
+      colors = "bg-green-50 text-green-600";
       break;
     case "agent_transferred":
       icon = (
@@ -555,7 +555,7 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         </svg>
       );
       label = t("conversations.systemAgentTransferred", { fromAgent: metadata?.fromAgentName || "Agent", toAgent: metadata?.toAgentName || "Agent" });
-      colors = "bg-blue-50 text-blue-600 border-blue-200";
+      colors = "bg-blue-50 text-blue-600";
       break;
     case "department_route":
       icon = (
@@ -564,7 +564,7 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         </svg>
       );
       label = t("conversations.systemDepartmentRoute", { departmentName: metadata?.departmentName || "Department" });
-      colors = "bg-teal-50 text-teal-600 border-teal-200";
+      colors = "bg-teal-50 text-teal-600";
       break;
     case "department_transferred":
       icon = (
@@ -573,18 +573,18 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         </svg>
       );
       label = t("conversations.systemDepartmentTransferred", { departmentName: metadata?.departmentName || "Department" });
-      colors = "bg-teal-50 text-teal-600 border-teal-200";
+      colors = "bg-teal-50 text-teal-600";
       break;
     default:
       icon = null;
       label = event || "System event";
-      colors = "bg-gray-50 text-gray-500 border-gray-200";
+      colors = "bg-gray-50 text-gray-500";
   }
 
   return (
     <div className="flex items-center gap-3 py-2">
       <div className="flex-1 h-px bg-gray-200" />
-      <div className={clsx("flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium border", colors)}>
+      <div className={clsx("flex items-center gap-1.5 px-3 py-1 rounded-full text-[11px] font-medium", colors)}>
         {icon}
         <span>{label}</span>
         <span className="opacity-50 ml-1">{format(new Date(timestamp), "HH:mm")}</span>

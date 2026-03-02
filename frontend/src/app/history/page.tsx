@@ -125,9 +125,9 @@ export default function HistoryPage() {
 
   return (
     <AppLayout>
-      <div className="flex h-screen">
+      <div className="flex md:gap-2 h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
         {/* Left: Customer list */}
-        <div className="w-full md:w-[340px] border-e border-gray-100 bg-white flex-shrink-0 flex flex-col">
+        <div className="w-full md:w-[340px] border-e border-gray-100 bg-white flex-shrink-0 flex flex-col md:rounded-2xl md:shadow-subtle md:overflow-hidden">
           {/* Header */}
           <div className="p-4 border-b border-gray-100">
             <h1 className="text-lg font-bold text-gray-900 ps-8 md:ps-0">{t("history.title")}</h1>
@@ -262,7 +262,7 @@ export default function HistoryPage() {
         </div>
 
         {/* Right: Conversation timeline & messages */}
-        <div className="flex-1 flex flex-col bg-gray-50/50">
+        <div className="flex-1 flex flex-col bg-white md:rounded-2xl md:shadow-subtle md:overflow-hidden">
           {!selectedCustomer ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center text-gray-300">
