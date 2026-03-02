@@ -89,156 +89,172 @@ export async function createMagicLink(tenantId: string, userId: string): Promise
 
 // ─── HTML Email Templates ───────────────────────────────────
 
-function emailWrapper(content: string): string {
+function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string): string {
+  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+  const logoUrl = `${frontendUrl}/logo.png`;
+
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Gotcha.</title>
+  <title>Set up ${tenantName} &mdash; GOTCHA.</title>
   <!--[if mso]>
   <style>table,td{font-family:Arial,sans-serif;}</style>
   <![endif]-->
 </head>
-<body style="margin:0;padding:0;background-color:#f8f9fb;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
-  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f8f9fb;">
+<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
     <tr>
-      <td align="center" style="padding:32px 16px;">
-        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
+      <td align="center" style="padding:40px 16px 20px;">
 
-          <!-- Logo -->
+        <!-- ━━━ Logo ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
           <tr>
-            <td align="center" style="padding-bottom:24px;">
-              <span style="font-size:28px;font-weight:800;color:#111827;letter-spacing:-0.5px;">Gotcha.</span>
+            <td align="center" style="padding-bottom:32px;">
+              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
             </td>
           </tr>
+        </table>
 
-          <!-- Card -->
+        <!-- ━━━ Hero Banner ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
           <tr>
-            <td style="background-color:#ffffff;border-radius:16px;border:1px solid #e5e7eb;overflow:hidden;">
-              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                ${content}
-              </table>
-            </td>
-          </tr>
-
-          <!-- Footer -->
-          <tr>
-            <td align="center" style="padding:24px 16px 0;">
-              <p style="margin:0;color:#9ca3af;font-size:12px;line-height:18px;">
-                Sent by Gotcha. &mdash; Smart messaging for modern teams.
+            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
+              <!-- Lightning circle -->
+              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
+                <span style="font-size:34px;color:#ffffff;">&#9889;</span>
+              </div>
+              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
+                Let's set up ${tenantName}.
+              </h1>
+              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
+                Your workspace is ready, ${adminName}.
               </p>
             </td>
           </tr>
         </table>
+
+        <!-- ━━━ CTA Button ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:36px 40px 32px;text-align:center;">
+              <a href="${setupUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;mso-padding-alt:14px 40px;">
+                Start Setup Wizard &rarr;
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Timeline Steps ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px 32px;">
+              <p style="margin:0 0 22px;font-size:11px;font-weight:700;color:#7C3291;text-transform:uppercase;letter-spacing:1.2px;">What you'll do</p>
+
+              <!-- Step 1 -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
+                <tr>
+                  <td style="width:40px;vertical-align:top;padding-top:2px;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#7C3291,#5A72B3);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">1</div>
+                  </td>
+                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(124,50,145,0.2);padding-left:20px;">
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Business Profile</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Industry, priorities, and preferences</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Step 2 -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="margin-bottom:4px;">
+                <tr>
+                  <td style="width:40px;vertical-align:top;padding-top:2px;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#5A72B3,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">2</div>
+                  </td>
+                  <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(90,114,179,0.2);padding-left:20px;">
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Departments &amp; SLAs</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Teams, response targets, and automation rules</p>
+                  </td>
+                </tr>
+              </table>
+
+              <!-- Step 3 -->
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <td style="width:40px;vertical-align:top;padding-top:2px;">
+                    <div style="width:30px;height:30px;background:linear-gradient(135deg,#10b981,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:15px;font-weight:800;">&#10003;</div>
+                  </td>
+                  <td style="vertical-align:top;padding-left:20px;">
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">AI Agents</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Auto-configured for each department</p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Fallback Link + Expiry ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
+                <tr>
+                  <td style="padding:24px 0 0;">
+                    <p style="margin:0;font-size:12px;color:#71717a;line-height:1.6;">
+                      Button not working? Copy this link:<br>
+                      <a href="${setupUrl}" style="color:#6DCED9;word-break:break-all;font-size:12px;">${setupUrl}</a>
+                    </p>
+                    <p style="margin:10px 0 0;font-size:12px;color:#52525b;">
+                      This link expires in <strong style="color:#6DCED9;">48 hours</strong> &bull; No login required
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Closing ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
+                <tr>
+                  <td style="padding:28px 0 0;text-align:center;">
+                    <p style="margin:0 0 20px;font-size:14px;color:#71717a;line-height:1.6;">
+                      Need help? Just hit reply &mdash; a real human reads every message.
+                    </p>
+                    <p style="margin:0;font-size:14px;color:#52525b;">
+                      Talk soon,<br>
+                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Footer ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding:28px 16px 12px;">
+              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
+                GOTCHA. &mdash; Smart messaging for modern teams.
+              </p>
+              <p style="margin:8px 0 0;color:#27272a;font-size:11px;">
+                You're receiving this because your workspace was created on gotcha.co.il
+              </p>
+            </td>
+          </tr>
+        </table>
+
       </td>
     </tr>
   </table>
 </body>
 </html>`;
-}
-
-function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string): string {
-  return emailWrapper(`
-                <!-- Header -->
-                <tr>
-                  <td style="padding:36px 36px 28px;border-bottom:1px solid #f3f4f6;">
-                    <p style="margin:0 0 4px;font-size:14px;font-weight:600;color:#6366f1;text-transform:uppercase;letter-spacing:0.5px;">Welcome aboard</p>
-                    <h1 style="margin:0 0 12px;font-size:24px;font-weight:700;color:#111827;line-height:1.3;">
-                      Set up your workspace
-                    </h1>
-                    <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.6;">
-                      Hello <strong style="color:#374151;">${adminName}</strong>, your organization <strong style="color:#374151;">"${tenantName}"</strong> has been created. Complete the setup wizard to get started.
-                    </p>
-                  </td>
-                </tr>
-
-                <!-- CTA Button -->
-                <tr>
-                  <td style="padding:28px 36px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center">
-                          <a href="${setupUrl}" target="_blank" style="display:inline-block;background-color:#6366f1;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 32px;border-radius:10px;mso-padding-alt:12px 32px;">
-                            Start Setup Wizard &rarr;
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- Steps -->
-                <tr>
-                  <td style="padding:0 36px 32px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border-radius:12px;">
-                      <tr>
-                        <td style="padding:20px 24px 8px;">
-                          <p style="margin:0;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.8px;">What you'll do</p>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:12px 24px;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                            <tr>
-                              <td style="width:28px;vertical-align:top;padding-right:12px;">
-                                <div style="width:24px;height:24px;background-color:#6366f1;border-radius:50%;text-align:center;line-height:24px;color:#fff;font-size:12px;font-weight:700;">1</div>
-                              </td>
-                              <td style="vertical-align:top;padding-bottom:14px;">
-                                <p style="margin:0;font-size:14px;font-weight:600;color:#374151;">Business Profile</p>
-                                <p style="margin:2px 0 0;font-size:13px;color:#9ca3af;">Industry, priorities, and preferences</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:0 24px;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                            <tr>
-                              <td style="width:28px;vertical-align:top;padding-right:12px;">
-                                <div style="width:24px;height:24px;background-color:#6366f1;border-radius:50%;text-align:center;line-height:24px;color:#fff;font-size:12px;font-weight:700;">2</div>
-                              </td>
-                              <td style="vertical-align:top;padding-bottom:14px;">
-                                <p style="margin:0;font-size:14px;font-weight:600;color:#374151;">Departments</p>
-                                <p style="margin:2px 0 0;font-size:13px;color:#9ca3af;">Teams, SLAs, and automation rules</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                      <tr>
-                        <td style="padding:0 24px 20px;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                            <tr>
-                              <td style="width:28px;vertical-align:top;padding-right:12px;">
-                                <div style="width:24px;height:24px;background-color:#10b981;border-radius:50%;text-align:center;line-height:24px;color:#fff;font-size:12px;font-weight:700;">&#10003;</div>
-                              </td>
-                              <td style="vertical-align:top;">
-                                <p style="margin:0;font-size:14px;font-weight:600;color:#374151;">AI Agents</p>
-                                <p style="margin:2px 0 0;font-size:13px;color:#9ca3af;">Auto-configured for each department</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- Fallback link -->
-                <tr>
-                  <td style="padding:0 36px 28px;">
-                    <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.6;">
-                      Button not working? Copy this link:<br>
-                      <a href="${setupUrl}" style="color:#6366f1;word-break:break-all;font-size:12px;">${setupUrl}</a>
-                    </p>
-                    <p style="margin:8px 0 0;font-size:12px;color:#d1d5db;">
-                      This link expires in 48 hours &bull; No login required
-                    </p>
-                  </td>
-                </tr>
-  `);
 }
 
 function activationEmailHtml(
@@ -249,115 +265,169 @@ function activationEmailHtml(
   departments: { name: string; sla: string }[],
   dashboardUrl: string,
 ): string {
+  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+  const logoUrl = `${frontendUrl}/logo.png`;
+
   const deptRows = departments
     .map(
       (d) => `
-                            <tr>
-                              <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;font-size:14px;color:#374151;">${d.name}</td>
-                              <td style="padding:10px 14px;border-bottom:1px solid #f3f4f6;text-align:center;font-size:14px;color:#6b7280;">${d.sla}</td>
-                            </tr>`,
+                      <tr>
+                        <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);font-size:14px;color:#e4e4e7;">${d.name}</td>
+                        <td style="padding:12px 16px;border-bottom:1px solid rgba(255,255,255,0.06);text-align:center;font-size:14px;color:#a1a1aa;">${d.sla}</td>
+                      </tr>`,
     )
     .join("");
 
-  return emailWrapper(`
-                <!-- Header -->
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${tenantName} is live &mdash; GOTCHA.</title>
+  <!--[if mso]>
+  <style>table,td{font-family:Arial,sans-serif;}</style>
+  <![endif]-->
+</head>
+<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
+    <tr>
+      <td align="center" style="padding:40px 16px 20px;">
+
+        <!-- ━━━ Logo ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding-bottom:32px;">
+              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Hero Banner ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
+              <!-- Checkmark circle -->
+              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
+                <span style="font-size:34px;color:#ffffff;">&#10003;</span>
+              </div>
+              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
+                ${tenantName} is live.
+              </h1>
+              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
+                Everything's set up and ready to go, ${adminName}.
+              </p>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Summary Cards ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:32px 40px 28px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
                 <tr>
-                  <td style="padding:36px 36px 24px;border-bottom:1px solid #f3f4f6;">
-                    <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                  <td style="width:33%;padding-right:6px;vertical-align:top;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
                       <tr>
-                        <td style="vertical-align:middle;padding-right:14px;">
-                          <div style="width:40px;height:40px;background-color:#ecfdf5;border-radius:50%;text-align:center;line-height:40px;">
-                            <span style="font-size:20px;color:#10b981;">&#10003;</span>
-                          </div>
+                        <td style="padding:16px 12px;text-align:center;">
+                          <p style="margin:0;font-size:10px;font-weight:700;color:#7C3291;text-transform:uppercase;letter-spacing:0.5px;">Industry</p>
+                          <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:#e4e4e7;">${industry}</p>
                         </td>
-                        <td style="vertical-align:middle;">
-                          <p style="margin:0 0 2px;font-size:14px;font-weight:600;color:#10b981;text-transform:uppercase;letter-spacing:0.5px;">You're live</p>
-                          <h1 style="margin:0;font-size:22px;font-weight:700;color:#111827;line-height:1.3;">
-                            ${tenantName} is now active
-                          </h1>
+                      </tr>
+                    </table>
+                  </td>
+                  <td style="width:33%;padding:0 3px;vertical-align:top;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
+                      <tr>
+                        <td style="padding:16px 12px;text-align:center;">
+                          <p style="margin:0;font-size:10px;font-weight:700;color:#5A72B3;text-transform:uppercase;letter-spacing:0.5px;">Priority</p>
+                          <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:#e4e4e7;">${priority.replace(/_/g, " ")}</p>
+                        </td>
+                      </tr>
+                    </table>
+                  </td>
+                  <td style="width:33%;padding-left:6px;vertical-align:top;">
+                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;">
+                      <tr>
+                        <td style="padding:16px 12px;text-align:center;">
+                          <p style="margin:0;font-size:10px;font-weight:700;color:#6DCED9;text-transform:uppercase;letter-spacing:0.5px;">AI Copilot</p>
+                          <p style="margin:6px 0 0;font-size:13px;font-weight:600;color:#e4e4e7;">Active</p>
                         </td>
                       </tr>
                     </table>
                   </td>
                 </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
 
-                <!-- Greeting -->
+        <!-- ━━━ Departments Table ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:rgba(255,255,255,0.025);border:1px solid rgba(255,255,255,0.06);border-radius:14px;overflow:hidden;">
                 <tr>
-                  <td style="padding:24px 36px 0;">
-                    <p style="margin:0;font-size:15px;color:#6b7280;line-height:1.6;">
-                      Hello <strong style="color:#374151;">${adminName}</strong>, your workspace is fully activated and ready to receive conversations.
+                  <td style="padding:12px 16px;font-size:11px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid rgba(255,255,255,0.06);">Department</td>
+                  <td style="padding:12px 16px;font-size:11px;font-weight:700;color:#52525b;text-transform:uppercase;letter-spacing:0.5px;text-align:center;border-bottom:1px solid rgba(255,255,255,0.06);">SLA</td>
+                </tr>
+                ${deptRows}
+              </table>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ CTA Button ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px 32px;text-align:center;">
+              <a href="${dashboardUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;mso-padding-alt:14px 40px;">
+                Open Dashboard &rarr;
+              </a>
+            </td>
+          </tr>
+        </table>
+
+        <!-- ━━━ Closing ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
+                <tr>
+                  <td style="padding:28px 0 0;text-align:center;">
+                    <p style="margin:0 0 20px;font-size:14px;color:#71717a;line-height:1.6;">
+                      Your AI agents are standing by &mdash; ready to handle every conversation.
+                    </p>
+                    <p style="margin:0;font-size:14px;color:#52525b;">
+                      Talk soon,<br>
+                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
                     </p>
                   </td>
                 </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
 
-                <!-- Summary Cards -->
-                <tr>
-                  <td style="padding:24px 36px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td style="width:33%;padding-right:6px;vertical-align:top;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border-radius:10px;">
-                            <tr>
-                              <td style="padding:14px 12px;text-align:center;">
-                                <p style="margin:0;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">Industry</p>
-                                <p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#374151;">${industry}</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                        <td style="width:33%;padding:0 3px;vertical-align:top;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border-radius:10px;">
-                            <tr>
-                              <td style="padding:14px 12px;text-align:center;">
-                                <p style="margin:0;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">Priority</p>
-                                <p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#374151;">${priority.replace(/_/g, " ")}</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                        <td style="width:33%;padding-left:6px;vertical-align:top;">
-                          <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#f9fafb;border-radius:10px;">
-                            <tr>
-                              <td style="padding:14px 12px;text-align:center;">
-                                <p style="margin:0;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;">AI Copilot</p>
-                                <p style="margin:4px 0 0;font-size:13px;font-weight:600;color:#374151;">Active</p>
-                              </td>
-                            </tr>
-                          </table>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
+        <!-- ━━━ Footer ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding:28px 16px 12px;">
+              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
+                GOTCHA. &mdash; Smart messaging for modern teams.
+              </p>
+              <p style="margin:8px 0 0;color:#27272a;font-size:11px;">
+                You're receiving this because your workspace was activated on gotcha.co.il
+              </p>
+            </td>
+          </tr>
+        </table>
 
-                <!-- Departments Table -->
-                <tr>
-                  <td style="padding:0 36px 28px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border:1px solid #e5e7eb;border-radius:10px;overflow:hidden;">
-                      <tr>
-                        <td style="padding:10px 14px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;background-color:#f9fafb;border-bottom:1px solid #e5e7eb;">Department</td>
-                        <td style="padding:10px 14px;font-size:11px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.5px;text-align:center;background-color:#f9fafb;border-bottom:1px solid #e5e7eb;">SLA</td>
-                      </tr>
-                      ${deptRows}
-                    </table>
-                  </td>
-                </tr>
-
-                <!-- CTA -->
-                <tr>
-                  <td style="padding:0 36px 32px;">
-                    <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0">
-                      <tr>
-                        <td align="center">
-                          <a href="${dashboardUrl}" target="_blank" style="display:inline-block;background-color:#6366f1;color:#ffffff;font-size:15px;font-weight:600;text-decoration:none;padding:12px 32px;border-radius:10px;mso-padding-alt:12px 32px;">
-                            Open Dashboard &rarr;
-                          </a>
-                        </td>
-                      </tr>
-                    </table>
-                  </td>
-                </tr>
-  `);
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
 }
 
 // ─── Waitlist Welcome Email ──────────────────────────────────

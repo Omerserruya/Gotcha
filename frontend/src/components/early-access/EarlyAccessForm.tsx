@@ -263,7 +263,7 @@ export default function EarlyAccessForm() {
   const progress = (step + 1) / STEPS.length;
 
   return (
-    <div dir={dir} className="min-h-screen flex flex-col bg-white" onKeyDown={handleKeyDown}>
+    <div dir={dir} className="min-h-screen flex flex-col bg-white">
       {/* Header */}
       <header className="flex items-center justify-between px-6 py-4">
         <Link href="/" className="text-xl font-bold tracking-tight text-gray-900">

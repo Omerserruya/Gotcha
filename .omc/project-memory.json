@@ -138,6 +138,18 @@
       "type": "file"
     },
     {
+      "path": "frontend/src/lib/api.ts",
+      "accessCount": 7,
+      "lastAccessed": 1772443323419,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/services/notification.service.ts",
+      "accessCount": 7,
+      "lastAccessed": 1772444294514,
+      "type": "file"
+    },
+    {
       "path": "frontend/src/i18n/he.json",
       "accessCount": 6,
       "lastAccessed": 1772394230845,
@@ -156,15 +168,21 @@
       "type": "file"
     },
     {
-      "path": "frontend/src/lib/api.ts",
-      "accessCount": 5,
-      "lastAccessed": 1772394258197,
-      "type": "file"
-    },
-    {
       "path": "nginx/nginx.conf.template",
       "accessCount": 4,
       "lastAccessed": 1772394168042,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/onboarding.ts",
+      "accessCount": 4,
+      "lastAccessed": 1772443303113,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/components/early-access/EarlyAccessForm.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1772443317250,
       "type": "file"
     },
     {
@@ -177,12 +195,6 @@
       "path": "frontend/src/app/en/page.tsx",
       "accessCount": 3,
       "lastAccessed": 1772394091467,
-      "type": "file"
-    },
-    {
-      "path": "services/auth/src/routes/onboarding.ts",
-      "accessCount": 3,
-      "lastAccessed": 1772394100007,
       "type": "file"
     },
     {
@@ -238,6 +250,24 @@
       "accessCount": 2,
       "lastAccessed": 1772394315832,
       "type": "file"
+    },
+    {
+      "path": "services/auth/src/routes/waitlist.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772443302666,
+      "type": "file"
+    },
+    {
+      "path": "frontend/src/app/early-access/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772443316233,
+      "type": "file"
+    },
+    {
+      "path": "services/auth/src",
+      "accessCount": 2,
+      "lastAccessed": 1772443900899,
+      "type": "directory"
     },
     {
       "path": "frontend/src/app/layout.tsx",
@@ -336,21 +366,15 @@
       "type": "directory"
     },
     {
-      "path": "services/auth/src/routes/waitlist.ts",
+      "path": "services/auth/src/routes/system.ts",
       "accessCount": 1,
-      "lastAccessed": 1772394143880,
+      "lastAccessed": 1772443310752,
       "type": "file"
     },
     {
-      "path": "frontend/src/components/early-access/EarlyAccessForm.tsx",
+      "path": "frontend/src/app/system/onboarding/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1772394373156,
-      "type": "file"
-    },
-    {
-      "path": "frontend/src/app/early-access/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772394380097,
+      "lastAccessed": 1772443317417,
       "type": "file"
     }
   ],
