@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1772290780141,
+  "lastScanned": 1772449835179,
   "projectRoot": "/home/ocs/projects/ChatCenter/frontend",
   "techStack": {
     "languages": [
@@ -73,28 +73,28 @@
     "public": {
       "path": "public",
       "purpose": "Public files",
-      "fileCount": 8,
-      "lastAccessed": 1772290780125,
+      "fileCount": 5,
+      "lastAccessed": 1772449835160,
       "keyFiles": [
         "apple-touch-icon.png",
-        "favicon copy.ico",
         "favicon.ico",
-        "favicon2.ico",
-        "logo old.png"
+        "llms.txt",
+        "logo.png",
+        "logo_icon.png"
       ]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1772290780125,
+      "lastAccessed": 1772449835161,
       "keyFiles": []
     },
     "src/app": {
       "path": "src/app",
       "purpose": "Application code",
-      "fileCount": 4,
-      "lastAccessed": 1772290780138,
+      "fileCount": 6,
+      "lastAccessed": 1772449835174,
       "keyFiles": [
         "globals.css",
         "layout.tsx",
@@ -104,19 +104,19 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 6,
-      "lastAccessed": 1772290780138,
+      "fileCount": 7,
+      "lastAccessed": 1772449835176,
       "keyFiles": [
         "AppLayout.tsx",
         "ConfirmModal.tsx",
-        "LanguageSwitcher.tsx"
+        "JsonLd.tsx"
       ]
     },
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
       "fileCount": 2,
-      "lastAccessed": 1772290780138,
+      "lastAccessed": 1772449835177,
       "keyFiles": [
         "api.ts",
         "socket.ts"
@@ -126,99 +126,33 @@
   "hotPaths": [
     {
       "path": "src/components/landing/LandingPage.tsx",
-      "accessCount": 16,
-      "lastAccessed": 1772291419774,
+      "accessCount": 47,
+      "lastAccessed": 1772463250184,
       "type": "file"
     },
     {
-      "path": "src",
-      "accessCount": 2,
-      "lastAccessed": 1772291424373,
+      "path": "src/i18n/en.json",
+      "accessCount": 3,
+      "lastAccessed": 1772452052561,
       "type": "directory"
     },
     {
-      "path": "src/app",
-      "accessCount": 2,
-      "lastAccessed": 1772291426507,
+      "path": "src/i18n/he.json",
+      "accessCount": 3,
+      "lastAccessed": 1772452055739,
       "type": "directory"
-    },
-    {
-      "path": "src/app/layout.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772291561084,
-      "type": "file"
-    },
-    {
-      "path": "src/app/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772291561314,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 2,
-      "lastAccessed": 1772291561845,
-      "type": "file"
-    },
-    {
-      "path": "next.config.js",
-      "accessCount": 2,
-      "lastAccessed": 1772291564964,
-      "type": "file"
     },
     {
       "path": "src/app/globals.css",
-      "accessCount": 1,
-      "lastAccessed": 1772290785588,
+      "accessCount": 2,
+      "lastAccessed": 1772451684107,
       "type": "file"
     },
     {
       "path": "",
       "accessCount": 1,
-      "lastAccessed": 1772291416594,
+      "lastAccessed": 1772455254601,
       "type": "directory"
-    },
-    {
-      "path": "src/app/terms/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291419091,
-      "type": "file"
-    },
-    {
-      "path": "src/app/privacy-policy/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291419689,
-      "type": "file"
-    },
-    {
-      "path": "src/app/copilot/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291429362,
-      "type": "file"
-    },
-    {
-      "path": "src/app/dashboard/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291432701,
-      "type": "file"
-    },
-    {
-      "path": "src/app/login/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291432889,
-      "type": "file"
-    },
-    {
-      "path": "src/app/en/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291561583,
-      "type": "file"
-    },
-    {
-      "path": "src/app/he/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772291561873,
-      "type": "file"
     }
   ],
   "userDirectives": []

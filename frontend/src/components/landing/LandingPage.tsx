@@ -6,58 +6,418 @@ import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
 
-/* ───── Icons ───── */
+/* ───── Scroll Story: Platform Config ───── */
 
-function IconCopilot() {
+const INBOX_PLATFORMS = [
+  { name: "WhatsApp", color: "#25D366", icon: "/platforms/wa-logo.png", badge: 12, contact: "Sarah M.", initial: "S", message: "Hi, is my order on the way?" },
+  { name: "Instagram", color: "#E1306C", icon: "/platforms/ins-logo.png", badge: 8, contact: "david_k", initial: "D", message: "Hey can I return this?" },
+  { name: "Messenger", color: "#0084FF", icon: "/platforms/fb-logo.png", badge: 23, contact: "Rachel B.", initial: "R", message: "When does the sale end?" },
+  { name: "Gmail", color: "#EA4335", icon: "/platforms/gm-logo.png", badge: 4, contact: "Mike Johnson", initial: "M", message: "RE: Invoice #4812 question" },
+  { name: "Facebook", color: "#1877F2", icon: "/platforms/fb-logo.png", badge: 3, contact: "TechStore", initial: "T", message: "New message from customer" },
+] as const;
+
+const CHAOS_POSITIONS = [
+  { x: -240, y: -130, rotate: -10, scale: 0.88 },
+  { x: 210,  y: -85,  rotate: 7,   scale: 0.92 },
+  { x: -150, y: 30,   rotate: -14, scale: 0.85 },
+  { x: 190,  y: 110,  rotate: 5,   scale: 0.9 },
+  { x: 10,   y: 185,  rotate: -3,  scale: 0.87 },
+];
+
+const STACKED_POSITIONS = [
+  { x: 0, y: -116 },
+  { x: 0, y: -58 },
+  { x: 0, y: 0 },
+  { x: 0, y: 58 },
+  { x: 0, y: 116 },
+];
+
+/* ───── Product Features Config ───── */
+
+const PRODUCT_FEATURES = [
+  {
+    key: "unifiedInbox",
+    gradient: "from-primary-500/10 to-purple-500/10",
+    iconColor: "text-primary-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M21 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2" />
+        <path d="m7 8 5 4 5-4" />
+      </svg>
+    ),
+  },
+  {
+    key: "aiCopilot",
+    gradient: "from-cyan-500/10 to-blue-500/10",
+    iconColor: "text-cyan-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
+        <path d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
+      </svg>
+    ),
+  },
+  {
+    key: "smartBot",
+    gradient: "from-amber-500/10 to-orange-500/10",
+    iconColor: "text-amber-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
+      </svg>
+    ),
+  },
+  {
+    key: "knowledgeBase",
+    gradient: "from-green-500/10 to-emerald-500/10",
+    iconColor: "text-green-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
+      </svg>
+    ),
+  },
+  {
+    key: "smartRouting",
+    gradient: "from-blue-500/10 to-indigo-500/10",
+    iconColor: "text-blue-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+      </svg>
+    ),
+  },
+  {
+    key: "analytics",
+    gradient: "from-rose-500/10 to-pink-500/10",
+    iconColor: "text-rose-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+      </svg>
+    ),
+  },
+] as const;
+
+/* ───── ConversationItem (for chaos + stack phases) ───── */
+
+function ConversationItem({ platform, index, progress, isRtl }: {
+  platform: typeof INBOX_PLATFORMS[number];
+  index: number;
+  progress: number;
+  isRtl: boolean;
+}) {
+  const chaos = CHAOS_POSITIONS[index];
+  const stacked = STACKED_POSITIONS[index];
+  const xSign = isRtl ? -1 : 1;
+
+  // Phase 1 (0–0.25): chaos
+  // Phase 2 (0.25–0.50): converge to stacked list
+  // Phase 3 (0.45–0.60): fade out as InboxDemo fades in
+  const stackStart = 0.25;
+  const stackEnd = 0.50;
+  const fadeStart = 0.45;
+  const fadeEnd = 0.60;
+
+  let x: number, y: number, rotate: number, scale: number;
+  let opacity = 1;
+
+  if (progress < stackStart) {
+    // Full chaos
+    x = chaos.x * xSign;
+    y = chaos.y;
+    rotate = chaos.rotate;
+    scale = chaos.scale;
+  } else if (progress < stackEnd) {
+    // Interpolate chaos → stacked
+    const sub = (progress - stackStart) / (stackEnd - stackStart);
+    const eased = 1 - Math.pow(1 - sub, 3);
+    x = (chaos.x * xSign) * (1 - eased) + stacked.x * eased;
+    y = chaos.y * (1 - eased) + stacked.y * eased;
+    rotate = chaos.rotate * (1 - eased);
+    scale = chaos.scale + (1 - chaos.scale) * eased;
+  } else {
+    // Fully stacked
+    x = stacked.x;
+    y = stacked.y;
+    rotate = 0;
+    scale = 1;
+  }
+
+  // Fade out during crossfade
+  if (progress > fadeStart) {
+    opacity = Math.max(0, 1 - (progress - fadeStart) / (fadeEnd - fadeStart));
+  }
+
   return (
-    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09ZM18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 0 0-2.456 2.456Z" />
-    </svg>
+    <div
+      className="absolute w-[270px] sm:w-[310px]"
+      style={{
+        transform: `translate(${x}px, ${y}px) rotate(${rotate}deg) scale(${scale})`,
+        opacity,
+        willChange: "transform, opacity",
+      }}
+    >
+      <div className="relative bg-[#1a1a2e] rounded-xl border border-white/[0.06] px-3 py-2.5 flex items-center gap-2.5 shadow-[0_4px_24px_rgba(0,0,0,0.35)]">
+        {/* Avatar */}
+        <div className="w-9 h-9 rounded-full bg-gradient-to-br from-primary-400/30 to-primary-600/30 flex items-center justify-center flex-shrink-0">
+          <span className="text-[11px] font-bold text-white/70">{platform.initial}</span>
+        </div>
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center justify-between mb-0.5">
+            <span className="text-[11px] font-semibold text-white/80 truncate">{platform.contact}</span>
+            <span className="text-[9px] text-white/30 flex-shrink-0 ms-2">2m</span>
+          </div>
+          <p className="text-[10px] text-white/40 truncate">{platform.message}</p>
+        </div>
+        {/* Platform icon (right side, prominent) */}
+        <img src={platform.icon} alt={platform.name} className="w-6 h-6 flex-shrink-0" />
+        {/* Unread badge */}
+        <div
+          className={`absolute -top-1.5 -end-1.5 min-w-[18px] h-[18px] px-1 rounded-full flex items-center justify-center text-[8px] font-bold text-white ${progress < stackStart ? "badge-pulse" : ""}`}
+          style={{ background: platform.color }}
+        >
+          {platform.badge}
+        </div>
+      </div>
+    </div>
   );
 }
 
-function IconChannels() {
+/* ───── InboxDemo (realistic app mockup) ───── */
+
+function InboxDemo({ copilotProgress, isRtl, t }: {
+  copilotProgress: number; // 0 = hidden, 1 = fully visible
+  isRtl: boolean;
+  t: (key: string) => string;
+}) {
+  const copilotEased = 1 - Math.pow(1 - copilotProgress, 3);
+  const copilotTranslate = (1 - copilotEased) * (isRtl ? -100 : 100);
+
   return (
-    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 0 1-.825-.242m9.345-8.334a2.126 2.126 0 0 0-.476-.095 48.64 48.64 0 0 0-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0 0 11.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-    </svg>
+    <div className="w-[820px] max-w-[90vw] bg-[#12121f] rounded-2xl border border-white/[0.06] overflow-hidden shadow-[0_8px_48px_rgba(0,0,0,0.4)]">
+      {/* Browser chrome */}
+      <div className="flex items-center gap-2 px-4 py-2 bg-[#0d0d18] border-b border-white/[0.04]">
+        <div className="flex gap-1.5">
+          <div className="w-2.5 h-2.5 rounded-full bg-[#ff5f57]" />
+          <div className="w-2.5 h-2.5 rounded-full bg-[#febc2e]" />
+          <div className="w-2.5 h-2.5 rounded-full bg-[#28c840]" />
+        </div>
+        <div className="flex-1 mx-8">
+          <div className="h-4 bg-white/[0.04] rounded max-w-[180px] mx-auto" />
+        </div>
+      </div>
+
+      {/* App body */}
+      <div className="flex h-[380px] sm:h-[420px]" style={{ "--cp": copilotEased } as React.CSSProperties}>
+        {/* Sidebar nav */}
+        <div className={`hidden sm:flex flex-col w-11 bg-white/[0.02] border-white/[0.04] py-3 gap-2.5 items-center flex-shrink-0 ${isRtl ? "border-s" : "border-e"}`}>
+          {[0, 1, 2, 3].map((i) => (
+            <div key={i} className={`w-7 h-7 rounded-lg ${i === 0 ? "bg-primary-500/20" : "bg-white/[0.04]"}`} />
+          ))}
+        </div>
+
+        {/* Conversation list */}
+        <div className={`inbox-demo-convlist w-[180px] sm:w-[200px] bg-white/[0.02] flex flex-col flex-shrink-0 ${isRtl ? "border-s border-white/[0.04]" : "border-e border-white/[0.04]"}`}>
+          {/* Search */}
+          <div className="p-2">
+            <div className="h-7 bg-white/[0.04] rounded-lg" />
+          </div>
+          {/* My Active section */}
+          <div className="px-2 py-1">
+            <span className="text-[8px] font-semibold text-primary-400 uppercase tracking-wider">{t("landing.features.myActive")}</span>
+          </div>
+          {/* Active items */}
+          {INBOX_PLATFORMS.slice(0, 2).map((p, i) => (
+            <div key={p.name} className={`mx-1.5 mb-1 px-2 py-1.5 rounded-lg flex items-center gap-2 ${i === 0 ? "bg-primary-500/10 border border-primary-500/15" : "bg-white/[0.02]"}`}>
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400/30 to-primary-600/30 flex items-center justify-center flex-shrink-0">
+                <span className="text-[8px] font-bold text-white/70">{p.initial}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-semibold text-white/80 truncate">{p.contact}</span>
+                  <img src={p.icon} alt="" className="w-4 h-4 flex-shrink-0" />
+                </div>
+                <p className="text-[8px] text-white/30 truncate">{p.message}</p>
+              </div>
+              {i === 0 && <div className="w-1.5 h-1.5 rounded-full bg-primary-400 flex-shrink-0" />}
+            </div>
+          ))}
+          {/* Queue section */}
+          <div className="px-2 py-1 mt-1">
+            <span className="text-[8px] font-semibold text-white/30 uppercase tracking-wider">{t("landing.features.queue")}</span>
+          </div>
+          {INBOX_PLATFORMS.slice(2, 5).map((p) => (
+            <div key={p.name} className="mx-1.5 mb-1 px-2 py-1.5 rounded-lg flex items-center gap-2 bg-white/[0.02]">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-white/[0.06] to-white/[0.03] flex items-center justify-center flex-shrink-0">
+                <span className="text-[8px] font-bold text-white/50">{p.initial}</span>
+              </div>
+              <div className="flex-1 min-w-0">
+                <div className="flex items-center gap-1">
+                  <span className="text-[9px] font-medium text-white/60 truncate">{p.contact}</span>
+                  <img src={p.icon} alt="" className="w-4 h-4 flex-shrink-0 opacity-60" />
+                </div>
+                <p className="text-[8px] text-white/25 truncate">{p.message}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+
+        {/* Chat area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Chat header */}
+          <div className="flex items-center justify-between px-3 py-2 border-b border-white/[0.04]">
+            <div className="flex items-center gap-2">
+              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400/30 to-primary-600/30 flex items-center justify-center">
+                <span className="text-[9px] font-bold text-white/70">S</span>
+              </div>
+              <div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-semibold text-white/80">Sarah M.</span>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded-full bg-green-500/15 text-green-400 font-medium">WhatsApp</span>
+                </div>
+                <span className="text-[8px] text-white/30">+972 50-123-4567</span>
+              </div>
+            </div>
+            <div className="flex gap-1.5">
+              <div className="px-2 py-1 rounded-md bg-primary-500/15 text-[8px] font-medium text-primary-300">Claim</div>
+              <div className="px-2 py-1 rounded-md bg-white/[0.04] text-[8px] font-medium text-white/40">Transfer</div>
+            </div>
+          </div>
+
+          {/* Messages */}
+          <div className="flex-1 p-3 space-y-2 overflow-hidden bg-white/[0.01]">
+            {/* Bot greeting */}
+            <div className={`flex ${isRtl ? "justify-end" : "justify-start"}`}>
+              <div className="max-w-[75%] bg-amber-500/10 border border-amber-500/10 rounded-xl rounded-tl-sm px-3 py-1.5">
+                <div className="flex items-center gap-1 mb-0.5">
+                  <span className="text-[7px] text-amber-400 font-semibold">BOT</span>
+                </div>
+                <p className="text-[9px] text-white/60 leading-[1.5]">{t("landing.features.botGreeting")}</p>
+              </div>
+            </div>
+            {/* Customer message */}
+            <div className={`flex ${isRtl ? "justify-start" : "justify-end"}`}>
+              <div className="max-w-[75%] bg-white/[0.06] rounded-xl rounded-tr-sm px-3 py-1.5">
+                <p className="text-[9px] text-white/70 leading-[1.5]">{t("landing.features.customerMsg")}</p>
+              </div>
+            </div>
+            {/* Bot handover reply */}
+            <div className={`flex ${isRtl ? "justify-end" : "justify-start"}`}>
+              <div className="max-w-[75%] bg-amber-500/10 border border-amber-500/10 rounded-xl rounded-tl-sm px-3 py-1.5">
+                <p className="text-[9px] text-white/60 leading-[1.5]">{t("landing.features.botReply")}</p>
+              </div>
+            </div>
+            {/* System divider: bot handover */}
+            <div className="flex items-center gap-2 py-1">
+              <div className="flex-1 h-px bg-amber-500/20" />
+              <span className="text-[7px] text-amber-400/70 font-medium whitespace-nowrap">{t("landing.features.botDivider")}</span>
+              <div className="flex-1 h-px bg-amber-500/20" />
+            </div>
+            {/* System divider: agent joined */}
+            <div className="flex items-center gap-2 py-0.5">
+              <div className="flex-1 h-px bg-green-500/20" />
+              <span className="text-[7px] text-green-400/70 font-medium whitespace-nowrap">{t("landing.features.agentJoined")}</span>
+              <div className="flex-1 h-px bg-green-500/20" />
+            </div>
+            {/* Agent message */}
+            <div className={`flex ${isRtl ? "justify-start" : "justify-end"}`}>
+              <div className="max-w-[80%] bg-primary-500/20 border border-primary-500/15 rounded-xl rounded-tr-sm px-3 py-1.5">
+                <p className="text-[9px] text-white/70 leading-[1.5]">{t("landing.features.agentReply")}</p>
+                <div className="flex items-center justify-end gap-1 mt-0.5">
+                  <span className="text-[7px] text-white/25">Just now</span>
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-blue-400">
+                    <path d="M1 12l6 6L18 6M6 12l6 6L23 6" />
+                  </svg>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          {/* Input */}
+          <div className="px-3 py-2 border-t border-white/[0.04] flex items-center gap-2">
+            <div className="flex-1 h-7 bg-white/[0.03] border border-white/[0.06] rounded-lg" />
+            <div className="w-7 h-7 rounded-lg bg-primary-500/30 flex items-center justify-center">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-300"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
+            </div>
+          </div>
+        </div>
+
+        {/* Copilot panel (slides in) */}
+        <div
+          className={`inbox-demo-copilot w-[140px] sm:w-[170px] md:w-[200px] flex-shrink-0 flex flex-col bg-white/[0.02] overflow-hidden ${isRtl ? "border-e border-white/[0.04]" : "border-s border-white/[0.04]"}`}
+          style={{
+            transform: `translateX(${copilotTranslate}%)`,
+            opacity: copilotEased,
+            willChange: "transform, opacity",
+          }}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-1.5 px-3 py-2 border-b border-white/[0.04]">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400">
+              <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" />
+            </svg>
+            <span className="text-[9px] font-semibold text-primary-300">{t("landing.features.copilotLabel")}</span>
+            <div className="ms-auto w-1.5 h-1.5 rounded-full bg-green-400" />
+          </div>
+          {/* Context */}
+          <div className="p-2 space-y-2">
+            <div className="bg-primary-500/5 border border-primary-500/10 rounded-lg p-2">
+              <span className="text-[7px] font-semibold text-primary-400 uppercase tracking-wider">Context</span>
+              <p className="text-[8px] text-white/50 leading-[1.5] mt-1">{t("landing.features.contextSummary")}</p>
+            </div>
+            {/* Suggestions */}
+            <div className="space-y-1.5">
+              <span className="text-[7px] font-semibold text-white/30 uppercase tracking-wider">Suggestions</span>
+              <div className="bg-white/[0.04] border border-white/[0.04] rounded-lg p-2 hover:border-primary-500/20 transition-colors cursor-pointer">
+                <p className="text-[8px] text-white/60 leading-[1.5]">{t("landing.features.copilotSuggestion1")}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <div className="h-1 flex-1 rounded-full bg-green-500/30">
+                    <div className="h-full w-[92%] rounded-full bg-green-500/60" />
+                  </div>
+                  <span className="text-[7px] text-green-400/70">92%</span>
+                </div>
+              </div>
+              <div className="bg-white/[0.04] border border-white/[0.04] rounded-lg p-2 hover:border-primary-500/20 transition-colors cursor-pointer">
+                <p className="text-[8px] text-white/60 leading-[1.5]">{t("landing.features.copilotSuggestion2")}</p>
+                <div className="flex items-center gap-1 mt-1">
+                  <div className="h-1 flex-1 rounded-full bg-amber-500/30">
+                    <div className="h-full w-[87%] rounded-full bg-amber-500/60" />
+                  </div>
+                  <span className="text-[7px] text-amber-400/70">87%</span>
+                </div>
+              </div>
+            </div>
+            <button className="w-full py-1.5 rounded-lg bg-primary-500/15 text-[8px] font-medium text-primary-300">
+              {t("landing.features.copilotInsert")}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
   );
 }
 
-function IconRouting() {
+/* ───── StoryPhaseText ───── */
+
+function StoryPhaseText({ text, desc, opacity, bottom }: { text: string; desc?: string; opacity: number; bottom?: boolean }) {
   return (
-    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-    </svg>
+    <div
+      className="absolute inset-x-0 text-center px-6 pointer-events-none max-w-2xl mx-auto"
+      style={{ opacity, willChange: "opacity", ...(bottom ? { bottom: "8%" } : { top: "14%" }) }}
+    >
+      <p className="text-lg sm:text-2xl md:text-3xl font-light tracking-[-0.02em] text-white/90">
+        {text}
+      </p>
+      {desc && (
+        <p className="mt-2 text-sm sm:text-base font-light text-white/40 leading-relaxed">
+          {desc}
+        </p>
+      )}
+    </div>
   );
 }
-
-function IconKnowledge() {
-  return (
-    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-    </svg>
-  );
-}
-
-function IconAnalytics() {
-  return (
-    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-    </svg>
-  );
-}
-
-function IconBot() {
-  return (
-    <svg width="24" height="24" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 0 1-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 0 1 4.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0 1 12 15a9.065 9.065 0 0 0-6.23.693L5 14.5m14.8.8 1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0 1 12 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-    </svg>
-  );
-}
-
-const featureIcons = [IconCopilot, IconChannels, IconRouting, IconKnowledge, IconAnalytics, IconBot];
-const featureKeys = ["copilot", "channels", "routing", "knowledge", "analytics", "botBuilder"] as const;
 
 /* ───── Rotating Platform Names ───── */
 
@@ -160,11 +520,11 @@ function MobileMenu({
           <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M18 6 6 18M6 6l12 12" /></svg>
         </button>
         <nav className="flex flex-col gap-1">
-          <a href="#features" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-            {t("landing.nav.features")}
-          </a>
           <a href="#how-it-works" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
-            {t("landing.nav.channels")}
+            {t("landing.nav.howItWorks")}
+          </a>
+          <a href="#product-features" onClick={onClose} className="px-4 py-3 text-[15px] font-medium text-gray-700 hover:bg-gray-50 rounded-xl transition-colors">
+            {t("landing.nav.features")}
           </a>
           <div className="h-px bg-gray-100 my-2" />
           <div className="flex items-center gap-2 px-4 py-2">
@@ -198,7 +558,7 @@ function MobileMenu({
 function Logo({ light }: { light?: boolean }) {
   return (
     <img
-      src="/logo.png"
+      src="/logo_icon.png"
       alt="GOTCHA"
       className={`h-7 w-auto ${light ? "brightness-0 invert" : ""}`}
     />
@@ -304,146 +664,13 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
   );
 }
 
-/* ───── Feature Visual Card ───── */
-
-function FeatureVisual({ index: i }: { index: number }) {
-  return (
-    <div
-      className="w-full bg-white/[0.04] rounded-2xl border border-white/[0.06] overflow-hidden p-5 sm:p-8"
-      style={{ aspectRatio: "4/3", boxShadow: "0 8px 40px rgba(0,0,0,0.2)" }}
-    >
-      {i === 0 && (
-        /* Copilot */
-        <div className="flex flex-col gap-3 h-full justify-center max-w-xs mx-auto">
-          <div className="self-start bg-white/[0.08] rounded-2xl rounded-tl-sm px-4 py-3 max-w-[80%]">
-            <div className="h-2.5 bg-white/20 rounded w-full mb-2" />
-            <div className="h-2.5 bg-white/20 rounded w-3/4" />
-          </div>
-          <div className="self-end bg-primary-500/20 border border-primary-500/20 rounded-2xl rounded-tr-sm px-4 py-3 max-w-[85%]">
-            <div className="flex items-center gap-1.5 mb-2.5">
-              <div className="w-4 h-4 rounded bg-primary-500/40 flex items-center justify-center">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-300"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" /></svg>
-              </div>
-              <span className="text-[10px] text-primary-300 font-medium">AI Suggestion</span>
-            </div>
-            <div className="h-2.5 bg-white/15 rounded w-full mb-2" />
-            <div className="h-2.5 bg-white/15 rounded w-2/3" />
-          </div>
-          <div className="self-start bg-white/[0.08] rounded-2xl rounded-tl-sm px-4 py-3 max-w-[70%]">
-            <div className="h-2.5 bg-white/20 rounded w-full" />
-          </div>
-        </div>
-      )}
-      {i === 1 && (
-        /* Channels */
-        <div className="flex flex-col items-center gap-4 sm:gap-5 h-full justify-center max-w-xs mx-auto">
-          <div className="flex items-center gap-3 sm:gap-5">
-            <img src="/integrations/whatsapp.svg" alt="" className="h-7 sm:h-9 opacity-80" />
-            <img src="/integrations/facebook.svg" alt="" className="h-7 sm:h-9 opacity-80" />
-            <img src="/integrations/instagram.svg" alt="" className="h-7 sm:h-9 opacity-80" />
-            <img src="/integrations/gmail.svg" alt="" className="h-7 sm:h-9 opacity-80" />
-          </div>
-          <div className="flex flex-col items-center gap-1 text-white/20">
-            <div className="w-px h-4 sm:h-6 bg-current" />
-            <svg width="12" height="8" viewBox="0 0 12 8" fill="currentColor"><path d="M6 8L0 0h12z" /></svg>
-          </div>
-          <div className="bg-white/[0.06] rounded-xl p-2.5 sm:p-3 w-full space-y-2">
-            {[1, 2, 3].map(n => (
-              <div key={n} className="flex items-center gap-2.5 bg-white/[0.04] rounded-lg p-2 sm:p-2.5">
-                <div className={`w-6 sm:w-7 h-6 sm:h-7 rounded-full ${n === 1 ? "bg-green-500/30" : n === 2 ? "bg-blue-500/30" : "bg-pink-500/30"}`} />
-                <div className="flex-1">
-                  <div className="h-2 bg-white/15 rounded w-20 mb-1.5" />
-                  <div className="h-2 bg-white/10 rounded w-full" />
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {i === 2 && (
-        /* Routing */
-        <div className="flex flex-col items-center gap-3 sm:gap-4 h-full justify-center max-w-sm mx-auto">
-          <div className="bg-white/[0.08] rounded-xl px-4 py-2.5 flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-green-500/40" />
-            <div className="h-2.5 bg-white/20 rounded w-20 sm:w-24" />
-          </div>
-          <svg width="80" height="40" viewBox="0 0 80 40" className="text-white/20">
-            <path d="M40 0 V15 M40 15 L15 35 M40 15 L65 35" stroke="currentColor" strokeWidth="1.5" fill="none" />
-          </svg>
-          <div className="flex gap-4 sm:gap-6 w-full justify-center">
-            {["Sales", "Support"].map(label => (
-              <div key={label} className="bg-primary-500/15 border border-primary-500/20 rounded-xl px-3 sm:px-4 py-2.5 sm:py-3 text-center">
-                <div className="w-7 sm:w-8 h-7 sm:h-8 rounded-full bg-primary-500/30 mx-auto mb-2" />
-                <span className="text-[10px] text-primary-300 font-medium">{label}</span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {i === 3 && (
-        /* Knowledge */
-        <div className="flex flex-col gap-3 sm:gap-4 h-full justify-center max-w-xs mx-auto">
-          <div className="bg-white/[0.06] rounded-xl px-3 sm:px-4 py-2.5 flex items-center gap-2 border border-white/[0.06]">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-white/40 flex-shrink-0"><circle cx="11" cy="11" r="8" /><path d="m21 21-4.35-4.35" /></svg>
-            <div className="h-2.5 bg-white/15 rounded w-24 sm:w-32" />
-          </div>
-          <div className="grid grid-cols-2 gap-2 sm:gap-2.5">
-            {[1, 2, 3, 4].map(n => (
-              <div key={n} className="bg-white/[0.05] rounded-xl p-2.5 sm:p-3 border border-white/[0.04]">
-                <div className="h-2 bg-white/15 rounded w-full mb-2" />
-                <div className="h-2 bg-white/10 rounded w-3/4 mb-2" />
-                <div className="h-2 bg-white/10 rounded w-1/2" />
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-      {i === 4 && (
-        /* Analytics */
-        <div className="flex flex-col gap-3 sm:gap-4 h-full justify-center max-w-xs mx-auto">
-          <div className="grid grid-cols-3 gap-2 sm:gap-2.5">
-            {["#7c5cfc", "#06b6d4", "#22c55e"].map(color => (
-              <div key={color} className="bg-white/[0.06] rounded-xl p-2.5 sm:p-3 text-center">
-                <div className="text-sm font-bold mb-1" style={{ color }}>--</div>
-                <div className="h-2 bg-white/10 rounded w-10 sm:w-12 mx-auto" />
-              </div>
-            ))}
-          </div>
-          <div className="bg-white/[0.04] rounded-xl p-3 sm:p-4 flex items-end gap-1.5 sm:gap-2 h-24 sm:h-32">
-            {[40, 65, 45, 80, 55, 70, 90, 60, 75, 85].map((h, j) => (
-              <div key={j} className="flex-1 rounded-t" style={{ height: `${h}%`, background: j === 9 ? "#7c5cfc" : "rgba(124,92,252,0.25)" }} />
-            ))}
-          </div>
-        </div>
-      )}
-      {i === 5 && (
-        /* Bot Builder */
-        <div className="flex flex-col items-center gap-2 sm:gap-3 h-full justify-center max-w-xs mx-auto">
-          {[
-            { label: "Trigger", color: "bg-blue-500/25 border-blue-500/30" },
-            { label: "Condition", color: "bg-amber-500/25 border-amber-500/30" },
-            { label: "Reply", color: "bg-green-500/25 border-green-500/30" },
-          ].map((node, ni) => (
-            <div key={node.label}>
-              {ni > 0 && <div className="w-px h-3 sm:h-4 bg-white/15 mx-auto mb-2 sm:mb-3" />}
-              <div className={`${node.color} border rounded-xl px-5 sm:px-6 py-2.5 sm:py-3 text-center`}>
-                <span className="text-[11px] text-white/70 font-medium">{node.label}</span>
-                <div className="h-2 bg-white/15 rounded w-20 mx-auto mt-1.5" />
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-}
 
 /* ───── Main Component ───── */
 
 export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale }) {
   const { t, locale, setLocale, dir } = useI18n();
   const featuresRef = useRef<HTMLElement>(null);
-  const [activeFeature, setActiveFeature] = useState(0);
+  const [storyProgress, setStoryProgress] = useState(0);
   const [navDark, setNavDark] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
@@ -462,8 +689,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       const sectionHeight = rect.height - window.innerHeight;
       if (sectionHeight > 0) {
         const progress = Math.min(1, Math.max(0, scrolled / sectionHeight));
-        const idx = Math.min(featureKeys.length - 1, Math.floor(progress * featureKeys.length));
-        setActiveFeature(idx);
+        setStoryProgress(progress);
         features.style.setProperty("--fp", String(progress));
       }
       // Check if nav overlaps a dark section
@@ -526,15 +752,15 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
           <div className="flex items-center gap-6">
             <Logo light={navDark} />
             <div className="hidden md:flex items-center gap-1">
-              <a href="#features" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
-                navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
-              }`}>
-                {t("landing.nav.features")}
-              </a>
               <a href="#how-it-works" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
                 navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
               }`}>
-                {t("landing.nav.channels")}
+                {t("landing.nav.howItWorks")}
+              </a>
+              <a href="#product-features" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
+                navDark ? "text-white/60 hover:text-white hover:bg-white/10" : "text-gray-500 hover:text-black hover:bg-gray-100/80"
+              }`}>
+                {t("landing.nav.features")}
               </a>
             </div>
           </div>
@@ -635,117 +861,166 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
         </div>
       </section>
 
-      {/* ───── Features (scroll-linked: left sticky, right scrolls) ───── */}
+      {/* ───── How It Works: Scroll-Driven Story ───── */}
       <section
-        id="features"
+        id="how-it-works"
         ref={featuresRef}
         className="landing-features relative"
-        style={{ "--fp": "0" } as React.CSSProperties}
+        style={{ "--fp": "0", minHeight: "400vh" } as React.CSSProperties}
       >
-        {/* Grid overlay — covers full section */}
+        {/* Grid overlay */}
         <div className="landing-features-grid pointer-events-none absolute inset-0" style={{ zIndex: 1 }} />
 
-        {/* Rotating gradient blobs (shared background) */}
+        {/* Rotating gradient blobs */}
         <div className="landing-features-gradients pointer-events-none absolute -inset-20 overflow-hidden">
           <div className="absolute top-[10%] left-0 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #7C3291 0%, transparent 70%)", filter: "blur(100px)" }} />
           <div className="absolute top-[40%] right-0 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full opacity-[0.15]" style={{ background: "radial-gradient(circle, #5A72B3 0%, transparent 70%)", filter: "blur(100px)" }} />
           <div className="absolute bottom-[10%] left-[20%] w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #6DCED9 0%, transparent 70%)", filter: "blur(100px)" }} />
         </div>
 
-        {/* ── Desktop: sticky left + scrolling right ── */}
-        <div className={`relative hidden lg:flex max-w-[1240px] mx-auto px-6 sm:px-12 lg:px-20 ${isRtl ? "lg:flex-row-reverse" : ""}`} style={{ zIndex: 2 }}>
-          {/* Left: sticky text */}
-          <div className="lg:sticky lg:top-0 lg:h-screen flex-1 flex items-center">
-            <div className="relative">
-              <p className="text-xs font-medium text-primary-400 uppercase tracking-[0.15em] mb-6">
-                {t("landing.features.label")}
-              </p>
-              <div className="relative min-h-[180px]">
-                {featureKeys.map((key, i) => {
-                  const Icon = featureIcons[i];
-                  const isActive = i === activeFeature;
-                  return (
-                    <div
-                      key={key}
-                      className={`transition-all duration-700 ${
-                        isActive
-                          ? "opacity-100 translate-y-0 relative"
-                          : i < activeFeature
-                            ? "opacity-0 -translate-y-4 absolute inset-0 pointer-events-none"
-                            : "opacity-0 translate-y-4 absolute inset-0 pointer-events-none"
-                      }`}
-                      style={{ transitionTimingFunction: "cubic-bezier(0.16, 1, 0.3, 1)" }}
-                    >
-                      <div className="w-11 h-11 rounded-xl bg-primary-500/20 text-primary-400 flex items-center justify-center mb-5">
-                        <Icon />
-                      </div>
-                      <h3 className="text-[clamp(1.3rem,2.5vw,1.75rem)] font-semibold tracking-[-0.02em] leading-[1.2] mb-3 text-white">
-                        {t(`landing.features.${key}.title`)}
-                      </h3>
-                      <p className="text-[#a3a3a3] text-base leading-[1.7]">
-                        {t(`landing.features.${key}.desc`)}
-                      </p>
-                    </div>
-                  );
-                })}
-              </div>
-              {/* Progress dots */}
-              <div className="flex gap-2 mt-8">
-                {featureKeys.map((_, i) => (
-                  <div
-                    key={i}
-                    className={`h-1.5 rounded-full transition-all duration-700 ease-out ${
-                      i === activeFeature ? "w-8 bg-primary-500" : "w-1.5 bg-white/20"
-                    }`}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Right: scrolling panels — each feature gets a full viewport height */}
-          <div className="flex-1 max-w-xl">
-            {featureKeys.map((key, i) => (
-              <div key={key} className="h-screen flex items-center justify-center px-4 lg:px-8">
-                <FeatureVisual index={i} />
-              </div>
-            ))}
-          </div>
-        </div>
-
-        {/* ── Mobile: stacked cards ── */}
-        <div className="lg:hidden relative px-4 sm:px-8 py-14 sm:py-20" style={{ zIndex: 2 }}>
-          <div className="text-center mb-10">
-            <p className="text-xs font-medium text-primary-400 uppercase tracking-[0.15em] mb-3">
+        {/* ── Scroll-driven story (all screen sizes) ── */}
+        <div className="relative" style={{ zIndex: 2, minHeight: "400vh" }}>
+          <div className="sticky top-0 h-screen flex items-center justify-center overflow-hidden">
+            {/* Section label */}
+            <p className="absolute top-6 sm:top-8 inset-x-0 text-center text-[10px] sm:text-xs font-medium text-primary-400 uppercase tracking-[0.15em]">
               {t("landing.features.label")}
             </p>
-          </div>
-          <div className="flex flex-col gap-8 max-w-md mx-auto">
-            {featureKeys.map((key, i) => {
-              const Icon = featureIcons[i];
+
+            {/* Phase 1 & 2: Chaos → stacked conversation items */}
+            <div className="relative w-full h-full flex items-center justify-center scale-[0.75] sm:scale-[0.8] md:scale-[0.9] lg:scale-100 origin-center">
+              {INBOX_PLATFORMS.map((platform, i) => (
+                <ConversationItem
+                  key={platform.name}
+                  platform={platform}
+                  index={i}
+                  progress={storyProgress}
+                  isRtl={isRtl}
+                />
+              ))}
+            </div>
+
+            {/* Phase 3 & 4: Full inbox demo (crossfades in) */}
+            {(() => {
+              const demoFadeStart = 0.45;
+              const demoFadeEnd = 0.60;
+              const sub = Math.min(1, Math.max(0, (storyProgress - demoFadeStart) / (demoFadeEnd - demoFadeStart)));
+              const eased = 1 - Math.pow(1 - sub, 3);
+              const scale = 0.92 + 0.08 * eased;
+              // Copilot slides in later (0.70–0.90)
+              const copilotP = Math.min(1, Math.max(0, (storyProgress - 0.70) / 0.20));
               return (
-                <div key={key}>
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className="w-9 h-9 rounded-lg bg-primary-500/20 text-primary-400 flex items-center justify-center flex-shrink-0">
-                      <Icon />
-                    </div>
-                    <h3 className="text-lg font-semibold text-white tracking-[-0.01em]">
-                      {t(`landing.features.${key}.title`)}
-                    </h3>
+                <div
+                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
+                  style={{ opacity: eased, transform: `scale(${scale}) translateY(-4%)`, willChange: "transform, opacity" }}
+                >
+                  <div className="scale-[0.78] sm:scale-[0.82] md:scale-[0.88] lg:scale-100 origin-center">
+                    <InboxDemo
+                      copilotProgress={copilotP}
+                      isRtl={isRtl}
+                      t={t as (key: string) => string}
+                    />
                   </div>
-                  <p className="text-[#a3a3a3] text-sm leading-[1.7] mb-4">
-                    {t(`landing.features.${key}.desc`)}
-                  </p>
-                  <FeatureVisual index={i} />
                 </div>
               );
-            })}
+            })()}
+
+            {/* Phase text overlays */}
+            {/* Phase 1: Chaos — top */}
+            <StoryPhaseText
+              text={t("landing.features.chaosText") as string}
+              desc={t("landing.features.chaosDesc") as string}
+              opacity={storyProgress < 0.18 ? 1 : Math.max(0, 1 - (storyProgress - 0.18) / 0.06)}
+            />
+            {/* Phase 2: Converge — top, fades out before demo appears */}
+            <StoryPhaseText
+              text={t("landing.features.convergeText") as string}
+              desc={t("landing.features.convergeDesc") as string}
+              opacity={
+                storyProgress < 0.28 ? Math.max(0, (storyProgress - 0.22) / 0.06)
+                : storyProgress > 0.36 ? Math.max(0, 1 - (storyProgress - 0.36) / 0.06)
+                : 1
+              }
+            />
+            {/* Phase 3: One inbox — bottom, appears when demo fades in */}
+            <StoryPhaseText
+              text={t("landing.features.resolveText") as string}
+              desc={t("landing.features.resolveDesc") as string}
+              opacity={
+                storyProgress < 0.50 ? Math.max(0, (storyProgress - 0.44) / 0.06)
+                : storyProgress > 0.56 ? Math.max(0, 1 - (storyProgress - 0.56) / 0.06)
+                : 1
+              }
+              bottom
+            />
+            {/* Phase 4: Bot handover — bottom */}
+            <StoryPhaseText
+              text={t("landing.features.botText") as string}
+              desc={t("landing.features.botDesc") as string}
+              opacity={
+                storyProgress < 0.64 ? Math.max(0, (storyProgress - 0.58) / 0.06)
+                : storyProgress > 0.72 ? Math.max(0, 1 - (storyProgress - 0.72) / 0.06)
+                : 1
+              }
+              bottom
+            />
+            {/* Phase 5: AI Copilot — bottom */}
+            <StoryPhaseText
+              text={t("landing.features.copilotText") as string}
+              desc={t("landing.features.copilotDesc") as string}
+              opacity={storyProgress < 0.80 ? 0 : Math.min(1, (storyProgress - 0.80) / 0.10)}
+              bottom
+            />
+
+            {/* Progress bar */}
+            <div className="absolute bottom-2 sm:bottom-3 inset-x-0 flex justify-center">
+              <div className="w-24 sm:w-32 h-1 bg-white/10 rounded-full overflow-hidden">
+                <div
+                  className="h-full bg-primary-500 rounded-full transition-none"
+                  style={{ width: `${storyProgress * 100}%` }}
+                />
+              </div>
+            </div>
           </div>
         </div>
       </section>
 
-      {/* ───── How It Works: Zigzag ───── */}
-      <section id="how-it-works" className="py-14 sm:py-28 px-4 sm:px-12 lg:px-20 bg-white">
+      {/* ───── Features: 2x3 Grid ───── */}
+      <section id="product-features" className="py-14 sm:py-28 px-4 sm:px-12 lg:px-20 bg-gray-50/50">
+        <div className="max-w-[1240px] mx-auto">
+          <div className="text-center max-w-xl mx-auto mb-10 sm:mb-16">
+            <p className="text-xs font-medium text-primary-500 uppercase tracking-[0.15em] mb-3">
+              {t("landing.productFeatures.label")}
+            </p>
+            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-4">
+              {t("landing.productFeatures.title")}
+            </h2>
+            <p className="text-[#757575] text-sm sm:text-base">
+              {t("landing.productFeatures.subtitle")}
+            </p>
+          </div>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+            {PRODUCT_FEATURES.map((feature) => (
+              <div
+                key={feature.key}
+                className="bg-white rounded-2xl border border-gray-100 p-5 sm:p-6 hover:shadow-lg hover:shadow-gray-200/50 transition-all duration-300"
+              >
+                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-4`}>
+                  <span className={feature.iconColor}>{feature.icon}</span>
+                </div>
+                <h3 className="text-[15px] sm:text-base font-semibold text-black mb-2">
+                  {t(`landing.productFeatures.${feature.key}.title`)}
+                </h3>
+                <p className="text-sm text-[#757575] leading-[1.6]">
+                  {t(`landing.productFeatures.${feature.key}.desc`)}
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ───── Get Started: Zigzag ───── */}
+      <section id="get-started" className="py-14 sm:py-28 px-4 sm:px-12 lg:px-20 bg-white">
         <div className="max-w-[1240px] mx-auto">
           {/* Header */}
           <div className="text-center max-w-xl mx-auto mb-10 sm:mb-20">
@@ -794,75 +1069,14 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
                   {/* Visual */}
                   <div className="flex-1 w-full max-w-md">
                     <div
-                      className="bg-[#1a1a2e] rounded-2xl border border-white/[0.06] p-5 sm:p-8 overflow-hidden"
-                      style={{ aspectRatio: "4/3", boxShadow: "0 6px 30px rgba(0,0,0,0.15)" }}
+                      className="bg-[#1a1a2e] rounded-2xl border border-white/[0.06] overflow-hidden"
+                      style={{ boxShadow: "0 6px 30px rgba(0,0,0,0.15)" }}
                     >
-                      {i === 0 && (
-                        /* Workspace setup */
-                        <div className="flex flex-col gap-3 h-full justify-center max-w-xs mx-auto">
-                          <div className="bg-white/[0.06] rounded-xl p-3 flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-primary-500/30" />
-                            <div className="flex-1">
-                              <div className="h-2.5 bg-white/20 rounded w-24 mb-1.5" />
-                              <div className="h-2 bg-white/10 rounded w-16" />
-                            </div>
-                          </div>
-                          <div className="flex gap-2.5 mt-2">
-                            {["whatsapp", "facebook", "instagram", "gmail"].map(ch => (
-                              <div key={ch} className="flex-1 bg-white/[0.04] rounded-xl p-3 border border-white/[0.06] flex flex-col items-center gap-2">
-                                <img src={`/integrations/${ch}.svg`} alt="" className="h-6 opacity-70" />
-                                <div className="w-3 h-3 rounded-full bg-green-500/50" />
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      )}
-                      {i === 1 && (
-                        /* Train AI */
-                        <div className="flex flex-col gap-3 h-full justify-center max-w-xs mx-auto">
-                          <div className="bg-primary-500/15 border border-primary-500/20 rounded-xl p-4">
-                            <div className="flex items-center gap-2 mb-3">
-                              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" /></svg>
-                              <span className="text-[11px] text-primary-300 font-medium">Knowledge Base</span>
-                            </div>
-                            <div className="space-y-2">
-                              <div className="h-2 bg-white/15 rounded w-full" />
-                              <div className="h-2 bg-white/15 rounded w-4/5" />
-                              <div className="h-2 bg-white/15 rounded w-3/5" />
-                            </div>
-                          </div>
-                          <div className="bg-white/[0.06] rounded-xl p-3 flex items-center gap-2">
-                            <div className="w-6 h-6 rounded-full bg-green-500/30 flex items-center justify-center">
-                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-green-400"><path d="M5 13l4 4L19 7" /></svg>
-                            </div>
-                            <span className="text-[11px] text-white/50">Brand voice configured</span>
-                          </div>
-                        </div>
-                      )}
-                      {i === 2 && (
-                        /* Deploy agents */
-                        <div className="flex flex-col gap-3 h-full justify-center max-w-xs mx-auto">
-                          {["Agent A", "Agent B", "Agent C"].map((agent, ai) => (
-                            <div key={agent} className="bg-white/[0.04] rounded-xl p-3 flex items-center gap-3 border border-white/[0.04]">
-                              <div className={`w-8 h-8 rounded-full ${ai === 0 ? "bg-primary-500/30" : ai === 1 ? "bg-cyan-500/30" : "bg-amber-500/30"}`} />
-                              <div className="flex-1">
-                                <div className="h-2.5 bg-white/15 rounded w-16 mb-1.5" />
-                                <div className="h-2 bg-white/10 rounded w-24" />
-                              </div>
-                              <div className="flex gap-1">
-                                <div className="w-5 h-5 rounded bg-green-500/20" />
-                                <div className="w-5 h-5 rounded bg-blue-500/20" />
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                      {i === 3 && (
-                        /* Engage everywhere */
-                        <div className="flex flex-col gap-3 h-full justify-center">
-                          <ProductMockup dark />
-                        </div>
-                      )}
+                      <img
+                        src={["/get_gifs/connect.gif", "/get_gifs/knowladge.gif", "/get_gifs/ai.gif", "/get_gifs/chat.gif"][i]}
+                        alt={t(`landing.howItWorks.${step}.title`) as string}
+                        className="w-full h-auto block"
+                      />
                     </div>
                   </div>
                 </div>
@@ -926,8 +1140,8 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
               <div>
                 <h4 className="font-semibold text-black mb-2.5 sm:mb-3 text-[13px]">{t("landing.footer.product")}</h4>
                 <ul className="space-y-1.5 sm:space-y-2 text-[#757575]">
-                  <li><a href="#features" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.nav.features")}</a></li>
-                  <li><a href="#channels" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.nav.channels")}</a></li>
+                  <li><a href="#how-it-works" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.nav.howItWorks")}</a></li>
+                  <li><a href="#product-features" className="hover:text-black transition-colors text-[13px] inline-block py-0.5">{t("landing.nav.features")}</a></li>
                 </ul>
               </div>
               <div>

@@ -277,6 +277,28 @@ body {
 }
 .ea-check-draw { stroke-dasharray: 48; animation: ea-check-draw 0.5s ease-out 0.3s both; }
 
+/* Badge pulse for story chaos phase */
+@keyframes badge-pulse {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50% { transform: scale(1.18); opacity: 0.85; }
+}
+.badge-pulse {
+  animation: badge-pulse 1.5s ease-in-out infinite;
+}
+
+/* Mobile inbox demo: copilot expands from 0, conv list shrinks */
+@media (max-width: 767px) {
+  .inbox-demo-convlist {
+    width: calc(180px * (1 - var(--cp, 0))) !important;
+    overflow: hidden;
+  }
+  .inbox-demo-copilot {
+    width: calc(140px * var(--cp, 0)) !important;
+    transform: none !important;
+    overflow: hidden;
+  }
+}
+
 /* Dark section with vignette (Kinso-style) */
 .landing-dark-section {
   background: linear-gradient(180deg, #333 0%, #121212 8%, #121212 92%, #333 100%);

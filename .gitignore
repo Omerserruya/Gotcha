@@ -38,3 +38,5 @@ packages/shared/prisma/*.db
 
 # Coverage
 coverage/
+.claude/
+.omc/

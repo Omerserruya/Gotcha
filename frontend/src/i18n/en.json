@@ -539,7 +539,7 @@
   "landing": {
     "nav": {
       "features": "Features",
-      "channels": "How It Works",
+      "howItWorks": "How It Works",
       "pricing": "Pricing",
       "login": "Login",
       "getStarted": "Get Early Access"
@@ -554,36 +554,33 @@
       "trustedBy": "Works with your channels"
     },
     "features": {
-      "label": "What you get",
-      "title": "Less tab-switching. More closing.",
-      "subtitle": "Six things that make your support team dangerous (in a good way).",
-      "copilot": {
-        "title": "AI Co-Pilot",
-        "desc": "Suggests replies your agents actually want to send. Trained on your knowledge base, not generic fluff."
-      },
-      "channels": {
-        "title": "Unified Inbox",
-        "desc": "WhatsApp, Messenger, Instagram — one screen. Your agents stop context-switching, customers stop repeating themselves."
-      },
-      "routing": {
-        "title": "Smart Routing",
-        "desc": "Messages land with the right agent, in the right department, before the customer notices."
-      },
-      "knowledge": {
-        "title": "Knowledge Base",
-        "desc": "Upload your docs. Connect Confluence or Drive. The AI reads them so your agents don't have to memorize everything."
-      },
-      "analytics": {
-        "title": "Live Dashboard",
-        "desc": "Response times, agent load, SLA tracking — all real-time. No more guessing who's drowning."
-      },
-      "botBuilder": {
-        "title": "Bot Builder",
-        "desc": "Drag. Drop. Automate. Handle the repetitive stuff so your humans can handle the human stuff."
-      }
+      "label": "How It Works",
+      "chaosText": "4 platforms. 47 unread. 0 overview.",
+      "chaosDesc": "Your team switches tabs 200 times a day. Customers repeat themselves. Context vanishes between apps.",
+      "convergeText": "What if they all came together?",
+      "convergeDesc": "Every message from every channel — one list, one screen, zero tab-switching.",
+      "botText": "The bot handles first contact.",
+      "botDesc": "Greets, qualifies, and routes. When it gets real — seamless handover to your best agent.",
+      "resolveText": "One inbox. Total clarity.",
+      "resolveDesc": "All your conversations in one place. Every platform, every message — nothing falls through the cracks.",
+      "copilotText": "Every agent deserves an AI co-pilot.",
+      "copilotDesc": "It reads the full conversation, pulls from your knowledge base, and writes the perfect reply. Your agent just clicks send.",
+      "copilotLabel": "AI Co-Pilot",
+      "copilotSuggestion1": "Based on order #4812, the shipment arrives Thursday. Want me to share tracking?",
+      "copilotSuggestion2": "Customer seems frustrated — suggest empathetic opening + resolution.",
+      "copilotInsert": "Insert reply",
+      "botGreeting": "Hi! How can I help you today?",
+      "customerMsg": "I need to return order #4812",
+      "botReply": "Let me connect you with an agent right away!",
+      "botDivider": "Bot transferred to agent queue",
+      "agentJoined": "Sarah joined the conversation",
+      "agentReply": "Hi! I'm looking at your order right now — give me just a moment.",
+      "myActive": "My Active",
+      "queue": "Queue",
+      "contextSummary": "Return request for order #4812. Customer purchased 3 days ago."
     },
     "howItWorks": {
-      "label": "How It Works",
+      "label": "Get Started",
       "title": "Live in under 15 minutes",
       "subtitle": "Four steps. No code. No consultants.",
       "step1": {
@@ -601,6 +598,35 @@
       "step4": {
         "title": "Go live",
         "desc": "Customers message you anywhere. Your team replies from one place with AI-powered suggestions and full context."
+      }
+    },
+    "productFeatures": {
+      "label": "Features",
+      "title": "Everything your team needs",
+      "subtitle": "Powerful tools to turn conversations into customers.",
+      "unifiedInbox": {
+        "title": "Unified Inbox",
+        "desc": "WhatsApp, Messenger, Instagram, and email — one screen, zero tab-switching."
+      },
+      "aiCopilot": {
+        "title": "AI Co-Pilot",
+        "desc": "Reads the conversation, pulls from your knowledge base, and suggests the perfect reply."
+      },
+      "smartBot": {
+        "title": "Smart Bot",
+        "desc": "Greets, qualifies, and routes. When it gets complex — seamless handover to your best agent."
+      },
+      "knowledgeBase": {
+        "title": "Knowledge Base",
+        "desc": "Upload docs, FAQs, and brand guidelines. The AI learns your voice."
+      },
+      "smartRouting": {
+        "title": "Smart Routing",
+        "desc": "Department routing, round-robin assignment, and SLA tracking — all built in."
+      },
+      "analytics": {
+        "title": "Analytics Dashboard",
+        "desc": "Real-time metrics, agent workload, and conversation volume at a glance."
       }
     },
     "faq": {
