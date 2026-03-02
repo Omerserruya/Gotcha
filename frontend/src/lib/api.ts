@@ -771,3 +771,36 @@ export function deleteConversation(token: string, id: string, force?: boolean) {
 export function deleteMessage(token: string, conversationId: string, messageId: string) {
   return apiFetch<{ data: any }>(`/api/conversations/${conversationId}/messages/${messageId}`, { token, method: "DELETE" });
 }
+
+// ─── Leads CRM (System Admin) ───────────────────────────────
+
+export function getLeads(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; meta: { total: number; page: number; limit: number; totalPages: number } }>(
+    `/api/waitlist/leads${qs}`, { token }
+  );
+}
+
+export function getLeadStats(token: string) {
+  return apiFetch<{ data: { total: number; new: number; contacted: number; approved: number; rejected: number; recentWeek: number } }>(
+    "/api/waitlist/leads/stats", { token }
+  );
+}
+
+export function updateLead(token: string, id: string, data: { status?: string; notes?: string; leadScore?: number }) {
+  return apiFetch<{ data: any }>(`/api/waitlist/leads/${id}`, {
+    token, method: "PATCH", body: JSON.stringify(data),
+  });
+}
+
+export function deleteLead(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/waitlist/leads/${id}`, { token, method: "DELETE" });
+}
+
+export function exportLeadsCsv(token: string, status?: string) {
+  const qs = status ? `?status=${status}` : "";
+  const API_BASE = process.env.NEXT_PUBLIC_API_URL || "";
+  return fetch(`${API_BASE}/api/waitlist/leads/export${qs}`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}

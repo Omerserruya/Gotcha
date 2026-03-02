@@ -584,21 +584,37 @@ model MagicLink {
   @@map("magic_links")
 }
 
-// ─── Waitlist ───────────────────────────────────────────────
+// ─── Lead Status ────────────────────────────────────────────
+
+enum LeadStatus {
+  NEW
+  CONTACTED
+  APPROVED
+  REJECTED
+}
+
+// ─── Waitlist / Whitelist Leads ─────────────────────────────
 
 model WaitlistEntry {
-  id          String    @id @default(cuid())
-  firstName   String    @map("first_name")
-  email       String    @unique
+  id          String     @id @default(cuid())
+  firstName   String     @map("first_name")
+  email       String     @unique
   phone       String?
+  company     String?
   role        String
-  companySize String    @map("company_size")
+  companySize String     @map("company_size")
   frustration String?
-  source      String    @default("early-access-form")
-  convertedAt DateTime? @map("converted_at")
-  createdAt   DateTime  @default(now()) @map("created_at")
+  source      String     @default("early-access-form")
+  status      LeadStatus @default(NEW)
+  leadScore   Int        @default(0) @map("lead_score")
+  notes       String?
+  convertedAt DateTime?  @map("converted_at")
+  createdAt   DateTime   @default(now()) @map("created_at")
+  updatedAt   DateTime   @updatedAt @map("updated_at")
 
   @@index([createdAt])
+  @@index([status])
+  @@index([email])
   @@map("waitlist_entries")
 }
 
