@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1771355060870,
+  "lastScanned": 1772565411323,
   "projectRoot": "/home/ocs/projects/ChatCenter/packages/shared",
   "techStack": {
     "languages": [
@@ -63,7 +63,7 @@
       "path": "prisma",
       "purpose": null,
       "fileCount": 2,
-      "lastAccessed": 1771355060850,
+      "lastAccessed": 1772565411306,
       "keyFiles": [
         "schema.prisma",
         "seed.ts"
@@ -73,7 +73,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 1,
-      "lastAccessed": 1771355060850,
+      "lastAccessed": 1772565411307,
       "keyFiles": [
         "index.ts"
       ]
@@ -82,7 +82,7 @@
       "path": "prisma/migrations",
       "purpose": "Database migrations",
       "fileCount": 1,
-      "lastAccessed": 1771355060860,
+      "lastAccessed": 1772565411317,
       "keyFiles": [
         "migration_lock.toml"
       ]
@@ -90,114 +90,35 @@
     "src/lib": {
       "path": "src/lib",
       "purpose": "Library code",
-      "fileCount": 6,
-      "lastAccessed": 1771355060861,
+      "fileCount": 7,
+      "lastAccessed": 1772565411318,
       "keyFiles": [
+        "encryption.ts",
         "event-bus.ts",
-        "jwt.ts",
-        "prisma.ts"
+        "jwt.ts"
       ]
     },
     "src/middleware": {
       "path": "src/middleware",
       "purpose": "Middleware",
-      "fileCount": 4,
-      "lastAccessed": 1771355060862,
+      "fileCount": 5,
+      "lastAccessed": 1772565411319,
       "keyFiles": [
         "auth.ts",
         "rbac.ts",
-        "tenant.ts"
+        "tenant-status.ts"
       ]
     },
     "src/types": {
       "path": "src/types",
       "purpose": "Type definitions",
       "fileCount": 1,
-      "lastAccessed": 1771355060862,
+      "lastAccessed": 1772565411319,
       "keyFiles": [
         "express.d.ts"
       ]
     }
   },
-  "hotPaths": [
-    {
-      "path": "prisma/schema.prisma",
-      "accessCount": 9,
-      "lastAccessed": 1772563939118,
-      "type": "directory"
-    },
-    {
-      "path": "src/index.ts",
-      "accessCount": 5,
-      "lastAccessed": 1772563933330,
-      "type": "file"
-    },
-    {
-      "path": "src/lib/queue.ts",
-      "accessCount": 2,
-      "lastAccessed": 1771766652368,
-      "type": "file"
-    },
-    {
-      "path": "src/channels/registry.ts",
-      "accessCount": 2,
-      "lastAccessed": 1772563927272,
-      "type": "file"
-    },
-    {
-      "path": "src/channels/index.ts",
-      "accessCount": 2,
-      "lastAccessed": 1772563932296,
-      "type": "file"
-    },
-    {
-      "path": "src/middleware/rbac.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771580870442,
-      "type": "file"
-    },
-    {
-      "path": "src/middleware/tenant.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771580880994,
-      "type": "file"
-    },
-    {
-      "path": "src/lib/jwt.ts",
-      "accessCount": 1,
-      "lastAccessed": 1771580892605,
-      "type": "file"
-    },
-    {
-      "path": "prisma/migrations/0008_add_reminder_sent_at/migration.sql",
-      "accessCount": 1,
-      "lastAccessed": 1771766491418,
-      "type": "file"
-    },
-    {
-      "path": "src",
-      "accessCount": 1,
-      "lastAccessed": 1771766683931,
-      "type": "directory"
-    },
-    {
-      "path": "src/channels/whatsapp.adapter.ts",
-      "accessCount": 1,
-      "lastAccessed": 1772563886693,
-      "type": "file"
-    },
-    {
-      "path": "src/channels/types.ts",
-      "accessCount": 1,
-      "lastAccessed": 1772563886918,
-      "type": "file"
-    },
-    {
-      "path": "src/channels/email.adapter.ts",
-      "accessCount": 1,
-      "lastAccessed": 1772563919903,
-      "type": "file"
-    }
-  ],
+  "hotPaths": [],
   "userDirectives": []
 }

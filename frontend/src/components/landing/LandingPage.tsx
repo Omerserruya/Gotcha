@@ -2,6 +2,7 @@
 
 import { memo, useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
@@ -445,9 +446,10 @@ function RotatingPlatform({ locale }: { locale: string }) {
 
 /* ───── Locale Dropdown ───── */
 
-function LocaleDropdown({ locale, setLocale }: { locale: string; setLocale: (l: "en" | "he") => void }) {
+function LocaleDropdown({ locale, setLocale, forcedLocale }: { locale: string; setLocale: (l: "en" | "he") => void; forcedLocale?: string }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
+  const router = useRouter();
 
   useEffect(() => {
     const close = (e: MouseEvent) => {
@@ -456,6 +458,15 @@ function LocaleDropdown({ locale, setLocale }: { locale: string; setLocale: (l: 
     document.addEventListener("mousedown", close);
     return () => document.removeEventListener("mousedown", close);
   }, []);
+
+  function handleSwitch(l: "en" | "he") {
+    setOpen(false);
+    if (forcedLocale) {
+      router.push(`/${l}`);
+    } else {
+      setLocale(l);
+    }
+  }
 
   return (
     <div ref={ref} className="relative">
@@ -473,7 +484,7 @@ function LocaleDropdown({ locale, setLocale }: { locale: string; setLocale: (l: 
           {(["en", "he"] as const).map((l) => (
             <button
               key={l}
-              onClick={() => { setLocale(l); setOpen(false); }}
+              onClick={() => handleSwitch(l)}
               className={`w-full px-3 py-1.5 text-[13px] text-start transition-colors ${
                 l === locale ? "font-semibold text-primary-500 bg-primary-50" : "text-gray-600 hover:bg-gray-50"
               }`}
@@ -496,6 +507,7 @@ function MobileMenu({
   locale,
   setLocale,
   navDark,
+  forcedLocale,
 }: {
   open: boolean;
   onClose: () => void;
@@ -503,12 +515,24 @@ function MobileMenu({
   locale: string;
   setLocale: (l: "en" | "he") => void;
   navDark: boolean;
+  forcedLocale?: string;
 }) {
+  const router = useRouter();
+
   useEffect(() => {
     if (open) document.body.style.overflow = "hidden";
     else document.body.style.overflow = "";
     return () => { document.body.style.overflow = ""; };
   }, [open]);
+
+  function handleSwitch(l: "en" | "he") {
+    onClose();
+    if (forcedLocale) {
+      router.push(`/${l}`);
+    } else {
+      setLocale(l);
+    }
+  }
 
   if (!open) return null;
 
@@ -531,7 +555,7 @@ function MobileMenu({
             {(["en", "he"] as const).map((l) => (
               <button
                 key={l}
-                onClick={() => setLocale(l)}
+                onClick={() => handleSwitch(l)}
                 className={`px-4 py-2 text-sm rounded-lg transition-colors ${
                   l === locale ? "bg-primary-50 text-primary-500 font-semibold" : "text-gray-500 hover:bg-gray-50"
                 }`}
@@ -928,7 +952,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
 
           <div className="flex items-center gap-2">
             <div className="hidden md:flex items-center gap-2">
-              <LocaleDropdown locale={locale} setLocale={setLocale} />
+              <LocaleDropdown locale={locale} setLocale={setLocale} forcedLocale={forcedLocale} />
               <Link href="/login" className={`px-3.5 py-1.5 text-[13px] font-medium rounded-full transition-all ${
                 navDark ? "text-white/70 hover:text-white hover:bg-white/10" : "text-gray-600 hover:text-black hover:bg-gray-100/80"
               }`}>
@@ -952,7 +976,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
           </div>
         </nav>
       </header>
-      <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} t={t} locale={locale} setLocale={setLocale} navDark={navDark} />
+      <MobileMenu open={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} t={t} locale={locale} setLocale={setLocale} navDark={navDark} forcedLocale={forcedLocale} />
 
       {/* ───── Hero: Split Layout ───── */}
       <section className="relative min-h-[80vh] sm:min-h-[95vh] flex items-center px-4 sm:px-12 lg:px-20 pt-24 sm:pt-28 pb-16 sm:pb-0 overflow-hidden bg-white">
