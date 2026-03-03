@@ -1028,6 +1028,49 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN")
   }
 });
 
+// ─── Delete Channel Account (with cascade) ───────────────────
+
+router.delete("/:id", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+    });
+    if (!account) {
+      res.status(404).json({ error: "Channel account not found" });
+      return;
+    }
+
+    const channelAccountId = account.id;
+
+    const { deletedMessages, deletedConversations } = await prisma.$transaction(async (tx) => {
+      const deletedMessages = await tx.message.deleteMany({
+        where: { conversation: { channelAccountId } },
+      });
+      const deletedConversations = await tx.conversation.deleteMany({
+        where: { channelAccountId },
+      });
+      await tx.channelAccount.delete({ where: { id: channelAccountId } });
+      return { deletedMessages, deletedConversations };
+    });
+
+    // Invalidate Redis cache
+    const redis = getRedis();
+    await redis.del(`channel_account:${account.channel}:${account.externalId}`);
+
+    res.json({
+      data: {
+        deleted: true,
+        channelAccountId,
+        deletedConversations: deletedConversations.count,
+        deletedMessages: deletedMessages.count,
+      },
+    });
+  } catch (err) {
+    console.error("Delete channel account error:", err);
+    res.status(500).json({ error: "Failed to delete channel account" });
+  }
+});
+
 // ─── Channel Health Check ────────────────────────────────────
 
 router.get("/:id/status", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
@@ -1097,6 +1140,59 @@ router.get("/:id/status", authenticate, resolveTenant, requireRole("ADMIN"), asy
   } catch (err) {
     console.error("Channel status check error:", err);
     res.status(500).json({ error: "Failed to check channel status" });
+  }
+});
+
+// ─── Connect Email Channel ─────────────────────────────────────
+const connectEmailSchema = z.object({
+  emailAddress: z.string().email(),
+  displayName: z.string().min(1),
+  smtpHost: z.string().min(1),
+  smtpPort: z.number().int().min(1).max(65535),
+  smtpUser: z.string().min(1),
+  smtpPass: z.string().min(1),
+  imapHost: z.string().optional(),
+  imapPort: z.number().int().min(1).max(65535).optional(),
+  imapUser: z.string().optional(),
+  imapPass: z.string().optional(),
+});
+
+router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"), validate(connectEmailSchema), async (req: Request, res: Response) => {
+  try {
+    const { emailAddress, displayName, smtpHost, smtpPort, smtpUser, smtpPass, imapHost, imapPort, imapUser, imapPass } = req.body;
+
+    // Check for duplicate
+    const existing = await prisma.channelAccount.findFirst({
+      where: { channel: "EMAIL", externalId: emailAddress, tenantId: req.tenantId! },
+    });
+    if (existing) {
+      res.status(409).json({ error: "This email address is already connected" });
+      return;
+    }
+
+    const credentials = {
+      smtpHost, smtpPort, smtpUser, smtpPass,
+      imapHost, imapPort, imapUser, imapPass,
+      fromAddress: emailAddress,
+    };
+
+    const channelAccount = await prisma.channelAccount.create({
+      data: {
+        tenantId: req.tenantId!,
+        channel: "EMAIL",
+        externalId: emailAddress,
+        displayName,
+        credentials: encryptCredentials(credentials),
+        connectionStatus: "CONNECTED",
+        connectedAt: new Date(),
+        connectedBy: req.user!.userId,
+      },
+    });
+
+    res.json({ data: [channelAccount] });
+  } catch (err: any) {
+    console.error("Email connection error:", err);
+    res.status(500).json({ error: "Failed to connect email channel" });
   }
 });
 

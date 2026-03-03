@@ -14,6 +14,7 @@ enum ChannelType {
   WHATSAPP
   MESSENGER
   INSTAGRAM
+  EMAIL
 }
 
 enum ChannelConnectionStatus {
@@ -213,7 +214,7 @@ model Conversation {
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
   tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
   assignedAgent  User?           @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
   department     Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   chatbotFlow    ChatbotFlow?    @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)

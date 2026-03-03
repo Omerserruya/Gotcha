@@ -232,4 +232,73 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
   } catch { res.status(500).json({ error: "Internal server error" }); }
 });
 
+// ─── Change Password ─────────────────────────────────────────
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+router.post("/change-password", authenticate, validate(changePasswordSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { currentPassword, newPassword } = req.body;
+    await authService.changePassword(req.user!.tenantId, req.user!.userId, currentPassword, newPassword);
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err.message === "Invalid current password") { res.status(400).json({ error: err.message }); return; }
+    console.error("Change password error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Forgot Password (request reset link) ────────────────────
+const forgotPasswordSchema = z.object({
+  email: z.string().email(),
+  tenantSlug: z.string().min(1),
+});
+
+router.post("/forgot-password", validate(forgotPasswordSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { email, tenantSlug } = req.body;
+    const tenant = await prisma.tenant.findUnique({ where: { slug: tenantSlug } });
+    if (!tenant) {
+      // Don't leak tenant existence - always return success
+      res.json({ success: true, message: "If the email exists, a reset link has been sent." });
+      return;
+    }
+    const result = await authService.createPasswordResetToken(tenant.id, email);
+    if (result) {
+      // Import and call sendPasswordResetEmail from notification service
+      const { sendPasswordResetEmail } = await import("../services/notification.service");
+      const user = await prisma.user.findFirst({ where: { id: result.userId }, select: { name: true } });
+      await sendPasswordResetEmail(tenant.id, email, user?.name || "User", tenant.name, result.token);
+    }
+    // Always return success to prevent email enumeration
+    res.json({ success: true, message: "If the email exists, a reset link has been sent." });
+  } catch (err) {
+    console.error("Forgot password error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ─── Reset Password (with token) ─────────────────────────────
+const resetPasswordSchema = z.object({
+  token: z.string().min(1),
+  newPassword: z.string().min(8),
+});
+
+router.post("/reset-password", validate(resetPasswordSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token, newPassword } = req.body;
+    await authService.resetPassword(token, newPassword);
+    res.json({ success: true });
+  } catch (err: any) {
+    if (err.message?.includes("Invalid") || err.message?.includes("expired") || err.message?.includes("used")) {
+      res.status(400).json({ error: err.message });
+      return;
+    }
+    console.error("Reset password error:", err);
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 export default router;

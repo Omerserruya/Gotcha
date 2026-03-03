@@ -1,4 +1,5 @@
 import bcrypt from "bcryptjs";
+import crypto from "crypto";
 import { prisma, signToken, generateRefreshToken } from "@chatcenter/shared";
 
 const SALT_ROUNDS = 10;
@@ -77,4 +78,47 @@ export async function login(tenantId: string, email: string, password: string) {
     user: { id: user.id, email: user.email, name: user.name, role: user.role, tenantId: user.tenantId, ...deptInfo },
     tenantStatus: tenant?.status || "ACTIVE",
   };
+}
+
+export async function changePassword(tenantId: string, userId: string, currentPassword: string, newPassword: string) {
+  const user = await prisma.user.findFirst({ where: { tenantId, id: userId } });
+  if (!user) throw new Error("User not found");
+
+  const isValid = await bcrypt.compare(currentPassword, user.password);
+  if (!isValid) throw new Error("Invalid current password");
+
+  const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+  await prisma.user.update({ where: { id: userId }, data: { password: hashedPassword } });
+
+  return { success: true };
+}
+
+export async function createPasswordResetToken(tenantId: string, email: string): Promise<{ token: string; userId: string } | null> {
+  const user = await prisma.user.findFirst({ where: { tenantId, email } });
+  if (!user) return null;
+
+  const token = crypto.randomBytes(32).toString("hex");
+  const expiresAt = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+
+  await prisma.magicLink.create({
+    data: { token, userId: user.id, tenantId, expiresAt },
+  });
+
+  return { token, userId: user.id };
+}
+
+export async function resetPassword(token: string, newPassword: string) {
+  const magicLink = await prisma.magicLink.findUnique({ where: { token } });
+  if (!magicLink) throw new Error("Invalid or expired token");
+  if (magicLink.usedAt) throw new Error("Token has already been used");
+  if (new Date() > magicLink.expiresAt) throw new Error("Token has expired");
+
+  const hashedPassword = await bcrypt.hash(newPassword, SALT_ROUNDS);
+
+  await prisma.$transaction([
+    prisma.user.update({ where: { id: magicLink.userId }, data: { password: hashedPassword } }),
+    prisma.magicLink.update({ where: { id: magicLink.id }, data: { usedAt: new Date() } }),
+  ]);
+
+  return { success: true };
 }

@@ -62,6 +62,30 @@ export function getMe(token: string) {
   return apiFetch<{ user: any }>("/api/auth/me", { token });
 }
 
+// ─── Password Management ───────────────────────────────────
+
+export function changePassword(token: string, currentPassword: string, newPassword: string) {
+  return apiFetch<{ success: boolean }>("/api/auth/change-password", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ currentPassword, newPassword }),
+  });
+}
+
+export function forgotPassword(email: string, tenantSlug: string) {
+  return apiFetch<{ success: boolean; message: string }>("/api/auth/forgot-password", {
+    method: "POST",
+    body: JSON.stringify({ email, tenantSlug }),
+  });
+}
+
+export function resetPassword(resetToken: string, newPassword: string) {
+  return apiFetch<{ success: boolean }>("/api/auth/reset-password", {
+    method: "POST",
+    body: JSON.stringify({ token: resetToken, newPassword }),
+  });
+}
+
 // ─── Conversations ──────────────────────────────────────────
 
 export function getConversations(token: string, params?: Record<string, string>) {
@@ -266,6 +290,25 @@ export function connectWhatsApp(
       wabaId: sessionInfo?.wabaId,
       phoneNumberId: sessionInfo?.phoneNumberId,
     }),
+  });
+}
+
+export function connectEmail(token: string, data: {
+  emailAddress: string;
+  displayName: string;
+  smtpHost: string;
+  smtpPort: number;
+  smtpUser: string;
+  smtpPass: string;
+  imapHost?: string;
+  imapPort?: number;
+  imapUser?: string;
+  imapPass?: string;
+}) {
+  return apiFetch<{ data: any[] }>("/api/channels/connect/email", {
+    token,
+    method: "POST",
+    body: JSON.stringify(data),
   });
 }
 

@@ -13,7 +13,24 @@ export const metadata: Metadata = {
     template: "%s | GOTCHA",
   },
   description:
-    "Unify WhatsApp, Messenger, and Instagram into one AI-powered inbox. Smart routing, co-pilot suggestions, and real-time analytics for customer support teams.",
+    "GOTCHA unifies WhatsApp Business, Instagram DMs, and Facebook Messenger into one AI-powered unified inbox. Automate customer support with smart routing, AI co-pilot suggestions, and real-time analytics. The best omnichannel customer communication platform for teams managing multiple agents across social messaging channels.",
+  keywords: [
+    "unified inbox",
+    "whatsapp business multiple agents",
+    "ai customer support platform",
+    "omnichannel messaging",
+    "whatsapp business inbox",
+    "customer support automation",
+    "instagram dm management",
+    "facebook messenger business",
+    "ai chatbot customer service",
+    "multi-channel customer communication",
+    "whatsapp crm",
+    "social media customer support",
+    "team inbox whatsapp",
+    "customer service automation software",
+    "ai-powered helpdesk",
+  ],
   icons: {
     icon: "/favicon.ico",
     apple: "/apple-touch-icon.png",
@@ -21,7 +38,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "GOTCHA — AI-Powered Customer Communication",
     description:
-      "Unify WhatsApp, Messenger, and Instagram into one AI-powered inbox. Smart routing, co-pilot suggestions, and real-time analytics.",
+      "Unify WhatsApp Business, Instagram DMs, and Messenger into one AI-powered inbox. Smart routing, AI co-pilot, and real-time analytics for customer support teams.",
     url: "https://gotcha.co.il",
     siteName: "GOTCHA",
     locale: "en_US",
@@ -32,7 +49,7 @@ export const metadata: Metadata = {
     card: "summary_large_image",
     title: "GOTCHA — AI-Powered Customer Communication",
     description:
-      "Unify WhatsApp, Messenger, and Instagram into one AI-powered inbox.",
+      "Unify WhatsApp Business, Instagram DMs, and Messenger into one AI-powered unified inbox for customer support teams.",
     images: ["/logo.png"],
   },
   alternates: {

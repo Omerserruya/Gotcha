@@ -9,6 +9,7 @@ import {
   getSlaSettings, updateSlaSettings,
   getIdleAutomation, updateIdleAutomation,
   getDepartments, getDepartmentSla, updateDepartmentSla,
+  changePassword as changePasswordApi,
 } from "@/lib/api";
 import { AppLayout } from "@/components/AppLayout";
 import clsx from "clsx";
@@ -102,6 +103,12 @@ export default function SettingsPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [deptSlaMap, setDeptSlaMap] = useState<Record<string, SlaConfig>>({});
   const [showDeptSla, setShowDeptSla] = useState(false);
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordMessage, setPasswordMessage] = useState("");
+  const [passwordError, setPasswordError] = useState("");
+  const [changingPassword, setChangingPassword] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -184,6 +191,33 @@ export default function SettingsPage() {
       ...prev,
       [deptId]: { ...prev[deptId], [field]: value },
     }));
+  }
+
+  async function handleChangePassword() {
+    if (!token) return;
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Passwords do not match");
+      return;
+    }
+    if (newPassword.length < 8) {
+      setPasswordError("Password must be at least 8 characters");
+      return;
+    }
+    setChangingPassword(true);
+    setPasswordError("");
+    setPasswordMessage("");
+    try {
+      await changePasswordApi(token, currentPassword, newPassword);
+      setPasswordMessage("Password changed successfully");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err: any) {
+      setPasswordError(err.message || "Failed to change password");
+    } finally {
+      setChangingPassword(false);
+      setTimeout(() => { setPasswordMessage(""); setPasswordError(""); }, 5000);
+    }
   }
 
   if (user?.role !== "ADMIN") {
@@ -563,6 +597,63 @@ export default function SettingsPage() {
               rows={3}
               className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
             />
+          </div>
+
+          {/* Change Password */}
+          <div className="bg-white rounded-2xl border border-gray-200 p-6">
+            <h2 className="font-semibold text-gray-900 mb-1">Change Password</h2>
+            <p className="text-xs text-gray-500 mb-5">Update your account password</p>
+
+            {passwordMessage && (
+              <div className="bg-green-50 text-green-700 text-sm px-4 py-2.5 rounded-xl border border-green-200 mb-4">
+                {passwordMessage}
+              </div>
+            )}
+            {passwordError && (
+              <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-xl border border-red-200 mb-4">
+                {passwordError}
+              </div>
+            )}
+
+            <div className="space-y-4 max-w-md">
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Current Password</label>
+                <input
+                  type="password"
+                  value={currentPassword}
+                  onChange={(e) => setCurrentPassword(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
+                  placeholder="Enter current password"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">New Password</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => setNewPassword(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
+                  placeholder="Enter new password (min 8 characters)"
+                />
+              </div>
+              <div>
+                <label className="text-xs font-medium text-gray-600 block mb-1">Confirm New Password</label>
+                <input
+                  type="password"
+                  value={confirmPassword}
+                  onChange={(e) => setConfirmPassword(e.target.value)}
+                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
+                  placeholder="Confirm new password"
+                />
+              </div>
+              <button
+                onClick={handleChangePassword}
+                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
+                className="px-5 py-2 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition font-medium text-sm disabled:opacity-40"
+              >
+                {changingPassword ? "Changing..." : "Change Password"}
+              </button>
+            </div>
           </div>
 
           {/* Save Button */}

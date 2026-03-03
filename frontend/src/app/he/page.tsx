@@ -4,7 +4,7 @@ import LandingPage from "@/components/landing/LandingPage";
 export const metadata: Metadata = {
   title: "GOTCHA — תקשורת לקוחות מונעת בינה מלאכותית",
   description:
-    "אחדו WhatsApp, Messenger ו-Instagram לתיבה חכמה אחת מבוססת AI. ניתוב חכם, עוזר AI ואנליטיקה בזמן אמת לצוותי שירות לקוחות.",
+    "אחדו WhatsApp Business, הודעות Instagram ו-Facebook Messenger לתיבת דואר נכנס אחת מבוססת בינה מלאכותית. אוטומציה של שירות לקוחות עם ניתוב חכם, עוזר AI, ואנליטיקה בזמן אמת. ניהול נציגים מרובים בערוצי מסרים חברתיים מלוח בקרה אחד.",
   alternates: {
     canonical: "/he",
     languages: { en: "/en", he: "/he" },
@@ -12,7 +12,7 @@ export const metadata: Metadata = {
   openGraph: {
     title: "GOTCHA — תקשורת לקוחות מונעת בינה מלאכותית",
     description:
-      "אחדו WhatsApp, Messenger ו-Instagram לתיבה חכמה אחת מבוססת AI. ניתוב חכם, עוזר AI ואנליטיקה בזמן אמת.",
+      "אחדו WhatsApp Business, הודעות Instagram ו-Messenger לתיבת דואר אחת מבוססת AI. ניתוב חכם, עוזר AI ואנליטיקה בזמן אמת לצוותי שירות לקוחות.",
     url: "https://gotcha.co.il/he",
     locale: "he_IL",
     type: "website",

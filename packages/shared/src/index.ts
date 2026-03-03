@@ -30,6 +30,8 @@ export {
   messengerOutboundAdapter,
   instagramInboundAdapter,
   instagramOutboundAdapter,
+  emailInboundAdapter,
+  emailOutboundAdapter,
 } from "./channels";
 
 // Lib

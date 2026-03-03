@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { memo, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
@@ -101,7 +101,7 @@ const PRODUCT_FEATURES = [
 
 /* ───── ConversationItem (for chaos + stack phases) ───── */
 
-function ConversationItem({ platform, index, progress, isRtl }: {
+const ConversationItem = memo(function ConversationItem({ platform, index, progress, isRtl }: {
   platform: typeof INBOX_PLATFORMS[number];
   index: number;
   progress: number;
@@ -183,7 +183,7 @@ function ConversationItem({ platform, index, progress, isRtl }: {
       </div>
     </div>
   );
-}
+});
 
 /* ───── InboxDemo (realistic app mockup) ───── */
 
@@ -401,7 +401,7 @@ function InboxDemo({ copilotProgress, isRtl, t }: {
 
 /* ───── StoryPhaseText ───── */
 
-function StoryPhaseText({ text, desc, opacity, bottom }: { text: string; desc?: string; opacity: number; bottom?: boolean }) {
+const StoryPhaseText = memo(function StoryPhaseText({ text, desc, opacity, bottom }: { text: string; desc?: string; opacity: number; bottom?: boolean }) {
   return (
     <div
       className="absolute inset-x-0 text-center px-6 pointer-events-none max-w-2xl mx-auto"
@@ -417,7 +417,7 @@ function StoryPhaseText({ text, desc, opacity, bottom }: { text: string; desc?: 
       )}
     </div>
   );
-}
+});
 
 /* ───── Rotating Platform Names ───── */
 
@@ -821,6 +821,8 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
   const [storyProgress, setStoryProgress] = useState(0);
   const [navDark, setNavDark] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const rafRef = useRef<number>(0);
+  const lastProgressRef = useRef(0);
 
   useEffect(() => {
     if (forcedLocale && forcedLocale !== locale) {
@@ -832,26 +834,37 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
     const features = featuresRef.current;
     if (!features) return;
     const onScroll = () => {
-      const rect = features.getBoundingClientRect();
-      const scrolled = -rect.top;
-      const sectionHeight = rect.height - window.innerHeight;
-      if (sectionHeight > 0) {
-        const progress = Math.min(1, Math.max(0, scrolled / sectionHeight));
-        setStoryProgress(progress);
-        features.style.setProperty("--fp", String(progress));
-      }
-      // Check if nav overlaps a dark section
-      const darkEls = document.querySelectorAll(".landing-features, .landing-dark-section");
-      let overDark = false;
-      darkEls.forEach(el => {
-        const r = el.getBoundingClientRect();
-        if (r.top < 60 && r.bottom > 60) overDark = true;
+      if (rafRef.current) return;
+      rafRef.current = requestAnimationFrame(() => {
+        rafRef.current = 0;
+        const rect = features.getBoundingClientRect();
+        const scrolled = -rect.top;
+        const sectionHeight = rect.height - window.innerHeight;
+        if (sectionHeight > 0) {
+          const progress = Math.min(1, Math.max(0, scrolled / sectionHeight));
+          // Only re-render if progress changed meaningfully (reduces re-renders)
+          if (Math.abs(progress - lastProgressRef.current) > 0.002) {
+            lastProgressRef.current = progress;
+            setStoryProgress(progress);
+          }
+          features.style.setProperty("--fp", String(progress));
+        }
+        // Check if nav overlaps a dark section
+        const darkEls = document.querySelectorAll(".landing-features, .landing-dark-section");
+        let overDark = false;
+        darkEls.forEach(el => {
+          const r = el.getBoundingClientRect();
+          if (r.top < 60 && r.bottom > 60) overDark = true;
+        });
+        setNavDark(overDark);
       });
-      setNavDark(overDark);
     };
     window.addEventListener("scroll", onScroll, { passive: true });
     onScroll();
-    return () => window.removeEventListener("scroll", onScroll);
+    return () => {
+      window.removeEventListener("scroll", onScroll);
+      if (rafRef.current) cancelAnimationFrame(rafRef.current);
+    };
   }, []);
 
   const otherLabel = locale === "en" ? "עברית" : "English";
@@ -1021,14 +1034,14 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
 
         {/* Rotating gradient blobs */}
         <div className="landing-features-gradients pointer-events-none absolute -inset-20 overflow-hidden">
-          <div className="absolute top-[10%] left-0 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #7C3291 0%, transparent 70%)", filter: "blur(100px)" }} />
-          <div className="absolute top-[40%] right-0 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full opacity-[0.15]" style={{ background: "radial-gradient(circle, #5A72B3 0%, transparent 70%)", filter: "blur(100px)" }} />
-          <div className="absolute bottom-[10%] left-[20%] w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #6DCED9 0%, transparent 70%)", filter: "blur(100px)" }} />
+          <div className="absolute top-[10%] left-0 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #7C3291 0%, transparent 70%)", filter: "blur(60px)", WebkitFilter: "blur(60px)" }} />
+          <div className="absolute top-[40%] right-0 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full opacity-[0.15]" style={{ background: "radial-gradient(circle, #5A72B3 0%, transparent 70%)", filter: "blur(60px)", WebkitFilter: "blur(60px)" }} />
+          <div className="absolute bottom-[10%] left-[20%] w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #6DCED9 0%, transparent 70%)", filter: "blur(60px)", WebkitFilter: "blur(60px)" }} />
         </div>
 
         {/* ── Scroll-driven story (all screen sizes) ── */}
         <div className="relative" style={{ zIndex: 2, minHeight: "400vh" }}>
-          <div className="sticky top-0 h-screen flex items-center justify-center overflow-hidden">
+          <div className="sticky top-0 h-screen flex items-center justify-center overflow-hidden" style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}>
             {/* Section label */}
             <p className="absolute top-6 sm:top-8 inset-x-0 text-center text-[10px] sm:text-xs font-medium text-primary-400 uppercase tracking-[0.15em]">
               {t("landing.features.label")}

@@ -215,6 +215,12 @@
       "type": "file"
     },
     {
+      "path": "src/app/channels/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1772563755596,
+      "type": "directory"
+    },
+    {
       "path": "src/app",
       "accessCount": 2,
       "lastAccessed": 1772465666045,
@@ -245,16 +251,16 @@
       "type": "file"
     },
     {
+      "path": "src/app/settings/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772563755258,
+      "type": "directory"
+    },
+    {
       "path": "package.json",
       "accessCount": 1,
       "lastAccessed": 1772466885931,
       "type": "file"
-    },
-    {
-      "path": "src/app/settings/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1772472915296,
-      "type": "directory"
     },
     {
       "path": "src/app/agents/page.tsx",
@@ -263,10 +269,10 @@
       "type": "directory"
     },
     {
-      "path": "src/app/channels/page.tsx",
+      "path": "src/lib/api.ts",
       "accessCount": 1,
-      "lastAccessed": 1772472917378,
-      "type": "directory"
+      "lastAccessed": 1772563766173,
+      "type": "file"
     }
   ],
   "userDirectives": []

@@ -122,20 +122,32 @@
   "hotPaths": [
     {
       "path": "prisma/schema.prisma",
-      "accessCount": 7,
-      "lastAccessed": 1771856583046,
+      "accessCount": 9,
+      "lastAccessed": 1772563939118,
       "type": "directory"
     },
     {
       "path": "src/index.ts",
-      "accessCount": 3,
-      "lastAccessed": 1771766702372,
+      "accessCount": 5,
+      "lastAccessed": 1772563933330,
       "type": "file"
     },
     {
       "path": "src/lib/queue.ts",
       "accessCount": 2,
       "lastAccessed": 1771766652368,
+      "type": "file"
+    },
+    {
+      "path": "src/channels/registry.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772563927272,
+      "type": "file"
+    },
+    {
+      "path": "src/channels/index.ts",
+      "accessCount": 2,
+      "lastAccessed": 1772563932296,
       "type": "file"
     },
     {
@@ -167,6 +179,24 @@
       "accessCount": 1,
       "lastAccessed": 1771766683931,
       "type": "directory"
+    },
+    {
+      "path": "src/channels/whatsapp.adapter.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772563886693,
+      "type": "file"
+    },
+    {
+      "path": "src/channels/types.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772563886918,
+      "type": "file"
+    },
+    {
+      "path": "src/channels/email.adapter.ts",
+      "accessCount": 1,
+      "lastAccessed": 1772563919903,
+      "type": "file"
     }
   ],
   "userDirectives": []

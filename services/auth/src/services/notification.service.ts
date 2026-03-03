@@ -683,6 +683,150 @@ export async function sendWaitlistWelcomeEmail(email: string, firstName: string,
 }
 
 /**
+ * Send password reset email with magic link.
+ */
+export async function sendPasswordResetEmail(
+  tenantId: string,
+  email: string,
+  userName: string,
+  tenantName: string,
+  token: string,
+): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
+  const resetUrl = `${frontendUrl}/login?resetToken=${token}`;
+  const logoUrl = `${frontendUrl}/logo.png`;
+
+  const subject = `Reset your password — ${tenantName}`;
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Reset Password &mdash; GOTCHA.</title>
+</head>
+<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+  <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
+    <tr>
+      <td align="center" style="padding:40px 16px 20px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding-bottom:32px;">
+              <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
+              <div style="margin:0 auto 20px;width:68px;height:68px;border-radius:50%;background-color:rgba(255,255,255,0.18);line-height:68px;text-align:center;">
+                <span style="font-size:34px;color:#ffffff;">&#128274;</span>
+              </div>
+              <h1 style="margin:0 0 8px;font-size:30px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
+                Reset your password
+              </h1>
+              <p style="margin:0;font-size:16px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
+                Hi ${userName}, we received a password reset request.
+              </p>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:36px 40px 32px;text-align:center;">
+              <p style="margin:0 0 24px;font-size:15px;color:#a1a1aa;line-height:1.6;">
+                Click the button below to set a new password for your <strong style="color:#e4e4e7;">${tenantName}</strong> account.
+              </p>
+              <a href="${resetUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;">
+                Reset Password &rarr;
+              </a>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;padding:0 40px 32px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
+                <tr>
+                  <td style="padding:24px 0 0;">
+                    <p style="margin:0;font-size:12px;color:#71717a;line-height:1.6;">
+                      Button not working? Copy this link:<br>
+                      <a href="${resetUrl}" style="color:#6DCED9;word-break:break-all;font-size:12px;">${resetUrl}</a>
+                    </p>
+                    <p style="margin:10px 0 0;font-size:12px;color:#52525b;">
+                      This link expires in <strong style="color:#6DCED9;">1 hour</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td style="background-color:#0f0f16;border-radius:0 0 20px 20px;padding:0 40px 40px;">
+              <table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="border-top:1px solid rgba(255,255,255,0.06);">
+                <tr>
+                  <td style="padding:28px 0 0;text-align:center;">
+                    <p style="margin:0 0 12px;font-size:13px;color:#71717a;line-height:1.6;">
+                      If you didn't request this, you can safely ignore this email.
+                    </p>
+                    <p style="margin:0;font-size:14px;color:#52525b;">
+                      <strong style="color:#e4e4e7;">The GOTCHA. Team</strong>
+                    </p>
+                  </td>
+                </tr>
+              </table>
+            </td>
+          </tr>
+        </table>
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding:28px 16px 12px;">
+              <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">GOTCHA. &mdash; Smart messaging for modern teams.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+
+  const text = [
+    `Hi ${userName},`,
+    "",
+    "We received a request to reset your password.",
+    "",
+    "Click the link below to set a new password:",
+    resetUrl,
+    "",
+    "This link expires in 1 hour.",
+    "",
+    "If you didn't request this, you can safely ignore this email.",
+    "",
+    "— The GOTCHA. Team",
+  ].join("\n");
+
+  const payload: NotificationPayload = {
+    tenantId,
+    channel: "email",
+    type: "password_reset",
+    recipient: email,
+    subject,
+    body: text,
+    metadata: { resetUrl },
+  };
+
+  try {
+    await sendHtmlEmail(email, subject, html, text);
+    await logNotification(payload, "sent");
+  } catch (err: any) {
+    console.error("Failed to send password reset email:", err);
+    await logNotification(payload, "failed", err.message);
+  }
+}
+
+/**
  * Send onboarding email with magic link (no login required).
  */
 export async function sendOnboardingEmail(

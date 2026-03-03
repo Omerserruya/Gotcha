@@ -160,4 +160,66 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
   }
 }
 
+// ─── Email Webhook (POST) ──────────────────────────────────────
+router.post("/email", async (req: Request, res: Response) => {
+  res.sendStatus(200);
+
+  try {
+    const body = req.body;
+    console.log(`[WEBHOOK] Email incoming from: ${body?.from}`);
+
+    // Use the email adapter directly
+    const { emailInboundAdapter } = await import("@chatcenter/shared");
+
+    if (!emailInboundAdapter.canHandle(body)) {
+      console.warn("Email webhook: invalid payload");
+      return;
+    }
+
+    // Resolve channel account by recipient email
+    const recipientEmail = emailInboundAdapter.resolveChannelAccountExternalId(body);
+    if (!recipientEmail) {
+      console.warn("Email webhook: no recipient found");
+      return;
+    }
+
+    const channelAccount = await prisma.channelAccount.findFirst({
+      where: { externalId: recipientEmail, channel: "EMAIL", isActive: true },
+    });
+
+    if (!channelAccount) {
+      console.warn(`No email channel account found for: ${recipientEmail}`);
+      return;
+    }
+
+    const tenantId = channelAccount.tenantId;
+    const channelAccountId = channelAccount.id;
+
+    // Extract and enqueue messages
+    const messages = emailInboundAdapter.extractMessages(body);
+    for (const msg of messages) {
+      await incomingMessageQueue.add(
+        "process",
+        {
+          tenantId,
+          channel: "EMAIL",
+          channelAccountId,
+          normalizedMessage: {
+            externalMessageId: msg.externalMessageId,
+            senderId: msg.senderId,
+            senderDisplayName: msg.senderDisplayName,
+            timestamp: msg.timestamp.toISOString(),
+            contentType: msg.content.type,
+            body: msg.content.text || "",
+            messageType: "email",
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+  } catch (err) {
+    console.error("Email webhook error:", err);
+  }
+});
+
 export default router;

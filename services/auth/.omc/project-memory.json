@@ -120,6 +120,12 @@
       "type": "file"
     },
     {
+      "path": "src/routes/channels.ts",
+      "accessCount": 5,
+      "lastAccessed": 1772564718338,
+      "type": "file"
+    },
+    {
       "path": "src/routes/auth.ts",
       "accessCount": 3,
       "lastAccessed": 1771842195928,
@@ -129,12 +135,6 @@
       "path": "src/routes/system.ts",
       "accessCount": 3,
       "lastAccessed": 1771950818984,
-      "type": "file"
-    },
-    {
-      "path": "src/routes/channels.ts",
-      "accessCount": 2,
-      "lastAccessed": 1771845613442,
       "type": "file"
     },
     {

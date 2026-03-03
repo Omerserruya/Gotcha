@@ -189,11 +189,19 @@ body {
 /* ───── Features section: dark + grid + rotating gradients ───── */
 .landing-features {
   background: #0e0e12;
+  contain: layout style;
+}
+
+/* Disable transitions on scroll-driven animated children for smooth mobile scroll */
+.landing-features *,
+.landing-features *::before,
+.landing-features *::after {
+  transition: none !important;
 }
 
 .landing-features-gradients {
   transform: rotate(calc(var(--fp, 0) * 360deg));
-  transition: transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+  will-change: transform;
 }
 
 .landing-features-grid {
