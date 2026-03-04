@@ -20,3 +20,6 @@ export { whatsAppInboundAdapter, whatsAppOutboundAdapter } from "./whatsapp.adap
 export { messengerInboundAdapter, messengerOutboundAdapter } from "./messenger.adapter";
 export { instagramInboundAdapter, instagramOutboundAdapter } from "./instagram.adapter";
 export { emailInboundAdapter, emailOutboundAdapter } from "./email.adapter";
+export { gmailInboundAdapter, gmailOutboundAdapter } from "./gmail.adapter";
+export { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter";
+export { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";

@@ -152,7 +152,7 @@ export default function HistoryPage() {
             </div>
             <div className="flex gap-1.5">
               {/* Channel filter chips */}
-              {["ALL", "WHATSAPP", "MESSENGER"].map((ch) => (
+              {["ALL", "WHATSAPP", "MESSENGER", "INSTAGRAM", "GMAIL", "OUTLOOK", "SLACK"].map((ch) => (
                 <button
                   key={ch}
                   onClick={() => { setChannelFilter(ch); setPage(1); }}
@@ -161,11 +161,15 @@ export default function HistoryPage() {
                     channelFilter === ch
                       ? ch === "WHATSAPP" ? "bg-green-100 text-green-700"
                         : ch === "MESSENGER" ? "bg-blue-100 text-blue-700"
+                        : ch === "INSTAGRAM" ? "bg-pink-100 text-pink-700"
+                        : ch === "GMAIL" ? "bg-red-100 text-red-700"
+                        : ch === "OUTLOOK" ? "bg-blue-100 text-blue-700"
+                        : ch === "SLACK" ? "bg-purple-100 text-purple-700"
                         : "bg-primary-100 text-primary-700"
                       : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                   )}
                 >
-                  {ch === "ALL" ? t("conversations.channelAll") : ch === "WHATSAPP" ? "WhatsApp" : "Messenger"}
+                  {ch === "ALL" ? t("conversations.channelAll") : t(`conversations.channel${ch.charAt(0) + ch.slice(1).toLowerCase()}`)}
                 </button>
               ))}
               {/* Status filter */}

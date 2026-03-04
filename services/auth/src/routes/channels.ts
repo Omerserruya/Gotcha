@@ -1,3 +1,4 @@
+import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import axios from "axios";
@@ -23,6 +24,23 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
 const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 
+// Google (Gmail) OAuth
+const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
+const GOOGLE_OAUTH_REDIRECT_URI = process.env.GOOGLE_OAUTH_REDIRECT_URI || "";
+
+// Microsoft (Outlook) OAuth
+const MICROSOFT_CLIENT_ID = process.env.MICROSOFT_CLIENT_ID || "";
+const MICROSOFT_CLIENT_SECRET = process.env.MICROSOFT_CLIENT_SECRET || "";
+const MICROSOFT_OAUTH_REDIRECT_URI = process.env.MICROSOFT_OAUTH_REDIRECT_URI || "";
+const MICROSOFT_TENANT_ID = process.env.MICROSOFT_TENANT_ID || "common";
+
+// Slack OAuth
+const SLACK_CLIENT_ID = process.env.SLACK_CLIENT_ID || "";
+const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET || "";
+const SLACK_OAUTH_REDIRECT_URI = process.env.SLACK_OAUTH_REDIRECT_URI || "";
+const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
+
 // ─── List Connected Channels ─────────────────────────────────
 
 router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
@@ -43,6 +61,7 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
         platformMeta: true,
         createdAt: true,
         updatedAt: true,
+        responseMode: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
       },
       orderBy: { createdAt: "asc" },
@@ -389,13 +408,26 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 
   try {
     const platform = req.query.platform as string;
-    if (!platform || !["messenger", "instagram", "whatsapp"].includes(platform)) {
-      res.status(400).json({ error: "Invalid platform. Must be 'messenger', 'instagram', or 'whatsapp'" });
+    if (!platform || !["messenger", "instagram", "whatsapp", "gmail", "outlook", "slack"].includes(platform)) {
+      res.status(400).json({ error: "Invalid platform. Must be 'messenger', 'instagram', 'whatsapp', 'gmail', 'outlook', or 'slack'" });
       return;
     }
 
-    if (!META_APP_ID || !OAUTH_REDIRECT_URI) {
+    // Validate platform-specific config
+    if (["messenger", "instagram", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
       res.status(500).json({ error: "OAuth not configured. META_APP_ID and OAUTH_REDIRECT_URI are required." });
+      return;
+    }
+    if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) {
+      res.status(500).json({ error: "Gmail OAuth not configured. GOOGLE_CLIENT_ID and GOOGLE_OAUTH_REDIRECT_URI are required." });
+      return;
+    }
+    if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) {
+      res.status(500).json({ error: "Outlook OAuth not configured. MICROSOFT_CLIENT_ID and MICROSOFT_OAUTH_REDIRECT_URI are required." });
+      return;
+    }
+    if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) {
+      res.status(500).json({ error: "Slack OAuth not configured. SLACK_CLIENT_ID and SLACK_OAUTH_REDIRECT_URI are required." });
       return;
     }
 
@@ -423,6 +455,40 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
       // WhatsApp Embedded Signup: config_id + extras triggers the signup wizard
       const extras = encodeURIComponent(JSON.stringify({ setup: { channel: "WHATSAPP" } }));
       oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&config_id=${EMBEDDED_SIGNUP_CONFIG_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&response_type=code&override_default_response_type=true&extras=${extras}`;
+    } else if (platform === "gmail") {
+      // Google OAuth2 for Gmail API
+      const googleScopes = [
+        "https://www.googleapis.com/auth/gmail.readonly",
+        "https://www.googleapis.com/auth/gmail.send",
+        "https://www.googleapis.com/auth/gmail.modify",
+        "https://www.googleapis.com/auth/userinfo.email",
+      ].join(" ");
+      oauthUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${GOOGLE_CLIENT_ID}&redirect_uri=${encodeURIComponent(GOOGLE_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(googleScopes)}&access_type=offline&prompt=consent&state=${encodeURIComponent(state)}`;
+    } else if (platform === "outlook") {
+      // Microsoft OAuth2 for Outlook Mail (Microsoft Graph)
+      const msScopes = [
+        "https://graph.microsoft.com/Mail.ReadWrite",
+        "https://graph.microsoft.com/Mail.Send",
+        "https://graph.microsoft.com/User.Read",
+        "offline_access",
+      ].join(" ");
+      oauthUrl = `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/authorize?client_id=${MICROSOFT_CLIENT_ID}&redirect_uri=${encodeURIComponent(MICROSOFT_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(msScopes)}&state=${encodeURIComponent(state)}`;
+    } else if (platform === "slack") {
+      // Slack OAuth2 with bot scopes for messaging
+      const slackScopes = [
+        "channels:history",
+        "channels:read",
+        "chat:write",
+        "groups:history",
+        "groups:read",
+        "im:history",
+        "im:read",
+        "im:write",
+        "mpim:history",
+        "mpim:read",
+        "users:read",
+      ].join(",");
+      oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
     } else {
       const scopes: Record<string, string> = {
         messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
@@ -507,7 +573,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       accessToken = token;
       tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
       console.log("[WA-CALLBACK] Business token obtained successfully");
-    } else {
+    } else if (platform === "messenger" || platform === "instagram") {
       // Messenger/Instagram: standard OAuth token exchange
       const tokenResponse = await axios.get(`${FB_API_URL}/oauth/access_token`, {
         params: {
@@ -538,6 +604,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
       accessToken = longLivedToken;
       tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+    } else {
+      // Gmail, Outlook, Slack: token exchange handled in platform-specific section below
+      accessToken = "";
+      tokenExpiresAt = new Date();
     }
 
     const connectedAccounts: string[] = [];
@@ -949,12 +1019,337 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
         return;
       }
+    } else if (platform === "gmail") {
+      // ─── GMAIL ───────────────────────────────────────────
+      // Exchange code for tokens
+      const tokenResponse = await axios.post("https://oauth2.googleapis.com/token", {
+        client_id: GOOGLE_CLIENT_ID,
+        client_secret: GOOGLE_CLIENT_SECRET,
+        code,
+        grant_type: "authorization_code",
+        redirect_uri: GOOGLE_OAUTH_REDIRECT_URI,
+      });
+
+      const { access_token: gmailAccessToken, refresh_token: gmailRefreshToken, expires_in } = tokenResponse.data;
+      tokenExpiresAt = new Date(Date.now() + (expires_in || 3600) * 1000);
+
+      // Get user email address
+      const profileResponse = await axios.get("https://www.googleapis.com/oauth2/v2/userinfo", {
+        headers: { Authorization: `Bearer ${gmailAccessToken}` },
+      });
+      const emailAddress = profileResponse.data.email;
+      const displayName = profileResponse.data.name || emailAddress;
+
+      if (!emailAddress) {
+        res.redirect(`${frontendUrl}/channels?error=gmail_no_email`);
+        return;
+      }
+
+      // Set up Gmail push notifications via Pub/Sub
+      try {
+        const watchTopic = process.env.GMAIL_PUBSUB_TOPIC || "";
+        if (watchTopic) {
+          await axios.post(
+            `https://gmail.googleapis.com/gmail/v1/users/me/watch`,
+            { topicName: watchTopic, labelIds: ["INBOX"] },
+            { headers: { Authorization: `Bearer ${gmailAccessToken}` } }
+          );
+          console.log(`[GMAIL-CALLBACK] Push notifications enabled for ${emailAddress}`);
+        }
+      } catch (watchErr: any) {
+        console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
+      }
+
+      // Check if already connected
+      const existing = await prisma.channelAccount.findFirst({
+        where: { channel: "GMAIL", externalId: emailAddress },
+      });
+
+      if (existing && existing.tenantId !== tenantId) {
+        res.redirect(`${frontendUrl}/channels?error=gmail_already_connected`);
+        return;
+      }
+
+      const credentials = encryptCredentials({
+        accessToken: gmailAccessToken,
+        refreshToken: gmailRefreshToken,
+        clientId: GOOGLE_CLIENT_ID,
+        clientSecret: GOOGLE_CLIENT_SECRET,
+        fromAddress: emailAddress,
+      });
+
+      if (existing) {
+        await prisma.channelAccount.update({
+          where: { id: existing.id },
+          data: {
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            lastError: null,
+            displayName,
+            responseMode: "HUMAN_WITH_COPILOT",
+          },
+        });
+      } else {
+        await prisma.channelAccount.create({
+          data: {
+            tenantId,
+            channel: "GMAIL",
+            externalId: emailAddress,
+            displayName,
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            responseMode: "HUMAN_WITH_COPILOT",
+          },
+        });
+      }
+
+      await redis.del(`channel_account:GMAIL:${emailAddress}`);
+      connectedAccounts.push(displayName);
+    } else if (platform === "outlook") {
+      // ─── OUTLOOK ─────────────────────────────────────────
+      // Exchange code for tokens
+      const tokenResponse = await axios.post(
+        `https://login.microsoftonline.com/${MICROSOFT_TENANT_ID}/oauth2/v2.0/token`,
+        new URLSearchParams({
+          client_id: MICROSOFT_CLIENT_ID,
+          client_secret: MICROSOFT_CLIENT_SECRET,
+          code: code as string,
+          grant_type: "authorization_code",
+          redirect_uri: MICROSOFT_OAUTH_REDIRECT_URI,
+          scope: "https://graph.microsoft.com/Mail.ReadWrite https://graph.microsoft.com/Mail.Send https://graph.microsoft.com/User.Read offline_access",
+        }).toString(),
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+      );
+
+      const { access_token: outlookAccessToken, refresh_token: outlookRefreshToken, expires_in: outlookExpiresIn } = tokenResponse.data;
+      tokenExpiresAt = new Date(Date.now() + (outlookExpiresIn || 3600) * 1000);
+
+      // Get user profile
+      const profileResponse = await axios.get("https://graph.microsoft.com/v1.0/me", {
+        headers: { Authorization: `Bearer ${outlookAccessToken}` },
+      });
+      const emailAddress = profileResponse.data.mail || profileResponse.data.userPrincipalName;
+      const displayName = profileResponse.data.displayName || emailAddress;
+
+      if (!emailAddress) {
+        res.redirect(`${frontendUrl}/channels?error=outlook_no_email`);
+        return;
+      }
+
+      // Create a mail subscription for incoming messages via Microsoft Graph webhooks
+      const webhookUrl = process.env.OUTLOOK_WEBHOOK_URL || "";
+      let subscriptionId: string | null = null;
+      if (webhookUrl) {
+        try {
+          const clientState = crypto.randomBytes(16).toString("hex");
+          const subscriptionResponse = await axios.post(
+            "https://graph.microsoft.com/v1.0/subscriptions",
+            {
+              changeType: "created",
+              notificationUrl: webhookUrl,
+              resource: "me/mailFolders('Inbox')/messages",
+              expirationDateTime: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(), // 3 days max
+              clientState,
+            },
+            { headers: { Authorization: `Bearer ${outlookAccessToken}`, "Content-Type": "application/json" } }
+          );
+          subscriptionId = subscriptionResponse.data.id;
+          console.log(`[OUTLOOK-CALLBACK] Webhook subscription created: ${subscriptionId}`);
+        } catch (subErr: any) {
+          console.warn("[OUTLOOK-CALLBACK] Subscription warning:", subErr.response?.data || subErr.message);
+        }
+      }
+
+      // Check if already connected
+      const existing = await prisma.channelAccount.findFirst({
+        where: { channel: "OUTLOOK", externalId: emailAddress },
+      });
+
+      if (existing && existing.tenantId !== tenantId) {
+        res.redirect(`${frontendUrl}/channels?error=outlook_already_connected`);
+        return;
+      }
+
+      const credentials = encryptCredentials({
+        accessToken: outlookAccessToken,
+        refreshToken: outlookRefreshToken,
+        clientId: MICROSOFT_CLIENT_ID,
+        clientSecret: MICROSOFT_CLIENT_SECRET,
+        tenantIdAzure: MICROSOFT_TENANT_ID,
+        fromAddress: emailAddress,
+      });
+
+      if (existing) {
+        await prisma.channelAccount.update({
+          where: { id: existing.id },
+          data: {
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            lastError: null,
+            displayName,
+            platformMeta: { subscriptionId },
+            responseMode: "HUMAN_WITH_COPILOT",
+          },
+        });
+      } else {
+        await prisma.channelAccount.create({
+          data: {
+            tenantId,
+            channel: "OUTLOOK",
+            externalId: emailAddress,
+            displayName,
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            platformMeta: { subscriptionId },
+            responseMode: "HUMAN_WITH_COPILOT",
+          },
+        });
+      }
+
+      await redis.del(`channel_account:OUTLOOK:${emailAddress}`);
+      connectedAccounts.push(displayName);
+    } else if (platform === "slack") {
+      // ─── SLACK ───────────────────────────────────────────
+      // Exchange code for bot token (Slack V2 OAuth)
+      const tokenResponse = await axios.post(
+        "https://slack.com/api/oauth.v2.access",
+        new URLSearchParams({
+          client_id: SLACK_CLIENT_ID,
+          client_secret: SLACK_CLIENT_SECRET,
+          code: code as string,
+          redirect_uri: SLACK_OAUTH_REDIRECT_URI,
+        }).toString(),
+        { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+      );
+
+      const slackData = tokenResponse.data;
+      if (!slackData.ok) {
+        console.error("[SLACK-CALLBACK] Token exchange failed:", slackData.error);
+        res.redirect(`${frontendUrl}/channels?error=slack_token_failed`);
+        return;
+      }
+
+      const botToken = slackData.access_token;
+      const teamId = slackData.team?.id || "";
+      const teamName = slackData.team?.name || teamId;
+      const botUserId = slackData.bot_user_id || "";
+      // Slack bot tokens don't expire
+      tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000);
+
+      if (!teamId) {
+        res.redirect(`${frontendUrl}/channels?error=slack_no_team`);
+        return;
+      }
+
+      // Check if already connected
+      const existing = await prisma.channelAccount.findFirst({
+        where: { channel: "SLACK", externalId: teamId },
+      });
+
+      if (existing && existing.tenantId !== tenantId) {
+        res.redirect(`${frontendUrl}/channels?error=slack_already_connected`);
+        return;
+      }
+
+      const credentials = encryptCredentials({
+        accessToken: botToken,
+        signingSecret: SLACK_SIGNING_SECRET,
+        botUserId,
+        teamId,
+      });
+
+      if (existing) {
+        await prisma.channelAccount.update({
+          where: { id: existing.id },
+          data: {
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            lastError: null,
+            displayName: teamName,
+            platformMeta: { teamId, botUserId },
+          },
+        });
+      } else {
+        await prisma.channelAccount.create({
+          data: {
+            tenantId,
+            channel: "SLACK",
+            externalId: teamId,
+            displayName: teamName,
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            platformMeta: { teamId, botUserId },
+          },
+        });
+      }
+
+      await redis.del(`channel_account:SLACK:${teamId}`);
+      connectedAccounts.push(teamName);
     }
 
     res.redirect(`${frontendUrl}/channels?connected=${platform}&count=${connectedAccounts.length}`);
   } catch (err: any) {
     console.error("OAuth callback error:", err.response?.data || err.message);
     res.redirect(`${frontendUrl}/channels?error=connection_failed`);
+  }
+});
+
+// ─── Update Channel Response Mode ────────────────────────────
+
+const responseModeSchema = z.object({
+  responseMode: z.enum(["HUMAN_WITH_COPILOT", "AI_AUTO_REPLY"]),
+});
+
+router.patch("/:id/response-mode", authenticate, resolveTenant, requireRole("ADMIN"), validate(responseModeSchema), async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! },
+    });
+
+    if (!account) {
+      res.status(404).json({ error: "Channel not found" });
+      return;
+    }
+
+    if (account.channel !== "GMAIL" && account.channel !== "OUTLOOK") {
+      res.status(400).json({ error: "Response mode is only configurable for Gmail and Outlook channels" });
+      return;
+    }
+
+    const updated = await prisma.channelAccount.update({
+      where: { id: account.id },
+      data: { responseMode: req.body.responseMode },
+      select: { id: true, channel: true, displayName: true, responseMode: true },
+    });
+
+    res.json({ data: updated });
+  } catch (err) {
+    console.error("Update response mode error:", err);
+    res.status(500).json({ error: "Failed to update response mode" });
   }
 });
 
@@ -999,6 +1394,26 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN")
               params: { access_token: accessToken },
             });
           }
+        } else if (account.channel === "GMAIL") {
+          // Stop Gmail push notifications
+          await axios.post(
+            "https://gmail.googleapis.com/gmail/v1/users/me/stop",
+            {},
+            { headers: { Authorization: `Bearer ${accessToken}` } }
+          );
+        } else if (account.channel === "OUTLOOK") {
+          // Delete Microsoft Graph webhook subscription
+          const subscriptionId = (account.platformMeta as any)?.subscriptionId;
+          if (subscriptionId) {
+            await axios.delete(`https://graph.microsoft.com/v1.0/subscriptions/${subscriptionId}`, {
+              headers: { Authorization: `Bearer ${accessToken}` },
+            });
+          }
+        } else if (account.channel === "SLACK") {
+          // Revoke Slack bot token
+          await axios.post("https://slack.com/api/auth.revoke", null, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
         }
       }
     } catch (cleanupErr: any) {

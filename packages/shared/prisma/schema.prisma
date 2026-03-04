@@ -15,6 +15,9 @@ enum ChannelType {
   MESSENGER
   INSTAGRAM
   EMAIL
+  GMAIL
+  OUTLOOK
+  SLACK
 }
 
 enum ChannelConnectionStatus {
@@ -27,6 +30,11 @@ enum ChannelConnectionStatus {
 enum BotFlowMode {
   UNIFIED
   PER_CHANNEL
+}
+
+enum ChannelResponseMode {
+  HUMAN_WITH_COPILOT
+  AI_AUTO_REPLY
 }
 
 // ─── Tenant Status & AI Mode ────────────────────────────────
@@ -102,6 +110,9 @@ model ChannelAccount {
   displayName     String      @map("display_name")
   credentials     Json        @default("{}")          // { accessToken, appSecret, ... }
   isActive        Boolean     @default(true) @map("is_active")
+
+  // Per-channel response mode (for email channels: GMAIL, OUTLOOK)
+  responseMode    ChannelResponseMode @default(HUMAN_WITH_COPILOT) @map("response_mode")
 
   // Connection lifecycle
   connectionStatus ChannelConnectionStatus @default(CONNECTED) @map("connection_status")

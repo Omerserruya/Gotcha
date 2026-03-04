@@ -253,10 +253,11 @@ function ChannelsPageContent() {
 
   // ─── OAuth Redirect (Messenger / Instagram) ─────────────
 
-  function handleOAuthConnect(platform: "messenger" | "instagram") {
+  function handleOAuthConnect(platform: "messenger" | "instagram" | "gmail" | "outlook" | "slack") {
     if (!token) return;
     window.location.href = `${API_URL}/api/channels/oauth/init?platform=${platform}&token=${token}`;
   }
+
 
   // ─── Disconnect ─────────────────────────────────────────
 
@@ -336,7 +337,7 @@ function ChannelsPageContent() {
       )}
 
       {/* Connect Channel Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <ConnectCard
           icon={
             <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="currentColor">
@@ -373,6 +374,43 @@ function ChannelsPageContent() {
           buttonLabel={t("channels.connectInstagram")}
           onClick={() => handleOAuthConnect("instagram")}
         />
+
+        <ConnectCard
+          icon={
+            <svg className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 5.457v13.909c0 .904-.732 1.636-1.636 1.636h-3.819V11.73l-6.546 4.91-6.546-4.91v9.273H1.636A1.636 1.636 0 010 19.366V5.457c0-2.023 2.309-3.178 3.927-1.964L5.455 4.64 12 9.548l6.545-4.91 1.528-1.145C21.69 2.28 24 3.434 24 5.457z"/>
+            </svg>
+          }
+          title={t("channels.gmail")}
+          description={t("channels.gmailDesc")}
+          buttonLabel={t("channels.connectGmail")}
+          onClick={() => handleOAuthConnect("gmail")}
+        />
+
+        <ConnectCard
+          icon={
+            <svg className="w-6 h-6 text-blue-600" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M24 7.387v10.478c0 .23-.08.424-.238.576a.806.806 0 01-.587.234h-8.327v-6.408l1.674 1.258a.39.39 0 00.494 0l.005-.004 6.98-5.282V7.387zm-11.5 7.863L.493 5.534a.39.39 0 01.005-.648l.086-.058A1.91 1.91 0 011.636 4.5h20.728c.38 0 .726.113 1.052.328l.086.058a.39.39 0 01.005.648L12.5 15.25a.78.78 0 01-.996 0zM0 7.387v11.478c0 .23.08.424.238.576a.806.806 0 00.587.234h8.327v-6.408L7.478 14.525a.39.39 0 01-.494 0l-.005-.004L0 9.24V7.387z"/>
+            </svg>
+          }
+          title={t("channels.outlook")}
+          description={t("channels.outlookDesc")}
+          buttonLabel={t("channels.connectOutlook")}
+          onClick={() => handleOAuthConnect("outlook")}
+        />
+
+        <ConnectCard
+          icon={
+            <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M5.042 15.165a2.528 2.528 0 01-2.52 2.523A2.528 2.528 0 010 15.165a2.527 2.527 0 012.522-2.52h2.52v2.52zm1.271 0a2.527 2.527 0 012.521-2.52 2.527 2.527 0 012.521 2.52v6.313A2.528 2.528 0 018.834 24a2.528 2.528 0 01-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 01-2.521-2.52A2.528 2.528 0 018.834 0a2.528 2.528 0 012.521 2.522v2.52H8.834zm0 1.271a2.528 2.528 0 012.521 2.521 2.528 2.528 0 01-2.521 2.521H2.522A2.528 2.528 0 010 8.834a2.528 2.528 0 012.522-2.521h6.312zm10.124 2.521a2.528 2.528 0 012.52-2.521A2.528 2.528 0 0124 8.834a2.528 2.528 0 01-2.522 2.521h-2.52V8.834zm-1.268 0a2.528 2.528 0 01-2.524 2.521 2.528 2.528 0 01-2.52-2.521V2.522A2.528 2.528 0 0115.165 0a2.528 2.528 0 012.524 2.522v6.312zm-2.524 10.124a2.528 2.528 0 012.524 2.52A2.528 2.528 0 0115.165 24a2.528 2.528 0 01-2.52-2.522v-2.52h2.52zm0-1.268a2.528 2.528 0 01-2.52-2.524 2.528 2.528 0 012.52-2.52h6.313A2.528 2.528 0 0124 15.165a2.528 2.528 0 01-2.522 2.524h-6.313z" fill="#E01E5A"/>
+            </svg>
+          }
+          title={t("channels.slack")}
+          description={t("channels.slackDesc")}
+          buttonLabel={t("channels.connectSlack")}
+          onClick={() => handleOAuthConnect("slack")}
+        />
+
       </div>
 
       {/* Connected Channels List */}

@@ -163,16 +163,30 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
-      const botTenant = await prisma.tenant.findUnique({
-        where: { id: tenantId },
-        select: { botEnabled: true, botType: true },
-      });
+      // Gmail/Outlook: respect per-channel-account response mode
+      if ((channel === "GMAIL" || channel === "OUTLOOK") && channelAccountId) {
+        const channelAcct = await prisma.channelAccount.findUnique({
+          where: { id: channelAccountId },
+          select: { responseMode: true },
+        });
 
-      if (botTenant?.botEnabled && botTenant.botType === "AUTONOMOUS_AI") {
-        await processAIBot(tenantId, conversation.id, body);
+        if (channelAcct?.responseMode === "AI_AUTO_REPLY") {
+          await processAIBot(tenantId, conversation.id, body);
+        }
+        // HUMAN_WITH_COPILOT (default): skip auto-reply, conversation stays OPEN for human agent
       } else {
-        // Default: chatbot flow (works even if botType not set)
-        await processChatbotFlow(tenantId, conversation.id, body);
+        // All other channels: use tenant-level bot settings
+        const botTenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { botEnabled: true, botType: true },
+        });
+
+        if (botTenant?.botEnabled && botTenant.botType === "AUTONOMOUS_AI") {
+          await processAIBot(tenantId, conversation.id, body);
+        } else {
+          // Default: chatbot flow (works even if botType not set)
+          await processChatbotFlow(tenantId, conversation.id, body);
+        }
       }
     } catch (err) {
       console.error("Bot processing error:", err);

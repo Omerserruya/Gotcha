@@ -32,6 +32,12 @@ export {
   instagramOutboundAdapter,
   emailInboundAdapter,
   emailOutboundAdapter,
+  gmailInboundAdapter,
+  gmailOutboundAdapter,
+  outlookInboundAdapter,
+  outlookOutboundAdapter,
+  slackInboundAdapter,
+  slackOutboundAdapter,
 } from "./channels";
 
 // Lib

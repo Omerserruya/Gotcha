@@ -5,7 +5,21 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getConversations, getDepartments, getSlaSettings, getDepartmentSla, deleteConversation } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
-import { formatDistanceToNow } from "date-fns";
+function shortTimeAgo(date: Date): string {
+  const now = Date.now();
+  const diff = now - date.getTime();
+  const mins = Math.floor(diff / 60000);
+  if (mins < 1) return "now";
+  if (mins < 60) return `${mins}m`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h`;
+  const days = Math.floor(hours / 24);
+  if (days < 7) return `${days}d`;
+  const weeks = Math.floor(days / 7);
+  if (weeks < 4) return `${weeks}w`;
+  const months = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+  return `${date.getDate()} ${months[date.getMonth()]}`;
+}
 import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -316,6 +330,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                   { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
                   { value: "MESSENGER", label: t("conversations.channelMessenger") },
                   { value: "INSTAGRAM", label: t("conversations.channelInstagram") },
+                  { value: "GMAIL", label: t("conversations.channelGmail") },
+                  { value: "OUTLOOK", label: t("conversations.channelOutlook") },
+                  { value: "SLACK", label: t("conversations.channelSlack") },
                 ].map((opt) => (
                   <button
                     key={opt.value}
@@ -370,7 +387,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto" ref={listRef}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden" ref={listRef}>
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
@@ -415,7 +432,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                       selectedId === conv.id && "bg-primary-50/60 rounded-lg mx-2"
                     )}
                   >
-                    <div className="flex items-start gap-3">
+                    <div className="flex items-center gap-3">
                       {/* Avatar */}
                       <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
                         <span className="text-sm font-bold text-gray-600">
@@ -432,37 +449,16 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                             {conv.customerName || conv.customerExternalId || conv.customerPhone}
                           </p>
                           <div className="flex items-center gap-1.5 shrink-0">
-                            {isUnread(conv, lastReadMap, markedUnread) && (
-                              <span className="w-2.5 h-2.5 bg-blue-500 rounded-full shadow-sm shadow-blue-500/30" title="Unread" />
-                            )}
                             {conv.lastMessageAt && (
-                              <span className={clsx(
-                                "text-[10px] shrink-0",
-                                (() => {
-                                  // SLA color takes priority over unread
-                                  if (slaConfig?.enabled && conv.status !== "CLOSED") {
-                                    let slaMins = slaConfig.slaMinutes;
-                                    if (conv.departmentId && deptSlaMap[conv.departmentId]?.enabled) {
-                                      slaMins = deptSlaMap[conv.departmentId].slaMinutes;
-                                    }
-                                    const ref = conv.lastMessageAt || conv.createdAt;
-                                    if (ref) {
-                                      const pct = ((Date.now() - new Date(ref).getTime()) / 60000 / slaMins) * 100;
-                                      if (pct >= 100) return "text-red-500 font-semibold";
-                                      if (pct >= slaConfig.warningThreshold) return "text-amber-500 font-semibold";
-                                    }
-                                  }
-                                  return isUnread(conv, lastReadMap, markedUnread) ? "text-blue-500 font-semibold" : "text-gray-400";
-                                })()
-                              )}>
-                                {formatDistanceToNow(new Date(conv.lastMessageAt), { addSuffix: true })}
+                              <span className="text-[10px] text-gray-400 shrink-0">
+                                {shortTimeAgo(new Date(conv.lastMessageAt))}
                               </span>
                             )}
                           </div>
                         </div>
                         <p className={clsx(
                           "text-xs truncate mt-0.5",
-                          isUnread(conv, lastReadMap, markedUnread) ? "text-gray-700 font-medium" : "text-gray-500"
+                          isUnread(conv, lastReadMap, markedUnread) ? "text-gray-500 font-medium" : "text-gray-400"
                         )}>
                           {conv.lastMessageBody || conv.customerPhone}
                         </p>
@@ -482,6 +478,26 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                           <ChannelBadge channel={conv.channel} size="sm" />
                         </div>
                       </div>
+
+                      {/* Status dot: blue=unread, red=SLA breach */}
+                      {(() => {
+                        let dotColor = "";
+                        if (slaConfig?.enabled && conv.status !== "CLOSED") {
+                          let slaMins = slaConfig.slaMinutes;
+                          if (conv.departmentId && deptSlaMap[conv.departmentId]?.enabled) {
+                            slaMins = deptSlaMap[conv.departmentId].slaMinutes;
+                          }
+                          const ref = conv.lastMessageAt || conv.createdAt;
+                          if (ref) {
+                            const pct = ((Date.now() - new Date(ref).getTime()) / 60000 / slaMins) * 100;
+                            if (pct >= 100) dotColor = "bg-red-500";
+                          }
+                        }
+                        if (!dotColor && isUnread(conv, lastReadMap, markedUnread)) dotColor = "bg-blue-500";
+                        return dotColor ? (
+                          <span className={clsx("w-2 h-2 rounded-full shrink-0", dotColor)} />
+                        ) : <span className="w-2 shrink-0" />;
+                      })()}
                     </div>
                   </button>
                 ))

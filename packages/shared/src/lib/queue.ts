@@ -14,7 +14,7 @@ export const idleConversationQueue = new Queue("idle-conversations", { connectio
 
 export interface IncomingMessageJob {
   tenantId: string;
-  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK";
   channelAccountId: string;
   normalizedMessage: {
     externalMessageId: string;
@@ -35,7 +35,7 @@ export interface IncomingMessageJob {
 export interface OutgoingMessageJob {
   tenantId: string;
   conversationId: string;
-  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK";
   channelAccountId: string;
   recipientExternalId: string;
   body: string;

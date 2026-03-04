@@ -3,6 +3,9 @@ import { whatsAppInboundAdapter, whatsAppOutboundAdapter } from "./whatsapp.adap
 import { messengerInboundAdapter, messengerOutboundAdapter } from "./messenger.adapter";
 import { instagramInboundAdapter, instagramOutboundAdapter } from "./instagram.adapter";
 import { emailInboundAdapter, emailOutboundAdapter } from "./email.adapter";
+import { gmailInboundAdapter, gmailOutboundAdapter } from "./gmail.adapter";
+import { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter";
+import { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";
 
 // ─── Channel Registry ────────────────────────────────────────
 
@@ -11,6 +14,9 @@ const inboundAdapters: InboundAdapter[] = [
   messengerInboundAdapter,
   instagramInboundAdapter,
   emailInboundAdapter,
+  gmailInboundAdapter,
+  outlookInboundAdapter,
+  slackInboundAdapter,
 ];
 
 const outboundAdapters: Map<ChannelType, OutboundAdapter> = new Map([
@@ -18,6 +24,9 @@ const outboundAdapters: Map<ChannelType, OutboundAdapter> = new Map([
   ["MESSENGER", messengerOutboundAdapter],
   ["INSTAGRAM", instagramOutboundAdapter],
   ["EMAIL", emailOutboundAdapter],
+  ["GMAIL", gmailOutboundAdapter],
+  ["OUTLOOK", outlookOutboundAdapter],
+  ["SLACK", slackOutboundAdapter],
 ]);
 
 /**

@@ -1,9 +1,13 @@
+import crypto from "crypto";
 import { Router, Request, Response } from "express";
 import {
   prisma,
   incomingMessageQueue,
   publishEvent,
   detectInboundAdapter,
+  gmailInboundAdapter,
+  outlookInboundAdapter,
+  slackInboundAdapter,
 } from "@chatcenter/shared";
 import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcenter/shared";
 
@@ -219,6 +223,247 @@ router.post("/email", async (req: Request, res: Response) => {
     }
   } catch (err) {
     console.error("Email webhook error:", err);
+  }
+});
+
+// ─── Gmail Webhook (POST) - Google Pub/Sub push ────────────────
+
+router.post("/gmail", async (req: Request, res: Response) => {
+  res.sendStatus(200);
+
+  try {
+    const body = req.body;
+    console.log(`[WEBHOOK] Gmail push notification received`);
+
+    if (!gmailInboundAdapter.canHandle(body)) {
+      console.warn("Gmail webhook: invalid payload");
+      return;
+    }
+
+    const emailAddress = gmailInboundAdapter.resolveChannelAccountExternalId(body);
+    if (!emailAddress) {
+      console.warn("Gmail webhook: no email address found");
+      return;
+    }
+
+    const channelAccount = await prisma.channelAccount.findFirst({
+      where: { externalId: emailAddress, channel: "GMAIL", isActive: true },
+    });
+
+    if (!channelAccount) {
+      console.warn(`No Gmail channel account found for: ${emailAddress}`);
+      return;
+    }
+
+    const tenantId = channelAccount.tenantId;
+    const channelAccountId = channelAccount.id;
+
+    const messages = gmailInboundAdapter.extractMessages(body);
+    for (const msg of messages) {
+      await incomingMessageQueue.add(
+        "process",
+        {
+          tenantId,
+          channel: "GMAIL",
+          channelAccountId,
+          normalizedMessage: {
+            externalMessageId: msg.externalMessageId,
+            senderId: msg.senderId,
+            senderDisplayName: msg.senderDisplayName,
+            timestamp: msg.timestamp.toISOString(),
+            contentType: msg.content.type,
+            body: msg.content.text || "",
+            messageType: "text",
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+  } catch (err) {
+    console.error("Gmail webhook error:", err);
+  }
+});
+
+// ─── Outlook Webhook (POST) - Microsoft Graph subscriptions ────
+
+router.post("/outlook", async (req: Request, res: Response) => {
+  // Microsoft Graph subscription validation: respond to validationToken query
+  const validationToken = req.query.validationToken as string;
+  if (validationToken) {
+    console.log("[WEBHOOK] Outlook subscription validation");
+    res.status(200).contentType("text/plain").send(validationToken);
+    return;
+  }
+
+  res.sendStatus(202);
+
+  try {
+    const body = req.body;
+    console.log(`[WEBHOOK] Outlook notification received, count=${body?.value?.length || 0}`);
+
+    if (!outlookInboundAdapter.canHandle(body)) {
+      console.warn("Outlook webhook: invalid payload");
+      return;
+    }
+
+    // Outlook sends subscriptionId which maps to our channel account
+    const subscriptionId = outlookInboundAdapter.resolveChannelAccountExternalId(body);
+
+    // Find channel account by subscriptionId stored in platformMeta
+    let channelAccount;
+    if (subscriptionId) {
+      // Search by subscriptionId in platformMeta
+      const accounts = await prisma.channelAccount.findMany({
+        where: { channel: "OUTLOOK", isActive: true },
+      });
+      channelAccount = accounts.find((a) => {
+        const meta = a.platformMeta as any;
+        return meta?.subscriptionId === subscriptionId;
+      });
+    }
+
+    if (!channelAccount) {
+      console.warn(`No Outlook channel account found for subscription: ${subscriptionId}`);
+      return;
+    }
+
+    const tenantId = channelAccount.tenantId;
+    const channelAccountId = channelAccount.id;
+
+    const messages = outlookInboundAdapter.extractMessages(body);
+    for (const msg of messages) {
+      await incomingMessageQueue.add(
+        "process",
+        {
+          tenantId,
+          channel: "OUTLOOK",
+          channelAccountId,
+          normalizedMessage: {
+            externalMessageId: msg.externalMessageId,
+            senderId: msg.senderId,
+            senderDisplayName: msg.senderDisplayName,
+            timestamp: msg.timestamp.toISOString(),
+            contentType: msg.content.type,
+            body: msg.content.text || "",
+            messageType: "text",
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+  } catch (err) {
+    console.error("Outlook webhook error:", err);
+  }
+});
+
+// ─── Slack Webhook (POST) - Events API ─────────────────────────
+
+router.post("/slack", async (req: Request, res: Response) => {
+  const body = req.body;
+
+  // Slack URL verification challenge
+  if (body?.type === "url_verification") {
+    console.log("[WEBHOOK] Slack URL verification");
+    res.status(200).json({ challenge: body.challenge });
+    return;
+  }
+
+  // Verify Slack request signature
+  const slackSigningSecret = process.env.SLACK_SIGNING_SECRET || "";
+  if (slackSigningSecret) {
+    const timestamp = req.headers["x-slack-request-timestamp"] as string;
+    const slackSignature = req.headers["x-slack-signature"] as string;
+    const rawBody = (req as any).rawBody;
+
+    if (timestamp && slackSignature && rawBody) {
+      const fiveMinutesAgo = Math.floor(Date.now() / 1000) - 300;
+      if (parseInt(timestamp) < fiveMinutesAgo) {
+        console.warn("[WEBHOOK] Slack request too old, possible replay attack");
+        res.sendStatus(403);
+        return;
+      }
+
+      const sigBasestring = `v0:${timestamp}:${rawBody.toString()}`;
+      const mySignature = "v0=" + crypto.createHmac("sha256", slackSigningSecret).update(sigBasestring).digest("hex");
+
+      try {
+        if (!crypto.timingSafeEqual(Buffer.from(mySignature), Buffer.from(slackSignature))) {
+          console.error("[WEBHOOK] Invalid Slack signature");
+          res.sendStatus(403);
+          return;
+        }
+      } catch {
+        console.error("[WEBHOOK] Slack signature verification failed");
+        res.sendStatus(403);
+        return;
+      }
+    }
+  }
+
+  res.sendStatus(200);
+
+  try {
+    console.log(`[WEBHOOK] Slack event: type=${body?.event?.type}, team=${body?.team_id}`);
+
+    if (!slackInboundAdapter.canHandle(body)) {
+      return;
+    }
+
+    const teamId = slackInboundAdapter.resolveChannelAccountExternalId(body);
+    if (!teamId) {
+      console.warn("Slack webhook: no team_id found");
+      return;
+    }
+
+    const channelAccount = await prisma.channelAccount.findFirst({
+      where: { externalId: teamId, channel: "SLACK", isActive: true },
+    });
+
+    if (!channelAccount) {
+      console.warn(`No Slack channel account found for team: ${teamId}`);
+      return;
+    }
+
+    const tenantId = channelAccount.tenantId;
+    const channelAccountId = channelAccount.id;
+
+    // Skip messages from the bot itself
+    const botUserId = (channelAccount.platformMeta as any)?.botUserId;
+    if (body.event?.user === botUserId) return;
+
+    const messages = slackInboundAdapter.extractMessages(body);
+    for (const msg of messages) {
+      // For threaded messages, encode the thread info in the sender ID for routing
+      const slackChannel = body.event?.channel || "";
+      const threadTs = body.event?.thread_ts || "";
+      const recipientId = threadTs ? `${slackChannel}:${threadTs}` : slackChannel;
+
+      await incomingMessageQueue.add(
+        "process",
+        {
+          tenantId,
+          channel: "SLACK",
+          channelAccountId,
+          normalizedMessage: {
+            externalMessageId: msg.externalMessageId,
+            senderId: msg.senderId,
+            senderDisplayName: msg.senderDisplayName,
+            timestamp: msg.timestamp.toISOString(),
+            contentType: msg.content.type,
+            body: msg.content.text || "",
+            messageType: "text",
+            metadata: {
+              slackChannel,
+              threadTs,
+              recipientId,
+            },
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+  } catch (err) {
+    console.error("Slack webhook error:", err);
   }
 });
 
