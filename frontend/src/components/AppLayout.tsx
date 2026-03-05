@@ -103,6 +103,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <div className="flex min-h-screen app-bg md:p-2 md:gap-2">
+      <div className="app-bg-spots" />
       {/* Desktop sidebar - hidden on mobile */}
       <div className="hidden md:block relative z-10">
         <Sidebar collapsed={collapsed} onToggle={handleToggle} />

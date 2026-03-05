@@ -131,6 +131,12 @@
       "type": "directory"
     },
     {
+      "path": "src/components/conversations/ConversationList.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1772745817023,
+      "type": "directory"
+    },
+    {
       "path": "src/components/conversations/ChatPanel.tsx",
       "accessCount": 5,
       "lastAccessed": 1772743687171,
@@ -144,14 +150,32 @@
     },
     {
       "path": "src/app/globals.css",
+      "accessCount": 4,
+      "lastAccessed": 1772745756253,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppLayout.tsx",
       "accessCount": 2,
-      "lastAccessed": 1772743608744,
+      "lastAccessed": 1772745770057,
       "type": "file"
     },
     {
       "path": "src/app",
       "accessCount": 1,
       "lastAccessed": 1772744065811,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/conversations",
+      "accessCount": 1,
+      "lastAccessed": 1772745728623,
+      "type": "directory"
+    },
+    {
+      "path": "src",
+      "accessCount": 1,
+      "lastAccessed": 1772745761290,
       "type": "directory"
     }
   ],

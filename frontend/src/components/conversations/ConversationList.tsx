@@ -284,43 +284,45 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   return (
     <>
       {/* Header */}
-      <div className="p-4 shadow-subtle">
+      <div className="p-3">
         <h2 className="text-lg font-bold text-gray-900 mb-3 ps-8 md:ps-0">{t("conversations.title")}</h2>
-        <div className="flex items-center gap-2">
-          <div className="relative flex-1">
-            <svg className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-            </svg>
-            <input
-              type="text"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder={t("conversations.search")}
-              className="w-full ps-9 pe-4 py-2.5 text-sm bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
-            />
+        {/* Search & Filter widget */}
+        <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-3">
+          <div className="flex items-center gap-2">
+            <div className="relative flex-1">
+              <svg className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("conversations.search")}
+                className="w-full ps-9 pe-4 py-2.5 text-base md:text-sm bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
+              />
+            </div>
+            {/* Filter toggle */}
+            <button
+              onClick={() => setShowFilters(!showFilters)}
+              className={clsx(
+                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all relative",
+                showFilters || channelFilter || departmentFilter
+                  ? "bg-primary-50 text-primary-600"
+                  : "bg-gray-50/80 text-gray-400 ring-1 ring-gray-200/60 hover:bg-gray-100"
+              )}
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+              </svg>
+              {(channelFilter || departmentFilter) && (
+                <span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-primary-500 rounded-full" />
+              )}
+            </button>
           </div>
-          {/* Filter toggle */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={clsx(
-              "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all relative",
-              showFilters || channelFilter || departmentFilter
-                ? "bg-primary-50 text-primary-600"
-                : "bg-gray-50/80 text-gray-400 ring-1 ring-gray-200/60 hover:bg-gray-100"
-            )}
-          >
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
-            </svg>
-            {(channelFilter || departmentFilter) && (
-              <span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-primary-500 rounded-full" />
-            )}
-          </button>
-        </div>
 
-        {/* Collapsible filters */}
-        {showFilters && (
-          <div className="mt-3 pt-3 border-t border-gray-100/60 space-y-2.5">
+          {/* Collapsible filters */}
+          {showFilters && (
+            <div className="mt-3 pt-3 border-t border-gray-100/60 space-y-2.5">
             {/* Channel filter */}
             <div>
               <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 block">{t("conversations.filterAll")}</span>
@@ -382,12 +384,13 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                 </div>
               </div>
             )}
-          </div>
-        )}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden" ref={listRef}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pt-2 space-y-2" ref={listRef}>
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
@@ -401,9 +404,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           </div>
         ) : (
           sections.map((section) => (
-            <div key={section.key}>
+            <div key={section.key} className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
               {/* Section header */}
-              <div className="px-4 py-2.5 flex items-center gap-2 bg-gray-50/50">
+              <div className="px-3.5 py-2.5 flex items-center gap-2">
                 <span className={section.color}>{section.icon}</span>
                 <span className={clsx("text-[10px] font-semibold uppercase tracking-widest", section.color)}>
                   {section.label}

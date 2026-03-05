@@ -357,6 +357,40 @@ body {
   filter: blur(90px);
 }
 
+/* Extra gradient spots — desktop only */
+@media (min-width: 1024px) {
+  .app-bg-spots {
+    position: fixed;
+    inset: 0;
+    pointer-events: none;
+    z-index: 0;
+  }
+  .app-bg-spots::before {
+    content: "";
+    position: absolute;
+    bottom: -80px;
+    left: 30%;
+    width: 500px;
+    height: 500px;
+    background: radial-gradient(circle, #f472b6 0%, #ec4899 40%, transparent 70%);
+    opacity: 0.07;
+    filter: blur(100px);
+    border-radius: 50%;
+  }
+  .app-bg-spots::after {
+    content: "";
+    position: absolute;
+    top: 10%;
+    right: 25%;
+    width: 450px;
+    height: 450px;
+    background: radial-gradient(circle, #a78bfa 0%, #7c5cfc 40%, transparent 70%);
+    opacity: 0.08;
+    filter: blur(90px);
+    border-radius: 50%;
+  }
+}
+
 /* ───── Premium app surfaces ───── */
 .surface-primary {
   @apply bg-white shadow-subtle;
