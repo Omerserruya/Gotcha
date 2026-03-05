@@ -18,16 +18,22 @@ export const emailInboundAdapter: InboundAdapter = {
   },
 
   extractMessages(body: any): NormalizedInboundMessage[] {
-    const senderId: string = (body.envelope?.from || body.from || "") as string;
+    const rawFrom: string = (body.envelope?.from || body.from || "") as string;
     const subject: string = body.subject || "";
     const text: string = body.text || "";
     const messageText = subject + "\n" + text;
+
+    // Parse "John Doe <john@example.com>" into name and email
+    const nameMatch = rawFrom.match(/^["']?(.+?)["']?\s*<(.+?)>$/);
+    const senderId = nameMatch ? nameMatch[2] : rawFrom;
+    const senderDisplayName = nameMatch ? nameMatch[1].trim() : undefined;
 
     return [
       {
         externalMessageId: crypto.randomUUID(),
         channel: "EMAIL",
         senderId,
+        senderDisplayName,
         timestamp: new Date(),
         content: {
           type: "text",

@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback, FormEvent } from "react";
+import { useState, useEffect, useRef, useCallback, FormEvent, DragEvent, ChangeEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
   getConversation,
   sendMessage,
+  sendMediaMessage,
   claimConversation,
   releaseConversation,
   closeConversation,
@@ -39,7 +40,11 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [departments, setDepartments] = useState<any[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
+  const [isDragging, setIsDragging] = useState(false);
+  const [aiGenerating, setAiGenerating] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Notify AppLayout to auto-collapse sidebar when panels open
   useEffect(() => {
@@ -127,21 +132,64 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
   async function handleSend(e: FormEvent) {
     e.preventDefault();
-    if (!inputText.trim() || !token || sending) return;
+    if ((!inputText.trim() && attachedFiles.length === 0) || !token || sending) return;
 
     setSending(true);
     try {
-      const res = await sendMessage(token, conversationId, inputText.trim());
-      setMessages((prev) => {
-        if (prev.some((m) => m.id === res.data.id)) return prev;
-        return [...prev, res.data];
-      });
+      // Send files first
+      for (const file of attachedFiles) {
+        const res = await sendMediaMessage(token, conversationId, file, inputText.trim() || undefined);
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === res.data.id)) return prev;
+          return [...prev, res.data];
+        });
+      }
+
+      // Send text only if no files or text remains
+      if (attachedFiles.length === 0 && inputText.trim()) {
+        const res = await sendMessage(token, conversationId, inputText.trim());
+        setMessages((prev) => {
+          if (prev.some((m) => m.id === res.data.id)) return prev;
+          return [...prev, res.data];
+        });
+      }
+
       setInputText("");
+      setAttachedFiles([]);
     } catch (err) {
       console.error("Send failed:", err);
     } finally {
       setSending(false);
     }
+  }
+
+  function handleFilesSelected(files: FileList | null) {
+    if (!files) return;
+    const newFiles = Array.from(files).slice(0, 5); // max 5 files
+    setAttachedFiles((prev) => [...prev, ...newFiles].slice(0, 5));
+  }
+
+  function removeAttachedFile(index: number) {
+    setAttachedFiles((prev) => prev.filter((_, i) => i !== index));
+  }
+
+  function handleDragOver(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
+  }
+
+  function handleDragLeave(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  }
+
+  function handleDrop(e: DragEvent) {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    handleFilesSelected(e.dataTransfer.files);
   }
 
   async function handleClaim() {
@@ -238,82 +286,100 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           </div>
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-2">
-              <ChannelBadge channel={conversation?.channel} size="md" showLabel />
               <p className="font-semibold text-sm text-gray-900 truncate">
                 {conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "..."}
               </p>
+              <ChannelBadge channel={conversation?.channel} size="md" showLabel />
             </div>
             <p className="text-xs text-gray-400">{conversation?.customerExternalId || conversation?.customerPhone}</p>
           </div>
 
           {/* Actions */}
-          <div className="flex items-center gap-1 md:gap-2 overflow-x-auto scrollbar-none">
-            {!isClosed && !conversation?.assignedAgentId && (
-              <ActionButton onClick={handleClaim} variant="primary">
-                {t("conversations.claim")}
-              </ActionButton>
-            )}
-            {isAssignedToMe && !isClosed && (
-              <>
-                <ActionButton onClick={handleRelease} variant="ghost">
-                  <span className="hidden sm:inline">{t("conversations.release")}</span>
-                  <svg className="w-3.5 h-3.5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
-                  </svg>
-                </ActionButton>
-                <ActionButton onClick={handleClose} variant="danger">
-                  <span className="hidden sm:inline">{t("conversations.close")}</span>
-                  <svg className="w-3.5 h-3.5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </ActionButton>
-              </>
-            )}
-            {canTransfer && (
-              <ActionButton onClick={openTransferDialog} variant="secondary">
+          <div className="flex flex-col items-end gap-1 shrink-0">
+            {/* Top row: Agent name (full width of bottom row) */}
+            {!isClosed && (
+              <button
+                onClick={() => {
+                  if (!conversation?.assignedAgentId) {
+                    handleClaim();
+                  } else {
+                    openTransferDialog();
+                  }
+                }}
+                className="w-full flex items-center justify-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition bg-gray-50 text-gray-600 hover:bg-gray-100"
+              >
                 <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                 </svg>
-                <span className="hidden sm:inline">{t("conversations.transfer")}</span>
-              </ActionButton>
+                <span>
+                  {conversation?.assignedAgent?.name || (conversation?.assignedAgentId ? "Agent" : t("conversations.claim"))}
+                </span>
+                {conversation?.assignedAgentId && (
+                  <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                  </svg>
+                )}
+              </button>
             )}
 
-            {/* History toggle */}
-            <button
-              onClick={() => { setHistoryOpen(!historyOpen); if (!historyOpen) setCopilotOpen(false); }}
-              className={clsx(
-                "flex items-center gap-1.5 text-xs px-2 md:px-3 py-1.5 rounded-lg font-medium transition shrink-0",
-                historyOpen
-                  ? "bg-primary-500 text-white shadow-sm"
-                  : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+            {/* Bottom row: Close, History, Co-Pilot */}
+            <div className="flex items-center gap-1.5">
+              {isAssignedToMe && !isClosed && (
+                <ActionButton onClick={handleClose} variant="danger">
+                  {t("conversations.close")}
+                </ActionButton>
               )}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span className="hidden sm:inline">History</span>
-            </button>
 
-            {/* Co-Pilot toggle */}
-            <button
-              onClick={() => { setCopilotOpen(!copilotOpen); if (!copilotOpen) setHistoryOpen(false); }}
-              className={clsx(
-                "flex items-center gap-1.5 text-xs px-2 md:px-3 py-1.5 rounded-lg font-medium transition shrink-0",
-                copilotOpen
-                  ? "bg-primary-500 text-white shadow-sm"
-                  : "bg-gray-50 text-gray-500 hover:bg-gray-100"
-              )}
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
-              </svg>
-              <span className="hidden sm:inline">Co-Pilot</span>
-            </button>
+              <button
+                onClick={() => { setHistoryOpen(!historyOpen); if (!historyOpen) setCopilotOpen(false); }}
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition shrink-0",
+                  historyOpen
+                    ? "bg-primary-500 text-white shadow-sm"
+                    : "bg-gray-50 text-gray-500 hover:bg-gray-100"
+                )}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span className="hidden sm:inline">History</span>
+              </button>
+
+              <button
+                onClick={() => { setCopilotOpen(!copilotOpen); if (!copilotOpen) setHistoryOpen(false); }}
+                className={clsx(
+                  "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition shrink-0",
+                  copilotOpen
+                    ? "bg-purple-500 text-white shadow-sm"
+                    : "bg-purple-50 text-purple-500 hover:bg-purple-100"
+                )}
+              >
+                <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                </svg>
+                <span className="hidden sm:inline">Co-Pilot</span>
+              </button>
+            </div>
           </div>
         </div>
 
         {/* Messages area */}
-        <div className="flex-1 overflow-y-auto bg-[var(--bg-chat)] p-4 space-y-2">
+        <div
+          className={clsx("flex-1 overflow-y-auto bg-[var(--bg-chat)] p-4 space-y-2 relative", isDragging && "ring-2 ring-inset ring-primary-400 bg-primary-50/30")}
+          onDragOver={handleDragOver}
+          onDragLeave={handleDragLeave}
+          onDrop={handleDrop}
+        >
+          {isDragging && (
+            <div className="absolute inset-0 flex items-center justify-center bg-primary-50/60 z-10 pointer-events-none rounded-lg">
+              <div className="flex flex-col items-center gap-2 text-primary-600">
+                <svg className="w-10 h-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                </svg>
+                <span className="text-sm font-medium">Drop files here</span>
+              </div>
+            </div>
+          )}
           {messages.map((msg) =>
             msg.messageType === "system" ? (
               <SystemDivider key={msg.id} metadata={msg.metadata} timestamp={msg.createdAt} t={t} />
@@ -336,7 +402,19 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 {msg.senderName && msg.direction === "OUTBOUND" && (
                   <p className="text-[10px] opacity-70 mb-0.5 font-medium">{msg.senderName}</p>
                 )}
-                <p className="whitespace-pre-wrap break-words">{msg.body}</p>
+                {msg.mediaUrl && (msg.messageType === "image" || msg.mediaUrl.match(/\.(jpg|jpeg|png|gif|webp)$/i)) ? (
+                  <img src={msg.mediaUrl} alt="" className="max-w-full rounded-lg mb-1 cursor-pointer" onClick={() => window.open(msg.mediaUrl, "_blank")} />
+                ) : msg.mediaUrl && (msg.messageType === "video" || msg.mediaUrl.match(/\.(mp4|webm|mov)$/i)) ? (
+                  <video src={msg.mediaUrl} controls className="max-w-full rounded-lg mb-1" />
+                ) : msg.mediaUrl ? (
+                  <a href={msg.mediaUrl} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 px-3 py-2 bg-white/20 rounded-lg mb-1 hover:bg-white/30 transition">
+                    <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                    </svg>
+                    <span className="text-xs truncate">{msg.fileName || "Download file"}</span>
+                  </a>
+                ) : null}
+                {msg.body && <p className="whitespace-pre-wrap break-words">{msg.body}</p>}
                 <div className={clsx(
                   "flex items-center gap-1 mt-1",
                   msg.direction === "OUTBOUND" ? "justify-end" : "justify-start"
@@ -357,25 +435,85 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
         {/* Input area */}
         {canSend ? (
-          <form onSubmit={handleSend} className="bg-white shadow-[0_-1px_3px_rgba(0,0,0,0.04)] p-3 flex items-center gap-3">
-            <input
-              type="text"
-              value={inputText}
-              onChange={(e) => setInputText(e.target.value)}
-              placeholder={t("conversations.typeMessage")}
-              className="flex-1 px-4 py-2.5 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
-              disabled={sending}
-            />
-            <button
-              type="submit"
-              disabled={sending || !inputText.trim()}
-              className="w-10 h-10 bg-primary-500 hover:bg-primary-600 text-white rounded-xl flex items-center justify-center transition disabled:opacity-40 shadow-sm shadow-primary-500/20"
-            >
-              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d={dir === "rtl" ? "M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" : "M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"} />
-              </svg>
-            </button>
-          </form>
+          <div className="px-4 pb-4 pt-2 bg-[var(--bg-chat)]">
+            {/* File preview strip */}
+            {attachedFiles.length > 0 && (
+              <div className="flex gap-2 mb-2 overflow-x-auto pt-2 pb-1">
+                {attachedFiles.map((file, i) => (
+                  <div key={i} className="relative shrink-0 group">
+                    {file.type.startsWith("image/") ? (
+                      <img
+                        src={URL.createObjectURL(file)}
+                        alt={file.name}
+                        className="w-16 h-16 object-cover rounded-xl ring-1 ring-gray-200"
+                      />
+                    ) : (
+                      <div className="w-16 h-16 flex flex-col items-center justify-center rounded-xl bg-gray-100 ring-1 ring-gray-200 px-1">
+                        <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m.75 12l3 3m0 0l3-3m-3 3v-6m-1.5-9H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        <span className="text-[9px] text-gray-500 truncate w-full text-center mt-0.5">{file.name.split(".").pop()}</span>
+                      </div>
+                    )}
+                    <button
+                      type="button"
+                      onClick={() => removeAttachedFile(i)}
+                      className="absolute -top-1.5 -right-1.5 w-5 h-5 bg-red-500 text-white rounded-full flex items-center justify-center text-xs opacity-0 group-hover:opacity-100 transition shadow"
+                    >
+                      &times;
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            <div className={clsx("rounded-2xl transition-all relative", aiGenerating ? "p-[2px] ai-border-glow" : "p-0")}>
+            <form onSubmit={handleSend} className={clsx("flex items-center gap-2 bg-white rounded-2xl shadow-lg shadow-gray-200/50 px-3 py-1.5 transition", aiGenerating ? "" : "ring-1 ring-gray-200/80 focus-within:ring-2 focus-within:ring-primary-300")}>
+              {/* Hidden file input */}
+              <input
+                ref={fileInputRef}
+                type="file"
+                multiple
+                accept="image/*,video/*,.pdf,.doc,.docx,.xls,.xlsx,.zip,.rar"
+                className="hidden"
+                onChange={(e: ChangeEvent<HTMLInputElement>) => { handleFilesSelected(e.target.files); e.target.value = ""; }}
+              />
+
+              {/* Attachment button */}
+              <button
+                type="button"
+                onClick={() => fileInputRef.current?.click()}
+                className="w-8 h-8 flex items-center justify-center rounded-full text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition flex-shrink-0"
+                title={t("conversations.attach") || "Attach"}
+              >
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                </svg>
+              </button>
+
+              {/* Text input */}
+              <input
+                type="text"
+                value={inputText}
+                onChange={(e) => setInputText(e.target.value)}
+                placeholder={attachedFiles.length > 0 ? "Add a caption..." : t("conversations.typeMessage")}
+                className="flex-1 py-2 bg-transparent border-0 text-sm outline-none placeholder:text-gray-400"
+                disabled={sending}
+              />
+
+              {/* Send button */}
+              <button
+                type="submit"
+                disabled={sending || (!inputText.trim() && attachedFiles.length === 0)}
+                className="w-8 h-8 flex items-center justify-center rounded-full bg-primary-500 hover:bg-primary-600 text-white transition disabled:opacity-30 flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d={dir === "rtl" ? "M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" : "M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3"} />
+                </svg>
+              </button>
+            </form>
+            </div>
+          </div>
         ) : isClosed ? (
           <div className="bg-gray-50 shadow-[0_-1px_3px_rgba(0,0,0,0.04)] p-4 text-center text-sm text-gray-400">
             {t("conversations.filterClosed")}
@@ -402,6 +540,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           messages={messages}
           onInsertReply={(text) => setInputText(text)}
           onClose={() => setCopilotOpen(false)}
+          onAiLoadingChange={setAiGenerating}
         />
       )}
 

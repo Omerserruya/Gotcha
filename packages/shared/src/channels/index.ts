@@ -20,6 +20,7 @@ export { whatsAppInboundAdapter, whatsAppOutboundAdapter } from "./whatsapp.adap
 export { messengerInboundAdapter, messengerOutboundAdapter } from "./messenger.adapter";
 export { instagramInboundAdapter, instagramOutboundAdapter } from "./instagram.adapter";
 export { emailInboundAdapter, emailOutboundAdapter } from "./email.adapter";
-export { gmailInboundAdapter, gmailOutboundAdapter } from "./gmail.adapter";
+export { gmailInboundAdapter, gmailOutboundAdapter, resolveAccessToken as gmailResolveAccessToken, fetchNewMessages as gmailFetchNewMessages } from "./gmail.adapter";
+export type { GmailFetchedMessage } from "./gmail.adapter";
 export { outlookInboundAdapter, outlookOutboundAdapter } from "./outlook.adapter";
 export { slackInboundAdapter, slackOutboundAdapter } from "./slack.adapter";

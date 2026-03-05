@@ -6,8 +6,10 @@ import {
   publishEvent,
   detectInboundAdapter,
   gmailInboundAdapter,
+  gmailFetchNewMessages,
   outlookInboundAdapter,
   slackInboundAdapter,
+  decryptCredentials,
 } from "@chatcenter/shared";
 import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcenter/shared";
 
@@ -258,7 +260,46 @@ router.post("/gmail", async (req: Request, res: Response) => {
     const tenantId = channelAccount.tenantId;
     const channelAccountId = channelAccount.id;
 
-    const messages = gmailInboundAdapter.extractMessages(body);
+    // Decrypt credentials for Gmail API calls
+    const rawCreds = channelAccount.credentials;
+    const credentials = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
+
+    // Extract historyId from Pub/Sub notification
+    let pubsubHistoryId: string;
+    try {
+      const pubsubData = JSON.parse(
+        Buffer.from(body.message.data, "base64").toString("utf8")
+      );
+      pubsubHistoryId = pubsubData.historyId?.toString() || "";
+    } catch {
+      console.warn("Gmail webhook: failed to parse Pub/Sub data");
+      return;
+    }
+
+    // Get lastHistoryId from platformMeta
+    const platformMeta = (channelAccount.platformMeta as any) || {};
+    const lastHistoryId = platformMeta.lastHistoryId?.toString();
+
+    if (!lastHistoryId) {
+      // No lastHistoryId stored yet — store current one and skip
+      console.log(`[WEBHOOK] Gmail: no lastHistoryId, storing ${pubsubHistoryId}`);
+      await prisma.channelAccount.update({
+        where: { id: channelAccountId },
+        data: { platformMeta: { ...platformMeta, lastHistoryId: pubsubHistoryId } },
+      });
+      return;
+    }
+
+    // Fetch actual emails from Gmail API
+    const { messages, newHistoryId } = await gmailFetchNewMessages(
+      credentials,
+      lastHistoryId,
+      emailAddress!
+    );
+
+    console.log(`[WEBHOOK] Gmail: fetched ${messages.length} new message(s) for ${emailAddress}`);
+
+    // Enqueue each real message
     for (const msg of messages) {
       await incomingMessageQueue.add(
         "process",
@@ -267,18 +308,25 @@ router.post("/gmail", async (req: Request, res: Response) => {
           channel: "GMAIL",
           channelAccountId,
           normalizedMessage: {
-            externalMessageId: msg.externalMessageId,
+            externalMessageId: msg.messageId,
             senderId: msg.senderId,
             senderDisplayName: msg.senderDisplayName,
-            timestamp: msg.timestamp.toISOString(),
-            contentType: msg.content.type,
-            body: msg.content.text || "",
-            messageType: "text",
+            timestamp: new Date().toISOString(),
+            contentType: "text",
+            body: msg.body,
+            subject: msg.subject,
+            messageType: "email",
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
       );
     }
+
+    // Update lastHistoryId so we don't re-fetch the same messages
+    await prisma.channelAccount.update({
+      where: { id: channelAccountId },
+      data: { platformMeta: { ...platformMeta, lastHistoryId: newHistoryId } },
+    });
   } catch (err) {
     console.error("Gmail webhook error:", err);
   }

@@ -160,9 +160,116 @@ export const gmailOutboundAdapter: OutboundAdapter = {
   },
 };
 
-// ─── Helpers ───────────────────────────────────────────────
+// ─── Exported helpers ──────────────────────────────────────
 
-async function resolveAccessToken(credentials: ChannelCredentials): Promise<string> {
+export interface GmailFetchedMessage {
+  messageId: string;
+  senderId: string;
+  senderDisplayName: string;
+  subject: string;
+  body: string;
+}
+
+/**
+ * Fetch new messages from Gmail using the History API.
+ * Calls history.list with startHistoryId, then fetches metadata for each new message.
+ * Filters out SENT messages (only returns INBOX).
+ */
+export async function fetchNewMessages(
+  credentials: ChannelCredentials,
+  lastHistoryId: string,
+  accountEmail: string
+): Promise<{ messages: GmailFetchedMessage[]; newHistoryId: string }> {
+  const accessToken = await resolveAccessToken(credentials);
+  const headers = { Authorization: `Bearer ${accessToken}` };
+
+  // 1. Get history since lastHistoryId
+  const historyUrl = `${GMAIL_API_URL}/users/me/history?startHistoryId=${lastHistoryId}&historyTypes=messageAdded`;
+  const historyRes = await fetch(historyUrl, { headers });
+
+  if (!historyRes.ok) {
+    const err = await historyRes.json().catch(() => ({})) as Record<string, any>;
+    // 404 means historyId is too old — caller should reset
+    console.error("[Gmail] History fetch error:", historyRes.status, err);
+    return { messages: [], newHistoryId: lastHistoryId };
+  }
+
+  const historyData = await historyRes.json() as Record<string, any>;
+  const newHistoryId = (historyData.historyId as string) || lastHistoryId;
+
+  if (!historyData.history || !Array.isArray(historyData.history)) {
+    return { messages: [], newHistoryId };
+  }
+
+  // 2. Collect unique message IDs from messagesAdded
+  const seenIds = new Set<string>();
+  for (const entry of historyData.history) {
+    if (entry.messagesAdded) {
+      for (const added of entry.messagesAdded) {
+        const msg = added.message;
+        if (!msg?.id) continue;
+        // Skip messages with SENT label (outbound)
+        const labels: string[] = msg.labelIds || [];
+        if (labels.includes("SENT")) continue;
+        if (!labels.includes("INBOX")) continue;
+        seenIds.add(msg.id);
+      }
+    }
+  }
+
+  if (seenIds.size === 0) {
+    return { messages: [], newHistoryId };
+  }
+
+  // 3. Fetch metadata for each message
+  const results: GmailFetchedMessage[] = [];
+  for (const msgId of seenIds) {
+    try {
+      const msgRes = await fetch(
+        `${GMAIL_API_URL}/users/me/messages/${msgId}?format=metadata&metadataHeaders=From&metadataHeaders=Subject`,
+        { headers }
+      );
+      if (!msgRes.ok) continue;
+
+      const msgData = await msgRes.json() as Record<string, any>;
+      const headersArr: Array<{ name: string; value: string }> = msgData.payload?.headers || [];
+      const fromHeader = headersArr.find((h) => h.name === "From")?.value || "";
+      const subject = headersArr.find((h) => h.name === "Subject")?.value || "(no subject)";
+      const snippet = (msgData.snippet as string) || "";
+
+      const { email, name } = parseFromHeader(fromHeader);
+
+      // Skip if sender is the account itself (self-sent)
+      if (email.toLowerCase() === accountEmail.toLowerCase()) continue;
+
+      results.push({
+        messageId: msgId,
+        senderId: email,
+        senderDisplayName: name,
+        subject,
+        body: snippet,
+      });
+    } catch (err) {
+      console.error(`[Gmail] Failed to fetch message ${msgId}:`, err);
+    }
+  }
+
+  return { messages: results, newHistoryId };
+}
+
+/**
+ * Parse a From header like "John Doe <john@example.com>" into name and email.
+ */
+function parseFromHeader(from: string): { email: string; name: string } {
+  const match = from.match(/^"?(.+?)"?\s*<(.+?)>$/);
+  if (match) {
+    return { name: match[1].trim(), email: match[2].trim() };
+  }
+  // Bare email address
+  return { name: from.trim(), email: from.trim() };
+}
+
+export async function resolveAccessToken(credentials: ChannelCredentials): Promise<string> {
   // If we have a refresh token, exchange it for a fresh access token
   if (credentials.refreshToken && credentials.clientId && credentials.clientSecret) {
     const response = await fetch("https://oauth2.googleapis.com/token", {

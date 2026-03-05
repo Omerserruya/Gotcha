@@ -34,6 +34,8 @@ export {
   emailOutboundAdapter,
   gmailInboundAdapter,
   gmailOutboundAdapter,
+  gmailResolveAccessToken,
+  gmailFetchNewMessages,
   outlookInboundAdapter,
   outlookOutboundAdapter,
   slackInboundAdapter,

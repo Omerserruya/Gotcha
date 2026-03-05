@@ -10,6 +10,7 @@ interface CoPilotPanelProps {
   messages: any[];
   onInsertReply: (text: string) => void;
   onClose?: () => void;
+  onAiLoadingChange?: (loading: boolean) => void;
 }
 
 // Fallback demo suggested replies when AI service returns stub/error
@@ -92,7 +93,7 @@ function getLocalSummary(messages: any[], conversation: any): string {
   return summary;
 }
 
-export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }: CoPilotPanelProps) {
+export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, onAiLoadingChange }: CoPilotPanelProps) {
   const { token } = useAuth();
   const [kbQuery, setKbQuery] = useState("");
   const [kbResults, setKbResults] = useState<{ title: string; snippet: string; source: string }[]>([]);
@@ -111,6 +112,11 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose }:
   const [aiLoading, setAiLoading] = useState(false);
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [paused, setPaused] = useState(false);
+
+  // Notify parent of AI loading state
+  useEffect(() => {
+    onAiLoadingChange?.(aiLoading || chatLoading);
+  }, [aiLoading, chatLoading, onAiLoadingChange]);
 
   // Auto-switch to chat tab when copilotMode is CHAT
   useEffect(() => {

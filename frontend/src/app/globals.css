@@ -381,3 +381,46 @@ body {
 .hover-lift:hover {
   @apply shadow-panel -translate-y-px;
 }
+
+/* AI generating border glow animation */
+@property --ai-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+
+@keyframes ai-border-spin {
+  to {
+    --ai-angle: 360deg;
+  }
+}
+
+.ai-border-glow {
+  background: conic-gradient(
+    from var(--ai-angle),
+    #7C3291 0%,
+    #5A72B3 25%,
+    #6DCED9 50%,
+    #5A72B3 75%,
+    #7C3291 100%
+  );
+  animation: ai-border-spin 2.5s linear infinite;
+}
+
+.ai-border-glow::before {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 1rem;
+  background: conic-gradient(
+    from var(--ai-angle),
+    #7C329140 0%,
+    #5A72B340 25%,
+    #6DCED940 50%,
+    #5A72B340 75%,
+    #7C329140 100%
+  );
+  animation: ai-border-spin 2.5s linear infinite;
+  filter: blur(12px);
+  z-index: -1;
+}

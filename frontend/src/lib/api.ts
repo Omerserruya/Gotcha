@@ -149,6 +149,25 @@ export function sendMessage(token: string, conversationId: string, body: string)
   );
 }
 
+export async function sendMediaMessage(token: string, conversationId: string, file: File, caption?: string) {
+  const formData = new FormData();
+  formData.append("file", file);
+  if (caption) formData.append("body", caption);
+
+  const res = await fetch(`${API_URL}/api/conversations/${conversationId}/messages/media`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}` },
+    body: formData,
+  });
+
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({ error: res.statusText }));
+    throw new Error(body.error || `Upload failed: ${res.status}`);
+  }
+
+  return res.json() as Promise<{ data: any }>;
+}
+
 // ─── Analytics ──────────────────────────────────────────────
 
 export function getDashboardStats(token: string) {

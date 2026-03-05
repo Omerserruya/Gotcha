@@ -137,9 +137,15 @@
       "type": "file"
     },
     {
+      "path": "src/components/conversations/ChatPanel.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1772741784928,
+      "type": "file"
+    },
+    {
       "path": "src/app/globals.css",
-      "accessCount": 10,
-      "lastAccessed": 1772471697059,
+      "accessCount": 13,
+      "lastAccessed": 1772741778643,
       "type": "file"
     },
     {
@@ -155,6 +161,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/conversations/CoPilotPanel.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1772741715040,
+      "type": "file"
+    },
+    {
       "path": "",
       "accessCount": 8,
       "lastAccessed": 1772466871902,
@@ -165,12 +177,6 @@
       "accessCount": 7,
       "lastAccessed": 1772465985505,
       "type": "directory"
-    },
-    {
-      "path": "src/components/conversations/ChatPanel.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1772472099950,
-      "type": "file"
     },
     {
       "path": "src/app/layout.tsx",
@@ -230,12 +236,6 @@
       "path": "src/components/ConfirmModal.tsx",
       "accessCount": 2,
       "lastAccessed": 1772466879644,
-      "type": "file"
-    },
-    {
-      "path": "src/components/conversations/CoPilotPanel.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772467021290,
       "type": "file"
     },
     {

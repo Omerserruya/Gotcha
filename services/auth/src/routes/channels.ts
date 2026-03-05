@@ -526,8 +526,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     // Verify state JWT
     let statePayload: any;
     try {
+      console.log("[OAUTH-CALLBACK] state param:", state);
       statePayload = jwt.verify(state as string, JWT_SECRET);
-    } catch {
+    } catch (stateErr: any) {
+      console.error("[OAUTH-CALLBACK] State JWT verify failed:", stateErr.message, "| state value:", state);
       res.redirect(`${frontendUrl}/channels?error=invalid_state`);
       return;
     }
@@ -1060,6 +1062,19 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         console.warn("[GMAIL-CALLBACK] Watch setup warning:", watchErr.response?.data || watchErr.message);
       }
 
+      // Get current historyId for tracking new messages going forward
+      let initialHistoryId: string | undefined;
+      try {
+        const gmailProfileRes = await axios.get(
+          "https://gmail.googleapis.com/gmail/v1/users/me/profile",
+          { headers: { Authorization: `Bearer ${gmailAccessToken}` } }
+        );
+        initialHistoryId = gmailProfileRes.data.historyId?.toString();
+        console.log(`[GMAIL-CALLBACK] Initial historyId: ${initialHistoryId}`);
+      } catch (histErr: any) {
+        console.warn("[GMAIL-CALLBACK] Failed to get historyId:", histErr.response?.data || histErr.message);
+      }
+
       // Check if already connected
       const existing = await prisma.channelAccount.findFirst({
         where: { channel: "GMAIL", externalId: emailAddress },
@@ -1078,6 +1093,11 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         fromAddress: emailAddress,
       });
 
+      const gmailPlatformMeta = {
+        ...(existing ? (existing.platformMeta as any) || {} : {}),
+        ...(initialHistoryId ? { lastHistoryId: initialHistoryId } : {}),
+      };
+
       if (existing) {
         await prisma.channelAccount.update({
           where: { id: existing.id },
@@ -1091,6 +1111,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             lastError: null,
             displayName,
             responseMode: "HUMAN_WITH_COPILOT",
+            platformMeta: gmailPlatformMeta,
           },
         });
       } else {
@@ -1107,6 +1128,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
             tokenExpiresAt,
             isActive: true,
             responseMode: "HUMAN_WITH_COPILOT",
+            platformMeta: gmailPlatformMeta,
           },
         });
       }
