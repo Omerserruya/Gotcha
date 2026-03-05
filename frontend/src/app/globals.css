@@ -389,38 +389,73 @@ body {
   inherits: false;
 }
 
+@property --ai-wave {
+  syntax: "<number>";
+  initial-value: 0;
+  inherits: false;
+}
+
 @keyframes ai-border-spin {
   to {
     --ai-angle: 360deg;
   }
 }
 
+@keyframes ai-wave-pulse {
+  0%, 100% { --ai-wave: 0; }
+  50% { --ai-wave: 1; }
+}
+
 .ai-border-glow {
   background: conic-gradient(
     from var(--ai-angle),
-    #7C3291 0%,
-    #5A72B3 25%,
-    #6DCED9 50%,
-    #5A72B3 75%,
-    #7C3291 100%
+    rgba(168, 130, 255, 0.5) 0%,
+    rgba(120, 200, 255, 0.6) 15%,
+    rgba(130, 230, 210, 0.5) 30%,
+    rgba(180, 160, 255, 0.3) 45%,
+    rgba(120, 200, 255, 0.6) 60%,
+    rgba(130, 230, 210, 0.5) 75%,
+    rgba(168, 130, 255, 0.5) 100%
   );
-  animation: ai-border-spin 2.5s linear infinite;
+  animation:
+    ai-border-spin 3s linear infinite,
+    ai-wave-pulse 2s ease-in-out infinite;
 }
 
 .ai-border-glow::before {
   content: "";
   position: absolute;
-  inset: -4px;
-  border-radius: 1rem;
+  inset: -6px;
+  border-radius: 1.25rem;
   background: conic-gradient(
     from var(--ai-angle),
-    #7C329140 0%,
-    #5A72B340 25%,
-    #6DCED940 50%,
-    #5A72B340 75%,
-    #7C329140 100%
+    rgba(168, 130, 255, 0.25) 0%,
+    rgba(120, 200, 255, 0.3) 20%,
+    rgba(130, 230, 210, 0.25) 40%,
+    rgba(180, 160, 255, 0.15) 60%,
+    rgba(120, 200, 255, 0.3) 80%,
+    rgba(168, 130, 255, 0.25) 100%
   );
-  animation: ai-border-spin 2.5s linear infinite;
-  filter: blur(12px);
+  animation: ai-border-spin 3s linear infinite;
+  filter: blur(16px);
+  z-index: -1;
+}
+
+.ai-border-glow::after {
+  content: "";
+  position: absolute;
+  inset: -3px;
+  border-radius: 1.1rem;
+  background: conic-gradient(
+    from calc(var(--ai-angle) + 180deg),
+    rgba(130, 230, 210, 0.4) 0%,
+    transparent 20%,
+    rgba(168, 130, 255, 0.35) 40%,
+    transparent 60%,
+    rgba(120, 200, 255, 0.4) 80%,
+    rgba(130, 230, 210, 0.4) 100%
+  );
+  animation: ai-border-spin 2s linear infinite reverse;
+  filter: blur(4px);
   z-index: -1;
 }

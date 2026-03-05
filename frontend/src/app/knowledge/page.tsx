@@ -343,9 +343,9 @@ export default function KnowledgePage() {
           </button>
         </div>
 
-        <div className="flex gap-6 max-w-6xl">
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 max-w-6xl">
           {/* Knowledge Base List */}
-          <div className="w-72 shrink-0 space-y-2">
+          <div className="w-full md:w-72 md:shrink-0 space-y-2">
             {knowledgeBases.length === 0 ? (
               <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8 text-center">
                 <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
@@ -615,7 +615,7 @@ export default function KnowledgePage() {
 
       {/* Create KB Modal */}
       {showCreateModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-md p-6">
             <h3 className="font-bold text-lg text-gray-900 mb-4">{t("knowledge.createKb")}</h3>
             <div className="space-y-3">
@@ -658,7 +658,7 @@ export default function KnowledgePage() {
 
       {/* Upload Document Modal */}
       {showUploadModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6">
             <h3 className="font-bold text-lg text-gray-900 mb-4">{t("knowledge.addDocument")}</h3>
 
@@ -775,7 +775,7 @@ export default function KnowledgePage() {
 
       {/* Browse Modal (Confluence Spaces / Drive Files) */}
       {showBrowseModal && browseIntegration && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[80vh] flex flex-col">
             <div className="flex items-center justify-between mb-4">
               <h3 className="font-bold text-lg text-gray-900">

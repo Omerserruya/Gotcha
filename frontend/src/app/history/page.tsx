@@ -126,8 +126,11 @@ export default function HistoryPage() {
   return (
     <AppLayout>
       <div className="flex md:gap-2 h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
-        {/* Left: Customer list */}
-        <div className="w-full md:w-[340px] border-e border-gray-100 bg-white flex-shrink-0 flex flex-col md:rounded-2xl md:shadow-subtle md:overflow-hidden">
+        {/* Left: Customer list - hidden on mobile when a customer is selected */}
+        <div className={clsx(
+          "w-full md:w-[340px] border-e border-gray-100 bg-white flex-shrink-0 flex flex-col md:rounded-2xl md:shadow-subtle md:overflow-hidden",
+          selectedCustomer ? "hidden md:flex" : "flex"
+        )}>
           {/* Header */}
           <div className="p-4 border-b border-gray-100">
             <h1 className="text-lg font-bold text-gray-900 ps-8 md:ps-0">{t("history.title")}</h1>
@@ -265,8 +268,11 @@ export default function HistoryPage() {
           </div>
         </div>
 
-        {/* Right: Conversation timeline & messages */}
-        <div className="flex-1 flex flex-col bg-white md:rounded-2xl md:shadow-subtle md:overflow-hidden">
+        {/* Right: Conversation timeline & messages - hidden on mobile when no customer selected */}
+        <div className={clsx(
+          "flex-1 flex flex-col bg-white md:rounded-2xl md:shadow-subtle md:overflow-hidden",
+          selectedCustomer ? "flex" : "hidden md:flex"
+        )}>
           {!selectedCustomer ? (
             <div className="flex-1 flex items-center justify-center">
               <div className="text-center text-gray-300">
@@ -282,6 +288,16 @@ export default function HistoryPage() {
             <>
               {/* Customer header */}
               <div className="bg-white border-b border-gray-100 px-5 py-3 flex items-center gap-3 shadow-sm">
+                {/* Mobile back button */}
+                <button
+                  onClick={() => setSelectedCustomer(null)}
+                  className="md:hidden w-8 h-8 flex items-center justify-center text-gray-400 hover:text-gray-600 -ml-1 shrink-0"
+                  aria-label="Back"
+                >
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                  </svg>
+                </button>
                 <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center shrink-0">
                   <span className="text-sm font-bold text-primary-600">
                     {selectedGroup?.name.charAt(0).toUpperCase()}
@@ -300,7 +316,7 @@ export default function HistoryPage() {
 
               <div className="flex-1 flex overflow-hidden">
                 {/* Conversation timeline */}
-                <div className="w-[260px] border-e border-gray-100 bg-white overflow-y-auto shrink-0">
+                <div className="hidden sm:block w-[200px] md:w-[260px] border-e border-gray-100 bg-white overflow-y-auto shrink-0">
                   <div className="p-2.5">
                     <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-2">
                       {t("history.timeline")}

@@ -44,7 +44,7 @@ export default function DashboardPage() {
   return (
     <AppLayout>
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
-        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6 ">{t("dashboard.title")}</h1>
+        <h1 className="text-xl md:text-2xl font-bold text-gray-900 mb-4 md:mb-6">{t("dashboard.title")}</h1>
 
         {/* KPI Cards */}
         <div className="grid grid-cols-2 md:grid-cols-4 gap-2 md:gap-4 mb-6 md:mb-8">
@@ -59,85 +59,93 @@ export default function DashboardPage() {
         </div>
 
         {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6 mb-6 md:mb-8">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-2 md:gap-4 mb-6 md:mb-8">
           {/* Hourly Traffic */}
-          <div className="bg-white rounded-2xl p-4 md:p-6 shadow-card border border-gray-100">
+          <div className="bg-white rounded-2xl p-3 md:p-6 shadow-card border border-gray-100">
             <h3 className="font-bold text-gray-900 mb-4">{t("dashboard.hourlyTraffic")}</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <BarChart data={hourly}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="hour" tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0" }} />
-                <Legend />
-                <Bar dataKey="inbound" fill="#7c5cfc" name={t("dashboard.inbound")} radius={[4, 4, 0, 0]} />
-                <Bar dataKey="outbound" fill="#a78bfa" name={t("dashboard.outbound")} radius={[4, 4, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="h-[180px] md:h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={hourly}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="hour" tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0" }} />
+                  <Legend />
+                  <Bar dataKey="inbound" fill="#7c5cfc" name={t("dashboard.inbound")} radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="outbound" fill="#a78bfa" name={t("dashboard.outbound")} radius={[4, 4, 0, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
 
           {/* Daily Volume */}
-          <div className="bg-white rounded-2xl p-4 md:p-6 shadow-card border border-gray-100">
+          <div className="bg-white rounded-2xl p-3 md:p-6 shadow-card border border-gray-100">
             <h3 className="font-bold text-gray-900 mb-4">{t("dashboard.conversationVolume")}</h3>
-            <ResponsiveContainer width="100%" height={250}>
-              <LineChart data={daily}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
-                <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
-                <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0" }} />
-                <Legend />
-                <Line type="monotone" dataKey="total" stroke="#7c5cfc" name={t("dashboard.messages")} strokeWidth={2} dot={false} />
-                <Line type="monotone" dataKey="closed" stroke="#ef4444" name={t("dashboard.closed")} strokeWidth={2} dot={false} />
-              </LineChart>
-            </ResponsiveContainer>
+            <div className="h-[180px] md:h-[250px]">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={daily}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis dataKey="date" tick={{ fontSize: 10 }} stroke="#94a3b8" />
+                  <YAxis tick={{ fontSize: 11 }} stroke="#94a3b8" />
+                  <Tooltip contentStyle={{ borderRadius: "12px", border: "1px solid #e2e8f0" }} />
+                  <Legend />
+                  <Line type="monotone" dataKey="total" stroke="#7c5cfc" name={t("dashboard.messages")} strokeWidth={2} dot={false} />
+                  <Line type="monotone" dataKey="closed" stroke="#ef4444" name={t("dashboard.closed")} strokeWidth={2} dot={false} />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
           </div>
         </div>
 
         {/* Agent Workload Table */}
-        <div className="bg-white rounded-2xl p-4 md:p-6 shadow-card border border-gray-100">
+        <div className="bg-white rounded-2xl p-3 md:p-6 shadow-card border border-gray-100">
           <h3 className="font-bold text-gray-900 mb-4">{t("dashboard.agentWorkload")}</h3>
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-gray-100">
-                  <th className="text-start py-3 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("agents.name")}</th>
-                  <th className="text-start py-3 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("agents.activeConversations")}</th>
-                  <th className="text-start py-3 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("dashboard.avgResponseTime")}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {agentStats.map((agent) => (
-                  <tr key={agent.agentId} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
-                          <span className="text-xs font-bold text-primary-600">{agent.name?.charAt(0).toUpperCase()}</span>
-                        </div>
-                        <div>
-                          <p className="font-medium text-gray-900">{agent.name}</p>
-                          <p className="text-xs text-gray-400">{agent.email}</p>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4">
-                      <span className="bg-primary-50 text-primary-600 px-2.5 py-1 rounded-full text-xs font-medium">
-                        {agent.activeConversations}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 text-gray-600">
-                      {formatMs(agent.avgResponseTimeMs)}
-                    </td>
+          <div className="relative">
+            <div className="overflow-x-auto [&::-webkit-scrollbar]:h-1.5 [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-gray-200">
+              <table className="w-full text-sm min-w-[480px]">
+                <thead>
+                  <tr className="border-b border-gray-100">
+                    <th className="text-start py-3 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("agents.name")}</th>
+                    <th className="text-start py-3 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("agents.activeConversations")}</th>
+                    <th className="text-start py-3 px-4 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("dashboard.avgResponseTime")}</th>
                   </tr>
-                ))}
-                {agentStats.length === 0 && (
-                  <tr>
-                    <td colSpan={3} className="py-12 text-center text-gray-400">
-                      {t("dashboard.noData")}
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {agentStats.map((agent) => (
+                    <tr key={agent.agentId} className="border-b border-gray-50 hover:bg-gray-50/50 transition">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-8 h-8 flex-shrink-0 bg-gradient-to-br from-primary-100 to-primary-200 rounded-lg flex items-center justify-center">
+                            <span className="text-xs font-bold text-primary-600">{agent.name?.charAt(0).toUpperCase()}</span>
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-medium text-gray-900 truncate">{agent.name}</p>
+                            <p className="text-xs text-gray-400 truncate">{agent.email}</p>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="bg-primary-50 text-primary-600 px-2.5 py-1 rounded-full text-xs font-medium">
+                          {agent.activeConversations}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-gray-600">
+                        {formatMs(agent.avgResponseTimeMs)}
+                      </td>
+                    </tr>
+                  ))}
+                  {agentStats.length === 0 && (
+                    <tr>
+                      <td colSpan={3} className="py-12 text-center text-gray-400">
+                        {t("dashboard.noData")}
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
+            {/* Scroll hint gradient on right edge */}
+            <div className="pointer-events-none absolute inset-y-0 right-0 w-8 bg-gradient-to-l from-white to-transparent rounded-r-2xl" />
           </div>
         </div>
       </div>
@@ -160,8 +168,8 @@ function KpiCard({ label, value, color, icon }: { label: string; value: any; col
           {icon === "wait" && <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />}
         </svg>
       </div>
-      <p className="text-lg md:text-2xl font-bold text-gray-900">{value}</p>
-      <p className="text-[10px] md:text-xs text-gray-400 mt-1">{label}</p>
+      <p className="text-lg md:text-2xl font-bold text-gray-900 truncate">{value}</p>
+      <p className="text-[10px] md:text-xs text-gray-400 mt-1 leading-tight line-clamp-2">{label}</p>
     </div>
   );
 }

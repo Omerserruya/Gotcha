@@ -271,27 +271,28 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       {/* Main chat area */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <div className="bg-white px-4 py-3 flex items-center gap-3 shadow-subtle">
-          <button onClick={onBack} className="md:hidden text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition">
+        <div className="bg-white px-2 md:px-4 py-2 md:py-3 flex items-center gap-2 md:gap-3 shadow-subtle">
+          <button onClick={onBack} className="md:hidden text-gray-400 hover:text-gray-600 p-2 rounded-lg hover:bg-gray-100 transition min-w-[44px] min-h-[44px] flex items-center justify-center">
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d={dir === "rtl" ? "M8.25 4.5l7.5 7.5-7.5 7.5" : "M15.75 19.5L8.25 12l7.5-7.5"} />
             </svg>
           </button>
 
           {/* Customer info with channel badge */}
-          <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
+          <div className="w-8 h-8 md:w-10 md:h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
             <span className="text-sm font-bold text-gray-600">
               {(conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "?").charAt(0).toUpperCase()}
             </span>
           </div>
           <div className="flex-1 min-w-0">
-            <div className="flex items-center gap-2">
-              <p className="font-semibold text-sm text-gray-900 truncate">
+            <div className="flex items-center gap-1.5 md:gap-2">
+              <p className="font-semibold text-xs md:text-sm text-gray-900 truncate">
                 {conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "..."}
               </p>
-              <ChannelBadge channel={conversation?.channel} size="md" showLabel />
+              <span className="hidden sm:inline"><ChannelBadge channel={conversation?.channel} size="md" showLabel /></span>
+              <span className="sm:hidden"><ChannelBadge channel={conversation?.channel} size="sm" /></span>
             </div>
-            <p className="text-xs text-gray-400">{conversation?.customerExternalId || conversation?.customerPhone}</p>
+            <p className="text-[10px] md:text-xs text-gray-400 truncate">{conversation?.customerExternalId || conversation?.customerPhone}</p>
           </div>
 
           {/* Actions */}
@@ -393,7 +394,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             >
               <div
                 className={clsx(
-                  "max-w-[75%] px-4 py-2.5 text-sm",
+                  "max-w-[85%] md:max-w-[75%] px-3 md:px-4 py-2 md:py-2.5 text-sm",
                   msg.direction === "OUTBOUND"
                     ? "chat-bubble-outbound"
                     : "chat-bubble-inbound"
@@ -435,7 +436,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
         {/* Input area */}
         {canSend ? (
-          <div className="px-4 pb-4 pt-2 bg-[var(--bg-chat)]">
+          <div className="px-2 md:px-4 pb-3 md:pb-4 pt-2 bg-[var(--bg-chat)]">
             {/* File preview strip */}
             {attachedFiles.length > 0 && (
               <div className="flex gap-2 mb-2 overflow-x-auto pt-2 pb-1">
@@ -497,7 +498,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 value={inputText}
                 onChange={(e) => setInputText(e.target.value)}
                 placeholder={attachedFiles.length > 0 ? "Add a caption..." : t("conversations.typeMessage")}
-                className="flex-1 py-2 bg-transparent border-0 text-sm outline-none placeholder:text-gray-400"
+                className="flex-1 py-2 bg-transparent border-0 text-base md:text-sm outline-none placeholder:text-gray-400"
                 disabled={sending}
               />
 

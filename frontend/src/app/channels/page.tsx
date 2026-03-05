@@ -317,7 +317,7 @@ function ChannelsPageContent() {
 
   return (
     <AppLayout>
-    <div className="max-w-4xl mx-auto p-6 space-y-8">
+    <div className="max-w-4xl mx-auto p-3 md:p-6 space-y-8">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{t("channels.title")}</h1>
@@ -430,7 +430,7 @@ function ChannelsPageContent() {
             {accounts.map((account) => (
               <div
                 key={account.id}
-                className="flex items-center gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition"
+                className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 p-4 rounded-xl border border-gray-100 hover:bg-gray-50 transition"
               >
                 <ChannelBadge channel={account.channel} size="md" showLabel />
                 <div className="flex-1 min-w-0">
@@ -440,7 +440,7 @@ function ChannelsPageContent() {
                     <p className="text-xs text-red-500 mt-0.5">{account.lastError}</p>
                   )}
                 </div>
-                <div className="flex items-center gap-3 shrink-0">
+                <div className="flex items-center gap-3 shrink-0 self-end sm:self-auto">
                   {account._count?.conversations > 0 && (
                     <span className="text-[10px] bg-gray-100 text-gray-500 px-2 py-0.5 rounded-full">
                       {account._count.conversations} {t("channels.activeConversations").toLowerCase()}
@@ -484,7 +484,7 @@ function ChannelsPageContent() {
       <div className="bg-white rounded-2xl border border-gray-200 p-6">
         <h2 className="font-semibold text-gray-900 mb-1">{t("channels.botFlowMode")}</h2>
         <p className="text-xs text-gray-500 mb-4">{t("channels.botFlowModeDesc")}</p>
-        <div className="flex gap-3">
+        <div className="flex flex-col sm:flex-row gap-3">
           {[
             { value: "UNIFIED", label: t("channels.unified"), desc: t("channels.unifiedDesc") },
             { value: "PER_CHANNEL", label: t("channels.perChannel"), desc: t("channels.perChannelDesc") },

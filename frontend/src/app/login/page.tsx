@@ -88,7 +88,7 @@ export default function LoginPage() {
       </div>
 
       <div className="w-full max-w-md relative">
-        <div className="bg-white rounded-3xl shadow-2xl p-8">
+        <div className="bg-white rounded-3xl shadow-2xl p-5 sm:p-8">
           {/* Logo / Header */}
           <div className="text-center mb-8">
             <Image src="/apple-touch-icon.png" alt="GOTCHA" width={64} height={64} className="w-16 h-16 mx-auto mb-4" />
