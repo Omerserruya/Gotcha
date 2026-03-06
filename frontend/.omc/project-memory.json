@@ -161,21 +161,27 @@
       "type": "file"
     },
     {
-      "path": "src/app",
-      "accessCount": 1,
-      "lastAccessed": 1772744065811,
-      "type": "directory"
-    },
-    {
       "path": "src/components/conversations",
-      "accessCount": 1,
-      "lastAccessed": 1772745728623,
+      "accessCount": 2,
+      "lastAccessed": 1772746169387,
       "type": "directory"
     },
     {
       "path": "src",
+      "accessCount": 2,
+      "lastAccessed": 1772746173676,
+      "type": "directory"
+    },
+    {
+      "path": "src/app/conversations/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1772746183802,
+      "type": "file"
+    },
+    {
+      "path": "src/app",
       "accessCount": 1,
-      "lastAccessed": 1772745761290,
+      "lastAccessed": 1772744065811,
       "type": "directory"
     }
   ],

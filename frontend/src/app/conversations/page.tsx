@@ -40,7 +40,7 @@ export default function ConversationsPage() {
     <AppLayout>
       <div className={`flex md:gap-3 md:p-2 ${selectedId ? "h-screen" : "h-[calc(100vh-48px)]"} md:h-[calc(100vh-16px)]`}>
         {/* Conversation list - hidden on mobile when chat is selected */}
-        <div className={`w-full md:w-[380px] bg-white flex-shrink-0 md:rounded-2xl md:shadow-subtle md:overflow-hidden ${selectedId ? "hidden md:flex" : "flex"} flex-col`}>
+        <div className={`w-full md:w-[380px] flex-shrink-0 md:rounded-2xl md:overflow-hidden ${selectedId ? "hidden md:flex" : "flex"} flex-col`}>
           <ConversationList
             selectedId={selectedId}
             onSelect={setSelectedId}
