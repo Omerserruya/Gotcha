@@ -1,3 +1,5 @@
+import path from "path";
+import express from "express";
 import { createServiceApp, startService, subscribeToEvents } from "@chatcenter/shared";
 import { createServer } from "http";
 import { initSocket, getIO } from "./lib/socket";
@@ -20,6 +22,10 @@ subscribeToEvents((event) => {
     // Socket not ready yet
   }
 });
+
+// Serve uploaded media files
+const uploadsDir = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
+app.use("/api/uploads", express.static(uploadsDir));
 
 // Routes
 app.use("/api/conversations", conversationRoutes);

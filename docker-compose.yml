@@ -127,6 +127,10 @@ services:
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -241,6 +245,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -262,6 +269,9 @@ services:
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
       FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
     depends_on:
       db:
         condition: service_healthy
@@ -270,7 +280,7 @@ services:
     deploy:
       replicas: ${OUTGOING_WORKER_REPLICAS:-1}
 
-  # ─── DB Migration (run once) ─────────────────────────────
+  # ─── DB Migration (run manually: docker compose run --rm migrate) ─────
   migrate:
     build:
       context: .
@@ -288,6 +298,8 @@ services:
       db:
         condition: service_healthy
     restart: "no"
+    profiles:
+      - migrate
 
   # ─── Frontend ────────────────────────────────────────────
   frontend:
@@ -303,3 +315,4 @@ services:
 volumes:
   pgdata:
   qdrant_data:
+  uploads:

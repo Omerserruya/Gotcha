@@ -95,7 +95,6 @@ export const slackOutboundAdapter: OutboundAdapter = {
     text: string
   ): Promise<string | null> {
     try {
-      // recipientId can be a channel ID or a "channel:thread_ts" combination for threaded replies
       const { channelId, threadTs } = parseRecipient(recipientId);
 
       const payload: Record<string, any> = {
@@ -186,13 +185,57 @@ export const slackOutboundAdapter: OutboundAdapter = {
       return null;
     }
   },
+
+  async sendMediaMessage(
+    credentials: ChannelCredentials,
+    _accountExternalId: string,
+    recipientId: string,
+    mediaUrl: string,
+    mediaType: "image" | "video" | "document",
+    fileName?: string,
+    caption?: string
+  ): Promise<string | null> {
+    try {
+      const { channelId, threadTs } = parseRecipient(recipientId);
+
+      if (mediaType === "image") {
+        const blocks: any[] = [
+          { type: "image", image_url: mediaUrl, alt_text: caption || fileName || "Image" },
+        ];
+        if (caption) {
+          blocks.unshift({ type: "section", text: { type: "mrkdwn", text: caption } });
+        }
+        const payload: Record<string, any> = { channel: channelId, text: caption || "Shared an image", blocks };
+        if (threadTs) payload.thread_ts = threadTs;
+
+        const response = await fetch(`${SLACK_API_URL}/chat.postMessage`, {
+          method: "POST",
+          headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        });
+        const data = await response.json() as Record<string, any>;
+        return data.ok ? ((data.ts as string) || crypto.randomUUID()) : null;
+      }
+
+      // For documents/videos, send a text message with a download link
+      const text = caption ? `${caption}\n${mediaUrl}` : mediaUrl;
+      const payload: Record<string, any> = { channel: channelId, text };
+      if (threadTs) payload.thread_ts = threadTs;
+
+      const response = await fetch(`${SLACK_API_URL}/chat.postMessage`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
+      });
+      const data = await response.json() as Record<string, any>;
+      return data.ok ? ((data.ts as string) || crypto.randomUUID()) : null;
+    } catch (err: any) {
+      console.error(`Slack ${mediaType} send error:`, err.message);
+      return null;
+    }
+  },
 };
 
-// ─── Helpers ───────────────────────────────────────────────
-
-/**
- * Parse recipient ID which can be "channelId" or "channelId:threadTs" for threaded replies
- */
 function parseRecipient(recipientId: string): { channelId: string; threadTs?: string } {
   const parts = recipientId.split(":");
   if (parts.length >= 2) {

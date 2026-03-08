@@ -11,6 +11,8 @@ interface CreateMessageData {
   externalMessageId?: string;
   channel?: "WHATSAPP" | "MESSENGER";
   metadata?: any;
+  mediaUrl?: string;
+  fileName?: string;
 }
 
 export async function listByConversation(tenantId: string, conversationId: string, options: { page?: number; limit?: number } = {}) {
@@ -33,6 +35,8 @@ export async function create(data: CreateMessageData) {
         channel: data.channel ?? undefined,
         externalMessageId: data.externalMessageId,
         metadata: data.metadata ?? undefined,
+        mediaUrl: data.mediaUrl ?? undefined,
+        fileName: data.fileName ?? undefined,
         status: data.direction === "OUTBOUND" ? "PENDING" : "DELIVERED",
       },
     });

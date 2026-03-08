@@ -265,6 +265,8 @@ model Message {
   status            MessageStatus    @default(PENDING)
   senderName        String?          @map("sender_name")
   metadata          Json?
+  mediaUrl          String?          @map("media_url")
+  fileName          String?          @map("file_name")
   createdAt         DateTime         @default(now()) @map("created_at")
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)

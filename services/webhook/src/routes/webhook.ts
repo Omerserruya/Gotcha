@@ -81,7 +81,7 @@ router.post("/", async (req: Request, res: Response) => {
     // Step 4: Extract and enqueue normalized messages
     const messages = adapter.extractMessages(body);
     for (const msg of messages) {
-      const { body: msgBody, messageType } = normalizeContentToBodyAndType(msg);
+      const { body: msgBody, messageType, mediaUrl } = normalizeContentToBodyAndType(msg);
       await incomingMessageQueue.add(
         "process",
         {
@@ -97,6 +97,7 @@ router.post("/", async (req: Request, res: Response) => {
             body: msgBody,
             messageType,
             interactiveReply: msg.content.interactiveReply,
+            mediaUrl,
           },
         },
         { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
@@ -115,7 +116,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ─── Helpers ─────────────────────────────────────────────────
 
-function normalizeContentToBodyAndType(msg: NormalizedInboundMessage): { body: string; messageType: string } {
+function normalizeContentToBodyAndType(msg: NormalizedInboundMessage): { body: string; messageType: string; mediaUrl?: string } {
   const content = msg.content;
   if (content.interactiveReply) {
     return { body: content.interactiveReply.title || content.text || "", messageType: "interactive" };
@@ -124,13 +125,13 @@ function normalizeContentToBodyAndType(msg: NormalizedInboundMessage): { body: s
     case "text":
       return { body: content.text || "", messageType: "text" };
     case "image":
-      return { body: content.caption || "[Image]", messageType: "image" };
+      return { body: content.caption || "[Image]", messageType: "image", mediaUrl: content.mediaUrl };
     case "document":
-      return { body: content.caption || "[Document]", messageType: "document" };
+      return { body: content.caption || "[Document]", messageType: "document", mediaUrl: content.mediaUrl };
     case "audio":
-      return { body: content.text || "[Audio message]", messageType: "audio" };
+      return { body: content.text || "[Audio message]", messageType: "audio", mediaUrl: content.mediaUrl };
     case "video":
-      return { body: content.caption || "[Video]", messageType: "video" };
+      return { body: content.caption || "[Video]", messageType: "video", mediaUrl: content.mediaUrl };
     case "location":
       return { body: content.text || "[Location]", messageType: "location" };
     default:

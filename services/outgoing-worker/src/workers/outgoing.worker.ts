@@ -2,8 +2,10 @@ import { Job } from "bullmq";
 import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 
+const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
+
 async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<void> {
-  const { tenantId, channel, channelAccountId, recipientExternalId, body, messageId } = job.data;
+  const { tenantId, channel, channelAccountId, recipientExternalId, body, messageId, messageType, mediaUrl, fileName } = job.data;
 
   // Resolve channel account credentials
   const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
@@ -22,12 +24,27 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
     return;
   }
 
-  const externalMessageId = await adapter.sendTextMessage(
-    credentials,
-    channelAccount.externalId,
-    recipientExternalId,
-    body
-  );
+  let externalMessageId: string | null = null;
+
+  // Send media or text message
+  if (MEDIA_MESSAGE_TYPES.includes(messageType) && mediaUrl && adapter.sendMediaMessage) {
+    externalMessageId = await adapter.sendMediaMessage(
+      credentials,
+      channelAccount.externalId,
+      recipientExternalId,
+      mediaUrl,
+      messageType as "image" | "video" | "document",
+      fileName,
+      body || undefined
+    );
+  } else {
+    externalMessageId = await adapter.sendTextMessage(
+      credentials,
+      channelAccount.externalId,
+      recipientExternalId,
+      body
+    );
+  }
 
   const status = externalMessageId ? "SENT" : "FAILED";
 

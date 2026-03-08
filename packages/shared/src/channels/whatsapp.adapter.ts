@@ -167,4 +167,35 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       return null;
     }
   },
+
+  async sendMediaMessage(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    mediaUrl: string,
+    mediaType: "image" | "video" | "document",
+    fileName?: string,
+    caption?: string
+  ): Promise<string | null> {
+    try {
+      const mediaPayload: Record<string, any> = { link: mediaUrl };
+      if (caption) mediaPayload.caption = caption;
+      if (mediaType === "document" && fileName) mediaPayload.filename = fileName;
+
+      const response = await axios.post(
+        `${WA_API_URL}/${accountExternalId}/messages`,
+        {
+          messaging_product: "whatsapp",
+          to: recipientId,
+          type: mediaType,
+          [mediaType]: mediaPayload,
+        },
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
+      );
+      return response.data?.messages?.[0]?.id || null;
+    } catch (err: any) {
+      console.error(`WhatsApp ${mediaType} send error:`, err.response?.data || err.message);
+      return null;
+    }
+  },
 };

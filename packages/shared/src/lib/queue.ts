@@ -29,6 +29,8 @@ export interface IncomingMessageJob {
       payload: string;
       title: string;
     };
+    mediaUrl?: string;
+    fileName?: string;
   };
 }
 
@@ -43,6 +45,8 @@ export interface OutgoingMessageJob {
   senderName: string;
   messageId: string;
   retryCount?: number;
+  mediaUrl?: string;
+  fileName?: string;
 }
 
 export interface AnalyticsJob {

@@ -74,4 +74,13 @@ export interface OutboundAdapter {
     bodyText: string,
     buttons: Array<{ id: string; title: string }>
   ): Promise<string | null>;
+  sendMediaMessage?(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    mediaUrl: string,
+    mediaType: "image" | "video" | "document",
+    fileName?: string,
+    caption?: string
+  ): Promise<string | null>;
 }

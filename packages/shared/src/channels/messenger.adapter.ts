@@ -204,4 +204,36 @@ export const messengerOutboundAdapter: OutboundAdapter = {
       return null;
     }
   },
+
+  async sendMediaMessage(
+    credentials: ChannelCredentials,
+    _accountExternalId: string,
+    recipientId: string,
+    mediaUrl: string,
+    mediaType: "image" | "video" | "document",
+    _fileName?: string,
+    _caption?: string
+  ): Promise<string | null> {
+    try {
+      const attachmentType = mediaType === "document" ? "file" : mediaType;
+      const response = await axios.post(
+        `${FB_API_URL}/me/messages`,
+        {
+          recipient: { id: recipientId },
+          messaging_type: "RESPONSE",
+          message: {
+            attachment: {
+              type: attachmentType,
+              payload: { url: mediaUrl, is_reusable: true },
+            },
+          },
+        },
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
+      );
+      return response.data?.message_id || null;
+    } catch (err: any) {
+      console.error(`Messenger ${mediaType} send error:`, err.response?.data || err.message);
+      return null;
+    }
+  },
 };
