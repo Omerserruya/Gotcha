@@ -34,6 +34,7 @@ export function submitWaitlistEntry(data: {
   phone?: string;
   role: string;
   companySize: string;
+  companyDomain?: string;
   frustration?: string;
 }) {
   return apiFetch<{ data: { id: string } }>("/api/waitlist", {

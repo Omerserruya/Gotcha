@@ -21,6 +21,7 @@ const STEPS: StepConfig[] = [
   { key: "phone", type: "tel", required: false },
   { key: "role", type: "select", required: true },
   { key: "companySize", type: "select", required: true },
+  { key: "companyDomain", type: "select", required: true },
   { key: "frustration", type: "textarea", required: false },
 ];
 
@@ -37,6 +38,7 @@ export default function EarlyAccessForm() {
     phone: "",
     role: "",
     companySize: "",
+    companyDomain: "",
     frustration: "",
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -129,6 +131,7 @@ export default function EarlyAccessForm() {
         phone: formData.phone?.trim() || undefined,
         role: formData.role,
         companySize: formData.companySize,
+        companyDomain: formData.companyDomain,
         frustration: formData.frustration?.trim() || undefined,
       });
       setSubmitted(true);

@@ -571,24 +571,27 @@
   },
   "landing": {
     "nav": {
-      "features": "Features",
+      "features": "Why GOTCHA",
       "howItWorks": "How It Works",
       "pricing": "Pricing",
       "login": "Login",
       "getStarted": "Get Early Access"
     },
     "hero": {
-      "badge": "Where conversations become customers",
+      "badge": "AI for your agents — not instead of them",
       "title1": "Stop losing customers on",
-      "title2": "One inbox. Every channel. AI that actually works.",
-      "subtitle": "Your team juggles WhatsApp, Messenger, and Instagram in separate tabs. Customers wait. Context gets lost. GOTCHA fixes that.",
+      "title2": "AI that makes your agents better. Not obsolete.",
+      "subtitle": "Most platforms replace your team with chatbots. GOTCHA gives every agent an AI co-pilot — one inbox, every channel, full context.",
       "cta": "Get Early Access",
       "ctaSecondary": "See How It Works",
-      "trustedBy": "Works with your channels"
+      "trustedBy": "Works with your channels",
+      "channelsLabel": "Every channel. One platform.",
+      "channelsTitle": "Connect wherever your customers are",
+      "channelsSubtitle": "No matter where customers reach out — everything flows into one inbox. Simple setup, no code, no hassle."
     },
     "features": {
       "label": "How It Works",
-      "chaosText": "4 platforms. 47 unread. 0 overview.",
+      "chaosText": "6 platforms. 58 unread. 0 overview.",
       "chaosDesc": "Your team switches tabs 200 times a day. Customers repeat themselves. Context vanishes between apps.",
       "convergeText": "What if they all came together?",
       "convergeDesc": "Every message from every channel — one list, one screen, zero tab-switching.",
@@ -596,8 +599,8 @@
       "botDesc": "Greets, qualifies, and routes. When it gets real — seamless handover to your best agent.",
       "resolveText": "One inbox. Total clarity.",
       "resolveDesc": "All your conversations in one place. Every platform, every message — nothing falls through the cracks.",
-      "copilotText": "Every agent deserves an AI co-pilot.",
-      "copilotDesc": "It reads the full conversation, pulls from your knowledge base, and writes the perfect reply. Your agent just clicks send.",
+      "copilotText": "AI that works with your agents. Not without them.",
+      "copilotDesc": "It reads the full conversation, understands the customer, pulls from your knowledge base, and writes the perfect reply. Your agent just clicks send.",
       "copilotLabel": "AI Co-Pilot",
       "copilotSuggestion1": "Based on order #4812, the shipment arrives Thursday. Want me to share tracking?",
       "copilotSuggestion2": "Customer seems frustrated — suggest empathetic opening + resolution.",
@@ -618,7 +621,7 @@
       "subtitle": "Four steps. No code. No consultants.",
       "step1": {
         "title": "Connect your channels",
-        "desc": "Link WhatsApp, Messenger, Instagram — one setup flow, done in minutes."
+        "desc": "Link WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — one setup flow, done in minutes."
       },
       "step2": {
         "title": "Feed the AI your knowledge",
@@ -635,15 +638,15 @@
     },
     "productFeatures": {
       "label": "Features",
-      "title": "Everything your team needs",
-      "subtitle": "Powerful tools to turn conversations into customers.",
+      "title": "Your agents, supercharged",
+      "subtitle": "AI-powered tools that make your team faster, sharper, and unstoppable.",
       "unifiedInbox": {
         "title": "Unified Inbox",
-        "desc": "WhatsApp, Messenger, Instagram, and email — one screen, zero tab-switching."
+        "desc": "WhatsApp, Messenger, Instagram, Gmail, Outlook, and Slack — one screen, zero tab-switching."
       },
       "aiCopilot": {
         "title": "AI Co-Pilot",
-        "desc": "Reads the conversation, pulls from your knowledge base, and suggests the perfect reply."
+        "desc": "Understands the conversation, the customer, and your product. Suggests the perfect reply — your agent clicks send."
       },
       "smartBot": {
         "title": "Smart Bot",
@@ -668,11 +671,11 @@
       "items": [
         {
           "q": "What exactly is GOTCHA?",
-          "a": "A single inbox for all your customer messaging — WhatsApp, Messenger, Instagram, email — with an AI co-pilot that helps your agents respond faster and smarter."
+          "a": "A single inbox for all your customer messaging — WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — with an AI co-pilot that makes your agents faster and sharper. Not a chatbot that replaces them."
         },
         {
           "q": "Which channels does it support?",
-          "a": "WhatsApp, Facebook Messenger, Instagram DMs, and email. More coming soon."
+          "a": "WhatsApp, Facebook Messenger, Instagram DMs, Gmail, Outlook, and Slack. Every channel your customers use — in one place."
         },
         {
           "q": "What does the AI co-pilot actually do?",
@@ -689,8 +692,8 @@
       ]
     },
     "cta": {
-      "title": "Your customers are already messaging you. Are you keeping up?",
-      "subtitle": "Join the teams that reply faster, sell more, and never lose a conversation again.",
+      "title": "Great support is human. Now it's AI-powered too.",
+      "subtitle": "Give your agents the co-pilot they deserve. One inbox, every channel, zero guesswork.",
       "button": "Get Early Access"
     },
     "footer": {
@@ -753,6 +756,26 @@
           "11_50": "11-50",
           "51_200": "51-200",
           "201_plus": "201+"
+        }
+      },
+      "companyDomain": {
+        "label": "What industry is your company in?",
+        "placeholder": "Select industry...",
+        "micro": "Helps us tailor the platform to your needs.",
+        "options": {
+          "ecommerce": "E-Commerce",
+          "saas": "SaaS / Technology",
+          "healthcare": "Healthcare",
+          "finance": "Finance & Banking",
+          "education": "Education",
+          "realestate": "Real Estate",
+          "travel": "Travel & Hospitality",
+          "retail": "Retail",
+          "telecom": "Telecommunications",
+          "insurance": "Insurance",
+          "logistics": "Logistics",
+          "food": "Food & Beverage",
+          "other": "Other"
         }
       },
       "frustration": {

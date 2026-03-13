@@ -10,11 +10,12 @@ import JsonLd from "@/components/JsonLd";
 /* ───── Scroll Story: Platform Config ───── */
 
 const INBOX_PLATFORMS = [
-  { name: "WhatsApp", color: "#25D366", icon: "/platforms/wa-logo.png", badge: 12, contact: "Sarah M.", initial: "S", message: "Hi, is my order on the way?" },
-  { name: "Instagram", color: "#E1306C", icon: "/platforms/ins-logo.png", badge: 8, contact: "david_k", initial: "D", message: "Hey can I return this?" },
-  { name: "Messenger", color: "#0084FF", icon: "/platforms/fb-logo.png", badge: 23, contact: "Rachel B.", initial: "R", message: "When does the sale end?" },
-  { name: "Gmail", color: "#EA4335", icon: "/platforms/gm-logo.png", badge: 4, contact: "Mike Johnson", initial: "M", message: "RE: Invoice #4812 question" },
-  { name: "Facebook", color: "#1877F2", icon: "/platforms/fb-logo.png", badge: 3, contact: "TechStore", initial: "T", message: "New message from customer" },
+  { name: "WhatsApp", color: "#25D366", icon: "/icons/wa.png", badge: 12, contact: "Sarah M.", initial: "S", message: "Hi, is my order on the way?" },
+  { name: "Instagram", color: "#E1306C", icon: "/icons/ins.png", badge: 8, contact: "david_k", initial: "D", message: "Hey can I return this?" },
+  { name: "Messenger", color: "#0084FF", icon: "/icons/msn.png", badge: 23, contact: "Rachel B.", initial: "R", message: "When does the sale end?" },
+  { name: "Gmail", color: "#EA4335", icon: "/icons/gm.png", badge: 4, contact: "Mike Johnson", initial: "M", message: "RE: Invoice #4812 question" },
+  { name: "Outlook", color: "#0078D4", icon: "/icons/ol.png", badge: 6, contact: "Lisa Chen", initial: "L", message: "Follow up on proposal" },
+  { name: "Slack", color: "#4A154B", icon: "/icons/slk.png", badge: 5, contact: "#support", initial: "#", message: "New ticket from enterprise client" },
 ] as const;
 
 const CHAOS_POSITIONS = [
@@ -22,15 +23,17 @@ const CHAOS_POSITIONS = [
   { x: 210,  y: -85,  rotate: 7,   scale: 0.92 },
   { x: -150, y: 30,   rotate: -14, scale: 0.85 },
   { x: 190,  y: 110,  rotate: 5,   scale: 0.9 },
-  { x: 10,   y: 185,  rotate: -3,  scale: 0.87 },
+  { x: -60,  y: 185,  rotate: -3,  scale: 0.87 },
+  { x: 80,   y: -170, rotate: 4,   scale: 0.86 },
 ];
 
 const STACKED_POSITIONS = [
-  { x: 0, y: -116 },
-  { x: 0, y: -58 },
-  { x: 0, y: 0 },
-  { x: 0, y: 58 },
-  { x: 0, y: 116 },
+  { x: 0, y: -145 },
+  { x: 0, y: -87 },
+  { x: 0, y: -29 },
+  { x: 0, y: 29 },
+  { x: 0, y: 87 },
+  { x: 0, y: 145 },
 ];
 
 /* ───── Product Features Config ───── */
@@ -232,14 +235,12 @@ function InboxDemo({ copilotProgress, isRtl, t }: {
           {/* Active items */}
           {INBOX_PLATFORMS.slice(0, 2).map((p, i) => (
             <div key={p.name} className={`mx-1.5 mb-1 px-2 py-1.5 rounded-lg flex items-center gap-2 ${i === 0 ? "bg-primary-500/10 border border-primary-500/15" : "bg-white/[0.02]"}`}>
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-primary-400/30 to-primary-600/30 flex items-center justify-center flex-shrink-0">
+              <div className="relative w-7 h-7 rounded-full bg-gradient-to-br from-primary-400/30 to-primary-600/30 flex items-center justify-center flex-shrink-0">
                 <span className="text-[8px] font-bold text-white/70">{p.initial}</span>
+                <img src={p.icon} alt="" className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border border-[#12121f]" style={{ background: p.color + "20" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] font-semibold text-white/80 truncate">{p.contact}</span>
-                  <img src={p.icon} alt="" className="w-4 h-4 flex-shrink-0" />
-                </div>
+                <span className="text-[9px] font-semibold text-white/80 truncate block">{p.contact}</span>
                 <p className="text-[8px] text-white/30 truncate">{p.message}</p>
               </div>
               {i === 0 && <div className="w-1.5 h-1.5 rounded-full bg-primary-400 flex-shrink-0" />}
@@ -251,14 +252,12 @@ function InboxDemo({ copilotProgress, isRtl, t }: {
           </div>
           {INBOX_PLATFORMS.slice(2, 5).map((p) => (
             <div key={p.name} className="mx-1.5 mb-1 px-2 py-1.5 rounded-lg flex items-center gap-2 bg-white/[0.02]">
-              <div className="w-7 h-7 rounded-full bg-gradient-to-br from-white/[0.06] to-white/[0.03] flex items-center justify-center flex-shrink-0">
+              <div className="relative w-7 h-7 rounded-full bg-gradient-to-br from-white/[0.06] to-white/[0.03] flex items-center justify-center flex-shrink-0">
                 <span className="text-[8px] font-bold text-white/50">{p.initial}</span>
+                <img src={p.icon} alt="" className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border border-[#12121f] opacity-70" style={{ background: p.color + "20" }} />
               </div>
               <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-1">
-                  <span className="text-[9px] font-medium text-white/60 truncate">{p.contact}</span>
-                  <img src={p.icon} alt="" className="w-4 h-4 flex-shrink-0 opacity-60" />
-                </div>
+                <span className="text-[9px] font-medium text-white/60 truncate block">{p.contact}</span>
                 <p className="text-[8px] text-white/25 truncate">{p.message}</p>
               </div>
             </div>
@@ -336,9 +335,17 @@ function InboxDemo({ copilotProgress, isRtl, t }: {
             </div>
           </div>
 
-          {/* Input */}
+          {/* Input with AI glow */}
           <div className="px-3 py-2 border-t border-white/[0.04] flex items-center gap-2">
-            <div className="flex-1 h-7 bg-white/[0.03] border border-white/[0.06] rounded-lg" />
+            <div className="flex-1 h-7 relative rounded-lg">
+              <div className="absolute -inset-[1px] rounded-lg demo-input-ai-glow" />
+              <div className="relative h-full bg-[#12121f] rounded-lg border border-white/[0.06] flex items-center px-2">
+                <span className="text-[8px] text-white/20">Type a message...</span>
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400/50 ms-auto">
+                  <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" />
+                </svg>
+              </div>
+            </div>
             <div className="w-7 h-7 rounded-lg bg-primary-500/30 flex items-center justify-center">
               <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-300"><path d="M22 2L11 13M22 2l-7 20-4-9-9-4 20-7z" /></svg>
             </div>
@@ -347,11 +354,13 @@ function InboxDemo({ copilotProgress, isRtl, t }: {
 
         {/* Copilot panel (slides in) */}
         <div
-          className={`inbox-demo-copilot w-[140px] sm:w-[170px] md:w-[200px] flex-shrink-0 flex flex-col bg-white/[0.02] overflow-hidden ${isRtl ? "border-e border-white/[0.04]" : "border-s border-white/[0.04]"}`}
+          className={`inbox-demo-copilot w-[140px] sm:w-[170px] md:w-[200px] flex-shrink-0 flex flex-col overflow-hidden relative ${isRtl ? "border-e border-primary-500/20" : "border-s border-primary-500/20"}`}
           style={{
             transform: `translateX(${copilotTranslate}%)`,
             opacity: copilotEased,
             willChange: "transform, opacity",
+            background: "linear-gradient(180deg, rgba(124,92,252,0.06) 0%, rgba(124,92,252,0.02) 50%, rgba(124,92,252,0.04) 100%)",
+            boxShadow: copilotEased > 0.5 ? `inset ${isRtl ? "3px" : "-3px"} 0 12px rgba(124,92,252,0.08), ${isRtl ? "3px" : "-3px"} 0 20px rgba(124,92,252,0.06)` : "none",
           }}
         >
           {/* Header */}
@@ -422,7 +431,7 @@ const StoryPhaseText = memo(function StoryPhaseText({ text, desc, opacity, botto
 
 /* ───── Rotating Platform Names ───── */
 
-const PLATFORMS = ["WhatsApp", "Instagram", "Facebook", "Messenger"];
+const PLATFORMS = ["WhatsApp", "Instagram", "Facebook", "Messenger", "Gmail", "Outlook", "Slack"];
 
 function RotatingPlatform({ locale }: { locale: string }) {
   const [index, setIndex] = useState(0);
@@ -653,9 +662,7 @@ function ProductMockup() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
                     <span className="text-[9px] font-bold text-white">SM</span>
                   </div>
-                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#25D366]" />
-                  </div>
+                  <img src="/icons/wa.png" alt="" className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white bg-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -673,9 +680,7 @@ function ProductMockup() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-pink-400 to-rose-500 flex items-center justify-center">
                     <span className="text-[9px] font-bold text-white">DK</span>
                   </div>
-                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#E1306C]" />
-                  </div>
+                  <img src="/icons/ins.png" alt="" className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white bg-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -695,9 +700,7 @@ function ProductMockup() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 flex items-center justify-center">
                     <span className="text-[9px] font-bold text-white">RB</span>
                   </div>
-                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#0084FF]" />
-                  </div>
+                  <img src="/icons/msn.png" alt="" className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white bg-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -715,9 +718,7 @@ function ProductMockup() {
                   <div className="w-8 h-8 rounded-full bg-gradient-to-br from-red-400 to-red-500 flex items-center justify-center">
                     <span className="text-[9px] font-bold text-white">MJ</span>
                   </div>
-                  <div className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full bg-white flex items-center justify-center">
-                    <div className="w-2.5 h-2.5 rounded-full bg-[#EA4335]" />
-                  </div>
+                  <img src="/icons/gm.png" alt="" className="absolute -bottom-0.5 -end-0.5 w-3.5 h-3.5 rounded-full border-2 border-white bg-white" />
                 </div>
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center justify-between">
@@ -732,7 +733,7 @@ function ProductMockup() {
         </div>
 
         {/* Chat area */}
-        <div className="hidden md:flex flex-[1.8] flex-col min-w-0">
+        <div className="hidden md:flex flex-[1.4] flex-col min-w-0">
           {/* Chat header */}
           <div className="flex items-center gap-2.5 px-3 py-2 border-b border-gray-100">
             <div className="w-7 h-7 rounded-full bg-gradient-to-br from-green-400 to-green-600 flex items-center justify-center">
@@ -776,29 +777,79 @@ function ProductMockup() {
                 <div className="h-1.5 w-16 bg-gray-300/70 rounded-full" />
               </div>
             </div>
-            {/* AI Copilot suggestion */}
-            <div className="self-end max-w-[80%] mt-auto">
-              <div className="bg-primary-50 border border-primary-200/60 rounded-xl px-2.5 py-2">
-                <div className="flex items-center gap-1.5 mb-1.5">
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400"><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25"/></svg>
-                  <div className="h-1.5 w-10 bg-primary-300/60 rounded-full" />
-                </div>
-                <div className="h-1.5 w-full bg-primary-200/50 rounded-full" />
-                <div className="h-1.5 w-3/4 bg-primary-200/40 rounded-full mt-1" />
-                <div className="flex justify-end mt-2">
-                  <div className="h-4 w-12 bg-primary-500 rounded text-[6px] text-white flex items-center justify-center font-medium">Insert</div>
+          </div>
+          {/* Input with AI glow */}
+          <div className="px-3 py-2 border-t border-gray-100">
+            <div className="relative h-8 rounded-xl">
+              <div className="absolute -inset-[1px] rounded-xl demo-input-ai-glow" />
+              <div className="relative h-full bg-white border border-gray-200 rounded-xl flex items-center px-2.5 gap-2">
+                <div className="h-1.5 w-20 bg-gray-200 rounded-full" />
+                <div className="flex-1" />
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400/60"><path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25"/></svg>
+                <div className="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
+                  <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-white"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
                 </div>
               </div>
             </div>
           </div>
-          {/* Input */}
-          <div className="px-3 py-2 border-t border-gray-100">
-            <div className="h-8 bg-gray-50 border border-gray-200 rounded-xl flex items-center px-2.5 gap-2">
-              <div className="h-1.5 w-20 bg-gray-200 rounded-full" />
-              <div className="flex-1" />
-              <div className="w-5 h-5 rounded-full bg-primary-500 flex items-center justify-center">
-                <svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" className="text-white"><path d="M22 2 11 13M22 2l-7 20-4-9-9-4 20-7z"/></svg>
+        </div>
+
+        {/* Co-Pilot panel (animated slide-in) */}
+        <div className="hidden md:flex flex-col w-[160px] border-s border-primary-200/40 hero-copilot-slide overflow-hidden"
+          style={{ background: "linear-gradient(180deg, rgba(124,92,252,0.04) 0%, rgba(124,92,252,0.08) 100%)" }}
+        >
+          {/* Header */}
+          <div className="flex items-center gap-1.5 px-2.5 py-2 border-b border-primary-100/60">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-500">
+              <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" />
+            </svg>
+            <span className="text-[8px] font-semibold text-primary-600">AI Co-Pilot</span>
+            <div className="ms-auto w-1.5 h-1.5 rounded-full bg-green-400 hero-copilot-dot" />
+          </div>
+          {/* Context card */}
+          <div className="p-2 space-y-2 hero-copilot-content">
+            <div className="bg-primary-50 border border-primary-100 rounded-lg p-2">
+              <span className="text-[6px] font-bold text-primary-500 uppercase tracking-wider">Context</span>
+              <div className="mt-1 space-y-1">
+                <div className="h-1.5 w-full bg-primary-200/50 rounded-full" />
+                <div className="h-1.5 w-3/4 bg-primary-200/40 rounded-full" />
               </div>
+            </div>
+            {/* Suggestion 1 */}
+            <div>
+              <span className="text-[6px] font-bold text-gray-400 uppercase tracking-wider">Suggested reply</span>
+              <div className="mt-1 relative rounded-lg">
+                <div className="absolute -inset-[1px] rounded-lg demo-input-ai-glow opacity-40" />
+                <div className="relative bg-white border border-primary-100 rounded-lg p-2">
+                  <div className="space-y-1">
+                    <div className="h-1.5 w-full bg-primary-200/60 rounded-full" />
+                    <div className="h-1.5 w-5/6 bg-primary-200/45 rounded-full" />
+                  </div>
+                  <div className="flex items-center gap-1 mt-1.5">
+                    <div className="h-1 flex-1 rounded-full bg-green-200">
+                      <div className="h-full w-[94%] rounded-full bg-green-400" />
+                    </div>
+                    <span className="text-[6px] font-medium text-green-500">94%</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            {/* Suggestion 2 */}
+            <div className="bg-white border border-gray-100 rounded-lg p-2">
+              <div className="space-y-1">
+                <div className="h-1.5 w-full bg-gray-200/60 rounded-full" />
+                <div className="h-1.5 w-2/3 bg-gray-200/45 rounded-full" />
+              </div>
+              <div className="flex items-center gap-1 mt-1.5">
+                <div className="h-1 flex-1 rounded-full bg-amber-200">
+                  <div className="h-full w-[82%] rounded-full bg-amber-400" />
+                </div>
+                <span className="text-[6px] font-medium text-amber-500">82%</span>
+              </div>
+            </div>
+            {/* Insert button */}
+            <div className="h-5 bg-primary-500 rounded-md flex items-center justify-center">
+              <span className="text-[7px] font-semibold text-white">Insert reply</span>
             </div>
           </div>
         </div>
@@ -1027,22 +1078,44 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
         </div>
       </section>
 
-      {/* ───── Supported Integrations (marquee) ───── */}
-      <section className="py-12 sm:py-16 px-4 sm:px-6">
+      {/* ───── Channels Hub Section ───── */}
+      <section className="py-20 sm:py-32 px-4 sm:px-12 lg:px-20 bg-white overflow-hidden">
         <div className="max-w-[1240px] mx-auto">
-          <p className="text-[11px] font-medium text-[#c0c0c0] uppercase tracking-[0.2em] mb-6 sm:mb-8 text-center">{t("landing.hero.trustedBy")}</p>
-          <div className="landing-marquee">
-          <div className="landing-marquee-track">
-            {[0, 1, 2, 3].map((copy) => (
-              <div key={copy} className="flex items-center gap-10 sm:gap-20 px-5 sm:px-10 flex-shrink-0" aria-hidden={copy > 0}>
-                <img src="/integrations/whatsapp.svg" alt="WhatsApp" className="h-6 sm:h-8 flex-shrink-0 object-contain" />
-                <img src="/integrations/facebook.svg" alt="Facebook Messenger" className="h-6 sm:h-8 flex-shrink-0 object-contain" />
-                <img src="/integrations/instagram.svg" alt="Instagram" className="h-6 sm:h-8 flex-shrink-0 object-contain" />
-                <img src="/integrations/gmail.svg" alt="Gmail" className="h-6 sm:h-8 flex-shrink-0 object-contain" />
+          {/* Header */}
+          <div className="text-center max-w-xl mx-auto mb-14 sm:mb-20">
+            <p className="text-[11px] font-medium text-primary-500 uppercase tracking-[0.2em] mb-4">
+              {t("landing.hero.channelsLabel")}
+            </p>
+            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
+              {t("landing.hero.channelsTitle")}
+            </h2>
+            <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed">
+              {t("landing.hero.channelsSubtitle")}
+            </p>
+          </div>
+
+          {/* Channels converge visual */}
+          {/* Channel pills row */}
+          <div className="flex flex-wrap justify-center gap-3 sm:gap-4 max-w-2xl mx-auto">
+            {[
+              { name: "WhatsApp", logo: "/icons/wa.png", color: "#25D366" },
+              { name: "Instagram", logo: "/icons/ins.png", color: "#E1306C" },
+              { name: "Messenger", logo: "/icons/msn.png", color: "#0084FF" },
+              { name: "Gmail", logo: "/icons/gm.png", color: "#EA4335" },
+              { name: "Outlook", logo: "/icons/ol.png", color: "#0078D4" },
+              { name: "Slack", logo: "/icons/slk.png", color: "#4A154B" },
+            ].map((channel) => (
+              <div
+                key={channel.name}
+                className="group flex items-center gap-2.5 bg-white rounded-full border border-gray-100 px-4 py-2.5 sm:px-5 sm:py-3 hover:border-gray-200 hover:shadow-md transition-all duration-300"
+              >
+                <div className="w-8 h-8 rounded-full bg-gray-50 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                  <img src={channel.logo} alt={channel.name} className="w-5 h-5 object-contain" />
+                </div>
+                <span className="text-sm font-medium text-gray-900">{channel.name}</span>
               </div>
             ))}
           </div>
-        </div>
         </div>
       </section>
 
