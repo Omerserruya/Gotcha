@@ -3,6 +3,9 @@ import aiAssistRoutes from "./routes/ai-assist";
 import knowledgeRoutes from "./routes/knowledge";
 import knowledgeOauthRoutes from "./routes/knowledge-oauth";
 import systemChatRoutes from "./routes/system-chat";
+import toolRoutes from "./routes/tools";
+import integrationRoutes from "./routes/integrations";
+import agentScoreRoutes from "./routes/agent-scores";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 
@@ -25,6 +28,9 @@ app.use("/api/ai-assist", aiAssistRoutes);
 app.use("/api/knowledge-bases", knowledgeRoutes);
 app.use("/api/knowledge", knowledgeOauthRoutes);
 app.use("/api/system-chat", systemChatRoutes);
+app.use("/api/tools", toolRoutes);
+app.use("/api/integrations", integrationRoutes);
+app.use("/api/agent-scores", agentScoreRoutes);
 
 startService(app, config);
 export { app };

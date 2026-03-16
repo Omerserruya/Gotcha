@@ -867,3 +867,118 @@ export function exportLeadsCsv(token: string, status?: string) {
     headers: { Authorization: `Bearer ${token}` },
   });
 }
+
+// ─── Analytics - Advanced ───────────────────────────────────
+
+export function getAnalyticsOverview(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any }>(`/api/analytics/overview${qs}`, { token });
+}
+
+export function getTopQuestions(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[] }>(`/api/analytics/top-questions${qs}`, { token });
+}
+
+export function getToolUsageStats(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[] }>(`/api/analytics/tool-usage${qs}`, { token });
+}
+
+export function getChannelPerformance(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[] }>(`/api/analytics/channel-performance${qs}`, { token });
+}
+
+export function getDepartmentPerformance(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[] }>(`/api/analytics/department-performance${qs}`, { token });
+}
+
+export function getAIInsights(token: string) {
+  return apiFetch<{ data: any[] }>("/api/analytics/insights", { token });
+}
+
+export function getAIPerformance(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any }>(`/api/analytics/ai-performance${qs}`, { token });
+}
+
+export function getConversationIntelligence(token: string, conversationId: string) {
+  return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/intelligence`, { token });
+}
+
+export function getConversationReplay(token: string, conversationId: string) {
+  return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/replay`, { token });
+}
+
+export function executeToolInConversation(token: string, conversationId: string, tenantToolId: string, input?: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/tools/execute`, {
+    token, method: "POST", body: JSON.stringify({ tenantToolId, input: input || {} }),
+  });
+}
+
+// ─── Integrations Marketplace ────────────────────────────────
+
+export function getMarketplaceIntegrations(token: string) {
+  return apiFetch<{ data: any[] }>("/api/integrations", { token });
+}
+
+export function getMarketplaceIntegration(token: string, slug: string) {
+  return apiFetch<{ data: any }>(`/api/integrations/${slug}`, { token });
+}
+
+export function connectIntegration(token: string, slug: string, credentials: Record<string, any>, config?: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/integrations/${slug}/connect`, {
+    token, method: "POST", body: JSON.stringify({ credentials, config }),
+  });
+}
+
+export function testIntegration(token: string, slug: string) {
+  return apiFetch<{ data: any }>(`/api/integrations/${slug}/test`, { token, method: "POST" });
+}
+
+export function disconnectIntegration(token: string, slug: string) {
+  return apiFetch<{ data: any }>(`/api/integrations/${slug}/disconnect`, { token, method: "POST" });
+}
+
+export function updateIntegrationCredentials(token: string, slug: string, credentials: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/integrations/${slug}/credentials`, {
+    token, method: "PUT", body: JSON.stringify({ credentials }),
+  });
+}
+
+export function getIntegrationTools(token: string, slug: string) {
+  return apiFetch<{ data: any[] }>(`/api/integrations/${slug}/tools`, { token });
+}
+
+export function toggleIntegrationTool(token: string, slug: string, toolSlug: string, isEnabled: boolean) {
+  return apiFetch<{ data: any }>(`/api/integrations/${slug}/tools/${toolSlug}`, {
+    token, method: "PUT", body: JSON.stringify({ isEnabled }),
+  });
+}
+
+// ─── Tools (Active tenant tools) ────────────────────────────
+
+export function getActiveTenantTools(token: string) {
+  return apiFetch<{ data: any[] }>("/api/tools", { token });
+}
+
+export function getDepartmentToolPermissions(token: string, departmentId: string) {
+  return apiFetch<{ data: any[] }>(`/api/tools/permissions/${departmentId}`, { token });
+}
+
+export function updateDepartmentToolPermissions(token: string, departmentId: string, permissions: Array<{ tenantToolId: string; isAllowed: boolean; requireApproval: boolean }>) {
+  return apiFetch<{ data: any }>(`/api/tools/permissions/${departmentId}`, {
+    token, method: "PUT", body: JSON.stringify({ permissions }),
+  });
+}
+
+export function getAgentScores(token: string, agentId: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any }>(`/api/agent-scores/${agentId}${qs}`, { token });
+}
+
+export function getConversationScore(token: string, conversationId: string) {
+  return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/score`, { token });
+}

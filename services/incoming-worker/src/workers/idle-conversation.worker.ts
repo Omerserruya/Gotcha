@@ -142,6 +142,13 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
                 data: { id: conv.id, status: "CLOSED" },
               }).catch(() => {});
 
+              // Analyze the closed conversation for intelligence
+              import("../services/intelligence.service").then(({ analyzeClosedConversation }) => {
+                analyzeClosedConversation(tenant.id, conv.id).catch((err: any) =>
+                  console.error(`[idle-check] Intelligence analysis failed for ${conv.id}:`, err.message)
+                );
+              }).catch(() => {});
+
               closes++;
               console.log(`[idle-check] Auto-closed conversation ${conv.id} (idle ${Math.round(elapsedMinutes)}m)`);
             } catch (err) {

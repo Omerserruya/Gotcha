@@ -4,20 +4,51 @@ import bcrypt from "bcryptjs";
 const prisma = new PrismaClient();
 
 async function main() {
-  console.log("Seeding database...");
+  console.log("Seeding database...\n");
 
-  // Create tenant
+  // ─── Tenant ──────────────────────────────────────────────────
   const tenant = await prisma.tenant.upsert({
-    where: { slug: "gotcha" },
-    update: {},
+    where: { slug: "demo-company" },
+    update: { status: "ACTIVE", isActive: true, botEnabled: true, botType: "AUTONOMOUS_AI", firstTakeCareEnabled: true },
     create: {
-      name: "Gotcha",
-      slug: "gotcha",
+      name: "Demo Company",
+      slug: "demo-company",
+      status: "ACTIVE",
+      isActive: true,
+      botEnabled: true,
+      botType: "AUTONOMOUS_AI",
+      firstTakeCareEnabled: true,
     },
   });
-  console.log(`Tenant: ${tenant.name} (${tenant.id})`);
+  console.log(`Tenant: ${tenant.name} (${tenant.id}) — ACTIVE`);
 
-  // Create channel accounts (one per platform)
+  // ─── Business Profile ────────────────────────────────────────
+  await prisma.businessProfile.upsert({
+    where: { tenantId: tenant.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      organizationName: "Demo Company Ltd.",
+      industry: "SaaS / Customer Communication",
+      businessDescription: "AI-powered omnichannel customer communication platform for businesses",
+      businessPriority: "FAST_RESPONSE",
+      estimatedDailyConversations: 500,
+      numberOfAgents: 10,
+    },
+  });
+
+  // ─── Onboarding (completed) ──────────────────────────────────
+  await prisma.tenantOnboarding.upsert({
+    where: { tenantId: tenant.id },
+    update: { currentStep: "COMPLETED", completedAt: new Date() },
+    create: {
+      tenantId: tenant.id,
+      currentStep: "COMPLETED",
+      completedAt: new Date(),
+    },
+  });
+
+  // ─── Channel Accounts ────────────────────────────────────────
   const waAccount = await prisma.channelAccount.upsert({
     where: { channel_externalId: { channel: "WHATSAPP", externalId: process.env.WHATSAPP_PHONE_NUMBER_ID || "demo-wa-id" } },
     update: {},
@@ -25,7 +56,9 @@ async function main() {
       tenantId: tenant.id,
       channel: "WHATSAPP",
       externalId: process.env.WHATSAPP_PHONE_NUMBER_ID || "demo-wa-id",
-      displayName: "Gotcha WhatsApp",
+      displayName: "Demo WhatsApp",
+      connectionStatus: "CONNECTED",
+      connectedAt: new Date(),
       credentials: {
         accessToken: process.env.WHATSAPP_ACCESS_TOKEN || "demo-token",
         webhookSecret: process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "demo-secret",
@@ -40,10 +73,10 @@ async function main() {
       tenantId: tenant.id,
       channel: "MESSENGER",
       externalId: process.env.MESSENGER_PAGE_ID || "demo-msn-id",
-      displayName: "Gotcha Messenger",
-      credentials: {
-        accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token",
-      },
+      displayName: "Demo Messenger",
+      connectionStatus: "CONNECTED",
+      connectedAt: new Date(),
+      credentials: { accessToken: process.env.MESSENGER_ACCESS_TOKEN || "demo-messenger-token" },
     },
   });
 
@@ -54,7 +87,9 @@ async function main() {
       tenantId: tenant.id,
       channel: "INSTAGRAM",
       externalId: "demo-ins-id",
-      displayName: "Gotcha Instagram",
+      displayName: "Demo Instagram",
+      connectionStatus: "CONNECTED",
+      connectedAt: new Date(),
       credentials: { accessToken: "demo-instagram-token" },
     },
   });
@@ -66,7 +101,9 @@ async function main() {
       tenantId: tenant.id,
       channel: "GMAIL",
       externalId: "demo-gmail-id",
-      displayName: "Gotcha Gmail",
+      displayName: "Demo Gmail",
+      connectionStatus: "CONNECTED",
+      connectedAt: new Date(),
       credentials: { accessToken: "demo-gmail-token" },
     },
   });
@@ -78,7 +115,9 @@ async function main() {
       tenantId: tenant.id,
       channel: "OUTLOOK",
       externalId: "demo-outlook-id",
-      displayName: "Gotcha Outlook",
+      displayName: "Demo Outlook",
+      connectionStatus: "CONNECTED",
+      connectedAt: new Date(),
       credentials: { accessToken: "demo-outlook-token" },
     },
   });
@@ -90,66 +129,71 @@ async function main() {
       tenantId: tenant.id,
       channel: "SLACK",
       externalId: "demo-slack-id",
-      displayName: "Gotcha Slack",
+      displayName: "Demo Slack",
+      connectionStatus: "CONNECTED",
+      connectedAt: new Date(),
       credentials: { accessToken: "demo-slack-token" },
     },
   });
 
-  console.log("Channel accounts created: WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack");
+  console.log("Channel accounts: WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack");
 
-  // Create tenant channel config
+  // ─── Tenant Channel Config ───────────────────────────────────
   await prisma.tenantChannelConfig.upsert({
     where: { tenantId: tenant.id },
     update: {},
-    create: {
-      tenantId: tenant.id,
-      botFlowMode: "UNIFIED",
-    },
+    create: { tenantId: tenant.id, botFlowMode: "UNIFIED" },
   });
 
-  // Create admin user
+  // ─── Users ───────────────────────────────────────────────────
   const adminPassword = await bcrypt.hash("admin123", 10);
-  const admin = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tenant.id, email: "omer.serruya@gotcha.co.il" } },
+  const agentPassword = await bcrypt.hash("agent123", 10);
+
+  // System Admin
+  const sysAdmin = await prisma.user.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: "system@demo.com" } },
     update: {},
     create: {
       tenantId: tenant.id,
-      email: "omer.serruya@gotcha.co.il",
+      email: "system@demo.com",
       password: adminPassword,
-      name: "Omer Serruya",
+      name: "System Admin",
+      role: "SYSTEM_ADMIN",
+    },
+  });
+
+  // Admin
+  const admin = await prisma.user.upsert({
+    where: { tenantId_email: { tenantId: tenant.id, email: "admin@demo.com" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      email: "admin@demo.com",
+      password: adminPassword,
+      name: "Admin User",
       role: "ADMIN",
     },
   });
-  console.log(`Admin: ${admin.email}`);
 
-  // Create agent users
-  const agentPassword = await bcrypt.hash("agent123", 10);
-  const agent1 = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tenant.id, email: "agent1@gotcha.co.il" } },
-    update: {},
-    create: {
-      tenantId: tenant.id,
-      email: "agent1@gotcha.co.il",
-      password: agentPassword,
-      name: "Agent One",
-      role: "AGENT",
-    },
-  });
+  // Agents
+  const agents = [];
+  const agentData = [
+    { email: "dana@demo.com", name: "Dana Avraham" },
+    { email: "yossi@demo.com", name: "Yossi Katz" },
+    { email: "maya@demo.com", name: "Maya Ben-David" },
+    { email: "eli@demo.com", name: "Eli Rosenberg" },
+  ];
+  for (const a of agentData) {
+    const agent = await prisma.user.upsert({
+      where: { tenantId_email: { tenantId: tenant.id, email: a.email } },
+      update: {},
+      create: { tenantId: tenant.id, email: a.email, password: agentPassword, name: a.name, role: "AGENT" },
+    });
+    agents.push(agent);
+  }
+  console.log(`Users: 1 sysadmin, 1 admin, ${agents.length} agents`);
 
-  const agent2 = await prisma.user.upsert({
-    where: { tenantId_email: { tenantId: tenant.id, email: "agent2@gotcha.co.il" } },
-    update: {},
-    create: {
-      tenantId: tenant.id,
-      email: "agent2@gotcha.co.il",
-      password: agentPassword,
-      name: "Agent Two",
-      role: "AGENT",
-    },
-  });
-  console.log(`Agents: ${agent1.email}, ${agent2.email}`);
-
-  // Create departments
+  // ─── Departments ─────────────────────────────────────────────
   const salesDept = await prisma.department.upsert({
     where: { tenantId_name: { tenantId: tenant.id, name: "Sales" } },
     update: {},
@@ -158,6 +202,11 @@ async function main() {
       name: "Sales",
       description: "Sales and pre-sales inquiries",
       queueMode: "ROUND_ROBIN",
+      slaTarget: 5,
+      autoGreetingEnabled: true,
+      autoGreetingMessage: "Hi! Thanks for reaching out to our sales team. An agent will be with you shortly.",
+      autoCloseMinutes: 1440,
+      aiSuggestionsEnabled: true,
     },
   });
 
@@ -169,71 +218,525 @@ async function main() {
       name: "Support",
       description: "Technical support and troubleshooting",
       queueMode: "CLAIM",
+      slaTarget: 15,
+      autoGreetingEnabled: true,
+      autoGreetingMessage: "Hello! Our support team has received your message. We'll help you as soon as possible.",
+      autoCloseMinutes: 720,
+      escalateOnSlaBreach: true,
+      aiSuggestionsEnabled: true,
+    },
+  });
+
+  const billingDept = await prisma.department.upsert({
+    where: { tenantId_name: { tenantId: tenant.id, name: "Billing" } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      name: "Billing",
+      description: "Billing, payments, and invoicing",
+      queueMode: "ROUND_ROBIN",
+      slaTarget: 30,
+      aiSuggestionsEnabled: true,
     },
   });
 
   // Assign agents to departments
   await prisma.departmentMember.upsert({
-    where: { userId: agent1.id },
+    where: { userId: agents[0].id },
     update: {},
-    create: {
-      userId: agent1.id,
-      tenantId: tenant.id,
-      departmentId: salesDept.id,
-      departmentRole: "MANAGER",
-    },
+    create: { userId: agents[0].id, tenantId: tenant.id, departmentId: salesDept.id, departmentRole: "MANAGER" },
   });
-
   await prisma.departmentMember.upsert({
-    where: { userId: agent2.id },
+    where: { userId: agents[1].id },
+    update: {},
+    create: { userId: agents[1].id, tenantId: tenant.id, departmentId: salesDept.id, departmentRole: "AGENT" },
+  });
+  await prisma.departmentMember.upsert({
+    where: { userId: agents[2].id },
+    update: {},
+    create: { userId: agents[2].id, tenantId: tenant.id, departmentId: supportDept.id, departmentRole: "MANAGER" },
+  });
+  await prisma.departmentMember.upsert({
+    where: { userId: agents[3].id },
+    update: {},
+    create: { userId: agents[3].id, tenantId: tenant.id, departmentId: billingDept.id, departmentRole: "AGENT" },
+  });
+  console.log("Departments: Sales, Support, Billing (agents assigned)");
+
+  // ─── Copilot Config (tenant-level) ──────────────────────────
+  await prisma.copilotConfig.upsert({
+    where: { tenantId: tenant.id },
     update: {},
     create: {
-      userId: agent2.id,
       tenantId: tenant.id,
-      departmentId: supportDept.id,
-      departmentRole: "AGENT",
+      copilotMode: "READY_MESSAGE",
+      systemPrompt: "You are an AI copilot for Demo Company, a customer communication platform. Help agents respond to customers quickly and professionally. Always maintain a friendly, helpful tone. If you're unsure about something, suggest the agent verify before responding.",
+      rules: [
+        "Always greet the customer by name when available",
+        "Never share internal pricing or discount codes unless approved",
+        "Escalate any complaints about data privacy to a manager",
+        "Use the knowledge base before providing technical answers",
+        "Keep responses concise — under 3 sentences when possible",
+      ],
+      model: "gpt-4o-mini",
+      provider: "openai",
+      temperature: 0.7,
+      maxTokens: 1024,
+      isActive: true,
+      identity: {
+        role: "AI Customer Support Copilot",
+        responsibility: "Assist human agents with fast, accurate, and empathetic responses",
+        representationGuidelines: ["Represent the company brand", "Be professional but approachable"],
+      },
+      goals: {
+        focus: "Customer satisfaction and fast resolution",
+        slaAwareness: true,
+        conversionObjective: "Help convert leads when appropriate",
+        qualityExpectations: ["Accurate information", "Empathetic tone", "Follow-up questions"],
+      },
+      tone: {
+        formalityLevel: "semi-formal",
+        empathyLevel: "high",
+        assertiveness: "medium",
+        brandAlignment: "friendly and tech-savvy",
+      },
+      behavioral: {
+        escalationTriggers: ["angry customer", "legal threat", "data breach mention", "request to speak to manager"],
+        forbiddenActions: ["sharing API keys", "making promises about unreleased features", "providing legal advice"],
+        safetyBoundaries: ["Do not discuss competitors negatively", "Do not share customer data across conversations"],
+      },
     },
   });
+  console.log("Copilot config created");
 
-  // Create one conversation per channel with one inbound message each
-  const channels = [
-    { channel: "WHATSAPP" as const, accountId: waAccount.id, customerId: "+972501234567", customerName: "David Cohen", body: "Hi, I'm interested in your services" },
-    { channel: "MESSENGER" as const, accountId: msgAccount.id, customerId: "psid_100001", customerName: "Sarah Levi", body: "Hey! Saw your page, do you offer demos?" },
-    { channel: "INSTAGRAM" as const, accountId: insAccount.id, customerId: "igid_200001", customerName: "Noa Mizrahi", body: "Love your product! How can I get started?" },
-    { channel: "GMAIL" as const, accountId: gmailAccount.id, customerId: "customer@example.com", customerName: "Yael Shapira", body: "Hello, I'd like to schedule a meeting" },
-    { channel: "OUTLOOK" as const, accountId: outlookAccount.id, customerId: "contact@company.com", customerName: "Amit Goldberg", body: "Can you send me the pricing details?" },
-    { channel: "SLACK" as const, accountId: slackAccount.id, customerId: "U0SLACK001", customerName: "Ron Peretz", body: "Quick question about the integration" },
-  ];
+  // ─── Marketplace: Tenant Integrations & Tools ───────────────
+  // Catalog is seeded by migration. Look up entries by slug.
+  const shopifyCatalog = await prisma.integrationCatalog.findUnique({ where: { slug: "shopify" } });
+  const hubspotCatalog = await prisma.integrationCatalog.findUnique({ where: { slug: "hubspot" } });
 
-  for (const ch of channels) {
-    const conv = await prisma.conversation.create({
-      data: {
-        tenantId: tenant.id,
-        channel: ch.channel,
-        channelAccountId: ch.accountId,
-        customerExternalId: ch.customerId,
-        customerName: ch.customerName,
-        status: "OPEN",
-        lastMessageAt: new Date(),
-      },
-    });
-
-    await prisma.message.create({
-      data: {
-        tenantId: tenant.id,
-        conversationId: conv.id,
-        channel: ch.channel,
-        direction: "INBOUND",
-        body: ch.body,
-        senderName: ch.customerName,
-        status: "DELIVERED",
-      },
-    });
-
-    console.log(`Conversation [${ch.channel}]: ${ch.customerName}`);
+  if (!shopifyCatalog || !hubspotCatalog) {
+    throw new Error("Integration catalog not seeded. Run migrations first.");
   }
 
-  // Create example chatbot flow
+  // TenantIntegration: connect Shopify
+  const shopifyTenantInt = await prisma.tenantIntegration.upsert({
+    where: { tenantId_integrationId: { tenantId: tenant.id, integrationId: shopifyCatalog.id } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      integrationId: shopifyCatalog.id,
+      status: "CONNECTED",
+      credentials: { apiKey: "demo-shopify-key", apiUrl: "https://demo-store.myshopify.com" },
+      config: {},
+      connectedAt: new Date(),
+      lastTestedAt: new Date(),
+      lastTestResult: true,
+    },
+  });
+
+  // TenantIntegration: connect HubSpot
+  const hubspotTenantInt = await prisma.tenantIntegration.upsert({
+    where: { tenantId_integrationId: { tenantId: tenant.id, integrationId: hubspotCatalog.id } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      integrationId: hubspotCatalog.id,
+      status: "CONNECTED",
+      credentials: { apiKey: "demo-hubspot-key" },
+      config: {},
+      connectedAt: new Date(),
+      lastTestedAt: new Date(),
+      lastTestResult: true,
+    },
+  });
+
+  // Look up catalog tools by slug
+  const catalogOrderLookup   = await prisma.catalogTool.findFirst({ where: { integrationId: shopifyCatalog.id, slug: "order_lookup" } });
+  const catalogTrackShipment = await prisma.catalogTool.findFirst({ where: { integrationId: shopifyCatalog.id, slug: "track_shipment" } });
+  const catalogProcessRefund = await prisma.catalogTool.findFirst({ where: { integrationId: shopifyCatalog.id, slug: "process_refund" } });
+  const catalogCrmLookup     = await prisma.catalogTool.findFirst({ where: { integrationId: hubspotCatalog.id, slug: "customer_lookup" } });
+  const catalogCreateDeal    = await prisma.catalogTool.findFirst({ where: { integrationId: hubspotCatalog.id, slug: "create_deal" } });
+
+  if (!catalogOrderLookup || !catalogTrackShipment || !catalogProcessRefund || !catalogCrmLookup || !catalogCreateDeal) {
+    throw new Error("Catalog tools not found. Run migrations first.");
+  }
+
+  // TenantTools: enable specific Shopify tools
+  const tenantOrderLookup = await prisma.tenantTool.upsert({
+    where: { tenantIntegrationId_catalogToolId: { tenantIntegrationId: shopifyTenantInt.id, catalogToolId: catalogOrderLookup.id } },
+    update: {},
+    create: { tenantId: tenant.id, tenantIntegrationId: shopifyTenantInt.id, catalogToolId: catalogOrderLookup.id, isEnabled: true },
+  });
+
+  const tenantTrackShipment = await prisma.tenantTool.upsert({
+    where: { tenantIntegrationId_catalogToolId: { tenantIntegrationId: shopifyTenantInt.id, catalogToolId: catalogTrackShipment.id } },
+    update: {},
+    create: { tenantId: tenant.id, tenantIntegrationId: shopifyTenantInt.id, catalogToolId: catalogTrackShipment.id, isEnabled: true },
+  });
+
+  const tenantProcessRefund = await prisma.tenantTool.upsert({
+    where: { tenantIntegrationId_catalogToolId: { tenantIntegrationId: shopifyTenantInt.id, catalogToolId: catalogProcessRefund.id } },
+    update: {},
+    create: { tenantId: tenant.id, tenantIntegrationId: shopifyTenantInt.id, catalogToolId: catalogProcessRefund.id, isEnabled: true },
+  });
+
+  // TenantTools: enable specific HubSpot tools
+  const tenantCrmLookup = await prisma.tenantTool.upsert({
+    where: { tenantIntegrationId_catalogToolId: { tenantIntegrationId: hubspotTenantInt.id, catalogToolId: catalogCrmLookup.id } },
+    update: {},
+    create: { tenantId: tenant.id, tenantIntegrationId: hubspotTenantInt.id, catalogToolId: catalogCrmLookup.id, isEnabled: true },
+  });
+
+  const tenantCreateDeal = await prisma.tenantTool.upsert({
+    where: { tenantIntegrationId_catalogToolId: { tenantIntegrationId: hubspotTenantInt.id, catalogToolId: catalogCreateDeal.id } },
+    update: {},
+    create: { tenantId: tenant.id, tenantIntegrationId: hubspotTenantInt.id, catalogToolId: catalogCreateDeal.id, isEnabled: true },
+  });
+
+  console.log("Tenant integrations: Shopify (CONNECTED), HubSpot (CONNECTED) — 5 tools enabled");
+
+  // ─── Agent Tool Permissions ──────────────────────────────────
+  // Sales: HubSpot Customer Lookup (auto), HubSpot Create Deal (auto)
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: salesDept.id, tenantToolId: tenantCrmLookup.id, isAllowed: true, requireApproval: false },
+  });
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: salesDept.id, tenantToolId: tenantCreateDeal.id, isAllowed: true, requireApproval: false },
+  });
+
+  // Support: Shopify Order Lookup (auto), Track Shipment (auto), Process Refund (requires approval)
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: supportDept.id, tenantToolId: tenantOrderLookup.id, isAllowed: true, requireApproval: false },
+  });
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: supportDept.id, tenantToolId: tenantTrackShipment.id, isAllowed: true, requireApproval: false },
+  });
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: supportDept.id, tenantToolId: tenantProcessRefund.id, isAllowed: true, requireApproval: true },
+  });
+
+  // Billing: Shopify Order Lookup (auto), Process Refund (auto)
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: billingDept.id, tenantToolId: tenantOrderLookup.id, isAllowed: true, requireApproval: false },
+  });
+  await prisma.agentToolPermission.create({
+    data: { tenantId: tenant.id, departmentId: billingDept.id, tenantToolId: tenantProcessRefund.id, isAllowed: true, requireApproval: false },
+  });
+
+  console.log("Agent tool permissions configured");
+
+  // ─── Conversations with realistic message threads ────────────
+  const now = new Date();
+  const ago = (minutes: number) => new Date(now.getTime() - minutes * 60000);
+
+  // Conversation 1: WhatsApp — Sales inquiry (assigned, multi-message)
+  const conv1 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "WHATSAPP",
+      channelAccountId: waAccount.id,
+      customerExternalId: "+972501234567",
+      customerName: "David Cohen",
+      assignedAgentId: agents[0].id,
+      departmentId: salesDept.id,
+      status: "OPEN",
+      lastMessageAt: ago(3),
+    },
+  });
+  const conv1Messages = [
+    { dir: "INBOUND" as const, body: "Hi, I saw your product online. Can you tell me about pricing?", sender: "David Cohen", at: ago(30) },
+    { dir: "OUTBOUND" as const, body: "Hi David! Thanks for your interest. We have 3 plans: Starter ($49/mo), Pro ($149/mo), and Enterprise (custom). What's your team size?", sender: "Dana Avraham", at: ago(25) },
+    { dir: "INBOUND" as const, body: "We're about 15 people. Mostly customer support agents.", sender: "David Cohen", at: ago(20) },
+    { dir: "OUTBOUND" as const, body: "For a team of 15, I'd recommend our Pro plan. It includes AI copilot, analytics, and up to 20 agent seats. Want me to set up a demo?", sender: "Dana Avraham", at: ago(15) },
+    { dir: "INBOUND" as const, body: "Yes please! Can we do it this week?", sender: "David Cohen", at: ago(3) },
+  ];
+  for (const m of conv1Messages) {
+    await prisma.message.create({
+      data: { tenantId: tenant.id, conversationId: conv1.id, channel: "WHATSAPP", direction: m.dir, body: m.body, senderName: m.sender, status: "DELIVERED", createdAt: m.at },
+    });
+  }
+
+  // Conversation 2: Messenger — Support issue (open, waiting on customer)
+  const conv2 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "MESSENGER",
+      channelAccountId: msgAccount.id,
+      customerExternalId: "psid_100001",
+      customerName: "Sarah Levi",
+      assignedAgentId: agents[2].id,
+      departmentId: supportDept.id,
+      status: "WAITING",
+      lastMessageAt: ago(120),
+    },
+  });
+  const conv2Messages = [
+    { dir: "INBOUND" as const, body: "My dashboard is showing an error when I try to export reports", sender: "Sarah Levi", at: ago(180) },
+    { dir: "OUTBOUND" as const, body: "Hi Sarah, sorry about that. Can you tell me which browser you're using and share a screenshot of the error?", sender: "Maya Ben-David", at: ago(170) },
+    { dir: "INBOUND" as const, body: "Chrome latest version. Here's what I see: 'Export failed: timeout error'", sender: "Sarah Levi", at: ago(150) },
+    { dir: "OUTBOUND" as const, body: "Thanks! This looks like a known issue with large exports. I've applied a fix to your account. Can you try again and let me know?", sender: "Maya Ben-David", at: ago(120) },
+  ];
+  for (const m of conv2Messages) {
+    await prisma.message.create({
+      data: { tenantId: tenant.id, conversationId: conv2.id, channel: "MESSENGER", direction: m.dir, body: m.body, senderName: m.sender, status: "DELIVERED", createdAt: m.at },
+    });
+  }
+
+  // Conversation 3: Instagram — New lead (unassigned)
+  const conv3 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "INSTAGRAM",
+      channelAccountId: insAccount.id,
+      customerExternalId: "igid_200001",
+      customerName: "Noa Mizrahi",
+      status: "OPEN",
+      lastMessageAt: ago(5),
+    },
+  });
+  await prisma.message.create({
+    data: { tenantId: tenant.id, conversationId: conv3.id, channel: "INSTAGRAM", direction: "INBOUND", body: "Love your product! How much is the starter plan? Also do you integrate with Shopify?", senderName: "Noa Mizrahi", status: "DELIVERED", createdAt: ago(5) },
+  });
+
+  // Conversation 4: Gmail — Billing question (assigned)
+  const conv4 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "GMAIL",
+      channelAccountId: gmailAccount.id,
+      customerExternalId: "billing@acmecorp.com",
+      customerName: "Yael Shapira",
+      assignedAgentId: agents[3].id,
+      departmentId: billingDept.id,
+      status: "OPEN",
+      lastMessageAt: ago(45),
+    },
+  });
+  const conv4Messages = [
+    { dir: "INBOUND" as const, body: "Hi, I was charged twice for last month's subscription. Invoice #INV-2024-0891. Please look into this.", sender: "Yael Shapira", at: ago(60) },
+    { dir: "OUTBOUND" as const, body: "Hi Yael, I'm looking into this right now. Let me check your billing history.", sender: "Eli Rosenberg", at: ago(55) },
+    { dir: "OUTBOUND" as const, body: "I found the duplicate charge. I've initiated a refund of $149 to your card ending in 4242. You should see it within 3-5 business days. Sorry for the inconvenience!", sender: "Eli Rosenberg", at: ago(45) },
+  ];
+  for (const m of conv4Messages) {
+    await prisma.message.create({
+      data: { tenantId: tenant.id, conversationId: conv4.id, channel: "GMAIL", direction: m.dir, body: m.body, senderName: m.sender, status: "DELIVERED", createdAt: m.at },
+    });
+  }
+
+  // Conversation 5: Slack — Internal request
+  const conv5 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "SLACK",
+      channelAccountId: slackAccount.id,
+      customerExternalId: "U0SLACK001",
+      customerName: "Ron Peretz",
+      assignedAgentId: agents[1].id,
+      departmentId: salesDept.id,
+      status: "OPEN",
+      lastMessageAt: ago(10),
+    },
+  });
+  await prisma.message.create({
+    data: { tenantId: tenant.id, conversationId: conv5.id, channel: "SLACK", direction: "INBOUND", body: "Quick question — can we get an API key for the sandbox environment? We want to test the integration before going live.", senderName: "Ron Peretz", status: "DELIVERED", createdAt: ago(10) },
+  });
+
+  // Conversation 6: WhatsApp — Closed conversation (for history/replay)
+  const conv6 = await prisma.conversation.create({
+    data: {
+      tenantId: tenant.id,
+      channel: "WHATSAPP",
+      channelAccountId: waAccount.id,
+      customerExternalId: "+972509876543",
+      customerName: "Amit Goldberg",
+      assignedAgentId: agents[0].id,
+      departmentId: salesDept.id,
+      status: "CLOSED",
+      closedAt: ago(60),
+      lastMessageAt: ago(65),
+      aiSummary: "Customer inquired about enterprise pricing and API access. Agent provided pricing details and scheduled a technical demo for next week.",
+    },
+  });
+  const conv6Messages = [
+    { dir: "INBOUND" as const, body: "Hi, we're evaluating communication platforms for our enterprise. What API capabilities do you offer?", sender: "Amit Goldberg", at: ago(120) },
+    { dir: "OUTBOUND" as const, body: "Welcome Amit! Our Enterprise plan includes full REST API access, webhooks, and SDKs for Node.js, Python, and Java. What's your use case?", sender: "Dana Avraham", at: ago(115) },
+    { dir: "INBOUND" as const, body: "We need to integrate with our existing CRM (Salesforce) and have automated messaging for order updates.", sender: "Amit Goldberg", at: ago(100) },
+    { dir: "OUTBOUND" as const, body: "Great news — we have native Salesforce integration and support automated transactional messages. I'll schedule a technical demo. Does Thursday work?", sender: "Dana Avraham", at: ago(90) },
+    { dir: "INBOUND" as const, body: "Thursday at 2pm works. Send me a calendar invite to amit@goldberg-tech.com", sender: "Amit Goldberg", at: ago(80) },
+    { dir: "OUTBOUND" as const, body: "Done! You'll receive the invite shortly. Looking forward to the demo. Have a great day!", sender: "Dana Avraham", at: ago(65) },
+  ];
+  for (const m of conv6Messages) {
+    await prisma.message.create({
+      data: { tenantId: tenant.id, conversationId: conv6.id, channel: "WHATSAPP", direction: m.dir, body: m.body, senderName: m.sender, status: "DELIVERED", createdAt: m.at },
+    });
+  }
+
+  console.log("Conversations: 6 (4 open, 1 waiting, 1 closed)");
+
+  // ─── Conversation Intelligence (for closed conversation) ────
+  await prisma.conversationIntelligence.upsert({
+    where: { conversationId: conv6.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      conversationId: conv6.id,
+      summary: "Enterprise customer exploring platform capabilities. Focused on API access and Salesforce integration. Demo scheduled for Thursday.",
+      detectedIntent: "enterprise_inquiry",
+      intentConfidence: 0.92,
+      sentiment: "positive",
+      sentimentScore: 0.85,
+      topics: ["enterprise", "API", "CRM integration", "Salesforce", "pricing"],
+      toolsUsed: [{ tenantToolId: tenantCrmLookup.id, toolName: "Customer CRM Lookup", success: true }],
+      resolutionOutcome: "resolved",
+      customerEffort: 1,
+      aiConfidence: 0.88,
+    },
+  });
+
+  // Intelligence for billing conversation
+  await prisma.conversationIntelligence.upsert({
+    where: { conversationId: conv4.id },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      conversationId: conv4.id,
+      summary: "Customer reported duplicate billing charge. Agent verified and initiated refund.",
+      detectedIntent: "billing_dispute",
+      intentConfidence: 0.95,
+      sentiment: "negative",
+      sentimentScore: -0.3,
+      topics: ["billing", "duplicate charge", "refund"],
+      toolsUsed: [
+        { tenantToolId: tenantOrderLookup.id, toolName: "Order Lookup", success: true },
+        { tenantToolId: tenantProcessRefund.id, toolName: "Process Refund", success: true },
+      ],
+      resolutionOutcome: "resolved",
+      customerEffort: 2,
+      aiConfidence: 0.91,
+    },
+  });
+
+  // ─── Agent Scores (for closed conversation) ─────────────────
+  await prisma.agentScore.upsert({
+    where: { conversationId_agentId: { conversationId: conv6.id, agentId: agents[0].id } },
+    update: {},
+    create: {
+      tenantId: tenant.id,
+      conversationId: conv6.id,
+      agentId: agents[0].id,
+      responseQuality: 5,
+      responseSpeed: 4,
+      resolutionScore: 5,
+      protocolAdherence: 5,
+      customerHandling: 5,
+      overallScore: 93,
+      strengths: ["Excellent product knowledge", "Proactive demo scheduling", "Professional tone"],
+      improvements: ["Could mention specific SLA guarantees"],
+      summary: "Outstanding handling of enterprise inquiry. Agent demonstrated deep product knowledge and moved efficiently toward scheduling a demo.",
+      copilotUsageRate: 0.6,
+      toolsUsedCount: 1,
+      messageCount: 6,
+    },
+  });
+
+  // ─── Tool Executions (sample audit log) ─────────────────────
+  await prisma.toolExecution.create({
+    data: {
+      tenantId: tenant.id,
+      conversationId: conv4.id,
+      tenantToolId: tenantOrderLookup.id,
+      input: { email: "billing@acmecorp.com" },
+      output: { orderId: "ORD-2024-0891", amount: 149, status: "paid", duplicate: true },
+      success: true,
+      durationMs: 230,
+      triggeredBy: "agent",
+      createdAt: ago(52),
+    },
+  });
+
+  await prisma.toolExecution.create({
+    data: {
+      tenantId: tenant.id,
+      conversationId: conv4.id,
+      tenantToolId: tenantProcessRefund.id,
+      input: { orderId: "ORD-2024-0891", amount: 149, reason: "duplicate charge" },
+      output: { refundId: "REF-2024-0445", status: "processing", estimatedDays: 5 },
+      success: true,
+      durationMs: 450,
+      triggeredBy: "agent",
+      createdAt: ago(48),
+    },
+  });
+
+  await prisma.toolExecution.create({
+    data: {
+      tenantId: tenant.id,
+      conversationId: conv6.id,
+      tenantToolId: tenantCrmLookup.id,
+      input: { email: "amit@goldberg-tech.com" },
+      output: { contactId: "HS-12345", company: "Goldberg Tech", lifecycle: "lead", dealStage: "qualified" },
+      success: true,
+      durationMs: 180,
+      triggeredBy: "ai",
+      createdAt: ago(110),
+    },
+  });
+
+  // ─── Knowledge Base ─────────────────────────────────────────
+  const kb = await prisma.knowledgeBase.create({
+    data: {
+      tenantId: tenant.id,
+      name: "Product FAQ",
+      description: "Frequently asked questions and product documentation",
+      isActive: true,
+    },
+  });
+
+  const kbDoc = await prisma.knowledgeDocument.create({
+    data: {
+      knowledgeBaseId: kb.id,
+      tenantId: tenant.id,
+      title: "Pricing & Plans",
+      content: "We offer 3 plans:\n\n**Starter** — $49/mo: Up to 5 agents, WhatsApp + Messenger, basic analytics\n**Pro** — $149/mo: Up to 20 agents, all channels, AI copilot, advanced analytics, knowledge base\n**Enterprise** — Custom pricing: Unlimited agents, dedicated support, API access, custom integrations, SLA guarantees\n\nAll plans include a 14-day free trial. Annual billing saves 20%.",
+      sourceType: "text",
+      status: "indexed",
+      chunkCount: 1,
+    },
+  });
+
+  await prisma.knowledgeChunk.create({
+    data: {
+      documentId: kbDoc.id,
+      tenantId: tenant.id,
+      content: kbDoc.content,
+      chunkIndex: 0,
+    },
+  });
+
+  const kbDoc2 = await prisma.knowledgeDocument.create({
+    data: {
+      knowledgeBaseId: kb.id,
+      tenantId: tenant.id,
+      title: "Refund Policy",
+      content: "We offer a 30-day money-back guarantee on all plans. Refunds are processed within 3-5 business days. For annual plans, pro-rated refunds are available within the first 90 days. Contact billing@demo.com for refund requests.",
+      sourceType: "text",
+      status: "indexed",
+      chunkCount: 1,
+    },
+  });
+
+  await prisma.knowledgeChunk.create({
+    data: {
+      documentId: kbDoc2.id,
+      tenantId: tenant.id,
+      content: kbDoc2.content,
+      chunkIndex: 0,
+    },
+  });
+
+  console.log("Knowledge base: 2 documents indexed");
+
+  // ─── Chatbot Flow ───────────────────────────────────────────
   await prisma.chatbotFlow.create({
     data: {
       tenantId: tenant.id,
@@ -243,10 +746,11 @@ async function main() {
       channel: null,
       nodes: [
         { id: "start-1", type: "start", data: {} },
-        { id: "msg-welcome", type: "message", data: { text: "Welcome to Gotcha! How can we help you today?" } },
-        { id: "qr-department", type: "quick_reply", data: { text: "Please select a department:", buttons: [{ id: "sales", title: "Sales" }, { id: "support", title: "Support" }] } },
-        { id: "msg-sales", type: "message", data: { text: "Connecting you with our sales team..." } },
+        { id: "msg-welcome", type: "message", data: { text: "Welcome! 👋 How can we help you today?" } },
+        { id: "qr-department", type: "quick_reply", data: { text: "Please select a topic:", buttons: [{ id: "sales", title: "Sales & Pricing" }, { id: "support", title: "Technical Support" }, { id: "billing", title: "Billing" }] } },
+        { id: "msg-sales", type: "message", data: { text: "Great! Connecting you with our sales team..." } },
         { id: "msg-support", type: "message", data: { text: "Connecting you with technical support..." } },
+        { id: "msg-billing", type: "message", data: { text: "Connecting you with our billing team..." } },
         { id: "handover-1", type: "handover", data: {} },
       ],
       edges: [
@@ -254,18 +758,25 @@ async function main() {
         { id: "e2", source: "msg-welcome", target: "qr-department" },
         { id: "e3", source: "qr-department", target: "msg-sales", sourceHandle: "sales" },
         { id: "e4", source: "qr-department", target: "msg-support", sourceHandle: "support" },
-        { id: "e5", source: "msg-sales", target: "handover-1" },
-        { id: "e6", source: "msg-support", target: "handover-1" },
+        { id: "e5", source: "qr-department", target: "msg-billing", sourceHandle: "billing" },
+        { id: "e6", source: "msg-sales", target: "handover-1" },
+        { id: "e7", source: "msg-support", target: "handover-1" },
+        { id: "e8", source: "msg-billing", target: "handover-1" },
       ],
     },
   });
+  console.log("Chatbot flow: Welcome Flow");
 
-  console.log("\nSeed complete!");
-  console.log("\nLogin credentials:");
-  console.log("  Admin: omer.serruya@gotcha.co.il / admin123");
-  console.log("  Agent: agent1@gotcha.co.il / agent123");
-  console.log("  Agent: agent2@gotcha.co.il / agent123");
-  console.log("  Tenant slug: gotcha");
+  // ─── Done ───────────────────────────────────────────────────
+  console.log("\n✅ Seed complete!\n");
+  console.log("Login credentials:");
+  console.log("  System Admin : system@demo.com / admin123");
+  console.log("  Admin        : admin@demo.com / admin123");
+  console.log("  Agent (Sales): dana@demo.com / agent123");
+  console.log("  Agent (Sales): yossi@demo.com / agent123");
+  console.log("  Agent (Supp) : maya@demo.com / agent123");
+  console.log("  Agent (Bill) : eli@demo.com / agent123");
+  console.log("  Tenant slug  : demo-company");
 }
 
 main()

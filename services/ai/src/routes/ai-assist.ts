@@ -2,6 +2,9 @@ import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
+import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
+import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
+import { scoreAgent, getAgentScore } from "../services/agent-scoring.service";
 
 const router = Router();
 
@@ -36,7 +39,7 @@ router.post("/generate-configs", authenticate, resolveTenant, requireRole("ADMIN
 
 router.post("/generate-config/:departmentId", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const { departmentId } = req.params;
+    const departmentId = req.params.departmentId as string;
     const dept = await prisma.department.findFirst({
       where: { id: departmentId, tenantId: req.tenantId! },
     });
@@ -55,6 +58,14 @@ router.post("/generate-config/:departmentId", authenticate, resolveTenant, requi
 // ─── Main AI Routes (require active tenant) ─────────────────
 
 router.use(authenticate, resolveTenant, requireActiveTenant());
+
+// Tools registry - MUST be before /:conversationId routes
+router.get("/tools/registry", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tools = await getToolsForTenant(req.tenantId!);
+    res.json({ data: tools });
+  } catch (err) { console.error("Tools registry error:", err); res.status(500).json({ error: "Failed to get tools" }); }
+});
 
 // Static routes BEFORE parameterized routes
 router.get("/config", async (req: Request, res: Response) => {
@@ -199,6 +210,94 @@ router.get("/prompt/:departmentId", requireRole("SYSTEM_ADMIN"), async (req: Req
   } catch (err) {
     console.error("Get assembled prompt error:", err);
     res.status(500).json({ error: "Failed to get copilot config" });
+  }
+});
+
+// ─── Conversation Intelligence & Replay ─────────────────────
+
+router.get("/:conversationId/intelligence", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const intelligence = await getConversationIntelligence(req.tenantId!, convId);
+    res.json({ data: intelligence });
+  } catch (err) { console.error("Intelligence error:", err); res.status(500).json({ error: "Failed to get conversation intelligence" }); }
+});
+
+router.post("/:conversationId/analyze", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const intelligence = await analyzeConversation(req.tenantId!, convId);
+    res.json({ data: intelligence });
+  } catch (err) { console.error("Analyze error:", err); res.status(500).json({ error: "Failed to analyze conversation" }); }
+});
+
+router.get("/:conversationId/replay", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const replay = await getConversationReplay(req.tenantId!, convId);
+    res.json({ data: replay });
+  } catch (err) { console.error("Replay error:", err); res.status(500).json({ error: "Failed to get conversation replay" }); }
+});
+
+// ─── Tool Execution ──────────────────────────────────────────
+
+router.get("/:conversationId/tools", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const executions = await getToolExecutions(req.tenantId!, convId);
+    res.json({ data: executions });
+  } catch (err) { console.error("Tool executions error:", err); res.status(500).json({ error: "Failed to get tool executions" }); }
+});
+
+router.post("/:conversationId/tools/execute", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const { tenantToolId, input } = req.body;
+    if (!tenantToolId) { res.status(400).json({ error: "tenantToolId is required" }); return; }
+    const execution = await executeTool({
+      tenantId: req.tenantId!,
+      conversationId: convId,
+      tenantToolId,
+      input: input || {},
+      triggeredBy: (req as any).user?.id || "agent",
+    });
+    res.json({ data: execution });
+  } catch (err: any) {
+    console.error("Tool execute error:", err);
+    if (err.message === "Tool not found") { res.status(404).json({ error: err.message }); return; }
+    res.status(500).json({ error: "Failed to execute tool" });
+  }
+});
+
+// ─── Agent Scoring ───────────────────────────────────────────
+
+router.get("/:conversationId/score", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const score = await getAgentScore(req.tenantId!, convId);
+    if (!score) {
+      res.status(404).json({ error: "No agent assigned to this conversation" });
+      return;
+    }
+    res.json({ data: score });
+  } catch (err) {
+    console.error("Get agent score error:", err);
+    res.status(500).json({ error: "Failed to get agent score" });
+  }
+});
+
+router.post("/:conversationId/score", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const score = await scoreAgent(req.tenantId!, convId);
+    if (!score) {
+      res.status(404).json({ error: "No agent assigned to this conversation" });
+      return;
+    }
+    res.json({ data: score });
+  } catch (err) {
+    console.error("Score agent error:", err);
+    res.status(500).json({ error: "Failed to score agent" });
   }
 });
 

@@ -8,14 +8,19 @@
     "dashboard": "Dashboard",
     "bot": "Bot",
     "agents": "Agents",
+    "aiEmployees": "AI Employees",
     "copilot": "Co-Pilot",
     "channels": "Channels",
     "departments": "Departments",
     "history": "History",
     "knowledge": "Knowledge",
+    "analytics": "Analytics",
     "settings": "Settings",
     "more": "More",
-    "logout": "Logout"
+    "logout": "Logout",
+    "tools": "Tools",
+    "integrations": "Integrations",
+    "aiStudio": "AI Studio"
   },
   "auth": {
     "login": "Login",
@@ -186,7 +191,32 @@
     "global": "Default Template",
     "globalHelperText": "The Default Template is inherited by departments that don't have custom settings.",
     "departmentMembers": "Department Members",
-    "usingDefaultTemplate": "Using Default Template"
+    "usingDefaultTemplate": "Using Default Template",
+    "modeToggle": {
+      "label": "Mode",
+      "humanOnly": "Human Only",
+      "copilot": "Co-Pilot",
+      "autonomous": "Autonomous"
+    },
+    "customerContext": {
+      "title": "Customer Context",
+      "name": "Name",
+      "totalConversations": "Conversations",
+      "sentiment": "Sentiment",
+      "channel": "Channel",
+      "sentimentHappy": "Happy",
+      "sentimentNeutral": "Neutral",
+      "sentimentAngry": "Angry"
+    },
+    "confidence": {
+      "label": "confident"
+    },
+    "suggestedActions": {
+      "title": "Suggested Actions",
+      "checkOrderStatus": "Check Order Status",
+      "offerDiscount": "Offer Discount",
+      "transferToHuman": "Transfer to Human"
+    }
   },
   "channels": {
     "title": "Channels",
@@ -793,9 +823,380 @@
     "thankYou": {
       "badge": "Early Access Member",
       "title": "You're on the list!",
-      "subtitle": "Welcome to the inner circle.",
-      "message": "We're rolling out access in waves. Expect your invite within 48 hours.",
+      "subtitle": "We'll be in touch soon.",
+      "message": "Our team is preparing the platform for you. One of our specialists will reach out to schedule a personal kickoff call.",
       "backHome": "Back to Home"
+    }
+  },
+  "analytics": {
+    "title": "Analytics",
+    "subtitle": "Insights and performance metrics across your organization",
+    "dateRange": {
+      "today": "Today",
+      "7days": "7 Days",
+      "30days": "30 Days",
+      "90days": "90 Days"
+    },
+    "overview": {
+      "totalConversations": "Total Conversations",
+      "resolutionRate": "Resolution Rate",
+      "avgResponseTime": "Avg Response Time",
+      "avgResolutionTime": "Avg Resolution Time",
+      "customerSatisfaction": "Customer Satisfaction",
+      "aiResolutionRate": "AI Resolution Rate"
+    },
+    "aiPerformance": {
+      "title": "AI Agent Performance",
+      "conversationsHandled": "Conversations Handled",
+      "avgResolutionTime": "Avg Resolution Time",
+      "escalationRate": "Escalation Rate",
+      "topCategories": "Top Resolved Categories"
+    },
+    "humanPerformance": {
+      "title": "Human Agent Performance",
+      "conversationsHandled": "Conversations Handled",
+      "avgResolutionTime": "Avg Resolution Time",
+      "satisfactionScore": "Satisfaction Score",
+      "topAgents": "Top Agents"
+    },
+    "topQuestions": {
+      "title": "Top Customer Questions",
+      "subtitle": "Most frequently asked questions and automation opportunities",
+      "count": "Count",
+      "category": "Category",
+      "canAutomate": "Automation Opportunity"
+    },
+    "toolUsage": {
+      "title": "Tool Usage",
+      "subtitle": "How AI tools are being utilized",
+      "tool": "Tool",
+      "usage": "Usage",
+      "successRate": "Success Rate"
+    },
+    "channelPerformance": {
+      "title": "Channel Performance",
+      "subtitle": "Conversations and response times by channel"
+    },
+    "departmentPerformance": {
+      "title": "Department Performance",
+      "department": "Department",
+      "conversations": "Conversations",
+      "responseTime": "Response Time",
+      "resolutionRate": "Resolution Rate",
+      "slaCompliance": "SLA Compliance"
+    },
+    "insights": {
+      "title": "AI Insights",
+      "subtitle": "Suggested automations and improvements",
+      "automationOpportunity": "Automation Opportunity",
+      "createFlow": "Create Flow",
+      "setupIntegration": "Setup Integration"
+    },
+    "noData": "No analytics data available for this period"
+  },
+  "replay": {
+    "title": "Conversation Replay",
+    "summary": "Summary",
+    "timeline": "Timeline",
+    "insights": "Insights",
+    "duration": "Duration",
+    "totalMessages": "Total Messages",
+    "resolution": "Resolution",
+    "resolved": "Resolved",
+    "unresolved": "Unresolved",
+    "customerContacted": "Customer contacted",
+    "aiAnalysis": "AI Analysis",
+    "toolsUsed": "Tools Used",
+    "aiGeneratedReply": "AI Generated Reply",
+    "agentSent": "Agent Sent",
+    "conversationClosed": "Conversation closed",
+    "intent": "Intent",
+    "sentiment": "Sentiment",
+    "confidence": "Confidence",
+    "responseTime": "Response Time",
+    "aiAccuracy": "AI Accuracy",
+    "wentWell": "What went well",
+    "couldImprove": "Could improve"
+  },
+  "tools": {
+    "title": "Tools & Integrations",
+    "subtitle": "Connect external services to empower your AI agents",
+    "addTool": "Add Tool",
+    "editTool": "Edit Tool",
+    "name": "Name",
+    "description": "Description",
+    "descriptionPlaceholder": "What does this tool do?",
+    "toolType": "Tool Type",
+    "provider": "Provider",
+    "apiUrl": "API URL",
+    "apiKey": "API Key",
+    "headers": "Custom Headers (JSON)",
+    "headersHint": "Optional JSON object with custom HTTP headers",
+    "headersInvalid": "Headers must be a valid JSON object",
+    "active": "Active",
+    "activeDesc": "Enable or disable this tool for AI agents",
+    "activate": "Activate",
+    "deactivate": "Deactivate",
+    "inactive": "Inactive",
+    "noTools": "No tools configured yet",
+    "noToolsDesc": "Add your first integration to empower your AI agents",
+    "deleteMsg": "This will permanently delete this tool and its configuration. This action cannot be undone."
+  },
+  "integrations": {
+    "title": "Integrations",
+    "connect": "Connect Integration",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "addTool": "Add Tool",
+    "standAloneTools": "Standalone Tools"
+  },
+  "agentScore": {
+    "title": "Agent Performance Review",
+    "overall": "Overall Score",
+    "responseSpeed": "Response Speed",
+    "responseQuality": "Response Quality",
+    "resolution": "Resolution",
+    "protocol": "Protocol Adherence",
+    "customerHandling": "Customer Handling",
+    "strengths": "Strengths",
+    "improvements": "Areas for Improvement",
+    "copilotUsage": "Copilot Usage",
+    "toolsUsed": "Tools Used",
+    "noScore": "No score available yet",
+    "score": "Score"
+  },
+  "marketplace": {
+    "title": "Integrations Marketplace",
+    "search": "Search integrations...",
+    "allCategories": "All",
+    "connect": "Connect",
+    "manage": "Manage",
+    "connected": "Connected",
+    "notConnected": "Not Connected",
+    "toolsAvailable": "tools available",
+    "toolsEnabled": "tools enabled",
+    "disconnect": "Disconnect",
+    "testConnection": "Test Connection",
+    "testing": "Testing...",
+    "connectionSuccess": "Connection successful",
+    "connectionFailed": "Connection failed",
+    "credentials": "Credentials",
+    "apiKey": "API Key",
+    "saveCredentials": "Save Credentials",
+    "saveConnect": "Save & Connect",
+    "availableTools": "Available Tools",
+    "riskLow": "Low Risk",
+    "riskMedium": "Medium Risk",
+    "riskHigh": "High Risk",
+    "categoryRead": "Read",
+    "categoryWrite": "Write",
+    "categoryDelete": "Delete",
+    "categoryAction": "Action",
+    "connectInMarketplace": "Connect in Marketplace",
+    "requiresApproval": "Requires Approval",
+    "auto": "Auto",
+    "toolPermissions": "Tool Permissions",
+    "noToolsConnected": "No tools connected yet. Visit the Marketplace to get started.",
+    "usedByDepartments": "Used by {count} departments",
+    "categoryShipping": "Shipping",
+    "categoryProjectManagement": "Project Management",
+    "categoryCalendar": "Calendar"
+  },
+  "aiStudio": {
+    "title": "AI Studio",
+    "subtitle": "Configure AI employees, flows, knowledge, and integrations in one place",
+    "edit": "Edit",
+    "test": "Test",
+    "tabs": {
+      "agents": "AI Employees",
+      "flows": "Flows",
+      "router": "Router",
+      "knowledge": "Knowledge",
+      "tools": "Tools",
+      "marketplace": "Marketplace"
+    },
+    "stats": {
+      "activeAgents": "AI Employees",
+      "agentsSub": "handling conversations",
+      "activeFlows": "Active Flows",
+      "flowsSub": "running automations",
+      "knowledgeSources": "Knowledge Sources",
+      "knowledgeSub": "3 synced",
+      "connectedTools": "Connected Tools",
+      "toolsSub": "across 2 integrations"
+    },
+    "agents": {
+      "title": "AI Employees",
+      "subtitle": "AI-powered employees that assist or handle conversations autonomously",
+      "newAgent": "New AI Employee",
+      "conversations": "convos today",
+      "satisfaction": "satisfaction",
+      "editor": {
+        "newAgent": "New AI Employee",
+        "editAgent": "Edit AI Employee",
+        "newAgentSub": "Configure your new AI agent",
+        "editAgentSub": "Adjust settings and behavior",
+        "backToStudio": "Back to AI Studio",
+        "save": "Save Agent",
+        "saved": "Saved!",
+        "statusActive": "Active",
+        "statusDraft": "Draft",
+        "statusPaused": "Paused",
+        "setup": {
+          "title": "Agent Setup",
+          "subtitle": "Basic identity and role of this agent",
+          "avatar": "Avatar Color",
+          "name": "Name",
+          "namePlaceholder": "e.g. Maya",
+          "role": "Role",
+          "roleSupport": "Customer Support",
+          "roleSales": "Sales",
+          "roleBooking": "Booking",
+          "roleBilling": "Billing",
+          "roleCustom": "Custom",
+          "description": "Description",
+          "descriptionPlaceholder": "What does this agent handle? e.g. Handles support queries and helps customers with their orders."
+        },
+        "personality": {
+          "title": "Personality",
+          "subtitle": "How this agent communicates with customers",
+          "tone": "Tone",
+          "tone_professional": "Professional",
+          "tone_friendly": "Friendly",
+          "tone_casual": "Casual",
+          "tone_formal": "Formal",
+          "language": "Language",
+          "lang_english": "English",
+          "lang_hebrew": "Hebrew",
+          "lang_arabic": "Arabic",
+          "style": "Style",
+          "styleEmojis": "Use emojis occasionally",
+          "styleConcise": "Keep responses concise",
+          "styleFirstName": "Use customer's first name",
+          "styleProactive": "Be proactive (offer help before asked)"
+        },
+        "skills": {
+          "title": "Skills (Tools)",
+          "subtitle": "Actions this agent can perform via connected integrations",
+          "addMore": "Add more tools from Integrations"
+        },
+        "knowledge": {
+          "title": "Knowledge",
+          "subtitle": "Information sources this agent can reference when answering",
+          "addSource": "Add knowledge source"
+        },
+        "escalation": {
+          "title": "Escalation Rules",
+          "subtitle": "When should this agent hand off to a human?",
+          "attempts": "attempts",
+          "keywordsPlaceholder": "e.g. refund, cancel, lawsuit",
+          "addCustomRule": "+ Add custom rule",
+          "customRulePlaceholder": "Describe the escalation condition..."
+        },
+        "channels": {
+          "title": "Channels",
+          "subtitle": "Which channels should this agent be active on?",
+          "whatsapp": "WhatsApp",
+          "instagram": "Instagram",
+          "webchat": "Web Chat",
+          "active": "Active"
+        },
+        "mode": {
+          "title": "Mode",
+          "subtitle": "How much autonomy does this agent have?",
+          "humanOnly": "Human Only",
+          "humanOnlyDesc": "No AI involvement. Agents type every reply manually.",
+          "copilot": "Co-Pilot",
+          "copilotDesc": "AI drafts replies and surfaces context. Human reviews and sends.",
+          "autonomous": "Autonomous",
+          "autonomousDesc": "AI handles conversations independently. Human can monitor and intervene."
+        }
+      }
+    },
+    "flows": {
+      "title": "Conversation Flows",
+      "subtitle": "Structured step-by-step conversation paths with visual logic",
+      "newFlow": "New Flow",
+      "trigger": "Trigger",
+      "runs": "runs",
+      "builder": {
+        "backToStudio": "Back to AI Studio",
+        "statusActive": "Active",
+        "statusDraft": "Draft",
+        "save": "Save",
+        "saved": "Saved!",
+        "activate": "Activate",
+        "deactivate": "Deactivate",
+        "palette": "Add Nodes"
+      }
+    },
+    "router": {
+      "title": "AI Router",
+      "subtitle": "Rules evaluated top to bottom — first match wins",
+      "addRule": "+ Add Rule",
+      "rule": "Rule",
+      "condition": "Condition",
+      "routeTo": "Route To",
+      "hint": "Rules are evaluated top to bottom. Drag to reorder priority.",
+      "pageTitle": "AI Router",
+      "pageSubtitle": "Define rules for how incoming messages are handled",
+      "backToStudio": "Back to AI Studio",
+      "infoBanner": "Rules are evaluated top to bottom. The first matching rule wins. The default rule at the bottom catches everything that doesn't match.",
+      "rulesTitle": "Routing Rules",
+      "rulesSubtitle": "Priority-ordered — drag to reorder",
+      "ruleCol": "Rule",
+      "routeToCol": "Route To",
+      "onCol": "On",
+      "configureRouter": "Configure Router",
+      "addRule": "+ Add Rule",
+      "howItWorksTitle": "How Routing Works",
+      "how1": "A new message arrives from any channel (WhatsApp, Instagram, Web Chat).",
+      "how2": "The router evaluates each rule from top to bottom. The first rule whose conditions match the message wins.",
+      "how3": "The conversation is sent to the matched destination — an AI Agent, a Flow, or a Human Agent."
+    },
+    "knowledge": {
+      "title": "Knowledge Sources",
+      "subtitle": "Information AI agents reference when answering questions",
+      "addSource": "+ Add Source",
+      "source": "Source",
+      "type": "Type",
+      "status": "Status",
+      "lastSync": "Last Synced",
+      "manageKnowledge": "Manage Knowledge",
+      "page": {
+        "backToStudio": "Back to AI Studio",
+        "title": "Knowledge Sources",
+        "subtitle": "Manage documents, FAQs, and websites that AI agents reference",
+        "addSource": "+ Add Source",
+        "addSourceHint": "Upload files, add URLs, or create structured Q&A pairs",
+        "totalSources": "Total Sources",
+        "synced": "Synced",
+        "syncing": "Syncing",
+        "colSource": "Source",
+        "colType": "Type",
+        "colStatus": "Status",
+        "colLastSync": "Last Synced",
+        "colAgents": "Agents",
+        "empty": "No knowledge sources yet",
+        "emptyHint": "Add your first source to get started",
+        "howItWorksTitle": "How Knowledge Works",
+        "how1": "Add documents, websites, or FAQ pairs as knowledge sources.",
+        "how2": "Sources are indexed and made searchable for your AI agents.",
+        "how3": "Agents automatically reference relevant knowledge when answering customer questions.",
+        "deleteTitle": "Delete Source",
+        "deleteMsg": "This will permanently remove this knowledge source and unassign it from all agents.",
+        "cancel": "Cancel",
+        "delete": "Delete"
+      }
+    },
+    "tools": {
+      "title": "Connected Tools",
+      "subtitle": "Actions AI agents can perform via external integrations",
+      "openMarketplace": "Open Marketplace",
+      "usedBy": "Used by",
+      "notAssigned": "Not assigned",
+      "connectNew": "Connect New Integration",
+      "connectNewSub": "Browse the Integrations Marketplace to add more tools"
     }
   },
   "confirm": {

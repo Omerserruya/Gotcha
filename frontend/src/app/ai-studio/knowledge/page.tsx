@@ -1,0 +1,1088 @@
+"use client";
+
+import { useState, useEffect, useCallback, useRef } from "react";
+import { useRouter } from "next/navigation";
+import { AppLayout } from "@/components/AppLayout";
+import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
+import {
+  getKnowledgeBases,
+  createKnowledgeBase,
+  deleteKnowledgeBase,
+  updateKnowledgeBase,
+  uploadKnowledgeDocument,
+  deleteKnowledgeDocument,
+  processKnowledgeDocument,
+  uploadKnowledgeFile,
+  getKnowledgeIntegrations,
+  deleteKnowledgeIntegration,
+  initConfluenceOAuth,
+  initGoogleDriveOAuth,
+  getConfluenceSpaces,
+  getConfluencePages,
+  syncConfluenceSpaces,
+  getDriveFiles,
+  syncDriveFiles,
+  getAgents,
+  getDepartments,
+} from "@/lib/api";
+import clsx from "clsx";
+
+// ─── Types ────────────────────────────────────────────────────
+
+interface KnowledgeDocument {
+  id: string;
+  title: string;
+  status: string;
+  chunkCount: number;
+  sourceType: string;
+  sourceUrl?: string;
+  createdAt: string;
+}
+
+interface KnowledgeBase {
+  id: string;
+  name: string;
+  description: string | null;
+  isActive: boolean;
+  documents: KnowledgeDocument[];
+  scope?: string; // "all" | "agent:<id>" | "department:<id>"
+  createdAt: string;
+}
+
+interface Integration {
+  id: string;
+  provider: string;
+  displayName: string;
+  config: any;
+  isActive: boolean;
+  createdAt: string;
+}
+
+type ScopeOption = { value: string; label: string; type: "all" | "agent" | "department" };
+
+// ─── Scope Helpers ────────────────────────────────────────────
+
+function scopeLabel(scope: string | undefined, scopeOptions: ScopeOption[]): string {
+  if (!scope || scope === "all") return "All AI";
+  const opt = scopeOptions.find((o) => o.value === scope);
+  return opt?.label ?? scope;
+}
+
+function scopeBadgeColor(scope: string | undefined): string {
+  if (!scope || scope === "all") return "bg-violet-100 text-violet-700";
+  if (scope.startsWith("agent:")) return "bg-blue-100 text-blue-700";
+  if (scope.startsWith("department:")) return "bg-emerald-100 text-emerald-700";
+  return "bg-gray-100 text-gray-600";
+}
+
+// ─── Page ─────────────────────────────────────────────────────
+
+export default function KnowledgePage() {
+  const { token } = useAuth();
+  const { t } = useI18n();
+  const router = useRouter();
+
+  const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedKb, setSelectedKb] = useState<string | null>(null);
+  const [detailTab, setDetailTab] = useState<"documents" | "integrations">("documents");
+
+  // Scope options
+  const [scopeOptions, setScopeOptions] = useState<ScopeOption[]>([{ value: "all", label: "All AI", type: "all" }]);
+
+  // Create KB
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [newKbName, setNewKbName] = useState("");
+  const [newKbDescription, setNewKbDescription] = useState("");
+  const [newKbScope, setNewKbScope] = useState("all");
+  const [creating, setCreating] = useState(false);
+
+  // Upload doc
+  const [showUploadModal, setShowUploadModal] = useState(false);
+  const [uploadMode, setUploadMode] = useState<"text" | "file" | "url">("file");
+  const [docTitle, setDocTitle] = useState("");
+  const [docContent, setDocContent] = useState("");
+  const [docUrl, setDocUrl] = useState("");
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploading, setUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Integrations
+  const [integrations, setIntegrations] = useState<Integration[]>([]);
+  const [showConnectMenu, setShowConnectMenu] = useState(false);
+  const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
+
+  // Browse modal (Confluence / Drive)
+  const [showBrowseModal, setShowBrowseModal] = useState(false);
+  const [browseIntegration, setBrowseIntegration] = useState<Integration | null>(null);
+  const [browseItems, setBrowseItems] = useState<any[]>([]);
+  const [browseLoading, setBrowseLoading] = useState(false);
+  const [browseSelected, setBrowseSelected] = useState<Set<string>>(new Set());
+  const [syncing, setSyncing] = useState(false);
+  const [browseSpaceKey, setBrowseSpaceKey] = useState<string | null>(null);
+  const [browsePages, setBrowsePages] = useState<any[]>([]);
+
+  // ─── Load data ────────────────────────────────────────────
+
+  const loadKnowledgeBases = useCallback(async () => {
+    if (!token) return;
+    try {
+      const res = await getKnowledgeBases(token);
+      setKnowledgeBases(res.data);
+    } catch (err) {
+      console.error("Failed to load knowledge bases:", err);
+    } finally {
+      setLoading(false);
+    }
+  }, [token]);
+
+  const loadIntegrations = useCallback(async () => {
+    if (!token || !selectedKb) return;
+    try {
+      const res = await getKnowledgeIntegrations(token, selectedKb);
+      setIntegrations(res.data);
+    } catch (err) {
+      console.error("Failed to load integrations:", err);
+    }
+  }, [token, selectedKb]);
+
+  // Load agents + departments for scope selector
+  useEffect(() => {
+    if (!token) return;
+    Promise.all([
+      getAgents(token).catch(() => []),
+      getDepartments(token).catch(() => ({ data: [] })),
+    ]).then(([agentsRes, deptsRes]) => {
+      const agents = Array.isArray(agentsRes) ? agentsRes : [];
+      const depts = deptsRes?.data || [];
+      const opts: ScopeOption[] = [
+        { value: "all", label: "All AI", type: "all" },
+        ...agents.map((a: any) => ({
+          value: `agent:${a.id}`,
+          label: `Agent: ${a.name || a.email}`,
+          type: "agent" as const,
+        })),
+        ...depts.map((d: any) => ({
+          value: `department:${d.id}`,
+          label: `Department: ${d.name}`,
+          type: "department" as const,
+        })),
+      ];
+      setScopeOptions(opts);
+    });
+  }, [token]);
+
+  useEffect(() => { loadKnowledgeBases(); }, [loadKnowledgeBases]);
+  useEffect(() => { loadIntegrations(); }, [loadIntegrations]);
+
+  // OAuth callback
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const connected = params.get("connected");
+    if (connected) {
+      window.history.replaceState({}, "", "/ai-studio/knowledge");
+      loadIntegrations();
+    }
+  }, [loadIntegrations]);
+
+  // ─── Handlers ─────────────────────────────────────────────
+
+  async function handleCreateKb() {
+    if (!token || !newKbName.trim()) return;
+    setCreating(true);
+    try {
+      await createKnowledgeBase(token, {
+        name: newKbName,
+        description: newKbDescription || undefined,
+      });
+      setShowCreateModal(false);
+      setNewKbName("");
+      setNewKbDescription("");
+      setNewKbScope("all");
+      await loadKnowledgeBases();
+    } catch (err) {
+      console.error("Failed to create KB:", err);
+    } finally {
+      setCreating(false);
+    }
+  }
+
+  async function handleDeleteKb(kbId: string) {
+    if (!token) return;
+    try {
+      await deleteKnowledgeBase(token, kbId);
+      if (selectedKb === kbId) setSelectedKb(null);
+      await loadKnowledgeBases();
+    } catch (err) {
+      console.error("Failed to delete KB:", err);
+    }
+  }
+
+  async function handleUploadDoc() {
+    if (!token || !selectedKb) return;
+
+    if (uploadMode === "file") {
+      if (!selectedFile) return;
+      setUploading(true);
+      try {
+        await uploadKnowledgeFile(token, selectedKb, selectedFile, docTitle || selectedFile.name.replace(/\.[^.]+$/, ""));
+        resetUploadModal();
+        await loadKnowledgeBases();
+      } catch (err) {
+        console.error("Failed to upload file:", err);
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
+    if (uploadMode === "url") {
+      if (!docUrl.trim()) return;
+      setUploading(true);
+      try {
+        const res = await uploadKnowledgeDocument(token, selectedKb, {
+          title: docTitle || docUrl,
+          content: docUrl,
+          sourceType: "url",
+          sourceUrl: docUrl,
+        });
+        await processKnowledgeDocument(token, selectedKb, res.data.id);
+        resetUploadModal();
+        await loadKnowledgeBases();
+      } catch (err) {
+        console.error("Failed to add URL:", err);
+      } finally {
+        setUploading(false);
+      }
+      return;
+    }
+
+    // text mode
+    if (!docTitle.trim() || !docContent.trim()) return;
+    setUploading(true);
+    try {
+      const res = await uploadKnowledgeDocument(token, selectedKb, {
+        title: docTitle,
+        content: docContent,
+        sourceType: "text",
+      });
+      await processKnowledgeDocument(token, selectedKb, res.data.id);
+      resetUploadModal();
+      await loadKnowledgeBases();
+    } catch (err) {
+      console.error("Failed to upload document:", err);
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  function resetUploadModal() {
+    setShowUploadModal(false);
+    setDocTitle("");
+    setDocContent("");
+    setDocUrl("");
+    setSelectedFile(null);
+    setUploadMode("file");
+  }
+
+  async function handleDeleteDoc(kbId: string, docId: string) {
+    if (!token) return;
+    try {
+      await deleteKnowledgeDocument(token, kbId, docId);
+      await loadKnowledgeBases();
+    } catch (err) {
+      console.error("Failed to delete document:", err);
+    }
+  }
+
+  async function handleReprocessDoc(kbId: string, docId: string) {
+    if (!token) return;
+    try {
+      await processKnowledgeDocument(token, kbId, docId);
+      await loadKnowledgeBases();
+    } catch (err) {
+      console.error("Failed to reprocess document:", err);
+    }
+  }
+
+  async function handleConnect(provider: "confluence" | "google_drive") {
+    if (!token || !selectedKb) return;
+    setConnectingProvider(provider);
+    setShowConnectMenu(false);
+    try {
+      const res = provider === "confluence"
+        ? await initConfluenceOAuth(token, selectedKb)
+        : await initGoogleDriveOAuth(token, selectedKb);
+      window.location.href = res.url;
+    } catch (err) {
+      console.error(`Failed to init ${provider} OAuth:`, err);
+      setConnectingProvider(null);
+    }
+  }
+
+  async function handleDisconnect(intId: string) {
+    if (!token) return;
+    try {
+      await deleteKnowledgeIntegration(token, intId);
+      await loadIntegrations();
+    } catch (err) {
+      console.error("Failed to disconnect:", err);
+    }
+  }
+
+  async function handleBrowse(integration: Integration) {
+    if (!token) return;
+    setBrowseIntegration(integration);
+    setShowBrowseModal(true);
+    setBrowseLoading(true);
+    setBrowseSelected(new Set());
+    setBrowseSpaceKey(null);
+    setBrowsePages([]);
+    try {
+      if (integration.provider === "confluence") {
+        const res = await getConfluenceSpaces(token, integration.id);
+        setBrowseItems(res.data);
+      } else {
+        const res = await getDriveFiles(token, integration.id);
+        setBrowseItems(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to browse:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleBrowseSpacePages(spaceKey: string) {
+    if (!token || !browseIntegration) return;
+    setBrowseSpaceKey(spaceKey);
+    setBrowseLoading(true);
+    try {
+      const res = await getConfluencePages(token, browseIntegration.id, spaceKey);
+      setBrowsePages(res.data);
+    } catch (err) {
+      console.error("Failed to load pages:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleImportSelected() {
+    if (!token || !browseIntegration || browseSelected.size === 0) return;
+    setSyncing(true);
+    try {
+      if (browseIntegration.provider === "confluence") {
+        await syncConfluenceSpaces(token, browseIntegration.id, Array.from(browseSelected));
+      } else {
+        await syncDriveFiles(token, browseIntegration.id, Array.from(browseSelected));
+      }
+      setShowBrowseModal(false);
+      await loadKnowledgeBases();
+      await loadIntegrations();
+    } catch (err) {
+      console.error("Failed to import:", err);
+    } finally {
+      setSyncing(false);
+    }
+  }
+
+  function toggleBrowseItem(id: string) {
+    setBrowseSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  }
+
+  function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    if (file) {
+      setSelectedFile(file);
+      if (!docTitle) setDocTitle(file.name.replace(/\.[^.]+$/, ""));
+    }
+  }
+
+  const activeKb = knowledgeBases.find((kb) => kb.id === selectedKb);
+
+  // ─── Render ───────────────────────────────────────────────
+
+  const inputClass =
+    "w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition";
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="flex items-center justify-center h-screen">
+          <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  return (
+    <AppLayout>
+      <div className="p-3 md:p-6 overflow-y-auto h-screen">
+        {/* Back */}
+        <button
+          onClick={() => router.push("/ai-studio")}
+          className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+          </svg>
+          Back to AI Studio
+        </button>
+
+        {/* Header */}
+        <div className="flex items-center justify-between mb-5">
+          <div className="flex items-center gap-3">
+            <div className="w-11 h-11 rounded-2xl bg-emerald-100 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-gray-900">Knowledge Base</h1>
+              <p className="text-sm text-gray-400 mt-0.5">Manage knowledge sources for your AI agents and copilot</p>
+            </div>
+          </div>
+          <button
+            onClick={() => setShowCreateModal(true)}
+            className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            New Knowledge Base
+          </button>
+        </div>
+
+        <div className="flex flex-col md:flex-row gap-4 md:gap-6 max-w-6xl">
+          {/* ── KB List ────────────────────────────────────── */}
+          <div className="w-full md:w-72 md:shrink-0 space-y-2">
+            {knowledgeBases.length === 0 ? (
+              <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8 text-center">
+                <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                  <svg className="w-6 h-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                  </svg>
+                </div>
+                <p className="text-sm text-gray-500">No knowledge bases yet</p>
+                <p className="text-xs text-gray-400 mt-1">Create one to get started</p>
+              </div>
+            ) : (
+              knowledgeBases.map((kb) => (
+                <button
+                  key={kb.id}
+                  onClick={() => { setSelectedKb(kb.id); setDetailTab("documents"); }}
+                  className={clsx(
+                    "w-full text-left p-4 rounded-xl border transition",
+                    selectedKb === kb.id
+                      ? "bg-violet-50 border-violet-200 shadow-sm"
+                      : "bg-white border-gray-100 hover:border-gray-200 shadow-card"
+                  )}
+                >
+                  <div className="flex items-center justify-between mb-1">
+                    <h4 className="font-semibold text-sm text-gray-900 truncate">{kb.name}</h4>
+                    <span className={clsx("w-2 h-2 rounded-full shrink-0", kb.isActive ? "bg-green-400" : "bg-gray-300")} />
+                  </div>
+                  {kb.description && <p className="text-xs text-gray-400 truncate">{kb.description}</p>}
+                  <div className="flex items-center gap-2 mt-1.5">
+                    <p className="text-xs text-gray-400">
+                      {kb.documents.length} {kb.documents.length === 1 ? "document" : "documents"}
+                    </p>
+                    <span className={clsx("px-1.5 py-0.5 rounded-full text-[10px] font-medium", scopeBadgeColor(kb.scope))}>
+                      {scopeLabel(kb.scope, scopeOptions)}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+
+          {/* ── KB Detail ──────────────────────────────────── */}
+          <div className="flex-1 min-w-0">
+            {!activeKb ? (
+              <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-12 text-center">
+                <svg className="w-12 h-12 text-gray-300 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                </svg>
+                <p className="text-sm text-gray-400">Select a knowledge base to view details</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {/* KB Header */}
+                <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-lg text-gray-900">{activeKb.name}</h3>
+                        <span className={clsx("px-2 py-0.5 rounded-full text-xs font-medium", scopeBadgeColor(activeKb.scope))}>
+                          {scopeLabel(activeKb.scope, scopeOptions)}
+                        </span>
+                      </div>
+                      {activeKb.description && <p className="text-sm text-gray-500 mt-0.5">{activeKb.description}</p>}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {/* Add Content button group */}
+                      <button
+                        onClick={() => setShowUploadModal(true)}
+                        className="bg-violet-600 hover:bg-violet-700 text-white px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5"
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                        </svg>
+                        Add Content
+                      </button>
+
+                      {/* Connect Source dropdown */}
+                      <div className="relative">
+                        <button
+                          onClick={() => setShowConnectMenu(!showConnectMenu)}
+                          disabled={!!connectingProvider}
+                          className="bg-blue-600 hover:bg-blue-700 text-white px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.718a4.5 4.5 0 00-1.242-7.244l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
+                          </svg>
+                          {connectingProvider ? "Connecting..." : "Connect Source"}
+                        </button>
+                        {showConnectMenu && (
+                          <div className="absolute right-0 top-full mt-1 bg-white rounded-xl shadow-lg border border-gray-200 py-1.5 z-10 w-52">
+                            <p className="px-3 py-1 text-[10px] font-semibold text-gray-400 uppercase tracking-wide">External Sources</p>
+                            <button
+                              onClick={() => handleConnect("google_drive")}
+                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <div className="w-7 h-7 bg-green-100 rounded-lg flex items-center justify-center shrink-0">
+                                <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                                </svg>
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-800">Google Drive</p>
+                                <p className="text-xs text-gray-400">Import docs &amp; sheets</p>
+                              </div>
+                            </button>
+                            <button
+                              onClick={() => handleConnect("confluence")}
+                              className="w-full text-left px-3 py-2.5 text-sm hover:bg-gray-50 flex items-center gap-3"
+                            >
+                              <div className="w-7 h-7 bg-blue-100 rounded-lg flex items-center justify-center shrink-0">
+                                <span className="text-blue-600 text-xs font-bold">C</span>
+                              </div>
+                              <div>
+                                <p className="font-medium text-gray-800">Confluence</p>
+                                <p className="text-xs text-gray-400">Import wiki pages</p>
+                              </div>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+
+                      <button
+                        onClick={() => handleDeleteKb(activeKb.id)}
+                        className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 rounded-xl transition"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                        </svg>
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Tabs */}
+                <div className="flex gap-1 bg-gray-100 rounded-xl p-1 w-fit">
+                  <button
+                    onClick={() => setDetailTab("documents")}
+                    className={clsx(
+                      "px-4 py-1.5 rounded-lg text-xs font-medium transition",
+                      detailTab === "documents" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
+                    )}
+                  >
+                    Documents ({activeKb.documents.length})
+                  </button>
+                  <button
+                    onClick={() => setDetailTab("integrations")}
+                    className={clsx(
+                      "px-4 py-1.5 rounded-lg text-xs font-medium transition",
+                      detailTab === "integrations" ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
+                    )}
+                  >
+                    Integrations ({integrations.length})
+                  </button>
+                </div>
+
+                {/* Documents Tab */}
+                {detailTab === "documents" && (
+                  <>
+                    {activeKb.documents.length === 0 ? (
+                      <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8 text-center">
+                        <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-gray-500">No documents yet</p>
+                        <p className="text-xs text-gray-400 mt-1">Upload files, paste content, add URLs, or connect Google Drive / Confluence</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {activeKb.documents.map((doc) => (
+                          <div key={doc.id} className="bg-white rounded-xl shadow-card border border-gray-100 p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={clsx(
+                                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0",
+                                doc.status === "ready" ? "bg-green-100" :
+                                doc.status === "processing" ? "bg-amber-100" :
+                                doc.status === "error" ? "bg-red-100" : "bg-gray-100"
+                              )}>
+                                {doc.status === "ready" ? (
+                                  <svg className="w-4 h-4 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                                  </svg>
+                                ) : doc.status === "processing" ? (
+                                  <div className="w-4 h-4 border-2 border-amber-300 border-t-amber-600 rounded-full animate-spin" />
+                                ) : doc.status === "error" ? (
+                                  <svg className="w-4 h-4 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                                  </svg>
+                                ) : (
+                                  <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <h5 className="text-sm font-medium text-gray-900 truncate">{doc.title}</h5>
+                                <p className="text-xs text-gray-400">
+                                  {doc.sourceType === "url" ? (
+                                    <span className="text-blue-500">URL</span>
+                                  ) : (
+                                    doc.sourceType
+                                  )}
+                                  {" "}&middot; {doc.chunkCount} chunks &middot;{" "}
+                                  <span className={clsx(
+                                    doc.status === "ready" ? "text-green-600" :
+                                    doc.status === "processing" ? "text-amber-600" :
+                                    doc.status === "error" ? "text-red-600" : "text-gray-400"
+                                  )}>{doc.status}</span>
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1 shrink-0">
+                              {(doc.status === "error" || doc.status === "pending") && (
+                                <button
+                                  onClick={() => handleReprocessDoc(activeKb.id, doc.id)}
+                                  className="text-violet-500 hover:text-violet-700 hover:bg-violet-50 p-1.5 rounded-lg transition"
+                                  title="Reprocess"
+                                >
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182" />
+                                  </svg>
+                                </button>
+                              )}
+                              <button
+                                onClick={() => handleDeleteDoc(activeKb.id, doc.id)}
+                                className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+
+                {/* Integrations Tab */}
+                {detailTab === "integrations" && (
+                  <>
+                    {integrations.length === 0 ? (
+                      <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-8 text-center">
+                        <div className="w-12 h-12 bg-gray-100 rounded-2xl flex items-center justify-center mx-auto mb-3">
+                          <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m9.86-2.718a4.5 4.5 0 00-1.242-7.244l4.5-4.5a4.5 4.5 0 016.364 6.364l-1.757 1.757" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-gray-500">No integrations connected</p>
+                        <p className="text-xs text-gray-400 mt-1">Connect Google Drive or Confluence to import content</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-2">
+                        {integrations.map((int) => (
+                          <div key={int.id} className="bg-white rounded-xl shadow-card border border-gray-100 p-4 flex items-center justify-between">
+                            <div className="flex items-center gap-3 min-w-0">
+                              <div className={clsx(
+                                "w-9 h-9 rounded-xl flex items-center justify-center shrink-0 text-xs font-bold",
+                                int.provider === "confluence" ? "bg-blue-100 text-blue-600" : "bg-green-100 text-green-600"
+                              )}>
+                                {int.provider === "confluence" ? "C" : (
+                                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                                  </svg>
+                                )}
+                              </div>
+                              <div className="min-w-0">
+                                <h5 className="text-sm font-medium text-gray-900 truncate">{int.displayName}</h5>
+                                <p className="text-xs text-gray-400">
+                                  {int.provider === "confluence" ? "Confluence" : "Google Drive"}
+                                  {int.config?.lastSyncAt && (
+                                    <> &middot; Last sync: {new Date(int.config.lastSyncAt).toLocaleDateString()}</>
+                                  )}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => handleBrowse(int)}
+                                className="bg-violet-50 text-violet-700 hover:bg-violet-100 px-3 py-1.5 rounded-xl text-xs font-medium transition"
+                              >
+                                {int.provider === "confluence" ? "Browse Spaces" : "Browse Files"}
+                              </button>
+                              <button
+                                onClick={() => handleDisconnect(int.id)}
+                                className="text-red-400 hover:text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition"
+                                title="Disconnect"
+                              >
+                                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+
+      {/* ── Create KB Modal ────────────────────────────────── */}
+      {showCreateModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowCreateModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-md p-6">
+            <h3 className="font-bold text-lg text-gray-900 mb-4">New Knowledge Base</h3>
+            <div className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Name</label>
+                <input
+                  type="text"
+                  value={newKbName}
+                  onChange={(e) => setNewKbName(e.target.value)}
+                  placeholder="e.g. Product Documentation"
+                  className={inputClass}
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Description</label>
+                <textarea
+                  value={newKbDescription}
+                  onChange={(e) => setNewKbDescription(e.target.value)}
+                  placeholder="Optional description..."
+                  rows={2}
+                  className={clsx(inputClass, "resize-none")}
+                />
+              </div>
+
+              {/* Scope selector */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Available To</label>
+                <select
+                  value={newKbScope}
+                  onChange={(e) => setNewKbScope(e.target.value)}
+                  className={inputClass}
+                >
+                  <optgroup label="Global">
+                    <option value="all">All AI (entire tenant)</option>
+                  </optgroup>
+                  {scopeOptions.filter((o) => o.type === "agent").length > 0 && (
+                    <optgroup label="Specific Agent">
+                      {scopeOptions.filter((o) => o.type === "agent").map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                  {scopeOptions.filter((o) => o.type === "department").length > 0 && (
+                    <optgroup label="Department (Agent & Co-Pilot)">
+                      {scopeOptions.filter((o) => o.type === "department").map((o) => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
+                    </optgroup>
+                  )}
+                </select>
+                <p className="text-xs text-gray-400 mt-1.5">
+                  Choose who can access this knowledge: a specific agent, a department (both AI agent and co-pilot), or all AI in the tenant.
+                </p>
+              </div>
+            </div>
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={() => setShowCreateModal(false)} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">
+                Cancel
+              </button>
+              <button
+                onClick={handleCreateKb}
+                disabled={!newKbName.trim() || creating}
+                className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm"
+              >
+                {creating ? "Creating..." : "Create"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Upload / Add Content Modal ─────────────────────── */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={resetUploadModal} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[90vh] overflow-y-auto">
+            <h3 className="font-bold text-lg text-gray-900 mb-4">Add Content</h3>
+
+            {/* Mode tabs */}
+            <div className="flex gap-1 bg-gray-100 rounded-xl p-1 mb-5">
+              {(["file", "url", "text"] as const).map((mode) => (
+                <button
+                  key={mode}
+                  onClick={() => setUploadMode(mode)}
+                  className={clsx(
+                    "flex-1 px-3 py-1.5 rounded-lg text-xs font-medium transition capitalize",
+                    uploadMode === mode ? "bg-white shadow text-gray-900" : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  {mode === "file" ? "Upload Files" : mode === "url" ? "Website URL" : "Paste Text"}
+                </button>
+              ))}
+            </div>
+
+            <div className="space-y-4">
+              {/* Title */}
+              <div>
+                <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Title</label>
+                <input
+                  type="text"
+                  value={docTitle}
+                  onChange={(e) => setDocTitle(e.target.value)}
+                  placeholder={uploadMode === "url" ? "e.g. Help Center" : "e.g. Return Policy"}
+                  className={inputClass}
+                />
+              </div>
+
+              {/* File upload */}
+              {uploadMode === "file" && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">File</label>
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-gray-200 rounded-2xl p-8 text-center cursor-pointer hover:border-violet-300 hover:bg-violet-50/30 transition"
+                  >
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".pdf,.doc,.docx,.md,.txt,.csv,.xls,.xlsx"
+                      onChange={handleFileChange}
+                      className="hidden"
+                    />
+                    {selectedFile ? (
+                      <div>
+                        <svg className="w-8 h-8 text-violet-500 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                        <p className="text-sm font-medium text-gray-900">{selectedFile.name}</p>
+                        <p className="text-xs text-gray-400 mt-0.5">{(selectedFile.size / 1024).toFixed(1)} KB</p>
+                      </div>
+                    ) : (
+                      <div>
+                        <svg className="w-8 h-8 text-gray-400 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" />
+                        </svg>
+                        <p className="text-sm font-medium text-gray-700">Drop files here or click to browse</p>
+                        <p className="text-xs text-gray-400 mt-1">PDF, DOCX, TXT, MD, CSV, XLS up to 10MB</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* URL input */}
+              {uploadMode === "url" && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Website URL</label>
+                  <input
+                    type="url"
+                    value={docUrl}
+                    onChange={(e) => setDocUrl(e.target.value)}
+                    placeholder="https://example.com/help"
+                    className={inputClass}
+                  />
+                  <p className="text-xs text-gray-400 mt-1.5">We will crawl this page and extract its content automatically.</p>
+                </div>
+              )}
+
+              {/* Paste text */}
+              {uploadMode === "text" && (
+                <div>
+                  <label className="block text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Content</label>
+                  <textarea
+                    value={docContent}
+                    onChange={(e) => setDocContent(e.target.value)}
+                    placeholder="Paste your content here..."
+                    rows={10}
+                    className={clsx(inputClass, "resize-none font-mono")}
+                  />
+                </div>
+              )}
+            </div>
+
+            <div className="flex justify-end gap-2 mt-5">
+              <button onClick={resetUploadModal} className="px-4 py-2 text-sm text-gray-600 hover:bg-gray-100 rounded-xl transition">
+                Cancel
+              </button>
+              <button
+                onClick={handleUploadDoc}
+                disabled={
+                  uploading ||
+                  (uploadMode === "text" ? (!docTitle.trim() || !docContent.trim()) :
+                   uploadMode === "url" ? !docUrl.trim() :
+                   !selectedFile)
+                }
+                className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm"
+              >
+                {uploading ? "Processing..." : uploadMode === "url" ? "Crawl & Add" : "Upload"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ── Browse Modal (Confluence / Drive) ──────────────── */}
+      {showBrowseModal && browseIntegration && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowBrowseModal(false)} />
+          <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-lg p-6 max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-4">
+              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                {browseSpaceKey && (
+                  <button
+                    onClick={() => { setBrowseSpaceKey(null); setBrowsePages([]); setBrowseSelected(new Set()); }}
+                    className="text-violet-600 hover:text-violet-700"
+                  >
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+                    </svg>
+                  </button>
+                )}
+                {browseIntegration.provider === "confluence"
+                  ? browseSpaceKey ? `Pages in ${browseSpaceKey}` : "Confluence Spaces"
+                  : "Google Drive Files"
+                }
+              </h3>
+              <button onClick={() => setShowBrowseModal(false)} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition">
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+
+            <div className="flex-1 overflow-y-auto space-y-1">
+              {browseLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+                </div>
+              ) : browseIntegration.provider === "confluence" && !browseSpaceKey ? (
+                browseItems.map((space: any) => (
+                  <div
+                    key={space.key}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer"
+                    onClick={() => toggleBrowseItem(space.key)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={browseSelected.has(space.key)}
+                      onChange={() => toggleBrowseItem(space.key)}
+                      className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-medium text-gray-900">{space.name}</p>
+                      <p className="text-xs text-gray-400">{space.key}</p>
+                    </div>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleBrowseSpacePages(space.key); }}
+                      className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                    >
+                      View pages &rarr;
+                    </button>
+                  </div>
+                ))
+              ) : browseIntegration.provider === "confluence" && browseSpaceKey ? (
+                browsePages.map((page: any) => (
+                  <div key={page.id} className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50">
+                    <div className="w-7 h-7 bg-blue-50 rounded-lg flex items-center justify-center shrink-0">
+                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                      </svg>
+                    </div>
+                    <p className="text-sm text-gray-900 truncate">{page.title}</p>
+                  </div>
+                ))
+              ) : (
+                browseItems.map((file: any) => (
+                  <div
+                    key={file.id}
+                    className="flex items-center gap-3 p-3 rounded-xl hover:bg-gray-50 cursor-pointer"
+                    onClick={() => toggleBrowseItem(file.id)}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={browseSelected.has(file.id)}
+                      onChange={() => toggleBrowseItem(file.id)}
+                      className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                    />
+                    <div className={clsx(
+                      "w-7 h-7 rounded-lg flex items-center justify-center shrink-0",
+                      file.mimeType === "application/vnd.google-apps.folder" ? "bg-amber-50" : "bg-green-50"
+                    )}>
+                      {file.mimeType === "application/vnd.google-apps.folder" ? (
+                        <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+                        </svg>
+                      ) : (
+                        <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+                        </svg>
+                      )}
+                    </div>
+                    <p className="text-sm text-gray-900 truncate">{file.name}</p>
+                  </div>
+                ))
+              )}
+            </div>
+
+            {browseSelected.size > 0 && !browseSpaceKey && (
+              <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
+                <p className="text-xs text-gray-500">{browseSelected.size} selected</p>
+                <button
+                  onClick={handleImportSelected}
+                  disabled={syncing}
+                  className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition disabled:opacity-50 shadow-sm"
+                >
+                  {syncing ? "Importing..." : "Import Selected"}
+                </button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </AppLayout>
+  );
+}

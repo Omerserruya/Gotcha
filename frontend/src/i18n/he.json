@@ -8,14 +8,19 @@
     "dashboard": "לוח בקרה",
     "bot": "בוט",
     "agents": "נציגים",
+    "aiEmployees": "עובדי AI",
     "copilot": "עוזר AI",
     "channels": "ערוצים",
     "departments": "מחלקות",
     "history": "היסטוריה",
     "knowledge": "בסיס ידע",
+    "analytics": "אנליטיקס",
     "settings": "הגדרות",
     "more": "עוד",
-    "logout": "התנתק"
+    "logout": "התנתק",
+    "tools": "כלים",
+    "integrations": "אינטגרציות",
+    "aiStudio": "סטודיו AI"
   },
   "auth": {
     "login": "התחברות",
@@ -186,7 +191,32 @@
     "global": "תבנית ברירת מחדל",
     "globalHelperText": "תבנית ברירת המחדל עוברת בירושה למחלקות שאין להן הגדרות מותאמות.",
     "departmentMembers": "חברי מחלקה",
-    "usingDefaultTemplate": "משתמש בתבנית ברירת מחדל"
+    "usingDefaultTemplate": "משתמש בתבנית ברירת מחדל",
+    "modeToggle": {
+      "label": "מצב",
+      "humanOnly": "נציג בלבד",
+      "copilot": "עוזר AI",
+      "autonomous": "אוטונומי"
+    },
+    "customerContext": {
+      "title": "פרטי לקוח",
+      "name": "שם",
+      "totalConversations": "שיחות",
+      "sentiment": "מצב רוח",
+      "channel": "ערוץ",
+      "sentimentHappy": "שמח",
+      "sentimentNeutral": "ניטרלי",
+      "sentimentAngry": "כועס"
+    },
+    "confidence": {
+      "label": "ביטחון"
+    },
+    "suggestedActions": {
+      "title": "פעולות מוצעות",
+      "checkOrderStatus": "בדוק סטטוס הזמנה",
+      "offerDiscount": "הצע הנחה",
+      "transferToHuman": "העבר לנציג"
+    }
   },
   "channels": {
     "title": "ערוצים",
@@ -793,9 +823,379 @@
     "thankYou": {
       "badge": "חבר גישה מוקדמת",
       "title": "אתה ברשימה!",
-      "subtitle": "ברוכים הבאים למעגל הפנימי.",
-      "message": "אנחנו פותחים גישה בגלים. ההזמנה שלך תגיע תוך 48 שעות.",
+      "subtitle": "ניצור איתך קשר בקרוב.",
+      "message": "הצוות שלנו מכין את הפלטפורמה עבורך. אחד המומחים שלנו ייצור איתך קשר לתיאום שיחת היכרות אישית.",
       "backHome": "חזרה לדף הבית"
+    }
+  },
+  "analytics": {
+    "title": "אנליטיקס",
+    "subtitle": "תובנות ומדדי ביצועים ברחבי הארגון",
+    "dateRange": {
+      "today": "היום",
+      "7days": "7 ימים",
+      "30days": "30 ימים",
+      "90days": "90 ימים"
+    },
+    "overview": {
+      "totalConversations": "סה״כ שיחות",
+      "resolutionRate": "שיעור פתרון",
+      "avgResponseTime": "זמן תגובה ממוצע",
+      "avgResolutionTime": "זמן פתרון ממוצע",
+      "customerSatisfaction": "שביעות רצון לקוחות",
+      "aiResolutionRate": "שיעור פתרון AI"
+    },
+    "aiPerformance": {
+      "title": "ביצועי סוכן AI",
+      "conversationsHandled": "שיחות שטופלו",
+      "avgResolutionTime": "זמן פתרון ממוצע",
+      "escalationRate": "שיעור הסלמה",
+      "topCategories": "קטגוריות מובילות"
+    },
+    "humanPerformance": {
+      "title": "ביצועי נציגים",
+      "conversationsHandled": "שיחות שטופלו",
+      "avgResolutionTime": "זמן פתרון ממוצע",
+      "satisfactionScore": "ציון שביעות רצון",
+      "topAgents": "נציגים מובילים"
+    },
+    "topQuestions": {
+      "title": "שאלות נפוצות",
+      "subtitle": "שאלות הנשאלות לעתים קרובות והזדמנויות אוטומציה",
+      "count": "כמות",
+      "category": "קטגוריה",
+      "canAutomate": "הזדמנות אוטומציה"
+    },
+    "toolUsage": {
+      "title": "שימוש בכלים",
+      "subtitle": "כיצד כלי ה-AI מנוצלים",
+      "tool": "כלי",
+      "usage": "שימוש",
+      "successRate": "שיעור הצלחה"
+    },
+    "channelPerformance": {
+      "title": "ביצועי ערוצים",
+      "subtitle": "שיחות וזמני תגובה לפי ערוץ"
+    },
+    "departmentPerformance": {
+      "title": "ביצועי מחלקות",
+      "department": "מחלקה",
+      "conversations": "שיחות",
+      "responseTime": "זמן תגובה",
+      "resolutionRate": "שיעור פתרון",
+      "slaCompliance": "עמידה ב-SLA"
+    },
+    "insights": {
+      "title": "תובנות AI",
+      "subtitle": "הצעות אוטומציה ושיפורים",
+      "automationOpportunity": "הזדמנות אוטומציה",
+      "createFlow": "צור תהליך",
+      "setupIntegration": "הגדר אינטגרציה"
+    },
+    "noData": "אין נתוני אנליטיקס זמינים לתקופה זו"
+  },
+  "replay": {
+    "title": "הפעלה חוזרת של שיחה",
+    "summary": "סיכום",
+    "timeline": "ציר זמן",
+    "insights": "תובנות",
+    "duration": "משך",
+    "totalMessages": "סה״כ הודעות",
+    "resolution": "פתרון",
+    "resolved": "נפתר",
+    "unresolved": "לא נפתר",
+    "customerContacted": "לקוח יצר קשר",
+    "aiAnalysis": "ניתוח AI",
+    "toolsUsed": "כלים שנעשה בהם שימוש",
+    "aiGeneratedReply": "תשובת AI",
+    "agentSent": "נציג שלח",
+    "conversationClosed": "השיחה נסגרה",
+    "intent": "כוונה",
+    "sentiment": "סנטימנט",
+    "confidence": "ביטחון",
+    "responseTime": "זמן תגובה",
+    "aiAccuracy": "דיוק AI",
+    "wentWell": "מה הלך טוב",
+    "couldImprove": "ניתן לשפר"
+  },
+  "tools": {
+    "title": "כלים ואינטגרציות",
+    "subtitle": "חבר שירותים חיצוניים לחיזוק סוכני ה-AI שלך",
+    "addTool": "הוסף כלי",
+    "editTool": "ערוך כלי",
+    "name": "שם",
+    "description": "תיאור",
+    "descriptionPlaceholder": "מה הכלי הזה עושה?",
+    "toolType": "סוג כלי",
+    "provider": "ספק",
+    "apiUrl": "כתובת API",
+    "apiKey": "מפתח API",
+    "headers": "כותרות מותאמות (JSON)",
+    "headersHint": "אובייקט JSON אופציונלי עם כותרות HTTP מותאמות",
+    "headersInvalid": "הכותרות חייבות להיות אובייקט JSON תקני",
+    "active": "פעיל",
+    "activeDesc": "הפעל או השבת כלי זה עבור סוכני AI",
+    "activate": "הפעל",
+    "deactivate": "השבת",
+    "inactive": "לא פעיל",
+    "noTools": "לא הוגדרו כלים עדיין",
+    "noToolsDesc": "הוסף את האינטגרציה הראשונה שלך לחיזוק סוכני ה-AI",
+    "deleteMsg": "פעולה זו תמחק לצמיתות את הכלי ואת ההגדרות שלו. לא ניתן לבטל פעולה זו."
+  },
+  "integrations": {
+    "title": "אינטגרציות",
+    "connect": "חבר אינטגרציה",
+    "connected": "מחובר",
+    "disconnected": "מנותק",
+    "addTool": "הוסף כלי",
+    "standAloneTools": "כלים עצמאיים"
+  },
+  "agentScore": {
+    "title": "סקירת ביצועי נציג",
+    "overall": "ציון כולל",
+    "responseSpeed": "מהירות תגובה",
+    "responseQuality": "איכות תגובה",
+    "resolution": "פתרון",
+    "protocol": "עמידה בפרוטוקול",
+    "customerHandling": "טיפול בלקוח",
+    "strengths": "נקודות חוזק",
+    "improvements": "תחומים לשיפור",
+    "copilotUsage": "שימוש ב-Copilot",
+    "toolsUsed": "כלים ששימשו",
+    "noScore": "אין ציון זמין עדיין",
+    "score": "ציון"
+  },
+  "marketplace": {
+    "title": "שוק האינטגרציות",
+    "search": "חפש אינטגרציות...",
+    "allCategories": "הכל",
+    "connect": "חבר",
+    "manage": "נהל",
+    "connected": "מחובר",
+    "notConnected": "לא מחובר",
+    "toolsAvailable": "כלים זמינים",
+    "toolsEnabled": "כלים מופעלים",
+    "disconnect": "נתק",
+    "testConnection": "בדוק חיבור",
+    "testing": "בודק...",
+    "connectionSuccess": "החיבור הצליח",
+    "connectionFailed": "החיבור נכשל",
+    "credentials": "פרטי גישה",
+    "apiKey": "מפתח API",
+    "saveCredentials": "שמור פרטי גישה",
+    "saveConnect": "שמור וחבר",
+    "availableTools": "כלים זמינים",
+    "riskLow": "סיכון נמוך",
+    "riskMedium": "סיכון בינוני",
+    "riskHigh": "סיכון גבוה",
+    "categoryRead": "קריאה",
+    "categoryWrite": "כתיבה",
+    "categoryDelete": "מחיקה",
+    "categoryAction": "פעולה",
+    "connectInMarketplace": "חבר בשוק",
+    "requiresApproval": "דורש אישור",
+    "auto": "אוטומטי",
+    "toolPermissions": "הרשאות כלים",
+    "noToolsConnected": "אין כלים מחוברים עדיין. בקר בשוק האינטגרציות כדי להתחיל.",
+    "usedByDepartments": "בשימוש על ידי {count} מחלקות",
+    "categoryShipping": "משלוחים",
+    "categoryProjectManagement": "ניהול פרויקטים",
+    "categoryCalendar": "לוח שנה"
+  },
+  "aiStudio": {
+    "title": "סטודיו AI",
+    "subtitle": "הגדר עובדי AI, תהליכים, ידע ואינטגרציות במקום אחד",
+    "edit": "ערוך",
+    "test": "בדוק",
+    "tabs": {
+      "agents": "עובדי AI",
+      "flows": "תהליכים",
+      "router": "ניתוב",
+      "knowledge": "ידע",
+      "tools": "כלים",
+      "marketplace": "מרקטפלייס"
+    },
+    "stats": {
+      "activeAgents": "עובדי AI",
+      "agentsSub": "מטפלים בשיחות",
+      "activeFlows": "תהליכים פעילים",
+      "flowsSub": "אוטומציות פועלות",
+      "knowledgeSources": "מקורות ידע",
+      "knowledgeSub": "3 מסונכרנים",
+      "connectedTools": "כלים מחוברים",
+      "toolsSub": "ב-2 אינטגרציות"
+    },
+    "agents": {
+      "title": "עובדי AI",
+      "subtitle": "עובדים מבוססי AI המסייעים או מטפלים בשיחות באופן אוטונומי",
+      "newAgent": "עובד AI חדש",
+      "conversations": "שיחות היום",
+      "satisfaction": "שביעות רצון",
+      "editor": {
+        "newAgent": "עובד AI חדש",
+        "editAgent": "ערוך עובד AI",
+        "newAgentSub": "הגדר את עובד ה-AI החדש שלך",
+        "editAgentSub": "שנה הגדרות והתנהגות",
+        "backToStudio": "חזרה לסטודיו AI",
+        "save": "שמור סוכן",
+        "saved": "נשמר!",
+        "statusActive": "פעיל",
+        "statusDraft": "טיוטה",
+        "statusPaused": "מושהה",
+        "setup": {
+          "title": "הגדרת סוכן",
+          "subtitle": "זהות ותפקיד בסיסיים של הסוכן",
+          "avatar": "צבע אווטאר",
+          "name": "שם",
+          "namePlaceholder": "לדוגמה: מאיה",
+          "role": "תפקיד",
+          "roleSupport": "שירות לקוחות",
+          "roleSales": "מכירות",
+          "roleBooking": "הזמנות",
+          "roleBilling": "חיובים",
+          "roleCustom": "מותאם אישית",
+          "description": "תיאור",
+          "descriptionPlaceholder": "במה הסוכן מטפל? לדוגמה: מטפל בפניות תמיכה ועוזר ללקוחות עם הזמנותיהם."
+        },
+        "personality": {
+          "title": "אישיות",
+          "subtitle": "כיצד הסוכן מתקשר עם לקוחות",
+          "tone": "טון",
+          "tone_professional": "מקצועי",
+          "tone_friendly": "ידידותי",
+          "tone_casual": "קז'ואל",
+          "tone_formal": "פורמלי",
+          "language": "שפה",
+          "lang_english": "אנגלית",
+          "lang_hebrew": "עברית",
+          "lang_arabic": "ערבית",
+          "style": "סגנון",
+          "styleEmojis": "השתמש באימוג'י מדי פעם",
+          "styleConcise": "שמור על תגובות קצרות",
+          "styleFirstName": "השתמש בשם הפרטי של הלקוח",
+          "styleProactive": "היה יזום (הצע עזרה לפני שנשאלים)"
+        },
+        "skills": {
+          "title": "כישורים (כלים)",
+          "subtitle": "פעולות שהסוכן יכול לבצע דרך אינטגרציות מחוברות",
+          "addMore": "הוסף כלים נוספים מאינטגרציות"
+        },
+        "knowledge": {
+          "title": "ידע",
+          "subtitle": "מקורות מידע שהסוכן יכול להפנות אליהם בעת מענה",
+          "addSource": "הוסף מקור ידע"
+        },
+        "escalation": {
+          "title": "כללי הסלמה",
+          "subtitle": "מתי הסוכן צריך להעביר לאדם?",
+          "attempts": "ניסיונות",
+          "keywordsPlaceholder": "לדוגמה: החזר, ביטול, תביעה",
+          "addCustomRule": "+ הוסף כלל מותאם",
+          "customRulePlaceholder": "תאר את תנאי ההסלמה..."
+        },
+        "channels": {
+          "title": "ערוצים",
+          "subtitle": "על אילו ערוצים הסוכן יהיה פעיל?",
+          "whatsapp": "WhatsApp",
+          "instagram": "Instagram",
+          "webchat": "צ'אט אתר",
+          "active": "פעיל"
+        },
+        "mode": {
+          "title": "מצב",
+          "subtitle": "כמה אוטונומיה יש לסוכן?",
+          "humanOnly": "אנושי בלבד",
+          "humanOnlyDesc": "ללא מעורבות AI. נציגים מקלידים כל תשובה ידנית.",
+          "copilot": "עוזר AI",
+          "copilotDesc": "AI מנסח תגובות ומציג הקשר. אדם בודק ושולח.",
+          "autonomous": "אוטונומי",
+          "autonomousDesc": "AI מטפל בשיחות באופן עצמאי. אדם יכול לנטר ולהתערב."
+        }
+      }
+    },
+    "flows": {
+      "title": "תהליכי שיחה",
+      "subtitle": "נתיבי שיחה מובנים עם לוגיקה ויזואלית שלב-אחר-שלב",
+      "newFlow": "תהליך חדש",
+      "trigger": "טריגר",
+      "runs": "הפעלות",
+      "builder": {
+        "backToStudio": "חזרה לסטודיו AI",
+        "statusActive": "פעיל",
+        "statusDraft": "טיוטה",
+        "save": "שמור",
+        "saved": "נשמר!",
+        "activate": "הפעל",
+        "deactivate": "השבת",
+        "palette": "הוסף צמתים"
+      }
+    },
+    "router": {
+      "title": "ניתוב AI",
+      "subtitle": "כללים מוערכים מלמעלה למטה — ההתאמה הראשונה מנצחת",
+      "addRule": "+ הוסף כלל",
+      "rule": "כלל",
+      "condition": "תנאי",
+      "routeTo": "נתב אל",
+      "hint": "כללים מוערכים מלמעלה למטה. גרור לסידור עדיפויות.",
+      "pageTitle": "ניתוב AI",
+      "pageSubtitle": "הגדר כללים כיצד מטפלים בהודעות נכנסות",
+      "backToStudio": "חזרה לסטודיו AI",
+      "infoBanner": "כללים מוערכים מלמעלה למטה. הכלל התואם הראשון מנצח. כלל ברירת המחדל בתחתית תופס את כל מה שלא תואם.",
+      "rulesTitle": "כללי ניתוב",
+      "rulesSubtitle": "לפי סדר עדיפויות — גרור לסידור מחדש",
+      "ruleCol": "כלל",
+      "routeToCol": "נתב אל",
+      "onCol": "פעיל",
+      "configureRouter": "הגדר ניתוב",
+      "howItWorksTitle": "כיצד הניתוב עובד",
+      "how1": "הודעה חדשה מגיעה מכל ערוץ (WhatsApp, Instagram, צ'אט אתר).",
+      "how2": "הנתב מעריך כל כלל מלמעלה למטה. הכלל הראשון שתנאיו תואמים את ההודעה מנצח.",
+      "how3": "השיחה נשלחת ליעד התואם — סוכן AI, תהליך, או נציג אנושי."
+    },
+    "knowledge": {
+      "title": "מקורות ידע",
+      "subtitle": "מידע שסוכני AI מפנים אליו בעת מענה לשאלות",
+      "addSource": "+ הוסף מקור",
+      "source": "מקור",
+      "type": "סוג",
+      "status": "סטטוס",
+      "lastSync": "סנכרון אחרון",
+      "manageKnowledge": "נהל ידע",
+      "page": {
+        "backToStudio": "חזרה לסטודיו AI",
+        "title": "מקורות ידע",
+        "subtitle": "נהל מסמכים, שאלות נפוצות ואתרים שסוכני AI מפנים אליהם",
+        "addSource": "+ הוסף מקור",
+        "addSourceHint": "העלה קבצים, הוסף כתובות URL, או צור זוגות שאלה-תשובה",
+        "totalSources": "סך מקורות",
+        "synced": "מסונכרנים",
+        "syncing": "בסנכרון",
+        "colSource": "מקור",
+        "colType": "סוג",
+        "colStatus": "סטטוס",
+        "colLastSync": "סנכרון אחרון",
+        "colAgents": "סוכנים",
+        "empty": "אין מקורות ידע עדיין",
+        "emptyHint": "הוסף את המקור הראשון שלך כדי להתחיל",
+        "howItWorksTitle": "כיצד הידע עובד",
+        "how1": "הוסף מסמכים, אתרים, או זוגות שאלה-תשובה כמקורות ידע.",
+        "how2": "המקורות מאונדקסים ומאפשרים חיפוש לסוכני ה-AI שלך.",
+        "how3": "הסוכנים מפנים אוטומטית לידע הרלוונטי בעת מענה לשאלות לקוחות.",
+        "deleteTitle": "מחק מקור",
+        "deleteMsg": "פעולה זו תמחק לצמיתות את מקור הידע ותבטל את הקצאתו מכל הסוכנים.",
+        "cancel": "ביטול",
+        "delete": "מחק"
+      }
+    },
+    "tools": {
+      "title": "כלים מחוברים",
+      "subtitle": "פעולות שסוכני AI יכולים לבצע דרך אינטגרציות חיצוניות",
+      "openMarketplace": "פתח שוק אינטגרציות",
+      "usedBy": "בשימוש של",
+      "notAssigned": "לא מוקצה",
+      "connectNew": "חבר אינטגרציה חדשה",
+      "connectNewSub": "עיין בשוק האינטגרציות להוספת כלים נוספים"
     }
   },
   "confirm": {

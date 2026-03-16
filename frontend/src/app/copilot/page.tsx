@@ -12,19 +12,6 @@ import {
 } from "@/lib/api";
 import clsx from "clsx";
 
-interface ToolConfig {
-  id: string;
-  name: string;
-  enabled: boolean;
-  config?: Record<string, any>;
-}
-
-const DEFAULT_TOOLS: ToolConfig[] = [
-  { id: "kb_search", name: "Knowledge Base Search", enabled: true, config: {} },
-  { id: "conversation_history", name: "Conversation History", enabled: true, config: {} },
-  { id: "customer_lookup", name: "Customer Lookup", enabled: false, config: {} },
-  { id: "order_status", name: "Order Status", enabled: false, config: {} },
-];
 
 // Default initialization values for structured personality blocks
 const DEFAULT_IDENTITY = { role: "", responsibility: "", representationGuidelines: [] as string[] };
@@ -208,7 +195,7 @@ export default function CopilotPage() {
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [rules, setRules] = useState<string[]>([]);
-  const [tools, setTools] = useState<ToolConfig[]>(DEFAULT_TOOLS);
+  const [tools, setTools] = useState<any[]>([]);
   const [model, setModel] = useState("gpt-4o-mini");
   const [provider, setProvider] = useState("openai");
   const [temperature, setTemperature] = useState(0.7);
@@ -240,7 +227,7 @@ export default function CopilotPage() {
         setCopilotMode(d.copilotMode || "READY_MESSAGE");
         setSystemPrompt(d.systemPrompt || "");
         setRules(Array.isArray(d.rules) ? d.rules : []);
-        setTools(Array.isArray(d.tools) && d.tools.length > 0 ? d.tools : DEFAULT_TOOLS);
+        setTools(Array.isArray(d.tools) ? d.tools : []);
         setModel(d.model || "gpt-4o-mini");
         setProvider(d.provider || "openai");
         setTemperature(d.temperature ?? 0.7);
@@ -256,7 +243,7 @@ export default function CopilotPage() {
         setCopilotMode(data.copilotMode || "READY_MESSAGE");
         setSystemPrompt(data.systemPrompt || "");
         setRules(Array.isArray(data.rules) ? data.rules : []);
-        setTools(Array.isArray(data.tools) && data.tools.length > 0 ? data.tools : DEFAULT_TOOLS);
+        setTools(Array.isArray(data.tools) ? data.tools : []);
         setModel(data.model || "gpt-4o-mini");
         setProvider(data.provider || "openai");
         setTemperature(data.temperature ?? 0.7);

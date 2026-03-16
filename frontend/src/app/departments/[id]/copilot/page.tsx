@@ -5,22 +5,25 @@ import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getDepartmentCopilot, updateDepartmentCopilot } from "@/lib/api";
+import { getDepartmentCopilot, updateDepartmentCopilot, getDepartmentToolPermissions, updateDepartmentToolPermissions } from "@/lib/api";
 import clsx from "clsx";
 
-interface ToolConfig {
-  id: string;
-  name: string;
-  enabled: boolean;
-  config?: Record<string, any>;
+interface DeptToolPermission {
+  tenantToolId: string;
+  isAllowed: boolean;
+  requireApproval: boolean;
+  tenantTool?: {
+    id: string;
+    isEnabled: boolean;
+    catalogTool?: {
+      name: string;
+      description?: string;
+      category: string;
+      riskLevel: string;
+      integration?: { name: string; slug: string; status?: string };
+    };
+  };
 }
-
-const DEFAULT_TOOLS: ToolConfig[] = [
-  { id: "kb_search", name: "Knowledge Base Search", enabled: true, config: {} },
-  { id: "conversation_history", name: "Conversation History", enabled: true, config: {} },
-  { id: "customer_lookup", name: "Customer Lookup", enabled: false, config: {} },
-  { id: "order_status", name: "Order Status", enabled: false, config: {} },
-];
 
 export default function DepartmentCopilotPage() {
   const params = useParams();
@@ -33,7 +36,6 @@ export default function DepartmentCopilotPage() {
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [systemPrompt, setSystemPrompt] = useState("");
   const [rules, setRules] = useState<string[]>([]);
-  const [tools, setTools] = useState<ToolConfig[]>(DEFAULT_TOOLS);
   const [model, setModel] = useState("gpt-4o-mini");
   const [provider, setProvider] = useState("openai");
   const [temperature, setTemperature] = useState(0.7);
@@ -41,6 +43,18 @@ export default function DepartmentCopilotPage() {
   const [isActive, setIsActive] = useState(true);
   const [loading, setLoading] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  // Tool permissions
+  const [toolPermissions, setToolPermissions] = useState<DeptToolPermission[]>([]);
+  const [savingPerms, setSavingPerms] = useState(false);
+  const [permsSaved, setPermsSaved] = useState(false);
+
+  useEffect(() => {
+    if (!token) return;
+    getDepartmentToolPermissions(token, departmentId)
+      .then((res) => setToolPermissions(res.data || []))
+      .catch(() => {});
+  }, [token, departmentId]);
 
   useEffect(() => {
     if (!token) return;
@@ -52,7 +66,6 @@ export default function DepartmentCopilotPage() {
           setCopilotMode(res.data.copilotMode || "READY_MESSAGE");
           setSystemPrompt(res.data.systemPrompt || "");
           setRules(Array.isArray(res.data.rules) ? res.data.rules : []);
-          setTools(Array.isArray(res.data.tools) && res.data.tools.length > 0 ? res.data.tools : DEFAULT_TOOLS);
           setModel(res.data.model || "gpt-4o-mini");
           setProvider(res.data.provider || "openai");
           setTemperature(res.data.temperature ?? 0.7);
@@ -69,7 +82,7 @@ export default function DepartmentCopilotPage() {
     setLoading(true);
     try {
       await updateDepartmentCopilot(token, departmentId, {
-        copilotMode, systemPrompt, rules, tools, model, provider, temperature, maxTokens, isActive,
+        copilotMode, systemPrompt, rules, model, provider, temperature, maxTokens, isActive,
       });
       setSource("department");
       setSaved(true);
@@ -77,6 +90,41 @@ export default function DepartmentCopilotPage() {
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }
+
+  async function handleSavePermissions() {
+    if (!token) return;
+    setSavingPerms(true);
+    try {
+      await updateDepartmentToolPermissions(token, departmentId, toolPermissions.map((p) => ({
+        tenantToolId: p.tenantToolId,
+        isAllowed: p.isAllowed,
+        requireApproval: p.requireApproval,
+      })));
+      setPermsSaved(true);
+      setTimeout(() => setPermsSaved(false), 3000);
+    } catch (err) { console.error(err); }
+    finally { setSavingPerms(false); }
+  }
+
+  function togglePermAllowed(tenantToolId: string) {
+    setToolPermissions((prev) =>
+      prev.map((p) => p.tenantToolId === tenantToolId ? { ...p, isAllowed: !p.isAllowed } : p)
+    );
+  }
+
+  function togglePermApproval(tenantToolId: string, requireApproval: boolean) {
+    setToolPermissions((prev) =>
+      prev.map((p) => p.tenantToolId === tenantToolId ? { ...p, requireApproval } : p)
+    );
+  }
+
+  // Group tool permissions by integration name
+  const permsByIntegration = toolPermissions.reduce<Record<string, DeptToolPermission[]>>((acc, perm) => {
+    const intgName = perm.tenantTool?.catalogTool?.integration?.name || "Other";
+    if (!acc[intgName]) acc[intgName] = [];
+    acc[intgName].push(perm);
+    return acc;
+  }, {});
 
   return (
     <AppLayout>
@@ -163,6 +211,79 @@ export default function DepartmentCopilotPage() {
                 </div>
               ))}
             </div>
+          </div>
+
+          {/* Tool Permissions */}
+          <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+            <h4 className="font-semibold text-gray-900 mb-1">{t("marketplace.toolPermissions")}</h4>
+            {toolPermissions.length === 0 ? (
+              <div className="mt-3 text-sm text-gray-400">
+                {t("marketplace.noToolsConnected")}{" "}
+                <a href="/integrations" className="text-violet-600 hover:underline">
+                  {t("marketplace.connectInMarketplace")} →
+                </a>
+              </div>
+            ) : (
+              <div className="mt-3 space-y-5">
+                {Object.entries(permsByIntegration).map(([intgName, perms]) => {
+                  const intgSlug = perms[0]?.tenantTool?.catalogTool?.integration?.slug;
+                  return (
+                    <div key={intgName}>
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{intgName}</span>
+                        {intgSlug && (
+                          <a href={`/integrations/${intgSlug}`} className="text-xs text-violet-600 hover:underline">
+                            {t("marketplace.connectInMarketplace")} →
+                          </a>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        {perms.map((perm) => {
+                          const tool = perm.tenantTool?.catalogTool;
+                          return (
+                            <div key={perm.tenantToolId} className={clsx("flex items-center gap-3 p-3 rounded-xl border transition", perm.isAllowed ? "border-gray-200 bg-white" : "border-gray-100 bg-gray-50/50")}>
+                              <button
+                                onClick={() => togglePermAllowed(perm.tenantToolId)}
+                                className={clsx("relative w-9 h-5 rounded-full transition-colors shrink-0", perm.isAllowed ? "bg-violet-600" : "bg-gray-200")}
+                              >
+                                <div className={clsx("absolute top-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform", perm.isAllowed ? "left-auto right-0.5" : "left-0.5")} />
+                              </button>
+                              <div className="flex-1 min-w-0">
+                                <span className={clsx("text-sm font-medium", perm.isAllowed ? "text-gray-900" : "text-gray-400")}>
+                                  {tool?.name || perm.tenantToolId}
+                                </span>
+                                {tool?.description && (
+                                  <p className="text-xs text-gray-400 truncate">{tool.description}</p>
+                                )}
+                              </div>
+                              {perm.isAllowed && (
+                                <select
+                                  value={perm.requireApproval ? "approval" : "auto"}
+                                  onChange={(e) => togglePermApproval(perm.tenantToolId, e.target.value === "approval")}
+                                  className="text-xs px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-violet-200"
+                                >
+                                  <option value="auto">{t("marketplace.auto")}</option>
+                                  <option value="approval">{t("marketplace.requiresApproval")}</option>
+                                </select>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+            {toolPermissions.length > 0 && (
+              <div className="flex items-center gap-3 mt-4">
+                <button onClick={handleSavePermissions} disabled={savingPerms} className="bg-violet-600 hover:bg-violet-700 text-white px-5 py-2 rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-50 flex items-center gap-2">
+                  {savingPerms && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+                  {t("common.save")}
+                </button>
+                {permsSaved && <span className="text-sm text-green-600">{t("common.success")}</span>}
+              </div>
+            )}
           </div>
 
           {/* Model Settings */}

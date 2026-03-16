@@ -489,7 +489,7 @@ function waitlistWelcomeHtml(firstName: string, position: number): string {
                       <tr>
                         <td style="padding:16px 32px;text-align:center;">
                           <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#6DCED9;text-transform:uppercase;letter-spacing:1.5px;">Your position</p>
-                          <p style="margin:0;font-size:36px;font-weight:800;color:#ffffff;letter-spacing:-1px;">#${position}</p>
+                          <p style="margin:0;font-size:36px;font-weight:800;color:#ffffff;letter-spacing:-1px;">#${position + 500}</p>
                         </td>
                       </tr>
                     </table>
@@ -524,8 +524,8 @@ function waitlistWelcomeHtml(firstName: string, position: number): string {
                     <div style="width:30px;height:30px;background:linear-gradient(135deg,#7C3291,#5A72B3);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">1</div>
                   </td>
                   <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(124,50,145,0.2);padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">We're preparing your spot</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Rolling out in small waves to ensure every team gets a white-glove experience.</p>
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">We're building your command center</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Our team is preparing the platform tailored to your business &mdash; every detail dialed in before you touch it.</p>
                   </td>
                 </tr>
               </table>
@@ -537,8 +537,8 @@ function waitlistWelcomeHtml(firstName: string, position: number): string {
                     <div style="width:30px;height:30px;background:linear-gradient(135deg,#5A72B3,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:13px;font-weight:800;">2</div>
                   </td>
                   <td style="vertical-align:top;padding-bottom:22px;border-left:2px solid rgba(90,114,179,0.2);padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Your invite lands in your inbox</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Within <strong style="color:#6DCED9;">48 hours</strong> you'll get a personal setup link. No passwords needed.</p>
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">A personal kickoff call with our team</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">One of our specialists will reach out to schedule a <strong style="color:#6DCED9;">Teams call</strong> &mdash; we'll map your workflows and set you up for success.</p>
                   </td>
                 </tr>
               </table>
@@ -550,8 +550,8 @@ function waitlistWelcomeHtml(firstName: string, position: number): string {
                     <div style="width:30px;height:30px;background:linear-gradient(135deg,#10b981,#6DCED9);border-radius:50%;text-align:center;line-height:30px;color:#fff;font-size:15px;font-weight:800;">&#10003;</div>
                   </td>
                   <td style="vertical-align:top;padding-left:20px;">
-                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Go live in 15 minutes</p>
-                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Connect your channels, upload your knowledge base, and start handling every conversation from one place.</p>
+                    <p style="margin:0;font-size:15px;font-weight:700;color:#e4e4e7;">Welcome to the Gotcha standard</p>
+                    <p style="margin:5px 0 0;font-size:13px;color:#71717a;line-height:1.55;">Every message answered. Every customer delighted. Transform how your company communicates &mdash; starting day one.</p>
                   </td>
                 </tr>
               </table>
@@ -630,10 +630,49 @@ function waitlistWelcomeHtml(firstName: string, position: number): string {
           </tr>
         </table>
 
+        <!-- ━━━ Social Icons ━━━ -->
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+          <tr>
+            <td align="center" style="padding:24px 16px 0;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0">
+                <tr>
+                  <!-- Facebook -->
+                  <td style="padding:0 8px;">
+                    <a href="https://www.facebook.com/gotchainbox" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
+                      <img src="https://cdn-icons-png.flaticon.com/512/733/733547.png" alt="Facebook" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
+                    </a>
+                  </td>
+                  <!-- Instagram -->
+                  <td style="padding:0 8px;">
+                    <a href="https://www.instagram.com/gotcha.inbox/" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
+                      <img src="https://cdn-icons-png.flaticon.com/512/733/733558.png" alt="Instagram" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
+                    </a>
+                  </td>
+                  <!-- LinkedIn - Omer -->
+                  <td style="padding:0 8px;">
+                    <a href="http://linkedin.com/in/omer-serruya" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
+                      <img src="https://cdn-icons-png.flaticon.com/512/733/733561.png" alt="LinkedIn" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
+                    </a>
+                  </td>
+                  <!-- LinkedIn - Matan -->
+                  <td style="padding:0 8px;">
+                    <a href="https://www.linkedin.com/in/matan-amran-82625b264/" target="_blank" style="display:inline-block;width:36px;height:36px;border-radius:50%;background-color:rgba(255,255,255,0.06);text-align:center;line-height:36px;text-decoration:none;">
+                      <img src="https://cdn-icons-png.flaticon.com/512/733/733561.png" alt="LinkedIn" width="18" height="18" style="display:inline-block;vertical-align:middle;border:0;filter:brightness(0) invert(0.55);" />
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:10px 0 0;font-size:11px;color:#52525b;">
+                Follow us &amp; DM the founders
+              </p>
+            </td>
+          </tr>
+        </table>
+
         <!-- ━━━ Footer ━━━ -->
         <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
           <tr>
-            <td align="center" style="padding:28px 16px 12px;">
+            <td align="center" style="padding:16px 16px 12px;">
               <p style="margin:0;color:#3f3f46;font-size:11px;line-height:18px;">
                 GOTCHA. &mdash; Smart messaging for modern teams.
               </p>
@@ -665,9 +704,9 @@ export async function sendWaitlistWelcomeEmail(email: string, firstName: string,
     "Thanks for signing up for early access to Gotcha.",
     "",
     "What happens next:",
-    "1. We review your request — we're rolling out in small batches",
-    "2. You get your invite — expect an email within 48 hours",
-    "3. Go live in 15 minutes — connect channels, upload knowledge base, start chatting",
+    "1. We're building your command center — preparing the platform tailored to your business",
+    "2. A personal kickoff call — one of our team will reach out to schedule a Teams call",
+    "3. Welcome to the Gotcha standard — transform how your company communicates, starting day one",
     "",
     "In the meantime, hit reply if you have any questions — we read every message.",
     "",

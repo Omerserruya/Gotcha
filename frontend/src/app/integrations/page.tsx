@@ -1,0 +1,253 @@
+"use client";
+
+import { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
+import { AppLayout } from "@/components/AppLayout";
+import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
+import { getMarketplaceIntegrations } from "@/lib/api";
+import clsx from "clsx";
+
+const CATEGORIES = [
+  { label: "All", value: "All" },
+  { label: "E-Commerce", value: "ECOMMERCE" },
+  { label: "CRM", value: "CRM" },
+  { label: "Payments", value: "PAYMENTS" },
+  { label: "Helpdesk", value: "HELPDESK" },
+  { label: "Communication", value: "COMMUNICATION" },
+  { label: "Analytics", value: "ANALYTICS" },
+  { label: "Shipping", value: "SHIPPING" },
+  { label: "Project Management", value: "PROJECT_MANAGEMENT" },
+  { label: "Calendar", value: "CALENDAR" },
+  { label: "Database", value: "DATABASE" },
+];
+
+const CATEGORY_COLORS: Record<string, string> = {
+  ECOMMERCE: "bg-blue-100 text-blue-700",
+  CRM: "bg-purple-100 text-purple-700",
+  PAYMENTS: "bg-green-100 text-green-700",
+  HELPDESK: "bg-orange-100 text-orange-700",
+  COMMUNICATION: "bg-pink-100 text-pink-700",
+  ANALYTICS: "bg-yellow-100 text-yellow-700",
+  SHIPPING: "bg-cyan-100 text-cyan-700",
+  PROJECT_MANAGEMENT: "bg-indigo-100 text-indigo-700",
+  CALENDAR: "bg-emerald-100 text-emerald-700",
+  DATABASE: "bg-slate-100 text-slate-700",
+};
+
+const INTEGRATION_LOGOS: Record<string, string> = {
+  shopify: "https://cdn.worldvectorlogo.com/logos/shopify.svg",
+  woocommerce: "https://cdn.worldvectorlogo.com/logos/woocommerce.svg",
+  bigcommerce: "https://cdn.worldvectorlogo.com/logos/bigcommerce-1.svg",
+  magento: "https://cdn.worldvectorlogo.com/logos/magento.svg",
+  wix: "https://cdn.worldvectorlogo.com/logos/wix.svg",
+  shippo: "https://cdn.prod.website-files.com/64700b7f349828a5b8dc81ab/6720117f8561f9ad587b820e_AD_4nXewExxEHFrSDaVcyUsSBCZxMRLDfuZ3SYABIbGEikcH_3jFJsGRLXAAkPSeRsqBtlQ-tY89qW1qtX3rzZQ_qmt7hzOrNLQHdu2BOyIeEjIYliByLM5FwYgB0IMD-K46n9wKX6NFbKRsmT845rfmGYcGhQ5X.gif",
+  easyship: "https://cdn.shopify.com/app-store/listing_images/7857972f1c70c4384cd3d0e61c5284c1/icon/CLPUja--4IMDEAE=.png",
+  shipstation: "https://www.shipstation.com/wp-content/uploads/2024/10/ShipStation-BlogLaunch-Logo-2-1024x427.png",
+  aftership: "https://aftership.ghost.io/content/images/2023/01/YouTube-avatar-2.png",
+  stripe: "https://cdn.worldvectorlogo.com/logos/stripe-4.svg",
+  paypal: "https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-200px.png",
+  square: "https://messenger-assets.qualified.com/uploads/7ujZqmvzoStw2DuEbeUvSkS2tNDMnum1bcHPM/c55336256d47abdd4b160b28e0535a57ccebff58605da5199d39e3af3b55fe3d.png",
+  hubspot: "https://cdn.worldvectorlogo.com/logos/hubspot.svg",
+  salesforce: "https://cdn.worldvectorlogo.com/logos/salesforce-2.svg",
+  pipedrive: "https://cdn.worldvectorlogo.com/logos/pipedrive.svg",
+  zoho_crm: "https://cdn.worldvectorlogo.com/logos/zoho-1.svg",
+  zendesk: "https://cdn.worldvectorlogo.com/logos/zendesk.svg",
+  intercom: "https://cdn.worldvectorlogo.com/logos/intercom-2.svg",
+  monday: "https://cdn.worldvectorlogo.com/logos/monday-1.svg",
+  google_calendar: "https://fonts.gstatic.com/s/i/productlogos/calendar_2020q4/v13/192px.svg",
+  calendly: "https://calendly.com/media/favicon/icon-144x144.png",
+  slack: "https://cdn.worldvectorlogo.com/logos/slack-new-logo.svg",
+  google_analytics: "https://cdn.worldvectorlogo.com/logos/google-analytics-4.svg",
+  postgresql: "https://cdn.worldvectorlogo.com/logos/postgresql.svg",
+  mongodb: "https://cdn.worldvectorlogo.com/logos/mongodb-icon-1.svg",
+  aws_rds: "https://cdn.worldvectorlogo.com/logos/aws-rds.svg",
+  mongo_atlas: "https://cdn.worldvectorlogo.com/logos/mongodb-icon-1.svg",
+};
+
+const AUTH_TYPE_STYLES: Record<string, string> = {
+  OAUTH2: "bg-blue-50 text-blue-600 border-blue-200",
+  API_KEY: "bg-amber-50 text-amber-600 border-amber-200",
+  BASIC_AUTH: "bg-gray-50 text-gray-600 border-gray-200",
+};
+
+const LOGO_COLORS = [
+  "bg-blue-500", "bg-purple-500", "bg-green-500", "bg-orange-500",
+  "bg-pink-500", "bg-yellow-500", "bg-teal-500", "bg-red-500",
+];
+
+function getLogoColor(name: string) {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  return LOGO_COLORS[Math.abs(hash) % LOGO_COLORS.length];
+}
+
+export default function IntegrationsMarketplacePage() {
+  const { token } = useAuth();
+  const { t } = useI18n();
+  const router = useRouter();
+
+  const [integrations, setIntegrations] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState("");
+  const [activeCategory, setActiveCategory] = useState("All");
+
+  useEffect(() => {
+    if (!token) return;
+    setLoading(true);
+    getMarketplaceIntegrations(token)
+      .then((res) => setIntegrations(res.data || []))
+      .catch(() => setIntegrations([]))
+      .finally(() => setLoading(false));
+  }, [token]);
+
+  const filtered = integrations.filter((intg) => {
+    const matchSearch =
+      !search ||
+      intg.name?.toLowerCase().includes(search.toLowerCase()) ||
+      intg.description?.toLowerCase().includes(search.toLowerCase());
+    const matchCat = activeCategory === "All" || intg.category === activeCategory || intg.category?.toUpperCase() === activeCategory;
+    return matchSearch && matchCat;
+  });
+
+  function getStatusInfo(intg: any) {
+    const ti = intg.tenantConnection;
+    const isConnected = ti && ti.status === "CONNECTED";
+    const totalTools = intg.catalogTools?.length || 0;
+    const enabledTools = intg.catalogTools?.filter((t: any) => t.tenantTool?.isEnabled).length || 0;
+    return { isConnected, totalTools, enabledTools };
+  }
+
+  return (
+    <AppLayout>
+      <div className="p-3 md:p-6 overflow-y-auto h-screen">
+        {/* Header */}
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-gray-900">{t("marketplace.title")}</h1>
+          <p className="text-sm text-gray-400 mt-1">Connect external services to power your AI agents</p>
+        </div>
+
+        {/* Search + filters */}
+        <div className="mb-5 flex flex-col gap-3">
+          <div className="relative">
+            <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+            </svg>
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder={t("marketplace.search")}
+              className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition"
+            />
+          </div>
+          <div className="flex gap-2 flex-wrap">
+            {CATEGORIES.map((cat) => (
+              <button
+                key={cat.value}
+                onClick={() => setActiveCategory(cat.value)}
+                className={clsx(
+                  "px-4 py-1.5 rounded-full text-sm font-medium transition",
+                  activeCategory === cat.value
+                    ? "bg-violet-600 text-white shadow-sm"
+                    : "bg-white text-gray-600 border border-gray-200 hover:border-violet-300 hover:text-violet-600"
+                )}
+              >
+                {cat.value === "All" ? t("marketplace.allCategories") : cat.label}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Grid */}
+        {loading ? (
+          <div className="flex items-center justify-center h-48">
+            <div className="w-8 h-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+          </div>
+        ) : filtered.length === 0 ? (
+          <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+            <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
+            </svg>
+            <p className="text-sm">No integrations found</p>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+            {filtered.map((intg) => {
+              const { isConnected, totalTools, enabledTools } = getStatusInfo(intg);
+              const logoSrc = intg.logoUrl || INTEGRATION_LOGOS[intg.slug] || null;
+              const logoColor = getLogoColor(intg.name || "");
+              const authLabel = intg.authType === "OAUTH2" ? "OAuth" : intg.authType === "BASIC_AUTH" ? "Basic Auth" : "API Key";
+              return (
+                <div
+                  key={intg.id || intg.slug}
+                  className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
+                  onClick={() => router.push(`/integrations/${intg.slug}`)}
+                >
+                  {/* Logo + status */}
+                  <div className="flex items-start justify-between">
+                    <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", logoSrc ? "bg-white border border-gray-100 p-1.5" : `${logoColor} text-white font-bold text-lg`)}>
+                      {logoSrc ? (
+                        <img src={logoSrc} alt={intg.name} className="w-full h-full object-contain" />
+                      ) : (
+                        (intg.name || "?").charAt(0).toUpperCase()
+                      )}
+                    </div>
+                    <div className="flex flex-col items-end gap-1.5">
+                      <div className="flex items-center gap-1.5">
+                        <span className={clsx("w-2 h-2 rounded-full", isConnected ? "bg-green-500" : "bg-gray-300")} />
+                        <span className={clsx("text-xs font-medium", isConnected ? "text-green-600" : "text-gray-400")}>
+                          {isConnected ? t("marketplace.connected") : t("marketplace.notConnected")}
+                        </span>
+                      </div>
+                      {intg.authType && (
+                        <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-medium border", AUTH_TYPE_STYLES[intg.authType] || AUTH_TYPE_STYLES.API_KEY)}>
+                          {authLabel}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Name + category */}
+                  <div>
+                    <h3 className="font-semibold text-gray-900 text-sm">{intg.name}</h3>
+                    {intg.category && (
+                      <span className={clsx("inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium", CATEGORY_COLORS[intg.category] || "bg-gray-100 text-gray-600")}>
+                        {intg.category}
+                      </span>
+                    )}
+                  </div>
+
+                  {/* Description */}
+                  {intg.description && (
+                    <p className="text-xs text-gray-500 line-clamp-2 flex-1">{intg.description}</p>
+                  )}
+
+                  {/* Tool count */}
+                  <p className="text-xs text-gray-400">
+                    {isConnected && totalTools > 0
+                      ? `${enabledTools}/${totalTools} ${t("marketplace.toolsEnabled")}`
+                      : `${totalTools} ${t("marketplace.toolsAvailable")}`}
+                  </p>
+
+                  {/* Action button */}
+                  <button
+                    className={clsx(
+                      "w-full py-2 rounded-xl text-sm font-medium transition",
+                      isConnected
+                        ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
+                        : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                    )}
+                    onClick={(e) => { e.stopPropagation(); router.push(`/integrations/${intg.slug}`); }}
+                  >
+                    {isConnected ? t("marketplace.manage") : t("marketplace.connect")}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  );
+}

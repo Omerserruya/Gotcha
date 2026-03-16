@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1772742590580,
+  "lastScanned": 1773413283381,
   "projectRoot": "/home/ocs/projects/ChatCenter/frontend",
   "techStack": {
     "languages": [
@@ -74,7 +74,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 5,
-      "lastAccessed": 1772742590565,
+      "lastAccessed": 1773413283361,
       "keyFiles": [
         "apple-touch-icon.png",
         "favicon.ico",
@@ -87,14 +87,14 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 0,
-      "lastAccessed": 1772742590574,
+      "lastAccessed": 1773413283362,
       "keyFiles": []
     },
     "src/app": {
       "path": "src/app",
       "purpose": "Application code",
       "fileCount": 6,
-      "lastAccessed": 1772742590577,
+      "lastAccessed": 1773413283375,
       "keyFiles": [
         "globals.css",
         "layout.tsx",
@@ -105,7 +105,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 7,
-      "lastAccessed": 1772742590578,
+      "lastAccessed": 1773413283376,
       "keyFiles": [
         "AppLayout.tsx",
         "ConfirmModal.tsx",
@@ -116,7 +116,7 @@
       "path": "src/lib",
       "purpose": "Library code",
       "fileCount": 2,
-      "lastAccessed": 1772742590578,
+      "lastAccessed": 1773413283376,
       "keyFiles": [
         "api.ts",
         "socket.ts"
@@ -125,64 +125,82 @@
   },
   "hotPaths": [
     {
-      "path": "src/components/conversations/CoPilotPanel.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1772743690478,
+      "path": "src/app/ai-studio/page.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1773508470316,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/en.json",
+      "accessCount": 15,
+      "lastAccessed": 1773510336332,
       "type": "directory"
     },
     {
-      "path": "src/components/conversations/ConversationList.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1772745817023,
+      "path": "src/i18n/he.json",
+      "accessCount": 11,
+      "lastAccessed": 1773510349363,
       "type": "directory"
     },
     {
-      "path": "src/components/conversations/ChatPanel.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1772743687171,
-      "type": "directory"
-    },
-    {
-      "path": "src/app/layout.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1772744087129,
-      "type": "directory"
-    },
-    {
-      "path": "src/app/globals.css",
+      "path": "src/components/MobileNav.tsx",
       "accessCount": 4,
-      "lastAccessed": 1772745756253,
+      "lastAccessed": 1773510379314,
       "type": "file"
     },
     {
-      "path": "src/components/AppLayout.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772745770057,
+      "path": "src/app/knowledge/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1773413356928,
       "type": "file"
     },
     {
-      "path": "src/components/conversations",
-      "accessCount": 2,
-      "lastAccessed": 1772746169387,
-      "type": "directory"
-    },
-    {
-      "path": "src",
-      "accessCount": 2,
-      "lastAccessed": 1772746173676,
-      "type": "directory"
-    },
-    {
-      "path": "src/app/conversations/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1772746183802,
+      "path": "src/app/ai-studio/flows/[id]/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1773508796743,
       "type": "file"
     },
     {
-      "path": "src/app",
+      "path": "src/app/ai-studio/knowledge/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1773413542290,
+      "type": "file"
+    },
+    {
+      "path": "src/app/integrations/[slug]/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1773508058335,
+      "type": "file"
+    },
+    {
+      "path": "src/app/ai-studio/marketplace/[slug]/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1773508081720,
+      "type": "file"
+    },
+    {
+      "path": "src/app/ai-studio/agents/[id]/page.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1773508802108,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1773510359672,
+      "type": "file"
+    },
+    {
+      "path": "src/components/chatbot/FlowEditor.tsx",
       "accessCount": 1,
-      "lastAccessed": 1772744065811,
-      "type": "directory"
+      "lastAccessed": 1773413287216,
+      "type": "file"
+    },
+    {
+      "path": "src/app/integrations/page.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1773507895607,
+      "type": "file"
     }
   ],
   "userDirectives": []

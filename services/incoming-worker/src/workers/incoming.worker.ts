@@ -304,6 +304,25 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
+      // Check if this is a new conversation needing routing
+      const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
+
+      if (messageCount <= 1 && !conversation.departmentId) {
+        // New conversation - route it to a department based on intent
+        const { routeConversation } = await import("../services/routing.service");
+        const routing = await routeConversation(tenantId, conversation.id, body);
+
+        if (routing.handledByAI) {
+          // AI bot already handled it inside routeConversation
+          return;
+        }
+        // If routed to department but not AI, conversation is now WAITING for human
+        // Fall through to chatbot flow check below only if no department was matched
+        if (routing.departmentId) {
+          return;
+        }
+      }
+
       // Gmail/Outlook: respect per-channel-account response mode
       if ((channel === "GMAIL" || channel === "OUTLOOK") && channelAccountId) {
         const channelAcct = await prisma.channelAccount.findUnique({

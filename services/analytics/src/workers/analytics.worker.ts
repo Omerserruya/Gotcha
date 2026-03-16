@@ -48,6 +48,38 @@ async function processAnalyticsEvent(job: Job<AnalyticsJob>): Promise<void> {
       }
       break;
     }
+    case "tool_executed": {
+      const { toolId, success } = data;
+      if (toolId) {
+        await redis.hincrby(`analytics:${tenantId}:tools:${dateKey}`, `${toolId}:total`, 1);
+        if (success) {
+          await redis.hincrby(`analytics:${tenantId}:tools:${dateKey}`, `${toolId}:success`, 1);
+        }
+        await redis.expire(`analytics:${tenantId}:tools:${dateKey}`, 86400 * 30);
+      }
+      break;
+    }
+    case "ai_message_sent": {
+      await redis.hincrby(`analytics:${tenantId}:${dateKey}`, "messages_ai", 1);
+      await redis.hincrby(`analytics:${tenantId}:hourly:${hourKey}`, "messages_ai", 1);
+      break;
+    }
+    case "conversation_analyzed": {
+      const { resolutionOutcome, aiConfidence } = data;
+      await redis.hincrby(`analytics:${tenantId}:intelligence:${dateKey}`, "analyzed", 1);
+      if (resolutionOutcome === "escalated") {
+        await redis.hincrby(`analytics:${tenantId}:intelligence:${dateKey}`, "escalated", 1);
+      }
+      if (resolutionOutcome === "resolved") {
+        await redis.hincrby(`analytics:${tenantId}:intelligence:${dateKey}`, "resolved", 1);
+      }
+      if (aiConfidence != null) {
+        await redis.lpush(`analytics:${tenantId}:ai_confidence:${dateKey}`, String(aiConfidence));
+        await redis.expire(`analytics:${tenantId}:ai_confidence:${dateKey}`, 86400 * 30);
+      }
+      await redis.expire(`analytics:${tenantId}:intelligence:${dateKey}`, 86400 * 30);
+      break;
+    }
   }
   await redis.expire(`analytics:${tenantId}:${dateKey}`, 86400 * 30);
   await redis.expire(`analytics:${tenantId}:hourly:${hourKey}`, 86400 * 7);

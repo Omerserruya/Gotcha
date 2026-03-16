@@ -1418,6 +1418,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
 
           <div className="mt-8 sm:mt-10 pt-6 sm:pt-8 border-t border-gray-200/60 flex flex-col sm:flex-row items-center justify-between gap-3 text-[13px] text-[#b0b0b0]">
             <p>&copy; {new Date().getFullYear()} GOTCHA. {t("landing.footer.copyright")}</p>
+            <p className="text-[11px] text-[#c0c0c0]">Founds and Operated by Omer Serruya | עומר צרויה, Matan Amran | מתן עמרן</p>
             <Link href={otherPath} className="hover:text-gray-900 transition-colors duration-200">
               {otherLabel}
             </Link>
