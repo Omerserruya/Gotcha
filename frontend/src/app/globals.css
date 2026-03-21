@@ -297,6 +297,125 @@ body {
 }
 .ea-check-draw { stroke-dasharray: 48; animation: ea-check-draw 0.5s ease-out 0.3s both; }
 
+/* ───── Message Flow Section ───── */
+.flow-section {
+  background: #0e0e12;
+  contain: layout style;
+}
+
+.flow-section *,
+.flow-section *::before,
+.flow-section *::after {
+  transition: none !important;
+}
+
+.flow-stage-card {
+  background: rgba(26, 26, 46, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 1rem;
+  backdrop-filter: blur(8px);
+  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.3);
+  width: 100%;
+  overflow: hidden;
+  will-change: transform, opacity;
+}
+
+.flow-stage-active {
+  border-color: rgba(124, 92, 252, 0.15);
+  box-shadow: 0 4px 30px rgba(124, 92, 252, 0.08), 0 2px 12px rgba(0, 0, 0, 0.3);
+}
+
+.flow-stage-inactive {
+  opacity: 0.4;
+}
+
+/* Thinking dots animation */
+@keyframes flow-dot-bounce {
+  0%, 80%, 100% { transform: translateY(0); opacity: 0.4; }
+  40% { transform: translateY(-4px); opacity: 1; }
+}
+.flow-dot-1 { animation: flow-dot-bounce 1.2s ease-in-out infinite 0s; }
+.flow-dot-2 { animation: flow-dot-bounce 1.2s ease-in-out infinite 0.15s; }
+.flow-dot-3 { animation: flow-dot-bounce 1.2s ease-in-out infinite 0.3s; }
+
+/* Pulse ring for channel icons */
+@keyframes flow-pulse-ring {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.4); opacity: 0; }
+}
+.flow-pulse-ring {
+  border: 2px solid;
+  animation: flow-pulse-ring 1.5s ease-out infinite;
+}
+
+/* Bounce down arrow */
+@keyframes flow-bounce-down {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(4px); }
+}
+.flow-bounce-down {
+  animation: flow-bounce-down 1.5s ease-in-out infinite;
+}
+
+/* Spinning ring on bot icon */
+@keyframes flow-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.flow-spin {
+  animation: flow-spin 1.2s linear infinite;
+}
+
+/* Typing cursor blink */
+@keyframes flow-cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
+.flow-cursor {
+  animation: flow-cursor-blink 0.8s ease-in-out infinite;
+  color: rgba(124, 92, 252, 0.5);
+}
+
+/* Text appear in input */
+@keyframes flow-text-appear {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+.flow-text-appear {
+  animation: flow-text-appear 0.4s ease-out both;
+}
+
+/* Small pulse ring (copilot ready dot) */
+@keyframes flow-pulse-sm {
+  0% { box-shadow: 0 0 0 0 rgba(74, 222, 128, 0.4); }
+  100% { box-shadow: 0 0 0 6px rgba(74, 222, 128, 0); }
+}
+.flow-pulse-ring-sm {
+  animation: flow-pulse-sm 1.5s ease-out infinite;
+}
+
+/* Copilot panel: fixed width on desktop */
+@media (min-width: 768px) {
+  .flow-copilot-panel {
+    width: clamp(200px, 22vw, 280px);
+  }
+}
+
+/* Chat messages fade out at top on mobile */
+@media (max-width: 767px) {
+  .flow-chat-fade {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 15%, black 100%);
+    max-height: 35vh;
+    overflow-y: auto;
+  }
+  /* Copilot content fades at top on mobile */
+  .flow-copilot-fade {
+    -webkit-mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
+    mask-image: linear-gradient(to bottom, transparent 0%, black 20%, black 100%);
+  }
+}
+
 /* Badge pulse for story chaos phase */
 @keyframes badge-pulse {
   0%, 100% { transform: scale(1); opacity: 1; }

@@ -125,22 +125,40 @@
   },
   "hotPaths": [
     {
+      "path": "src/components/landing/MessageFlowSection.tsx",
+      "accessCount": 113,
+      "lastAccessed": 1773694443973,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/en.json",
+      "accessCount": 29,
+      "lastAccessed": 1773696768602,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/landing/LandingPage.tsx",
+      "accessCount": 19,
+      "lastAccessed": 1773696758790,
+      "type": "file"
+    },
+    {
+      "path": "src/i18n/he.json",
+      "accessCount": 19,
+      "lastAccessed": 1773696772957,
+      "type": "directory"
+    },
+    {
       "path": "src/app/ai-studio/page.tsx",
       "accessCount": 16,
       "lastAccessed": 1773508470316,
       "type": "file"
     },
     {
-      "path": "src/i18n/en.json",
-      "accessCount": 15,
-      "lastAccessed": 1773510336332,
-      "type": "directory"
-    },
-    {
-      "path": "src/i18n/he.json",
-      "accessCount": 11,
-      "lastAccessed": 1773510349363,
-      "type": "directory"
+      "path": "src/app/globals.css",
+      "accessCount": 9,
+      "lastAccessed": 1773694287007,
+      "type": "file"
     },
     {
       "path": "src/components/MobileNav.tsx",

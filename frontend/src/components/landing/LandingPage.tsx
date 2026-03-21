@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
+import MessageFlowSection from "@/components/landing/MessageFlowSection";
 
 /* ───── Scroll Story: Platform Config ───── */
 
@@ -51,6 +52,16 @@ const PRODUCT_FEATURES = [
     ),
   },
   {
+    key: "aiAgents",
+    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
+    iconColor: "text-primary-500",
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
+      </svg>
+    ),
+  },
+  {
     key: "aiCopilot",
     gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
     iconColor: "text-primary-500",
@@ -72,32 +83,23 @@ const PRODUCT_FEATURES = [
     ),
   },
   {
-    key: "knowledgeBase",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" />
-      </svg>
-    ),
-  },
-  {
-    key: "smartRouting",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M7.5 21 3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-      </svg>
-    ),
-  },
-  {
     key: "analytics",
     gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
     iconColor: "text-primary-500",
     icon: (
       <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
         <path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
+      </svg>
+    ),
+  },
+  {
+    key: "voipCopilot",
+    gradient: "from-amber-500/[0.08] to-amber-500/[0.04]",
+    iconColor: "text-amber-500",
+    comingSoon: true,
+    icon: (
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+        <path d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
       </svg>
     ),
   },
@@ -892,12 +894,9 @@ function FaqItem({ question, answer }: { question: string; answer: string }) {
 
 export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale }) {
   const { t, locale, setLocale, dir } = useI18n();
-  const featuresRef = useRef<HTMLElement>(null);
-  const [storyProgress, setStoryProgress] = useState(0);
   const [navDark, setNavDark] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const rafRef = useRef<number>(0);
-  const lastProgressRef = useRef(0);
 
   useEffect(() => {
     if (forcedLocale && forcedLocale !== locale) {
@@ -906,26 +905,12 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
   }, [forcedLocale, locale, setLocale]);
 
   useEffect(() => {
-    const features = featuresRef.current;
-    if (!features) return;
     const onScroll = () => {
       if (rafRef.current) return;
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0;
-        const rect = features.getBoundingClientRect();
-        const scrolled = -rect.top;
-        const sectionHeight = rect.height - window.innerHeight;
-        if (sectionHeight > 0) {
-          const progress = Math.min(1, Math.max(0, scrolled / sectionHeight));
-          // Only re-render if progress changed meaningfully (reduces re-renders)
-          if (Math.abs(progress - lastProgressRef.current) > 0.002) {
-            lastProgressRef.current = progress;
-            setStoryProgress(progress);
-          }
-          features.style.setProperty("--fp", String(progress));
-        }
         // Check if nav overlaps a dark section
-        const darkEls = document.querySelectorAll(".landing-features, .landing-dark-section");
+        const darkEls = document.querySelectorAll(".landing-features, .landing-dark-section, .flow-section");
         let overDark = false;
         darkEls.forEach(el => {
           const r = el.getBoundingClientRect();
@@ -1044,8 +1029,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
           <div className={`flex-1 max-w-xl text-center lg:text-start ${isRtl ? "lg:order-2" : ""}`}>
             <h1 className="landing-fade-in mb-4 sm:mb-5">
               <span className="block text-[clamp(1.7rem,5vw,3.2rem)] font-light leading-[1.12] tracking-[-0.03em] text-black">
-                {t("landing.hero.title1")}{" "}
-                <RotatingPlatform locale={locale} />
+                {t("landing.hero.title1")}
               </span>
               <span className="block text-[clamp(1.15rem,3.5vw,2rem)] font-extralight leading-[1.2] tracking-[-0.02em] text-[#9a9a9a] mt-3 sm:mt-4">
                 {t("landing.hero.title2")}
@@ -1119,128 +1103,8 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
         </div>
       </section>
 
-      {/* ───── How It Works: Scroll-Driven Story ───── */}
-      <section
-        id="how-it-works"
-        ref={featuresRef}
-        className="landing-features relative"
-        style={{ "--fp": "0", minHeight: "400vh" } as React.CSSProperties}
-      >
-        {/* Grid overlay */}
-        <div className="landing-features-grid pointer-events-none absolute inset-0" style={{ zIndex: 1 }} />
-
-        {/* Rotating gradient blobs */}
-        <div className="landing-features-gradients pointer-events-none absolute -inset-20 overflow-hidden">
-          <div className="absolute top-[10%] left-0 w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #7C3291 0%, transparent 70%)", filter: "blur(60px)", WebkitFilter: "blur(60px)" }} />
-          <div className="absolute top-[40%] right-0 w-[250px] sm:w-[400px] h-[250px] sm:h-[400px] rounded-full opacity-[0.15]" style={{ background: "radial-gradient(circle, #5A72B3 0%, transparent 70%)", filter: "blur(60px)", WebkitFilter: "blur(60px)" }} />
-          <div className="absolute bottom-[10%] left-[20%] w-[300px] sm:w-[500px] h-[300px] sm:h-[500px] rounded-full opacity-[0.18]" style={{ background: "radial-gradient(circle, #6DCED9 0%, transparent 70%)", filter: "blur(60px)", WebkitFilter: "blur(60px)" }} />
-        </div>
-
-        {/* ── Scroll-driven story (all screen sizes) ── */}
-        <div className="relative" style={{ zIndex: 2, minHeight: "400vh" }}>
-          <div className="sticky top-0 h-screen flex items-center justify-center overflow-hidden" style={{ transform: "translateZ(0)", backfaceVisibility: "hidden" }}>
-            {/* Section label */}
-            <p className="absolute top-6 sm:top-8 inset-x-0 text-center text-[10px] sm:text-xs font-medium text-primary-400 uppercase tracking-[0.15em]">
-              {t("landing.features.label")}
-            </p>
-
-            {/* Phase 1 & 2: Chaos → stacked conversation items */}
-            <div className="relative w-full h-full flex items-center justify-center scale-[0.75] sm:scale-[0.8] md:scale-[0.9] lg:scale-100 origin-center">
-              {INBOX_PLATFORMS.map((platform, i) => (
-                <ConversationItem
-                  key={platform.name}
-                  platform={platform}
-                  index={i}
-                  progress={storyProgress}
-                  isRtl={isRtl}
-                />
-              ))}
-            </div>
-
-            {/* Phase 3 & 4: Full inbox demo (crossfades in) */}
-            {(() => {
-              const demoFadeStart = 0.45;
-              const demoFadeEnd = 0.60;
-              const sub = Math.min(1, Math.max(0, (storyProgress - demoFadeStart) / (demoFadeEnd - demoFadeStart)));
-              const eased = 1 - Math.pow(1 - sub, 3);
-              const scale = 0.92 + 0.08 * eased;
-              // Copilot slides in later (0.70–0.90)
-              const copilotP = Math.min(1, Math.max(0, (storyProgress - 0.70) / 0.20));
-              return (
-                <div
-                  className="absolute inset-0 flex items-center justify-center pointer-events-none"
-                  style={{ opacity: eased, transform: `scale(${scale}) translateY(-4%)`, willChange: "transform, opacity" }}
-                >
-                  <div className="scale-[0.78] sm:scale-[0.82] md:scale-[0.88] lg:scale-100 origin-center">
-                    <InboxDemo
-                      copilotProgress={copilotP}
-                      isRtl={isRtl}
-                      t={t as (key: string) => string}
-                    />
-                  </div>
-                </div>
-              );
-            })()}
-
-            {/* Phase text overlays */}
-            {/* Phase 1: Chaos — top */}
-            <StoryPhaseText
-              text={t("landing.features.chaosText") as string}
-              desc={t("landing.features.chaosDesc") as string}
-              opacity={storyProgress < 0.18 ? 1 : Math.max(0, 1 - (storyProgress - 0.18) / 0.06)}
-            />
-            {/* Phase 2: Converge — top, fades out before demo appears */}
-            <StoryPhaseText
-              text={t("landing.features.convergeText") as string}
-              desc={t("landing.features.convergeDesc") as string}
-              opacity={
-                storyProgress < 0.28 ? Math.max(0, (storyProgress - 0.22) / 0.06)
-                : storyProgress > 0.36 ? Math.max(0, 1 - (storyProgress - 0.36) / 0.06)
-                : 1
-              }
-            />
-            {/* Phase 3: One inbox — bottom, appears when demo fades in */}
-            <StoryPhaseText
-              text={t("landing.features.resolveText") as string}
-              desc={t("landing.features.resolveDesc") as string}
-              opacity={
-                storyProgress < 0.50 ? Math.max(0, (storyProgress - 0.44) / 0.06)
-                : storyProgress > 0.56 ? Math.max(0, 1 - (storyProgress - 0.56) / 0.06)
-                : 1
-              }
-              bottom
-            />
-            {/* Phase 4: Bot handover — bottom */}
-            <StoryPhaseText
-              text={t("landing.features.botText") as string}
-              desc={t("landing.features.botDesc") as string}
-              opacity={
-                storyProgress < 0.64 ? Math.max(0, (storyProgress - 0.58) / 0.06)
-                : storyProgress > 0.72 ? Math.max(0, 1 - (storyProgress - 0.72) / 0.06)
-                : 1
-              }
-              bottom
-            />
-            {/* Phase 5: AI Copilot — bottom */}
-            <StoryPhaseText
-              text={t("landing.features.copilotText") as string}
-              desc={t("landing.features.copilotDesc") as string}
-              opacity={storyProgress < 0.80 ? 0 : Math.min(1, (storyProgress - 0.80) / 0.10)}
-              bottom
-            />
-
-            {/* Progress bar */}
-            <div className="absolute bottom-2 sm:bottom-3 inset-x-0 flex justify-center">
-              <div className="w-24 sm:w-32 h-1 bg-white/10 rounded-full overflow-hidden">
-                <div
-                  className="h-full bg-primary-500 rounded-full transition-none"
-                  style={{ width: `${storyProgress * 100}%` }}
-                />
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
+      {/* ───── How It Works: Message Flow Visualization ───── */}
+      <MessageFlowSection t={t as (key: string) => string} isRtl={isRtl} />
 
       {/* ───── Features: 2x3 Grid ───── */}
       <section id="product-features" className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
@@ -1260,8 +1124,13 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
             {PRODUCT_FEATURES.map((feature) => (
               <div
                 key={feature.key}
-                className="bg-white rounded-2xl p-6 sm:p-7 hover:shadow-sm transition-shadow duration-200 group"
+                className={`bg-white rounded-2xl p-6 sm:p-7 hover:shadow-sm transition-shadow duration-200 group relative ${"comingSoon" in feature && feature.comingSoon ? "opacity-80" : ""}`}
               >
+                {"comingSoon" in feature && feature.comingSoon && (
+                  <span className="absolute top-4 end-4 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/15">
+                    {t("landing.productFeatures.comingSoon")}
+                  </span>
+                )}
                 <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 group-hover:scale-105 transition-transform duration-200`}>
                   <span className={feature.iconColor}>{feature.icon}</span>
                 </div>
