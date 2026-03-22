@@ -216,6 +216,128 @@
       "checkOrderStatus": "Check Order Status",
       "offerDiscount": "Offer Discount",
       "transferToHuman": "Transfer to Human"
+    },
+    "panel": {
+      "title": "AI Co-Pilot",
+      "aiPowered": "AI-Powered",
+      "demoMode": "Demo Mode",
+      "regenerate": "Regenerate",
+      "pause": "Pause",
+      "paused": "Paused",
+      "resumeCoPilot": "Resume Co-Pilot",
+      "pauseCoPilot": "Pause Co-Pilot",
+      "live": "Live",
+      "closeCoPilot": "Close Co-Pilot",
+      "tabs": {
+        "suggestions": "Suggestions",
+        "knowledgeBase": "Knowledge Base",
+        "aiChat": "AI Chat"
+      },
+      "analysis": {
+        "title": "AI Analysis",
+        "show": "Show",
+        "hide": "Hide",
+        "findings": "Findings",
+        "intent": "Intent",
+        "sentiment": "Sentiment",
+        "priority": "Priority",
+        "context": "Context",
+        "lastInbound": "last inbound",
+        "msg": "msg",
+        "msgs": "msgs",
+        "na": "N/A"
+      },
+      "thinking": {
+        "readingConversation": "Reading conversation",
+        "analyzingIntent": "Analyzing customer intent",
+        "searchingKB": "Searching knowledge base",
+        "fetchingData": "Fetching customer data",
+        "generatingSuggestions": "Generating suggestions"
+      },
+      "sentiments": {
+        "positive": "Positive",
+        "slightlyNegative": "Slightly negative",
+        "neutral": "Neutral"
+      },
+      "priorities": {
+        "high": "High",
+        "medium": "Medium",
+        "low": "Low"
+      },
+      "contextSection": {
+        "title": "Context"
+      },
+      "customerContext": {
+        "title": "Customer Context",
+        "show": "Show",
+        "hide": "Hide",
+        "name": "Name",
+        "phone": "Phone",
+        "conversations": "Conversations",
+        "sentiment": "Sentiment",
+        "channel": "Channel",
+        "status": "Status",
+        "unknown": "Unknown",
+        "vip": "VIP",
+        "happy": "Happy",
+        "angry": "Angry",
+        "neutral": "Neutral",
+        "web": "Web"
+      },
+      "suggestedReplies": {
+        "title": "Suggested Replies",
+        "confident": "confident"
+      },
+      "intelligence": {
+        "title": "Conversation Intelligence"
+      },
+      "intents": {
+        "generalInquiry": "General inquiry",
+        "refundRequest": "Refund request",
+        "cancellation": "Cancellation",
+        "returnRequest": "Return request",
+        "technicalIssue": "Technical issue",
+        "pricingInquiry": "Pricing inquiry",
+        "supportRequest": "Support request",
+        "orderInquiry": "Order inquiry",
+        "positiveFeedback": "Positive feedback"
+      },
+      "tags": {
+        "returnRequest": "Return Request",
+        "orderIssue": "Order Issue",
+        "highPriority": "High Priority",
+        "churnRisk": "Churn Risk",
+        "technical": "Technical",
+        "pricing": "Pricing",
+        "general": "General"
+      },
+      "search": {
+        "placeholder": "Search company docs...",
+        "enterToSearch": "Press Enter to search",
+        "searchKB": "Search your company knowledge base",
+        "tryTags": "Try the quick tags above",
+        "resultsFound": "result(s) found",
+        "refundPolicy": "Refund policy",
+        "pricingPlans": "Pricing plans",
+        "setupGuide": "Setup guide"
+      },
+      "chat": {
+        "askAnything": "Ask the AI anything",
+        "askHint": "Questions about the conversation, customer, KB lookups, draft replies...",
+        "inputPlaceholder": "Ask the AI...",
+        "failedResponse": "Failed to get response. Please try again."
+      },
+      "aiReplyLabel": "AI Reply",
+      "actionLabel": "Action",
+      "infoLabel": "Info",
+      "footer": "AI suggestions are for reference only. Always review before sending.",
+      "localSummary": {
+        "noMessages": "No messages yet.",
+        "messagesCount": "messages",
+        "fromCustomer": "from customer",
+        "fromAgent": "from agent",
+        "lastCustomerMessage": "Last customer message"
+      }
     }
   },
   "channels": {
@@ -1074,26 +1196,67 @@
   },
   "aiStudio": {
     "title": "AI Studio",
-    "subtitle": "Configure AI employees, flows, knowledge, and integrations in one place",
+    "subtitle": "Create AI employees, define what they know, and manage how they handle conversations",
     "edit": "Edit",
     "test": "Test",
     "tabs": {
-      "agents": "AI Employees",
-      "flows": "Flows",
-      "router": "Router",
+      "team": "Team Members",
+      "playbooks": "Playbooks",
       "knowledge": "Knowledge",
-      "tools": "Tools",
-      "marketplace": "Marketplace"
+      "skills": "Skills & Integrations"
     },
     "stats": {
-      "activeAgents": "AI Employees",
-      "agentsSub": "handling conversations",
-      "activeFlows": "Active Flows",
-      "flowsSub": "running automations",
+      "teamMembers": "Team Members",
+      "activeMembers": "handling conversations",
+      "activePlaybooks": "Active Playbooks",
+      "playbooksSub": "running automations",
       "knowledgeSources": "Knowledge Sources",
       "knowledgeSub": "3 synced",
-      "connectedTools": "Connected Tools",
-      "toolsSub": "across 2 integrations"
+      "connectedSkills": "Connected Skills",
+      "skillsSub": "across 2 integrations",
+      "conversationsToday": "conversations\ntoday",
+      "avgSatisfaction": "avg\nsatisfaction"
+    },
+    "team": {
+      "title": "Team Members",
+      "subtitle": "Your AI employees that handle customer conversations",
+      "addMember": "Add Team Member",
+      "addMemberHint": "Create a new AI employee for your team",
+      "knowledge": "knowledge",
+      "skills": "skills",
+      "convosToday": "today",
+      "csat": "CSAT",
+      "modeAutonomous": "Autonomous",
+      "modeCopilot": "Co-Pilot",
+      "modeHuman": "Human Only"
+    },
+    "playbooks": {
+      "title": "Playbooks",
+      "subtitle": "Define how conversations are routed and handled by your AI team",
+      "newPlaybook": "New Playbook",
+      "runs": "runs",
+      "mainPlaybook": "Main Playbook",
+      "mainPlaybookSub": "Entry point for all incoming conversations",
+      "editMainPlaybook": "Edit Playbook",
+      "mainPlaybookHint": "Steps are evaluated top to bottom. First match routes the conversation.",
+      "subPlaybooks": "Sub-Playbooks",
+      "routeSubflow": "Playbook",
+      "routeAgent": "Team Member",
+      "routeHuman": "Human"
+    },
+    "resources": {
+      "title": "Team Resources",
+      "subtitle": "Knowledge and capabilities shared across your AI team",
+      "knowledge": "Knowledge",
+      "sources": "sources",
+      "manage": "Manage",
+      "skillsAndTools": "Skills & Tools",
+      "browseMarketplace": "Browse Marketplace",
+      "toolsActive": "tools active",
+      "connected": "Connected",
+      "addIntegration": "Add Integration",
+      "availableIntegrations": "integrations available",
+      "browseAvailable": "Browse available integrations"
     },
     "agents": {
       "title": "AI Employees",
@@ -1180,6 +1343,23 @@
           "copilotDesc": "AI drafts replies and surfaces context. Human reviews and sends.",
           "autonomous": "Autonomous",
           "autonomousDesc": "AI handles conversations independently. Human can monitor and intervene."
+        },
+        "interactiveMessages": {
+          "subtitle": "Configure interactive message types the agent can send",
+          "allowedTypes": "Allowed Types",
+          "quickReply": "Quick Reply",
+          "listMenu": "List Menu",
+          "cta": "Call to Action",
+          "autoSuggestLabel": "Auto-Suggest",
+          "autoSuggestMultiple": "Multiple Choice",
+          "autoSuggestYesNo": "Yes / No",
+          "autoSuggestProduct": "Product Selection",
+          "autoSuggestAlways": "Always Suggest",
+          "previewTitle": "Preview",
+          "previewMessage": "How can I help you today?",
+          "previewBtn1": "Track Order",
+          "previewBtn2": "Return Item",
+          "previewBtn3": "Talk to Agent"
         }
       }
     },
@@ -1201,32 +1381,31 @@
       }
     },
     "router": {
-      "title": "AI Router",
+      "title": "Assignment Rules",
       "subtitle": "Rules evaluated top to bottom — first match wins",
       "addRule": "+ Add Rule",
       "rule": "Rule",
       "condition": "Condition",
       "routeTo": "Route To",
       "hint": "Rules are evaluated top to bottom. Drag to reorder priority.",
-      "pageTitle": "AI Router",
-      "pageSubtitle": "Define rules for how incoming messages are handled",
+      "pageTitle": "Assignment Rules",
+      "pageSubtitle": "Define how incoming conversations reach the right team member",
       "backToStudio": "Back to AI Studio",
       "infoBanner": "Rules are evaluated top to bottom. The first matching rule wins. The default rule at the bottom catches everything that doesn't match.",
-      "rulesTitle": "Routing Rules",
+      "rulesTitle": "Assignment Rules",
       "rulesSubtitle": "Priority-ordered — drag to reorder",
       "ruleCol": "Rule",
-      "routeToCol": "Route To",
+      "routeToCol": "Assign To",
       "onCol": "On",
-      "configureRouter": "Configure Router",
-      "addRule": "+ Add Rule",
-      "howItWorksTitle": "How Routing Works",
+      "configureRouter": "Edit Rules",
+      "howItWorksTitle": "How Assignment Works",
       "how1": "A new message arrives from any channel (WhatsApp, Instagram, Web Chat).",
-      "how2": "The router evaluates each rule from top to bottom. The first rule whose conditions match the message wins.",
-      "how3": "The conversation is sent to the matched destination — an AI Agent, a Flow, or a Human Agent."
+      "how2": "Each rule is checked from top to bottom. The first rule that matches the conversation wins.",
+      "how3": "The conversation is assigned to the right team member — an AI Employee, a Playbook, or a Human Agent."
     },
     "knowledge": {
       "title": "Knowledge Sources",
-      "subtitle": "Information AI agents reference when answering questions",
+      "subtitle": "Information your AI team references when answering questions",
       "addSource": "+ Add Source",
       "source": "Source",
       "type": "Type",
@@ -1236,7 +1415,7 @@
       "page": {
         "backToStudio": "Back to AI Studio",
         "title": "Knowledge Sources",
-        "subtitle": "Manage documents, FAQs, and websites that AI agents reference",
+        "subtitle": "Manage documents, FAQs, and websites that your AI team references",
         "addSource": "+ Add Source",
         "addSourceHint": "Upload files, add URLs, or create structured Q&A pairs",
         "totalSources": "Total Sources",
@@ -1246,27 +1425,27 @@
         "colType": "Type",
         "colStatus": "Status",
         "colLastSync": "Last Synced",
-        "colAgents": "Agents",
+        "colAgents": "Team Members",
         "empty": "No knowledge sources yet",
         "emptyHint": "Add your first source to get started",
         "howItWorksTitle": "How Knowledge Works",
         "how1": "Add documents, websites, or FAQ pairs as knowledge sources.",
-        "how2": "Sources are indexed and made searchable for your AI agents.",
-        "how3": "Agents automatically reference relevant knowledge when answering customer questions.",
+        "how2": "Sources are indexed and made searchable for your AI team.",
+        "how3": "Team members automatically reference relevant knowledge when answering customer questions.",
         "deleteTitle": "Delete Source",
-        "deleteMsg": "This will permanently remove this knowledge source and unassign it from all agents.",
+        "deleteMsg": "This will permanently remove this knowledge source and unassign it from all team members.",
         "cancel": "Cancel",
         "delete": "Delete"
       }
     },
     "tools": {
       "title": "Connected Tools",
-      "subtitle": "Actions AI agents can perform via external integrations",
-      "openMarketplace": "Open Marketplace",
+      "subtitle": "Actions AI team members can perform via external integrations",
+      "openMarketplace": "Browse Marketplace",
       "usedBy": "Used by",
       "notAssigned": "Not assigned",
       "connectNew": "Connect New Integration",
-      "connectNewSub": "Browse the Integrations Marketplace to add more tools"
+      "connectNewSub": "Browse the Marketplace to add more capabilities"
     }
   },
   "confirm": {

@@ -73,9 +73,9 @@ export const instagramInboundAdapter: InboundAdapter = {
   },
 
   resolveChannelAccountExternalId(body: any): string | null {
-    // entry[].id is the Instagram Business Account ID
+    // entry[].id is the Facebook Page ID, NOT the IG Business Account ID.
+    // recipient.id is the Instagram Business Account ID — matches externalId stored in DB.
     for (const entry of body.entry || []) {
-      if (entry.id) return entry.id;
       for (const event of entry.messaging || []) {
         if (event.recipient?.id) return event.recipient.id;
       }

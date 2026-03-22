@@ -4,8 +4,6 @@ import fs from "fs";
 import path from "path";
 import crypto from "crypto";
 import { prisma, createWorker, IncomingMessageJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
-import { processChatbotFlow } from "../services/chatbot-engine.service";
-import { processAIBot } from "../services/ai-bot.service";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
 const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
@@ -308,45 +306,19 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
 
       if (messageCount <= 1 && !conversation.departmentId) {
-        // New conversation - route it to a department based on intent
+        // New conversation - route via playbook rules
         const { routeConversation } = await import("../services/routing.service");
-        const routing = await routeConversation(tenantId, conversation.id, body);
+        const routing = await routeConversation(tenantId, conversation.id, body, channel);
 
         if (routing.handledByAI) {
-          // AI bot already handled it inside routeConversation
+          // AI agent or chatbot flow handled it inside routeConversation
           return;
         }
-        // If routed to department but not AI, conversation is now WAITING for human
-        // Fall through to chatbot flow check below only if no department was matched
         if (routing.departmentId) {
+          // Routed to department, conversation is WAITING for human
           return;
         }
-      }
-
-      // Gmail/Outlook: respect per-channel-account response mode
-      if ((channel === "GMAIL" || channel === "OUTLOOK") && channelAccountId) {
-        const channelAcct = await prisma.channelAccount.findUnique({
-          where: { id: channelAccountId },
-          select: { responseMode: true },
-        });
-
-        if (channelAcct?.responseMode === "AI_AUTO_REPLY") {
-          await processAIBot(tenantId, conversation.id, body);
-        }
-        // HUMAN_WITH_COPILOT (default): skip auto-reply, conversation stays OPEN for human agent
-      } else {
-        // All other channels: use tenant-level bot settings
-        const botTenant = await prisma.tenant.findUnique({
-          where: { id: tenantId },
-          select: { botEnabled: true, botType: true },
-        });
-
-        if (botTenant?.botEnabled && botTenant.botType === "AUTONOMOUS_AI") {
-          await processAIBot(tenantId, conversation.id, body);
-        } else {
-          // Default: chatbot flow (works even if botType not set)
-          await processChatbotFlow(tenantId, conversation.id, body);
-        }
+        // No rule matched — conversation stays in inbox for manual pickup
       }
     } catch (err) {
       console.error("Bot processing error:", err);

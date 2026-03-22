@@ -216,6 +216,128 @@
       "checkOrderStatus": "בדוק סטטוס הזמנה",
       "offerDiscount": "הצע הנחה",
       "transferToHuman": "העבר לנציג"
+    },
+    "panel": {
+      "title": "עוזר AI",
+      "aiPowered": "מופעל AI",
+      "demoMode": "מצב הדגמה",
+      "regenerate": "צור מחדש",
+      "pause": "השהה",
+      "paused": "מושהה",
+      "resumeCoPilot": "חדש עוזר AI",
+      "pauseCoPilot": "השהה עוזר AI",
+      "live": "פעיל",
+      "closeCoPilot": "סגור עוזר AI",
+      "tabs": {
+        "suggestions": "הצעות",
+        "knowledgeBase": "בסיס ידע",
+        "aiChat": "צ'אט AI"
+      },
+      "analysis": {
+        "title": "ניתוח AI",
+        "show": "הצג",
+        "hide": "הסתר",
+        "findings": "ממצאים",
+        "intent": "כוונה",
+        "sentiment": "סנטימנט",
+        "priority": "עדיפות",
+        "context": "הקשר",
+        "lastInbound": "הודעה נכנסת אחרונה",
+        "msg": "הודעה",
+        "msgs": "הודעות",
+        "na": "לא זמין"
+      },
+      "thinking": {
+        "readingConversation": "קורא שיחה",
+        "analyzingIntent": "מנתח כוונת לקוח",
+        "searchingKB": "מחפש בבסיס הידע",
+        "fetchingData": "מביא נתוני לקוח",
+        "generatingSuggestions": "מייצר הצעות"
+      },
+      "sentiments": {
+        "positive": "חיובי",
+        "slightlyNegative": "שלילי במקצת",
+        "neutral": "ניטרלי"
+      },
+      "priorities": {
+        "high": "גבוהה",
+        "medium": "בינונית",
+        "low": "נמוכה"
+      },
+      "contextSection": {
+        "title": "הקשר"
+      },
+      "customerContext": {
+        "title": "פרטי לקוח",
+        "show": "הצג",
+        "hide": "הסתר",
+        "name": "שם",
+        "phone": "טלפון",
+        "conversations": "שיחות",
+        "sentiment": "מצב רוח",
+        "channel": "ערוץ",
+        "status": "סטטוס",
+        "unknown": "לא ידוע",
+        "vip": "VIP",
+        "happy": "שמח",
+        "angry": "כועס",
+        "neutral": "ניטרלי",
+        "web": "אתר"
+      },
+      "suggestedReplies": {
+        "title": "תגובות מוצעות",
+        "confident": "ביטחון"
+      },
+      "intelligence": {
+        "title": "אינטליגנציית שיחה"
+      },
+      "intents": {
+        "generalInquiry": "פנייה כללית",
+        "refundRequest": "בקשת החזר",
+        "cancellation": "ביטול",
+        "returnRequest": "בקשת החזרה",
+        "technicalIssue": "תקלה טכנית",
+        "pricingInquiry": "שאלת מחיר",
+        "supportRequest": "בקשת תמיכה",
+        "orderInquiry": "שאלה על הזמנה",
+        "positiveFeedback": "משוב חיובי"
+      },
+      "tags": {
+        "returnRequest": "בקשת החזרה",
+        "orderIssue": "בעיה בהזמנה",
+        "highPriority": "עדיפות גבוהה",
+        "churnRisk": "סיכון נטישה",
+        "technical": "טכני",
+        "pricing": "מחירים",
+        "general": "כללי"
+      },
+      "search": {
+        "placeholder": "חפש במסמכי החברה...",
+        "enterToSearch": "לחץ Enter לחיפוש",
+        "searchKB": "חפש בבסיס הידע של החברה",
+        "tryTags": "נסה את התגיות למעלה",
+        "resultsFound": "תוצאות נמצאו",
+        "refundPolicy": "מדיניות החזרים",
+        "pricingPlans": "תוכניות מחיר",
+        "setupGuide": "מדריך התקנה"
+      },
+      "chat": {
+        "askAnything": "שאל את ה-AI כל דבר",
+        "askHint": "שאלות על השיחה, הלקוח, חיפוש בבסיס הידע, טיוטת תגובות...",
+        "inputPlaceholder": "שאל את ה-AI...",
+        "failedResponse": "לא ניתן לקבל תגובה. נסה שוב."
+      },
+      "aiReplyLabel": "תגובת AI",
+      "actionLabel": "פעולה",
+      "infoLabel": "מידע",
+      "footer": "הצעות AI הן לעיון בלבד. תמיד בדוק לפני שליחה.",
+      "localSummary": {
+        "noMessages": "אין הודעות עדיין.",
+        "messagesCount": "הודעות",
+        "fromCustomer": "מלקוח",
+        "fromAgent": "מנציג",
+        "lastCustomerMessage": "הודעת לקוח אחרונה"
+      }
     }
   },
   "channels": {
@@ -1074,26 +1196,67 @@
   },
   "aiStudio": {
     "title": "סטודיו AI",
-    "subtitle": "הגדר עובדי AI, תהליכים, ידע ואינטגרציות במקום אחד",
+    "subtitle": "צור עובדי AI, הגדר מה הם יודעים, ונהל כיצד הם מטפלים בשיחות",
     "edit": "ערוך",
     "test": "בדוק",
     "tabs": {
-      "agents": "עובדי AI",
-      "flows": "תהליכים",
-      "router": "ניתוב",
+      "team": "חברי צוות",
+      "playbooks": "תהליכים",
       "knowledge": "ידע",
-      "tools": "כלים",
-      "marketplace": "מרקטפלייס"
+      "skills": "כישורים ואינטגרציות"
     },
     "stats": {
-      "activeAgents": "עובדי AI",
-      "agentsSub": "מטפלים בשיחות",
-      "activeFlows": "תהליכים פעילים",
-      "flowsSub": "אוטומציות פועלות",
+      "teamMembers": "חברי צוות",
+      "activeMembers": "מטפלים בשיחות",
+      "activePlaybooks": "תהליכים פעילים",
+      "playbooksSub": "אוטומציות פועלות",
       "knowledgeSources": "מקורות ידע",
       "knowledgeSub": "3 מסונכרנים",
-      "connectedTools": "כלים מחוברים",
-      "toolsSub": "ב-2 אינטגרציות"
+      "connectedSkills": "כישורים מחוברים",
+      "skillsSub": "ב-2 אינטגרציות",
+      "conversationsToday": "שיחות\nהיום",
+      "avgSatisfaction": "שביעות רצון\nממוצעת"
+    },
+    "team": {
+      "title": "חברי צוות",
+      "subtitle": "עובדי ה-AI שלך שמטפלים בשיחות עם לקוחות",
+      "addMember": "הוסף חבר צוות",
+      "addMemberHint": "צור עובד AI חדש לצוות שלך",
+      "knowledge": "ידע",
+      "skills": "כישורים",
+      "convosToday": "היום",
+      "csat": "שביעות רצון",
+      "modeAutonomous": "אוטונומי",
+      "modeCopilot": "עוזר AI",
+      "modeHuman": "אנושי בלבד"
+    },
+    "playbooks": {
+      "title": "תהליכים",
+      "subtitle": "הגדר כיצד שיחות מנותבות ומטופלות על ידי צוות ה-AI שלך",
+      "newPlaybook": "תהליך חדש",
+      "runs": "הפעלות",
+      "mainPlaybook": "תהליך ראשי",
+      "mainPlaybookSub": "נקודת כניסה לכל השיחות הנכנסות",
+      "editMainPlaybook": "ערוך תהליך",
+      "mainPlaybookHint": "השלבים מוערכים מלמעלה למטה. ההתאמה הראשונה מנתבת את השיחה.",
+      "subPlaybooks": "תת-תהליכים",
+      "routeSubflow": "תהליך",
+      "routeAgent": "חבר צוות",
+      "routeHuman": "אנושי"
+    },
+    "resources": {
+      "title": "משאבי צוות",
+      "subtitle": "ידע ויכולות המשותפים לכל צוות ה-AI שלך",
+      "knowledge": "ידע",
+      "sources": "מקורות",
+      "manage": "נהל",
+      "skillsAndTools": "כישורים וכלים",
+      "browseMarketplace": "עיין בשוק",
+      "toolsActive": "כלים פעילים",
+      "connected": "מחובר",
+      "addIntegration": "הוסף אינטגרציה",
+      "availableIntegrations": "אינטגרציות זמינות",
+      "browseAvailable": "עיין באינטגרציות זמינות"
     },
     "agents": {
       "title": "עובדי AI",
@@ -1180,6 +1343,23 @@
           "copilotDesc": "AI מנסח תגובות ומציג הקשר. אדם בודק ושולח.",
           "autonomous": "אוטונומי",
           "autonomousDesc": "AI מטפל בשיחות באופן עצמאי. אדם יכול לנטר ולהתערב."
+        },
+        "interactiveMessages": {
+          "subtitle": "הגדר סוגי הודעות אינטראקטיביות שהסוכן יכול לשלוח",
+          "allowedTypes": "סוגים מותרים",
+          "quickReply": "תגובה מהירה",
+          "listMenu": "תפריט רשימה",
+          "cta": "קריאה לפעולה",
+          "autoSuggestLabel": "הצעה אוטומטית",
+          "autoSuggestMultiple": "בחירה מרובה",
+          "autoSuggestYesNo": "כן / לא",
+          "autoSuggestProduct": "בחירת מוצר",
+          "autoSuggestAlways": "הצע תמיד",
+          "previewTitle": "תצוגה מקדימה",
+          "previewMessage": "איך אפשר לעזור לך היום?",
+          "previewBtn1": "מעקב הזמנה",
+          "previewBtn2": "החזרת פריט",
+          "previewBtn3": "דבר עם נציג"
         }
       }
     },
@@ -1201,31 +1381,31 @@
       }
     },
     "router": {
-      "title": "ניתוב AI",
+      "title": "כללי הקצאה",
       "subtitle": "כללים מוערכים מלמעלה למטה — ההתאמה הראשונה מנצחת",
       "addRule": "+ הוסף כלל",
       "rule": "כלל",
       "condition": "תנאי",
-      "routeTo": "נתב אל",
+      "routeTo": "הקצה ל",
       "hint": "כללים מוערכים מלמעלה למטה. גרור לסידור עדיפויות.",
-      "pageTitle": "ניתוב AI",
-      "pageSubtitle": "הגדר כללים כיצד מטפלים בהודעות נכנסות",
+      "pageTitle": "כללי הקצאה",
+      "pageSubtitle": "הגדר כיצד שיחות נכנסות מגיעות לחבר הצוות הנכון",
       "backToStudio": "חזרה לסטודיו AI",
       "infoBanner": "כללים מוערכים מלמעלה למטה. הכלל התואם הראשון מנצח. כלל ברירת המחדל בתחתית תופס את כל מה שלא תואם.",
-      "rulesTitle": "כללי ניתוב",
+      "rulesTitle": "כללי הקצאה",
       "rulesSubtitle": "לפי סדר עדיפויות — גרור לסידור מחדש",
       "ruleCol": "כלל",
-      "routeToCol": "נתב אל",
+      "routeToCol": "הקצה ל",
       "onCol": "פעיל",
-      "configureRouter": "הגדר ניתוב",
-      "howItWorksTitle": "כיצד הניתוב עובד",
+      "configureRouter": "ערוך כללים",
+      "howItWorksTitle": "כיצד ההקצאה עובדת",
       "how1": "הודעה חדשה מגיעה מכל ערוץ (WhatsApp, Instagram, צ'אט אתר).",
-      "how2": "הנתב מעריך כל כלל מלמעלה למטה. הכלל הראשון שתנאיו תואמים את ההודעה מנצח.",
-      "how3": "השיחה נשלחת ליעד התואם — סוכן AI, תהליך, או נציג אנושי."
+      "how2": "כל כלל נבדק מלמעלה למטה. הכלל הראשון שתואם את השיחה מנצח.",
+      "how3": "השיחה מוקצית לחבר הצוות הנכון — עובד AI, תהליך, או נציג אנושי."
     },
     "knowledge": {
       "title": "מקורות ידע",
-      "subtitle": "מידע שסוכני AI מפנים אליו בעת מענה לשאלות",
+      "subtitle": "מידע שצוות ה-AI שלך מפנה אליו בעת מענה לשאלות",
       "addSource": "+ הוסף מקור",
       "source": "מקור",
       "type": "סוג",
@@ -1235,7 +1415,7 @@
       "page": {
         "backToStudio": "חזרה לסטודיו AI",
         "title": "מקורות ידע",
-        "subtitle": "נהל מסמכים, שאלות נפוצות ואתרים שסוכני AI מפנים אליהם",
+        "subtitle": "נהל מסמכים, שאלות נפוצות ואתרים שצוות ה-AI שלך מפנה אליהם",
         "addSource": "+ הוסף מקור",
         "addSourceHint": "העלה קבצים, הוסף כתובות URL, או צור זוגות שאלה-תשובה",
         "totalSources": "סך מקורות",
@@ -1245,27 +1425,27 @@
         "colType": "סוג",
         "colStatus": "סטטוס",
         "colLastSync": "סנכרון אחרון",
-        "colAgents": "סוכנים",
+        "colAgents": "חברי צוות",
         "empty": "אין מקורות ידע עדיין",
         "emptyHint": "הוסף את המקור הראשון שלך כדי להתחיל",
         "howItWorksTitle": "כיצד הידע עובד",
         "how1": "הוסף מסמכים, אתרים, או זוגות שאלה-תשובה כמקורות ידע.",
-        "how2": "המקורות מאונדקסים ומאפשרים חיפוש לסוכני ה-AI שלך.",
-        "how3": "הסוכנים מפנים אוטומטית לידע הרלוונטי בעת מענה לשאלות לקוחות.",
+        "how2": "המקורות מאונדקסים ומאפשרים חיפוש לצוות ה-AI שלך.",
+        "how3": "חברי הצוות מפנים אוטומטית לידע הרלוונטי בעת מענה לשאלות לקוחות.",
         "deleteTitle": "מחק מקור",
-        "deleteMsg": "פעולה זו תמחק לצמיתות את מקור הידע ותבטל את הקצאתו מכל הסוכנים.",
+        "deleteMsg": "פעולה זו תמחק לצמיתות את מקור הידע ותבטל את הקצאתו מכל חברי הצוות.",
         "cancel": "ביטול",
         "delete": "מחק"
       }
     },
     "tools": {
       "title": "כלים מחוברים",
-      "subtitle": "פעולות שסוכני AI יכולים לבצע דרך אינטגרציות חיצוניות",
-      "openMarketplace": "פתח שוק אינטגרציות",
+      "subtitle": "פעולות שחברי צוות ה-AI יכולים לבצע דרך אינטגרציות חיצוניות",
+      "openMarketplace": "עיין בשוק",
       "usedBy": "בשימוש של",
       "notAssigned": "לא מוקצה",
       "connectNew": "חבר אינטגרציה חדשה",
-      "connectNewSub": "עיין בשוק האינטגרציות להוספת כלים נוספים"
+      "connectNewSub": "עיין בשוק להוספת יכולות נוספות"
     }
   },
   "confirm": {

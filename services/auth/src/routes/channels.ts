@@ -41,6 +41,40 @@ const SLACK_CLIENT_SECRET = process.env.SLACK_CLIENT_SECRET || "";
 const SLACK_OAUTH_REDIRECT_URI = process.env.SLACK_OAUTH_REDIRECT_URI || "";
 const SLACK_SIGNING_SECRET = process.env.SLACK_SIGNING_SECRET || "";
 
+// ─── Auto-create router rule for email channels ─────────────
+async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLOOK", displayName: string) {
+  try {
+    // Check if a router rule with a channel condition for this email type already exists
+    const existingRules = await prisma.routerRule.findMany({
+      where: { tenantId },
+    });
+    const hasChannelRule = existingRules.some((r) => {
+      const conditions = (r.conditions as any[]) || [];
+      return conditions.some((c: any) => c.type === "channel" && c.value?.toUpperCase() === channel);
+    });
+    if (hasChannelRule) return;
+
+    // Get the highest priority to place the new rule before the default
+    const maxPriority = existingRules.reduce((max, r) => Math.max(max, r.priority), 0);
+
+    await prisma.routerRule.create({
+      data: {
+        tenantId,
+        name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} — ${displayName}`,
+        priority: maxPriority + 1,
+        conditions: [{ type: "channel", operator: "equals", value: channel.toLowerCase() }],
+        logic: "AND",
+        routeType: "HUMAN",
+        enabled: true,
+        isDefault: false,
+      },
+    });
+    console.log(`[CHANNELS] Auto-created router rule for ${channel} channel (${displayName})`);
+  } catch (err) {
+    console.warn(`[CHANNELS] Failed to auto-create router rule for ${channel}:`, err);
+  }
+}
+
 // ─── List Connected Channels ─────────────────────────────────
 
 router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
@@ -947,6 +981,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         // Subscribe app to Instagram webhooks (required for receiving DMs)
         const WEBHOOK_URL = process.env.WEBHOOK_URL || process.env.OAUTH_REDIRECT_URI?.replace("/api/channels/oauth/callback", "/api/webhook") || "";
         const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "";
+        if (!WEBHOOK_URL || !WEBHOOK_VERIFY_TOKEN) {
+          console.error("[INSTAGRAM-CALLBACK] SKIPPING app-level webhook subscription! WEBHOOK_URL=" + (WEBHOOK_URL || "(empty)") + ", WEBHOOK_VERIFY_TOKEN=" + (WEBHOOK_VERIFY_TOKEN ? "(set)" : "(empty)") + ". Instagram DMs will NOT be received. Set WEBHOOK_URL and WHATSAPP_WEBHOOK_VERIFY_TOKEN env vars.");
+        }
         if (WEBHOOK_URL && WEBHOOK_VERIFY_TOKEN) {
           try {
             await axios.post(`${FB_API_URL}/${META_APP_ID}/subscriptions`, null, {
@@ -1134,6 +1171,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       await redis.del(`channel_account:GMAIL:${emailAddress}`);
+
+      // Auto-create a default router rule for this Gmail channel (if none exists)
+      await ensureEmailRouterRule(tenantId, "GMAIL", displayName);
+
       connectedAccounts.push(displayName);
     } else if (platform === "outlook") {
       // ─── OUTLOOK ─────────────────────────────────────────
@@ -1245,6 +1286,10 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       }
 
       await redis.del(`channel_account:OUTLOOK:${emailAddress}`);
+
+      // Auto-create a default router rule for this Outlook channel (if none exists)
+      await ensureEmailRouterRule(tenantId, "OUTLOOK", displayName);
+
       connectedAccounts.push(displayName);
     } else if (platform === "slack") {
       // ─── SLACK ───────────────────────────────────────────

@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
 import { getAISuggestions, getAISummary, sendCopilotChat } from "@/lib/api";
 import clsx from "clsx";
 
@@ -86,16 +87,16 @@ function getDemoKBResults(query: string): { title: string; snippet: string; sour
   return [];
 }
 
-function getLocalSummary(messages: any[], conversation: any): string {
-  if (messages.length === 0) return "No messages yet.";
+function getLocalSummary(messages: any[], conversation: any, t: (key: string) => string): string {
+  if (messages.length === 0) return t("copilot.panel.localSummary.noMessages");
   const inboundCount = messages.filter((m) => m.direction === "INBOUND").length;
   const outboundCount = messages.filter((m) => m.direction === "OUTBOUND").length;
   const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
 
-  let summary = `${messages.length} messages (${inboundCount} from customer, ${outboundCount} from agent).`;
+  let summary = `${messages.length} ${t("copilot.panel.localSummary.messagesCount")} (${inboundCount} ${t("copilot.panel.localSummary.fromCustomer")}, ${outboundCount} ${t("copilot.panel.localSummary.fromAgent")}).`;
   if (lastInbound) {
     const preview = lastInbound.body.length > 80 ? lastInbound.body.slice(0, 80) + "..." : lastInbound.body;
-    summary += ` Last customer message: "${preview}"`;
+    summary += ` ${t("copilot.panel.localSummary.lastCustomerMessage")}: "${preview}"`;
   }
   return summary;
 }
@@ -110,16 +111,16 @@ function deriveConversationIntelligence(messages: any[]): {
   const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
   const body = (lastInbound?.body || "").toLowerCase();
 
-  // Intent detection
-  let intent = "General inquiry";
-  if (body.includes("refund") || body.includes("money back")) intent = "Refund request";
-  else if (body.includes("cancel")) intent = "Cancellation";
-  else if (body.includes("return")) intent = "Return request";
-  else if (body.includes("broken") || body.includes("not working") || body.includes("error")) intent = "Technical issue";
-  else if (body.includes("price") || body.includes("cost") || body.includes("how much")) intent = "Pricing inquiry";
-  else if (body.includes("help") || body.includes("issue") || body.includes("problem")) intent = "Support request";
-  else if (body.includes("order")) intent = "Order inquiry";
-  else if (body.includes("thank") || body.includes("great") || body.includes("awesome")) intent = "Positive feedback";
+  // Intent detection (returns i18n key)
+  let intent = "generalInquiry";
+  if (body.includes("refund") || body.includes("money back")) intent = "refundRequest";
+  else if (body.includes("cancel")) intent = "cancellation";
+  else if (body.includes("return")) intent = "returnRequest";
+  else if (body.includes("broken") || body.includes("not working") || body.includes("error")) intent = "technicalIssue";
+  else if (body.includes("price") || body.includes("cost") || body.includes("how much")) intent = "pricingInquiry";
+  else if (body.includes("help") || body.includes("issue") || body.includes("problem")) intent = "supportRequest";
+  else if (body.includes("order")) intent = "orderInquiry";
+  else if (body.includes("thank") || body.includes("great") || body.includes("awesome")) intent = "positiveFeedback";
 
   // Sentiment detection
   let sentiment: "positive" | "neutral" | "negative" = "neutral";
@@ -135,29 +136,30 @@ function deriveConversationIntelligence(messages: any[]): {
   if (body.includes("urgent") || body.includes("asap") || body.includes("immediately") || body.includes("critical") || body.includes("broken") || body.includes("not working")) priority = "high";
   else if (body.includes("thank") || body.includes("just wondering") || body.includes("curious")) priority = "low";
 
-  // Tags
+  // Tags (label is i18n key)
   const tags: { label: string; color: string }[] = [];
-  if (body.includes("return") || body.includes("refund")) tags.push({ label: "Return Request", color: "bg-orange-100 text-orange-600" });
-  if (body.includes("order")) tags.push({ label: "Order Issue", color: "bg-blue-100 text-blue-600" });
-  if (priority === "high") tags.push({ label: "High Priority", color: "bg-red-100 text-red-600" });
-  if (body.includes("cancel")) tags.push({ label: "Churn Risk", color: "bg-amber-100 text-amber-700" });
-  if (body.includes("broken") || body.includes("error") || body.includes("not working")) tags.push({ label: "Technical", color: "bg-purple-100 text-purple-600" });
-  if (body.includes("price") || body.includes("cost")) tags.push({ label: "Pricing", color: "bg-green-100 text-green-600" });
-  if (tags.length === 0) tags.push({ label: "General", color: "bg-gray-100 text-gray-500" });
+  if (body.includes("return") || body.includes("refund")) tags.push({ label: "returnRequest", color: "bg-orange-100 text-orange-600" });
+  if (body.includes("order")) tags.push({ label: "orderIssue", color: "bg-blue-100 text-blue-600" });
+  if (priority === "high") tags.push({ label: "highPriority", color: "bg-red-100 text-red-600" });
+  if (body.includes("cancel")) tags.push({ label: "churnRisk", color: "bg-amber-100 text-amber-700" });
+  if (body.includes("broken") || body.includes("error") || body.includes("not working")) tags.push({ label: "technical", color: "bg-purple-100 text-purple-600" });
+  if (body.includes("price") || body.includes("cost")) tags.push({ label: "pricing", color: "bg-green-100 text-green-600" });
+  if (tags.length === 0) tags.push({ label: "general", color: "bg-gray-100 text-gray-500" });
 
   return { intent, sentiment, priority, tags };
 }
 
 const INITIAL_THINKING_STEPS: ThinkingStep[] = [
-  { id: "read", label: "Reading conversation", status: "pending" },
-  { id: "intent", label: "Analyzing customer intent", status: "pending" },
-  { id: "kb", label: "Searching knowledge base", status: "pending" },
-  { id: "data", label: "Fetching customer data", status: "pending" },
-  { id: "gen", label: "Generating suggestions", status: "pending" },
+  { id: "read", label: "readingConversation", status: "pending" },
+  { id: "intent", label: "analyzingIntent", status: "pending" },
+  { id: "kb", label: "searchingKB", status: "pending" },
+  { id: "data", label: "fetchingData", status: "pending" },
+  { id: "gen", label: "generatingSuggestions", status: "pending" },
 ];
 
 export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, onAiLoadingChange }: CoPilotPanelProps) {
   const { token } = useAuth();
+  const { t } = useI18n();
   const [kbQuery, setKbQuery] = useState("");
   const [kbResults, setKbResults] = useState<{ title: string; snippet: string; source: string }[]>([]);
   const [activeTab, setActiveTab] = useState<"suggest" | "search" | "chat">("suggest");
@@ -201,7 +203,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
   const lastIsOutbound = lastMessage?.direction === "OUTBOUND";
 
   const demoSuggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
-  const localSummary = useMemo(() => getLocalSummary(messages, conversation), [messages, conversation]);
+  const localSummary = useMemo(() => getLocalSummary(messages, conversation, t), [messages, conversation, t]);
   const intelligence = useMemo(() => deriveConversationIntelligence(messages), [messages]);
 
   // The suggestions to display: AI-powered if available, otherwise demo
@@ -306,7 +308,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
         if (!isStub) {
           setAiSuggestions(suggestionsRes.data.map((s: any, i: number) => ({
             text: s.text,
-            label: s.type === "reply" ? `AI Reply ${i + 1}` : s.type === "action" ? "Action" : "Info",
+            label: s.type === "reply" ? `${t("copilot.panel.aiReplyLabel")} ${i + 1}` : s.type === "action" ? t("copilot.panel.actionLabel") : t("copilot.panel.infoLabel"),
             confidence: Math.round(s.confidence * 100),
           })));
         }
@@ -360,15 +362,15 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
       const res = await sendCopilotChat(token, conversation.id, { message: msg, history: chatMessages });
       setChatMessages([...updated, { role: "assistant" as const, content: res.data.reply }]);
     } catch (_err) {
-      setChatMessages([...updated, { role: "assistant" as const, content: "Failed to get response. Please try again." }]);
+      setChatMessages([...updated, { role: "assistant" as const, content: t("copilot.panel.chat.failedResponse") }]);
     } finally {
       setChatLoading(false);
     }
   }
 
-  const sentimentLabel = intelligence.sentiment === "positive" ? "Positive" : intelligence.sentiment === "negative" ? "Slightly negative" : "Neutral";
+  const sentimentLabel = intelligence.sentiment === "positive" ? t("copilot.panel.sentiments.positive") : intelligence.sentiment === "negative" ? t("copilot.panel.sentiments.slightlyNegative") : t("copilot.panel.sentiments.neutral");
   const sentimentColor = intelligence.sentiment === "positive" ? "text-green-600" : intelligence.sentiment === "negative" ? "text-red-500" : "text-gray-500";
-  const priorityLabel = intelligence.priority === "high" ? "High" : intelligence.priority === "low" ? "Low" : "Medium";
+  const priorityLabel = intelligence.priority === "high" ? t("copilot.panel.priorities.high") : intelligence.priority === "low" ? t("copilot.panel.priorities.low") : t("copilot.panel.priorities.medium");
   const priorityColor = intelligence.priority === "high" ? "text-red-500" : intelligence.priority === "low" ? "text-gray-400" : "text-amber-500";
 
   return (
@@ -381,8 +383,8 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
           </svg>
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-semibold text-gray-900">AI Co-Pilot</p>
-          <p className="text-[10px] text-gray-400">{aiSuggestions ? "AI-Powered" : "Demo Mode"}</p>
+          <p className="text-sm font-semibold text-gray-900">{t("copilot.panel.title")}</p>
+          <p className="text-[10px] text-gray-400">{aiSuggestions ? t("copilot.panel.aiPowered") : t("copilot.panel.demoMode")}</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Regenerate button (shown when last message is outbound) */}
@@ -390,12 +392,12 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
             <button
               onClick={() => fetchAI()}
               className="flex items-center gap-1 text-[10px] font-medium px-2 py-1 rounded-lg bg-violet-50 text-violet-600 hover:bg-violet-100 transition"
-              title="Regenerate suggestions"
+              title={t("copilot.panel.regenerate")}
             >
               <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182M2.985 14.652" />
               </svg>
-              Regenerate
+              {t("copilot.panel.regenerate")}
             </button>
           )}
           {/* Pause / Resume button */}
@@ -407,7 +409,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 ? "bg-amber-50 text-amber-600 hover:bg-amber-100"
                 : "bg-gray-50 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
             )}
-            title={paused ? "Resume Co-Pilot" : "Pause Co-Pilot"}
+            title={paused ? t("copilot.panel.resumeCoPilot") : t("copilot.panel.pauseCoPilot")}
           >
             {paused ? (
               <svg className="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
@@ -418,7 +420,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 <path fillRule="evenodd" d="M6.75 5.25a.75.75 0 01.75-.75H9a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H7.5a.75.75 0 01-.75-.75V5.25zm7.5 0A.75.75 0 0115 4.5h1.5a.75.75 0 01.75.75v13.5a.75.75 0 01-.75.75H15a.75.75 0 01-.75-.75V5.25z" clipRule="evenodd" />
               </svg>
             )}
-            {paused ? "Paused" : "Pause"}
+            {paused ? t("copilot.panel.paused") : t("copilot.panel.pause")}
           </button>
 
           <div className="flex items-center gap-0.5">
@@ -427,7 +429,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 <span className="relative flex h-2 w-2">
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-400"></span>
                 </span>
-                <span className="text-[10px] text-amber-500 font-medium ml-1">Paused</span>
+                <span className="text-[10px] text-amber-500 font-medium ml-1">{t("copilot.panel.paused")}</span>
               </>
             ) : aiLoading ? (
               <div className="w-3 h-3 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
@@ -437,7 +439,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
                   <span className="relative inline-flex rounded-full h-2 w-2 bg-green-500"></span>
                 </span>
-                <span className="text-[10px] text-green-600 font-medium ml-1">Live</span>
+                <span className="text-[10px] text-green-600 font-medium ml-1">{t("copilot.panel.live")}</span>
               </>
             )}
           </div>
@@ -445,7 +447,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
             <button
               onClick={onClose}
               className="md:hidden w-7 h-7 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
-              aria-label="Close Co-Pilot"
+              aria-label={t("copilot.panel.closeCoPilot")}
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -460,9 +462,9 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
         <div className="flex items-center gap-1.5 bg-gray-100 rounded-xl p-0.5">
           {(["human", "copilot", "autonomous"] as const).map((mode) => {
             const labels: Record<typeof mode, string> = {
-              human: "Human Only",
-              copilot: "Co-Pilot",
-              autonomous: "Autonomous",
+              human: t("copilot.modeToggle.humanOnly"),
+              copilot: t("copilot.modeToggle.copilot"),
+              autonomous: t("copilot.modeToggle.autonomous"),
             };
             return (
               <button
@@ -493,7 +495,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
               : "text-gray-400 hover:text-gray-600"
           )}
         >
-          Suggestions
+          {t("copilot.panel.tabs.suggestions")}
           {activeTab === "suggest" && (
             <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
           )}
@@ -507,7 +509,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
               : "text-gray-400 hover:text-gray-600"
           )}
         >
-          Knowledge Base
+          {t("copilot.panel.tabs.knowledgeBase")}
           {activeTab === "search" && (
             <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
           )}
@@ -521,7 +523,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
               : "text-gray-400 hover:text-gray-600"
           )}
         >
-          AI Chat
+          {t("copilot.panel.tabs.aiChat")}
           {activeTab === "chat" && (
             <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
           )}
@@ -543,14 +545,14 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 >
                   <div className="flex items-center gap-1.5">
                     <span className="text-violet-500 text-sm leading-none">✦</span>
-                    <span className="text-[11px] font-semibold text-violet-700">AI Analysis</span>
+                    <span className="text-[11px] font-semibold text-violet-700">{t("copilot.panel.analysis.title")}</span>
                     {aiLoading && (
                       <div className="w-2.5 h-2.5 border-[1.5px] border-violet-200 border-t-violet-500 rounded-full animate-spin ml-0.5" />
                     )}
                   </div>
                   <div className="flex items-center gap-1.5">
                     <span className="text-[10px] text-violet-400 font-medium">
-                      {analysisCollapsed ? "Show" : "Hide"}
+                      {analysisCollapsed ? t("copilot.panel.analysis.show") : t("copilot.panel.analysis.hide")}
                     </span>
                     <svg
                       className={clsx("w-3.5 h-3.5 text-violet-400 transition-transform duration-200", analysisCollapsed ? "-rotate-90" : "rotate-0")}
@@ -599,7 +601,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                             current?.status === "active" ? "text-violet-700 font-medium" :
                             "text-gray-300"
                           )}>
-                            {step.label}
+                            {t(`copilot.panel.thinking.${step.label}`)}
                             {current?.status === "active" && (
                               <span className="text-violet-400">...</span>
                             )}
@@ -611,26 +613,26 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                     {/* Findings card - shown when analysis is complete */}
                     {analysisComplete && (
                       <div className="mt-3 bg-gradient-to-br from-violet-50 to-purple-50 rounded-xl p-3 transition-all duration-300">
-                        <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider mb-2">Findings</p>
+                        <p className="text-[10px] font-semibold text-violet-600 uppercase tracking-wider mb-2">{t("copilot.panel.analysis.findings")}</p>
                         <div className="space-y-1.5">
                           <div className="flex items-baseline justify-between">
-                            <span className="text-[11px] text-gray-400">Intent</span>
-                            <span className="text-[11px] font-medium text-gray-700">{intelligence.intent}</span>
+                            <span className="text-[11px] text-gray-400">{t("copilot.panel.analysis.intent")}</span>
+                            <span className="text-[11px] font-medium text-gray-700">{t(`copilot.panel.intents.${intelligence.intent}`)}</span>
                           </div>
                           <div className="flex items-baseline justify-between">
-                            <span className="text-[11px] text-gray-400">Sentiment</span>
+                            <span className="text-[11px] text-gray-400">{t("copilot.panel.analysis.sentiment")}</span>
                             <span className={clsx("text-[11px] font-medium", sentimentColor)}>{sentimentLabel}</span>
                           </div>
                           <div className="flex items-baseline justify-between">
-                            <span className="text-[11px] text-gray-400">Priority</span>
+                            <span className="text-[11px] text-gray-400">{t("copilot.panel.analysis.priority")}</span>
                             <span className={clsx("text-[11px] font-medium", priorityColor)}>{priorityLabel}</span>
                           </div>
                           {messages.length > 0 && (
                             <div className="flex items-baseline justify-between gap-2">
-                              <span className="text-[11px] text-gray-400 shrink-0">Context</span>
-                              <span className="text-[11px] text-gray-600 text-right">{messages.length} msg{messages.length !== 1 ? "s" : ""}, last inbound {(() => {
+                              <span className="text-[11px] text-gray-400 shrink-0">{t("copilot.panel.analysis.context")}</span>
+                              <span className="text-[11px] text-gray-600 text-right">{messages.length} {messages.length !== 1 ? t("copilot.panel.analysis.msgs") : t("copilot.panel.analysis.msg")}, {t("copilot.panel.analysis.lastInbound")} {(() => {
                                 const li = [...messages].reverse().find((m) => m.direction === "INBOUND");
-                                if (!li) return "N/A";
+                                if (!li) return t("copilot.panel.analysis.na");
                                 const preview = (li.body || "").slice(0, 28);
                                 return `"${preview}${li.body?.length > 28 ? "…" : ""}"`;
                               })()}</span>
@@ -650,7 +652,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 <svg className="w-3.5 h-3.5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                 </svg>
-                <span className="text-[10px] font-semibold text-primary-600 uppercase tracking-wider">Context</span>
+                <span className="text-[10px] font-semibold text-primary-600 uppercase tracking-wider">{t("copilot.panel.contextSection.title")}</span>
               </div>
               <p className="text-xs text-gray-600 leading-relaxed">{summary}</p>
             </div>
@@ -667,10 +669,10 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                     <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
                     </svg>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Customer Context</span>
+                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.customerContext.title")}</span>
                   </div>
                   <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-400">{customerContextCollapsed ? "Show" : "Hide"}</span>
+                    <span className="text-[10px] text-gray-400">{customerContextCollapsed ? t("copilot.panel.customerContext.show") : t("copilot.panel.customerContext.hide")}</span>
                     <svg
                       className={clsx("w-3.5 h-3.5 text-gray-400 transition-transform duration-200", customerContextCollapsed ? "-rotate-90" : "rotate-0")}
                       fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
@@ -685,24 +687,24 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   <div className="px-3 pt-2 pb-3 space-y-2">
                     {/* Name */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">Name</span>
-                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerName || "Unknown"}</span>
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.name")}</span>
+                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerName || t("copilot.panel.customerContext.unknown")}</span>
                     </div>
                     {/* Phone */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">Phone</span>
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.phone")}</span>
                       <span className="text-[11px] font-medium text-gray-700">{conversation.customerPhone || "—"}</span>
                     </div>
                     {/* Total conversations (mock) */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">Conversations</span>
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.conversations")}</span>
                       <span className="text-[11px] font-medium text-gray-700">
-                        12 <span className="text-[10px] text-violet-500 font-semibold">(VIP)</span>
+                        12 <span className="text-[10px] text-violet-500 font-semibold">({t("copilot.panel.customerContext.vip")})</span>
                       </span>
                     </div>
                     {/* Sentiment */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">Sentiment</span>
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.sentiment")}</span>
                       <div className="flex items-center gap-1">
                         <span className={clsx(
                           "w-2 h-2 rounded-full",
@@ -716,14 +718,14 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                           intelligence.sentiment === "negative" ? "text-red-500" :
                           "text-gray-500"
                         )}>
-                          {intelligence.sentiment === "positive" ? "Happy" :
-                           intelligence.sentiment === "negative" ? "Angry" : "Neutral"}
+                          {intelligence.sentiment === "positive" ? t("copilot.panel.customerContext.happy") :
+                           intelligence.sentiment === "negative" ? t("copilot.panel.customerContext.angry") : t("copilot.panel.customerContext.neutral")}
                         </span>
                       </div>
                     </div>
                     {/* Channel badge */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">Channel</span>
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.channel")}</span>
                       {(() => {
                         const ch = (conversation.channel || conversation.channelType || "").toUpperCase();
                         const isWhatsApp = ch.includes("WHATSAPP");
@@ -735,14 +737,14 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                             isInstagram ? "bg-pink-50 text-pink-600" :
                             "bg-blue-50 text-blue-600"
                           )}>
-                            {isWhatsApp ? "WhatsApp" : isInstagram ? "Instagram" : "Web"}
+                            {isWhatsApp ? "WhatsApp" : isInstagram ? "Instagram" : t("copilot.panel.customerContext.web")}
                           </span>
                         );
                       })()}
                     </div>
                     {/* Status */}
                     <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">Status</span>
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.status")}</span>
                       <span className={clsx(
                         "text-[10px] font-medium px-2 py-0.5 rounded-full",
                         conversation.status === "OPEN" ? "bg-green-50 text-green-600" :
@@ -763,7 +765,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
                 </svg>
-                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Suggested Replies</span>
+                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.suggestedReplies.title")}</span>
                 {aiSuggestions && (
                   <span className="text-[9px] bg-violet-100 text-violet-600 px-1.5 py-0.5 rounded-full font-medium">AI</span>
                 )}
@@ -804,7 +806,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                                 s.confidence >= 50 ? "bg-yellow-50 text-yellow-600" :
                                 "bg-red-50 text-red-500"
                               )}>
-                                {s.confidence}% confident
+                                {s.confidence}% {t("copilot.panel.suggestedReplies.confident")}
                               </span>
                             </div>
                             {!isContextOnly && (
@@ -834,7 +836,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
                 </svg>
-                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Suggested Actions</span>
+                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.suggestedActions.title")}</span>
               </div>
               <div className="flex flex-col gap-2">
                 <button
@@ -844,7 +846,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                   </svg>
-                  Check Order Status
+                  {t("copilot.suggestedActions.checkOrderStatus")}
                 </button>
                 <button
                   onClick={() => {}}
@@ -853,7 +855,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-4.125-2.625L11.25 21.75l-4.125-2.625L3 21.75V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z" />
                   </svg>
-                  Offer Discount
+                  {t("copilot.suggestedActions.offerDiscount")}
                 </button>
                 <button
                   onClick={() => {}}
@@ -862,7 +864,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
                   </svg>
-                  Transfer to Human
+                  {t("copilot.suggestedActions.transferToHuman")}
                 </button>
               </div>
             </div>
@@ -874,7 +876,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
                   </svg>
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Conversation Intelligence</span>
+                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.intelligence.title")}</span>
                 </div>
                 <div className="flex flex-wrap gap-1.5">
                   {intelligence.tags.map((tag, i) => (
@@ -882,7 +884,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                       key={i}
                       className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full", tag.color)}
                     >
-                      {tag.label}
+                      {t(`copilot.panel.tags.${tag.label}`)}
                     </span>
                   ))}
                 </div>
@@ -899,7 +901,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 value={kbQuery}
                 onChange={(e) => setKbQuery(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder="Search company docs..."
+                placeholder={t("copilot.panel.search.placeholder")}
                 className="w-full pl-9 pr-3 py-2.5 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl text-base md:text-xs focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
               />
               <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -909,13 +911,13 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
 
             {/* Quick search tags */}
             <div className="flex flex-wrap gap-1.5">
-              {["Refund policy", "Pricing plans", "Setup guide"].map((tag) => (
+              {[{key: "refundPolicy", en: "Refund policy"}, {key: "pricingPlans", en: "Pricing plans"}, {key: "setupGuide", en: "Setup guide"}].map((tag) => (
                 <button
-                  key={tag}
-                  onClick={() => { setKbQuery(tag); setKbResults(getDemoKBResults(tag)); }}
+                  key={tag.key}
+                  onClick={() => { setKbQuery(tag.en); setKbResults(getDemoKBResults(tag.en)); }}
                   className="text-[10px] px-2.5 py-1 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition font-medium"
                 >
-                  {tag}
+                  {t(`copilot.panel.search.${tag.key}`)}
                 </button>
               ))}
             </div>
@@ -924,7 +926,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
             {kbResults.length > 0 ? (
               <div className="space-y-2">
                 <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-0.5">
-                  {kbResults.length} result{kbResults.length !== 1 ? "s" : ""} found
+                  {kbResults.length} {t("copilot.panel.search.resultsFound")}
                 </span>
                 {kbResults.map((r, i) => (
                   <div key={i} className="bg-gray-50/50 rounded-xl p-3 hover:bg-gray-50 hover:shadow-subtle transition">
@@ -950,7 +952,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                     <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
                   </svg>
                 </div>
-                <p className="text-xs text-gray-400">Press Enter to search</p>
+                <p className="text-xs text-gray-400">{t("copilot.panel.search.enterToSearch")}</p>
               </div>
             ) : (
               <div className="text-center py-8">
@@ -959,8 +961,8 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
                   </svg>
                 </div>
-                <p className="text-xs text-gray-400">Search your company knowledge base</p>
-                <p className="text-[10px] text-gray-300 mt-1">Try the quick tags above</p>
+                <p className="text-xs text-gray-400">{t("copilot.panel.search.searchKB")}</p>
+                <p className="text-[10px] text-gray-300 mt-1">{t("copilot.panel.search.tryTags")}</p>
               </div>
             )}
           </div>
@@ -975,8 +977,8 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                       <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
                     </svg>
                   </div>
-                  <p className="text-xs text-gray-500 font-medium">Ask the AI anything</p>
-                  <p className="text-[10px] text-gray-400 mt-1">Questions about the conversation, customer, KB lookups, draft replies...</p>
+                  <p className="text-xs text-gray-500 font-medium">{t("copilot.panel.chat.askAnything")}</p>
+                  <p className="text-[10px] text-gray-400 mt-1">{t("copilot.panel.chat.askHint")}</p>
                 </div>
               )}
               {chatMessages.map((msg, i) => (
@@ -1012,7 +1014,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   type="text"
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
-                  placeholder="Ask the AI..."
+                  placeholder={t("copilot.panel.chat.inputPlaceholder")}
                   disabled={chatLoading}
                   className="flex-1 px-3 py-2 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-lg text-base md:text-xs focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition disabled:opacity-50"
                 />
@@ -1034,7 +1036,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
       {/* Footer */}
       <div className="px-4 py-2.5 bg-gray-50/30">
         <p className="text-[10px] text-gray-400 text-center">
-          AI suggestions are for reference only. Always review before sending.
+          {t("copilot.panel.footer")}
         </p>
       </div>
     </div>
