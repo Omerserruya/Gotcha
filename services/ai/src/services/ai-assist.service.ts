@@ -131,9 +131,119 @@ function assembleFromBlocks(config: { identity?: any; goals?: any; tone?: any; b
   return sections.join("\n");
 }
 
+// ─── Copilot mode instructions injected when using AI employee ──
+
+const COPILOT_MODE_INJECTION = `\n\n## Operating Mode: Copilot
+You are assisting a human agent. Suggest replies and provide context.
+Do NOT send messages directly to the customer.
+Your suggestions will be reviewed by the human agent before being sent.`;
+
+// ─── Build CopilotConfigData from an AIAgent record ─────────
+
+function buildConfigFromAIAgent(agent: {
+  systemPrompt: string;
+  model: string;
+  provider: string;
+  temperature: number;
+  maxTokens: number;
+  identity: any;
+  goals: any;
+  toneConfig: any;
+  behavioral: any;
+  status: string;
+}): CopilotConfigData {
+  let systemPrompt = agent.systemPrompt;
+
+  // If systemPrompt is empty but structured blocks exist, reassemble
+  if ((!systemPrompt || !systemPrompt.trim()) && (agent.identity || agent.goals || agent.toneConfig || agent.behavioral)) {
+    systemPrompt = assembleFromBlocks({
+      identity: agent.identity,
+      goals: agent.goals,
+      tone: agent.toneConfig,
+      behavioral: agent.behavioral,
+    });
+  }
+
+  // Inject copilot-specific instructions so the AI employee knows it's assisting, not autonomous
+  systemPrompt = (systemPrompt || CORE_ENGINE_INSTRUCTIONS) + COPILOT_MODE_INJECTION;
+
+  return {
+    systemPrompt,
+    rules: [],
+    tools: [],
+    model: agent.model,
+    provider: agent.provider,
+    temperature: agent.temperature,
+    maxTokens: agent.maxTokens,
+    isActive: agent.status === "ACTIVE" || agent.status === "DRAFT",
+    copilotMode: "READY_MESSAGE",
+  };
+}
+
+// ─── Find AI employee for a department (via router rules) ───
+
+async function findAIAgentForDepartment(tenantId: string, departmentId: string): Promise<CopilotConfigData | null> {
+  // Look for a router rule that routes this department's conversations to an AI agent
+  const rule = await prisma.routerRule.findFirst({
+    where: {
+      tenantId,
+      routeType: "AI_AGENT",
+      aiAgentId: { not: null },
+      enabled: true,
+      routeTarget: departmentId,
+    },
+    orderBy: { priority: "asc" },
+  });
+
+  if (rule?.aiAgentId) {
+    const agent = await prisma.aIAgent.findUnique({ where: { id: rule.aiAgentId } });
+    if (agent) return buildConfigFromAIAgent(agent);
+  }
+  return null;
+}
+
+async function findDefaultAIAgent(tenantId: string): Promise<CopilotConfigData | null> {
+  // Look for a default router rule with an AI agent
+  const defaultRule = await prisma.routerRule.findFirst({
+    where: {
+      tenantId,
+      routeType: "AI_AGENT",
+      aiAgentId: { not: null },
+      enabled: true,
+      isDefault: true,
+    },
+    orderBy: { priority: "asc" },
+  });
+
+  if (defaultRule?.aiAgentId) {
+    const agent = await prisma.aIAgent.findUnique({ where: { id: defaultRule.aiAgentId } });
+    if (agent) return buildConfigFromAIAgent(agent);
+  }
+
+  // Fall back to any active AI agent for this tenant
+  const anyAgent = await prisma.aIAgent.findFirst({
+    where: {
+      tenantId,
+      status: { in: ["ACTIVE", "DRAFT"] },
+    },
+    orderBy: { createdAt: "asc" },
+  });
+
+  if (anyAgent) {
+    return buildConfigFromAIAgent(anyAgent);
+  }
+
+  return null;
+}
+
 // ─── Config resolution ──────────────────────────────────────
 
 export async function getTenantCopilotConfig(tenantId: string): Promise<CopilotConfigData | null> {
+  // 1. Try to find an AI employee as the config source
+  const aiAgentConfig = await findDefaultAIAgent(tenantId);
+  if (aiAgentConfig) return aiAgentConfig;
+
+  // 2. Fall back to legacy CopilotConfig table
   const config = await prisma.copilotConfig.findUnique({ where: { tenantId } });
   if (!config) return null;
   return {
@@ -150,14 +260,19 @@ export async function getTenantCopilotConfig(tenantId: string): Promise<CopilotC
 }
 
 /**
- * Resolves AI config with a simple 2-step chain:
- * 1. DepartmentCopilotConfig (if departmentId provided)
- *    - If systemPrompt is non-empty, use it
- *    - If systemPrompt is empty but structured blocks exist, reassemble from blocks
- * 2. Tenant CopilotConfig (fallback)
+ * Resolves AI config with priority:
+ * 1. AI Employee assigned to the department (via router rules)
+ * 2. DepartmentCopilotConfig (legacy, if departmentId provided)
+ * 3. Default AI Employee for the tenant (via default router rule or any active agent)
+ * 4. Tenant CopilotConfig (legacy fallback)
  */
 export async function getEffectiveCopilotConfig(tenantId: string, departmentId?: string | null): Promise<CopilotConfigData | null> {
   if (departmentId) {
+    // 1. Try AI employee assigned to this department
+    const aiAgentConfig = await findAIAgentForDepartment(tenantId, departmentId);
+    if (aiAgentConfig) return aiAgentConfig;
+
+    // 2. Fall back to legacy DepartmentCopilotConfig
     const deptConfig = await prisma.departmentCopilotConfig.findUnique({ where: { departmentId } });
     if (deptConfig) {
       let systemPrompt = deptConfig.systemPrompt;
@@ -185,7 +300,8 @@ export async function getEffectiveCopilotConfig(tenantId: string, departmentId?:
       };
     }
   }
-  // Fall back to tenant config
+
+  // 3-4. Fall back to tenant-level config (tries AI employee first, then legacy)
   return getTenantCopilotConfig(tenantId);
 }
 
