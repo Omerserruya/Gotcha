@@ -1,9 +1,19 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
+import { useAuth } from "@/context/AuthContext";
+import {
+  getRouterRules,
+  createRouterRule,
+  updateRouterRule,
+  deleteRouterRule,
+  reorderRouterRules,
+  getAIAgents,
+  getChatbotFlows,
+} from "@/lib/api";
 import clsx from "clsx";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -27,76 +37,60 @@ interface RouterRule {
   logic: LogicType;
   routeType: RouteType;
   routeTarget: string;
+  routeTargetName?: string;
   enabled: boolean;
   isDefault?: boolean;
 }
 
-// ─── Mock data ────────────────────────────────────────────────
-const INITIAL_RULES: RouterRule[] = [
-  {
-    id: "r1",
-    priority: 1,
-    name: "VIP Customers",
-    conditions: [{ id: "c1", type: "attribute", operator: "equals", value: "VIP" }],
-    logic: "AND",
-    routeType: "human",
-    routeTarget: "Support Team",
-    enabled: true,
-  },
-  {
-    id: "r2",
-    priority: 2,
-    name: "Cancel / Return Intent",
-    conditions: [{ id: "c2", type: "intent", operator: "contains", value: "cancel, return" }],
-    logic: "AND",
-    routeType: "flow",
-    routeTarget: "Returns Flow",
-    enabled: true,
-  },
-  {
-    id: "r3",
-    priority: 3,
-    name: "Track Order Intent",
-    conditions: [{ id: "c3", type: "intent", operator: "equals", value: "track order" }],
-    logic: "AND",
-    routeType: "agent",
-    routeTarget: "Maya (Support)",
-    enabled: true,
-  },
-  {
-    id: "r4",
-    priority: 4,
-    name: "Pricing / Sales Inquiry",
-    conditions: [{ id: "c4", type: "intent", operator: "contains", value: "pricing, buy" }],
-    logic: "AND",
-    routeType: "agent",
-    routeTarget: "Sales Bot",
-    enabled: true,
-  },
-  {
-    id: "r5",
-    priority: 5,
-    name: "After Business Hours",
-    conditions: [{ id: "c5", type: "time", operator: "equals", value: "After hours" }],
-    logic: "AND",
-    routeType: "flow",
-    routeTarget: "After-Hours Flow",
-    enabled: false,
-  },
-];
+// ─── Data mapping ─────────────────────────────────────────────
+function mapRule(apiRule: any): RouterRule {
+  const typeMap: Record<string, RouteType> = {
+    AI_AGENT: "agent",
+    FLOW: "flow",
+    HUMAN: "human",
+    DEPARTMENT: "human",
+  };
+  return {
+    id: apiRule.id,
+    priority: apiRule.priority,
+    name: apiRule.name,
+    conditions: (apiRule.conditions || []).map((c: any, i: number) => ({
+      id: c.id || `c_${i}`,
+      type: c.type || "intent",
+      operator: c.operator || "equals",
+      value: c.value || "",
+    })),
+    logic: apiRule.logic || "AND",
+    routeType: typeMap[apiRule.routeType] || "agent",
+    routeTarget:
+      apiRule.routeType === "AI_AGENT"
+        ? apiRule.aiAgentId || ""
+        : apiRule.routeTarget || "",
+    routeTargetName: apiRule.routeTargetName || "",
+    enabled: apiRule.enabled,
+    isDefault: apiRule.isDefault,
+  };
+}
 
-const DEFAULT_RULE: RouterRule = {
-  id: "default",
-  priority: 99,
-  name: "Everything Else",
-  conditions: [],
-  logic: "AND",
-  routeType: "agent",
-  routeTarget: "General Agent",
-  enabled: true,
-  isDefault: true,
-};
+function toApiPayload(rule: RouterRule) {
+  const typeMap: Record<RouteType, string> = {
+    agent: "AI_AGENT",
+    flow: "FLOW",
+    human: "HUMAN",
+  };
+  return {
+    name: rule.name,
+    conditions: rule.conditions.map(({ id, ...rest }) => rest),
+    logic: rule.logic,
+    routeType: typeMap[rule.routeType],
+    routeTarget: rule.routeType === "agent" ? null : rule.routeTarget,
+    aiAgentId: rule.routeType === "agent" ? rule.routeTarget : null,
+    enabled: rule.enabled,
+    isDefault: rule.isDefault || false,
+  };
+}
 
+// ─── Labels ───────────────────────────────────────────────────
 const CONDITION_TYPE_LABELS: Record<ConditionType, string> = {
   intent: "AI Intent",
   keyword: "Keywords",
@@ -118,10 +112,6 @@ const ROUTE_TYPE_LABELS: Record<RouteType, string> = {
   human: "Human Agent",
 };
 
-const AGENT_OPTIONS = ["Maya (Support)", "Sales Bot", "Returns Handler", "General Agent"];
-const FLOW_OPTIONS = ["Returns Flow", "After-Hours Flow", "Welcome Flow", "Lead Qualification"];
-const DEPARTMENT_OPTIONS = ["Support Team", "Sales Team", "Operations", "VIP Support"];
-
 function conditionSummary(rule: RouterRule): string {
   if (rule.isDefault) return "Default fallback — catches all unmatched conversations";
   return rule.conditions
@@ -131,7 +121,8 @@ function conditionSummary(rule: RouterRule): string {
 
 function routeSummary(rule: RouterRule): string {
   const prefix = ROUTE_TYPE_LABELS[rule.routeType];
-  return rule.routeTarget ? `${prefix}: ${rule.routeTarget}` : prefix;
+  const name = rule.routeTargetName || rule.routeTarget;
+  return name ? `${prefix}: ${name}` : prefix;
 }
 
 // ─── Toggle ───────────────────────────────────────────────────
@@ -239,11 +230,15 @@ function RuleEditor({
   onSave,
   onCancel,
   onDelete,
+  agents,
+  flows,
 }: {
   rule: RouterRule;
   onSave: (updated: RouterRule) => void;
   onCancel: () => void;
   onDelete?: () => void;
+  agents: any[];
+  flows: any[];
 }) {
   const [draft, setDraft] = useState<RouterRule>({ ...rule, conditions: rule.conditions.map((c) => ({ ...c })) });
 
@@ -272,12 +267,12 @@ function RuleEditor({
   const inputClass =
     "w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition";
 
-  const targetOptions =
+  const targetOptions: { value: string; label: string }[] =
     draft.routeType === "agent"
-      ? AGENT_OPTIONS
+      ? agents.map((a) => ({ value: a.id, label: a.name }))
       : draft.routeType === "flow"
-      ? FLOW_OPTIONS
-      : DEPARTMENT_OPTIONS;
+      ? flows.map((f) => ({ value: f.id, label: f.name }))
+      : [];
 
   return (
     <div className="border-t border-violet-100 bg-violet-50/30 p-5 space-y-5">
@@ -377,7 +372,7 @@ function RuleEditor({
               <span className={clsx("text-sm font-medium", draft.routeType === rt ? "text-violet-800" : "text-gray-700")}>
                 {ROUTE_TYPE_LABELS[rt]}
               </span>
-              {draft.routeType === rt && (
+              {draft.routeType === rt && rt !== "human" && (
                 <select
                   value={draft.routeTarget}
                   onChange={(e) => patchDraft({ routeTarget: e.target.value })}
@@ -386,7 +381,7 @@ function RuleEditor({
                 >
                   <option value="">Select...</option>
                   {targetOptions.map((opt) => (
-                    <option key={opt} value={opt}>{opt}</option>
+                    <option key={opt.value} value={opt.value}>{opt.label}</option>
                   ))}
                 </select>
               )}
@@ -441,7 +436,11 @@ function RuleRow({
   onSave,
   onDelete,
   onCancelEdit,
+  onMoveUp,
+  onMoveDown,
   totalNonDefault,
+  agents,
+  flows,
 }: {
   rule: RouterRule;
   index: number;
@@ -451,7 +450,11 @@ function RuleRow({
   onSave: (updated: RouterRule) => void;
   onDelete?: () => void;
   onCancelEdit: () => void;
+  onMoveUp?: () => void;
+  onMoveDown?: () => void;
   totalNonDefault: number;
+  agents: any[];
+  flows: any[];
 }) {
   const isDefault = rule.isDefault;
 
@@ -464,15 +467,31 @@ function RuleRow({
     >
       {/* Main row */}
       <div className="flex items-center gap-3 px-5 py-4">
-        {/* Drag handle (visual only) */}
-        {!isDefault && (
-          <div className="text-gray-200 cursor-grab active:cursor-grabbing shrink-0">
-            <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-              <path d="M7 2a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 8a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4zM7 14a2 2 0 1 0 0 4 2 2 0 0 0 0-4zm6 0a2 2 0 1 0 0 4 2 2 0 0 0 0-4z" />
-            </svg>
+        {/* Move up/down buttons */}
+        {!isDefault ? (
+          <div className="flex flex-col gap-0.5 shrink-0">
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveUp?.(); }}
+              disabled={!onMoveUp}
+              className={clsx("p-0.5 rounded transition", onMoveUp ? "text-gray-400 hover:text-violet-600 hover:bg-violet-50" : "text-gray-200 cursor-not-allowed")}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 15.75l7.5-7.5 7.5 7.5" />
+              </svg>
+            </button>
+            <button
+              onClick={(e) => { e.stopPropagation(); onMoveDown?.(); }}
+              disabled={!onMoveDown}
+              className={clsx("p-0.5 rounded transition", onMoveDown ? "text-gray-400 hover:text-violet-600 hover:bg-violet-50" : "text-gray-200 cursor-not-allowed")}
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </button>
           </div>
+        ) : (
+          <div className="w-4 shrink-0" />
         )}
-        {isDefault && <div className="w-4 shrink-0" />}
 
         {/* Priority badge */}
         <span
@@ -537,6 +556,8 @@ function RuleRow({
           onSave={onSave}
           onCancel={onCancelEdit}
           onDelete={!isDefault && onDelete ? onDelete : undefined}
+          agents={agents}
+          flows={flows}
         />
       )}
     </div>
@@ -547,11 +568,37 @@ function RuleRow({
 export default function RouterPage() {
   const router = useRouter();
   const { t } = useI18n();
+  const { token } = useAuth();
 
-  const [rules, setRules] = useState<RouterRule[]>(INITIAL_RULES);
+  const [rules, setRules] = useState<RouterRule[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [agents, setAgents] = useState<any[]>([]);
+  const [flows, setFlows] = useState<any[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [addingNew, setAddingNew] = useState(false);
   const [saved, setSaved] = useState(false);
+
+  async function fetchAll() {
+    if (!token) return;
+    setLoading(true);
+    try {
+      const [rulesRes, agentsRes, flowsRes] = await Promise.all([
+        getRouterRules(token),
+        getAIAgents(token),
+        getChatbotFlows(token),
+      ]);
+      setRules((rulesRes.data || []).map(mapRule));
+      setAgents(agentsRes.data || []);
+      setFlows(flowsRes as any[] || []);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    fetchAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   const newRuleTemplate: RouterRule = {
     id: `r_${Date.now()}`,
@@ -564,28 +611,70 @@ export default function RouterPage() {
     enabled: true,
   };
 
-  function toggleEnabled(id: string) {
-    setRules((prev) =>
-      prev.map((r) => (r.id === id ? { ...r, enabled: !r.enabled } : r))
-    );
+  async function toggleEnabled(id: string) {
+    if (!token) return;
+    const rule = rules.find((r) => r.id === id);
+    if (!rule) return;
+    await updateRouterRule(token, id, { enabled: !rule.enabled });
+    await fetchAll();
   }
 
-  function saveRule(updated: RouterRule) {
-    setRules((prev) => {
-      const exists = prev.find((r) => r.id === updated.id);
-      if (exists) {
-        return prev.map((r) => (r.id === updated.id ? updated : r));
+  async function moveRule(id: string, direction: "up" | "down") {
+    if (!token) return;
+    const nonDefault = rules.filter((r) => !r.isDefault);
+    const idx = nonDefault.findIndex((r) => r.id === id);
+    if (idx < 0) return;
+    const swapIdx = direction === "up" ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= nonDefault.length) return;
+
+    const reordered = [...nonDefault];
+    [reordered[idx], reordered[swapIdx]] = [reordered[swapIdx], reordered[idx]];
+
+    // Include default rule at the end if it exists
+    const def = rules.find((r) => r.isDefault);
+    const allIds = [...reordered.map((r) => r.id), ...(def ? [def.id] : [])];
+
+    await reorderRouterRules(token, allIds);
+    await fetchAll();
+  }
+
+  async function saveRule(updated: RouterRule) {
+    if (!token) return;
+    if (!updated.name.trim()) {
+      alert("Please enter a rule name");
+      return;
+    }
+    const payload = toApiPayload(updated);
+    const existsInDb = rules.some((r) => r.id === updated.id);
+    if (existsInDb) {
+      await updateRouterRule(token, updated.id, payload);
+    } else {
+      // Auto-create default fallback rule if none exists
+      const hasDefault = rules.some((r) => r.isDefault);
+      if (!hasDefault) {
+        await createRouterRule(token, {
+          name: "Default Fallback",
+          conditions: [],
+          logic: "AND",
+          routeType: "HUMAN",
+          routeTarget: null,
+          enabled: true,
+          isDefault: true,
+        });
       }
-      return [...prev, { ...updated, priority: prev.length + 1 }];
-    });
+      await createRouterRule(token, payload);
+    }
     setEditingId(null);
     setAddingNew(false);
     flashSaved();
+    await fetchAll();
   }
 
-  function deleteRule(id: string) {
-    setRules((prev) => prev.filter((r) => r.id !== id).map((r, i) => ({ ...r, priority: i + 1 })));
+  async function deleteRule(id: string) {
+    if (!token) return;
+    await deleteRouterRule(token, id);
     setEditingId(null);
+    await fetchAll();
   }
 
   function flashSaved() {
@@ -593,7 +682,9 @@ export default function RouterPage() {
     setTimeout(() => setSaved(false), 2000);
   }
 
-  const allDisplayRules = [...rules, DEFAULT_RULE];
+  const nonDefaultRules = rules.filter((r) => !r.isDefault);
+  const defaultRule = rules.find((r) => r.isDefault);
+  const allDisplayRules = defaultRule ? [...nonDefaultRules, defaultRule] : nonDefaultRules;
 
   return (
     <AppLayout>
@@ -657,56 +748,96 @@ export default function RouterPage() {
               <span />
             </div>
 
-            {/* Rule rows */}
-            <div className="-mx-5">
-              {allDisplayRules.map((rule, idx) => (
-                <RuleRow
-                  key={rule.id}
-                  rule={rule}
-                  index={idx}
-                  isEditing={editingId === rule.id}
-                  onToggleEdit={() => {
-                    setAddingNew(false);
-                    setEditingId(editingId === rule.id ? null : rule.id);
-                  }}
-                  onToggleEnabled={() => toggleEnabled(rule.id)}
-                  onSave={saveRule}
-                  onDelete={() => deleteRule(rule.id)}
-                  onCancelEdit={() => setEditingId(null)}
-                  totalNonDefault={rules.length}
-                />
-              ))}
-            </div>
-
-            {/* Add new rule inline */}
-            {addingNew && (
-              <div className="-mx-5 border-t border-gray-100 bg-white">
-                <div className="px-5 pt-4 pb-1">
-                  <p className="text-sm font-semibold text-gray-800">New Rule</p>
+            {/* Loading state */}
+            {loading ? (
+              <div className="py-10 text-center text-sm text-gray-400">Loading rules...</div>
+            ) : (
+              <>
+                {/* Rule rows */}
+                <div className="-mx-5">
+                  {allDisplayRules.map((rule, idx) => (
+                    <RuleRow
+                      key={rule.id}
+                      rule={rule}
+                      index={idx}
+                      isEditing={editingId === rule.id}
+                      onToggleEdit={() => {
+                        setAddingNew(false);
+                        setEditingId(editingId === rule.id ? null : rule.id);
+                      }}
+                      onToggleEnabled={() => toggleEnabled(rule.id)}
+                      onSave={saveRule}
+                      onDelete={() => deleteRule(rule.id)}
+                      onCancelEdit={() => setEditingId(null)}
+                      onMoveUp={!rule.isDefault && idx > 0 ? () => moveRule(rule.id, "up") : undefined}
+                      onMoveDown={!rule.isDefault && idx < nonDefaultRules.length - 1 ? () => moveRule(rule.id, "down") : undefined}
+                      totalNonDefault={nonDefaultRules.length}
+                      agents={agents}
+                      flows={flows}
+                    />
+                  ))}
                 </div>
-                <RuleEditor
-                  rule={newRuleTemplate}
-                  onSave={saveRule}
-                  onCancel={() => setAddingNew(false)}
-                />
-              </div>
-            )}
 
-            {/* Add Rule button */}
-            {!addingNew && (
-              <button
-                type="button"
-                onClick={() => {
-                  setEditingId(null);
-                  setAddingNew(true);
-                }}
-                className="mt-4 flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                {t("aiStudio.router.addRule")}
-              </button>
+                {/* Add new rule inline */}
+                {addingNew && (
+                  <div className="-mx-5 border-t border-gray-100 bg-white">
+                    <div className="px-5 pt-4 pb-1">
+                      <p className="text-sm font-semibold text-gray-800">New Rule</p>
+                    </div>
+                    <RuleEditor
+                      rule={newRuleTemplate}
+                      onSave={saveRule}
+                      onCancel={() => setAddingNew(false)}
+                      agents={agents}
+                      flows={flows}
+                    />
+                  </div>
+                )}
+
+                {/* Add Rule button */}
+                {!addingNew && (
+                  <div className="mt-4 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEditingId(null);
+                        setAddingNew(true);
+                      }}
+                      className="flex items-center gap-2 px-4 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                      </svg>
+                      {t("aiStudio.router.addRule")}
+                    </button>
+                    {!defaultRule && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          if (!token) return;
+                          await createRouterRule(token, {
+                            name: "Default Fallback",
+                            conditions: [],
+                            logic: "AND",
+                            routeType: "HUMAN",
+                            routeTarget: null,
+                            enabled: true,
+                            isDefault: true,
+                          });
+                          flashSaved();
+                          await fetchAll();
+                        }}
+                        className="flex items-center gap-2 px-4 py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-sm font-medium transition"
+                      >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+                        </svg>
+                        Add Default Fallback
+                      </button>
+                    )}
+                  </div>
+                )}
+              </>
             )}
           </SectionCard>
 

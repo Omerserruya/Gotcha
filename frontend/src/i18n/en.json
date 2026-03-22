@@ -1228,7 +1228,8 @@
       "csat": "CSAT",
       "modeAutonomous": "Autonomous",
       "modeCopilot": "Co-Pilot",
-      "modeHuman": "Human Only"
+      "modeHuman": "Human Only",
+      "noAgents": "No AI employees yet. Create your first team member to get started."
     },
     "playbooks": {
       "title": "Playbooks",
@@ -1345,6 +1346,7 @@
           "autonomousDesc": "AI handles conversations independently. Human can monitor and intervene."
         },
         "interactiveMessages": {
+          "title": "Interactive Messages",
           "subtitle": "Configure interactive message types the agent can send",
           "allowedTypes": "Allowed Types",
           "quickReply": "Quick Reply",

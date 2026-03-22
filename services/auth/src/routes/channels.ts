@@ -47,6 +47,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     // Check if a router rule with a channel condition for this email type already exists
     const existingRules = await prisma.routerRule.findMany({
       where: { tenantId },
+      orderBy: { priority: "asc" },
     });
     const hasChannelRule = existingRules.some((r) => {
       const conditions = (r.conditions as any[]) || [];
@@ -54,14 +55,21 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     });
     if (hasChannelRule) return;
 
-    // Get the highest priority to place the new rule before the default
-    const maxPriority = existingRules.reduce((max, r) => Math.max(max, r.priority), 0);
+    // Email rules go first — shift all existing rules down by 1
+    await prisma.$transaction(
+      existingRules.map((r) =>
+        prisma.routerRule.update({
+          where: { id: r.id },
+          data: { priority: r.priority + 1 },
+        })
+      )
+    );
 
     await prisma.routerRule.create({
       data: {
         tenantId,
         name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} — ${displayName}`,
-        priority: maxPriority + 1,
+        priority: 1,
         conditions: [{ type: "channel", operator: "equals", value: channel.toLowerCase() }],
         logic: "AND",
         routeType: "HUMAN",
@@ -69,6 +77,23 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
         isDefault: false,
       },
     });
+
+    // Auto-create default fallback rule if none exists
+    const hasDefault = existingRules.some((r) => r.isDefault);
+    if (!hasDefault) {
+      await prisma.routerRule.create({
+        data: {
+          tenantId,
+          name: "Default Fallback",
+          priority: existingRules.length + 2,
+          conditions: [],
+          logic: "AND",
+          routeType: "HUMAN",
+          enabled: true,
+          isDefault: true,
+        },
+      });
+    }
     console.log(`[CHANNELS] Auto-created router rule for ${channel} channel (${displayName})`);
   } catch (err) {
     console.warn(`[CHANNELS] Failed to auto-create router rule for ${channel}:`, err);
