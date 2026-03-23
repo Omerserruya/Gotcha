@@ -11,7 +11,11 @@ export default function FlowBuilderPage() {
 
   return (
     <AppLayout>
-      <FlowEditor flowId={flowId} onBack={() => router.push("/ai-studio")} />
+      <FlowEditor
+        flowId={flowId}
+        onBack={() => router.push("/ai-studio")}
+        onCreated={(id) => router.replace(`/ai-studio/flows/${id}`)}
+      />
     </AppLayout>
   );
 }

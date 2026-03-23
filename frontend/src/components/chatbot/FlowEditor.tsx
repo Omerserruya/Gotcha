@@ -20,7 +20,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getChatbotFlow, updateChatbotFlow, activateChatbotFlow, deactivateChatbotFlow } from "@/lib/api";
+import { getChatbotFlow, createChatbotFlow, updateChatbotFlow, activateChatbotFlow, deactivateChatbotFlow } from "@/lib/api";
 import { StartNode } from "./nodes/StartNode";
 import { MessageNode } from "./nodes/MessageNode";
 import { QuickReplyNode } from "./nodes/QuickReplyNode";
@@ -125,24 +125,6 @@ const NODE_PALETTE = [
         hoverBg: "hover:bg-amber-100",
         ring: "ring-amber-300",
         dot: "bg-amber-500",
-      },
-      {
-        type: "department_route",
-        label: "Dept. Route",
-        desc: "Route to a department queue",
-        icon: (
-          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-          </svg>
-        ),
-        color: "teal",
-        bg: "bg-teal-50",
-        border: "border-teal-200",
-        text: "text-teal-600",
-        iconBg: "bg-teal-100",
-        hoverBg: "hover:bg-teal-100",
-        ring: "ring-teal-300",
-        dot: "bg-teal-500",
       },
     ],
   },
@@ -316,8 +298,8 @@ function getDefaultData(type: string) {
   switch (type) {
     case "message": return { text: "Hello!" };
     case "quick_reply": return { text: "Choose an option:", buttons: [{ id: "opt1", title: "Option 1" }] };
-    case "condition": return { conditions: [], defaultTargetNodeId: null };
-    case "handover": return {};
+    case "condition": return { field: "intent", operator: "equals", value: "" };
+    case "handover": return { departmentId: "" };
     case "department_route": return { departmentId: "" };
     case "end": return {};
     default: return {};
@@ -329,9 +311,11 @@ function getDefaultData(type: string) {
 interface Props {
   flowId: string;
   onBack?: () => void;
+  onCreated?: (id: string) => void;
 }
 
-export function FlowEditor({ flowId, onBack }: Props) {
+export function FlowEditor({ flowId, onBack, onCreated }: Props) {
+  const isNew = flowId === "new";
   const { token } = useAuth();
   const { t } = useI18n();
   const [flow, setFlow] = useState<any>(null);
@@ -375,6 +359,12 @@ export function FlowEditor({ flowId, onBack }: Props) {
 
   useEffect(() => {
     if (!token) return;
+    if (isNew) {
+      setFlowName("New Flow");
+      const startNode: Node = { id: "start-1", type: "start", position: { x: 250, y: 50 }, data: {} };
+      setNodes([startNode]);
+      return;
+    }
     getChatbotFlow(token, flowId).then((data) => {
       setFlow(data);
       setFlowName(data.name);
@@ -447,7 +437,7 @@ export function FlowEditor({ flowId, onBack }: Props) {
   }
 
   async function handleToggleActive() {
-    if (!token || !flow) return;
+    if (!token || !flow || isNew) return;
     try {
       if (flowActive) {
         await deactivateChatbotFlow(token, flowId);
@@ -477,12 +467,23 @@ export function FlowEditor({ flowId, onBack }: Props) {
         target: e.target,
         sourceHandle: e.sourceHandle,
       }));
-      await updateChatbotFlow(token, flowId, {
-        name: flowName,
-        description: flow?.description || "",
-        nodes: backendNodes,
-        edges: backendEdges,
-      });
+      if (isNew && !flow) {
+        const created = await createChatbotFlow(token, {
+          name: flowName,
+          description: "",
+          nodes: backendNodes,
+          edges: backendEdges,
+        });
+        setFlow(created);
+        onCreated?.(created.id);
+      } else {
+        await updateChatbotFlow(token, flow?.id || flowId, {
+          name: flowName,
+          description: flow?.description || "",
+          nodes: backendNodes,
+          edges: backendEdges,
+        });
+      }
     } catch (err) {
       console.error("Save error:", err);
     } finally {

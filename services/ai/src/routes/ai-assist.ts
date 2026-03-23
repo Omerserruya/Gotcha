@@ -55,6 +55,63 @@ router.post("/generate-config/:departmentId", authenticate, resolveTenant, requi
   }
 });
 
+// ─── Intent Classification (internal, called by incoming-worker) ───
+
+router.post("/intent", (req: Request, res: Response, next) => {
+  const key = req.headers["x-internal-key"];
+  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
+    res.status(403).json({ error: "Forbidden" });
+    return;
+  }
+  next();
+}, async (req: Request, res: Response) => {
+  try {
+    const { message, intent } = req.body;
+    if (!message || !intent) {
+      res.status(400).json({ error: "message and intent are required" });
+      return;
+    }
+
+    // Ask AI directly: does this message relate to this intent?
+    const provider = aiService.getProvider() as any;
+    const client = provider.client;
+    const model = provider.defaultModel || "gpt-4o-mini";
+
+    if (!client) {
+      // No AI provider — fall back to keyword matching
+      const msgLower = message.toLowerCase();
+      const intentLower = intent.toLowerCase();
+      const match = msgLower.includes(intentLower);
+      console.log(`[intent] no AI provider, keyword fallback: message="${message.substring(0, 50)}" target="${intentLower}" match=${match}`);
+      res.json({ data: { match } });
+      return;
+    }
+
+    const response = await client.chat.completions.create({
+      model,
+      temperature: 0,
+      max_tokens: 5,
+      messages: [
+        {
+          role: "system",
+          content: `You determine if a customer message is related to a specific intent. Answer ONLY "true" or "false".\n\nIntent to check: "${intent}"`,
+        },
+        { role: "user", content: message },
+      ],
+    });
+
+    const answer = response.choices?.[0]?.message?.content?.trim()?.toLowerCase();
+    const match = answer === "true";
+
+    console.log(`[intent] message="${message.substring(0, 50)}" target="${intent}" answer="${answer}" match=${match}`);
+
+    res.json({ data: { match } });
+  } catch (err) {
+    console.error("Intent classification error:", err);
+    res.status(500).json({ error: "Failed to classify intent" });
+  }
+});
+
 // ─── Main AI Routes (require active tenant) ─────────────────
 
 router.use(authenticate, resolveTenant, requireActiveTenant());

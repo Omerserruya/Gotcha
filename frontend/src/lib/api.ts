@@ -982,3 +982,51 @@ export function getAgentScores(token: string, agentId: string, params?: Record<s
 export function getConversationScore(token: string, conversationId: string) {
   return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/score`, { token });
 }
+
+// ─── AI Agents (AI Studio Team Members) ──────────────────────
+
+export function getAIAgents(token: string) {
+  return apiFetch<{ data: any[] }>("/api/ai-agents", { token });
+}
+
+export function getAIAgent(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/ai-agents/${id}`, { token });
+}
+
+export function createAIAgent(token: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>("/api/ai-agents", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateAIAgent(token: string, id: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/ai-agents/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteAIAgent(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/ai-agents/${id}`, { token, method: "DELETE" });
+}
+
+// ─── Router Rules (Main Playbook) ────────────────────────────
+
+export function getRouterRules(token: string) {
+  return apiFetch<{ data: any[] }>("/api/router-rules", { token });
+}
+
+export function getRouterRule(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/router-rules/${id}`, { token });
+}
+
+export function createRouterRule(token: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>("/api/router-rules", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateRouterRule(token: string, id: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/router-rules/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function reorderRouterRules(token: string, ruleIds: string[]) {
+  return apiFetch<{ success: boolean }>("/api/router-rules/reorder", { token, method: "PUT", body: JSON.stringify({ ruleIds }) });
+}
+
+export function deleteRouterRule(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/router-rules/${id}`, { token, method: "DELETE" });
+}

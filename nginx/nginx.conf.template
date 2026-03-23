@@ -238,6 +238,24 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        location /api/ai-agents {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/router-rules {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/agent-scores {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -362,6 +380,22 @@ http {
 
         location ~ ^/t/([^/]+)/api/agent-scores(.*)$ {
             proxy_pass http://ai_service/api/agent-scores$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/ai-agents(.*)$ {
+            proxy_pass http://ai_service/api/ai-agents$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/router-rules(.*)$ {
+            proxy_pass http://ai_service/api/router-rules$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

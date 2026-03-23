@@ -95,6 +95,8 @@ model Tenant {
   businessProfile    BusinessProfile?
   onboarding         TenantOnboarding?
   knowledgeBases     KnowledgeBase[]
+  aiAgents           AIAgent[]
+  routerRules        RouterRule[]
 
   @@index([status])
   @@map("tenants")
@@ -308,6 +310,118 @@ model CopilotConfig {
   @@map("copilot_configs")
 }
 
+// ─── AI Agent Mode & Status ─────────────────────────────────
+
+enum AIAgentMode {
+  AUTONOMOUS
+  COPILOT
+  HUMAN_ONLY
+}
+
+enum AIAgentStatus {
+  ACTIVE
+  DRAFT
+  PAUSED
+}
+
+// ─── AI Agents (AI Studio Team Members) ─────────────────────
+
+model AIAgent {
+  id              String        @id @default(cuid())
+  tenantId        String        @map("tenant_id")
+  name            String
+  role            String        @default("customer_support")    // customer_support, sales, booking, billing, custom
+  description     String?
+  avatarColor     String        @default("#7c5cfc") @map("avatar_color")
+  mode            AIAgentMode   @default(AUTONOMOUS)
+  status          AIAgentStatus @default(DRAFT)
+  tone            String        @default("professional")        // professional, friendly, casual, formal
+  languages       Json          @default("{\"english\":true}")   // { english: bool, hebrew: bool, arabic: bool }
+  style           Json          @default("{}")                   // { useEmojis, concise, useFirstName, proactive }
+  channels        Json          @default("[]")                   // ["whatsapp", "instagram", "webchat"]
+  escalationRules Json          @default("[]") @map("escalation_rules") // [{ label, type, value, enabled }]
+  interactiveMessages Json      @default("{}") @map("interactive_messages") // { allowQuickReply, allowListMenu, ... }
+
+  // LLM settings (inherited from CopilotConfig pattern)
+  systemPrompt    String        @default("") @map("system_prompt")
+  model           String        @default("gpt-4o-mini")
+  provider        String        @default("openai")
+  temperature     Float         @default(0.7)
+  maxTokens       Int           @default(1024) @map("max_tokens")
+
+  // Structured AI personality blocks
+  identity        Json?         // { role, responsibility, representationGuidelines[] }
+  goals           Json?         // { focus, slaAwareness, conversionObjective }
+  toneConfig      Json?         @map("tone_config") // { formalityLevel, empathyLevel, assertiveness }
+  behavioral      Json?         // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
+
+  // Autonomous behavior settings
+  maxAutonomousMessages Int     @default(10) @map("max_autonomous_messages")
+  maxAutonomousMinutes  Int     @default(15) @map("max_autonomous_minutes")
+  confidenceThreshold   Float   @default(0.6) @map("confidence_threshold")
+  escalationMessage     String  @default("Let me connect you with a team member who can help further.") @map("escalation_message")
+
+  createdAt       DateTime      @default(now()) @map("created_at")
+  updatedAt       DateTime      @updatedAt @map("updated_at")
+
+  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  knowledgeBases  AIAgentKnowledge[]
+  routerRules     RouterRule[]        @relation("RouterRuleAIAgent")
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("ai_agents")
+}
+
+// ─── AI Agent ↔ Knowledge Base (many-to-many) ───────────────
+
+model AIAgentKnowledge {
+  id              String   @id @default(cuid())
+  aiAgentId       String   @map("ai_agent_id")
+  knowledgeBaseId String   @map("knowledge_base_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  aiAgent       AIAgent       @relation(fields: [aiAgentId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+
+  @@unique([aiAgentId, knowledgeBaseId])
+  @@index([aiAgentId])
+  @@index([knowledgeBaseId])
+  @@map("ai_agent_knowledge")
+}
+
+// ─── Router Rules (Main Playbook) ───────────────────────────
+
+enum RouterRuleRouteType {
+  AI_AGENT
+  FLOW
+  HUMAN
+  DEPARTMENT
+}
+
+model RouterRule {
+  id          String               @id @default(cuid())
+  tenantId    String               @map("tenant_id")
+  priority    Int                  @default(0)
+  name        String
+  conditions  Json                 @default("[]")    // [{ type: "intent"|"tag"|"keyword"|"channel", operator, value }]
+  logic       String               @default("AND")   // "AND" | "OR"
+  routeType   RouterRuleRouteType  @map("route_type")
+  routeTarget String?              @map("route_target") // ID of target (aiAgentId, flowId, departmentId)
+  aiAgentId   String?              @map("ai_agent_id")  // populated when routeType = AI_AGENT
+  enabled     Boolean              @default(true)
+  isDefault   Boolean              @default(false) @map("is_default")
+  createdAt   DateTime             @default(now()) @map("created_at")
+  updatedAt   DateTime             @updatedAt @map("updated_at")
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  aiAgent     AIAgent?             @relation("RouterRuleAIAgent", fields: [aiAgentId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId])
+  @@index([tenantId, enabled, priority])
+  @@map("router_rules")
+}
+
 // ─── Chatbot Flow Builder ────────────────────────────────────
 
 model ChatbotFlow {
@@ -317,6 +431,8 @@ model ChatbotFlow {
   description String?
   isActive    Boolean      @default(false) @map("is_active")
   channel     ChannelType?                                     // null = ALL channels
+  trigger     String?                                          // trigger condition description
+  runCount    Int          @default(0) @map("run_count")       // number of times this flow has been executed
   // JSON definition of the flow graph
   nodes       Json         @default("[]")
   edges       Json         @default("[]")
@@ -498,11 +614,18 @@ model KnowledgeBase {
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
-  tenant       Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  documents    KnowledgeDocument[]
-  integrations KnowledgeIntegration[]
+  // Scoping: who can use this knowledge base
+  scope              String   @default("all")     // "all" | "agent" | "department"
+  scopeAgentId       String?  @map("scope_agent_id")
+  scopeDepartmentId  String?  @map("scope_department_id")
+
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents          KnowledgeDocument[]
+  integrations       KnowledgeIntegration[]
+  aiAgentKnowledgeBases AIAgentKnowledge[]
 
   @@index([tenantId])
+  @@index([tenantId, scope])
   @@map("knowledge_bases")
 }
 
@@ -801,7 +924,8 @@ model AgentToolPermission {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
   departmentId    String?  @map("department_id")
-  agentId         String?  @map("agent_id")
+  agentId         String?  @map("agent_id")       // human agent (User) ID
+  aiAgentId       String?  @map("ai_agent_id")    // AI agent ID
   tenantToolId    String   @map("tenant_tool_id")
   isAllowed       Boolean  @default(true) @map("is_allowed")
   requireApproval Boolean  @default(false) @map("require_approval")
@@ -815,6 +939,7 @@ model AgentToolPermission {
   @@index([tenantId])
   @@index([departmentId])
   @@index([agentId])
+  @@index([aiAgentId])
   @@map("agent_tool_permissions")
 }
 

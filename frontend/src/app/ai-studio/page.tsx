@@ -6,39 +6,13 @@ import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getMarketplaceIntegrations } from "@/lib/api";
+import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getRouterRules, getKnowledgeBases, deleteChatbotFlow } from "@/lib/api";
 import clsx from "clsx";
+import ReactFlow, { Node, Edge, Controls, Background, BackgroundVariant, MarkerType } from "reactflow";
+import "reactflow/dist/style.css";
 
 // ─── Tab types ────────────────────────────────────────────────
-type Tab = "agents" | "flows" | "router" | "knowledge" | "tools" | "marketplace";
-
-// ─── Mock data ────────────────────────────────────────────────
-const MOCK_AGENTS = [
-  { id: "1", name: "Maya", role: "Support Agent", status: "active", conversations: 24, satisfaction: 94 },
-  { id: "2", name: "Sales Bot", role: "Sales Agent", status: "active", conversations: 11, satisfaction: 88 },
-  { id: "3", name: "Returns Handler", role: "Returns Agent", status: "draft", conversations: 0, satisfaction: null },
-];
-
-const MOCK_FLOWS = [
-  { id: "1", name: "Welcome & Onboarding", trigger: "New conversation", active: true, runs: 142 },
-  { id: "2", name: "Order Status Check", trigger: 'Keyword: "track order"', active: true, runs: 89 },
-  { id: "3", name: "Lead Qualification", trigger: "Intent: pricing question", active: false, runs: 0 },
-];
-
-const MOCK_RULES = [
-  { id: "1", priority: 1, name: "VIP customers", condition: "Customer Tag = VIP", routeTo: "Human Agent" },
-  { id: "2", priority: 2, name: "Cancel intent", condition: 'Intent: "cancel order"', routeTo: "Returns Flow" },
-  { id: "3", priority: 3, name: "Track order", condition: 'Intent: "track order"', routeTo: "Maya (Support)" },
-  { id: "4", priority: 4, name: "Sales inquiry", condition: "Intent: pricing/buy", routeTo: "Sales Bot" },
-  { id: "5", priority: 5, name: "Everything else", condition: "Default fallback", routeTo: "Maya (Support)" },
-];
-
-const MOCK_KNOWLEDGE = [
-  { id: "1", name: "Return Policy", type: "Document", status: "synced", lastSync: "2 hours ago" },
-  { id: "2", name: "FAQ — General", type: "FAQ", status: "synced", lastSync: "1 hour ago" },
-  { id: "3", name: "Product Catalog", type: "Website", status: "syncing", lastSync: "In progress" },
-  { id: "4", name: "Shipping Rates", type: "File", status: "synced", lastSync: "Yesterday" },
-];
+type Tab = "team" | "playbooks" | "knowledge" | "skills";
 
 const MOCK_TOOLS = [
   {
@@ -114,16 +88,46 @@ function RiskBadge({ risk }: { risk: string }) {
   );
 }
 
-// ─── Agents Tab ───────────────────────────────────────────────
-function AgentsTab({ t }: { t: (key: string) => string }) {
+// ─── Mode badge ───────────────────────────────────────────────
+function ModeBadge({ mode, t }: { mode: string; t: (k: string) => string }) {
+  const styles: Record<string, string> = {
+    autonomous: "bg-violet-100 text-violet-700",
+    copilot: "bg-blue-100 text-blue-700",
+    human_only: "bg-gray-100 text-gray-600",
+  };
+  const labels: Record<string, string> = {
+    autonomous: t("aiStudio.team.modeAutonomous"),
+    copilot: t("aiStudio.team.modeCopilot"),
+    human_only: t("aiStudio.team.modeHuman"),
+  };
+  return (
+    <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", styles[mode] || styles.autonomous)}>
+      {labels[mode] || mode}
+    </span>
+  );
+}
+
+// ─── Team Members Tab ─────────────────────────────────────────
+function TeamTab({ t }: { t: (key: string) => string }) {
+  const { token } = useAuth();
   const router = useRouter();
+  const [agents, setAgents] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    getAIAgents(token)
+      .then((res) => setAgents(res.data || []))
+      .catch(() => setAgents([]))
+      .finally(() => setLoading(false));
+  }, [token]);
 
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.agents.title")}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.agents.subtitle")}</p>
+          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.team.title")}</h2>
+          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.team.subtitle")}</p>
         </div>
         <Link
           href="/ai-studio/agents/new"
@@ -132,12 +136,25 @@ function AgentsTab({ t }: { t: (key: string) => string }) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          {t("aiStudio.agents.newAgent")}
+          {t("aiStudio.team.addMember")}
         </Link>
       </div>
 
+      {loading ? (
+        <div className="flex items-center justify-center h-48">
+          <div className="w-8 h-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+        </div>
+      ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {MOCK_AGENTS.map((agent) => (
+        {agents.map((agent) => {
+          const channels: string[] = typeof agent.channels === "string"
+            ? (() => { try { return JSON.parse(agent.channels); } catch { return []; } })()
+            : (agent.channels || []);
+          const status = agent.status?.toLowerCase() || "draft";
+          const mode = agent.mode?.toLowerCase() || "autonomous";
+          const knowledgeCount = agent.knowledgeSources?.length || 0;
+          const skillsCount = agent.toolCount || 0;
+          return (
           <div
             key={agent.id}
             className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
@@ -147,20 +164,44 @@ function AgentsTab({ t }: { t: (key: string) => string }) {
               <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                 {agent.name.charAt(0)}
               </div>
-              <StatusBadge status={agent.status} />
+              <StatusBadge status={status} />
             </div>
             <h3 className="font-semibold text-gray-900">{agent.name}</h3>
-            <p className="text-xs text-gray-400 mt-0.5 mb-3">{agent.role}</p>
-            <div className="flex items-center gap-4 text-xs text-gray-500">
-              <span>
-                <span className="font-semibold text-gray-800">{agent.conversations}</span> {t("aiStudio.agents.conversations")}
-              </span>
-              {agent.satisfaction !== null && (
-                <span>
-                  <span className="font-semibold text-gray-800">{agent.satisfaction}%</span> {t("aiStudio.agents.satisfaction")}
-                </span>
-              )}
+            <p className="text-xs text-gray-400 mt-0.5 mb-2">{agent.role}</p>
+
+            {/* Mode badge */}
+            <div className="mb-3">
+              <ModeBadge mode={mode} t={t} />
             </div>
+
+            {/* Connected resources */}
+            <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">
+              <span className="flex items-center gap-1">
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
+                </svg>
+                {knowledgeCount} {t("aiStudio.team.knowledge")}
+              </span>
+              <span className="flex items-center gap-1">
+                <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
+                </svg>
+                {skillsCount} {t("aiStudio.team.skills")}
+              </span>
+            </div>
+
+            {/* Channels */}
+            {channels.length > 0 && (
+              <div className="flex flex-wrap gap-1 mb-3">
+                {channels.slice(0, 3).map((ch: string) => (
+                  <span key={ch} className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500 capitalize">{ch}</span>
+                ))}
+                {channels.length > 3 && (
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-gray-100 text-gray-500">+{channels.length - 3}</span>
+                )}
+              </div>
+            )}
+
             <div className="mt-4 pt-4 border-t border-gray-50 flex gap-2">
               <Link
                 href={`/ai-studio/agents/${agent.id}`}
@@ -177,40 +218,306 @@ function AgentsTab({ t }: { t: (key: string) => string }) {
               </button>
             </div>
           </div>
-        ))}
+          );
+        })}
 
-        {/* New agent placeholder card */}
+        {agents.length === 0 && (
+          <div className="col-span-full flex flex-col items-center justify-center py-16 text-gray-400">
+            <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
+            </svg>
+            <p className="text-sm font-medium">{t("aiStudio.team.noAgents") || "No AI agents yet"}</p>
+            <p className="text-xs mt-1">{t("aiStudio.team.addMemberHint")}</p>
+          </div>
+        )}
+
+        {/* New member placeholder */}
         <Link
           href="/ai-studio/agents/new"
           className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-5 flex flex-col items-center justify-center gap-3 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer min-h-[160px]"
         >
           <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
-            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
             </svg>
           </div>
-          <p className="text-sm text-gray-400 font-medium">{t("aiStudio.agents.newAgent")}</p>
+          <div className="text-center">
+            <p className="text-sm text-gray-400 font-medium">{t("aiStudio.team.addMember")}</p>
+            <p className="text-xs text-gray-300 mt-1">{t("aiStudio.team.addMemberHint")}</p>
+          </div>
         </Link>
       </div>
+      )}
     </div>
   );
 }
 
-// ─── Flows Tab ────────────────────────────────────────────────
-function FlowsTab({ t }: { t: (key: string) => string }) {
+// ─── Step type icon for Main Playbook ─────────────────────────
+function StepTypeIcon({ type }: { type: string }) {
+  const styles: Record<string, { bg: string; color: string }> = {
+    intent: { bg: "bg-blue-50", color: "text-blue-600" },
+    tag: { bg: "bg-amber-50", color: "text-amber-600" },
+    message: { bg: "bg-emerald-50", color: "text-emerald-600" },
+    fallback: { bg: "bg-gray-100", color: "text-gray-400" },
+  };
+  const s = styles[type] || styles.fallback;
+
+  const icons: Record<string, React.ReactNode> = {
+    intent: (
+      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+      </svg>
+    ),
+    tag: (
+      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
+      </svg>
+    ),
+    message: (
+      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+      </svg>
+    ),
+    fallback: (
+      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
+      </svg>
+    ),
+  };
+
+  return (
+    <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", s.bg)}>
+      {icons[type] || icons.fallback}
+    </div>
+  );
+}
+
+// ─── Route type badge ─────────────────────────────────────────
+function RouteTypeBadge({ type, t }: { type: string; t: (k: string) => string }) {
+  const styles: Record<string, string> = {
+    subflow: "bg-violet-50 text-violet-600",
+    agent: "bg-blue-50 text-blue-600",
+    human: "bg-amber-50 text-amber-600",
+  };
+  const labels: Record<string, string> = {
+    subflow: t("aiStudio.playbooks.routeSubflow"),
+    agent: t("aiStudio.playbooks.routeAgent"),
+    human: t("aiStudio.playbooks.routeHuman"),
+  };
+  return (
+    <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-medium", styles[type] || styles.agent)}>
+      {labels[type] || type}
+    </span>
+  );
+}
+
+// ─── Playbook Graph (ReactFlow visualization) ─────────────────
+type PlaybookStep = { id: string; type: string; label: string; routeTo: string; routeType: string };
+function PlaybookGraph({ steps }: { steps: PlaybookStep[] }) {
+  const nonDefault = steps.filter((s) => s.type !== "fallback");
+  const defaultStep = steps.find((s) => s.type === "fallback");
+
+  const nodes: Node[] = [];
+  const edges: Edge[] = [];
+
+  // Start node
+  nodes.push({
+    id: "start",
+    type: "default",
+    position: { x: 200, y: 0 },
+    data: { label: "Incoming Message" },
+    style: {
+      background: "#16a34a",
+      color: "#fff",
+      border: "none",
+      borderRadius: 12,
+      fontWeight: 600,
+      fontSize: 12,
+      padding: "8px 16px",
+    },
+  });
+
+  nonDefault.forEach((step, i) => {
+    const y = 100 + i * 130;
+    const nodeId = `rule-${step.id}`;
+    nodes.push({
+      id: nodeId,
+      type: "default",
+      position: { x: 200, y },
+      data: {
+        label: (
+          <div style={{ textAlign: "center", fontSize: 11 }}>
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>{step.label}</div>
+            <div style={{ color: "#7c3aed", fontSize: 10 }}>{step.routeTo}</div>
+          </div>
+        ),
+      },
+      style: {
+        background: "#f5f3ff",
+        border: "1.5px solid #7c3aed",
+        borderRadius: 8,
+        width: 180,
+        fontSize: 11,
+      },
+    });
+
+    // Edge from previous node (start or previous rule)
+    const sourceId = i === 0 ? "start" : `rule-${nonDefault[i - 1].id}`;
+    edges.push({
+      id: `e-${sourceId}-${nodeId}`,
+      source: sourceId,
+      target: nodeId,
+      label: i === 0 ? "" : "false",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      style: { stroke: "#a78bfa" },
+    });
+
+    // "True" edge to route target node
+    const targetNodeId = `target-${step.id}`;
+    nodes.push({
+      id: targetNodeId,
+      type: "default",
+      position: { x: 450, y },
+      data: { label: step.routeTo || "Route Target" },
+      style: {
+        background: "#ede9fe",
+        border: "1px solid #c4b5fd",
+        borderRadius: 8,
+        fontSize: 11,
+        padding: "4px 10px",
+      },
+    });
+    edges.push({
+      id: `e-true-${nodeId}`,
+      source: nodeId,
+      target: targetNodeId,
+      label: "true",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      style: { stroke: "#16a34a" },
+      labelStyle: { fill: "#16a34a", fontWeight: 600, fontSize: 10 },
+    });
+  });
+
+  // Default/fallback node
+  if (defaultStep) {
+    const y = 100 + nonDefault.length * 130;
+    nodes.push({
+      id: "default",
+      type: "default",
+      position: { x: 200, y },
+      data: {
+        label: (
+          <div style={{ textAlign: "center", fontSize: 11 }}>
+            <div style={{ fontWeight: 700, marginBottom: 2 }}>Default Fallback</div>
+            <div style={{ color: "#6b7280", fontSize: 10 }}>{defaultStep.routeTo}</div>
+          </div>
+        ),
+      },
+      style: {
+        background: "#f9fafb",
+        border: "1.5px solid #d1d5db",
+        borderRadius: 12,
+        width: 180,
+        fontSize: 11,
+      },
+    });
+    const lastSource = nonDefault.length > 0
+      ? `rule-${nonDefault[nonDefault.length - 1].id}`
+      : "start";
+    edges.push({
+      id: "e-default",
+      source: lastSource,
+      target: "default",
+      label: nonDefault.length > 0 ? "false" : "",
+      markerEnd: { type: MarkerType.ArrowClosed },
+      style: { stroke: "#9ca3af" },
+    });
+  }
+
+  const graphHeight = 120 + (nonDefault.length + (defaultStep ? 1 : 0)) * 130;
+
+  return (
+    <div style={{ height: Math.max(graphHeight, 300), width: "100%" }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        fitView
+        nodesDraggable={false}
+        nodesConnectable={false}
+        elementsSelectable={false}
+        zoomOnScroll={false}
+        panOnDrag={true}
+      >
+        <Controls showInteractive={false} />
+        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e5e7eb" />
+      </ReactFlow>
+    </div>
+  );
+}
+
+// ─── Playbooks Tab (Main Playbook + Sub-Playbooks) ────────────
+function PlaybooksTab({ t }: { t: (key: string) => string }) {
+  const { token } = useAuth();
   const router = useRouter();
-  const [flows, setFlows] = useState(MOCK_FLOWS);
+  const [flows, setFlows] = useState<any[]>([]);
+  const [rules, setRules] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [viewMode, setViewMode] = useState<"list" | "graph">("list");
+
+  useEffect(() => {
+    if (!token) return;
+    Promise.all([
+      getChatbotFlows(token).then((r) => (Array.isArray(r) ? r : (r as any).data || [])),
+      getRouterRules(token).then((r) => r.data || []),
+    ])
+      .then(([flowsData, rulesData]) => {
+        setFlows(flowsData);
+        setRules(rulesData);
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, [token]);
 
   function toggleFlow(id: string) {
-    setFlows((prev) => prev.map((f) => f.id === id ? { ...f, active: !f.active } : f));
+    setFlows((prev) => prev.map((f) => f.id === id ? { ...f, isActive: !f.isActive } : f));
+  }
+
+  async function handleDeleteFlow(id: string) {
+    if (!token) return;
+    if (!confirm("Are you sure you want to delete this flow?")) return;
+    try {
+      await deleteChatbotFlow(token, id);
+      setFlows((prev) => prev.filter((f) => f.id !== id));
+    } catch {
+      // silently ignore
+    }
+  }
+
+  function ruleToStep(rule: any, idx: number) {
+    const routeType = rule.routeType === "AI_AGENT" ? "agent"
+      : rule.routeType === "FLOW" ? "subflow"
+      : rule.routeType === "HUMAN" || rule.routeType === "DEPARTMENT" ? "human"
+      : "agent";
+    const type = rule.isDefault ? "fallback"
+      : rule.routeType === "AI_AGENT" ? "intent"
+      : rule.routeType === "FLOW" ? "message"
+      : "tag";
+    return {
+      id: rule.id || String(idx),
+      type,
+      label: rule.name,
+      routeTo: rule.routeTargetName || rule.routeTarget || "",
+      routeType,
+    };
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.flows.title")}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.flows.subtitle")}</p>
+          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.playbooks.title")}</h2>
+          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.playbooks.subtitle")}</p>
         </div>
         <Link
           href="/ai-studio/flows/new"
@@ -219,11 +526,130 @@ function FlowsTab({ t }: { t: (key: string) => string }) {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
-          {t("aiStudio.flows.newFlow")}
+          {t("aiStudio.playbooks.newPlaybook")}
         </Link>
       </div>
 
+      {/* ── Main Playbook ── */}
+      <div className="bg-white rounded-2xl shadow-card border-2 border-violet-100 overflow-hidden mb-6">
+        <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-violet-50 to-violet-50/30 border-b border-violet-100">
+          <div className="flex items-center gap-3">
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-sm">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
+              </svg>
+            </div>
+            <div>
+              <h3 className="text-sm font-bold text-gray-900">{t("aiStudio.playbooks.mainPlaybook")}</h3>
+              <p className="text-xs text-gray-400">{t("aiStudio.playbooks.mainPlaybookSub")}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            {/* List / Graph toggle */}
+            <div className="flex rounded-lg border border-violet-200 overflow-hidden text-xs font-medium">
+              <button
+                onClick={() => setViewMode("list")}
+                className={clsx(
+                  "px-3 py-1.5 transition",
+                  viewMode === "list"
+                    ? "bg-violet-600 text-white"
+                    : "bg-white text-violet-700 hover:bg-violet-50"
+                )}
+              >
+                List
+              </button>
+              <button
+                onClick={() => setViewMode("graph")}
+                className={clsx(
+                  "px-3 py-1.5 transition border-l border-violet-200",
+                  viewMode === "graph"
+                    ? "bg-violet-600 text-white"
+                    : "bg-white text-violet-700 hover:bg-violet-50"
+                )}
+              >
+                Graph
+              </button>
+            </div>
+            <Link
+              href="/ai-studio/router"
+              className="flex items-center gap-2 px-3 py-1.5 bg-white text-violet-700 rounded-lg text-xs font-medium hover:bg-violet-50 transition border border-violet-200 shadow-sm"
+            >
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+              </svg>
+              {t("aiStudio.playbooks.editMainPlaybook")}
+            </Link>
+          </div>
+        </div>
+
+        {loading ? (
+          <div className="flex items-center justify-center h-24">
+            <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+          </div>
+        ) : rules.length === 0 ? (
+          <div className="px-5 py-8 text-center text-gray-400">
+            <p className="text-sm">No routing rules configured</p>
+          </div>
+        ) : viewMode === "graph" ? (
+          <PlaybookGraph steps={rules.map((r, i) => ruleToStep(r, i))} />
+        ) : rules.map((rule, i) => {
+          const step = ruleToStep(rule, i);
+          return (
+          <div
+            key={step.id}
+            className={clsx(
+              "flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50/60 transition",
+              i < rules.length - 1 && "border-b border-gray-50",
+              step.type === "fallback" && "bg-gray-50/30"
+            )}
+          >
+            {/* Step number + connector line */}
+            <div className="flex flex-col items-center w-5 shrink-0">
+              <span className={clsx(
+                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
+                step.type === "fallback" ? "bg-gray-200 text-gray-400" : "bg-violet-100 text-violet-700"
+              )}>
+                {i + 1}
+              </span>
+            </div>
+
+            {/* Type icon */}
+            <StepTypeIcon type={step.type} />
+
+            {/* Condition label */}
+            <span className="text-sm text-gray-700 flex-1 truncate">{step.label}</span>
+
+            {/* Arrow */}
+            <svg className="w-3.5 h-3.5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+
+            {/* Route target + type badge */}
+            <div className="flex items-center gap-2 shrink-0">
+              <span className="text-sm font-medium text-gray-800">{step.routeTo}</span>
+              <RouteTypeBadge type={step.routeType} t={t} />
+            </div>
+          </div>
+          );
+        })}
+
+        <div className="px-5 py-2.5 border-t border-violet-50 bg-violet-50/20">
+          <p className="text-[11px] text-gray-400">{t("aiStudio.playbooks.mainPlaybookHint")}</p>
+        </div>
+      </div>
+
+      {/* ── Sub-Playbooks ── */}
+      <div className="flex items-center gap-2 mb-3">
+        <h3 className="text-sm font-semibold text-gray-700">{t("aiStudio.playbooks.subPlaybooks")}</h3>
+        <span className="text-xs text-gray-400">({flows.length})</span>
+      </div>
+
       <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+        {flows.length === 0 && !loading && (
+          <div className="px-5 py-8 text-center text-gray-400">
+            <p className="text-sm">No playbooks yet</p>
+          </div>
+        )}
         {flows.map((flow, i) => (
           <div
             key={flow.id}
@@ -232,14 +658,12 @@ function FlowsTab({ t }: { t: (key: string) => string }) {
               i < flows.length - 1 && "border-b border-gray-50"
             )}
           >
-            {/* Flow icon */}
             <div className="w-9 h-9 rounded-lg bg-violet-50 flex items-center justify-center shrink-0">
               <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
               </svg>
             </div>
 
-            {/* Info — clicking name navigates to builder */}
             <div
               className="flex-1 min-w-0 cursor-pointer"
               onClick={() => router.push(`/ai-studio/flows/${flow.id}`)}
@@ -248,30 +672,27 @@ function FlowsTab({ t }: { t: (key: string) => string }) {
               <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.flows.trigger")}: {flow.trigger}</p>
             </div>
 
-            {/* Runs */}
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-semibold text-gray-800">{flow.runs}</p>
-              <p className="text-xs text-gray-400">{t("aiStudio.flows.runs")}</p>
+              <p className="text-sm font-semibold text-gray-800">{flow.runCount ?? 0}</p>
+              <p className="text-xs text-gray-400">{t("aiStudio.playbooks.runs")}</p>
             </div>
 
-            {/* Toggle */}
             <button
               onClick={() => toggleFlow(flow.id)}
               className={clsx(
                 "relative w-10 h-5.5 rounded-full transition-colors shrink-0",
-                flow.active ? "bg-violet-500" : "bg-gray-200"
+                flow.isActive ? "bg-violet-500" : "bg-gray-200"
               )}
               style={{ width: 40, height: 22 }}
             >
               <span
                 className={clsx(
                   "absolute top-0.5 left-0.5 w-[18px] h-[18px] bg-white rounded-full shadow transition-transform",
-                  flow.active && "translate-x-[18px]"
+                  flow.isActive && "translate-x-[18px]"
                 )}
               />
             </button>
 
-            {/* Edit — navigates to flow builder */}
             <Link
               href={`/ai-studio/flows/${flow.id}`}
               className="p-1.5 rounded-lg text-gray-400 hover:text-violet-600 hover:bg-violet-50 transition"
@@ -280,11 +701,20 @@ function FlowsTab({ t }: { t: (key: string) => string }) {
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
               </svg>
             </Link>
+
+            <button
+              onClick={() => handleDeleteFlow(flow.id)}
+              className="p-1.5 rounded-lg text-gray-400 hover:text-red-600 hover:bg-red-50 transition"
+              title="Delete flow"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
           </div>
         ))}
       </div>
 
-      {/* New flow placeholder card */}
       <Link
         href="/ai-studio/flows/new"
         className="mt-4 bg-white rounded-2xl border-2 border-dashed border-gray-200 px-5 py-4 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer"
@@ -294,96 +724,26 @@ function FlowsTab({ t }: { t: (key: string) => string }) {
             <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
           </svg>
         </div>
-        <p className="text-sm text-gray-400 font-medium">{t("aiStudio.flows.newFlow")}</p>
+        <p className="text-sm text-gray-400 font-medium">{t("aiStudio.playbooks.newPlaybook")}</p>
       </Link>
-    </div>
-  );
-}
-
-// ─── Router Tab ───────────────────────────────────────────────
-function RouterTab({ t }: { t: (key: string) => string }) {
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.router.title")}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.router.subtitle")}</p>
-        </div>
-        <Link
-          href="/ai-studio/router"
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-700 transition shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
-          </svg>
-          {t("aiStudio.router.configureRouter")}
-        </Link>
-      </div>
-
-      {/* Preview of rules — read-only summary */}
-      <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-        {/* Header */}
-        <div className="grid grid-cols-[48px_1fr_1fr_1fr_40px] gap-3 px-5 py-3 bg-gray-50/60 border-b border-gray-100">
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">#</span>
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.router.rule")}</span>
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.router.condition")}</span>
-          <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.router.routeTo")}</span>
-          <span />
-        </div>
-
-        {MOCK_RULES.map((rule, i) => (
-          <div
-            key={rule.id}
-            className={clsx(
-              "grid grid-cols-[48px_1fr_1fr_1fr_40px] gap-3 items-center px-5 py-3.5 hover:bg-gray-50/60 transition",
-              i < MOCK_RULES.length - 1 && "border-b border-gray-50",
-              i === MOCK_RULES.length - 1 && "bg-gray-50/30"
-            )}
-          >
-            <span className={clsx(
-              "w-7 h-7 rounded-lg flex items-center justify-center text-xs font-bold shrink-0",
-              i === MOCK_RULES.length - 1
-                ? "bg-gray-100 text-gray-400"
-                : "bg-violet-100 text-violet-700"
-            )}>
-              {rule.priority}
-            </span>
-            <p className="text-sm font-medium text-gray-800">{rule.name}</p>
-            <p className="text-xs text-gray-500 font-mono bg-gray-50 px-2 py-1 rounded-lg truncate">{rule.condition}</p>
-            <div className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full bg-violet-400 shrink-0" />
-              <span className="text-sm text-gray-700">{rule.routeTo}</span>
-            </div>
-            <Link
-              href="/ai-studio/router"
-              className="p-1.5 rounded-lg text-gray-300 hover:text-violet-600 hover:bg-violet-50 transition justify-self-end"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-              </svg>
-            </Link>
-          </div>
-        ))}
-      </div>
-
-      <div className="mt-3 flex items-center justify-between">
-        <p className="text-xs text-gray-400">{t("aiStudio.router.hint")}</p>
-        <Link
-          href="/ai-studio/router"
-          className="text-xs text-violet-600 hover:text-violet-700 font-medium flex items-center gap-1 transition"
-        >
-          {t("aiStudio.router.configureRouter")}
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-          </svg>
-        </Link>
-      </div>
     </div>
   );
 }
 
 // ─── Knowledge Tab ────────────────────────────────────────────
 function KnowledgeTab({ t }: { t: (key: string) => string }) {
+  const { token } = useAuth();
+  const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!token) return;
+    getKnowledgeBases(token)
+      .then((res) => setKnowledgeBases(res.data || []))
+      .catch(() => setKnowledgeBases([]))
+      .finally(() => setLoading(false));
+  }, [token]);
+
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
@@ -403,7 +763,6 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
       </div>
 
       <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-        {/* Header */}
         <div className="grid grid-cols-[1fr_100px_100px_120px_40px] gap-3 px-5 py-3 bg-gray-50/60 border-b border-gray-100">
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.source")}</span>
           <span className="text-xs font-medium text-gray-400 uppercase tracking-wide">{t("aiStudio.knowledge.type")}</span>
@@ -412,12 +771,23 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
           <span />
         </div>
 
-        {MOCK_KNOWLEDGE.map((src, i) => (
+        {loading ? (
+          <div className="flex items-center justify-center h-32">
+            <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+          </div>
+        ) : knowledgeBases.length === 0 ? (
+          <div className="px-5 py-10 text-center text-gray-400">
+            <p className="text-sm">No knowledge sources yet</p>
+          </div>
+        ) : knowledgeBases.map((src, i) => {
+          const status = src.status?.toLowerCase() || "synced";
+          const lastSync = src.updatedAt ? new Date(src.updatedAt).toLocaleDateString() : "—";
+          return (
           <div
             key={src.id}
             className={clsx(
               "grid grid-cols-[1fr_100px_100px_120px_40px] gap-3 items-center px-5 py-3.5 hover:bg-gray-50/60 transition",
-              i < MOCK_KNOWLEDGE.length - 1 && "border-b border-gray-50"
+              i < knowledgeBases.length - 1 && "border-b border-gray-50"
             )}
           >
             <div className="flex items-center gap-3">
@@ -428,109 +798,23 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
               </div>
               <span className="text-sm font-medium text-gray-800">{src.name}</span>
             </div>
-            <span className="text-xs text-gray-500">{src.type}</span>
-            <StatusBadge status={src.status} />
-            <span className="text-xs text-gray-400">{src.lastSync}</span>
+            <span className="text-xs text-gray-500">{src.type || "Document"}</span>
+            <StatusBadge status={status} />
+            <span className="text-xs text-gray-400">{lastSync}</span>
             <button className="p-1.5 rounded-lg text-gray-300 hover:text-violet-600 hover:bg-violet-50 transition justify-self-end">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
               </svg>
             </button>
           </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
 }
 
-// ─── Tools Tab ────────────────────────────────────────────────
-function ToolsTab({ t, onOpenMarketplace }: { t: (key: string) => string; onOpenMarketplace?: () => void }) {
-  const router = useRouter();
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-5">
-        <div>
-          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.tools.title")}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.tools.subtitle")}</p>
-        </div>
-        <button
-          onClick={onOpenMarketplace}
-          className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-700 transition shadow-sm"
-        >
-          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
-          </svg>
-          {t("aiStudio.tools.openMarketplace")}
-        </button>
-      </div>
-
-      <div className="space-y-4">
-        {MOCK_TOOLS.map((intg) => (
-          <div key={intg.integration} className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-            {/* Integration header */}
-            <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50 bg-gray-50/40">
-              <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 shadow-sm">
-                {intg.integration.charAt(0)}
-              </div>
-              <span className="font-semibold text-gray-800">{intg.integration}</span>
-              <StatusBadge status={intg.status} />
-            </div>
-
-            {/* Tools list */}
-            {intg.tools.map((tool, i) => (
-              <div
-                key={tool.name}
-                className={clsx(
-                  "flex items-center gap-4 px-5 py-3 hover:bg-gray-50/40 transition",
-                  i < intg.tools.length - 1 && "border-b border-gray-50"
-                )}
-              >
-                {/* Toggle indicator */}
-                <div className={clsx("w-2 h-2 rounded-full shrink-0", tool.enabled ? "bg-green-400" : "bg-gray-200")} />
-
-                {/* Name */}
-                <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
-
-                {/* Risk */}
-                <RiskBadge risk={tool.risk} />
-
-                {/* Used by */}
-                <span className="text-xs text-gray-400 w-24 text-right">
-                  {tool.usedBy
-                    ? <span className="text-gray-600">{t("aiStudio.tools.usedBy")}: <strong>{tool.usedBy}</strong></span>
-                    : <span className="text-gray-300">{t("aiStudio.tools.notAssigned")}</span>
-                  }
-                </span>
-              </div>
-            ))}
-          </div>
-        ))}
-      </div>
-
-      {/* CTA to marketplace */}
-      <div
-        className="mt-4 bg-white rounded-2xl border-2 border-dashed border-gray-200 p-6 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer"
-        onClick={onOpenMarketplace}
-      >
-        <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
-          <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </div>
-        <div>
-          <p className="text-sm font-medium text-gray-700">{t("aiStudio.tools.connectNew")}</p>
-          <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.tools.connectNewSub")}</p>
-        </div>
-        <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
-        </svg>
-      </div>
-    </div>
-  );
-}
-
-// ─── Marketplace constants ────────────────────────────────────
+// ─── Skills & Integrations Tab (Tools + Marketplace) ──────────
 const MARKETPLACE_CATEGORIES = [
   { label: "All", value: "All" },
   { label: "E-Commerce", value: "ECOMMERCE" },
@@ -605,10 +889,12 @@ const AUTH_TYPE_STYLES: Record<string, string> = {
   BASIC_AUTH: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
-// ─── Marketplace Tab ─────────────────────────────────────────
-function MarketplaceTab({ t }: { t: (key: string) => string }) {
+type SkillsSubView = "connected" | "marketplace";
+
+function SkillsTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
   const router = useRouter();
+  const [subView, setSubView] = useState<SkillsSubView>("connected");
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -644,130 +930,200 @@ function MarketplaceTab({ t }: { t: (key: string) => string }) {
     <div>
       <div className="flex items-center justify-between mb-5">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">{t("marketplace.title")}</h2>
-          <p className="text-sm text-gray-400 mt-0.5">Connect external services to power your AI agents</p>
+          <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.resources.skillsAndTools")}</h2>
+          <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.tools.subtitle")}</p>
         </div>
       </div>
 
-      {/* Search + filters */}
-      <div className="mb-5 flex flex-col gap-3">
-        <div className="relative">
-          <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-          </svg>
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder={t("marketplace.search")}
-            className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition"
-          />
-        </div>
-        <div className="flex gap-2 flex-wrap">
-          {MARKETPLACE_CATEGORIES.map((cat) => (
-            <button
-              key={cat.value}
-              onClick={() => setActiveCategory(cat.value)}
-              className={clsx(
-                "px-4 py-1.5 rounded-full text-sm font-medium transition",
-                activeCategory === cat.value
-                  ? "bg-violet-600 text-white shadow-sm"
-                  : "bg-white text-gray-600 border border-gray-200 hover:border-violet-300 hover:text-violet-600"
-              )}
-            >
-              {cat.value === "All" ? t("marketplace.allCategories") : cat.label}
-            </button>
-          ))}
-        </div>
+      {/* Sub-view toggle */}
+      <div className="flex gap-1 bg-gray-100/80 rounded-xl p-1 mb-5 w-fit">
+        <button
+          onClick={() => setSubView("connected")}
+          className={clsx(
+            "px-4 py-2 rounded-lg text-sm font-medium transition",
+            subView === "connected" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          {t("aiStudio.tools.title")}
+        </button>
+        <button
+          onClick={() => setSubView("marketplace")}
+          className={clsx(
+            "px-4 py-2 rounded-lg text-sm font-medium transition",
+            subView === "marketplace" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          {t("marketplace.title")}
+        </button>
       </div>
 
-      {/* Grid */}
-      {loading ? (
-        <div className="flex items-center justify-center h-48">
-          <div className="w-8 h-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
-        </div>
-      ) : filtered.length === 0 ? (
-        <div className="flex flex-col items-center justify-center h-48 text-gray-400">
-          <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
-          </svg>
-          <p className="text-sm">No integrations found</p>
-        </div>
-      ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filtered.map((intg) => {
-            const { isConnected, totalTools, enabledTools } = getStatusInfo(intg);
-            const logoSrc = intg.logoUrl || MARKETPLACE_LOGOS[intg.slug] || null;
-            const logoColor = getMarketplaceLogoColor(intg.name || "");
-            const authLabel = intg.authType === "OAUTH2" ? "OAuth" : intg.authType === "BASIC_AUTH" ? "Basic Auth" : "API Key";
-            return (
-              <div
-                key={intg.id || intg.slug}
-                className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
-                onClick={() => router.push(`/ai-studio/marketplace/${intg.slug}`)}
-              >
-                {/* Logo + status */}
-                <div className="flex items-start justify-between">
-                  <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", logoSrc ? "bg-white border border-gray-100 p-1.5" : `${logoColor} text-white font-bold text-lg`)}>
-                    {logoSrc ? (
-                      <img src={logoSrc} alt={intg.name} className="w-full h-full object-contain" />
-                    ) : (
-                      (intg.name || "?").charAt(0).toUpperCase()
-                    )}
+      {subView === "connected" ? (
+        <>
+          {/* Connected tools */}
+          <div className="space-y-4">
+            {MOCK_TOOLS.map((intg) => (
+              <div key={intg.integration} className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+                <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50 bg-gray-50/40">
+                  <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 shadow-sm">
+                    {intg.integration.charAt(0)}
                   </div>
-                  <div className="flex flex-col items-end gap-1.5">
-                    <div className="flex items-center gap-1.5">
-                      <span className={clsx("w-2 h-2 rounded-full", isConnected ? "bg-green-500" : "bg-gray-300")} />
-                      <span className={clsx("text-xs font-medium", isConnected ? "text-green-600" : "text-gray-400")}>
-                        {isConnected ? t("marketplace.connected") : t("marketplace.notConnected")}
-                      </span>
-                    </div>
-                    {intg.authType && (
-                      <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-medium border", AUTH_TYPE_STYLES[intg.authType] || AUTH_TYPE_STYLES.API_KEY)}>
-                        {authLabel}
-                      </span>
-                    )}
-                  </div>
+                  <span className="font-semibold text-gray-800">{intg.integration}</span>
+                  <StatusBadge status={intg.status} />
                 </div>
-
-                {/* Name + category */}
-                <div>
-                  <h3 className="font-semibold text-gray-900 text-sm">{intg.name}</h3>
-                  {intg.category && (
-                    <span className={clsx("inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium", MARKETPLACE_CATEGORY_COLORS[intg.category] || "bg-gray-100 text-gray-600")}>
-                      {intg.category}
+                {intg.tools.map((tool, i) => (
+                  <div
+                    key={tool.name}
+                    className={clsx(
+                      "flex items-center gap-4 px-5 py-3 hover:bg-gray-50/40 transition",
+                      i < intg.tools.length - 1 && "border-b border-gray-50"
+                    )}
+                  >
+                    <div className={clsx("w-2 h-2 rounded-full shrink-0", tool.enabled ? "bg-green-400" : "bg-gray-200")} />
+                    <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
+                    <RiskBadge risk={tool.risk} />
+                    <span className="text-xs text-gray-400 w-24 text-right">
+                      {tool.usedBy
+                        ? <span className="text-gray-600">{t("aiStudio.tools.usedBy")}: <strong>{tool.usedBy}</strong></span>
+                        : <span className="text-gray-300">{t("aiStudio.tools.notAssigned")}</span>
+                      }
                     </span>
-                  )}
-                </div>
-
-                {/* Description */}
-                {intg.description && (
-                  <p className="text-xs text-gray-500 line-clamp-2 flex-1">{intg.description}</p>
-                )}
-
-                {/* Tool count */}
-                <p className="text-xs text-gray-400">
-                  {isConnected && totalTools > 0
-                    ? `${enabledTools}/${totalTools} ${t("marketplace.toolsEnabled")}`
-                    : `${totalTools} ${t("marketplace.toolsAvailable")}`}
-                </p>
-
-                {/* Action button */}
-                <button
-                  className={clsx(
-                    "w-full py-2 rounded-xl text-sm font-medium transition",
-                    isConnected
-                      ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
-                      : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
-                  )}
-                  onClick={(e) => { e.stopPropagation(); router.push(`/ai-studio/marketplace/${intg.slug}`); }}
-                >
-                  {isConnected ? t("marketplace.manage") : t("marketplace.connect")}
-                </button>
+                  </div>
+                ))}
               </div>
-            );
-          })}
-        </div>
+            ))}
+          </div>
+
+          <div
+            className="mt-4 bg-white rounded-2xl border-2 border-dashed border-gray-200 p-6 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer"
+            onClick={() => setSubView("marketplace")}
+          >
+            <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center shrink-0">
+              <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+              </svg>
+            </div>
+            <div>
+              <p className="text-sm font-medium text-gray-700">{t("aiStudio.tools.connectNew")}</p>
+              <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.tools.connectNewSub")}</p>
+            </div>
+            <svg className="w-4 h-4 text-gray-400 ml-auto" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </svg>
+          </div>
+        </>
+      ) : (
+        <>
+          {/* Marketplace */}
+          <div className="mb-5 flex flex-col gap-3">
+            <div className="relative">
+              <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+              </svg>
+              <input
+                type="text"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                placeholder={t("marketplace.search")}
+                className="w-full pl-9 pr-4 py-2.5 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition"
+              />
+            </div>
+            <div className="flex gap-2 flex-wrap">
+              {MARKETPLACE_CATEGORIES.map((cat) => (
+                <button
+                  key={cat.value}
+                  onClick={() => setActiveCategory(cat.value)}
+                  className={clsx(
+                    "px-4 py-1.5 rounded-full text-sm font-medium transition",
+                    activeCategory === cat.value
+                      ? "bg-violet-600 text-white shadow-sm"
+                      : "bg-white text-gray-600 border border-gray-200 hover:border-violet-300 hover:text-violet-600"
+                  )}
+                >
+                  {cat.value === "All" ? t("marketplace.allCategories") : cat.label}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {loading ? (
+            <div className="flex items-center justify-center h-48">
+              <div className="w-8 h-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+            </div>
+          ) : filtered.length === 0 ? (
+            <div className="flex flex-col items-center justify-center h-48 text-gray-400">
+              <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 16.875h3.375m0 0h3.375m-3.375 0V13.5m0 3.375v3.375M6 10.5h2.25a2.25 2.25 0 002.25-2.25V6a2.25 2.25 0 00-2.25-2.25H6A2.25 2.25 0 003.75 6v2.25A2.25 2.25 0 006 10.5zm0 9.75h2.25A2.25 2.25 0 0010.5 18v-2.25a2.25 2.25 0 00-2.25-2.25H6a2.25 2.25 0 00-2.25 2.25V18A2.25 2.25 0 006 20.25zm9.75-9.75H18a2.25 2.25 0 002.25-2.25V6A2.25 2.25 0 0018 3.75h-2.25A2.25 2.25 0 0013.5 6v2.25a2.25 2.25 0 002.25 2.25z" />
+              </svg>
+              <p className="text-sm">No integrations found</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filtered.map((intg) => {
+                const { isConnected, totalTools, enabledTools } = getStatusInfo(intg);
+                const logoSrc = intg.logoUrl || MARKETPLACE_LOGOS[intg.slug] || null;
+                const logoColor = getMarketplaceLogoColor(intg.name || "");
+                const authLabel = intg.authType === "OAUTH2" ? "OAuth" : intg.authType === "BASIC_AUTH" ? "Basic Auth" : "API Key";
+                return (
+                  <div
+                    key={intg.id || intg.slug}
+                    className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
+                    onClick={() => router.push(`/ai-studio/marketplace/${intg.slug}`)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", logoSrc ? "bg-white border border-gray-100 p-1.5" : `${logoColor} text-white font-bold text-lg`)}>
+                        {logoSrc ? (
+                          <img src={logoSrc} alt={intg.name} className="w-full h-full object-contain" />
+                        ) : (
+                          (intg.name || "?").charAt(0).toUpperCase()
+                        )}
+                      </div>
+                      <div className="flex flex-col items-end gap-1.5">
+                        <div className="flex items-center gap-1.5">
+                          <span className={clsx("w-2 h-2 rounded-full", isConnected ? "bg-green-500" : "bg-gray-300")} />
+                          <span className={clsx("text-xs font-medium", isConnected ? "text-green-600" : "text-gray-400")}>
+                            {isConnected ? t("marketplace.connected") : t("marketplace.notConnected")}
+                          </span>
+                        </div>
+                        {intg.authType && (
+                          <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-medium border", AUTH_TYPE_STYLES[intg.authType] || AUTH_TYPE_STYLES.API_KEY)}>
+                            {authLabel}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                    <div>
+                      <h3 className="font-semibold text-gray-900 text-sm">{intg.name}</h3>
+                      {intg.category && (
+                        <span className={clsx("inline-block mt-1 px-2 py-0.5 rounded-full text-xs font-medium", MARKETPLACE_CATEGORY_COLORS[intg.category] || "bg-gray-100 text-gray-600")}>
+                          {intg.category}
+                        </span>
+                      )}
+                    </div>
+                    {intg.description && (
+                      <p className="text-xs text-gray-500 line-clamp-2 flex-1">{intg.description}</p>
+                    )}
+                    <p className="text-xs text-gray-400">
+                      {isConnected && totalTools > 0
+                        ? `${enabledTools}/${totalTools} ${t("marketplace.toolsEnabled")}`
+                        : `${totalTools} ${t("marketplace.toolsAvailable")}`}
+                    </p>
+                    <button
+                      className={clsx(
+                        "w-full py-2 rounded-xl text-sm font-medium transition",
+                        isConnected
+                          ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
+                          : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
+                      )}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/ai-studio/marketplace/${intg.slug}`); }}
+                    >
+                      {isConnected ? t("marketplace.manage") : t("marketplace.connect")}
+                    </button>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </>
       )}
     </div>
   );
@@ -776,33 +1132,36 @@ function MarketplaceTab({ t }: { t: (key: string) => string }) {
 // ─── Main Page ────────────────────────────────────────────────
 export default function AIStudioPage() {
   const { t } = useI18n();
-  const [activeTab, setActiveTab] = useState<Tab>("agents");
+  const { token } = useAuth();
+  const [activeTab, setActiveTab] = useState<Tab>("team");
+  const [stats, setStats] = useState({ agents: 0, playbooks: 0, knowledge: 0, skills: 0 });
+
+  useEffect(() => {
+    if (!token) return;
+    Promise.all([
+      getAIAgents(token).then((r) => (r.data || []).filter((a: any) => a.status === "ACTIVE").length).catch(() => 0),
+      getChatbotFlows(token).then((r) => (Array.isArray(r) ? r : (r as any).data || []).filter((f: any) => f.isActive).length).catch(() => 0),
+      getKnowledgeBases(token).then((r) => (r.data || []).length).catch(() => 0),
+      getMarketplaceIntegrations(token).then((r) => (r.data || []).filter((i: any) => i.tenantConnection?.status === "CONNECTED").length).catch(() => 0),
+    ]).then(([agents, playbooks, knowledge, skills]) => setStats({ agents, playbooks, knowledge, skills }));
+  }, [token]);
 
   const tabs: { key: Tab; label: string; icon: React.ReactNode }[] = [
     {
-      key: "agents",
-      label: t("aiStudio.tabs.agents"),
+      key: "team",
+      label: t("aiStudio.tabs.team"),
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+          <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
         </svg>
       ),
     },
     {
-      key: "flows",
-      label: t("aiStudio.tabs.flows"),
+      key: "playbooks",
+      label: t("aiStudio.tabs.playbooks"),
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-        </svg>
-      ),
-    },
-    {
-      key: "router",
-      label: t("aiStudio.tabs.router"),
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" />
         </svg>
       ),
     },
@@ -816,20 +1175,11 @@ export default function AIStudioPage() {
       ),
     },
     {
-      key: "tools",
-      label: t("aiStudio.tabs.tools"),
+      key: "skills",
+      label: t("aiStudio.tabs.skills"),
       icon: (
         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-        </svg>
-      ),
-    },
-    {
-      key: "marketplace",
-      label: t("marketplace.title"),
-      icon: (
-        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 21v-7.5a.75.75 0 01.75-.75h3a.75.75 0 01.75.75V21m-4.5 0H2.36m11.14 0H18m0 0h3.64m-1.39 0V9.349m-16.5 11.65V9.35m0 0a3.001 3.001 0 003.75-.615A2.993 2.993 0 009.75 9.75c.896 0 1.7-.393 2.25-1.016a2.993 2.993 0 002.25 1.016c.896 0 1.7-.393 2.25-1.016a3.001 3.001 0 003.75.614m-16.5 0a3.004 3.004 0 01-.621-4.72L4.318 3.44A1.5 1.5 0 015.378 3h13.243a1.5 1.5 0 011.06.44l1.19 1.189a3 3 0 01-.621 4.72m-13.5 8.65h3.75a.75.75 0 00.75-.75V13.5a.75.75 0 00-.75-.75H6.75a.75.75 0 00-.75.75v3.75c0 .415.336.75.75.75z" />
         </svg>
       ),
     },
@@ -843,7 +1193,7 @@ export default function AIStudioPage() {
           <div className="flex items-center gap-3 mb-1">
             <div className="w-8 h-8 rounded-lg bg-violet-100 flex items-center justify-center">
               <svg className="w-4 h-4 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 00-2.455 2.456z" />
+                <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
               </svg>
             </div>
             <h1 className="text-2xl font-bold text-gray-900">{t("aiStudio.title")}</h1>
@@ -854,31 +1204,31 @@ export default function AIStudioPage() {
         {/* Stats overview */}
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-6">
           <StatCard
-            icon={<svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>}
-            label={t("aiStudio.stats.activeAgents")}
-            value={2}
-            sub={t("aiStudio.stats.agentsSub")}
+            icon={<svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>}
+            label={t("aiStudio.stats.teamMembers")}
+            value={stats.agents}
+            sub={t("aiStudio.stats.activeMembers")}
             color="bg-violet-50"
           />
           <StatCard
             icon={<svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" /></svg>}
-            label={t("aiStudio.stats.activeFlows")}
-            value={2}
-            sub={t("aiStudio.stats.flowsSub")}
+            label={t("aiStudio.stats.activePlaybooks")}
+            value={stats.playbooks}
+            sub={t("aiStudio.stats.playbooksSub")}
             color="bg-blue-50"
           />
           <StatCard
             icon={<svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" /></svg>}
             label={t("aiStudio.stats.knowledgeSources")}
-            value={4}
+            value={stats.knowledge}
             sub={t("aiStudio.stats.knowledgeSub")}
             color="bg-emerald-50"
           />
           <StatCard
             icon={<svg className="w-5 h-5 text-orange-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}><path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" /></svg>}
-            label={t("aiStudio.stats.connectedTools")}
-            value={6}
-            sub={t("aiStudio.stats.toolsSub")}
+            label={t("aiStudio.stats.connectedSkills")}
+            value={stats.skills}
+            sub={t("aiStudio.stats.skillsSub")}
             color="bg-orange-50"
           />
         </div>
@@ -903,12 +1253,10 @@ export default function AIStudioPage() {
         </div>
 
         {/* Tab content */}
-        {activeTab === "agents" && <AgentsTab t={t} />}
-        {activeTab === "flows" && <FlowsTab t={t} />}
-        {activeTab === "router" && <RouterTab t={t} />}
+        {activeTab === "team" && <TeamTab t={t} />}
+        {activeTab === "playbooks" && <PlaybooksTab t={t} />}
         {activeTab === "knowledge" && <KnowledgeTab t={t} />}
-        {activeTab === "tools" && <ToolsTab t={t} onOpenMarketplace={() => setActiveTab("marketplace")} />}
-        {activeTab === "marketplace" && <MarketplaceTab t={t} />}
+        {activeTab === "skills" && <SkillsTab t={t} />}
       </div>
     </AppLayout>
   );

@@ -119,6 +119,13 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "prisma/schema.prisma",
+      "accessCount": 1,
+      "lastAccessed": 1774092474412,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }

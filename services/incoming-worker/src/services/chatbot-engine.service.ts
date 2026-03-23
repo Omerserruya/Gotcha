@@ -298,26 +298,102 @@ async function executeFromNode(
           });
         }
 
-        await prisma.conversation.update({
-          where: { id: conversationId },
-          data: { isHandedOver: true, chatbotNodeId: null, status: "WAITING" },
-        });
-        await prisma.message.create({
-          data: {
-            tenantId,
-            conversationId,
-            channel: sendCtx.channel,
-            direction: "INBOUND",
-            body: "",
-            messageType: "system",
-            senderName: "System",
-            status: "DELIVERED",
-            metadata: { systemEvent: "bot_handover" },
-          },
-        });
+        const handoverDeptId = node.data.departmentId;
+        if (handoverDeptId) {
+          const handoverDept = await prisma.department.findFirst({
+            where: { id: handoverDeptId, isActive: true },
+            include: { members: { include: { user: { select: { id: true, isActive: true, _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } } } } } } },
+          });
+
+          let handoverAgentId: string | null = null;
+          if (handoverDept && handoverDept.queueMode === "ROUND_ROBIN") {
+            const activeMembers = handoverDept.members.filter((m) => m.user.isActive);
+            if (activeMembers.length > 0) {
+              activeMembers.sort((a, b) => a.user._count.conversations - b.user._count.conversations);
+              handoverAgentId = activeMembers[0].userId;
+            }
+          }
+
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: {
+              departmentId: handoverDeptId,
+              assignedAgentId: handoverAgentId,
+              isHandedOver: true,
+              chatbotNodeId: null,
+              status: handoverAgentId ? "OPEN" : "WAITING",
+            },
+          });
+
+          await prisma.message.create({
+            data: {
+              tenantId,
+              conversationId,
+              channel: sendCtx.channel,
+              direction: "INBOUND",
+              body: "",
+              messageType: "system",
+              senderName: "System",
+              status: "DELIVERED",
+              metadata: {
+                systemEvent: "bot_handover",
+                departmentName: handoverDept?.name || "Unknown",
+                ...(handoverAgentId ? { agentId: handoverAgentId } : {}),
+              },
+            },
+          });
+        } else {
+          await prisma.conversation.update({
+            where: { id: conversationId },
+            data: { isHandedOver: true, chatbotNodeId: null, status: "WAITING" },
+          });
+          await prisma.message.create({
+            data: {
+              tenantId,
+              conversationId,
+              channel: sendCtx.channel,
+              direction: "INBOUND",
+              body: "",
+              messageType: "system",
+              senderName: "System",
+              status: "DELIVERED",
+              metadata: { systemEvent: "bot_handover" },
+            },
+          });
+        }
         return true;
       }
       case "end": {
+        // Send auto-close message if configured
+        try {
+          const redis = getRedis();
+          const raw = await redis.get(`tenant:${tenantId}:idleAutomation`);
+          if (raw) {
+            const idleConfig = JSON.parse(raw);
+            if (idleConfig.autoCloseMessage) {
+              const extId = await adapter.sendTextMessage(
+                sendCtx.credentials,
+                sendCtx.channelAccountExternalId,
+                sendCtx.recipientId,
+                idleConfig.autoCloseMessage
+              );
+              await prisma.message.create({
+                data: {
+                  tenantId,
+                  conversationId,
+                  channel: sendCtx.channel,
+                  direction: "OUTBOUND",
+                  body: idleConfig.autoCloseMessage,
+                  senderName: "Chatbot",
+                  externalMessageId: extId,
+                  status: extId ? "SENT" : "FAILED",
+                },
+              });
+            }
+          }
+        } catch (err) {
+          console.error("[chatbot-engine] Failed to send auto-close message:", err);
+        }
         await prisma.conversation.update({
           where: { id: conversationId },
           data: { chatbotNodeId: null, status: "CLOSED", closedAt: new Date() },

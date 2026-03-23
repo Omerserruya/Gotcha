@@ -6,6 +6,8 @@ import systemChatRoutes from "./routes/system-chat";
 import toolRoutes from "./routes/tools";
 import integrationRoutes from "./routes/integrations";
 import agentScoreRoutes from "./routes/agent-scores";
+import aiAgentRoutes from "./routes/ai-agents";
+import routerRuleRoutes from "./routes/router-rules";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 
@@ -31,6 +33,8 @@ app.use("/api/system-chat", systemChatRoutes);
 app.use("/api/tools", toolRoutes);
 app.use("/api/integrations", integrationRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
+app.use("/api/ai-agents", aiAgentRoutes);
+app.use("/api/router-rules", routerRuleRoutes);
 
 startService(app, config);
 export { app };

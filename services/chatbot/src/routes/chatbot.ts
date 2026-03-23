@@ -39,10 +39,6 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.post("/", requireRole("ADMIN"), validate(flowSchema), async (req: Request, res: Response) => {
   try {
     const { name, description, channel, nodes, edges, isActive } = req.body;
-    if (isActive) {
-      // Only deactivate flows for the same channel scope
-      await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, channel: channel ?? null, isActive: true }, data: { isActive: false } });
-    }
     const flow = await prisma.chatbotFlow.create({
       data: { tenantId: req.tenantId!, name, description, channel: channel ?? null, nodes, edges, isActive: isActive || false },
     });
@@ -55,9 +51,6 @@ router.put("/:id", requireRole("ADMIN"), validate(flowSchema), async (req: Reque
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
     const { name, description, nodes, edges, isActive } = req.body;
-    if (isActive) {
-      await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, isActive: true, NOT: { id: req.params.id as string } }, data: { isActive: false } });
-    }
     const flow = await prisma.chatbotFlow.update({
       where: { id: req.params.id as string },
       data: { name, description, nodes, edges, isActive: isActive ?? existing.isActive },
@@ -79,8 +72,6 @@ router.post("/:id/activate", requireRole("ADMIN"), async (req: Request, res: Res
   try {
     const existing = await prisma.chatbotFlow.findFirst({ where: { id: req.params.id as string, tenantId: req.tenantId! } });
     if (!existing) { res.status(404).json({ error: "Flow not found" }); return; }
-    // Only deactivate flows for the same channel scope
-    await prisma.chatbotFlow.updateMany({ where: { tenantId: req.tenantId!, channel: existing.channel, isActive: true }, data: { isActive: false } });
     const flow = await prisma.chatbotFlow.update({ where: { id: req.params.id as string }, data: { isActive: true } });
     res.json(flow);
   } catch (err) { console.error("Activate flow error:", err); res.status(500).json({ error: "Failed to activate flow" }); }

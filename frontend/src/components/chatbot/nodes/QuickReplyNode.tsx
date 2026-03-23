@@ -10,6 +10,7 @@ export function QuickReplyNode({ data }: NodeProps) {
   );
 
   function addButton() {
+    if (buttons.length >= 9) return;
     const newBtn = { id: `btn-${Date.now()}`, title: "Button" };
     const updated = [...buttons, newBtn];
     setButtons(updated);
@@ -78,15 +79,19 @@ export function QuickReplyNode({ data }: NodeProps) {
             </div>
           ))}
         </div>
-        <button
-          onClick={addButton}
-          className="flex items-center gap-1.5 text-xs text-violet-500 hover:text-violet-700 font-medium transition py-1"
-        >
-          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-          Add button
-        </button>
+        {buttons.length < 9 ? (
+          <button
+            onClick={addButton}
+            className="flex items-center gap-1.5 text-xs text-violet-500 hover:text-violet-700 font-medium transition py-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            </svg>
+            Add button
+          </button>
+        ) : (
+          <p className="text-[10px] text-gray-400 py-1">Max 9 buttons</p>
+        )}
       </div>
       {buttons.length === 0 && (
         <Handle type="source" position={Position.Bottom} className="!bg-violet-500 !w-3 !h-3 !border-2 !border-white !shadow-sm" />

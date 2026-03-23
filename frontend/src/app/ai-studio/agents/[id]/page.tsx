@@ -1,9 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
+import { useAuth } from "@/context/AuthContext";
+import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent } from "@/lib/api";
 import clsx from "clsx";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -67,7 +69,7 @@ interface AgentFormData {
   status: "active" | "draft" | "paused";
 }
 
-// ─── Demo data ─────────────────────────────────────────────────
+// ─── Constants ─────────────────────────────────────────────────
 const AVATAR_COLORS = [
   { value: "from-violet-400 to-violet-600", label: "Violet" },
   { value: "from-blue-400 to-blue-600", label: "Blue" },
@@ -77,116 +79,76 @@ const AVATAR_COLORS = [
   { value: "from-cyan-400 to-cyan-600", label: "Cyan" },
 ];
 
-const DEMO_AGENTS: Record<string, AgentFormData> = {
-  "1": {
-    name: "Maya",
-    role: "customer_support",
-    description: "Handles support queries and helps customers with their orders, returns, and general questions.",
-    avatarColor: "from-violet-400 to-violet-600",
-    tone: "friendly",
-    languages: { english: true, hebrew: true, arabic: false },
-    style: { useEmojis: true, concise: true, useFirstName: false, proactive: false },
-    tools: [
-      { id: "t1", name: "Order Lookup", integration: "Shopify", risk: "low", enabled: true },
-      { id: "t2", name: "Track Shipment", integration: "Shopify", risk: "low", enabled: true },
-      { id: "t3", name: "Process Refund", integration: "Shopify", risk: "high", enabled: false },
-      { id: "t4", name: "Cancel Order", integration: "Shopify", risk: "high", enabled: false },
-      { id: "t5", name: "Customer Lookup", integration: "HubSpot", risk: "low", enabled: true },
-    ],
-    knowledge: [
-      { id: "k1", name: "FAQ — General Support", type: "FAQ", status: "synced", enabled: true },
-      { id: "k2", name: "Return Policy", type: "Document", status: "synced", enabled: true },
-      { id: "k3", name: "Product Catalog", type: "Website", status: "syncing", enabled: false },
-      { id: "k4", name: "Shipping Rates", type: "File", status: "synced", enabled: false },
-    ],
-    escalationRules: [
-      { id: "e1", label: "Customer asks to speak to a human", enabled: true, type: "toggle" },
-      { id: "e2", label: "Customer is angry (AI detected)", enabled: true, type: "toggle" },
-      { id: "e3", label: "After N failed attempts", enabled: true, type: "number", value: 3 },
-      { id: "e4", label: "Specific keywords detected", enabled: false, type: "text", value: "refund, cancel, lawsuit" },
-    ],
-    interactiveMessages: {
-      allowQuickReply: true,
-      allowListMenu: false,
-      allowCTA: false,
-      autoSuggestMultipleOptions: true,
-      autoSuggestYesNo: true,
-      autoSuggestProductChoice: false,
-      autoSuggestAlways: false,
-    },
-    channels: { whatsapp: true, instagram: true, webchat: false },
-    mode: "copilot",
-    status: "active",
-  },
-  "2": {
-    name: "Sales Bot",
-    role: "sales",
-    description: "Engages with potential customers, qualifies leads, and helps close deals.",
-    avatarColor: "from-emerald-400 to-emerald-600",
-    tone: "professional",
-    languages: { english: true, hebrew: false, arabic: false },
-    style: { useEmojis: false, concise: false, useFirstName: true, proactive: true },
-    tools: [
-      { id: "t5", name: "Customer Lookup", integration: "HubSpot", risk: "low", enabled: true },
-      { id: "t6", name: "Create Deal", integration: "HubSpot", risk: "medium", enabled: true },
-    ],
-    knowledge: [
-      { id: "k3", name: "Product Catalog", type: "Website", status: "synced", enabled: true },
-    ],
-    escalationRules: [
-      { id: "e1", label: "Customer asks to speak to a human", enabled: true, type: "toggle" },
-      { id: "e2", label: "Customer is angry (AI detected)", enabled: false, type: "toggle" },
-      { id: "e3", label: "After N failed attempts", enabled: false, type: "number", value: 5 },
-      { id: "e4", label: "Specific keywords detected", enabled: false, type: "text", value: "" },
-    ],
-    interactiveMessages: {
-      allowQuickReply: true,
-      allowListMenu: true,
-      allowCTA: true,
-      autoSuggestMultipleOptions: true,
-      autoSuggestYesNo: false,
-      autoSuggestProductChoice: true,
-      autoSuggestAlways: false,
-    },
-    channels: { whatsapp: true, instagram: false, webchat: true },
-    mode: "autonomous",
-    status: "active",
-  },
-  "3": {
-    name: "Returns Handler",
-    role: "billing",
-    description: "Specialized agent for handling return requests and refund processing.",
-    avatarColor: "from-rose-400 to-rose-600",
-    tone: "professional",
-    languages: { english: true, hebrew: false, arabic: false },
-    style: { useEmojis: false, concise: true, useFirstName: false, proactive: false },
-    tools: [
-      { id: "t3", name: "Process Refund", integration: "Shopify", risk: "high", enabled: false },
-      { id: "t4", name: "Cancel Order", integration: "Shopify", risk: "high", enabled: false },
-    ],
-    knowledge: [
-      { id: "k2", name: "Return Policy", type: "Document", status: "synced", enabled: true },
-    ],
-    escalationRules: [
-      { id: "e1", label: "Customer asks to speak to a human", enabled: true, type: "toggle" },
-      { id: "e2", label: "Customer is angry (AI detected)", enabled: true, type: "toggle" },
-      { id: "e3", label: "After N failed attempts", enabled: true, type: "number", value: 2 },
-      { id: "e4", label: "Specific keywords detected", enabled: false, type: "text", value: "" },
-    ],
-    interactiveMessages: {
-      allowQuickReply: false,
-      allowListMenu: false,
-      allowCTA: false,
-      autoSuggestMultipleOptions: false,
-      autoSuggestYesNo: false,
-      autoSuggestProductChoice: false,
-      autoSuggestAlways: false,
-    },
-    channels: { whatsapp: false, instagram: false, webchat: false },
-    mode: "human_only",
-    status: "draft",
-  },
+const GRADIENT_TO_HEX: Record<string, string> = {
+  "from-violet-400 to-violet-600": "#7c5cfc",
+  "from-blue-400 to-blue-600": "#3b82f6",
+  "from-emerald-400 to-emerald-600": "#10b981",
+  "from-rose-400 to-rose-600": "#f43f5e",
+  "from-amber-400 to-amber-600": "#f59e0b",
+  "from-cyan-400 to-cyan-600": "#06b6d4",
 };
+
+const HEX_TO_GRADIENT: Record<string, string> = Object.fromEntries(
+  Object.entries(GRADIENT_TO_HEX).map(([k, v]) => [v, k])
+);
+
+function hexToGradient(hex: string): string {
+  return HEX_TO_GRADIENT[hex] || "from-violet-400 to-violet-600";
+}
+
+function parseChannels(channels: any): { whatsapp: boolean; instagram: boolean; webchat: boolean } {
+  if (!channels) return { whatsapp: false, instagram: false, webchat: false };
+  const arr = typeof channels === "string" ? JSON.parse(channels) : channels;
+  if (Array.isArray(arr)) {
+    return {
+      whatsapp: arr.includes("whatsapp"),
+      instagram: arr.includes("instagram"),
+      webchat: arr.includes("webchat"),
+    };
+  }
+  return channels;
+}
+
+function mapApiToForm(agent: any): AgentFormData {
+  return {
+    name: agent.name || "",
+    role: (agent.role || "custom") as AgentRole,
+    description: agent.description || "",
+    avatarColor: hexToGradient(agent.avatarColor) || "from-violet-400 to-violet-600",
+    tone: (agent.tone || "friendly") as Tone,
+    languages: typeof agent.languages === "string"
+      ? JSON.parse(agent.languages)
+      : (agent.languages || { english: true, hebrew: false, arabic: false }),
+    style: typeof agent.style === "string"
+      ? JSON.parse(agent.style)
+      : (agent.style || { useEmojis: false, concise: true, useFirstName: false, proactive: false }),
+    tools: [],
+    knowledge: (agent.knowledgeBases || []).map((ak: any) => ({
+      id: ak.knowledgeBase?.id || ak.id,
+      name: ak.knowledgeBase?.name || ak.name || "Unknown",
+      type: "Document",
+      status: ak.knowledgeBase?.isActive ? "synced" : "error",
+      enabled: true,
+    })),
+    escalationRules: typeof agent.escalationRules === "string"
+      ? JSON.parse(agent.escalationRules)
+      : (agent.escalationRules || []),
+    interactiveMessages: typeof agent.interactiveMessages === "string"
+      ? JSON.parse(agent.interactiveMessages)
+      : (agent.interactiveMessages || {
+          allowQuickReply: true,
+          allowListMenu: false,
+          allowCTA: false,
+          autoSuggestMultipleOptions: true,
+          autoSuggestYesNo: true,
+          autoSuggestProductChoice: false,
+          autoSuggestAlways: false,
+        }),
+    channels: parseChannels(agent.channels),
+    mode: ((agent.mode || "COPILOT").toLowerCase()) as AgentMode,
+    status: ((agent.status || "DRAFT").toLowerCase()) as "active" | "draft" | "paused",
+  };
+}
 
 const NEW_AGENT_DEFAULT: AgentFormData = {
   name: "",
@@ -196,18 +158,8 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   tone: "friendly",
   languages: { english: true, hebrew: false, arabic: false },
   style: { useEmojis: false, concise: true, useFirstName: false, proactive: false },
-  tools: [
-    { id: "t1", name: "Order Lookup", integration: "Shopify", risk: "low", enabled: false },
-    { id: "t2", name: "Track Shipment", integration: "Shopify", risk: "low", enabled: false },
-    { id: "t3", name: "Process Refund", integration: "Shopify", risk: "high", enabled: false },
-    { id: "t5", name: "Customer Lookup", integration: "HubSpot", risk: "low", enabled: false },
-    { id: "t6", name: "Create Deal", integration: "HubSpot", risk: "medium", enabled: false },
-  ],
-  knowledge: [
-    { id: "k1", name: "FAQ — General Support", type: "FAQ", status: "synced", enabled: false },
-    { id: "k2", name: "Return Policy", type: "Document", status: "synced", enabled: false },
-    { id: "k3", name: "Product Catalog", type: "Website", status: "syncing", enabled: false },
-  ],
+  tools: [],
+  knowledge: [],
   escalationRules: [
     { id: "e1", label: "Customer asks to speak to a human", enabled: true, type: "toggle" },
     { id: "e2", label: "Customer is angry (AI detected)", enabled: false, type: "toggle" },
@@ -296,23 +248,82 @@ export default function AgentEditorPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
   const { t } = useI18n();
+  const { token } = useAuth();
 
   const isNew = id === "new";
-  const initial = isNew ? NEW_AGENT_DEFAULT : (DEMO_AGENTS[id] ?? NEW_AGENT_DEFAULT);
 
-  const [form, setForm] = useState<AgentFormData>(initial);
+  const [form, setForm] = useState<AgentFormData>(NEW_AGENT_DEFAULT);
+  const [loading, setLoading] = useState(!isNew);
+  const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [customRuleInput, setCustomRuleInput] = useState("");
   const [showCustomRuleInput, setShowCustomRuleInput] = useState(false);
+
+  useEffect(() => {
+    if (isNew || !token) return;
+    setLoading(true);
+    getAIAgent(token, id)
+      .then((res) => {
+        if (res.data) {
+          setForm(mapApiToForm(res.data));
+        }
+      })
+      .catch((err) => {
+        console.error("Failed to load agent:", err);
+        router.push("/ai-studio");
+      })
+      .finally(() => setLoading(false));
+  }, [id, token, isNew]);
 
   function patch(partial: Partial<AgentFormData>) {
     setForm((prev) => ({ ...prev, ...partial }));
   }
 
-  function handleSave() {
-    // Local-only: just show a brief confirmation
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+  async function handleSave() {
+    if (!token) return;
+    setSaving(true);
+    try {
+      const channelsArr = Object.entries(form.channels)
+        .filter(([, v]) => v)
+        .map(([k]) => k);
+      const payload = {
+        name: form.name,
+        role: form.role,
+        description: form.description,
+        avatarColor: GRADIENT_TO_HEX[form.avatarColor] || "#7c5cfc",
+        tone: form.tone,
+        languages: form.languages,
+        style: form.style,
+        channels: channelsArr,
+        escalationRules: form.escalationRules,
+        interactiveMessages: form.interactiveMessages,
+        mode: form.mode.toUpperCase(),
+        status: form.status.toUpperCase(),
+      };
+
+      if (isNew) {
+        const res = await createAIAgent(token, payload);
+        router.push(`/ai-studio/agents/${res.data.id}`);
+      } else {
+        await updateAIAgent(token, id, payload);
+        setSaved(true);
+        setTimeout(() => setSaved(false), 2500);
+      }
+    } catch (err) {
+      console.error("Save failed:", err);
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!token || isNew) return;
+    try {
+      await deleteAIAgent(token, id);
+      router.push("/ai-studio");
+    } catch (err) {
+      console.error("Delete failed:", err);
+    }
   }
 
   function toggleTool(toolId: string) {
@@ -374,6 +385,16 @@ export default function AgentEditorPage() {
   const pageTitle = isNew
     ? t("aiStudio.agents.editor.newAgent")
     : (form.name || t("aiStudio.agents.editor.editAgent"));
+
+  if (loading) {
+    return (
+      <AppLayout>
+        <div className="p-3 md:p-6 flex items-center justify-center h-screen">
+          <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
 
   return (
     <AppLayout>
@@ -999,9 +1020,15 @@ export default function AgentEditorPage() {
             <button
               type="button"
               onClick={handleSave}
+              disabled={saving}
               className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-60"
             >
-              {saved ? (
+              {saving ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  {t("aiStudio.agents.editor.save")}
+                </>
+              ) : saved ? (
                 <>
                   <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
                     <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
@@ -1024,6 +1051,18 @@ export default function AgentEditorPage() {
             >
               {t("common.cancel")}
             </button>
+            {!isNew && (
+              <button
+                type="button"
+                onClick={handleDelete}
+                className="ml-auto flex items-center gap-2 px-4 py-3 text-red-400 hover:text-red-600 text-sm transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+                {t("common.delete")}
+              </button>
+            )}
           </div>
         </div>
       </div>
