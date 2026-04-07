@@ -466,7 +466,7 @@ function SummaryView({ progress, t }: { progress: number; t: (k: string) => stri
   ];
 
   return (
-    <div className="absolute inset-0 flex items-start justify-center pt-[200px] md:pt-[180px] px-4 pointer-events-none overflow-y-auto" style={{ opacity: appear }}>
+    <div className="absolute inset-0 flex items-start justify-center pt-[260px] md:pt-[240px] px-4 pointer-events-none overflow-y-auto" style={{ opacity: appear }}>
       <div className="w-full max-w-3xl mx-auto px-4 sm:px-6 flex flex-col md:flex-row gap-5 md:gap-8">
         {/* Summary */}
         <div className="flex-1 min-w-0">

@@ -13,21 +13,22 @@ const router = Router();
 router.post("/generate-configs", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     await generateAllAgentConfigs(req.tenantId!);
-    const configs = await prisma.departmentCopilotConfig.findMany({
-      where: { department: { tenantId: req.tenantId! } },
-      include: { department: { select: { name: true } } },
+    const agents = await prisma.aIAgent.findMany({
+      where: { tenantId: req.tenantId! },
     });
     res.json({
       data: {
-        departmentsConfigured: configs.length,
-        configs: configs.map(c => ({
-          departmentId: c.departmentId,
-          departmentName: c.department.name,
-          systemPrompt: c.systemPrompt.substring(0, 200) + "...",
-          hasIdentity: !!c.identity,
-          hasGoals: !!c.goals,
-          hasTone: !!c.tone,
-          hasBehavioral: !!c.behavioral,
+        agentsConfigured: agents.length,
+        agents: agents.map(a => ({
+          id: a.id,
+          name: a.name,
+          role: a.role,
+          status: a.status,
+          systemPrompt: a.systemPrompt.substring(0, 200) + "...",
+          hasIdentity: !!a.identity,
+          hasGoals: !!a.goals,
+          hasTone: !!a.toneConfig,
+          hasBehavioral: !!a.behavioral,
         })),
       },
     });
@@ -146,6 +147,12 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
 
     const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
 
+    // No AI Employee configured — return stub so frontend shows "not configured"
+    if (!copilotConfig) {
+      res.json({ data: [{ id: "no-config", text: "No AI Employee configured.", confidence: 0, type: "info" }], copilotMode: "READY_MESSAGE" });
+      return;
+    }
+
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
@@ -155,7 +162,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       copilotConfig,
     };
     const suggestions = await aiService.getSuggestions(context);
-    res.json({ data: suggestions, copilotMode: copilotConfig?.copilotMode || "READY_MESSAGE" });
+    res.json({ data: suggestions, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" });
   } catch (err) { console.error("AI suggestions error:", err); res.status(500).json({ error: "Failed to get suggestions" }); }
 });
 
@@ -173,6 +180,11 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
 
     const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
 
+    if (!copilotConfig) {
+      res.json({ data: { summary: "AI summarization not configured." }, copilotMode: "READY_MESSAGE" });
+      return;
+    }
+
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
@@ -182,7 +194,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       copilotConfig,
     };
     const summary = await aiService.summarizeConversation(context);
-    res.json({ data: { summary }, copilotMode: copilotConfig?.copilotMode || "READY_MESSAGE" });
+    res.json({ data: { summary }, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" });
   } catch (err) { console.error("AI summary error:", err); res.status(500).json({ error: "Failed to get summary" }); }
 });
 
@@ -213,6 +225,11 @@ router.post("/:conversationId/chat", async (req: Request, res: Response) => {
     });
 
     const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
+
+    if (!copilotConfig) {
+      res.status(400).json({ error: "No AI Employee configured. Set up an AI Employee in AI Studio." });
+      return;
+    }
 
     const reply = await aiService.chatWithAgent({
       tenantId: req.tenantId!,

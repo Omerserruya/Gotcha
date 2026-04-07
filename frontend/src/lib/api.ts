@@ -261,6 +261,22 @@ export function updateAgent(token: string, id: string, data: { name?: string; is
   });
 }
 
+export function deleteAgent(token: string, id: string) {
+  return apiFetch<any>(`/api/agents/${id}`, { token, method: "DELETE" });
+}
+
+export function resetAgentPassword(token: string, id: string, newPassword: string) {
+  return apiFetch<any>(`/api/agents/${id}/reset-password`, { token, method: "POST", body: JSON.stringify({ newPassword }) });
+}
+
+export function assignAgentToDepartment(token: string, departmentId: string, userId: string, departmentRole?: string) {
+  return apiFetch<any>(`/api/departments/${departmentId}/members`, { token, method: "POST", body: JSON.stringify({ userId, departmentRole }) });
+}
+
+export function removeAgentFromDepartment(token: string, departmentId: string, userId: string) {
+  return apiFetch<any>(`/api/departments/${departmentId}/members/${userId}`, { token, method: "DELETE" });
+}
+
 // ─── Channel Accounts (legacy) ─────────────────────────────
 
 export function getChannelAccounts(token: string) {
@@ -1029,4 +1045,197 @@ export function reorderRouterRules(token: string, ruleIds: string[]) {
 
 export function deleteRouterRule(token: string, id: string) {
   return apiFetch<{ success: boolean }>(`/api/router-rules/${id}`, { token, method: "DELETE" });
+}
+
+// ─── Templates ──────────────────────────────────────────────
+
+export function getTemplates(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; total: number }>(`/api/templates${qs}`, { token });
+}
+
+export function getTemplate(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/templates/${id}`, { token });
+}
+
+export function createTemplate(token: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>("/api/templates", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateTemplate(token: string, id: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/templates/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteTemplate(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/templates/${id}`, { token, method: "DELETE" });
+}
+
+export function duplicateTemplate(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/templates/${id}/duplicate`, { token, method: "POST" });
+}
+
+export function submitTemplateToMeta(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/templates/${id}/submit-to-meta`, { token, method: "POST" });
+}
+
+// ─── Broadcasts ─────────────────────────────────────────────
+
+export function getBroadcasts(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[] }>(`/api/broadcasts${qs}`, { token });
+}
+
+export function getBroadcast(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}`, { token });
+}
+
+export function getBroadcastRecipients(token: string, id: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; total: number }>(`/api/broadcasts/${id}/recipients${qs}`, { token });
+}
+
+export function createBroadcast(token: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>("/api/broadcasts", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateBroadcast(token: string, id: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteBroadcast(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/broadcasts/${id}`, { token, method: "DELETE" });
+}
+
+export function addBroadcastRecipients(token: string, id: string, recipients: { externalId: string; contactId?: string }[]) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}/recipients`, { token, method: "POST", body: JSON.stringify({ recipients }) });
+}
+
+export function sendBroadcast(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}/send`, { token, method: "POST" });
+}
+
+export function validateBroadcast(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}/validate`, { token, method: "POST" });
+}
+
+export function cancelBroadcast(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}/cancel`, { token, method: "POST" });
+}
+
+// ─── Scheduled Messages ─────────────────────────────────────
+
+export function getScheduledMessages(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; total: number }>(`/api/scheduled-messages${qs}`, { token });
+}
+
+export function getScheduledMessage(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/scheduled-messages/${id}`, { token });
+}
+
+export function createScheduledMessage(token: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>("/api/scheduled-messages", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateScheduledMessage(token: string, id: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/scheduled-messages/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function cancelScheduledMessage(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/scheduled-messages/${id}`, { token, method: "DELETE" });
+}
+
+// ─── Contact Segments ──────────────────────────────────────
+export function queryContactSegment(token: string, data: { rules?: any[]; channel?: string }) {
+  return apiFetch<{ data: any[]; total: number }>("/api/contacts/segment", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+// ─── Contacts ───────────────────────────────────────────────
+
+export function getContacts(token: string, params?: Record<string, string>) {
+  const qs = params ? "?" + new URLSearchParams(params).toString() : "";
+  return apiFetch<{ data: any[]; total: number }>(`/api/contacts${qs}`, { token });
+}
+
+export function getContact(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/contacts/${id}`, { token });
+}
+
+export function createContact(token: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>("/api/contacts", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function updateContact(token: string, id: string, data: Record<string, any>) {
+  return apiFetch<{ data: any }>(`/api/contacts/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function initiateConversation(token: string, data: { contactId?: string; externalId?: string; channel?: string; channelAccountId: string; body: string; messageType?: string }) {
+  return apiFetch<{ data: any }>("/api/contacts/initiate-conversation", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+// ─── Flow Canvas ────────────────────────────────────────────
+
+export function getFlowCanvas(token: string) {
+  return apiFetch<{ data: any }>("/api/flow-canvas", { token });
+}
+
+export function saveFlowCanvas(token: string, data: { nodes: any[]; edges: any[]; viewport?: any }) {
+  return apiFetch<{ data: any }>("/api/flow-canvas", { token, method: "PUT", body: JSON.stringify(data) });
+}
+
+export function autoGenerateFlowCanvas(token: string) {
+  return apiFetch<{ data: any }>("/api/flow-canvas/auto-generate", { token, method: "POST" });
+}
+
+// ─── Department Tree ────────────────────────────────────────
+
+export function getDepartmentTree(token: string) {
+  return apiFetch<{ data: { tree: any[]; aiAgents: any[] } }>("/api/departments/tree", { token });
+}
+
+// ─── Department AI Employee Assignment ──────────────────────
+
+export function getDepartmentAIEmployee(token: string, departmentId: string) {
+  return apiFetch<{ data: any; ruleId?: string }>(`/api/departments/${departmentId}/ai-employee`, { token });
+}
+
+export function assignDepartmentAIEmployee(token: string, departmentId: string, aiAgentId: string | null) {
+  return apiFetch<{ data: any; ruleId?: string }>(`/api/departments/${departmentId}/ai-employee`, {
+    token, method: "PUT", body: JSON.stringify({ aiAgentId }),
+  });
+}
+
+// ─── AI Employee Creation Wizard ────────────────────────────
+
+export function generateAIEmployeeConfig(token: string, data: { answers: Record<string, string>; departmentId?: string }) {
+  return apiFetch<{ data: any }>("/api/ai-agents/generate", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+// ─── Usage Tracking ─────────────────────────────────────────
+
+export function getUsageStats(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: { stats: Record<string, { total: number; count: number }>; period: number } }>(`/api/usage/stats${qs}`, { token });
+}
+
+export function getUsageDaily(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: Array<{ date: string; type: string; total: number; count: number }> }>(`/api/usage/daily${qs}`, { token });
+}
+
+export function getUsageLogs(token: string, params?: { limit?: number; offset?: number; type?: string }) {
+  const qs = params ? "?" + new URLSearchParams(Object.entries(params).filter(([, v]) => v != null).map(([k, v]) => [k, String(v)])).toString() : "";
+  return apiFetch<{ data: any[]; total: number }>(`/api/usage/logs${qs}`, { token });
+}
+
+// ─── System Admin: All Tenants Usage ────────────────────────
+
+export function getSystemUsageStats(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: any }>(`/api/system/usage/stats${qs}`, { token });
+}
+
+export function getSystemUsageByTenant(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: any[] }>(`/api/system/usage/by-tenant${qs}`, { token });
 }

@@ -5,6 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getConversations, getDepartments, getSlaSettings, getDepartmentSla, deleteConversation } from "@/lib/api";
 import { getSocket } from "@/lib/socket";
+import Image from "next/image";
 function shortTimeAgo(date: Date): string {
   const now = Date.now();
   const diff = now - date.getTime();
@@ -22,6 +23,8 @@ function shortTimeAgo(date: Date): string {
 }
 import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
+import { CustomerAvatar } from "./CustomerAvatar";
+import { NewConversationPanel } from "./NewConversationPanel";
 import ConfirmModal from "@/components/ConfirmModal";
 
 interface Props {
@@ -68,6 +71,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+
+  // New Conversation panel state
+  const [showInitiate, setShowInitiate] = useState(false);
 
   const handleSelect = useCallback((id: string) => {
     // Clear markedUnread when opening a conversation
@@ -127,6 +133,15 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       listEl?.removeEventListener("scroll", handleScroll);
     };
   }, [contextMenu, closeContextMenu]);
+
+  function openInitiateModal() {
+    setShowInitiate(true);
+  }
+
+  function handleConversationCreated(convId: string) {
+    fetchConversations();
+    if (convId) onSelect(convId);
+  }
 
   const fetchConversations = useCallback(async () => {
     if (!token) return;
@@ -301,89 +316,105 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                 className="w-full ps-9 pe-4 py-2.5 text-base md:text-sm bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
               />
             </div>
-            {/* Filter toggle */}
+            {/* New Conversation button */}
             <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={clsx(
-                "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all relative",
-                showFilters || channelFilter || departmentFilter
-                  ? "bg-primary-50 text-primary-600"
-                  : "bg-gray-50/80 text-gray-400 ring-1 ring-gray-200/60 hover:bg-gray-100"
-              )}
+              onClick={openInitiateModal}
+              title={t("conversations.newConversation")}
+              className="w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all bg-primary-500 text-white hover:bg-primary-600 shadow-sm"
             >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M12 3c2.755 0 5.455.232 8.083.678.533.09.917.556.917 1.096v1.044a2.25 2.25 0 01-.659 1.591l-5.432 5.432a2.25 2.25 0 00-.659 1.591v2.927a2.25 2.25 0 01-1.244 2.013L9.75 21v-6.568a2.25 2.25 0 00-.659-1.591L3.659 7.409A2.25 2.25 0 013 5.818V4.774c0-.54.384-1.006.917-1.096A48.32 48.32 0 0112 3z" />
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
               </svg>
-              {(channelFilter || departmentFilter) && (
-                <span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-primary-500 rounded-full" />
-              )}
             </button>
+            {/* Department filter toggle (admin only) */}
+            {user?.role === "ADMIN" && departments.length > 0 && (
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={clsx(
+                  "w-10 h-10 rounded-xl flex items-center justify-center shrink-0 transition-all relative",
+                  showFilters || departmentFilter
+                    ? "bg-primary-50 text-primary-600"
+                    : "bg-gray-50/80 text-gray-400 ring-1 ring-gray-200/60 hover:bg-gray-100"
+                )}
+                title={t("conversations.allDepartments")}
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 21h16.5M4.5 3h15M5.25 3v18m13.5-18v18M9 6.75h1.5m-1.5 3h1.5m-1.5 3h1.5m3-6H15m-1.5 3H15m-1.5 3H15M9 21v-3.375c0-.621.504-1.125 1.125-1.125h3.75c.621 0 1.125.504 1.125 1.125V21" />
+                </svg>
+                {departmentFilter && (
+                  <span className="absolute -top-0.5 -end-0.5 w-2 h-2 bg-primary-500 rounded-full" />
+                )}
+              </button>
+            )}
           </div>
 
-          {/* Collapsible filters */}
-          {showFilters && (
-            <div className="mt-3 pt-3 border-t border-gray-100/60 space-y-2.5">
-            {/* Channel filter */}
-            <div>
-              <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 block">{t("conversations.filterAll")}</span>
+          {/* Channel icon filters — always visible */}
+          <div className="flex items-center gap-1 mt-2.5">
+            <button
+              onClick={() => setChannelFilter("")}
+              className={clsx(
+                "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all",
+                channelFilter === ""
+                  ? "bg-primary-50 text-primary-600 ring-1 ring-primary-200"
+                  : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+              )}
+            >
+              {t("conversations.filterAll")}
+            </button>
+            {[
+              { value: "WHATSAPP", logo: "/icons/wa.png", label: "WhatsApp" },
+              { value: "MESSENGER", logo: "/icons/msn.png", label: "Messenger" },
+              { value: "INSTAGRAM", logo: "/icons/ins.png", label: "Instagram" },
+              { value: "GMAIL", logo: "/icons/gm.png", label: "Gmail" },
+              { value: "OUTLOOK", logo: "/icons/ol.png", label: "Outlook" },
+              { value: "SLACK", logo: "/icons/slk.png", label: "Slack" },
+            ].map((ch) => (
+              <button
+                key={ch.value}
+                onClick={() => setChannelFilter(channelFilter === ch.value ? "" : ch.value)}
+                title={ch.label}
+                className={clsx(
+                  "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all",
+                  channelFilter === ch.value
+                    ? "bg-primary-50 ring-1 ring-primary-200 shadow-sm"
+                    : "hover:bg-gray-100 opacity-50 hover:opacity-100"
+                )}
+              >
+                <Image src={ch.logo} alt={ch.label} width={18} height={18} className="rounded-sm" />
+              </button>
+            ))}
+          </div>
+
+          {/* Department filter (admin only, collapsible) */}
+          {showFilters && user?.role === "ADMIN" && departments.length > 0 && (
+            <div className="mt-2 pt-2 border-t border-gray-100/60">
               <div className="flex items-center gap-1.5 flex-wrap">
-                {[
-                  { value: "", label: t("conversations.filterAll") },
-                  { value: "WHATSAPP", label: t("conversations.channelWhatsApp") },
-                  { value: "MESSENGER", label: t("conversations.channelMessenger") },
-                  { value: "INSTAGRAM", label: t("conversations.channelInstagram") },
-                  { value: "GMAIL", label: t("conversations.channelGmail") },
-                  { value: "OUTLOOK", label: t("conversations.channelOutlook") },
-                  { value: "SLACK", label: t("conversations.channelSlack") },
-                ].map((opt) => (
+                <button
+                  onClick={() => setDepartmentFilter("")}
+                  className={clsx(
+                    "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
+                    departmentFilter === ""
+                      ? "bg-primary-500 text-white shadow-sm"
+                      : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
+                  )}
+                >
+                  {t("conversations.allDepartments")}
+                </button>
+                {departments.map((dept: any) => (
                   <button
-                    key={opt.value}
-                    onClick={() => setChannelFilter(opt.value)}
+                    key={dept.id}
+                    onClick={() => setDepartmentFilter(dept.id)}
                     className={clsx(
                       "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
-                      channelFilter === opt.value
+                      departmentFilter === dept.id
                         ? "bg-primary-500 text-white shadow-sm"
                         : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
                     )}
                   >
-                    {opt.label}
+                    {dept.name}
                   </button>
                 ))}
               </div>
-            </div>
-            {/* Department filter (admin only) */}
-            {user?.role === "ADMIN" && departments.length > 0 && (
-              <div>
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-widest mb-1.5 block">{t("conversations.allDepartments")}</span>
-                <div className="flex items-center gap-1.5 flex-wrap">
-                  <button
-                    onClick={() => setDepartmentFilter("")}
-                    className={clsx(
-                      "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
-                      departmentFilter === ""
-                        ? "bg-primary-500 text-white shadow-sm"
-                        : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
-                    )}
-                  >
-                    {t("conversations.allDepartments")}
-                  </button>
-                  {departments.map((dept: any) => (
-                    <button
-                      key={dept.id}
-                      onClick={() => setDepartmentFilter(dept.id)}
-                      className={clsx(
-                        "text-[11px] px-2.5 py-1 rounded-lg font-medium transition",
-                        departmentFilter === dept.id
-                          ? "bg-primary-500 text-white shadow-sm"
-                          : "bg-gray-50 text-gray-500 ring-1 ring-gray-200/40 hover:bg-gray-100"
-                      )}
-                    >
-                      {dept.name}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
             </div>
           )}
         </div>
@@ -436,12 +467,13 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      {/* Avatar */}
-                      <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-                        <span className="text-sm font-bold text-gray-600">
-                          {(conv.customerName || conv.customerPhone || "?").charAt(0).toUpperCase()}
-                        </span>
-                      </div>
+                      {/* Avatar with channel badge */}
+                      <CustomerAvatar
+                        name={conv.customerName || conv.customerPhone}
+                        avatarUrl={conv.customerAvatarUrl}
+                        channel={conv.channel}
+                        size="md"
+                      />
 
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center justify-between gap-2">
@@ -478,7 +510,6 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                               </span>
                             )}
                           </div>
-                          <ChannelBadge channel={conv.channel} size="sm" />
                         </div>
                       </div>
 
@@ -509,6 +540,14 @@ export function ConversationList({ selectedId, onSelect }: Props) {
           ))
         )}
       </div>
+
+      {/* New Conversation Panel */}
+      {showInitiate && (
+        <NewConversationPanel
+          onClose={() => setShowInitiate(false)}
+          onCreated={handleConversationCreated}
+        />
+      )}
 
       {/* Context menu */}
       {contextMenu && (

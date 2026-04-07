@@ -126,39 +126,105 @@
   "hotPaths": [
     {
       "path": "src/components/landing/MessageFlowSection.tsx",
-      "accessCount": 113,
-      "lastAccessed": 1773694443973,
+      "accessCount": 115,
+      "lastAccessed": 1774623983633,
       "type": "file"
     },
     {
       "path": "src/i18n/en.json",
-      "accessCount": 42,
-      "lastAccessed": 1774196346814,
+      "accessCount": 75,
+      "lastAccessed": 1775569594198,
       "type": "directory"
     },
     {
       "path": "src/i18n/he.json",
-      "accessCount": 29,
-      "lastAccessed": 1774196360725,
+      "accessCount": 50,
+      "lastAccessed": 1775569605588,
       "type": "directory"
     },
     {
-      "path": "src/app/ai-studio/page.tsx",
-      "accessCount": 27,
-      "lastAccessed": 1774092119487,
+      "path": "src/components/landing/LandingPage.tsx",
+      "accessCount": 44,
+      "lastAccessed": 1774624070116,
       "type": "file"
     },
     {
-      "path": "src/components/landing/LandingPage.tsx",
-      "accessCount": 19,
-      "lastAccessed": 1773696758790,
+      "path": "src/app/ai-studio/agents/[id]/page.tsx",
+      "accessCount": 41,
+      "lastAccessed": 1775569632006,
       "type": "file"
+    },
+    {
+      "path": "src/components/conversations/CoPilotPanel.tsx",
+      "accessCount": 39,
+      "lastAccessed": 1775507341326,
+      "type": "file"
+    },
+    {
+      "path": "src/app/ai-studio/page.tsx",
+      "accessCount": 32,
+      "lastAccessed": 1775569268576,
+      "type": "file"
+    },
+    {
+      "path": "src/components/landing/SolutionsSection.tsx",
+      "accessCount": 28,
+      "lastAccessed": 1774624051685,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/api.ts",
+      "accessCount": 17,
+      "lastAccessed": 1775569133264,
+      "type": "directory"
     },
     {
       "path": "src/app/globals.css",
-      "accessCount": 9,
-      "lastAccessed": 1773694287007,
+      "accessCount": 14,
+      "lastAccessed": 1774271164939,
       "type": "file"
+    },
+    {
+      "path": "src",
+      "accessCount": 12,
+      "lastAccessed": 1774871857109,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/landing/FeaturesSection.tsx",
+      "accessCount": 11,
+      "lastAccessed": 1774624045497,
+      "type": "file"
+    },
+    {
+      "path": "src/components/conversations/ChatPanel.tsx",
+      "accessCount": 11,
+      "lastAccessed": 1775503115769,
+      "type": "file"
+    },
+    {
+      "path": "src/app/channels/page.tsx",
+      "accessCount": 9,
+      "lastAccessed": 1775565166361,
+      "type": "file"
+    },
+    {
+      "path": "src/app/outbound/broadcasts/page.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1774624221916,
+      "type": "file"
+    },
+    {
+      "path": "src/app/agents/page.tsx",
+      "accessCount": 7,
+      "lastAccessed": 1775565111851,
+      "type": "file"
+    },
+    {
+      "path": "src/components/conversations/ConversationList.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1775558842407,
+      "type": "directory"
     },
     {
       "path": "src/components/MobileNav.tsx",
@@ -173,15 +239,15 @@
       "type": "file"
     },
     {
-      "path": "src",
+      "path": "",
       "accessCount": 4,
-      "lastAccessed": 1774196076024,
+      "lastAccessed": 1774871843665,
       "type": "directory"
     },
     {
-      "path": "src/app/ai-studio/agents/[id]/page.tsx",
+      "path": "src/app/history/page.tsx",
       "accessCount": 4,
-      "lastAccessed": 1774196082336,
+      "lastAccessed": 1775559381195,
       "type": "file"
     },
     {
@@ -197,16 +263,22 @@
       "type": "file"
     },
     {
-      "path": "src/lib/api.ts",
-      "accessCount": 3,
-      "lastAccessed": 1774190060626,
-      "type": "directory"
-    },
-    {
       "path": "src/app/ai-studio",
       "accessCount": 3,
       "lastAccessed": 1774196070074,
       "type": "directory"
+    },
+    {
+      "path": "src/app/outbound/scheduled/page.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1774624233628,
+      "type": "file"
+    },
+    {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 3,
+      "lastAccessed": 1775502792041,
+      "type": "file"
     },
     {
       "path": "src/app/ai-studio/knowledge/page.tsx",
@@ -227,15 +299,27 @@
       "type": "file"
     },
     {
-      "path": "src/components/Sidebar.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1773510359672,
-      "type": "file"
-    },
-    {
       "path": "src/app/channels",
       "accessCount": 2,
       "lastAccessed": 1774192893508,
+      "type": "directory"
+    },
+    {
+      "path": "src/app",
+      "accessCount": 2,
+      "lastAccessed": 1774270939336,
+      "type": "directory"
+    },
+    {
+      "path": "src/i18n",
+      "accessCount": 2,
+      "lastAccessed": 1774271654884,
+      "type": "directory"
+    },
+    {
+      "path": "src/lib",
+      "accessCount": 2,
+      "lastAccessed": 1774871857765,
       "type": "directory"
     },
     {
@@ -251,21 +335,39 @@
       "type": "file"
     },
     {
-      "path": "src/lib",
-      "accessCount": 1,
-      "lastAccessed": 1774092135317,
-      "type": "directory"
-    },
-    {
       "path": "src/app/layout.tsx",
       "accessCount": 1,
       "lastAccessed": 1774189987764,
       "type": "directory"
     },
     {
-      "path": "src/app/channels/page.tsx",
+      "path": "src/app/he/page.tsx",
       "accessCount": 1,
-      "lastAccessed": 1774189993512,
+      "lastAccessed": 1774270950993,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ChannelAccountPicker.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1774624207482,
+      "type": "file"
+    },
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1774871858091,
+      "type": "file"
+    },
+    {
+      "path": "src/components/conversations",
+      "accessCount": 1,
+      "lastAccessed": 1775559614021,
+      "type": "directory"
+    },
+    {
+      "path": "src/components/ConfirmModal.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1775565228179,
       "type": "file"
     }
   ],

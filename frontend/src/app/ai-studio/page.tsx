@@ -221,29 +221,22 @@ function TeamTab({ t }: { t: (key: string) => string }) {
           );
         })}
 
-        {agents.length === 0 && (
-          <div className="col-span-full flex flex-col items-center justify-center py-16 text-gray-400">
-            <svg className="w-12 h-12 mb-3 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" />
-            </svg>
-            <p className="text-sm font-medium">{t("aiStudio.team.noAgents") || "No AI agents yet"}</p>
-            <p className="text-xs mt-1">{t("aiStudio.team.addMemberHint")}</p>
-          </div>
-        )}
-
-        {/* New member placeholder */}
+        {/* New member placeholder — always first when no agents */}
         <Link
           href="/ai-studio/agents/new"
-          className="bg-white rounded-2xl border-2 border-dashed border-gray-200 p-5 flex flex-col items-center justify-center gap-3 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer min-h-[160px]"
+          className={clsx(
+            "bg-white rounded-2xl border-2 border-dashed border-gray-200 p-5 flex flex-col items-center justify-center gap-3 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer",
+            agents.length === 0 ? "col-span-full min-h-[200px]" : "min-h-[160px]"
+          )}
         >
-          <div className="w-10 h-10 rounded-xl bg-gray-100 flex items-center justify-center">
-            <svg className="w-5 h-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+          <div className="w-12 h-12 rounded-xl bg-violet-50 flex items-center justify-center">
+            <svg className="w-6 h-6 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
             </svg>
           </div>
           <div className="text-center">
-            <p className="text-sm text-gray-400 font-medium">{t("aiStudio.team.addMember")}</p>
-            <p className="text-xs text-gray-300 mt-1">{t("aiStudio.team.addMemberHint")}</p>
+            <p className="text-sm text-violet-600 font-semibold">{t("aiStudio.team.addMember")}</p>
+            <p className="text-xs text-gray-400 mt-1">{t("aiStudio.team.addMemberHint")}</p>
           </div>
         </Link>
       </div>

@@ -85,18 +85,20 @@ model Tenant {
   conversations      Conversation[]
   messages           Message[]
   chatbotFlows       ChatbotFlow[]
-  copilotConfig      CopilotConfig?
-  firstTakeCareConfig FirstTakeCareConfig?
   channelAccounts    ChannelAccount[]
   channelConfig      TenantChannelConfig?
   departments        Department[]
   departmentMembers  DepartmentMember[]
-  departmentCopilotConfigs DepartmentCopilotConfig[]
   businessProfile    BusinessProfile?
   onboarding         TenantOnboarding?
   knowledgeBases     KnowledgeBase[]
   aiAgents           AIAgent[]
   routerRules        RouterRule[]
+  contacts           Contact[]
+  messageTemplates   MessageTemplate[]
+  broadcasts         Broadcast[]
+  scheduledMessages  ScheduledMessage[]
+  flowCanvas         FlowCanvas?
 
   @@index([status])
   @@map("tenants")
@@ -212,6 +214,7 @@ model Conversation {
   channelAccountId   String?            @map("channel_account_id")
   customerExternalId String             @map("customer_external_id") // Phone (WA) or PSID (Messenger)
   customerName       String?            @map("customer_name")
+  customerAvatarUrl  String?            @map("customer_avatar_url")
   assignedAgentId    String?            @map("assigned_agent_id")
   departmentId       String?            @map("department_id")
   status             ConversationStatus @default(OPEN)
@@ -257,20 +260,25 @@ enum MessageStatus {
 }
 
 model Message {
-  id                String           @id @default(cuid())
-  tenantId          String           @map("tenant_id")
-  conversationId    String           @map("conversation_id")
-  channel           ChannelType?
-  externalMessageId String?          @map("external_message_id") // WA msg ID or Messenger mid
-  direction         MessageDirection
-  body              String
-  messageType       String           @default("text") @map("message_type")
-  status            MessageStatus    @default(PENDING)
-  senderName        String?          @map("sender_name")
-  metadata          Json?
-  mediaUrl          String?          @map("media_url")
-  fileName          String?          @map("file_name")
-  createdAt         DateTime         @default(now()) @map("created_at")
+  id                  String           @id @default(cuid())
+  tenantId            String           @map("tenant_id")
+  conversationId      String           @map("conversation_id")
+  channel             ChannelType?
+  externalMessageId   String?          @map("external_message_id") // WA msg ID or Messenger mid
+  direction           MessageDirection
+  body                String
+  messageType         String           @default("text") @map("message_type")
+  status              MessageStatus    @default(PENDING)
+  senderName          String?          @map("sender_name")
+  metadata            Json?
+  mediaUrl            String?          @map("media_url")
+  fileName            String?          @map("file_name")
+  broadcastId         String?          @map("broadcast_id")         // link to originating broadcast
+  scheduledMessageId  String?          @map("scheduled_message_id") // link to originating scheduled msg
+  errorMessage        String?          @map("error_message")
+  deliveredAt         DateTime?        @map("delivered_at")
+  readAt              DateTime?        @map("read_at")
+  createdAt           DateTime         @default(now()) @map("created_at")
 
   tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
@@ -278,36 +286,9 @@ model Message {
   @@index([conversationId, createdAt])
   @@index([externalMessageId])
   @@index([tenantId])
+  @@index([broadcastId])
+  @@index([scheduledMessageId])
   @@map("messages")
-}
-
-// ─── Co-Pilot Configuration (per-tenant AI agent) ───────────
-
-model CopilotConfig {
-  id           String      @id @default(cuid())
-  tenantId     String      @unique @map("tenant_id")
-  copilotMode  CopilotMode @default(READY_MESSAGE) @map("copilot_mode")
-  systemPrompt String      @default("") @map("system_prompt")
-  rules        Json        @default("[]")
-  tools        Json        @default("[]")
-  model        String      @default("gpt-4o-mini")
-  provider     String      @default("openai")
-  temperature  Float       @default(0.7)
-  maxTokens    Int         @default(1024) @map("max_tokens")
-  isActive     Boolean     @default(true) @map("is_active")
-
-  // Structured AI personality blocks (tenant-level defaults)
-  identity     Json?       // { role, responsibility, representationGuidelines[] }
-  goals        Json?       // { focus, slaAwareness, conversionObjective, qualityExpectations[] }
-  tone         Json?       // { formalityLevel, empathyLevel, assertiveness, brandAlignment }
-  behavioral   Json?       // { escalationTriggers[], noAutoReplyConditions[], forbiddenActions[], safetyBoundaries[], confidenceHandling }
-
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@map("copilot_configs")
 }
 
 // ─── AI Agent Mode & Status ─────────────────────────────────
@@ -344,10 +325,15 @@ model AIAgent {
 
   // LLM settings (inherited from CopilotConfig pattern)
   systemPrompt    String        @default("") @map("system_prompt")
+  sharedPrompt    String?       @map("shared_prompt")
+  autonomousPrompt String?      @map("autonomous_prompt")
   model           String        @default("gpt-4o-mini")
   provider        String        @default("openai")
   temperature     Float         @default(0.7)
   maxTokens       Int           @default(1024) @map("max_tokens")
+
+  // Persona configuration (gender-aware behavior, extensible)
+  persona         Json?         // { gender: "male"|"female"|"neutral", traits: {}, customAttributes: {} }
 
   // Structured AI personality blocks
   identity        Json?         // { role, responsibility, representationGuidelines[] }
@@ -452,6 +438,7 @@ model ChatbotFlow {
 model Department {
   id          String              @id @default(cuid())
   tenantId    String              @map("tenant_id")
+  parentId    String?             @map("parent_id")
   name        String
   description String?
   queueMode   DepartmentQueueMode @default(CLAIM) @map("queue_mode")
@@ -474,13 +461,15 @@ model Department {
   updatedAt   DateTime            @updatedAt @map("updated_at")
 
   tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent          Department?              @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children        Department[]             @relation("DepartmentHierarchy")
   members         DepartmentMember[]
   conversations   Conversation[]
-  copilotConfig   DepartmentCopilotConfig?
   agentToolPermissions AgentToolPermission[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
+  @@index([parentId])
   @@map("departments")
 }
 
@@ -501,36 +490,6 @@ model DepartmentMember {
   @@index([departmentId])
   @@index([tenantId])
   @@map("department_members")
-}
-
-model DepartmentCopilotConfig {
-  id           String      @id @default(cuid())
-  tenantId     String      @map("tenant_id")
-  departmentId String      @unique @map("department_id")
-  copilotMode  CopilotMode @default(READY_MESSAGE) @map("copilot_mode")
-  systemPrompt String      @default("") @map("system_prompt")
-  rules        Json        @default("[]")
-  tools        Json        @default("[]")
-  model        String      @default("gpt-4o-mini")
-  provider     String      @default("openai")
-  temperature  Float       @default(0.7)
-  maxTokens    Int         @default(1024) @map("max_tokens")
-  isActive     Boolean     @default(true) @map("is_active")
-
-  // Structured AI personality blocks (per-department overrides)
-  identity     Json?       // { role, responsibility, representationGuidelines[] }
-  goals        Json?       // { focus, slaAwareness, conversionObjective, qualityExpectations[] }
-  tone         Json?       // { formalityLevel, empathyLevel, assertiveness, brandAlignment }
-  behavioral   Json?       // { escalationTriggers[], noAutoReplyConditions[], forbiddenActions[], safetyBoundaries[], confidenceHandling }
-
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
-
-  tenant     Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  department Department @relation(fields: [departmentId], references: [id], onDelete: Cascade)
-
-  @@index([tenantId])
-  @@map("department_copilot_configs")
 }
 
 // ─── Business Profile (Onboarding Step A) ───────────────────
@@ -565,42 +524,6 @@ model TenantOnboarding {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("tenant_onboardings")
-}
-
-// ─── First-Take-Care AI Agent Config (tenant-level, premium) ─
-
-model FirstTakeCareConfig {
-  id           String  @id @default(cuid())
-  tenantId     String  @unique @map("tenant_id")
-  isActive     Boolean @default(true) @map("is_active")
-
-  // LLM settings
-  systemPrompt String  @default("") @map("system_prompt")
-  rules        Json    @default("[]")
-  tools        Json    @default("[]")
-  model        String  @default("gpt-4o-mini")
-  provider     String  @default("openai")
-  temperature  Float   @default(0.7)
-  maxTokens    Int     @default(1024) @map("max_tokens")
-
-  // Structured AI personality blocks
-  identity     Json?   // { role, responsibility, representationGuidelines[] }
-  goals        Json?   // { focus, slaAwareness, conversionObjective, qualityExpectations[] }
-  tone         Json?   // { formalityLevel, empathyLevel, assertiveness, brandAlignment }
-  behavioral   Json?   // { escalationTriggers[], noAutoReplyConditions[], forbiddenActions[], safetyBoundaries[], confidenceHandling }
-
-  // Autonomous behavior settings
-  maxAutonomousMessages Int @default(10) @map("max_autonomous_messages")  // Max AI messages before force-escalation
-  maxAutonomousMinutes  Int @default(15) @map("max_autonomous_minutes")   // Max minutes before force-escalation
-  confidenceThreshold   Float @default(0.6) @map("confidence_threshold")  // Below this, escalate to human
-  escalationMessage     String @default("Let me connect you with a team member who can help further.") @map("escalation_message")
-
-  createdAt    DateTime @default(now()) @map("created_at")
-  updatedAt    DateTime @updatedAt @map("updated_at")
-
-  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-
-  @@map("first_take_care_configs")
 }
 
 // ─── Knowledge Base (RAG) ───────────────────────────────────
@@ -1052,4 +975,260 @@ model NotificationLog {
   @@index([tenantId])
   @@index([type, status])
   @@map("notification_logs")
+}
+
+// ─── Contacts (Customer Directory) ─────────────────────────
+
+model Contact {
+  id                String      @id @default(cuid())
+  tenantId          String      @map("tenant_id")
+  externalId        String      @map("external_id")     // phone, email, PSID, etc.
+  channel           ChannelType
+  displayName       String?     @map("display_name")
+  email             String?
+  phone             String?
+  avatarUrl         String?     @map("avatar_url")
+  metadata          Json?                                // custom fields
+  tags              Json        @default("[]")           // string[] for segmentation
+  lastSeenAt        DateTime?   @map("last_seen_at")
+  lastInteractionAt DateTime?   @map("last_interaction_at")
+  source            String?                              // campaign/channel source
+  optOutChannels    Json        @default("[]") @map("opt_out_channels")  // string[] of opted-out channel types
+  optedOutAt        DateTime?   @map("opted_out_at")
+  createdAt         DateTime    @default(now()) @map("created_at")
+  updatedAt         DateTime    @updatedAt @map("updated_at")
+
+  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  broadcastRecipients BroadcastRecipient[]
+
+  @@unique([tenantId, channel, externalId])
+  @@index([tenantId])
+  @@index([tenantId, displayName])
+  @@index([tenantId, phone])
+  @@index([tenantId, email])
+  @@index([tenantId, lastInteractionAt])
+  @@map("contacts")
+}
+
+// ─── Message Templates ─────────────────────────────────────
+
+enum TemplateStatus {
+  DRAFT
+  PENDING_APPROVAL
+  APPROVED
+  REJECTED
+}
+
+model MessageTemplate {
+  id              String         @id @default(cuid())
+  tenantId        String         @map("tenant_id")
+  name            String
+  category        String         @default("general")     // marketing, utility, authentication, general
+  language        String         @default("en")
+  channel         ChannelType?                            // null = all channels
+  headerType      String?        @map("header_type")     // text, image, video, document
+  headerContent   String?        @map("header_content")
+  body            String                                  // template body with {{1}} placeholders
+  footer          String?
+  buttons         Json           @default("[]")           // [{ type: "QUICK_REPLY"|"URL"|"PHONE", text, url?, phoneNumber? }]
+  variables       Json           @default("[]")           // [{ key: "1", sample: "John" }]
+  externalId      String?        @map("external_id")      // WhatsApp template ID after sync
+  metaTemplateId  String?        @map("meta_template_id") // Meta's internal template ID
+  rejectionReason String?        @map("rejection_reason") // reason if rejected by Meta
+  status          TemplateStatus @default(DRAFT)
+  version         Int            @default(1)
+  isActive        Boolean        @default(true) @map("is_active")
+  createdAt       DateTime       @default(now()) @map("created_at")
+  updatedAt       DateTime       @updatedAt @map("updated_at")
+
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  broadcasts      Broadcast[]
+
+  @@unique([tenantId, name, language, channel])
+  @@index([tenantId])
+  @@index([tenantId, channel, status])
+  @@map("message_templates")
+}
+
+// ─── Broadcasts ────────────────────────────────────────────
+
+enum BroadcastStatus {
+  DRAFT
+  SCHEDULED
+  SENDING
+  COMPLETED
+  FAILED
+  CANCELLED
+}
+
+model Broadcast {
+  id              String          @id @default(cuid())
+  tenantId        String          @map("tenant_id")
+  name            String
+  channel         ChannelType
+  channelAccountId String         @map("channel_account_id")
+  templateId      String?         @map("template_id")
+  body            String?                                   // for non-template messages
+  variables       Json            @default("{}")             // template variable values
+  flowId          String?         @map("flow_id")           // trigger flow for each recipient
+  status          BroadcastStatus @default(DRAFT)
+  scheduledAt     DateTime?       @map("scheduled_at")
+  startedAt       DateTime?       @map("started_at")
+  completedAt     DateTime?       @map("completed_at")
+  createdBy       String          @map("created_by")
+
+  // Analytics counters
+  totalRecipients Int             @default(0) @map("total_recipients")
+  sentCount       Int             @default(0) @map("sent_count")
+  deliveredCount  Int             @default(0) @map("delivered_count")
+  readCount       Int             @default(0) @map("read_count")
+  repliedCount    Int             @default(0) @map("replied_count")
+  failedCount     Int             @default(0) @map("failed_count")
+
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
+
+  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template        MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipients      BroadcastRecipient[]
+
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@index([scheduledAt])
+  @@map("broadcasts")
+}
+
+model BroadcastRecipient {
+  id              String   @id @default(cuid())
+  broadcastId     String   @map("broadcast_id")
+  contactId       String?  @map("contact_id")
+  externalId      String   @map("external_id")      // phone/PSID/email
+  messageId       String?  @map("message_id")        // outgoing message ID after send
+  status          String   @default("pending")       // pending, sent, delivered, read, replied, failed
+  error           String?
+  sentAt          DateTime? @map("sent_at")
+  deliveredAt     DateTime? @map("delivered_at")
+  readAt          DateTime? @map("read_at")
+  repliedAt       DateTime? @map("replied_at")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  broadcast       Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  contact         Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@index([broadcastId])
+  @@index([broadcastId, status])
+  @@index([contactId])
+  @@map("broadcast_recipients")
+}
+
+// ─── Scheduled Messages ────────────────────────────────────
+
+enum ScheduledMessageStatus {
+  PENDING
+  SENT
+  FAILED
+  CANCELLED
+}
+
+model ScheduledMessage {
+  id                String                 @id @default(cuid())
+  tenantId          String                 @map("tenant_id")
+  conversationId    String?                @map("conversation_id")
+  channel           ChannelType
+  channelAccountId  String                 @map("channel_account_id")
+  recipientExternalId String               @map("recipient_external_id")
+  body              String
+  messageType       String                 @default("text") @map("message_type")
+  mediaUrl          String?                @map("media_url")
+  templateId        String?                @map("template_id")
+  variables         Json                   @default("{}")
+  sendType          String                 @default("regular") @map("send_type") // regular, conversation, flow
+  departmentId      String?                @map("department_id")
+  flowId            String?                @map("flow_id")
+  scheduledAt       DateTime               @map("scheduled_at")
+  status            ScheduledMessageStatus @default(PENDING)
+  sentAt            DateTime?              @map("sent_at")
+  error             String?
+  createdBy         String                 @map("created_by")
+  createdAt         DateTime               @default(now()) @map("created_at")
+  updatedAt         DateTime               @updatedAt @map("updated_at")
+
+  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([status, scheduledAt])
+  @@index([tenantId, status])
+  @@map("scheduled_messages")
+}
+
+// ─── Usage Logs (Centralized Usage Tracking) ───────────────
+
+model UsageLog {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  type             String   // "ai_tokens" | "message_sent" | "tool_call" | "automation_run"
+  quantity         Int
+  tokensEquivalent Int      @map("tokens_equivalent")
+  metadata         Json?    // { model, channel, tool, conversationId, messageId }
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, type])
+  @@index([tenantId, createdAt])
+  @@map("usage_logs")
+}
+
+// ─── Credit Transactions (Usage → Credits) ─────────────────
+
+model CreditTransaction {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  amount      Int      // credits consumed (positive = consumed, negative = added)
+  source      String   // usage type that generated this: "ai_tokens", "message_sent", etc.
+  referenceId String?  @map("reference_id") // optional link to usage_log or other entity
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, source])
+  @@index([tenantId, createdAt])
+  @@map("credit_transactions")
+}
+
+// ─── Audit Logs (Full System Audit Trail) ──────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  actorType  String   @map("actor_type")  // "user" | "ai" | "system"
+  actorId    String?  @map("actor_id")    // userId or aiAgentId or null for system
+  action     String   // "message.sent", "ai.responded", "tool.executed", "conversation.updated", etc.
+  targetType String?  @map("target_type") // "conversation", "message", "tool", "user", etc.
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, action])
+  @@index([tenantId, actorType])
+  @@index([tenantId, createdAt])
+  @@index([actorId])
+  @@index([targetType, targetId])
+  @@map("audit_logs")
+}
+
+// ─── Flow Canvas (Visual Routing) ──────────────────────────
+
+model FlowCanvas {
+  id          String   @id @default(cuid())
+  tenantId    String   @unique @map("tenant_id")
+  nodes       Json     @default("[]")    // [{ id, type: "channel"|"rule"|"flow"|"agent"|"department", position, data }]
+  edges       Json     @default("[]")    // [{ id, source, target, data }]
+  viewport    Json?                      // { x, y, zoom }
+  updatedBy   String?  @map("updated_by")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("flow_canvas")
 }

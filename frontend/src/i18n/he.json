@@ -20,7 +20,9 @@
     "logout": "התנתק",
     "tools": "כלים",
     "integrations": "אינטגרציות",
-    "aiStudio": "סטודיו AI"
+    "aiStudio": "סטודיו AI",
+    "outbound": "יוצא",
+    "usage": "צריכה"
   },
   "auth": {
     "login": "התחברות",
@@ -43,6 +45,9 @@
     "release": "שחרר",
     "transfer": "העבר",
     "close": "סגור",
+    "closeConfirmTitle": "סגירת שיחה",
+    "closeConfirmMessage": "האם אתה בטוח שברצונך לסגור שיחה זו? היא תוסר מהתצוגה הפעילה.",
+    "closeConfirmButton": "אשר וסגור",
     "reassign": "העבר לנציג",
     "typeMessage": "הקלד הודעה...",
     "send": "שלח",
@@ -78,7 +83,22 @@
     "deleteChat": "מחק שיחה",
     "deleteConfirmTitle": "למחוק את השיחה?",
     "deleteConfirmMsg": "שיחה זו וכל ההודעות שלה יימחקו לצמיתות.",
-    "chatDeleted": "השיחה נמחקה"
+    "chatDeleted": "השיחה נמחקה",
+    "newConversation": "שיחה חדשה",
+    "initiate": {
+      "title": "התחל שיחה חדשה",
+      "searchContact": "חפש אנשי קשר...",
+      "selectContact": "בחר איש קשר",
+      "noContacts": "לא נמצאו אנשי קשר",
+      "channelAccount": "חשבון ערוץ",
+      "selectChannelAccount": "בחר חשבון ערוץ",
+      "message": "הודעה",
+      "messagePlaceholder": "הקלד את ההודעה שלך...",
+      "send": "שלח",
+      "sending": "שולח...",
+      "success": "השיחה נפתחה",
+      "error": "שגיאה בפתיחת שיחה"
+    }
   },
   "dashboard": {
     "title": "לוח בקרה",
@@ -136,6 +156,18 @@
     "password": "סיסמה",
     "registerButton": "צור נציג",
     "registerSuccess": "הנציג נוצר בהצלחה",
+    "editAgent": "ערוך נציג",
+    "deleteAgent": "מחק נציג",
+    "deleteAgentMsg": "האם אתה בטוח שברצונך למחוק נציג זה? השיחות שלו יבוטלו.",
+    "department": "מחלקה",
+    "noDepartment": "ללא מחלקה",
+    "agentIsActive": "נציג זה יכול לקבל ולטפל בשיחות",
+    "agentIsInactive": "נציג זה מושבת ולא יכול לטפל בשיחות",
+    "resetPassword": "איפוס סיסמה",
+    "newPasswordPlaceholder": "סיסמה חדשה (מינימום 8 תווים)",
+    "passwordReset": "הסיסמה אופסה",
+    "passwordResetSuccess": "הסיסמה אופסה בהצלחה",
+    "dangerZone": "אזור מסוכן",
     "autoGreeting": "תבנית ברכה אוטומטית",
     "autoGreetingDesc": "הודעה זו נשלחת אוטומטית כשנציג מקבל שיחה. השתמש ב-{agentName} כמציין מיקום.",
     "autoGreetingPlaceholder": "שלום! אני {agentName} ואשמח לעזור לך היום.",
@@ -221,6 +253,12 @@
       "title": "עוזר AI",
       "aiPowered": "מופעל AI",
       "demoMode": "מצב הדגמה",
+      "notConfigured": "ללא עובד AI",
+      "noAiEmployee": {
+        "title": "לא הוגדר עובד AI",
+        "description": "הגדר עובד AI בסטודיו AI כדי להפעיל הצעות, ניתוח וצ'אט מבוססי AI.",
+        "setupButton": "הגדר ב-AI Studio"
+      },
       "regenerate": "צור מחדש",
       "pause": "השהה",
       "paused": "מושהה",
@@ -385,6 +423,8 @@
     "addManual": "הוסף ידנית",
     "created": "חשבון ערוץ נוצר",
     "deleted": "חשבון ערוץ נמחק",
+    "deleteChannel": "מחק ערוץ",
+    "deleteChannelMsg": "פעולה זו תמחק לצמיתות את הערוץ וכל השיחות וההודעות שלו. לא ניתן לבטל.",
     "confirmDelete": "האם אתה בטוח שברצונך להסיר ערוץ זה?",
     "gmail": "Gmail",
     "gmailDesc": "חיבור דרך Google OAuth",
@@ -438,7 +478,23 @@
     "selectAgent": "בחר נציג להוספה",
     "copilotConfig": "הגדרות עוזר AI",
     "copilotInherited": "יורש מהגדרות הארגון",
-    "copilotCustom": "הגדרות מותאמות למחלקה"
+    "copilotCustom": "הגדרות מותאמות למחלקה",
+    "parentDepartment": "מחלקת אב",
+    "noParent": "ללא (רמה עליונה)",
+    "expand": "הרחב",
+    "collapse": "כווץ",
+    "humanAgents": "נציגים אנושיים",
+    "aiAgents": "נציגי AI",
+    "noAgents": "אין נציגים משויכים",
+    "aiAgent": "נציג AI",
+    "aiEmployee": "עובד AI",
+    "aiEmployeeDesc": "שייך עובד AI לטיפול בשיחות במחלקה זו",
+    "currentAIEmployee": "משויך כעת",
+    "assignAIEmployee": "בחר עובד AI לשיוך",
+    "changeAIEmployee": "החלף עובד AI",
+    "unassign": "בטל שיוך",
+    "noAIEmployees": "לא נוצרו עובדי AI עדיין",
+    "createAIEmployee": "צור עובד AI"
   },
   "copilotMode": {
     "label": "מצב עוזר AI",
@@ -550,6 +606,244 @@
     "autoCloseMessagePlaceholder": "בשל חוסר מענה, השיחה נסגרה. אל תהסס לפנות אלינו שוב בכל עת!",
     "minutes": "דק׳"
   },
+  "outbound": {
+    "title": "מרכז יוצא",
+    "subtitle": "תבניות, שידורים והודעות מתוזמנות",
+    "nav": {
+      "templates": "תבניות",
+      "broadcasts": "שידורים",
+      "scheduled": "מתוזמנות"
+    },
+    "templates": {
+      "title": "תבניות",
+      "create": "תבנית חדשה",
+      "createTitle": "יצירת תבנית",
+      "editTitle": "עריכת תבנית",
+      "deleteTitle": "מחיקת תבנית",
+      "deleteConfirm": "פעולה זו תמחק לצמיתות תבנית זו.",
+      "duplicate": "שכפול",
+      "allChannels": "כל הערוצים",
+      "allStatuses": "כל הסטטוסים",
+      "colName": "שם",
+      "colChannel": "ערוץ",
+      "colCategory": "קטגוריה",
+      "colLanguage": "שפה",
+      "colStatus": "סטטוס",
+      "fieldName": "שם תבנית",
+      "fieldChannel": "ערוץ",
+      "fieldCategory": "קטגוריה",
+      "fieldLanguage": "שפה",
+      "fieldHeaderType": "סוג כותרת",
+      "fieldHeaderText": "טקסט כותרת",
+      "fieldBody": "גוף",
+      "fieldFooter": "כותרת תחתונה",
+      "bodyPlaceholder": "שלום {{1}}, ההודעה שלך כאן...",
+      "footerPlaceholder": "טקסט כותרת תחתונה אופציונלי",
+      "submitToMeta": "שלח למטא",
+      "submitToMetaConfirm": "לשלוח תבנית זו למטא לאישור?",
+      "submitting": "שולח...",
+      "submitted": "נשלח למטא",
+      "variables": "דוגמאות משתנים",
+      "variablePlaceholder": "ערך דוגמה עבור {{VAR}}",
+      "preview": "תצוגה מקדימה",
+      "previewTitle": "תצוגה מקדימה של הודעה",
+      "statusDraft": "טיוטה",
+      "statusPending": "ממתין לאישור",
+      "statusApproved": "מאושר",
+      "statusRejected": "נדחה",
+      "connectedChannelsOnly": "רק ערוצים מחוברים מוצגים",
+      "noConnectedChannels": "אין ערוצים מחוברים"
+    },
+    "broadcasts": {
+      "title": "שידורים",
+      "create": "שידור חדש",
+      "createTitle": "יצירת שידור",
+      "editTitle": "עריכת שידור",
+      "count": "שידורים",
+      "recipients": "נמענים",
+      "scheduledAt": "מתוזמן ל",
+      "send": "שלח עכשיו",
+      "cancel": "ביטול",
+      "showStats": "הצג סטטיסטיקות",
+      "hideStats": "הסתר סטטיסטיקות",
+      "analytics": "ניתוח משלוח",
+      "statSent": "נשלח",
+      "statDelivered": "נמסר",
+      "statRead": "נקרא",
+      "statReplied": "נענה",
+      "statFailed": "נכשל",
+      "fieldName": "שם שידור",
+      "fieldChannel": "ערוץ",
+      "selectChannel": "בחר ערוץ מחובר",
+      "fieldChannelAccount": "מזהה חשבון ערוץ",
+      "fieldTemplate": "תבנית (אופציונלי)",
+      "fieldBody": "גוף ההודעה",
+      "noTemplate": "ללא תבנית — השתמש בגוף מותאם",
+      "channelAccountPlaceholder": "השאר ריק לברירת מחדל",
+      "bodyPlaceholder": "הודעת השידור שלך...",
+      "stepBasicInfo": "מידע בסיסי",
+      "stepRecipients": "נמענים",
+      "stepSchedule": "תזמון וסקירה",
+      "next": "הבא",
+      "back": "חזרה",
+      "recipientsCrmSegment": "פלח CRM",
+      "recipientsImport": "ייבוא",
+      "recipientsAllContacts": "כל אנשי הקשר",
+      "segmentRules": "כללי פילוח",
+      "addRule": "הוסף כלל",
+      "removeRule": "הסר",
+      "ruleField": "שדה",
+      "ruleOperator": "אופרטור",
+      "ruleValue": "ערך",
+      "fieldChannel2": "ערוץ",
+      "fieldTag": "תגית",
+      "fieldPhone": "טלפון",
+      "fieldEmail": "אימייל",
+      "fieldLastSeen": "נראה לאחרונה אחרי",
+      "opEquals": "שווה",
+      "opContains": "מכיל",
+      "opStartsWith": "מתחיל ב",
+      "matchingContacts": "אנשי קשר תואמים יחושבו בעת השליחה",
+      "importRecipients": "ייבוא נמענים",
+      "importPlaceholder": "הדבק מספרי טלפון או מזהים, אחד בכל שורה...",
+      "importCount": "{{count}} נמענים נותחו",
+      "importCsv": "או העלה קובץ CSV",
+      "allContactsDesc": "שלח לכל אנשי הקשר בערוץ שנבחר",
+      "scheduleOption": "תזמון",
+      "sendNow": "שלח מיידית",
+      "scheduleLater": "תזמן למועד מאוחר",
+      "fieldScheduledAt": "שלח ב",
+      "reviewSummary": "סיכום סקירה",
+      "reviewChannel": "ערוץ",
+      "reviewTemplate": "תבנית",
+      "reviewRecipients": "נמענים",
+      "reviewSchedule": "תזמון",
+      "reviewImmediate": "מיידי",
+      "stepValidate": "אימות",
+      "stepSend": "תזמון ושליחה",
+      "validating": "מאמת נמענים...",
+      "validationTitle": "אימות לפני שליחה",
+      "reachable": "ניתנים להגעה",
+      "invalid": "לא תקין",
+      "optedOut": "בוטלו",
+      "estimatedCost": "עלות משוערת",
+      "warnings": "אזהרות",
+      "invalidReasons": "פרטי שגיאות",
+      "cannotSend": "לא ניתן לשלוח — תקן את הבעיות למעלה",
+      "readyToSend": "מוכן לשליחה",
+      "fieldFlow": "הפעל תהליך (אופציונלי)",
+      "noFlow": "ללא תהליך — שלח הודעה בלבד",
+      "fieldLastInteraction": "אינטראקציה אחרונה אחרי",
+      "fieldInactiveDays": "ימים לא פעילים",
+      "fieldSource": "מקור / קמפיין",
+      "fieldCreatedAfter": "נוצר אחרי",
+      "fieldCreatedBefore": "נוצר לפני",
+      "fieldHasTag": "יש תגית",
+      "excludeOptedOut": "הוצא אנשי קשר שביטלו"
+    },
+    "scheduled": {
+      "title": "הודעות מתוזמנות",
+      "create": "תזמן הודעה",
+      "createTitle": "תזמון הודעה",
+      "count": "הודעות",
+      "cancel": "ביטול",
+      "cancelTitle": "ביטול הודעה",
+      "cancelConfirm": "הודעה מתוזמנת זו תבוטל ולא תישלח.",
+      "colRecipient": "נמען",
+      "colChannel": "ערוץ",
+      "colBody": "הודעה",
+      "colScheduledAt": "מתוזמן ל",
+      "colStatus": "סטטוס",
+      "fieldChannel": "ערוץ",
+      "selectChannel": "בחר ערוץ מחובר",
+      "fieldChannelAccount": "מזהה חשבון ערוץ",
+      "fieldRecipient": "מזהה נמען",
+      "fieldBody": "הודעה",
+      "fieldScheduledAt": "שלח ב",
+      "channelAccountPlaceholder": "השאר ריק לברירת מחדל",
+      "recipientSingle": "נמען יחיד",
+      "recipientSegment": "פלח CRM",
+      "recipientImport": "ייבוא",
+      "advancedOptions": "אפשרויות מתקדמות",
+      "sendType": "סוג שליחה",
+      "sendTypeRegular": "הודעה רגילה",
+      "sendTypeRegularDesc": "הודעה חד-כיוונית, ללא כניסה לתיבת דואר",
+      "sendTypeConversation": "התחל שיחה",
+      "sendTypeConversationDesc": "יוצר כניסה בתיבת דואר עם הקצאת מחלקה",
+      "sendTypeFlow": "הפעל תהליך",
+      "sendTypeFlowDesc": "התחל תהליך אוטומטי לכל נמען",
+      "department": "מחלקה",
+      "selectDepartment": "בחר מחלקה",
+      "flow": "תהליך",
+      "selectFlow": "בחר תהליך",
+      "flowComingSoon": "הפעלת תהליכים בקרוב",
+      "segmentRules": "כללי פילוח",
+      "addRule": "הוסף כלל",
+      "importPlaceholder": "הדבק מזהים, אחד בכל שורה...",
+      "importCount": "{{count}} נמענים נותחו",
+      "fieldTemplate": "תבנית (אופציונלי)",
+      "noTemplate": "ללא תבנית — הקלד הודעה",
+      "fieldFlow": "הפעל תהליך",
+      "noFlow": "ללא תהליך",
+      "fieldLastInteraction": "אינטראקציה אחרונה אחרי",
+      "fieldInactiveDays": "ימים לא פעילים",
+      "fieldSource": "מקור / קמפיין",
+      "excludeOptedOut": "הוצא אנשי קשר שביטלו",
+      "validationSummary": "סיכום אימות",
+      "reachable": "ניתנים להגעה",
+      "optedOutExcluded": "אנשי קשר שביטלו הוצאו"
+    }
+  },
+  "newConversation": {
+    "title": "שיחה חדשה",
+    "steps": {
+      "channel": "בחר ערוץ להתחלה",
+      "recipient": "למי תרצה לשלוח הודעה?",
+      "message": "כתוב את ההודעה שלך"
+    },
+    "selectChannel": "בחר ערוץ",
+    "templateOnly": "תבניות בלבד",
+    "noChannels": "אין ערוצים מחוברים",
+    "noChannelsDesc": "חבר ערוץ בהגדרות כדי להתחיל לשלוח הודעות.",
+    "continue": "המשך",
+    "to": "אל",
+    "send": "שלח הודעה",
+    "sending": "שולח...",
+    "channelDesc": {
+      "whatsapp": "הזן את מספר הטלפון המלא עם קידומת מדינה (למשל 972501234567+)",
+      "messenger": "הזן את מזהה המשתמש של Messenger (PSID)",
+      "instagram": "הזן את מזהה המשתמש של אינסטגרם",
+      "email": "הזן את כתובת האימייל של הנמען",
+      "slack": "הזן את מזהה המשתמש או הערוץ ב-Slack"
+    },
+    "identifier": {
+      "phone": "מספר טלפון",
+      "email": "כתובת אימייל",
+      "username": "מזהה משתמש אינסטגרם",
+      "psid": "מזהה Messenger PSID",
+      "slackId": "מזהה משתמש Slack"
+    },
+    "recipient": {
+      "searchContacts": "חיפוש אנשי קשר",
+      "enterManually": "הזנה ידנית",
+      "searchPlaceholder": "חפש לפי שם, טלפון, אימייל...",
+      "noResults": "לא נמצאו אנשי קשר"
+    },
+    "message": {
+      "label": "הודעה",
+      "placeholder": "הקלד את ההודעה שלך...",
+      "selectTemplate": "בחר תבנית",
+      "waTemplateNotice": "WhatsApp דורש תבנית מאושרת להודעה הראשונה בשיחה.",
+      "noTemplates": "לא נמצאו תבניות מאושרות",
+      "createTemplate": "צור תבנית",
+      "variables": "משתני תבנית",
+      "preview": "תצוגה מקדימה"
+    },
+    "errors": {
+      "contactFailed": "יצירת איש קשר נכשלה",
+      "sendFailed": "שליחת ההודעה נכשלה"
+    }
+  },
   "common": {
     "save": "שמור",
     "cancel": "ביטול",
@@ -576,7 +870,8 @@
     "disable": "השבת",
     "enable": "הפעל",
     "create": "צור",
-    "saving": "שומר..."
+    "saving": "שומר...",
+    "send": "שלח"
   },
   "setup": {
     "title": "הגדרת ארגון",
@@ -858,34 +1153,60 @@
       }
     },
     "productFeatures": {
-      "label": "למה דווקא אנחנו?",
-      "title": "הנציגים שלכם, בגרסה משודרגת",
-      "subtitle": "כלים מבוססי AI שהופכים את הצוות שלכם למהיר יותר, חד יותר ובלתי ניתן לעצירה.",
-      "unifiedInbox": {
-        "title": "תיבת דואר רב-ערוצית",
-        "desc": "כל הערוצים במקום אחד. WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — מסך אחד, אפס קפיצות בין טאבים."
+      "label": "הפלטפורמה",
+      "title": "מערכת AI אחת שמנהלת את כל תפעול הלקוחות שלכם",
+      "subtitle": "לא רשימת פיצ׳רים — מערכת חיה שמבינה כל שיחה, לומדת מכל אינטראקציה ועוזרת לצוות שלכם לעבוד טוב יותר.",
+      "cards": {
+        "copilot": {
+          "title": "AI Copilot",
+          "hint": "השותף ה-AI שלכם בכל שיחה ושיחת טלפון",
+          "desc": "AI Copilot יושב לצד הצוות שלכם בכל מקום — צ׳אטים, מיילים, שיחות קוליות ותגובות ברשתות חברתיות. הוא מציע תשובות, מגיב אוטומטית לתגובות, פותח שיחות עם לידים ומאמן נציגים בזמן אמת במהלך שיחות חיות.",
+          "bullets": ["אימון בזמן אמת בשיחות קוליות", "תגובה אוטומטית לתגובות ו-DMs ברשתות", "פתיחת שיחות יזומה עם לידים חדשים", "הצעות מותאמות הקשר בכל ערוץ"]
+        },
+        "inbox": {
+          "title": "תיבת דואר רב-ערוצית",
+          "hint": "כל ערוץ, כל הודעה — מסך אחד",
+          "desc": "WhatsApp, Instagram, Messenger, Gmail, Outlook, Slack — הכל זורם לתיבה מאוחדת אחת. ניתוב חכם שולח כל שיחה לנציג הנכון, והיסטוריה מלאה מלווה כל לקוח בין הערוצים.",
+          "bullets": ["6+ ערוצים מאוחדים במבט אחד", "ניתוב חכם לפי מיומנות, עומס ועדיפות", "היסטוריית שיחות מלאה בין ערוצים"]
+        },
+        "insights": {
+          "title": "אינטליגנציה לקוחות",
+          "hint": "AI שלומד את הלקוחות ויודע איך לטפל בהם",
+          "desc": "כל אינטראקציה מלמדת את המערכת עוד על כל לקוח — העדפות, דפוסי סנטימנט, היסטוריית רכישות וסגנון תקשורת. הצוות שלכם מקבל כרטיסי הקשר חיים שמראים בדיוק איך לגשת לכל שיחה.",
+          "bullets": ["AI בונה פרופיל מכל אינטראקציה", "זיהוי סנטימנט וכוונה בזמן אמת", "המלצות טיפול מותאמות לכל לקוח"]
+        },
+        "knowledge": {
+          "title": "בסיס ידע מחובר",
+          "hint": "המוח של החברה שלכם, זמין בכל שיחה",
+          "desc": "העלו מסמכים, שאלות נפוצות ומידע מוצר — AI משתמש בהם מיידית לניסוח תשובות, מענה על שאלות ואימון הבוטים שלכם. בסיס הידע לומד מכל שיחה שנפתרה ומשתפר עם הזמן.",
+          "bullets": ["הצעות מאמרים אוטומטיות בצ׳אט", "מניע תשובות בוט והצעות קופיילוט", "לומד ומשתפר מפניות שנפתרו"]
+        }
+      }
+    },
+    "solutions": {
+      "label": "פתרונות",
+      "title": "פתרונות לכל צוות, מונעים בינה מלאכותית",
+      "subtitle": "פלטפורמה אחת. כל צוות. AI שמתאים את עצמו לדרך שלכם לעבוד.",
+      "ops": {
+        "title": "תפעול לקוחות",
+        "desc": "נהלו את כל שיחות הלקוחות מתיבה מאוחדת אחת. נתבו הודעות לנציגים הנכונים, אוטמטו משימות חוזרות ושמרו על SLA — עם AI שמשתפר עם כל אינטראקציה.",
+        "features": ["תיבת דואר רב-ערוצית", "ניתוב חכם ומעקב SLA", "אוטומציה מבוססת AI"]
       },
-      "aiAgents": {
-        "title": "סוכני AI מומחים",
-        "desc": "AI שמאומן על העסק והלקוחות שלכם. מבין הקשר, היסטוריה וכוונה — כך שכל אינטראקציה מרגישה אישית."
+      "sales": {
+        "title": "מכירות",
+        "desc": "צרו קשר עם לידים ברגע שהם פונים — בכל ערוץ. AI מסנן ומדרג לידים, מציע פולואפים ונותן לצוות המכירות את ההקשר שצריך כדי לסגור מהר יותר.",
+        "features": ["מענה מיידי ללידים", "סינון ודירוג AI", "היסטוריית שיחות מלאה"]
       },
-      "aiCopilot": {
-        "title": "AI Copilot לנציגים",
-        "desc": "הצעות ותשובות בזמן אמת. הקופיילוט קורא את השיחה, שולף מבסיס הידע ומנסח את התשובה המושלמת."
+      "support": {
+        "title": "תמיכה",
+        "desc": "פתרו בעיות מהר יותר עם AI שמבין את המוצר שלכם. הקופיילוט מנסח תשובות מבסיס הידע, בוטים מטפלים בשאלות נפוצות והנציגים מתמקדים במה שחשוב באמת.",
+        "features": ["AI Copilot לנציגים", "בוטים לשירות עצמי", "אינטליגנציה שיחתית"]
       },
-      "smartBot": {
-        "title": "בוטים חכמים",
-        "desc": "פותר שיחות שגרתיות אוטומטית. מקבל, מסווג ומנתב — כשזה מורכב, העברה חלקה לנציג הטוב ביותר."
-      },
-      "analytics": {
-        "title": "אינטליגנציה שיחתית",
-        "desc": "הפכו שיחות לתובנות. ניתוח סנטימנט, זיהוי נושאים ואנליטיקה פעילה מכל אינטראקציה."
-      },
-      "voipCopilot": {
-        "title": "Copilot לשיחות קוליות",
-        "desc": "עוזר AI בזמן אמת לשיחות VOIP. מאזין, מבין ומציע תשובות בזמן שהנציג על הקו."
-      },
-      "comingSoon": "בקרוב"
+      "social": {
+        "title": "מעורבות חברתית",
+        "desc": "הודעות באינסטגרם, תגובות בפייסבוק, WhatsApp — כל נקודת מגע חברתית הופכת לשיחה מנוהלת עם ניתוח סנטימנט בזמן אמת ותגובות מבוססות AI.",
+        "features": ["כל הערוצים החברתיים בתיבה אחת", "זיהוי סנטימנט בזמן אמת", "תגובות אוטומטיות לשאלות נפוצות"]
+      }
     },
     "faq": {
       "label": "שאלות נפוצות",
@@ -1194,9 +1515,52 @@
     "categoryProjectManagement": "ניהול פרויקטים",
     "categoryCalendar": "לוח שנה"
   },
+  "usage": {
+    "title": "צריכה",
+    "subtitle": "עקוב אחר השימוש בפלטפורמה - AI, הודעות וכלים",
+    "period": "תקופה",
+    "last7days": "7 ימים אחרונים",
+    "last30days": "30 ימים אחרונים",
+    "last90days": "90 ימים אחרונים",
+    "allTime": "כל הזמן",
+    "totalTokens": "סה\"כ טוקנים AI",
+    "messagesSent": "הודעות שנשלחו",
+    "toolCalls": "הפעלות כלים",
+    "automationRuns": "הפעלות אוטומציה",
+    "usageByType": "שימוש לפי סוג",
+    "usageOverTime": "שימוש לאורך זמן",
+    "recentActivity": "פעילות אחרונה",
+    "noUsage": "אין נתוני שימוש עדיין",
+    "type": "סוג",
+    "quantity": "כמות",
+    "date": "תאריך",
+    "ai_tokens": "טוקנים AI",
+    "message_sent": "הודעות",
+    "tool_call": "הפעלות כלים",
+    "automation_run": "אוטומציות",
+    "allTenants": "כל הלקוחות",
+    "tenant": "לקוח",
+    "totalUsage": "שימוש כולל",
+    "byTenant": "לפי לקוח"
+  },
   "aiStudio": {
     "title": "סטודיו AI",
     "subtitle": "צור עובדי AI, הגדר מה הם יודעים, ונהל כיצד הם מטפלים בשיחות",
+    "wizard": {
+      "title": "יצירת עובד AI",
+      "subtitle": "בוא נגדיר את חבר הצוות החדש שלך. ענה על כמה שאלות ונגדיר הכל עבורך.",
+      "q1Name": "איך לקרוא לעובד ה-AI הזה? תן לו שם שמתאים למותג שלך — כמו \"מאיה\" או \"בוט תמיכה\".",
+      "q2Responsibility": "על מה עובד ה-AI הזה צריך להיות אחראי? לדוגמה: מענה ללקוחות, טיפול בהחזרות, קביעת פגישות, סינון לידים...",
+      "q3Channels": "היכן הוא צריך לתקשר עם לקוחות? לדוגמה: WhatsApp, Instagram, אימייל, צ'אט באתר — אפשר לבחור כמה.",
+      "q4Communication": "איך הוא צריך לתקשר? תאר את הטון והסגנון — מקצועי, ידידותי, קז'ואל, אמפתי? האם להשתמש באימוג'ים? תשובות קצרות או מפורטות?",
+      "q5Escalation": "מתי הוא צריך לערב נציג אנושי? לדוגמה: כשלקוח כועס, שואל שאלה מורכבת, מבקש החזר, או מבקש במפורש לדבר עם אדם.",
+      "q6AiDisclosure": "האם הלקוחות צריכים לדעת שהם מדברים עם AI? האם הבוט צריך להציג את עצמו כ-AI, או להתנהג כחבר צוות רגיל?",
+      "q7Extra": "הנחיות מיוחדות או ידע שהוא צריך? לדוגמה: מדיניות חברה, פרטי מוצרים, דברים שאסור להגיד, או נושאי FAQ.",
+      "generating": "יוצר את הגדרות עובד ה-AI שלך...",
+      "inputPlaceholder": "הקלד את תשובתך...",
+      "skip": "דלג",
+      "skipAll": "דלג על האשף והגדר ידנית"
+    },
     "edit": "ערוך",
     "test": "בדוק",
     "tabs": {
@@ -1289,7 +1653,9 @@
           "roleBilling": "חיובים",
           "roleCustom": "מותאם אישית",
           "description": "תיאור",
-          "descriptionPlaceholder": "במה הסוכן מטפל? לדוגמה: מטפל בפניות תמיכה ועוזר ללקוחות עם הזמנותיהם."
+          "descriptionPlaceholder": "במה הסוכן מטפל? לדוגמה: מטפל בפניות תמיכה ועוזר ללקוחות עם הזמנותיהם.",
+          "tenantLevel": "כלל-ארגוני (כל המחלקות)",
+          "departmentHint": "שייך למחלקה ספציפית או השאר כארגוני."
         },
         "personality": {
           "title": "אישיות",
@@ -1312,12 +1678,19 @@
         "skills": {
           "title": "כישורים (כלים)",
           "subtitle": "פעולות שהסוכן יכול לבצע דרך אינטגרציות מחוברות",
-          "addMore": "הוסף כלים נוספים מאינטגרציות"
+          "addMore": "הוסף כלים נוספים מאינטגרציות",
+          "panelDesc": "חבר אינטגרציות והפעל כלים עבור סוכן זה",
+          "notConnected": "לא מחובר",
+          "connectIntegration": "חבר אינטגרציה זו"
         },
         "knowledge": {
           "title": "ידע",
           "subtitle": "מקורות מידע שהסוכן יכול להפנות אליהם בעת מענה",
-          "addSource": "הוסף מקור ידע"
+          "addSource": "הוסף מקור ידע",
+          "panelDesc": "בחר מקורות ידע שהסוכן יוכל להשתמש בהם",
+          "noSources": "אין מקורות ידע זמינים",
+          "createFirst": "צור את מקור הידע הראשון שלך",
+          "linked": "מקושר"
         },
         "escalation": {
           "title": "כללי הסלמה",

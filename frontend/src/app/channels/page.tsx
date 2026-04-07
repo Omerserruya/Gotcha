@@ -8,9 +8,8 @@ import {
   getChannels,
   connectWhatsApp,
   disconnectChannel,
+  deleteChannelAccount,
   getChannelStatus,
-  getChannelConfig,
-  updateChannelConfig,
 } from "@/lib/api";
 import { AppLayout } from "@/components/AppLayout";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
@@ -92,13 +91,14 @@ function ChannelsPageContent() {
   const searchParams = useSearchParams();
 
   const [accounts, setAccounts] = useState<any[]>([]);
-  const [botFlowMode, setBotFlowMode] = useState<string>("UNIFIED");
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState("");
   const [messageType, setMessageType] = useState<"success" | "error">("success");
   const [disconnectConfirm, setDisconnectConfirm] = useState<{ open: boolean; id: string }>({ open: false, id: "" });
   const [disconnecting, setDisconnecting] = useState(false);
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
+  const [deleting, setDeleting] = useState(false);
   const showMessage = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
     setMessageType(type);
@@ -111,12 +111,8 @@ function ChannelsPageContent() {
   const fetchData = useCallback(async () => {
     if (!token) return;
     try {
-      const [channelsRes, configRes] = await Promise.all([
-        getChannels(token),
-        getChannelConfig(token),
-      ]);
+      const channelsRes = await getChannels(token);
       setAccounts(channelsRes.data || []);
-      setBotFlowMode(configRes.data?.botFlowMode || "UNIFIED");
     } catch (err) {
       console.error("Failed to load channel data:", err);
     } finally {
@@ -244,8 +240,7 @@ function ChannelsPageContent() {
         response_type: "code",
         override_default_response_type: true,
         extras: {
-          setup: { channel: "WHATSAPP" },
-          sessionInfoVersion: "3",
+          version: "v3",
         },
       }
     );
@@ -292,16 +287,20 @@ function ChannelsPageContent() {
     }
   }
 
-  // ─── Bot Flow Mode ─────────────────────────────────────
+  // ─── Delete Channel ─────────────────────────────────────
 
-  async function handleModeChange(mode: string) {
+  async function confirmDelete() {
     if (!token) return;
-    setBotFlowMode(mode);
+    setDeleting(true);
     try {
-      await updateChannelConfig(token, { botFlowMode: mode });
-      showMessage(t("channels.saved"), "success");
+      await deleteChannelAccount(token, deleteConfirm.id);
+      setDeleteConfirm({ open: false, id: "", name: "" });
+      showMessage(t("channels.deleted"), "success");
+      fetchData();
     } catch (err: any) {
       showMessage(err.message || t("common.error"), "error");
+    } finally {
+      setDeleting(false);
     }
   }
 
@@ -461,8 +460,8 @@ function ChannelsPageContent() {
                     </button>
                   )}
 
-                  {/* Disconnect / Reconnect button */}
-                  {account.connectionStatus === "CONNECTED" || account.connectionStatus === "ERROR" ? (
+                  {/* Disconnect button */}
+                  {(account.connectionStatus === "CONNECTED" || account.connectionStatus === "ERROR") && (
                     <button
                       onClick={() => openDisconnectConfirm(account.id)}
                       className="text-xs text-red-500 hover:text-red-700 transition p-1"
@@ -472,7 +471,20 @@ function ChannelsPageContent() {
                         <path strokeLinecap="round" strokeLinejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
                       </svg>
                     </button>
-                  ) : null}
+                  )}
+
+                  {/* Delete button (only for disconnected channels) */}
+                  {account.connectionStatus === "DISCONNECTED" && (
+                    <button
+                      onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.displayName || account.externalId })}
+                      className="text-xs text-red-400 hover:text-red-600 transition p-1"
+                      title={t("common.delete")}
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  )}
                 </div>
               </div>
             ))}
@@ -480,36 +492,6 @@ function ChannelsPageContent() {
         )}
       </div>
 
-      {/* Bot Flow Mode */}
-      <div className="bg-white rounded-2xl border border-gray-200 p-6">
-        <h2 className="font-semibold text-gray-900 mb-1">{t("channels.botFlowMode")}</h2>
-        <p className="text-xs text-gray-500 mb-4">{t("channels.botFlowModeDesc")}</p>
-        <div className="flex flex-col sm:flex-row gap-3">
-          {[
-            { value: "UNIFIED", label: t("channels.unified"), desc: t("channels.unifiedDesc") },
-            { value: "PER_CHANNEL", label: t("channels.perChannel"), desc: t("channels.perChannelDesc") },
-          ].map((opt) => (
-            <button
-              key={opt.value}
-              onClick={() => handleModeChange(opt.value)}
-              className={clsx(
-                "flex-1 p-4 rounded-xl border-2 text-start transition",
-                botFlowMode === opt.value
-                  ? "border-primary-500 bg-primary-50"
-                  : "border-gray-200 hover:border-gray-300"
-              )}
-            >
-              <p className={clsx(
-                "font-medium text-sm",
-                botFlowMode === opt.value ? "text-primary-700" : "text-gray-700"
-              )}>
-                {opt.label}
-              </p>
-              <p className="text-xs text-gray-500 mt-0.5">{opt.desc}</p>
-            </button>
-          ))}
-        </div>
-      </div>
     </div>
 
     <ConfirmModal
@@ -521,6 +503,17 @@ function ChannelsPageContent() {
       loading={disconnecting}
       onConfirm={confirmDisconnect}
       onCancel={() => setDisconnectConfirm({ open: false, id: "" })}
+    />
+
+    <ConfirmModal
+      isOpen={deleteConfirm.open}
+      title={t("channels.deleteChannel")}
+      message={t("channels.deleteChannelMsg", { name: deleteConfirm.name })}
+      confirmText={t("common.delete")}
+      danger
+      loading={deleting}
+      onConfirm={confirmDelete}
+      onCancel={() => setDeleteConfirm({ open: false, id: "", name: "" })}
     />
     </AppLayout>
   );

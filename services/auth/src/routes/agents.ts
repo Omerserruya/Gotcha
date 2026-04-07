@@ -80,6 +80,50 @@ router.patch("/:id", requireRole("ADMIN"), validate(updateAgentSchema), async (r
   }
 });
 
+// Admin reset agent password
+const resetAgentPasswordSchema = z.object({
+  newPassword: z.string().min(8),
+});
+
+router.post("/:id/reset-password", requireRole("ADMIN"), validate(resetAgentPasswordSchema), async (req: Request, res: Response) => {
+  try {
+    const agent = await prisma.user.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId!, role: "AGENT" },
+    });
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+    const bcrypt = require("bcryptjs");
+    const hashed = await bcrypt.hash(req.body.newPassword, 12);
+    await prisma.user.update({ where: { id: agent.id }, data: { passwordHash: hashed } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Reset agent password error:", err);
+    res.status(500).json({ error: "Failed to reset password" });
+  }
+});
+
+// Delete agent (admin only)
+router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const agent = await prisma.user.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId!, role: "AGENT" },
+    });
+    if (!agent) { res.status(404).json({ error: "Agent not found" }); return; }
+
+    // Unassign from conversations first
+    await prisma.conversation.updateMany({
+      where: { assignedAgentId: agent.id },
+      data: { assignedAgentId: null },
+    });
+
+    await prisma.user.delete({ where: { id: agent.id } });
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete agent error:", err);
+    res.status(500).json({ error: "Failed to delete agent" });
+  }
+});
+
 // Auto-greeting settings
 router.get("/settings/auto-greeting", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
@@ -435,164 +479,21 @@ router.get("/settings/bot-config", requireRole("ADMIN"), async (req: Request, re
   }
 });
 
-// ─── Co-Pilot Settings ──────────────────────────────────────
-
-const copilotSettingsSchema = z.object({
-  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY", "CHAT"]).optional(),
-  systemPrompt: z.string().optional(),
-  rules: z.array(z.string()).optional(),
-  tools: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    enabled: z.boolean(),
-    config: z.record(z.any()).optional(),
-  })).optional(),
-  model: z.string().optional(),
-  provider: z.string().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().min(1).max(8192).optional(),
-  isActive: z.boolean().optional(),
+// Legacy copilot/first-take-care settings — now managed via AI Employees in AI Studio
+router.get("/settings/copilot", requireRole("ADMIN"), async (_req: Request, res: Response) => {
+  res.status(410).json({ error: "Deprecated. AI configuration is now managed via AI Employees in AI Studio." });
 });
 
-router.get("/settings/copilot", requireRole("ADMIN"), async (req: Request, res: Response) => {
-  try {
-    let config = await prisma.copilotConfig.findUnique({
-      where: { tenantId: req.tenantId! },
-    });
-    if (!config) {
-      // Return defaults without creating
-      res.json({
-        systemPrompt: "",
-        rules: [],
-        tools: [
-          { id: "kb_search", name: "Knowledge Base Search", enabled: true, config: {} },
-          { id: "conversation_history", name: "Conversation History", enabled: true, config: {} },
-          { id: "customer_lookup", name: "Customer Lookup", enabled: false, config: {} },
-          { id: "order_status", name: "Order Status", enabled: false, config: {} },
-        ],
-        model: "gpt-4o-mini",
-        provider: "openai",
-        temperature: 0.7,
-        maxTokens: 1024,
-        isActive: true,
-      });
-      return;
-    }
-    res.json(config);
-  } catch (err) {
-    console.error("Get copilot settings error:", err);
-    res.status(500).json({ error: "Failed to get copilot settings" });
-  }
+router.put("/settings/copilot", requireRole("ADMIN"), async (_req: Request, res: Response) => {
+  res.status(410).json({ error: "Deprecated. AI configuration is now managed via AI Employees in AI Studio." });
 });
 
-router.put("/settings/copilot", requireRole("ADMIN"), validate(copilotSettingsSchema), async (req: Request, res: Response) => {
-  try {
-    const config = await prisma.copilotConfig.upsert({
-      where: { tenantId: req.tenantId! },
-      update: req.body,
-      create: {
-        tenantId: req.tenantId!,
-        ...req.body,
-      },
-    });
-    res.json(config);
-  } catch (err) {
-    console.error("Update copilot settings error:", err);
-    res.status(500).json({ error: "Failed to update copilot settings" });
-  }
+router.get("/settings/first-take-care", requireRole("ADMIN"), async (_req: Request, res: Response) => {
+  res.status(410).json({ error: "Deprecated. Bot configuration is now managed via AI Employees in AI Studio." });
 });
 
-// ─── First-Take-Care AI Agent Settings ──────────────────────
-
-const firstTakeCareSettingsSchema = z.object({
-  isActive: z.boolean().optional(),
-  systemPrompt: z.string().optional(),
-  rules: z.array(z.string()).optional(),
-  tools: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    enabled: z.boolean(),
-    config: z.record(z.any()).optional(),
-  })).optional(),
-  model: z.string().optional(),
-  provider: z.string().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().min(1).max(8192).optional(),
-  identity: z.any().optional(),
-  goals: z.any().optional(),
-  tone: z.any().optional(),
-  behavioral: z.any().optional(),
-  maxAutonomousMessages: z.number().min(1).optional(),
-  maxAutonomousMinutes: z.number().min(1).optional(),
-  confidenceThreshold: z.number().min(0).max(1).optional(),
-  escalationMessage: z.string().optional(),
-});
-
-router.get("/settings/first-take-care", requireRole("ADMIN"), async (req: Request, res: Response) => {
-  try {
-    const [config, tenant] = await Promise.all([
-      prisma.firstTakeCareConfig.findUnique({ where: { tenantId: req.tenantId! } }),
-      prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { firstTakeCareEnabled: true } }),
-    ]);
-
-    if (!config) {
-      res.json({
-        data: {
-          isActive: false,
-          systemPrompt: "",
-          rules: [],
-          tools: [],
-          model: "gpt-4o-mini",
-          provider: "openai",
-          temperature: 0.7,
-          maxTokens: 1024,
-          identity: null,
-          goals: null,
-          tone: null,
-          behavioral: null,
-          maxAutonomousMessages: 10,
-          maxAutonomousMinutes: 15,
-          confidenceThreshold: 0.6,
-          escalationMessage: "Let me connect you with a team member who can help further.",
-        },
-        enabled: tenant?.firstTakeCareEnabled ?? false,
-      });
-      return;
-    }
-
-    res.json({ data: config, enabled: tenant?.firstTakeCareEnabled ?? false });
-  } catch (err) {
-    console.error("Get first-take-care settings error:", err);
-    res.status(500).json({ error: "Failed to get First-Take-Care settings" });
-  }
-});
-
-router.put("/settings/first-take-care", requireRole("ADMIN"), validate(firstTakeCareSettingsSchema), async (req: Request, res: Response) => {
-  try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: req.tenantId! },
-      select: { firstTakeCareEnabled: true },
-    });
-
-    if (!tenant?.firstTakeCareEnabled) {
-      res.status(403).json({ error: "First-Take-Care is not enabled for this tenant. Contact system administrator." });
-      return;
-    }
-
-    const config = await prisma.firstTakeCareConfig.upsert({
-      where: { tenantId: req.tenantId! },
-      update: req.body,
-      create: {
-        tenantId: req.tenantId!,
-        ...req.body,
-      },
-    });
-
-    res.json({ data: config });
-  } catch (err) {
-    console.error("Update first-take-care settings error:", err);
-    res.status(500).json({ error: "Failed to update First-Take-Care settings" });
-  }
+router.put("/settings/first-take-care", requireRole("ADMIN"), async (_req: Request, res: Response) => {
+  res.status(410).json({ error: "Deprecated. Bot configuration is now managed via AI Employees in AI Studio." });
 });
 
 export default router;

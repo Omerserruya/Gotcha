@@ -8,11 +8,21 @@ import integrationRoutes from "./routes/integrations";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
 import routerRuleRoutes from "./routes/router-rules";
+import flowCanvasRoutes from "./routes/flow-canvas";
+import usageRoutes from "./routes/usage";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
+import { initAIService } from "./services/ai.service";
 
-// Initialize AI provider from env
+// Initialize central AI service (MUST be done before provider)
 if (process.env.OPENAI_API_KEY) {
+  initAIService({
+    apiKey: process.env.OPENAI_API_KEY,
+    baseURL: process.env.OPENAI_BASE_URL || undefined,
+    defaultModel: process.env.OPENAI_DEFAULT_MODEL || undefined,
+    defaultEmbeddingModel: process.env.EMBEDDING_MODEL || undefined,
+  });
+
   setProvider(new OpenAIProvider(
     process.env.OPENAI_API_KEY,
     process.env.OPENAI_BASE_URL || undefined,
@@ -35,6 +45,8 @@ app.use("/api/integrations", integrationRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
 app.use("/api/router-rules", routerRuleRoutes);
+app.use("/api/flow-canvas", flowCanvasRoutes);
+app.use("/api/usage", usageRoutes);
 
 startService(app, config);
 export { app };

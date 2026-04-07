@@ -7,6 +7,8 @@ import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
 import MessageFlowSection from "@/components/landing/MessageFlowSection";
+import SolutionsSection from "@/components/landing/SolutionsSection";
+import FeaturesSection from "@/components/landing/FeaturesSection";
 
 /* ───── Scroll Story: Platform Config ───── */
 
@@ -38,72 +40,6 @@ const STACKED_POSITIONS = [
 ];
 
 /* ───── Product Features Config ───── */
-
-const PRODUCT_FEATURES = [
-  {
-    key: "unifiedInbox",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M21 8V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-2" />
-        <path d="m7 8 5 4 5-4" />
-      </svg>
-    ),
-  },
-  {
-    key: "aiAgents",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M15.75 6a3.75 3.75 0 1 1-7.5 0 3.75 3.75 0 0 1 7.5 0ZM4.501 20.118a7.5 7.5 0 0 1 14.998 0A17.933 17.933 0 0 1 12 21.75c-2.676 0-5.216-.584-7.499-1.632Z" />
-      </svg>
-    ),
-  },
-  {
-    key: "aiCopilot",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M9.813 15.904 9 18.75l-.813-2.846a4.5 4.5 0 0 0-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 0 0 3.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 0 0 3.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 0 0-3.09 3.09Z" />
-        <path d="M18.259 8.715 18 9.75l-.259-1.035a3.375 3.375 0 0 0-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 0 0 2.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 0 0 2.455 2.456L21.75 6l-1.036.259a3.375 3.375 0 0 0-2.455 2.456Z" />
-      </svg>
-    ),
-  },
-  {
-    key: "smartBot",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M8.625 12a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H8.25m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0H12m4.125 0a.375.375 0 1 1-.75 0 .375.375 0 0 1 .75 0Zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 0 1-2.555-.337A5.972 5.972 0 0 1 5.41 20.97a5.969 5.969 0 0 1-.474-.065 4.48 4.48 0 0 0 .978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25Z" />
-      </svg>
-    ),
-  },
-  {
-    key: "analytics",
-    gradient: "from-primary-500/[0.08] to-primary-500/[0.04]",
-    iconColor: "text-primary-500",
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 0 1 3 19.875v-6.75ZM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V8.625ZM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 0 1-1.125-1.125V4.125Z" />
-      </svg>
-    ),
-  },
-  {
-    key: "voipCopilot",
-    gradient: "from-amber-500/[0.08] to-amber-500/[0.04]",
-    iconColor: "text-amber-500",
-    comingSoon: true,
-    icon: (
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-        <path d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 0 0 2.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 0 1-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 0 0-1.091-.852H4.5A2.25 2.25 0 0 0 2.25 4.5v2.25Z" />
-      </svg>
-    ),
-  },
-] as const;
 
 /* ───── ConversationItem (for chaos + stack phases) ───── */
 
@@ -1106,110 +1042,11 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
       {/* ───── How It Works: Message Flow Visualization ───── */}
       <MessageFlowSection t={t as (key: string) => string} isRtl={isRtl} />
 
-      {/* ───── Features: 2x3 Grid ───── */}
-      <section id="product-features" className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
-        <div className="max-w-[1240px] mx-auto">
-          <div className="text-center max-w-xl mx-auto mb-12 sm:mb-20">
-            <p className="text-[11px] font-medium text-primary-500 uppercase tracking-[0.2em] mb-4">
-              {t("landing.productFeatures.label")}
-            </p>
-            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
-              {t("landing.productFeatures.title")}
-            </h2>
-            <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed">
-              {t("landing.productFeatures.subtitle")}
-            </p>
-          </div>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-5">
-            {PRODUCT_FEATURES.map((feature) => (
-              <div
-                key={feature.key}
-                className={`bg-white rounded-2xl p-6 sm:p-7 hover:shadow-sm transition-shadow duration-200 group relative ${"comingSoon" in feature && feature.comingSoon ? "opacity-80" : ""}`}
-              >
-                {"comingSoon" in feature && feature.comingSoon && (
-                  <span className="absolute top-4 end-4 text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 rounded-full bg-amber-500/10 text-amber-600 border border-amber-500/15">
-                    {t("landing.productFeatures.comingSoon")}
-                  </span>
-                )}
-                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${feature.gradient} flex items-center justify-center mb-5 group-hover:scale-105 transition-transform duration-200`}>
-                  <span className={feature.iconColor}>{feature.icon}</span>
-                </div>
-                <h3 className="text-[15px] font-semibold text-gray-900 mb-2">
-                  {t(`landing.productFeatures.${feature.key}.title`)}
-                </h3>
-                <p className="text-[13px] sm:text-sm text-[#9a9a9a] leading-[1.7]">
-                  {t(`landing.productFeatures.${feature.key}.desc`)}
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
+      {/* ───── Features: Interactive Tabs ───── */}
+      <FeaturesSection t={t as (key: string) => string} isRtl={isRtl} />
 
-      {/* ───── Get Started: Zigzag ───── */}
-      <section id="get-started" className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-white">
-        <div className="max-w-[1240px] mx-auto">
-          {/* Header */}
-          <div className="text-center max-w-xl mx-auto mb-12 sm:mb-24">
-            <p className="text-[11px] font-medium text-primary-500 uppercase tracking-[0.2em] mb-4">
-              {t("landing.howItWorks.label")}
-            </p>
-            <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
-              {t("landing.howItWorks.title")}
-            </h2>
-            <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed">
-              {t("landing.howItWorks.subtitle")}
-            </p>
-          </div>
-
-          {/* Zigzag steps */}
-          <div className="flex flex-col gap-0">
-            {(["step1", "step2", "step3", "step4"] as const).map((step, i) => {
-              const reverseRow = i % 2 === 1;
-              return (
-                <div key={step}>
-                  {i > 0 && (
-                    <div className="flex justify-center py-6 sm:py-14">
-                      <div className="w-px h-10 sm:h-16 bg-gradient-to-b from-gray-200 to-transparent" />
-                    </div>
-                  )}
-                <div
-                  className={`flex flex-col lg:flex-row items-center gap-6 sm:gap-10 lg:gap-16 ${
-                    (reverseRow && !isRtl) || (!reverseRow && isRtl) ? "lg:flex-row-reverse" : ""
-                  }`}
-                >
-                  {/* Text */}
-                  <div className="flex-1 max-w-lg">
-                    <div className="flex items-center gap-3.5 mb-4 sm:mb-5">
-                      <div className="flex-shrink-0 w-8 h-8 rounded-full bg-primary-500/10 text-primary-500 flex items-center justify-center text-[13px] font-semibold">
-                        {i + 1}
-                      </div>
-                      <h3 className="text-lg sm:text-xl font-semibold tracking-[-0.02em] text-gray-900">
-                        {t(`landing.howItWorks.${step}.title`)}
-                      </h3>
-                    </div>
-                    <p className="text-[#9a9a9a] text-sm sm:text-[15px] leading-[1.75] ps-[46px]">
-                      {t(`landing.howItWorks.${step}.desc`)}
-                    </p>
-                  </div>
-
-                  {/* Visual */}
-                  <div className="flex-1 w-full max-w-md">
-                    <div className="rounded-2xl overflow-hidden shadow-sm">
-                      <img
-                        src={["/get_gifs/connect.gif", "/get_gifs/knowladge.gif", "/get_gifs/ai.gif", "/get_gifs/chat.gif"][i]}
-                        alt={t(`landing.howItWorks.${step}.title`) as string}
-                        className="w-full h-auto block"
-                      />
-                    </div>
-                  </div>
-                </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      </section>
+      {/* ───── Solutions for Every Team ───── */}
+      <SolutionsSection t={t as (key: string) => string} isRtl={isRtl} />
 
       {/* ───── FAQ ───── */}
       <section className="py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">

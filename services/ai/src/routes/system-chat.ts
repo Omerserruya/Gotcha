@@ -4,12 +4,10 @@ import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "../services/knowledge.service";
-import { logTokenUsage } from "../services/tokenlog.service";
-import OpenAI from "openai";
+import { generateResponse, getDefaultModel } from "../services/ai.service";
 import multer from "multer";
 
 const router = Router();
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 const CHAT_MODEL = process.env.OPENAI_DEFAULT_MODEL || "gpt-4o-mini";
 
 const upload = multer({
@@ -223,7 +221,7 @@ Answer questions based on the provided knowledge base context. Be accurate, conc
 If the knowledge base context does not contain relevant information to answer the question, say so honestly rather than making up an answer.
 ${knowledgeContext ? `\n${knowledgeContext}` : "\nNo knowledge base documents are available. Let the user know they can upload documents to get contextual answers."}`;
 
-    const messages: OpenAI.Chat.ChatCompletionMessageParam[] = [
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt },
     ];
 
@@ -237,25 +235,16 @@ ${knowledgeContext ? `\n${knowledgeContext}` : "\nNo knowledge base documents ar
 
     messages.push({ role: "user", content: question });
 
-    const completion = await openai.chat.completions.create({
+    const result = await generateResponse({
+      tenantId: req.tenantId!,
       model: CHAT_MODEL,
       messages,
       temperature: 0.3,
-      max_tokens: 1024,
+      maxTokens: 1024,
+      metadata: { type: "chat" },
     });
 
-    if (completion.usage) {
-      logTokenUsage({
-        tenantId: req.tenantId!,
-        type: "chat",
-        model: CHAT_MODEL,
-        promptTokens: completion.usage.prompt_tokens,
-        completionTokens: completion.usage.completion_tokens,
-        totalTokens: completion.usage.total_tokens,
-      });
-    }
-
-    const answer = completion.choices[0]?.message?.content || "I was unable to generate a response.";
+    const answer = result.content || "I was unable to generate a response.";
 
     const sources = chunks
       .filter((c) => c.score > 0.3)

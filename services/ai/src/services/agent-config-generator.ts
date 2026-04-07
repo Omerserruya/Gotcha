@@ -1,5 +1,17 @@
 import { prisma } from "@chatcenter/shared";
 
+interface PersonaTraits {
+  warmth?: string;
+  humor?: string;
+  [key: string]: string | undefined;
+}
+
+interface PersonaData {
+  gender?: "male" | "female" | "neutral";
+  traits?: PersonaTraits;
+  customAttributes?: Record<string, string>;
+}
+
 interface BusinessProfileData {
   organizationName: string;
   industry: string;
@@ -159,6 +171,26 @@ function generateBehavioralBlock(profile: BusinessProfileData, dept: DepartmentD
   };
 }
 
+function generatePersonaBlock(persona: PersonaData): {
+  genderInstruction: string | null;
+  warmthLevel: string | null;
+  humorLevel: string | null;
+  customAttributes: Record<string, string>;
+} {
+  const genderInstructionMap: Record<string, string> = {
+    male: "Use masculine grammatical forms when responding in gendered languages (e.g., Hebrew, Arabic)",
+    female: "Use feminine grammatical forms when responding in gendered languages (e.g., Hebrew, Arabic)",
+    neutral: "Use gender-neutral grammatical forms when responding in gendered languages (e.g., Hebrew, Arabic)",
+  };
+
+  return {
+    genderInstruction: persona.gender ? (genderInstructionMap[persona.gender] ?? null) : null,
+    warmthLevel: persona.traits?.warmth ?? null,
+    humorLevel: persona.traits?.humor ?? null,
+    customAttributes: persona.customAttributes ?? {},
+  };
+}
+
 const CORE_ENGINE_INSTRUCTIONS = `You are an AI-powered customer engagement copilot operating within the ChatCenter platform.
 Your role is to assist human agents by suggesting replies and providing context — never to send messages directly.
 Always follow the behavioral rules defined for your department.
@@ -236,11 +268,31 @@ function assembleBehavioralSection(behavioral: ReturnType<typeof generateBehavio
   return lines.join("\n");
 }
 
+function assemblePersonaSection(persona: ReturnType<typeof generatePersonaBlock>): string {
+  const lines = [`## Persona & Communication Style`];
+
+  if (persona.genderInstruction) {
+    lines.push(`- Gender identity: ${persona.genderInstruction}`);
+  }
+  if (persona.warmthLevel) {
+    lines.push(`- Warmth level: ${persona.warmthLevel}`);
+  }
+  if (persona.humorLevel) {
+    lines.push(`- Humor level: ${persona.humorLevel}`);
+  }
+  for (const [key, value] of Object.entries(persona.customAttributes)) {
+    lines.push(`- ${key}: ${value}`);
+  }
+
+  return lines.join("\n");
+}
+
 function assembleSystemPrompt(config: {
   identity: ReturnType<typeof generateIdentityBlock>;
   goals: ReturnType<typeof generateGoalsBlock>;
   tone: ReturnType<typeof generateToneBlock>;
   behavioral: ReturnType<typeof generateBehavioralBlock>;
+  persona?: ReturnType<typeof generatePersonaBlock>;
 }): string {
   const sections = [
     CORE_ENGINE_INSTRUCTIONS,
@@ -253,18 +305,33 @@ function assembleSystemPrompt(config: {
     "",
     assembleBehavioralSection(config.behavioral),
   ];
+
+  if (config.persona) {
+    const personaSection = assemblePersonaSection(config.persona);
+    const hasContent =
+      config.persona.genderInstruction ||
+      config.persona.warmthLevel ||
+      config.persona.humorLevel ||
+      Object.keys(config.persona.customAttributes).length > 0;
+    if (hasContent) {
+      sections.push("", personaSection);
+    }
+  }
+
   return sections.join("\n");
 }
 
 /**
- * Generates a complete structured copilot configuration for a department
- * based on the tenant's business profile and department settings.
- * Writes only to DepartmentCopilotConfig.
+ * Generates a structured AI Employee config for a department.
+ * Creates or updates an AIAgent record and links it to the department via a RouterRule.
+ * If an existing AIAgent is provided via agentId, updates that agent instead.
  */
 export async function generateAgentConfig(
   tenantId: string,
   departmentId: string,
-): Promise<void> {
+  personaOverride?: PersonaData,
+  agentId?: string,
+): Promise<string> {
   const [profile, department] = await Promise.all([
     prisma.businessProfile.findUnique({ where: { tenantId } }),
     prisma.department.findUnique({ where: { id: departmentId } }),
@@ -292,44 +359,77 @@ export async function generateAgentConfig(
     autoCloseMinutes: department.autoCloseMinutes,
   };
 
+  const personaBlock = personaOverride ? generatePersonaBlock(personaOverride) : undefined;
+
   const config = {
     identity: generateIdentityBlock(profileData, deptData),
     goals: generateGoalsBlock(profileData, deptData),
     tone: generateToneBlock(profileData, deptData),
     behavioral: generateBehavioralBlock(profileData, deptData),
+    persona: personaBlock,
   };
 
   const systemPrompt = assembleSystemPrompt(config);
 
-  await prisma.departmentCopilotConfig.upsert({
-    where: { departmentId },
-    update: {
-      systemPrompt,
-      identity: config.identity,
-      goals: config.goals,
-      tone: config.tone,
-      behavioral: config.behavioral,
-      isActive: true,
-    },
-    create: {
-      tenantId,
-      departmentId,
-      systemPrompt,
-      identity: config.identity,
-      goals: config.goals,
-      tone: config.tone,
-      behavioral: config.behavioral,
-      isActive: true,
-      model: "gpt-4o-mini",
-      provider: "openai",
-      temperature: 0.7,
-      maxTokens: 1024,
-    },
-  });
+  // Create or update the AIAgent record
+  const agentData = {
+    systemPrompt,
+    identity: JSON.parse(JSON.stringify(config.identity)),
+    goals: JSON.parse(JSON.stringify(config.goals)),
+    toneConfig: JSON.parse(JSON.stringify(config.tone)),
+    behavioral: JSON.parse(JSON.stringify(config.behavioral)),
+    persona: personaOverride ? JSON.parse(JSON.stringify(personaOverride)) : undefined,
+    status: "ACTIVE" as const,
+    model: "gpt-4o-mini",
+    provider: "openai",
+    temperature: 0.7,
+    maxTokens: 1024,
+  };
+
+  let agent;
+  if (agentId) {
+    agent = await prisma.aIAgent.update({
+      where: { id: agentId },
+      data: agentData,
+    });
+  } else {
+    agent = await prisma.aIAgent.create({
+      data: {
+        tenantId,
+        name: `${department.name} AI Employee`,
+        role: "customer_support",
+        description: `AI Employee for ${department.name} department`,
+        mode: "COPILOT",
+        ...agentData,
+      },
+    });
+
+    // Create router rule to link agent to department
+    const maxPriority = await prisma.routerRule.aggregate({
+      where: { tenantId },
+      _max: { priority: true },
+    });
+
+    await prisma.routerRule.create({
+      data: {
+        tenantId,
+        name: `${department.name} AI Employee`,
+        priority: (maxPriority._max.priority || 0) + 1,
+        conditions: [{ field: "department", operator: "equals", value: departmentId }],
+        logic: "AND",
+        routeType: "AI_AGENT",
+        routeTarget: departmentId,
+        aiAgentId: agent.id,
+        enabled: true,
+      },
+    });
+  }
+
+  return agent.id;
 }
 
 /**
- * Generates copilot configs for all departments of a tenant.
+ * Generates AI Employee configs for all departments of a tenant.
  */
 export async function generateAllAgentConfigs(tenantId: string): Promise<void> {
   const departments = await prisma.department.findMany({

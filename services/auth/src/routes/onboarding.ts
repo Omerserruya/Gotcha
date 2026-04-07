@@ -132,13 +132,28 @@ ${deptDetails}`;
   messages.push({ role: "user", content: message });
 
   try {
+    const model = process.env.ONBOARDING_CHAT_MODEL || "gpt-4o-mini";
     const response = await client.chat.completions.create({
-      model: process.env.ONBOARDING_CHAT_MODEL || "gpt-4o-mini",
+      model,
       temperature: 0.7,
       max_tokens: 512,
       response_format: { type: "json_object" },
       messages,
     });
+
+    // Track usage + audit (fire-and-forget, never block onboarding)
+    if (response.usage) {
+      const totalTokens = response.usage.total_tokens;
+      prisma.usageLog.create({
+        data: {
+          tenantId: businessContext.organizationName, // best available identifier
+          type: "ai_tokens",
+          quantity: totalTokens,
+          tokensEquivalent: totalTokens, // actual tokens from model
+          metadata: { model, type: "onboarding" },
+        },
+      }).catch((err: any) => console.error("[Onboarding] Usage tracking failed:", err.message));
+    }
 
     const content = response.choices[0]?.message?.content;
     if (!content) {
@@ -262,9 +277,10 @@ router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response):
 
     const departments = await prisma.department.findMany({
       where: { tenantId: req.tenantId! },
-      include: {
-        copilotConfig: { select: { id: true } },
-      },
+    });
+
+    const aiAgentCount = await prisma.aIAgent.count({
+      where: { tenantId: req.tenantId! },
     });
 
     res.json({
@@ -273,7 +289,7 @@ router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response):
         onboarding: onboarding || { currentStep: "BUSINESS_PROFILE", completedAt: null },
         businessProfileCompleted: !!businessProfile,
         departmentsConfigured: departments.length,
-        departmentsWithCopilotConfig: departments.filter((d) => d.copilotConfig).length,
+        aiAgentsConfigured: aiAgentCount,
       },
     });
   } catch (err) {
@@ -399,9 +415,6 @@ router.post("/departments", requireRole("ADMIN"), validate(departmentConfigSchem
     // Create departments in a transaction
     const departments = await prisma.$transaction(async (tx) => {
       // Remove previously created onboarding departments (if re-submitting)
-      await tx.departmentCopilotConfig.deleteMany({
-        where: { department: { tenantId: req.tenantId! } },
-      });
       await tx.department.deleteMany({
         where: { tenantId: req.tenantId! },
       });
@@ -524,13 +537,12 @@ router.post("/generate-configs", requireRole("ADMIN"), async (req: Request, res:
       return;
     }
 
-    // Generate agent configs via AI service (this also populates DepartmentCopilotConfig)
+    // Generate agent configs via AI service (populates AIAgent records)
     await callAIGenerateConfigs(req.tenantId!, req.headers.authorization!);
 
-    // Fetch the generated configs to return
-    const configs = await prisma.departmentCopilotConfig.findMany({
-      where: { department: { tenantId: req.tenantId! } },
-      include: { department: { select: { name: true } } },
+    // Fetch the generated AI agents to return
+    const agents = await prisma.aIAgent.findMany({
+      where: { tenantId: req.tenantId! },
     });
 
     // Update onboarding step
@@ -542,15 +554,17 @@ router.post("/generate-configs", requireRole("ADMIN"), async (req: Request, res:
 
     res.json({
       data: {
-        departmentsConfigured: configs.length,
-        configs: configs.map(c => ({
-          departmentId: c.departmentId,
-          departmentName: c.department.name,
-          systemPrompt: c.systemPrompt.substring(0, 200) + "...",
-          hasIdentity: !!c.identity,
-          hasGoals: !!c.goals,
-          hasTone: !!c.tone,
-          hasBehavioral: !!c.behavioral,
+        agentsConfigured: agents.length,
+        agents: agents.map(a => ({
+          id: a.id,
+          name: a.name,
+          role: a.role,
+          status: a.status,
+          systemPrompt: a.systemPrompt.substring(0, 200) + "...",
+          hasIdentity: !!a.identity,
+          hasGoals: !!a.goals,
+          hasTone: !!a.toneConfig,
+          hasBehavioral: !!a.behavioral,
         })),
       },
     });
@@ -620,38 +634,14 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
     // ── Generate agent configs for all departments via AI service ──
     await callAIGenerateConfigs(req.tenantId!, req.headers.authorization!);
 
-    // ── Verify all departments have copilot configs ──
-    const configCount = await prisma.departmentCopilotConfig.count({
-      where: { department: { tenantId: req.tenantId! } },
+    // ── Verify AI agents were generated ──
+    const agentCount = await prisma.aIAgent.count({
+      where: { tenantId: req.tenantId! },
     });
-    if (configCount < departments.length) {
-      res.status(500).json({ error: "Failed to generate copilot configurations for all departments" });
+    if (agentCount === 0) {
+      res.status(500).json({ error: "Failed to generate AI agent configurations" });
       return;
     }
-
-    // ── Create CopilotConfig if not exists ──
-    // (Tenant-level settings like SLA, auto-greeting, business hours, idle automation
-    //  are already saved to Redis during the business profile step via settings APIs)
-    await prisma.copilotConfig.upsert({
-      where: { tenantId: req.tenantId! },
-      update: {},
-      create: {
-        tenantId: req.tenantId!,
-        systemPrompt: "",
-        rules: [],
-        tools: [
-          { id: "kb_search", name: "Knowledge Base Search", enabled: true },
-          { id: "conversation_history", name: "Conversation History", enabled: true },
-          { id: "customer_lookup", name: "Customer Lookup", enabled: false },
-          { id: "order_status", name: "Order Status", enabled: false },
-        ],
-        model: "gpt-4o-mini",
-        provider: "openai",
-        temperature: 0.7,
-        maxTokens: 1024,
-        isActive: true,
-      },
-    });
 
     // ── Activate tenant ──
     await prisma.$transaction([
@@ -675,7 +665,7 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
         status: "ACTIVE",
         message: "Tenant onboarding completed successfully",
         departmentsActivated: departments.length,
-        copilotConfigsGenerated: configCount,
+        aiAgentsConfigured: agentCount,
       },
     });
   } catch (err) {
@@ -704,9 +694,6 @@ router.get("/departments", requireRole("ADMIN"), async (req: Request, res: Respo
   try {
     const departments = await prisma.department.findMany({
       where: { tenantId: req.tenantId! },
-      include: {
-        copilotConfig: { select: { id: true, createdAt: true } },
-      },
       orderBy: { createdAt: "asc" },
     });
     res.json({ data: departments });
@@ -729,15 +716,22 @@ router.get("/agent-config/:departmentId", requireRole("ADMIN"), async (req: Requ
       return;
     }
 
-    const config = await prisma.departmentCopilotConfig.findUnique({
-      where: { departmentId },
+    // Find AI agent assigned to this department via router rules
+    const rule = await prisma.routerRule.findFirst({
+      where: { tenantId: req.tenantId!, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, routeTarget: departmentId },
+      orderBy: { priority: "asc" },
     });
-    if (!config) {
-      res.status(404).json({ error: "Copilot config not yet generated for this department" });
+    if (!rule?.aiAgentId) {
+      res.status(404).json({ error: "No AI Employee assigned to this department" });
+      return;
+    }
+    const agent = await prisma.aIAgent.findUnique({ where: { id: rule.aiAgentId } });
+    if (!agent) {
+      res.status(404).json({ error: "AI Employee not found" });
       return;
     }
 
-    res.json({ data: config });
+    res.json({ data: agent });
   } catch (err) {
     console.error("Get copilot config error:", err);
     res.status(500).json({ error: "Failed to get copilot config" });

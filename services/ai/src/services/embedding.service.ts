@@ -1,11 +1,8 @@
-import OpenAI from "openai";
 import { prisma } from "@chatcenter/shared";
 import { upsertChunks, deleteByDocumentId } from "./qdrant.service";
-import { logTokenUsage } from "./tokenlog.service";
+import { generateEmbedding as aiGenerateEmbedding } from "./ai.service";
 import { randomUUID } from "crypto";
 
-const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-const EMBEDDING_MODEL = process.env.EMBEDDING_MODEL || "text-embedding-3-small";
 const CHUNK_SIZE = parseInt(process.env.RAG_CHUNK_SIZE || "500", 10);
 const CHUNK_OVERLAP = parseInt(process.env.RAG_CHUNK_OVERLAP || "50", 10);
 
@@ -13,23 +10,13 @@ export async function generateEmbedding(
   text: string,
   context?: { tenantId: string; documentId?: string },
 ): Promise<number[]> {
-  const response = await openai.embeddings.create({
-    model: EMBEDDING_MODEL,
-    input: text.replace(/\n/g, " ").trim(),
+  const result = await aiGenerateEmbedding({
+    tenantId: context?.tenantId || "",
+    input: text,
+    metadata: { documentId: context?.documentId },
   });
 
-  if (response.usage && context?.tenantId) {
-    logTokenUsage({
-      tenantId: context.tenantId,
-      type: "embedding",
-      model: EMBEDDING_MODEL,
-      promptTokens: response.usage.prompt_tokens,
-      totalTokens: response.usage.total_tokens,
-      documentId: context.documentId,
-    });
-  }
-
-  return response.data[0].embedding;
+  return result.embedding;
 }
 
 export function chunkDocument(text: string, chunkSize = CHUNK_SIZE, overlap = CHUNK_OVERLAP): string[] {

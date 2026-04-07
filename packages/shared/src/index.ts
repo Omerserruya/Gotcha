@@ -6,6 +6,8 @@ export type {
   IncomingMessageJob,
   OutgoingMessageJob,
   AnalyticsJob,
+  BroadcastJob,
+  ScheduledMessageJob,
 } from "./lib/queue";
 
 // Channel types & adapters
@@ -53,7 +55,10 @@ export {
   analyticsQueue,
   channelHealthQueue,
   idleConversationQueue,
+  broadcastQueue,
+  scheduledMessageQueue,
   createWorker,
+  CHANNEL_RATE_LIMITS,
 } from "./lib/queue";
 export { publishEvent, subscribeToEvents, closeEventBus } from "./lib/event-bus";
 export { createServiceApp, startService } from "./lib/service-app";

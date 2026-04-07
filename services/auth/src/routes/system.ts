@@ -356,12 +356,9 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Re
       prisma.notificationLog.deleteMany({ where: { tenantId } }),
       prisma.message.deleteMany({ where: { tenantId } }),
       prisma.conversation.deleteMany({ where: { tenantId } }),
-      prisma.departmentCopilotConfig.deleteMany({ where: { department: { tenantId } } }),
       prisma.departmentMember.deleteMany({ where: { department: { tenantId } } }),
       prisma.department.deleteMany({ where: { tenantId } }),
       prisma.channelAccount.deleteMany({ where: { tenantId } }),
-      prisma.copilotConfig.deleteMany({ where: { tenantId } }),
-      prisma.firstTakeCareConfig.deleteMany({ where: { tenantId } }),
       prisma.businessProfile.deleteMany({ where: { tenantId } }),
       prisma.tenantOnboarding.deleteMany({ where: { tenantId } }),
       prisma.chatbotFlow.deleteMany({ where: { tenantId } }),
@@ -507,15 +504,6 @@ router.patch("/tenants/:id/bot-config", authenticate, requireSystemAdmin(), vali
       select: { id: true, botEnabled: true, botType: true, firstTakeCareEnabled: true },
     });
 
-    // If enabling AUTONOMOUS_AI, auto-create FirstTakeCareConfig if missing
-    if (botEnabled && botType === "AUTONOMOUS_AI") {
-      await prisma.firstTakeCareConfig.upsert({
-        where: { tenantId: req.params.id as string },
-        update: {},
-        create: { tenantId: req.params.id as string },
-      });
-    }
-
     res.json({ data: updated });
   } catch (err) {
     console.error("Update bot config error:", err);
@@ -544,15 +532,6 @@ router.patch("/tenants/:id/first-take-care", authenticate, requireSystemAdmin(),
       data: { firstTakeCareEnabled: enabled },
       select: { id: true, firstTakeCareEnabled: true },
     });
-
-    // If enabling for the first time, create a default FirstTakeCareConfig if none exists
-    if (enabled) {
-      await prisma.firstTakeCareConfig.upsert({
-        where: { tenantId: req.params.id as string },
-        update: {},
-        create: { tenantId: req.params.id as string },
-      });
-    }
 
     res.json({ data: { enabled: updated.firstTakeCareEnabled } });
   } catch (err) {
@@ -623,6 +602,84 @@ router.post("/seed", validate(seedSchema), async (req: Request, res: Response): 
   } catch (err) {
     console.error("Seed system admin error:", err);
     res.status(500).json({ error: "Failed to seed system admin" });
+  }
+});
+
+// ─── System Admin: Usage Stats (all tenants) ───────────────
+
+router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    // Aggregate by type across all tenants
+    const byType = await prisma.usageLog.groupBy({
+      by: ["type"],
+      where: { createdAt: { gte: since } },
+      _sum: { quantity: true },
+      _count: { id: true },
+    });
+
+    const stats: Record<string, { total: number; count: number }> = {};
+    for (const row of byType) {
+      stats[row.type] = { total: row._sum.quantity || 0, count: row._count.id };
+    }
+
+    // Total events
+    const totalEvents = await prisma.usageLog.count({ where: { createdAt: { gte: since } } });
+
+    res.json({ data: { stats, totalEvents, period: days } });
+  } catch (err) {
+    console.error("System usage stats error:", err);
+    res.status(500).json({ error: "Failed to get system usage stats" });
+  }
+});
+
+// ─── System Admin: Usage by Tenant ──────────────────────────
+
+router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    const byTenant = await prisma.usageLog.groupBy({
+      by: ["tenantId", "type"],
+      where: { createdAt: { gte: since } },
+      _sum: { quantity: true },
+      _count: { id: true },
+    });
+
+    // Get tenant names
+    const tenantIds = [...new Set(byTenant.map((r) => r.tenantId))];
+    const tenants = await prisma.tenant.findMany({
+      where: { id: { in: tenantIds } },
+      select: { id: true, name: true, slug: true },
+    });
+    const tenantMap = new Map(tenants.map((t) => [t.id, t]));
+
+    // Group by tenant
+    const grouped: Record<string, { tenant: any; usage: Record<string, { total: number; count: number }> }> = {};
+    for (const row of byTenant) {
+      if (!grouped[row.tenantId]) {
+        grouped[row.tenantId] = {
+          tenant: tenantMap.get(row.tenantId) || { id: row.tenantId, name: "Unknown", slug: "" },
+          usage: {},
+        };
+      }
+      grouped[row.tenantId].usage[row.type] = { total: row._sum.quantity || 0, count: row._count.id };
+    }
+
+    // Sort by total usage descending
+    const data = Object.values(grouped).sort((a, b) => {
+      const aTotal = Object.values(a.usage).reduce((sum, u) => sum + u.total, 0);
+      const bTotal = Object.values(b.usage).reduce((sum, u) => sum + u.total, 0);
+      return bTotal - aTotal;
+    });
+
+    res.json({ data });
+  } catch (err) {
+    console.error("System usage by tenant error:", err);
+    res.status(500).json({ error: "Failed to get usage by tenant" });
   }
 });
 

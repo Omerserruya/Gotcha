@@ -6,8 +6,10 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getConversations, getConversation, getConversationScore } from "@/lib/api";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
+import { CustomerAvatar } from "@/components/conversations/CustomerAvatar";
 import { ConversationReplay } from "@/components/conversations/ConversationReplay";
 import { format, formatDistanceToNow } from "date-fns";
+import Image from "next/image";
 import clsx from "clsx";
 
 interface CustomerGroup {
@@ -201,45 +203,27 @@ export default function HistoryPage() {
           </div>
 
           {/* Search & Filters */}
-          <div className="p-3 border-b border-gray-100 space-y-2">
-            <div className="relative">
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => { setSearch(e.target.value); setPage(1); }}
-                placeholder={t("history.searchPlaceholder")}
-                className="w-full pl-9 pr-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
-              />
-              <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
-            </div>
-            <div className="flex gap-1.5">
-              {["ALL", "WHATSAPP", "MESSENGER", "INSTAGRAM", "GMAIL", "OUTLOOK", "SLACK"].map((ch) => (
-                <button
-                  key={ch}
-                  onClick={() => { setChannelFilter(ch); setPage(1); }}
-                  className={clsx(
-                    "text-[10px] px-2.5 py-1 rounded-lg font-medium transition",
-                    channelFilter === ch
-                      ? ch === "WHATSAPP" ? "bg-green-100 text-green-700"
-                        : ch === "MESSENGER" ? "bg-blue-100 text-blue-700"
-                        : ch === "INSTAGRAM" ? "bg-pink-100 text-pink-700"
-                        : ch === "GMAIL" ? "bg-red-100 text-red-700"
-                        : ch === "OUTLOOK" ? "bg-blue-100 text-blue-700"
-                        : ch === "SLACK" ? "bg-purple-100 text-purple-700"
-                        : "bg-primary-100 text-primary-700"
-                      : "bg-gray-100 text-gray-500 hover:bg-gray-200"
-                  )}
-                >
-                  {ch === "ALL" ? t("conversations.channelAll") : t(`conversations.channel${ch.charAt(0) + ch.slice(1).toLowerCase()}`)}
-                </button>
-              ))}
-              <div className="ms-auto">
+          <div className="p-3">
+            <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-3">
+              {/* Search + status */}
+              <div className="flex items-center gap-2">
+                <div className="relative flex-1">
+                  <svg className="w-4 h-4 absolute start-3 top-1/2 -translate-y-1/2 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                  </svg>
+                  <input
+                    type="text"
+                    value={search}
+                    onChange={(e) => { setSearch(e.target.value); setPage(1); }}
+                    placeholder={t("history.searchPlaceholder")}
+                    className="w-full ps-9 pe-4 py-2.5 text-base md:text-sm bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
+                  />
+                </div>
+                {/* Status filter */}
                 <select
                   value={statusFilter}
                   onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
-                  className="text-[10px] px-2 py-1 bg-gray-100 border-0 rounded-lg text-gray-600 font-medium focus:ring-2 focus:ring-primary-200 outline-none"
+                  className="h-10 px-3 bg-gray-50/80 ring-1 ring-gray-200/60 border-0 rounded-xl text-xs text-gray-600 font-medium focus:ring-2 focus:ring-primary-200 outline-none transition cursor-pointer"
                 >
                   <option value="ALL">{t("conversations.filterAll")}</option>
                   <option value="OPEN">{t("conversations.filterOpen")}</option>
@@ -247,40 +231,80 @@ export default function HistoryPage() {
                   <option value="CLOSED">{t("conversations.filterClosed")}</option>
                 </select>
               </div>
+
+              {/* Channel icon filters */}
+              <div className="flex items-center gap-1 mt-2.5">
+                <button
+                  onClick={() => { setChannelFilter("ALL"); setPage(1); }}
+                  className={clsx(
+                    "flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg text-[11px] font-medium transition-all",
+                    channelFilter === "ALL"
+                      ? "bg-primary-50 text-primary-600 ring-1 ring-primary-200"
+                      : "text-gray-400 hover:bg-gray-50 hover:text-gray-600"
+                  )}
+                >
+                  {t("conversations.filterAll")}
+                </button>
+                {[
+                  { value: "WHATSAPP", logo: "/icons/wa.png", label: "WhatsApp" },
+                  { value: "MESSENGER", logo: "/icons/msn.png", label: "Messenger" },
+                  { value: "INSTAGRAM", logo: "/icons/ins.png", label: "Instagram" },
+                  { value: "GMAIL", logo: "/icons/gm.png", label: "Gmail" },
+                  { value: "OUTLOOK", logo: "/icons/ol.png", label: "Outlook" },
+                  { value: "SLACK", logo: "/icons/slk.png", label: "Slack" },
+                ].map((ch) => (
+                  <button
+                    key={ch.value}
+                    onClick={() => { setChannelFilter(channelFilter === ch.value ? "ALL" : ch.value); setPage(1); }}
+                    title={ch.label}
+                    className={clsx(
+                      "w-8 h-8 rounded-lg flex items-center justify-center shrink-0 transition-all",
+                      channelFilter === ch.value
+                        ? "bg-primary-50 ring-1 ring-primary-200 shadow-sm"
+                        : "hover:bg-gray-100 opacity-50 hover:opacity-100"
+                    )}
+                  >
+                    <Image src={ch.logo} alt={ch.label} width={18} height={18} className="rounded-sm" />
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
 
           {/* Customer list */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto px-3 pt-1 pb-3 space-y-2">
             {loading ? (
               <div className="flex items-center justify-center py-12">
                 <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
               </div>
             ) : customerGroups.length === 0 ? (
               <div className="text-center py-12">
+                <svg className="w-12 h-12 mx-auto mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
                 <p className="text-sm text-gray-400">{t("common.noResults")}</p>
               </div>
             ) : (
-              <div>
+              <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
                 {customerGroups.map((group) => (
                   <button
                     key={group.key}
                     onClick={() => setSelectedCustomer(group.key)}
                     className={clsx(
-                      "w-full text-start p-3 border-b border-gray-50 transition hover:bg-gray-50",
-                      selectedCustomer === group.key && "bg-primary-50/50 border-s-2 border-s-primary-500"
+                      "w-full text-start px-4 py-3 hover:bg-gray-50/80 transition-colors border-b border-gray-50 last:border-b-0",
+                      selectedCustomer === group.key && "bg-primary-50/60"
                     )}
                   >
                     <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center shrink-0">
-                        <span className="text-sm font-bold text-primary-600">
-                          {group.name.charAt(0).toUpperCase()}
-                        </span>
-                      </div>
+                      <CustomerAvatar
+                        name={group.name}
+                        avatarUrl={group.conversations[0]?.customerAvatarUrl}
+                        channel={group.channel}
+                        size="md"
+                      />
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
-                          <ChannelBadge channel={group.channel} size="sm" />
-                          <span className="text-sm font-medium text-gray-900 truncate">{group.name}</span>
+                          <span className="text-sm font-semibold text-gray-900 truncate">{group.name}</span>
                         </div>
                         <p className="text-xs text-gray-400 truncate">{group.lastMessageBody || t("common.noResults")}</p>
                         <div className="flex items-center gap-2 mt-1">
@@ -356,14 +380,14 @@ export default function HistoryPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
                   </svg>
                 </button>
-                <div className="w-10 h-10 bg-gradient-to-br from-primary-100 to-primary-200 rounded-xl flex items-center justify-center shrink-0">
-                  <span className="text-sm font-bold text-primary-600">
-                    {selectedGroup?.name.charAt(0).toUpperCase()}
-                  </span>
-                </div>
+                <CustomerAvatar
+                  name={selectedGroup?.name}
+                  avatarUrl={selectedGroup?.conversations[0]?.customerAvatarUrl}
+                  channel={selectedGroup?.channel}
+                  size="md"
+                />
                 <div className="flex-1 min-w-0">
                   <div className="flex items-center gap-2">
-                    <ChannelBadge channel={selectedGroup?.channel} size="md" showLabel />
                     <p className="font-semibold text-sm text-gray-900">{selectedGroup?.name}</p>
                   </div>
                   <p className="text-xs text-gray-400">

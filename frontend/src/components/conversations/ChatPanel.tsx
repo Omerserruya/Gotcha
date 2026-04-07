@@ -3,6 +3,7 @@
 import { useState, useEffect, useRef, useCallback, FormEvent, DragEvent, ChangeEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import ConfirmModal from "@/components/ConfirmModal";
 import {
   getConversation,
   sendMessage,
@@ -19,6 +20,7 @@ import { getSocket } from "@/lib/socket";
 import { format } from "date-fns";
 import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
+import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
 import { HistoryPanel } from "./HistoryPanel";
 
@@ -43,8 +45,11 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
+  const [topSuggestion, setTopSuggestion] = useState<{ text: string; label: string; confidence: number } | null>(null);
+  const [popupDismissed, setPopupDismissed] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const repliesRef = useRef<HTMLDivElement>(null);
 
   // Notify AppLayout to auto-collapse sidebar when panels open
   useEffect(() => {
@@ -70,6 +75,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   useEffect(() => {
     fetchConversation();
   }, [fetchConversation]);
+
+  // Auto-open copilot when entering a conversation where last message is inbound
+  const hasAutoOpenedRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (messages.length > 0 && hasAutoOpenedRef.current !== conversationId) {
+      hasAutoOpenedRef.current = conversationId;
+      const lastMsg = messages[messages.length - 1];
+      if (lastMsg?.direction === "INBOUND") {
+        setCopilotOpen(true);
+      }
+    }
+  }, [messages, conversationId]);
 
   // Mark conversation as read (for unread indicator)
   useEffect(() => {
@@ -212,13 +229,24 @@ export function ChatPanel({ conversationId, onBack }: Props) {
     }
   }
 
-  async function handleClose() {
+  const [showCloseConfirm, setShowCloseConfirm] = useState(false);
+  const [closeLoading, setCloseLoading] = useState(false);
+
+  function handleClose() {
+    setShowCloseConfirm(true);
+  }
+
+  async function confirmClose() {
     if (!token) return;
+    setCloseLoading(true);
     try {
       await closeConversation(token, conversationId);
+      setShowCloseConfirm(false);
       fetchConversation();
     } catch (err: any) {
       alert(err.message);
+    } finally {
+      setCloseLoading(false);
     }
   }
 
@@ -279,18 +307,17 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           </button>
 
           {/* Customer info with channel badge */}
-          <div className="w-8 h-8 md:w-10 md:h-10 bg-gray-100 rounded-xl flex items-center justify-center shrink-0">
-            <span className="text-sm font-bold text-gray-600">
-              {(conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "?").charAt(0).toUpperCase()}
-            </span>
-          </div>
+          <CustomerAvatar
+            name={conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone}
+            avatarUrl={conversation?.customerAvatarUrl}
+            channel={conversation?.channel}
+            size="md"
+          />
           <div className="flex-1 min-w-0">
             <div className="flex items-center gap-1.5 md:gap-2">
               <p className="font-semibold text-xs md:text-sm text-gray-900 truncate">
                 {conversation?.customerName || conversation?.customerExternalId || conversation?.customerPhone || "..."}
               </p>
-              <span className="hidden sm:inline"><ChannelBadge channel={conversation?.channel} size="md" showLabel /></span>
-              <span className="sm:hidden"><ChannelBadge channel={conversation?.channel} size="sm" /></span>
             </div>
             <p className="text-[10px] md:text-xs text-gray-400 truncate">{conversation?.customerExternalId || conversation?.customerPhone}</p>
           </div>
@@ -436,7 +463,55 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
         {/* Input area */}
         {canSend ? (
-          <div className="px-2 md:px-4 pb-3 md:pb-4 pt-2 bg-[var(--bg-chat)]">
+          <div className="px-2 md:px-4 pb-3 md:pb-4 pt-2 bg-[var(--bg-chat)] relative">
+            {/* Smart AI Suggestion Popup — floating overlay */}
+            {copilotOpen && topSuggestion && topSuggestion.confidence > 85 && !popupDismissed && (
+              <div className="absolute bottom-full left-4 right-4 md:right-auto md:left-4 md:w-[420px] mb-2 z-20 animate-fade-in-up">
+                <div className="rounded-2xl p-[1px] bg-gradient-to-br from-violet-500/20 via-purple-500/15 to-indigo-500/20 shadow-2xl shadow-violet-300/30">
+                  <div className="rounded-[15px] bg-white/5 backdrop-blur-xl border border-white/10 px-3.5 py-3">
+                    {/* Header: title + All Suggestions */}
+                    <div className="flex items-center justify-between mb-2">
+                      <div className="flex items-center gap-1.5">
+                        <div className="w-5 h-5 rounded-md bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                          <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                          </svg>
+                        </div>
+                        <span className="text-[11px] font-bold text-violet-700 uppercase tracking-wider">AI Recommendation</span>
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (!copilotOpen) setCopilotOpen(true);
+                          setTimeout(() => repliesRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 100);
+                        }}
+                        className="text-[10px] font-medium text-violet-400 hover:text-violet-600 transition"
+                      >
+                        All suggestions
+                      </button>
+                    </div>
+
+                    {/* Suggestion body */}
+                    <p className="text-[12.5px] text-gray-700 leading-relaxed mb-3">{topSuggestion.text}</p>
+
+                    {/* Footer: dismiss + apply */}
+                    <div className="flex items-center justify-between">
+                      <button
+                        onClick={() => setPopupDismissed(true)}
+                        className="text-[10px] font-medium text-gray-400 hover:text-gray-600 transition"
+                      >
+                        Dismiss
+                      </button>
+                      <button
+                        onClick={() => { setInputText(topSuggestion.text); setPopupDismissed(true); }}
+                        className="px-3.5 py-1.5 text-[11px] font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-lg hover:from-violet-600 hover:to-purple-700 transition-all shadow-sm shadow-violet-300/40"
+                      >
+                        Apply to input
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            )}
             {/* File preview strip */}
             {attachedFiles.length > 0 && (
               <div className="flex gap-2 mb-2 overflow-x-auto pt-2 pb-1">
@@ -542,8 +617,22 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           onInsertReply={(text) => setInputText(text)}
           onClose={() => setCopilotOpen(false)}
           onAiLoadingChange={setAiGenerating}
+          onTopSuggestion={(s) => { setTopSuggestion((prev) => { if (s?.text !== prev?.text) setPopupDismissed(false); return s; }); }}
+          repliesRef={repliesRef}
         />
       )}
+
+      {/* Close confirmation modal */}
+      <ConfirmModal
+        isOpen={showCloseConfirm}
+        title={t("conversations.closeConfirmTitle")}
+        message={t("conversations.closeConfirmMessage")}
+        confirmText={t("conversations.closeConfirmButton")}
+        danger
+        loading={closeLoading}
+        onConfirm={confirmClose}
+        onCancel={() => setShowCloseConfirm(false)}
+      />
 
       {/* Transfer dialog */}
       {showTransfer && (

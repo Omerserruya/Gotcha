@@ -12,6 +12,38 @@ interface SendContext {
   recipientId: string;
 }
 
+/**
+ * Resolve the AI Employee config for a conversation.
+ * Priority: department-assigned AI agent → default tenant AI agent → any active agent.
+ */
+async function resolveAIAgent(tenantId: string, departmentId?: string | null) {
+  // 1. Department-specific AI agent
+  if (departmentId) {
+    const rule = await prisma.routerRule.findFirst({
+      where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, routeTarget: departmentId },
+      orderBy: { priority: "asc" },
+    });
+    if (rule?.aiAgentId) {
+      const agent = await prisma.aIAgent.findUnique({ where: { id: rule.aiAgentId } });
+      if (agent && agent.status !== "PAUSED") return agent;
+    }
+  }
+  // 2. Default tenant AI agent
+  const defaultRule = await prisma.routerRule.findFirst({
+    where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, isDefault: true },
+    orderBy: { priority: "asc" },
+  });
+  if (defaultRule?.aiAgentId) {
+    const agent = await prisma.aIAgent.findUnique({ where: { id: defaultRule.aiAgentId } });
+    if (agent && agent.status !== "PAUSED") return agent;
+  }
+  // 3. Any active AI agent for this tenant
+  return prisma.aIAgent.findFirst({
+    where: { tenantId, status: { in: ["ACTIVE", "DRAFT"] } },
+    orderBy: { createdAt: "asc" },
+  });
+}
+
 export async function processAIBot(tenantId: string, conversationId: string, incomingMessage: string): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -20,11 +52,9 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
 
   if (!conversation || conversation.isHandedOver || conversation.assignedAgentId) return false;
 
-  // Load FirstTakeCareConfig
-  const config = await prisma.firstTakeCareConfig.findUnique({
-    where: { tenantId },
-  });
-  if (!config || !config.isActive) return false;
+  // Resolve AI Employee config (unified — no legacy tables)
+  const config = await resolveAIAgent(tenantId, (conversation as any).departmentId);
+  if (!config) return false;
 
   // Build send context
   const sendContext = buildSendContext(conversation);
@@ -78,25 +108,34 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
   }
 
   try {
+    const model = config.model || "gpt-4o-mini";
     const response = await openai.chat.completions.create({
-      model: config.model || "gpt-4o-mini",
+      model,
       temperature: config.temperature ?? 0.7,
       max_tokens: config.maxTokens ?? 1024,
       messages: chatMessages,
     });
 
-    if (response.usage) {
+    const usage = response.usage;
+    const totalTokens = usage?.total_tokens ?? 0;
+
+    // Track token usage via usage_logs + credit_transactions
+    if (usage) {
+      // Legacy token log (backward compat)
       prisma.tokenLog.create({
         data: {
           tenantId,
           type: "chat",
-          model: config.model || "gpt-4o-mini",
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          totalTokens: response.usage.total_tokens,
+          model,
+          promptTokens: usage.prompt_tokens,
+          completionTokens: usage.completion_tokens,
+          totalTokens: usage.total_tokens,
           conversationId,
         },
       }).catch((err: any) => console.error("[AI-Bot] Token log failed:", err.message));
+
+      // New: centralized usage tracking
+      trackUsageAndAudit(tenantId, conversationId, totalTokens, model).catch(() => {});
     }
 
     const replyText = response.choices[0]?.message?.content?.trim();
@@ -131,6 +170,9 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
       },
     });
 
+    // Track message_sent usage
+    trackMessageUsage(tenantId, conversationId, aiMessage.id, sendContext.channel).catch(() => {});
+
     // Update conversation timestamp
     await prisma.conversation.update({
       where: { id: conversationId },
@@ -150,6 +192,66 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
     return false;
   }
 }
+
+// ─── Usage + Audit Tracking Helpers ─────────────────────────
+
+async function trackUsageAndAudit(tenantId: string, conversationId: string, totalTokens: number, model: string) {
+  try {
+    // Usage log - actual tokens from model response
+    await prisma.usageLog.create({
+      data: {
+        tenantId,
+        type: "ai_tokens",
+        quantity: totalTokens,
+        tokensEquivalent: totalTokens,
+        metadata: { model, conversationId, type: "autonomous_bot" },
+      },
+    });
+
+    // Audit log
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "ai",
+        action: "ai.responded",
+        targetType: "conversation",
+        targetId: conversationId,
+        metadata: { model, tokens: totalTokens, source: "ai_bot" },
+      },
+    });
+  } catch (err: any) {
+    console.error("[AI-Bot] Usage/audit tracking failed:", err.message);
+  }
+}
+
+async function trackMessageUsage(tenantId: string, conversationId: string, messageId: string, channel: string) {
+  try {
+    await prisma.usageLog.create({
+      data: {
+        tenantId,
+        type: "message_sent",
+        quantity: 1,
+        tokensEquivalent: 1, // actual: 1 message sent
+        metadata: { channel, conversationId, messageId },
+      },
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "ai",
+        action: "message.sent",
+        targetType: "conversation",
+        targetId: conversationId,
+        metadata: { messageId, channel, source: "ai_bot" },
+      },
+    });
+  } catch (err: any) {
+    console.error("[AI-Bot] Message usage tracking failed:", err.message);
+  }
+}
+
+// ─── Existing helpers (unchanged) ───────────────────────────
 
 function buildSendContext(conversation: any): SendContext | null {
   if (!conversation.channelAccount) return null;
@@ -215,7 +317,6 @@ async function checkEscalationThresholds(
   tenantId: string,
   config: any
 ): Promise<boolean> {
-  // Check max autonomous messages
   const aiMessageCount = await prisma.message.count({
     where: {
       conversationId,
@@ -230,7 +331,6 @@ async function checkEscalationThresholds(
     return true;
   }
 
-  // Check max autonomous minutes
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
     select: { createdAt: true },
@@ -267,7 +367,6 @@ async function escalateToHuman(
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
 
-  // Send escalation message to customer
   const extId = await adapter.sendTextMessage(
     sendContext.credentials,
     sendContext.channelAccountExternalId,
@@ -289,7 +388,6 @@ async function escalateToHuman(
     },
   });
 
-  // Mark conversation as handed over
   await prisma.conversation.update({
     where: { id: conversationId },
     data: {
@@ -298,7 +396,6 @@ async function escalateToHuman(
     },
   });
 
-  // Publish system message for escalation
   await prisma.message.create({
     data: {
       tenantId,

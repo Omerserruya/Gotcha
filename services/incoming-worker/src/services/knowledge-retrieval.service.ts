@@ -24,11 +24,25 @@ export interface RetrievedChunk {
   chunkIndex: number;
 }
 
-async function generateEmbedding(text: string): Promise<number[]> {
+async function generateEmbedding(text: string, tenantId?: string): Promise<number[]> {
   const response = await openai.embeddings.create({
     model: EMBEDDING_MODEL,
     input: text.replace(/\n/g, " ").trim(),
   });
+
+  // Track embedding usage (fire-and-forget)
+  if (response.usage && tenantId) {
+    prisma.usageLog.create({
+      data: {
+        tenantId,
+        type: "ai_tokens",
+        quantity: response.usage.total_tokens,
+        tokensEquivalent: response.usage.total_tokens,
+        metadata: { model: EMBEDDING_MODEL, type: "embedding" },
+      },
+    }).catch((err: any) => console.error("[Knowledge] Usage tracking failed:", err.message));
+  }
+
   return response.data[0].embedding;
 }
 
@@ -38,7 +52,7 @@ export async function retrieveRelevantChunks(
   limit = 5
 ): Promise<RetrievedChunk[]> {
   try {
-    const queryEmbedding = await generateEmbedding(query);
+    const queryEmbedding = await generateEmbedding(query, tenantId);
 
     // Get active knowledge base IDs for this tenant
     const activeKBs = await prisma.knowledgeBase.findMany({

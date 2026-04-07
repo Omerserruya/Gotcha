@@ -1,11 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
-import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent } from "@/lib/api";
+import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, generateAIEmployeeConfig, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
 import clsx from "clsx";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -52,7 +52,8 @@ interface AgentFormData {
   role: AgentRole;
   description: string;
   avatarColor: string;
-  tone: Tone;
+  tone: string;
+  departmentId: string;
   languages: { english: boolean; hebrew: boolean; arabic: boolean };
   style: {
     useEmojis: boolean;
@@ -115,7 +116,8 @@ function mapApiToForm(agent: any): AgentFormData {
     role: (agent.role || "custom") as AgentRole,
     description: agent.description || "",
     avatarColor: hexToGradient(agent.avatarColor) || "from-violet-400 to-violet-600",
-    tone: (agent.tone || "friendly") as Tone,
+    tone: agent.tone || "friendly",
+    departmentId: agent.departmentId || "",
     languages: typeof agent.languages === "string"
       ? JSON.parse(agent.languages)
       : (agent.languages || { english: true, hebrew: false, arabic: false }),
@@ -156,6 +158,7 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   description: "",
   avatarColor: "from-violet-400 to-violet-600",
   tone: "friendly",
+  departmentId: "",
   languages: { english: true, hebrew: false, arabic: false },
   style: { useEmojis: false, concise: true, useFirstName: false, proactive: false },
   tools: [],
@@ -258,6 +261,92 @@ export default function AgentEditorPage() {
   const [saved, setSaved] = useState(false);
   const [customRuleInput, setCustomRuleInput] = useState("");
   const [showCustomRuleInput, setShowCustomRuleInput] = useState(false);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [showSkillsPanel, setShowSkillsPanel] = useState(false);
+  const [showKnowledgePanel, setShowKnowledgePanel] = useState(false);
+  const [marketplaceIntegrations, setMarketplaceIntegrations] = useState<any[]>([]);
+  const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
+  const [panelLoading, setPanelLoading] = useState(false);
+
+  // ─── Creation Wizard State ──────────────────────────────────
+  const [wizardComplete, setWizardComplete] = useState(false);
+  const [wizardStep, setWizardStep] = useState(0);
+  const [wizardAnswers, setWizardAnswers] = useState<Record<string, string>>({});
+  const [wizardGenerating, setWizardGenerating] = useState(false);
+  const [wizardInput, setWizardInput] = useState("");
+
+  const wizardChatRef = useRef<HTMLDivElement>(null);
+
+  const WIZARD_QUESTIONS = [
+    { key: "name", question: t("aiStudio.wizard.q1Name") },
+    { key: "responsibility", question: t("aiStudio.wizard.q2Responsibility") },
+    { key: "channels", question: t("aiStudio.wizard.q3Channels") },
+    { key: "communication", question: t("aiStudio.wizard.q4Communication") },
+    { key: "escalation", question: t("aiStudio.wizard.q5Escalation") },
+    { key: "aiDisclosure", question: t("aiStudio.wizard.q6AiDisclosure") },
+    { key: "extra", question: t("aiStudio.wizard.q7Extra") },
+  ];
+
+  // Auto-scroll wizard chat
+  useEffect(() => {
+    if (wizardChatRef.current) {
+      wizardChatRef.current.scrollTop = wizardChatRef.current.scrollHeight;
+    }
+  }, [wizardStep, wizardAnswers, wizardGenerating]);
+
+  function handleWizardAnswer() {
+    if (!wizardInput.trim()) return;
+    const currentQ = WIZARD_QUESTIONS[wizardStep];
+    const newAnswers = { ...wizardAnswers, [currentQ.key]: wizardInput.trim() };
+    setWizardAnswers(newAnswers);
+    setWizardInput("");
+
+    if (wizardStep < WIZARD_QUESTIONS.length - 1) {
+      setWizardStep(wizardStep + 1);
+    } else {
+      // All questions answered — generate config
+      finishWizard(newAnswers);
+    }
+  }
+
+  function handleWizardSkip() {
+    if (wizardStep < WIZARD_QUESTIONS.length - 1) {
+      setWizardStep(wizardStep + 1);
+    } else {
+      finishWizard(wizardAnswers);
+    }
+  }
+
+  async function finishWizard(answers: Record<string, string>) {
+    setWizardGenerating(true);
+    try {
+      if (token) {
+        const res = await generateAIEmployeeConfig(token, { answers });
+        if (res.data) {
+          // Map generated config back to form
+          const generated = res.data;
+          patch({
+            name: generated.name || answers.name || "",
+            role: generated.role || "custom",
+            description: generated.description || "",
+            tone: generated.tone || "friendly",
+            channels: {
+              whatsapp: (answers.channels || "").toLowerCase().includes("whatsapp"),
+              instagram: (answers.channels || "").toLowerCase().includes("instagram"),
+              webchat: (answers.channels || "").toLowerCase().includes("web"),
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error("Wizard generation failed:", err);
+      // Still allow manual editing even if generation fails
+      if (answers.name) patch({ name: answers.name });
+    } finally {
+      setWizardGenerating(false);
+      setWizardComplete(true);
+    }
+  }
 
   useEffect(() => {
     if (isNew || !token) return;
@@ -274,6 +363,12 @@ export default function AgentEditorPage() {
       })
       .finally(() => setLoading(false));
   }, [id, token, isNew]);
+
+  // Load departments
+  useEffect(() => {
+    if (!token) return;
+    getDepartments(token).then((res) => setDepartments((res as any)?.data || [])).catch(() => {});
+  }, [token]);
 
   function patch(partial: Partial<AgentFormData>) {
     setForm((prev) => ({ ...prev, ...partial }));
@@ -391,6 +486,136 @@ export default function AgentEditorPage() {
       <AppLayout>
         <div className="p-3 md:p-6 flex items-center justify-center h-screen">
           <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  // ─── Creation Wizard (chat-like onboarding) ─────────────────
+  if (isNew && !wizardComplete) {
+    return (
+      <AppLayout>
+        <div className="flex flex-col h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
+          {/* Fixed header */}
+          <div className="shrink-0 p-3 md:p-6 pb-0">
+            <button
+              onClick={() => router.push("/ai-studio")}
+              className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-4 transition"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
+              </svg>
+              {t("aiStudio.agents.editor.backToStudio")}
+            </button>
+
+            <div className="max-w-2xl mx-auto text-center mb-4">
+              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white mx-auto mb-3 shadow-lg">
+                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </div>
+              <h1 className="text-xl font-bold text-gray-900">{t("aiStudio.wizard.title")}</h1>
+              <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.wizard.subtitle")}</p>
+              {/* Progress indicator */}
+              <div className="flex items-center gap-1.5 mt-3 justify-center">
+                {WIZARD_QUESTIONS.map((_, i) => (
+                  <div
+                    key={i}
+                    className={clsx(
+                      "h-1.5 rounded-full transition-all",
+                      i < wizardStep ? "bg-violet-500 w-6" : i === wizardStep ? "bg-violet-400 w-4" : "bg-gray-200 w-1.5"
+                    )}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+
+          {/* Scrollable chat area */}
+          <div ref={wizardChatRef} className="flex-1 overflow-y-auto px-3 md:px-6">
+            <div className="max-w-2xl mx-auto space-y-4 pb-4">
+              {WIZARD_QUESTIONS.slice(0, wizardStep + 1).map((q, i) => (
+                <div key={q.key}>
+                  {/* AI question bubble */}
+                  <div className="flex items-start gap-3 mb-3">
+                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white shrink-0 mt-0.5">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                      </svg>
+                    </div>
+                    <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm max-w-md">
+                      <p className="text-sm text-gray-800">{q.question}</p>
+                    </div>
+                  </div>
+                  {/* User answer bubble */}
+                  {wizardAnswers[q.key] && (
+                    <div className="flex justify-end mb-2">
+                      <div className="bg-violet-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md">
+                        <p className="text-sm">{wizardAnswers[q.key]}</p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ))}
+
+              {/* Generating indicator */}
+              {wizardGenerating && (
+                <div className="flex items-start gap-3">
+                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white shrink-0">
+                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                    </svg>
+                  </div>
+                  <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
+                    <div className="flex items-center gap-2">
+                      <div className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />
+                      <p className="text-sm text-gray-500">{t("aiStudio.wizard.generating")}</p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Fixed input area */}
+          {!wizardGenerating && (
+            <div className="shrink-0 px-3 md:px-6 py-3 border-t border-gray-100 bg-white">
+              <div className="max-w-2xl mx-auto">
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={wizardInput}
+                    onChange={(e) => setWizardInput(e.target.value)}
+                    onKeyDown={(e) => { if (e.key === "Enter") handleWizardAnswer(); }}
+                    placeholder={t("aiStudio.wizard.inputPlaceholder")}
+                    autoFocus
+                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                  />
+                  <button
+                    onClick={handleWizardAnswer}
+                    disabled={!wizardInput.trim()}
+                    className="px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-40"
+                  >
+                    {t("common.send")}
+                  </button>
+                  <button
+                    onClick={handleWizardSkip}
+                    className="px-3 py-3 text-gray-400 hover:text-gray-600 text-sm transition"
+                  >
+                    {t("aiStudio.wizard.skip")}
+                  </button>
+                </div>
+                <div className="text-center mt-2">
+                  <button
+                    onClick={() => setWizardComplete(true)}
+                    className="text-xs text-gray-400 hover:text-gray-600 transition"
+                  >
+                    {t("aiStudio.wizard.skipAll")}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </AppLayout>
     );
@@ -516,6 +741,24 @@ export default function AgentEditorPage() {
               </select>
             </div>
 
+            {/* Department */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                {t("agents.department")}
+              </label>
+              <select
+                value={form.departmentId}
+                onChange={(e) => patch({ departmentId: e.target.value })}
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+              >
+                <option value="">{t("aiStudio.agents.editor.setup.tenantLevel")}</option>
+                {departments.map((dept: any) => (
+                  <option key={dept.id} value={dept.id}>{dept.name}</option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-400 mt-1">{t("aiStudio.agents.editor.setup.departmentHint")}</p>
+            </div>
+
             {/* Description */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -536,51 +779,36 @@ export default function AgentEditorPage() {
             title={t("aiStudio.agents.editor.personality.title")}
             subtitle={t("aiStudio.agents.editor.personality.subtitle")}
           >
-            {/* Tone */}
+            {/* Tone (multi-select) */}
             <div className="mb-5">
               <p className="text-sm font-medium text-gray-700 mb-2">
                 {t("aiStudio.agents.editor.personality.tone")}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(["professional", "friendly", "casual", "formal"] as Tone[]).map((tone) => (
-                  <button
-                    key={tone}
-                    type="button"
-                    onClick={() => patch({ tone })}
-                    className={clsx(
-                      "py-2 px-3 rounded-xl text-sm font-medium border transition capitalize",
-                      form.tone === tone
-                        ? "bg-violet-50 border-violet-300 text-violet-700"
-                        : "bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300"
-                    )}
-                  >
-                    {t(`aiStudio.agents.editor.personality.tone_${tone}`)}
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {/* Language */}
-            <div className="mb-5">
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                {t("aiStudio.agents.editor.personality.language")}
-              </p>
-              <div className="flex flex-wrap gap-3">
-                {(["english", "hebrew", "arabic"] as const).map((lang) => (
-                  <label key={lang} className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.languages[lang]}
-                      onChange={(e) =>
-                        patch({ languages: { ...form.languages, [lang]: e.target.checked } })
-                      }
-                      className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                    />
-                    <span className="text-sm text-gray-700 capitalize">
-                      {t(`aiStudio.agents.editor.personality.lang_${lang}`)}
-                    </span>
-                  </label>
-                ))}
+                {(["professional", "friendly", "casual", "formal"] as Tone[]).map((tone) => {
+                  const tones = (form.tone || "").split(",").map(s => s.trim()).filter(Boolean);
+                  const isSelected = tones.includes(tone);
+                  return (
+                    <button
+                      key={tone}
+                      type="button"
+                      onClick={() => {
+                        const updated = isSelected
+                          ? tones.filter(t => t !== tone)
+                          : [...tones, tone];
+                        patch({ tone: updated.join(",") || "professional" });
+                      }}
+                      className={clsx(
+                        "py-2 px-3 rounded-xl text-sm font-medium border transition capitalize",
+                        isSelected
+                          ? "bg-violet-50 border-violet-300 text-violet-700"
+                          : "bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300"
+                      )}
+                    >
+                      {t(`aiStudio.agents.editor.personality.tone_${tone}`)}
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -659,7 +887,13 @@ export default function AgentEditorPage() {
 
             <button
               type="button"
-              onClick={() => router.push("/integrations")}
+              onClick={async () => {
+                setShowSkillsPanel(true);
+                if (marketplaceIntegrations.length === 0 && token) {
+                  setPanelLoading(true);
+                  getMarketplaceIntegrations(token).then(res => setMarketplaceIntegrations((res as any)?.data || [])).catch(() => {}).finally(() => setPanelLoading(false));
+                }
+              }}
               className="mt-3 flex items-center gap-2 text-sm text-violet-600 hover:text-violet-700 font-medium transition"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -700,7 +934,13 @@ export default function AgentEditorPage() {
 
             <button
               type="button"
-              onClick={() => router.push("/ai-studio")}
+              onClick={async () => {
+                setShowKnowledgePanel(true);
+                if (knowledgeBases.length === 0 && token) {
+                  setPanelLoading(true);
+                  getSystemKnowledgeBases(token).then(res => setKnowledgeBases((res as any)?.data || [])).catch(() => {}).finally(() => setPanelLoading(false));
+                }
+              }}
               className="mt-3 flex items-center gap-2 text-sm text-violet-600 hover:text-violet-700 font-medium transition"
             >
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -794,226 +1034,13 @@ export default function AgentEditorPage() {
               <button
                 type="button"
                 onClick={() => setShowCustomRuleInput(true)}
-                className="mt-3 flex items-center gap-2 text-sm text-violet-600 hover:text-violet-700 font-medium transition"
+                className="mt-3 text-sm text-violet-600 hover:text-violet-700 font-medium transition"
               >
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                </svg>
-                {t("aiStudio.agents.editor.escalation.addCustomRule")}
+                + {t("aiStudio.agents.editor.escalation.addCustomRule")}
               </button>
             )}
           </SectionCard>
 
-          {/* ── Section 6: Interactive Messages ── */}
-          <SectionCard
-            title={t("aiStudio.agents.editor.interactiveMessages.title")}
-            subtitle={t("aiStudio.agents.editor.interactiveMessages.subtitle")}
-          >
-            {/* Allowed message types */}
-            <div className="mb-5">
-              <p className="text-sm font-medium text-gray-700 mb-3">
-                {t("aiStudio.agents.editor.interactiveMessages.allowedTypes")}
-              </p>
-              <div className="space-y-3">
-                {(
-                  [
-                    { key: "allowQuickReply" as const, label: t("aiStudio.agents.editor.interactiveMessages.quickReply") },
-                    { key: "allowListMenu" as const, label: t("aiStudio.agents.editor.interactiveMessages.listMenu") },
-                    { key: "allowCTA" as const, label: t("aiStudio.agents.editor.interactiveMessages.cta") },
-                  ]
-                ).map(({ key, label }) => (
-                  <div key={key} className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <Toggle
-                      checked={form.interactiveMessages[key]}
-                      onChange={(v) =>
-                        patch({ interactiveMessages: { ...form.interactiveMessages, [key]: v } })
-                      }
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Auto-suggest settings */}
-            <div className="mb-5">
-              <p className="text-sm font-medium text-gray-700 mb-3">
-                {t("aiStudio.agents.editor.interactiveMessages.autoSuggestLabel")}
-              </p>
-              <div className="space-y-2.5">
-                {(
-                  [
-                    { key: "autoSuggestMultipleOptions" as const, label: t("aiStudio.agents.editor.interactiveMessages.autoSuggestMultiple") },
-                    { key: "autoSuggestYesNo" as const, label: t("aiStudio.agents.editor.interactiveMessages.autoSuggestYesNo") },
-                    { key: "autoSuggestProductChoice" as const, label: t("aiStudio.agents.editor.interactiveMessages.autoSuggestProduct") },
-                    { key: "autoSuggestAlways" as const, label: t("aiStudio.agents.editor.interactiveMessages.autoSuggestAlways") },
-                  ]
-                ).map(({ key, label }) => (
-                  <label key={key} className="flex items-center gap-3 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={form.interactiveMessages[key]}
-                      onChange={(e) =>
-                        patch({ interactiveMessages: { ...form.interactiveMessages, [key]: e.target.checked } })
-                      }
-                      className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                    />
-                    <span className="text-sm text-gray-700">{label}</span>
-                  </label>
-                ))}
-              </div>
-            </div>
-
-            {/* Quick Reply Preview */}
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">
-                {t("aiStudio.agents.editor.interactiveMessages.previewTitle")}
-              </p>
-              <div className="bg-gray-50 rounded-xl border border-gray-200 p-4">
-                <div className="flex flex-col items-start gap-3 max-w-xs">
-                  {/* Chat bubble */}
-                  <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-2.5 shadow-sm">
-                    <p className="text-sm text-gray-800">
-                      {t("aiStudio.agents.editor.interactiveMessages.previewMessage")}
-                    </p>
-                  </div>
-                  {/* Quick reply buttons */}
-                  <div className="flex flex-wrap gap-2">
-                    {(
-                      [
-                        t("aiStudio.agents.editor.interactiveMessages.previewBtn1"),
-                        t("aiStudio.agents.editor.interactiveMessages.previewBtn2"),
-                        t("aiStudio.agents.editor.interactiveMessages.previewBtn3"),
-                      ]
-                    ).map((btn) => (
-                      <span
-                        key={btn}
-                        className="px-3 py-1.5 rounded-full border border-violet-300 bg-white text-violet-700 text-xs font-medium cursor-default"
-                      >
-                        {btn}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </SectionCard>
-
-          {/* ── Section 7: Channels ── */}
-          <SectionCard
-            title={t("aiStudio.agents.editor.channels.title")}
-            subtitle={t("aiStudio.agents.editor.channels.subtitle")}
-          >
-            <div className="space-y-3">
-              {(
-                [
-                  { key: "whatsapp", icon: "💬", label: t("aiStudio.agents.editor.channels.whatsapp") },
-                  { key: "instagram", icon: "📸", label: t("aiStudio.agents.editor.channels.instagram") },
-                  { key: "webchat", icon: "🌐", label: t("aiStudio.agents.editor.channels.webchat") },
-                ] as const
-              ).map(({ key, icon, label }) => (
-                <label
-                  key={key}
-                  className={clsx(
-                    "flex items-center gap-3 p-3 rounded-xl border cursor-pointer transition",
-                    form.channels[key]
-                      ? "border-violet-200 bg-violet-50/50"
-                      : "border-gray-100 bg-gray-50/40 hover:border-gray-200"
-                  )}
-                >
-                  <input
-                    type="checkbox"
-                    checked={form.channels[key]}
-                    onChange={(e) =>
-                      patch({ channels: { ...form.channels, [key]: e.target.checked } })
-                    }
-                    className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                  />
-                  <span className="text-base">{icon}</span>
-                  <span className="text-sm font-medium text-gray-800">{label}</span>
-                  {form.channels[key] && (
-                    <span className="ml-auto text-xs font-medium text-violet-600 bg-violet-100 px-2 py-0.5 rounded-full">
-                      {t("aiStudio.agents.editor.channels.active")}
-                    </span>
-                  )}
-                </label>
-              ))}
-            </div>
-          </SectionCard>
-
-          {/* ── Section 8: Mode ── */}
-          <SectionCard
-            title={t("aiStudio.agents.editor.mode.title")}
-            subtitle={t("aiStudio.agents.editor.mode.subtitle")}
-          >
-            <div className="space-y-3">
-              {(
-                [
-                  {
-                    value: "human_only" as AgentMode,
-                    label: t("aiStudio.agents.editor.mode.humanOnly"),
-                    desc: t("aiStudio.agents.editor.mode.humanOnlyDesc"),
-                    icon: (
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    value: "copilot" as AgentMode,
-                    label: t("aiStudio.agents.editor.mode.copilot"),
-                    desc: t("aiStudio.agents.editor.mode.copilotDesc"),
-                    icon: (
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                      </svg>
-                    ),
-                  },
-                  {
-                    value: "autonomous" as AgentMode,
-                    label: t("aiStudio.agents.editor.mode.autonomous"),
-                    desc: t("aiStudio.agents.editor.mode.autonomousDesc"),
-                    icon: (
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                      </svg>
-                    ),
-                  },
-                ]
-              ).map(({ value, label, desc, icon }) => (
-                <button
-                  key={value}
-                  type="button"
-                  onClick={() => patch({ mode: value })}
-                  className={clsx(
-                    "w-full flex items-start gap-4 p-4 rounded-xl border text-left transition",
-                    form.mode === value
-                      ? "border-violet-300 bg-violet-50"
-                      : "border-gray-100 bg-gray-50/40 hover:border-gray-200"
-                  )}
-                >
-                  <div className={clsx(
-                    "w-9 h-9 rounded-lg flex items-center justify-center shrink-0 mt-0.5",
-                    form.mode === value ? "bg-violet-100 text-violet-600" : "bg-gray-100 text-gray-400"
-                  )}>
-                    {icon}
-                  </div>
-                  <div className="flex-1">
-                    <p className={clsx("text-sm font-semibold", form.mode === value ? "text-violet-800" : "text-gray-800")}>
-                      {label}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-0.5">{desc}</p>
-                  </div>
-                  <div className={clsx(
-                    "w-4 h-4 rounded-full border-2 mt-1 shrink-0 flex items-center justify-center",
-                    form.mode === value ? "border-violet-500" : "border-gray-300"
-                  )}>
-                    {form.mode === value && <div className="w-2 h-2 rounded-full bg-violet-500" />}
-                  </div>
-                </button>
-              ))}
-            </div>
-          </SectionCard>
 
           {/* ── Save button ── */}
           <div className="flex items-center gap-3 pb-8">
@@ -1066,6 +1093,157 @@ export default function AgentEditorPage() {
           </div>
         </div>
       </div>
+
+      {/* Skills Panel (inline slide-over) */}
+      {showSkillsPanel && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowSkillsPanel(false)} />
+          <div className="relative ms-auto w-full max-w-[440px] bg-white h-full flex flex-col shadow-2xl animate-slide-in-right">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-gray-900">{t("aiStudio.agents.editor.skills.title")}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.agents.editor.skills.panelDesc")}</p>
+              </div>
+              <button onClick={() => setShowSkillsPanel(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {panelLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+                </div>
+              ) : marketplaceIntegrations.length === 0 ? (
+                <div className="text-center py-12 text-gray-400">
+                  <p className="text-sm">{t("common.noResults")}</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {marketplaceIntegrations.map((integration: any) => (
+                    <div key={integration.id || integration.slug} className="p-4 rounded-xl border border-gray-100 hover:border-violet-200 transition">
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500">
+                          {(integration.name || "?").charAt(0)}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-semibold text-gray-900">{integration.name}</p>
+                          <p className="text-xs text-gray-400 truncate">{integration.description}</p>
+                        </div>
+                        <span className={clsx(
+                          "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                          integration.status === "CONNECTED" ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
+                        )}>
+                          {integration.status === "CONNECTED" ? t("channels.statusConnected") : t("aiStudio.agents.editor.skills.notConnected")}
+                        </span>
+                      </div>
+                      {integration.status !== "CONNECTED" && (
+                        <a
+                          href={`/ai-studio?tab=skills`}
+                          className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                          onClick={(e) => { e.preventDefault(); setShowSkillsPanel(false); router.push("/ai-studio?tab=skills"); }}
+                        >
+                          {t("aiStudio.agents.editor.skills.connectIntegration")}
+                        </a>
+                      )}
+                      {integration.tools && integration.tools.length > 0 && (
+                        <div className="mt-2 space-y-1.5">
+                          {integration.tools.map((tool: any) => (
+                            <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer">
+                              <input
+                                type="checkbox"
+                                checked={form.tools.some(t => t.id === tool.id && t.enabled)}
+                                onChange={() => toggleTool(tool.id)}
+                                className="w-3.5 h-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                              />
+                              <span className="text-gray-700">{tool.name}</span>
+                            </label>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Knowledge Panel (inline slide-over) */}
+      {showKnowledgePanel && (
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowKnowledgePanel(false)} />
+          <div className="relative ms-auto w-full max-w-[440px] bg-white h-full flex flex-col shadow-2xl animate-slide-in-right">
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="flex-1">
+                <h3 className="text-base font-bold text-gray-900">{t("aiStudio.agents.editor.knowledge.title")}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.agents.editor.knowledge.panelDesc")}</p>
+              </div>
+              <button onClick={() => setShowKnowledgePanel(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto p-5">
+              {panelLoading ? (
+                <div className="flex items-center justify-center py-12">
+                  <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+                </div>
+              ) : knowledgeBases.length === 0 ? (
+                <div className="text-center py-12">
+                  <p className="text-sm text-gray-400 mb-2">{t("aiStudio.agents.editor.knowledge.noSources")}</p>
+                  <button
+                    onClick={() => { setShowKnowledgePanel(false); router.push("/ai-studio?tab=knowledge"); }}
+                    className="text-xs text-violet-600 hover:text-violet-700 font-medium"
+                  >
+                    {t("aiStudio.agents.editor.knowledge.createFirst")}
+                  </button>
+                </div>
+              ) : (
+                <div className="space-y-2">
+                  {knowledgeBases.map((kb: any) => {
+                    const isLinked = form.knowledge.some(k => k.id === kb.id);
+                    return (
+                      <label
+                        key={kb.id}
+                        className={clsx(
+                          "flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition",
+                          isLinked ? "border-violet-200 bg-violet-50/50" : "border-gray-100 hover:border-gray-200"
+                        )}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isLinked}
+                          onChange={() => {
+                            if (isLinked) {
+                              patch({ knowledge: form.knowledge.filter(k => k.id !== kb.id) });
+                            } else {
+                              patch({ knowledge: [...form.knowledge, { id: kb.id, name: kb.name, type: "Document", status: kb.isActive ? "synced" : "error", enabled: true }] });
+                            }
+                          }}
+                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800">{kb.name}</p>
+                          {kb.description && <p className="text-xs text-gray-400 truncate">{kb.description}</p>}
+                        </div>
+                        {isLinked && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 font-medium">
+                            {t("aiStudio.agents.editor.knowledge.linked")}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </AppLayout>
   );
 }

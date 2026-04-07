@@ -16,25 +16,34 @@ const UNSUPPORTED_MEDIA_TYPES = ["audio", "location"];
 // Ensure uploads dir exists
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string): Promise<string | null> {
+async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string): Promise<{ name: string | null; avatarUrl: string | null }> {
+  let name: string | null = null;
+  let avatarUrl: string | null = null;
+
   // Try direct profile lookup first
   try {
-    const fields = channel === "INSTAGRAM" ? "name,username" : "first_name,last_name,name";
+    // Instagram IGSID uses "profile_pic", Messenger uses "picture.type(large)"
+    const fields = channel === "INSTAGRAM"
+      ? "name,username,profile_pic"
+      : "first_name,last_name,name,picture.type(large)";
     const res = await axios.get(`${FB_API_URL}/${senderId}`, {
       params: { fields, access_token: accessToken },
     });
     if (channel === "INSTAGRAM") {
-      return res.data.name || res.data.username || null;
+      name = res.data.name || res.data.username || null;
+      avatarUrl = res.data.profile_pic || null;
+    } else {
+      const { first_name, last_name, name: fullName, picture } = res.data;
+      if (first_name || last_name) name = [first_name, last_name].filter(Boolean).join(" ");
+      else if (fullName) name = fullName;
+      avatarUrl = picture?.data?.url || null;
     }
-    const { first_name, last_name, name } = res.data;
-    if (first_name || last_name) return [first_name, last_name].filter(Boolean).join(" ");
-    if (name) return name;
   } catch (err: any) {
     console.warn(`[PROFILE] Direct lookup failed for ${senderId}:`, err.response?.data?.error?.message || err.message);
   }
 
   // Fallback for Messenger: use Conversations API to get participant name
-  if (channel === "MESSENGER" && pageId) {
+  if (!name && channel === "MESSENGER" && pageId) {
     try {
       const res = await axios.get(`${FB_API_URL}/${pageId}/conversations`, {
         params: {
@@ -48,14 +57,36 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
       const sender = participants.find((p: any) => p.id === senderId);
       if (sender?.name) {
         console.log(`[PROFILE] Messenger name via conversations API: ${sender.name}`);
-        return sender.name;
+        name = sender.name;
       }
     } catch (convErr: any) {
       console.warn(`[PROFILE] Conversations API fallback failed:`, convErr.response?.data?.error?.message || convErr.message);
     }
   }
 
-  return null;
+  return { name, avatarUrl };
+}
+
+/**
+ * Fetch WhatsApp contact profile picture via Cloud API contacts endpoint.
+ * Uses POST /{phone_number_id}/contacts to retrieve profile info.
+ */
+async function fetchWhatsAppAvatar(phoneNumberId: string, contactWaId: string, accessToken: string): Promise<string | null> {
+  try {
+    const res = await axios.post(
+      `${WA_API_URL}/${phoneNumberId}/contacts`,
+      { blocking: "wait", contacts: [`+${contactWaId}`] },
+      { headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/json" } },
+    );
+    const contact = res.data?.contacts?.[0];
+    if (contact?.status === "valid" && contact?.profile?.photo) {
+      return contact.profile.photo;
+    }
+    return null;
+  } catch {
+    // Profile picture not available (privacy settings) — silent fail
+    return null;
+  }
 }
 
 /**
@@ -157,17 +188,34 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     orderBy: { createdAt: "desc" },
   });
 
-  // For Messenger/Instagram, fetch display name from Graph API if not provided
+  // For Messenger/Instagram, fetch display name + avatar from Graph API if not provided
   let displayName = senderDisplayName || null;
-  if (!displayName && !conversation?.customerName && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
+  let avatarUrl: string | null = null;
+  if ((!displayName || !conversation?.customerAvatarUrl) && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
     const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
     const creds = channelAccount?.credentials;
     const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);
     const accessToken = decrypted?.accessToken;
     const pageId = decrypted?.pageId || channelAccount?.externalId;
     if (accessToken) {
-      displayName = await fetchMetaProfile(senderId, accessToken, channel, pageId);
+      const profile = await fetchMetaProfile(senderId, accessToken, channel, pageId);
+      if (!displayName) displayName = profile.name;
+      avatarUrl = profile.avatarUrl;
     }
+  }
+
+  // For WhatsApp, try fetching profile picture
+  if (!conversation?.customerAvatarUrl && channel === "WHATSAPP" && channelAccountId) {
+    try {
+      const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
+      const creds = channelAccount?.credentials;
+      const decrypted = typeof creds === "string" ? decryptCredentials(creds) : (creds as any);
+      const accessToken = decrypted?.accessToken;
+      const phoneNumberId = channelAccount?.externalId;
+      if (accessToken && phoneNumberId) {
+        avatarUrl = await fetchWhatsAppAvatar(phoneNumberId, senderId, accessToken);
+      }
+    } catch { /* silent */ }
   }
 
   if (!conversation) {
@@ -178,13 +226,24 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         channelAccountId: channelAccountId || undefined,
         customerExternalId: senderId,
         customerName: displayName,
+        customerAvatarUrl: avatarUrl || undefined,
         status: "OPEN",
       },
     });
-  } else if (displayName && !conversation.customerName) {
-    await prisma.conversation.update({
-      where: { id: conversation.id },
-      data: { customerName: displayName },
+  } else {
+    const updates: any = {};
+    if (displayName && !conversation.customerName) updates.customerName = displayName;
+    if (avatarUrl && !conversation.customerAvatarUrl) updates.customerAvatarUrl = avatarUrl;
+    if (Object.keys(updates).length > 0) {
+      await prisma.conversation.update({ where: { id: conversation.id }, data: updates });
+    }
+  }
+
+  // Also update Contact avatarUrl if we got one
+  if (avatarUrl) {
+    await prisma.contact.updateMany({
+      where: { tenantId, channel, externalId: senderId, avatarUrl: null },
+      data: { avatarUrl },
     });
   }
 

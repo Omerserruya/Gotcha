@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { generateAndSavePrompts } from "../services/prompt-assembler.service";
 
 const router = Router();
 
@@ -32,6 +33,92 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
   } catch (err) {
     console.error("List AI agents error:", err);
     res.status(500).json({ error: "Failed to list AI agents" });
+  }
+});
+
+// ─── Generate AI Employee Config from Wizard Answers ────────
+router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { answers, departmentId } = req.body;
+    if (!answers || typeof answers !== "object") {
+      res.status(400).json({ error: "answers object is required" });
+      return;
+    }
+
+    // Map wizard answers to structured AI Employee config
+    const roleMap: Record<string, string> = {
+      support: "customer_support", sales: "sales", booking: "booking", billing: "billing",
+    };
+    const toneMap: Record<string, string> = {
+      professional: "professional", friendly: "friendly", casual: "casual", formal: "formal",
+    };
+    const genderMap: Record<string, string> = {
+      male: "male", female: "female", neutral: "neutral",
+      "זכר": "male", "נקבה": "female", "ניטרלי": "neutral",
+    };
+
+    // Detect role from answers
+    const purposeLower = (answers.purpose || "").toLowerCase();
+    const roleLower = (answers.role || answers.department || "").toLowerCase();
+    let detectedRole = "custom";
+    for (const [key, val] of Object.entries(roleMap)) {
+      if (purposeLower.includes(key) || roleLower.includes(key)) { detectedRole = val; break; }
+    }
+
+    // Detect tone
+    const toneLower = (answers.tone || "").toLowerCase();
+    let detectedTone = "friendly";
+    for (const [key, val] of Object.entries(toneMap)) {
+      if (toneLower.includes(key)) { detectedTone = val; break; }
+    }
+
+    // Detect gender
+    const genderLower = (answers.gender || "").toLowerCase();
+    let detectedGender = "neutral";
+    for (const [key, val] of Object.entries(genderMap)) {
+      if (genderLower.includes(key)) { detectedGender = val; break; }
+    }
+
+    // Detect channels
+    const channelsRaw = (answers.channels || "").toLowerCase();
+    const channels: string[] = [];
+    if (channelsRaw.includes("whatsapp") || channelsRaw.includes("ווטסאפ")) channels.push("whatsapp");
+    if (channelsRaw.includes("instagram") || channelsRaw.includes("אינסטגרם")) channels.push("instagram");
+    if (channelsRaw.includes("web") || channelsRaw.includes("אתר") || channelsRaw.includes("צ'אט")) channels.push("webchat");
+
+    // Build the AI Employee name
+    const name = answers.purpose
+      ? answers.purpose.substring(0, 50)
+      : `AI Employee ${new Date().toLocaleDateString()}`;
+
+    // Detect mode from role answer
+    const roleAnswerLower = (answers.role || "").toLowerCase();
+    let mode = "COPILOT";
+    if (roleAnswerLower.includes("agent") || roleAnswerLower.includes("respond") || roleAnswerLower.includes("autonomous") || roleAnswerLower.includes("אוטונומי")) {
+      mode = "AUTONOMOUS";
+    } else if (roleAnswerLower.includes("hybrid") || roleAnswerLower.includes("היברידי")) {
+      mode = "COPILOT"; // Default hybrid to copilot
+    }
+
+    const config = {
+      name,
+      role: detectedRole,
+      description: answers.purpose || "",
+      tone: detectedTone,
+      channels,
+      mode,
+      persona: {
+        gender: detectedGender,
+        traits: { warmth: "moderate", humor: "low" },
+      },
+      escalationHints: answers.escalation || "",
+      extraContext: answers.extra || "",
+    };
+
+    res.json({ data: config });
+  } catch (err) {
+    console.error("Generate AI employee config error:", err);
+    res.status(500).json({ error: "Failed to generate AI employee config" });
   }
 });
 
@@ -98,7 +185,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       tone, languages, style, channels, escalationRules,
       interactiveMessages, systemPrompt, model, provider,
       temperature, maxTokens, identity, goals, toneConfig,
-      behavioral, maxAutonomousMessages, maxAutonomousMinutes,
+      behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
       confidenceThreshold, escalationMessage,
       knowledgeBaseIds, toolIds,
     } = req.body;
@@ -132,6 +219,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         goals: goals || null,
         toneConfig: toneConfig || null,
         behavioral: behavioral || null,
+        persona: persona || null,
         maxAutonomousMessages: maxAutonomousMessages ?? 10,
         maxAutonomousMinutes: maxAutonomousMinutes ?? 15,
         confidenceThreshold: confidenceThreshold ?? 0.6,
@@ -218,6 +306,13 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
           skipDuplicates: true,
         });
       }
+    }
+
+    // Generate and save prompt parts (shared + autonomous)
+    try {
+      await generateAndSavePrompts(req.tenantId! as string, agent.id);
+    } catch (promptErr) {
+      console.warn("[ai-agents] Prompt generation failed (non-fatal):", promptErr);
     }
 
     res.json({ data: agent });

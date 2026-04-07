@@ -1,15 +1,18 @@
-import OpenAI from "openai";
+/**
+ * OpenAI Provider — refactored to use central aiService for ALL LLM calls.
+ * No direct OpenAI SDK usage here anymore.
+ */
+
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
-import { logTokenUsage } from "./tokenlog.service";
+import { generateResponse, getDefaultModel } from "./ai.service";
 
 export class OpenAIProvider implements AIProvider {
-  private client: OpenAI;
   private defaultModel: string;
 
-  constructor(apiKey: string, baseURL?: string, defaultModel?: string) {
-    this.client = new OpenAI({ apiKey, ...(baseURL ? { baseURL } : {}) });
-    this.defaultModel = defaultModel || "gpt-4o-mini";
+  constructor(_apiKey: string, _baseURL?: string, defaultModel?: string) {
+    // API key and baseURL are now managed by aiService.initAIService()
+    this.defaultModel = defaultModel || getDefaultModel();
   }
 
   async suggestResponse(context: ConversationContext): Promise<AISuggestion[]> {
@@ -36,31 +39,22 @@ export class OpenAIProvider implements AIProvider {
 
     const chatMessages = this.buildChatMessages(context, systemPrompt);
     const model = config?.model || this.defaultModel;
-    const temperature = config?.temperature ?? 0.7;
-    const maxTokens = config?.maxTokens ?? 1024;
 
     try {
-      const response = await this.client.chat.completions.create({
+      const result = await generateResponse({
+        tenantId: context.tenantId || "",
         model,
-        temperature,
-        max_tokens: maxTokens,
         messages: chatMessages,
-        response_format: { type: "json_object" },
+        temperature: config?.temperature ?? 0.7,
+        maxTokens: config?.maxTokens ?? 1024,
+        responseFormat: { type: "json_object" },
+        metadata: {
+          type: "suggestion",
+          conversationId: context.conversationId,
+        },
       });
 
-      if (response.usage && context.tenantId) {
-        logTokenUsage({
-          tenantId: context.tenantId,
-          type: "suggestion",
-          model,
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          totalTokens: response.usage.total_tokens,
-          conversationId: context.conversationId,
-        });
-      }
-
-      const content = response.choices[0]?.message?.content;
+      const content = result.content;
       if (!content) return [{ id: "empty", text: "No suggestions available.", confidence: 0, type: "info" }];
 
       const parsed = JSON.parse(content);
@@ -91,28 +85,22 @@ export class OpenAIProvider implements AIProvider {
     if (!messagesText) return "No messages to summarize.";
 
     try {
-      const response = await this.client.chat.completions.create({
+      const result = await generateResponse({
+        tenantId: context.tenantId || "",
         model,
-        temperature: 0.3,
-        max_tokens: 256,
         messages: [
           { role: "system", content: "Summarize this customer support conversation in 2-3 concise sentences. Focus on the customer's issue and current status." },
           { role: "user", content: messagesText },
         ],
-      });
-      if (response.usage && context.tenantId) {
-        logTokenUsage({
-          tenantId: context.tenantId,
+        temperature: 0.3,
+        maxTokens: 256,
+        metadata: {
           type: "summary",
-          model,
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          totalTokens: response.usage.total_tokens,
           conversationId: context.conversationId,
-        });
-      }
+        },
+      });
 
-      return response.choices[0]?.message?.content || "Unable to generate summary.";
+      return result.content || "Unable to generate summary.";
     } catch (err: any) {
       console.error("OpenAI summary error:", err.message);
       return "Failed to generate summary.";
@@ -121,17 +109,20 @@ export class OpenAIProvider implements AIProvider {
 
   async classifyIntent(message: string): Promise<IntentClassification> {
     try {
-      const response = await this.client.chat.completions.create({
+      const result = await generateResponse({
+        tenantId: "", // intent classification may not have tenant context
         model: this.defaultModel,
-        temperature: 0,
-        max_tokens: 128,
-        response_format: { type: "json_object" },
         messages: [
           { role: "system", content: 'Classify the customer message intent. Return JSON: { "intent": string, "confidence": number 0-1, "entities": [{ "type": string, "value": string }] }. Common intents: greeting, inquiry, complaint, cancellation, billing, technical_support, feedback, other.' },
           { role: "user", content: message },
         ],
+        temperature: 0,
+        maxTokens: 128,
+        responseFormat: { type: "json_object" },
+        metadata: { type: "classification" },
       });
-      const content = response.choices[0]?.message?.content;
+
+      const content = result.content;
       if (!content) return { intent: "unknown", confidence: 0, entities: [] };
       return JSON.parse(content);
     } catch {
@@ -147,7 +138,7 @@ export class OpenAIProvider implements AIProvider {
     const systemPrompt = this.buildSystemPrompt(config);
     const chatMode = this.getModeInstruction("CHAT");
 
-    const messages: OpenAI.ChatCompletionMessageParam[] = [
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt + "\n\n" + chatMode },
     ];
 
@@ -208,26 +199,19 @@ export class OpenAIProvider implements AIProvider {
     messages.push({ role: "user", content: params.agentMessage });
 
     try {
-      const response = await this.client.chat.completions.create({
+      const result = await generateResponse({
+        tenantId: params.tenantId,
         model,
-        temperature: config?.temperature ?? 0.7,
-        max_tokens: config?.maxTokens ?? 1024,
         messages,
+        temperature: config?.temperature ?? 0.7,
+        maxTokens: config?.maxTokens ?? 1024,
+        metadata: {
+          type: "chat",
+          conversationId: params.conversationId,
+        },
       });
 
-      if (response.usage && params.tenantId) {
-        logTokenUsage({
-          tenantId: params.tenantId,
-          type: "chat",
-          model,
-          promptTokens: response.usage.prompt_tokens,
-          completionTokens: response.usage.completion_tokens,
-          totalTokens: response.usage.total_tokens,
-          conversationId: params.conversationId,
-        });
-      }
-
-      return response.choices[0]?.message?.content || "I couldn't generate a response. Please try again.";
+      return result.content || "I couldn't generate a response. Please try again.";
     } catch (err: any) {
       console.error("OpenAI agent chat error:", err.message);
       return "Failed to get AI response. Please check API configuration.";
@@ -257,11 +241,9 @@ export class OpenAIProvider implements AIProvider {
     return 'Based on this conversation, suggest 2-3 reply options the agent could send next.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the suggested reply), "confidence" (0-1), and "type" ("reply", "action", or "info"). Provide 2-3 suggestions.';
   }
 
-  private buildChatMessages(context: ConversationContext, systemPrompt: string): OpenAI.ChatCompletionMessageParam[] {
-    const messages: OpenAI.ChatCompletionMessageParam[] = [{ role: "system", content: systemPrompt }];
+  private buildChatMessages(context: ConversationContext, systemPrompt: string): Array<{ role: "system" | "user" | "assistant"; content: string }> {
+    const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [{ role: "system", content: systemPrompt }];
 
-    // Build conversation transcript as a single user message with labels
-    // This prevents OpenAI from confusing agent messages with its own prior responses
     const transcript = context.messages
       .filter((msg) => msg.body?.trim())
       .map((msg) => {
@@ -276,7 +258,6 @@ export class OpenAIProvider implements AIProvider {
       messages.push({ role: "user", content: `## Conversation Transcript\n${transcript}` });
     }
 
-    // Mode-specific instruction as final user message
     const copilotMode = context.copilotConfig?.copilotMode || "READY_MESSAGE";
     messages.push({ role: "user", content: this.getModeInstruction(copilotMode) });
 

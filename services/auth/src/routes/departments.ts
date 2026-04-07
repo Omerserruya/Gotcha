@@ -12,6 +12,14 @@ router.get("/", async (req: Request, res: Response) => {
       where: { tenantId: req.tenantId! },
       include: {
         _count: { select: { members: true, conversations: { where: { status: { not: "CLOSED" } } } } },
+        parent: { select: { id: true, name: true } },
+        children: { select: { id: true, name: true, isActive: true } },
+        members: {
+          select: {
+            departmentRole: true,
+            user: { select: { id: true, name: true, email: true, isActive: true } },
+          },
+        },
       },
       orderBy: { name: "asc" },
     });
@@ -22,23 +30,71 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
+// GET /tree - Get departments as hierarchical tree
+router.get("/tree", async (req: Request, res: Response) => {
+  try {
+    const departments = await prisma.department.findMany({
+      where: { tenantId: req.tenantId! },
+      include: {
+        _count: { select: { members: true, conversations: { where: { status: { not: "CLOSED" } } } } },
+        members: {
+          select: {
+            departmentRole: true,
+            user: { select: { id: true, name: true, email: true, isActive: true } },
+          },
+        },
+      },
+      orderBy: { name: "asc" },
+    });
+
+    // Get AI agents assigned to departments via router rules
+    const aiAgents = await prisma.aIAgent.findMany({
+      where: { tenantId: req.tenantId!, status: "ACTIVE" },
+      select: { id: true, name: true, role: true, mode: true, avatarColor: true },
+    });
+
+    // Build tree: root departments (no parent) with nested children
+    const deptMap = new Map(departments.map(d => [d.id, { ...d, children: [] as any[] }]));
+    const roots: any[] = [];
+    for (const dept of deptMap.values()) {
+      if (dept.parentId && deptMap.has(dept.parentId)) {
+        deptMap.get(dept.parentId)!.children.push(dept);
+      } else {
+        roots.push(dept);
+      }
+    }
+
+    res.json({ data: { tree: roots, aiAgents } });
+  } catch (err) {
+    console.error("Get department tree error:", err);
+    res.status(500).json({ error: "Failed to get department tree" });
+  }
+});
+
 // POST / - Create department (ADMIN only)
 const createDepartmentSchema = z.object({
   name: z.string().min(1).max(100),
   description: z.string().max(500).optional(),
   queueMode: z.enum(["CLAIM", "ROUND_ROBIN"]).optional(),
+  parentId: z.string().optional(),
 });
 
 router.post("/", requireRole("ADMIN"), validate(createDepartmentSchema), async (req: Request, res: Response) => {
   try {
-    const { name, description, queueMode } = req.body;
+    const { name, description, queueMode, parentId } = req.body;
     const existing = await prisma.department.findUnique({
       where: { tenantId_name: { tenantId: req.tenantId!, name } },
     });
     if (existing) { res.status(409).json({ error: "Department with this name already exists" }); return; }
 
+    // Validate parentId if provided
+    if (parentId) {
+      const parent = await prisma.department.findFirst({ where: { id: parentId, tenantId: req.tenantId! } });
+      if (!parent) { res.status(404).json({ error: "Parent department not found" }); return; }
+    }
+
     const department = await prisma.department.create({
-      data: { tenantId: req.tenantId!, name, description, queueMode: queueMode || "CLAIM" },
+      data: { tenantId: req.tenantId!, name, description, queueMode: queueMode || "CLAIM", parentId: parentId || null },
     });
     res.status(201).json({ data: department });
   } catch (err) {
@@ -53,6 +109,7 @@ const updateDepartmentSchema = z.object({
   description: z.string().max(500).optional(),
   queueMode: z.enum(["CLAIM", "ROUND_ROBIN"]).optional(),
   isActive: z.boolean().optional(),
+  parentId: z.string().nullable().optional(),
 });
 
 router.patch("/:id", requireRole("ADMIN"), validate(updateDepartmentSchema), async (req: Request, res: Response) => {
@@ -182,58 +239,106 @@ router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request,
   }
 });
 
-// GET /:id/copilot - Get department copilot config (ADMIN or MANAGER)
-router.get("/:id/copilot", requireDepartmentRole("MANAGER"), async (req: Request, res: Response) => {
+// GET /:id/ai-employee - Get assigned AI Employee for department
+router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Request, res: Response) => {
   try {
     const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
-    let config = await prisma.departmentCopilotConfig.findUnique({ where: { departmentId: req.params.id } });
-    if (!config) {
-      // Fall back to tenant config
-      const tenantConfig = await prisma.copilotConfig.findUnique({ where: { tenantId: req.tenantId! } });
-      res.json({ data: tenantConfig, source: "tenant" });
+    // Find AI employee assigned via router rule
+    const rule = await prisma.routerRule.findFirst({
+      where: {
+        tenantId: req.tenantId!,
+        routeType: "AI_AGENT",
+        aiAgentId: { not: null },
+        enabled: true,
+        routeTarget: req.params.id,
+      },
+      orderBy: { priority: "asc" },
+    });
+
+    if (rule?.aiAgentId) {
+      const agent = await prisma.aIAgent.findUnique({
+        where: { id: rule.aiAgentId },
+        select: { id: true, name: true, role: true, mode: true, status: true, avatarColor: true, description: true },
+      });
+      res.json({ data: agent, ruleId: rule.id });
       return;
     }
-    res.json({ data: config, source: "department" });
+
+    res.json({ data: null });
   } catch (err) {
-    console.error("Get dept copilot error:", err);
-    res.status(500).json({ error: "Failed to get department copilot config" });
+    console.error("Get dept AI employee error:", err);
+    res.status(500).json({ error: "Failed to get department AI employee" });
   }
 });
 
-// PUT /:id/copilot - Update department copilot config (ADMIN or MANAGER)
-const deptCopilotSchema = z.object({
-  copilotMode: z.enum(["READY_MESSAGE", "CONTEXT_ONLY", "CHAT"]).optional(),
-  systemPrompt: z.string().optional(),
-  rules: z.array(z.string()).optional(),
-  tools: z.array(z.object({
-    id: z.string(),
-    name: z.string(),
-    enabled: z.boolean(),
-    config: z.record(z.any()).optional(),
-  })).optional(),
-  model: z.string().optional(),
-  provider: z.string().optional(),
-  temperature: z.number().min(0).max(2).optional(),
-  maxTokens: z.number().min(1).max(8192).optional(),
-  isActive: z.boolean().optional(),
+// PUT /:id/ai-employee - Assign or unassign AI Employee to department
+const assignAIEmployeeSchema = z.object({
+  aiAgentId: z.string().nullable(),
 });
 
-router.put("/:id/copilot", requireDepartmentRole("MANAGER"), validate(deptCopilotSchema), async (req: Request, res: Response) => {
+router.put("/:id/ai-employee", requireRole("ADMIN"), validate(assignAIEmployeeSchema), async (req: Request, res: Response) => {
   try {
     const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
-    const config = await prisma.departmentCopilotConfig.upsert({
-      where: { departmentId: req.params.id },
-      update: req.body,
-      create: { tenantId: req.tenantId!, departmentId: req.params.id, ...req.body },
+    const { aiAgentId } = req.body;
+
+    // Find existing router rule for this department
+    const existingRule = await prisma.routerRule.findFirst({
+      where: {
+        tenantId: req.tenantId!,
+        routeType: "AI_AGENT",
+        routeTarget: req.params.id,
+      },
     });
-    res.json({ data: config });
+
+    if (!aiAgentId) {
+      // Unassign: delete the router rule
+      if (existingRule) {
+        await prisma.routerRule.delete({ where: { id: existingRule.id } });
+      }
+      res.json({ data: null });
+      return;
+    }
+
+    // Verify agent exists and belongs to tenant
+    const agent = await prisma.aIAgent.findFirst({ where: { id: aiAgentId, tenantId: req.tenantId! } });
+    if (!agent) { res.status(404).json({ error: "AI Employee not found" }); return; }
+
+    if (existingRule) {
+      // Update existing rule
+      const updated = await prisma.routerRule.update({
+        where: { id: existingRule.id },
+        data: { aiAgentId, enabled: true },
+      });
+      res.json({ data: agent, ruleId: updated.id });
+    } else {
+      // Create new router rule
+      const maxPriority = await prisma.routerRule.aggregate({
+        where: { tenantId: req.tenantId! },
+        _max: { priority: true },
+      });
+
+      const rule = await prisma.routerRule.create({
+        data: {
+          tenantId: req.tenantId!,
+          name: `${dept.name} AI Employee`,
+          priority: (maxPriority._max.priority || 0) + 1,
+          conditions: [{ field: "department", operator: "equals", value: req.params.id }],
+          logic: "AND",
+          routeType: "AI_AGENT",
+          routeTarget: req.params.id,
+          aiAgentId,
+          enabled: true,
+        },
+      });
+      res.json({ data: agent, ruleId: rule.id });
+    }
   } catch (err) {
-    console.error("Update dept copilot error:", err);
-    res.status(500).json({ error: "Failed to update department copilot config" });
+    console.error("Assign AI employee error:", err);
+    res.status(500).json({ error: "Failed to assign AI employee" });
   }
 });
 

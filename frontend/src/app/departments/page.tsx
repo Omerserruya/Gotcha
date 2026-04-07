@@ -5,60 +5,266 @@ import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
-  getDepartments, createDepartment, updateDepartment, deleteDepartment,
+  getDepartmentTree, createDepartment, updateDepartment, deleteDepartment,
   getDepartmentMembers, addDepartmentMember, removeDepartmentMember, updateDepartmentMember,
-  getAgents,
+  getAgents, getAIAgents, getDepartmentAIEmployee, assignDepartmentAIEmployee,
 } from "@/lib/api";
 import Link from "next/link";
 import clsx from "clsx";
 import ConfirmModal from "@/components/ConfirmModal";
 
+interface DeptNode {
+  id: string;
+  name: string;
+  description?: string;
+  isActive: boolean;
+  queueMode: string;
+  parentId?: string | null;
+  _count?: { members: number; conversations: number };
+  members?: any[];
+  children?: DeptNode[];
+}
+
+interface TreeData {
+  tree: DeptNode[];
+  aiAgents: any[];
+}
+
+function DepartmentNode({
+  node,
+  aiAgents,
+  depth,
+  onEdit,
+  onDelete,
+  onManage,
+  onAssignAI,
+  t,
+}: {
+  node: DeptNode;
+  aiAgents: any[];
+  depth: number;
+  onEdit: (dept: DeptNode) => void;
+  onDelete: (id: string, name: string) => void;
+  onManage: (dept: DeptNode) => void;
+  onAssignAI: (dept: DeptNode) => void;
+  t: (key: string) => string;
+}) {
+  const [expanded, setExpanded] = useState(depth === 0);
+  const [agentsExpanded, setAgentsExpanded] = useState(false);
+  const hasChildren = node.children && node.children.length > 0;
+  const humanAgents = node.members || [];
+
+  return (
+    <div className={clsx(depth > 0 && "ms-6 border-l-2 border-gray-200 ps-4")}>
+      <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 mb-3">
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex items-start gap-3 flex-1 min-w-0">
+            {/* Expand toggle */}
+            {hasChildren ? (
+              <button
+                onClick={() => setExpanded(!expanded)}
+                className="mt-0.5 w-6 h-6 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition shrink-0"
+                title={expanded ? t("departments.collapse") : t("departments.expand")}
+              >
+                <svg
+                  className={clsx("w-3.5 h-3.5 transition-transform", expanded && "rotate-90")}
+                  fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                >
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                </svg>
+              </button>
+            ) : (
+              <span className="w-6 shrink-0" />
+            )}
+
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2.5 mb-1 flex-wrap">
+                <h3 className="font-semibold text-gray-900">{node.name}</h3>
+                <span className={clsx(
+                  "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                  node.isActive ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
+                )}>
+                  {node.isActive ? t("agents.active") : t("agents.inactive")}
+                </span>
+                <span className={clsx(
+                  "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                  node.queueMode === "ROUND_ROBIN" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
+                )}>
+                  {node.queueMode === "ROUND_ROBIN" ? t("departments.roundRobin") : t("departments.claim")}
+                </span>
+              </div>
+              {node.description && <p className="text-sm text-gray-400">{node.description}</p>}
+              <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
+                <span>{node._count?.members || 0} {t("departments.members").toLowerCase()}</span>
+                <span>{node._count?.conversations || 0} {t("departments.conversations").toLowerCase()}</span>
+              </div>
+
+              {/* Agent list (expandable) */}
+              {(humanAgents.length > 0) && (
+                <div className="mt-3">
+                  <button
+                    onClick={() => setAgentsExpanded(!agentsExpanded)}
+                    className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-700 transition"
+                  >
+                    <svg
+                      className={clsx("w-3 h-3 transition-transform", agentsExpanded && "rotate-90")}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
+                    </svg>
+                    <span className="font-medium">{t("departments.humanAgents")}</span>
+                    <span className="bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded-full text-[10px] font-medium">{humanAgents.length}</span>
+                  </button>
+                  {agentsExpanded && (
+                    <div className="mt-2 space-y-1.5 ps-5">
+                      {humanAgents.map((m: any) => (
+                        <div key={m.id || m.userId} className="flex items-center gap-2">
+                          <span className={clsx(
+                            "w-1.5 h-1.5 rounded-full shrink-0",
+                            m.user?.isActive !== false ? "bg-green-400" : "bg-gray-300"
+                          )} />
+                          <span className="text-xs text-gray-700">{m.user?.name || m.name}</span>
+                          <span className={clsx(
+                            "text-[10px] px-1.5 py-0.5 rounded-full font-medium",
+                            m.departmentRole === "MANAGER" ? "bg-violet-50 text-violet-600" : "bg-gray-100 text-gray-500"
+                          )}>
+                            {m.departmentRole === "MANAGER" ? t("departments.roleManager") : t("departments.roleAgent")}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          </div>
+
+          {/* Actions */}
+          <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
+            <button onClick={() => onManage(node)} className="text-xs px-3 py-1.5 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 font-medium transition min-h-[36px]">
+              {t("departments.members")}
+            </button>
+            <button onClick={() => onAssignAI(node)} className="text-xs px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg hover:bg-violet-100 font-medium transition min-h-[36px] flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+              </svg>
+              {t("departments.aiEmployee")}
+            </button>
+            <button onClick={() => onEdit(node)} className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
+              </svg>
+            </button>
+            <button onClick={() => onDelete(node.id, node.name)} className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition">
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Children */}
+      {expanded && hasChildren && (
+        <div>
+          {node.children!.map((child) => (
+            <DepartmentNode
+              key={child.id}
+              node={child}
+              aiAgents={aiAgents}
+              depth={depth + 1}
+              onEdit={onEdit}
+              onDelete={onDelete}
+              onManage={onManage}
+              onAssignAI={onAssignAI}
+              t={t}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function DepartmentsPage() {
   const { token } = useAuth();
   const { t } = useI18n();
-  const [departments, setDepartments] = useState<any[]>([]);
+  const [treeData, setTreeData] = useState<TreeData>({ tree: [], aiAgents: [] });
+  // Flat list of all departments for parent dropdown
+  const [allDepts, setAllDepts] = useState<DeptNode[]>([]);
   const [loading, setLoading] = useState(true);
   const [showCreate, setShowCreate] = useState(false);
-  const [editDept, setEditDept] = useState<any>(null);
-  const [manageDept, setManageDept] = useState<any>(null);
+  const [editDept, setEditDept] = useState<DeptNode | null>(null);
+  const [manageDept, setManageDept] = useState<DeptNode | null>(null);
   const [members, setMembers] = useState<any[]>([]);
   const [agents, setAgents] = useState<any[]>([]);
   const [showAddMember, setShowAddMember] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
   const [deleting, setDeleting] = useState(false);
+  // AI Employee assignment
+  const [assignDept, setAssignDept] = useState<DeptNode | null>(null);
+  const [aiEmployeeList, setAIEmployeeList] = useState<any[]>([]);
+  const [currentAIEmployee, setCurrentAIEmployee] = useState<any>(null);
+  const [assignLoading, setAssignLoading] = useState(false);
 
   // Form state
   const [formName, setFormName] = useState("");
   const [formDesc, setFormDesc] = useState("");
   const [formQueueMode, setFormQueueMode] = useState("CLAIM");
+  const [formParentId, setFormParentId] = useState("");
 
-  const fetchDepartments = useCallback(async () => {
+  // Flatten tree for parent dropdown
+  function flattenTree(nodes: DeptNode[]): DeptNode[] {
+    const result: DeptNode[] = [];
+    function walk(list: DeptNode[]) {
+      for (const n of list) {
+        result.push(n);
+        if (n.children) walk(n.children);
+      }
+    }
+    walk(nodes);
+    return result;
+  }
+
+  const fetchTree = useCallback(async () => {
     if (!token) return;
     try {
-      const res = await getDepartments(token);
-      setDepartments(res.data);
+      const res = await getDepartmentTree(token);
+      const data = (res as any)?.data || { tree: [], aiAgents: [] };
+      setTreeData(data);
+      setAllDepts(flattenTree(data.tree));
     } catch (err) { console.error(err); }
     finally { setLoading(false); }
   }, [token]);
 
-  useEffect(() => { fetchDepartments(); }, [fetchDepartments]);
+  useEffect(() => { fetchTree(); }, [fetchTree]);
 
   async function handleCreate() {
     if (!token || !formName.trim()) return;
     try {
-      await createDepartment(token, { name: formName.trim(), description: formDesc.trim() || undefined, queueMode: formQueueMode });
+      await createDepartment(token, {
+        name: formName.trim(),
+        description: formDesc.trim() || undefined,
+        queueMode: formQueueMode,
+        ...(formParentId ? { parentId: formParentId } : {}),
+      } as any);
       setShowCreate(false);
-      setFormName(""); setFormDesc(""); setFormQueueMode("CLAIM");
-      fetchDepartments();
+      setFormName(""); setFormDesc(""); setFormQueueMode("CLAIM"); setFormParentId("");
+      fetchTree();
     } catch (err: any) { alert(err.message); }
   }
 
   async function handleUpdate() {
     if (!token || !editDept) return;
     try {
-      await updateDepartment(token, editDept.id, { name: formName.trim(), description: formDesc.trim(), queueMode: formQueueMode });
+      await updateDepartment(token, editDept.id, {
+        name: formName.trim(),
+        description: formDesc.trim(),
+        queueMode: formQueueMode,
+        ...(formParentId !== undefined ? { parentId: formParentId || null } : {}),
+      } as any);
       setEditDept(null);
-      fetchDepartments();
+      fetchTree();
     } catch (err: any) { alert(err.message); }
   }
 
@@ -72,7 +278,7 @@ export default function DepartmentsPage() {
     try {
       await deleteDepartment(token, deleteConfirm.id);
       setDeleteConfirm({ open: false, id: "", name: "" });
-      fetchDepartments();
+      fetchTree();
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -80,7 +286,7 @@ export default function DepartmentsPage() {
     }
   }
 
-  async function openManage(dept: any) {
+  async function openManage(dept: DeptNode) {
     if (!token) return;
     setManageDept(dept);
     try {
@@ -88,7 +294,7 @@ export default function DepartmentsPage() {
         getDepartmentMembers(token, dept.id),
         getAgents(token),
       ]);
-      setMembers(membersRes.data);
+      setMembers((membersRes as any).data || []);
       setAgents(Array.isArray(agentsRes) ? agentsRes : []);
     } catch (err) { console.error(err); }
   }
@@ -99,7 +305,7 @@ export default function DepartmentsPage() {
       await addDepartmentMember(token, manageDept.id, { userId, departmentRole: role });
       setShowAddMember(false);
       openManage(manageDept);
-      fetchDepartments();
+      fetchTree();
     } catch (err: any) { alert(err.message); }
   }
 
@@ -108,7 +314,7 @@ export default function DepartmentsPage() {
     try {
       await removeDepartmentMember(token, manageDept.id, userId);
       openManage(manageDept);
-      fetchDepartments();
+      fetchTree();
     } catch (err: any) { alert(err.message); }
   }
 
@@ -121,15 +327,45 @@ export default function DepartmentsPage() {
     } catch (err: any) { alert(err.message); }
   }
 
-  function openEdit(dept: any) {
+  async function openAssignAI(dept: DeptNode) {
+    if (!token) return;
+    setAssignDept(dept);
+    setAssignLoading(true);
+    try {
+      const [aiRes, currentRes] = await Promise.all([
+        getAIAgents(token),
+        getDepartmentAIEmployee(token, dept.id),
+      ]);
+      setAIEmployeeList((aiRes as any).data || []);
+      setCurrentAIEmployee(currentRes?.data || null);
+    } catch (err) { console.error(err); }
+    finally { setAssignLoading(false); }
+  }
+
+  async function handleAssignAIEmployee(aiAgentId: string | null) {
+    if (!token || !assignDept) return;
+    try {
+      await assignDepartmentAIEmployee(token, assignDept.id, aiAgentId);
+      if (aiAgentId) {
+        const agent = aiEmployeeList.find((a: any) => a.id === aiAgentId);
+        setCurrentAIEmployee(agent || null);
+      } else {
+        setCurrentAIEmployee(null);
+      }
+      fetchTree();
+    } catch (err: any) { alert(err.message); }
+  }
+
+  function openEdit(dept: DeptNode) {
     setFormName(dept.name);
     setFormDesc(dept.description || "");
     setFormQueueMode(dept.queueMode);
+    setFormParentId(dept.parentId || "");
     setEditDept(dept);
   }
 
   function openCreate() {
-    setFormName(""); setFormDesc(""); setFormQueueMode("CLAIM");
+    setFormName(""); setFormDesc(""); setFormQueueMode("CLAIM"); setFormParentId("");
     setShowCreate(true);
   }
 
@@ -140,8 +376,8 @@ export default function DepartmentsPage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         <div className="flex items-center justify-between mb-4 md:mb-6">
           <div>
-            <h1 className="text-xl md:text-2xl font-bold text-gray-900 ">{t("departments.title")}</h1>
-            <p className="text-sm text-gray-400 mt-0.5 ">{t("departments.subtitle")}</p>
+            <h1 className="text-xl md:text-2xl font-bold text-gray-900">{t("departments.title")}</h1>
+            <p className="text-sm text-gray-400 mt-0.5">{t("departments.subtitle")}</p>
           </div>
           <button onClick={openCreate} className="bg-primary-500 hover:bg-primary-600 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2">
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -156,57 +392,24 @@ export default function DepartmentsPage() {
             <div className="flex items-center justify-center py-12">
               <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
             </div>
-          ) : departments.length === 0 ? (
+          ) : treeData.tree.length === 0 ? (
             <div className="text-center py-12 bg-white rounded-2xl border border-gray-100">
               <p className="text-gray-400">{t("common.noResults")}</p>
             </div>
           ) : (
-            <div className="space-y-3">
-              {departments.map((dept) => (
-                <div key={dept.id} className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2.5 mb-1">
-                        <h3 className="font-semibold text-gray-900">{dept.name}</h3>
-                        <span className={clsx(
-                          "text-[10px] px-2 py-0.5 rounded-full font-medium",
-                          dept.isActive ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
-                        )}>
-                          {dept.isActive ? t("agents.active") : t("agents.inactive")}
-                        </span>
-                        <span className={clsx(
-                          "text-[10px] px-2 py-0.5 rounded-full font-medium",
-                          dept.queueMode === "ROUND_ROBIN" ? "bg-blue-50 text-blue-600" : "bg-amber-50 text-amber-600"
-                        )}>
-                          {dept.queueMode === "ROUND_ROBIN" ? t("departments.roundRobin") : t("departments.claim")}
-                        </span>
-                      </div>
-                      {dept.description && <p className="text-sm text-gray-400">{dept.description}</p>}
-                      <div className="flex items-center gap-4 mt-2 text-xs text-gray-500">
-                        <span>{dept._count?.members || 0} {t("departments.members").toLowerCase()}</span>
-                        <span>{dept._count?.conversations || 0} {t("departments.conversations").toLowerCase()}</span>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1 shrink-0 flex-wrap justify-end">
-                      <button onClick={() => openManage(dept)} className="text-xs px-3 py-1.5 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 font-medium transition min-h-[36px]">
-                        {t("departments.members")}
-                      </button>
-                      <Link href={`/departments/${dept.id}/copilot`} className="text-xs px-3 py-1.5 bg-violet-50 text-violet-600 rounded-lg hover:bg-violet-100 font-medium transition min-h-[36px] flex items-center">
-                        {t("departments.copilotConfig")}
-                      </Link>
-                      <button onClick={() => openEdit(dept)} className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-primary-600 hover:bg-primary-50 transition">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" />
-                        </svg>
-                      </button>
-                      <button onClick={() => openDeleteConfirm(dept.id, dept.name)} className="w-9 h-9 rounded-lg flex items-center justify-center text-gray-400 hover:text-red-500 hover:bg-red-50 transition">
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-                </div>
+            <div>
+              {treeData.tree.map((node) => (
+                <DepartmentNode
+                  key={node.id}
+                  node={node}
+                  aiAgents={treeData.aiAgents}
+                  depth={0}
+                  onEdit={openEdit}
+                  onDelete={openDeleteConfirm}
+                  onManage={openManage}
+                  onAssignAI={openAssignAI}
+                  t={t}
+                />
               ))}
             </div>
           )}
@@ -232,6 +435,21 @@ export default function DepartmentsPage() {
                 <select value={formQueueMode} onChange={(e) => setFormQueueMode(e.target.value)} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition">
                   <option value="CLAIM">{t("departments.claim")}</option>
                   <option value="ROUND_ROBIN">{t("departments.roundRobin")}</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{t("departments.parentDepartment")}</label>
+                <select
+                  value={formParentId}
+                  onChange={(e) => setFormParentId(e.target.value)}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+                >
+                  <option value="">{t("departments.noParent")}</option>
+                  {allDepts
+                    .filter((d) => !editDept || d.id !== editDept.id)
+                    .map((d) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
                 </select>
               </div>
             </div>
@@ -343,6 +561,98 @@ export default function DepartmentsPage() {
             </div>
             <button onClick={() => setShowAddMember(false)} className="w-full mt-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition">
               {t("common.cancel")}
+            </button>
+          </div>
+        </div>
+      )}
+      {/* AI Employee Assignment Dialog */}
+      {assignDept && (
+        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl max-h-[80vh] overflow-y-auto">
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <h3 className="font-bold text-gray-900">{assignDept.name} - {t("departments.aiEmployee")}</h3>
+                <p className="text-xs text-gray-400 mt-0.5">{t("departments.aiEmployeeDesc")}</p>
+              </div>
+            </div>
+
+            {assignLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
+              </div>
+            ) : (
+              <>
+                {/* Current assignment */}
+                {currentAIEmployee && (
+                  <div className="mb-4 p-3 rounded-xl border border-violet-200 bg-violet-50/50">
+                    <div className="flex items-center gap-3">
+                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                        {currentAIEmployee.name?.charAt(0).toUpperCase()}
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm text-gray-900">{currentAIEmployee.name}</p>
+                        <p className="text-xs text-gray-500">{t("departments.currentAIEmployee")}</p>
+                      </div>
+                      <Link href={`/ai-studio/agents/${currentAIEmployee.id}`} className="text-xs px-2.5 py-1 bg-violet-100 text-violet-600 rounded-lg hover:bg-violet-200 font-medium transition">
+                        {t("common.edit")}
+                      </Link>
+                      <button
+                        onClick={() => handleAssignAIEmployee(null)}
+                        className="text-xs px-2.5 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium transition"
+                      >
+                        {t("departments.unassign")}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
+                {/* Available AI Employees */}
+                <p className="text-sm font-medium text-gray-700 mb-2">
+                  {currentAIEmployee ? t("departments.changeAIEmployee") : t("departments.assignAIEmployee")}
+                </p>
+                <div className="space-y-2 max-h-60 overflow-y-auto">
+                  {aiEmployeeList
+                    .filter((a: any) => a.id !== currentAIEmployee?.id)
+                    .map((agent: any) => (
+                    <button
+                      key={agent.id}
+                      onClick={() => handleAssignAIEmployee(agent.id)}
+                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-violet-50 hover:border-violet-200 transition"
+                    >
+                      <div className="flex items-center gap-3">
+                        <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
+                          {agent.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-gray-900">{agent.name}</p>
+                          <p className="text-xs text-gray-400">{agent.role} &middot; {agent.mode?.toLowerCase()}</p>
+                        </div>
+                        <span className={clsx(
+                          "text-[10px] px-2 py-0.5 rounded-full font-medium",
+                          agent.status === "ACTIVE" ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
+                        )}>
+                          {agent.status?.toLowerCase()}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                  {aiEmployeeList.filter((a: any) => a.id !== currentAIEmployee?.id).length === 0 && (
+                    <div className="text-center py-4">
+                      <p className="text-sm text-gray-400 mb-2">{t("departments.noAIEmployees")}</p>
+                      <Link href="/ai-studio/agents/new" className="text-sm text-violet-600 hover:text-violet-700 font-medium">
+                        {t("departments.createAIEmployee")}
+                      </Link>
+                    </div>
+                  )}
+                </div>
+              </>
+            )}
+
+            <button
+              onClick={() => { setAssignDept(null); setCurrentAIEmployee(null); setAIEmployeeList([]); }}
+              className="w-full mt-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition"
+            >
+              {t("common.back")}
             </button>
           </div>
         </div>

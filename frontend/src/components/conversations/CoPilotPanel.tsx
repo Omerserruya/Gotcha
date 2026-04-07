@@ -3,7 +3,7 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getAISuggestions, getAISummary, sendCopilotChat } from "@/lib/api";
+import { getAISuggestions, getAISummary, sendCopilotChat, getConversationIntelligence } from "@/lib/api";
 import clsx from "clsx";
 
 interface CoPilotPanelProps {
@@ -12,6 +12,9 @@ interface CoPilotPanelProps {
   onInsertReply: (text: string) => void;
   onClose?: () => void;
   onAiLoadingChange?: (loading: boolean) => void;
+  onTopSuggestion?: (suggestion: { text: string; label: string; confidence: number } | null) => void;
+  onScrollToReplies?: () => void;
+  repliesRef?: React.RefObject<HTMLDivElement>;
 }
 
 interface ThinkingStep {
@@ -19,86 +22,6 @@ interface ThinkingStep {
   label: string;
   status: "completed" | "active" | "pending";
   detail?: string;
-}
-
-// Fallback demo suggested replies when AI service returns stub/error
-function getDemoSuggestions(messages: any[], conversation: any): { text: string; label: string; confidence: number }[] {
-  const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
-  const body = (lastInbound?.body || "").toLowerCase();
-
-  if (body.includes("price") || body.includes("cost") || body.includes("how much")) {
-    return [
-      { text: "Our pricing starts at $29/month for the basic plan. Would you like me to send you a detailed breakdown of all our plans?", label: "Pricing info", confidence: 95 },
-      { text: "I'd be happy to help with pricing! Could you tell me a bit more about your needs so I can recommend the best plan?", label: "Discovery", confidence: 88 },
-      { text: "Great question! Let me pull up our current pricing for you. One moment please.", label: "Quick ack", confidence: 82 },
-    ];
-  }
-  if (body.includes("help") || body.includes("issue") || body.includes("problem") || body.includes("broken") || body.includes("not working")) {
-    return [
-      { text: "I'm sorry to hear you're experiencing an issue. Could you describe what's happening in more detail so I can help resolve this quickly?", label: "Empathize & gather info", confidence: 94 },
-      { text: "Thank you for reaching out. Let me look into this right away. Can you share any error messages or screenshots?", label: "Technical follow-up", confidence: 89 },
-      { text: "I understand how frustrating that must be. Let me check our system for any known issues and get back to you.", label: "Investigate", confidence: 85 },
-    ];
-  }
-  if (body.includes("thank") || body.includes("thanks") || body.includes("great")) {
-    return [
-      { text: "You're welcome! Is there anything else I can help you with today?", label: "Positive close", confidence: 96 },
-      { text: "Happy to help! Don't hesitate to reach out if you need anything else.", label: "Friendly close", confidence: 92 },
-    ];
-  }
-  if (body.includes("cancel") || body.includes("refund") || body.includes("stop")) {
-    return [
-      { text: "I understand you'd like to discuss cancellation. Before we proceed, could I learn more about what's not working for you? I'd love the chance to address any concerns.", label: "Retention", confidence: 91 },
-      { text: "I'm sorry to hear that. Let me look into your account and see what options are available. Could you provide your account email?", label: "Process request", confidence: 87 },
-    ];
-  }
-
-  return [
-    { text: "Thank you for reaching out! How can I assist you today?", label: "Greeting", confidence: 90 },
-    { text: "I'd be happy to help with that. Could you provide a few more details so I can better assist you?", label: "Gather details", confidence: 85 },
-    { text: "Let me look into that for you right away. I'll get back to you shortly.", label: "Acknowledge", confidence: 80 },
-  ];
-}
-
-function getDemoKBResults(query: string): { title: string; snippet: string; source: string }[] {
-  const q = query.toLowerCase();
-  if (q.includes("refund") || q.includes("cancel")) {
-    return [
-      { title: "Refund & Cancellation Policy", snippet: "Customers are eligible for a full refund within 30 days of purchase. After 30 days, pro-rated refunds may be issued...", source: "Policies / Refund Policy" },
-      { title: "How to Process a Cancellation", snippet: "Navigate to Settings > Subscription > Cancel. Ensure all data exports are completed before...", source: "Internal Docs / Procedures" },
-    ];
-  }
-  if (q.includes("pricing") || q.includes("plan")) {
-    return [
-      { title: "Pricing Plans Overview", snippet: "Basic ($29/mo) - Up to 500 conversations. Pro ($79/mo) - Up to 2,000 conversations. Enterprise - Custom pricing...", source: "Sales / Pricing" },
-      { title: "Feature Comparison Table", snippet: "Compare features across Basic, Pro, and Enterprise plans including automation, integrations, and support levels.", source: "Sales / Plans" },
-    ];
-  }
-  if (q.includes("setup") || q.includes("start") || q.includes("install")) {
-    return [
-      { title: "Getting Started Guide", snippet: "Follow these steps to set up your WhatsApp Business integration: 1. Connect your phone number 2. Configure webhooks...", source: "Docs / Quick Start" },
-    ];
-  }
-  if (q.length > 0) {
-    return [
-      { title: "General FAQ", snippet: "Find answers to commonly asked questions about our platform, features, and support options.", source: "Help Center / FAQ" },
-    ];
-  }
-  return [];
-}
-
-function getLocalSummary(messages: any[], conversation: any, t: (key: string) => string): string {
-  if (messages.length === 0) return t("copilot.panel.localSummary.noMessages");
-  const inboundCount = messages.filter((m) => m.direction === "INBOUND").length;
-  const outboundCount = messages.filter((m) => m.direction === "OUTBOUND").length;
-  const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
-
-  let summary = `${messages.length} ${t("copilot.panel.localSummary.messagesCount")} (${inboundCount} ${t("copilot.panel.localSummary.fromCustomer")}, ${outboundCount} ${t("copilot.panel.localSummary.fromAgent")}).`;
-  if (lastInbound) {
-    const preview = lastInbound.body.length > 80 ? lastInbound.body.slice(0, 80) + "..." : lastInbound.body;
-    summary += ` ${t("copilot.panel.localSummary.lastCustomerMessage")}: "${preview}"`;
-  }
-  return summary;
 }
 
 // Derive conversation intelligence from last inbound message
@@ -157,14 +80,11 @@ const INITIAL_THINKING_STEPS: ThinkingStep[] = [
   { id: "gen", label: "generatingSuggestions", status: "pending" },
 ];
 
-export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, onAiLoadingChange }: CoPilotPanelProps) {
+export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, onAiLoadingChange, onTopSuggestion, repliesRef }: CoPilotPanelProps) {
   const { token } = useAuth();
   const { t } = useI18n();
-  const [kbQuery, setKbQuery] = useState("");
-  const [kbResults, setKbResults] = useState<{ title: string; snippet: string; source: string }[]>([]);
-  const [activeTab, setActiveTab] = useState<"suggest" | "search" | "chat">("suggest");
+  const [activeTab, setActiveTab] = useState<"suggest" | "chat">("suggest");
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
-  const [panelMode, setPanelMode] = useState<"human" | "copilot" | "autonomous">("copilot");
   const [customerContextCollapsed, setCustomerContextCollapsed] = useState(false);
 
   // Chat mode state
@@ -180,13 +100,40 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
   const [paused, setPaused] = useState(false);
 
+  // Whether a real AI provider is configured (not stub)
+  const [aiConfigured, setAiConfigured] = useState<boolean | null>(null);
+
+  // Real intelligence from backend
+  const [realIntelligence, setRealIntelligence] = useState<{
+    detectedIntent: string;
+    intentConfidence: number;
+    sentiment: string;
+    sentimentScore: number;
+    customerEffort: number;
+    resolutionOutcome: string;
+    toolsUsed: number[];
+  } | null>(null);
+
   // Thinking process state
   const [thinkingSteps, setThinkingSteps] = useState<ThinkingStep[]>(INITIAL_THINKING_STEPS);
   const [thinkingVisible, setThinkingVisible] = useState(false);
   const [analysisCollapsed, setAnalysisCollapsed] = useState(false);
   const [analysisComplete, setAnalysisComplete] = useState(false);
   const [visibleStepIds, setVisibleStepIds] = useState<Set<string>>(new Set());
-  const thinkingTimersRef = useRef<ReturnType<typeof setTimeout>[]>([]);
+
+
+  // Reset stale state when conversation changes so mock data doesn't flash
+  useEffect(() => {
+    setRealIntelligence(null);
+    setAiSuggestions(null);
+    setAiSummary(null);
+    setAiConfigured(null);
+    setThinkingVisible(false);
+    setAnalysisComplete(false);
+    setVisibleStepIds(new Set());
+    setThinkingSteps(INITIAL_THINKING_STEPS);
+    setChatMessages([]);
+  }, [conversation?.id]);
 
   // Notify parent of AI loading state
   useEffect(() => {
@@ -202,130 +149,119 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
   const lastIsOutbound = lastMessage?.direction === "OUTBOUND";
 
-  const demoSuggestions = useMemo(() => getDemoSuggestions(messages, conversation), [messages, conversation]);
-  const localSummary = useMemo(() => getLocalSummary(messages, conversation, t), [messages, conversation, t]);
   const intelligence = useMemo(() => deriveConversationIntelligence(messages), [messages]);
 
-  // The suggestions to display: AI-powered if available, otherwise demo
-  const suggestions = aiSuggestions || demoSuggestions;
-  const summary = aiSummary || localSummary;
+  // Only show real AI suggestions — no demo/mock fallback
+  const suggestions = aiSuggestions || [];
+  const summary = aiSummary || null;
 
-  // Start thinking animation when aiLoading becomes true
+  // Expose top suggestion to parent for smart popup (only when AI is configured)
   useEffect(() => {
-    if (aiLoading) {
-      // Clear any existing timers
-      thinkingTimersRef.current.forEach(clearTimeout);
-      thinkingTimersRef.current = [];
-
-      setThinkingVisible(true);
-      setAnalysisComplete(false);
-      setVisibleStepIds(new Set());
-      setThinkingSteps(INITIAL_THINKING_STEPS.map((s) => ({ ...s, status: "pending" })));
-
-      const delays = [
-        { id: "read", completeAfter: 400 },
-        { id: "intent", completeAfter: 600 },
-        { id: "kb", completeAfter: 800 },
-        { id: "data", completeAfter: 500 },
-      ];
-
-      let accumulated = 0;
-
-      // Fade in first step immediately
-      const fadeIn0 = setTimeout(() => {
-        setVisibleStepIds(new Set(["read"]));
-        setThinkingSteps((prev) =>
-          prev.map((s) => (s.id === "read" ? { ...s, status: "active" } : s))
-        );
-      }, 50);
-      thinkingTimersRef.current.push(fadeIn0);
-
-      delays.forEach((d, idx) => {
-        accumulated += d.completeAfter;
-        const nextId = delays[idx + 1]?.id;
-        const t = setTimeout(() => {
-          setThinkingSteps((prev) =>
-            prev.map((s) => {
-              if (s.id === d.id) return { ...s, status: "completed" };
-              if (nextId && s.id === nextId) return { ...s, status: "active" };
-              return s;
-            })
-          );
-          if (nextId) {
-            setVisibleStepIds((prev) => {
-              const next = new Set(prev);
-              next.add(nextId);
-              return next;
-            });
-          }
-          // Show last step (gen)
-          if (idx === delays.length - 1) {
-            const tGen = setTimeout(() => {
-              setVisibleStepIds((prev) => {
-                const next = new Set(prev);
-                next.add("gen");
-                return next;
-              });
-              setThinkingSteps((prev) =>
-                prev.map((s) => (s.id === "gen" ? { ...s, status: "active" } : s))
-              );
-            }, 150);
-            thinkingTimersRef.current.push(tGen);
-          }
-        }, accumulated);
-        thinkingTimersRef.current.push(t);
-      });
+    if (aiConfigured === false) {
+      onTopSuggestion?.(null);
+      return;
     }
-  }, [aiLoading]);
-
-  // When aiLoading becomes false, complete the last step
-  useEffect(() => {
-    if (!aiLoading && thinkingVisible) {
-      const t = setTimeout(() => {
-        setThinkingSteps((prev) =>
-          prev.map((s) => ({ ...s, status: "completed" }))
-        );
-        setVisibleStepIds(new Set(INITIAL_THINKING_STEPS.map((s) => s.id)));
-        setAnalysisComplete(true);
-      }, 300);
-      thinkingTimersRef.current.push(t);
+    if (onTopSuggestion && suggestions.length > 0) {
+      const best = suggestions.reduce((a, b) => a.confidence > b.confidence ? a : b);
+      onTopSuggestion(best.confidence > 85 ? best : null);
+    } else {
+      onTopSuggestion?.(null);
     }
-  }, [aiLoading, thinkingVisible]);
+  }, [suggestions, onTopSuggestion, aiConfigured]);
+
+  // Helper: update a single thinking step status
+  const completeStep = useCallback((stepId: string) => {
+    setThinkingSteps((prev) =>
+      prev.map((s) => (s.id === stepId ? { ...s, status: "completed" } : s))
+    );
+  }, []);
+
+  const activateStep = useCallback((stepId: string) => {
+    setVisibleStepIds((prev) => { const next = new Set(prev); next.add(stepId); return next; });
+    setThinkingSteps((prev) =>
+      prev.map((s) => (s.id === stepId ? { ...s, status: "active" } : s))
+    );
+  }, []);
 
   // Fetch AI suggestions when conversation/messages change
   const fetchAI = useCallback(async () => {
     if (!token || !conversation?.id || paused) return;
     setAiLoading(true);
+
     try {
-      const [suggestionsRes, summaryRes] = await Promise.all([
-        getAISuggestions(token, conversation.id).catch(() => null),
+      // Step 1: Check suggestions first to detect if AI is configured
+      const suggestionsRes = await getAISuggestions(token, conversation.id).catch(() => null);
+
+      if (suggestionsRes?.data && suggestionsRes.data.length > 0) {
+        const isStub = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info";
+        if (isStub) {
+          // No AI employee configured — skip all other calls
+          setAiConfigured(false);
+          setAiLoading(false);
+          return;
+        }
+        setAiConfigured(true);
+        setAiSuggestions(suggestionsRes.data.map((s: any, i: number) => ({
+          text: s.text,
+          label: s.type === "reply" ? `${t("copilot.panel.aiReplyLabel")} ${i + 1}` : s.type === "action" ? t("copilot.panel.actionLabel") : t("copilot.panel.infoLabel"),
+          confidence: Math.round(s.confidence * 100),
+        })));
+      } else {
+        setAiConfigured(false);
+        setAiLoading(false);
+        return;
+      }
+
+      if (suggestionsRes?.copilotMode) setCopilotMode(suggestionsRes.copilotMode);
+
+      // AI is configured — now fetch intelligence + summary in parallel with real thinking steps
+      setThinkingVisible(true);
+      setAnalysisComplete(false);
+      setVisibleStepIds(new Set(["read"]));
+      setThinkingSteps(INITIAL_THINKING_STEPS.map((s) => (s.id === "read" ? { ...s, status: "active" } : { ...s, status: "pending" })));
+
+      activateStep("intent");
+      activateStep("kb");
+      const [intelligenceRes, summaryRes] = await Promise.all([
+        getConversationIntelligence(token, conversation.id).catch(() => null),
         getAISummary(token, conversation.id).catch(() => null),
       ]);
 
-      if (suggestionsRes?.data && suggestionsRes.data.length > 0) {
-        // Check if it's the stub response
-        const isStub = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info";
-        if (!isStub) {
-          setAiSuggestions(suggestionsRes.data.map((s: any, i: number) => ({
-            text: s.text,
-            label: s.type === "reply" ? `${t("copilot.panel.aiReplyLabel")} ${i + 1}` : s.type === "action" ? t("copilot.panel.actionLabel") : t("copilot.panel.infoLabel"),
-            confidence: Math.round(s.confidence * 100),
-          })));
-        }
+      // Intelligence result
+      completeStep("read");
+      activateStep("data");
+      if (intelligenceRes?.data) {
+        setRealIntelligence({
+          detectedIntent: intelligenceRes.data.detectedIntent || "general",
+          intentConfidence: intelligenceRes.data.intentConfidence || 0,
+          sentiment: intelligenceRes.data.sentiment || "neutral",
+          sentimentScore: intelligenceRes.data.sentimentScore || 0,
+          customerEffort: intelligenceRes.data.customerEffort || 0,
+          resolutionOutcome: intelligenceRes.data.resolutionOutcome || "open",
+          toolsUsed: intelligenceRes.data.toolsUsed || [],
+        });
       }
-      // Read copilotMode from either response
-      if (suggestionsRes?.copilotMode) setCopilotMode(suggestionsRes.copilotMode);
-      else if (summaryRes?.copilotMode) setCopilotMode(summaryRes.copilotMode);
+      completeStep("intent");
+      completeStep("data");
+      completeStep("kb");
 
+      // Summary result
+      activateStep("gen");
+      if (summaryRes?.copilotMode && !suggestionsRes?.copilotMode) setCopilotMode(summaryRes.copilotMode);
       if (summaryRes?.data?.summary && summaryRes.data.summary !== "AI summarization not configured.") {
         setAiSummary(summaryRes.data.summary);
       }
+      completeStep("gen");
     } catch {
-      // Silently fall back to demo
+      setAiConfigured(false);
     } finally {
       setAiLoading(false);
+      // Mark all steps complete and show findings
+      setThinkingSteps((prev) => prev.map((s) => ({ ...s, status: "completed" })));
+      setVisibleStepIds(new Set(INITIAL_THINKING_STEPS.map((s) => s.id)));
+      setAnalysisComplete(true);
     }
-  }, [token, conversation?.id, paused]);
+  }, [token, conversation?.id, paused, activateStep, completeStep, t]);
 
   useEffect(() => {
     if (!lastIsOutbound) fetchAI();
@@ -338,11 +274,6 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
       return () => clearTimeout(timer);
     }
   }, [messages.length, lastIsOutbound]);
-
-  function handleSearch() {
-    if (!kbQuery.trim()) return;
-    setKbResults(getDemoKBResults(kbQuery));
-  }
 
   function handleInsert(text: string, idx: number) {
     onInsertReply(text);
@@ -368,10 +299,81 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
     }
   }
 
-  const sentimentLabel = intelligence.sentiment === "positive" ? t("copilot.panel.sentiments.positive") : intelligence.sentiment === "negative" ? t("copilot.panel.sentiments.slightlyNegative") : t("copilot.panel.sentiments.neutral");
-  const sentimentColor = intelligence.sentiment === "positive" ? "text-green-600" : intelligence.sentiment === "negative" ? "text-red-500" : "text-gray-500";
-  const priorityLabel = intelligence.priority === "high" ? t("copilot.panel.priorities.high") : intelligence.priority === "low" ? t("copilot.panel.priorities.low") : t("copilot.panel.priorities.medium");
-  const priorityColor = intelligence.priority === "high" ? "text-red-500" : intelligence.priority === "low" ? "text-gray-400" : "text-amber-500";
+  // Use real intelligence from backend, fall back to local keyword-based
+  const effectiveSentiment = realIntelligence?.sentiment || intelligence.sentiment;
+  const effectiveIntent = realIntelligence?.detectedIntent || intelligence.intent;
+  const effectiveConfidence = realIntelligence?.intentConfidence ?? 0;
+  const effectiveEffort = realIntelligence?.customerEffort ?? 0;
+
+  // Derive priority from real intelligence customerEffort, or fallback
+  const effectivePriority = realIntelligence
+    ? (realIntelligence.customerEffort >= 4 ? "high" : realIntelligence.customerEffort >= 2 ? "medium" : "low")
+    : intelligence.priority;
+
+  const sentimentLabel = effectiveSentiment === "positive" ? t("copilot.panel.sentiments.positive") : effectiveSentiment === "negative" ? t("copilot.panel.sentiments.slightlyNegative") : t("copilot.panel.sentiments.neutral");
+  const sentimentColor = effectiveSentiment === "positive" ? "text-green-600" : effectiveSentiment === "negative" ? "text-red-500" : "text-gray-500";
+  const priorityLabel = effectivePriority === "high" ? t("copilot.panel.priorities.high") : effectivePriority === "low" ? t("copilot.panel.priorities.low") : t("copilot.panel.priorities.medium");
+  const priorityColor = effectivePriority === "high" ? "text-red-500" : effectivePriority === "low" ? "text-gray-400" : "text-amber-500";
+
+  // Dynamic suggested actions based on real detected intent
+  const suggestedActions = useMemo(() => {
+    const intent = effectiveIntent;
+    const actions: Array<{ label: string; icon: string; style: string; text: string }> = [];
+
+    if (intent === "refundRequest" || intent === "returnRequest" || intent === "cancellation") {
+      actions.push({
+        label: t("copilot.suggestedActions.offerDiscount"),
+        icon: "ticket",
+        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
+        text: t("copilot.panel.actionTexts.offerDiscount") || "I understand your concern. As a valued customer, I'd like to offer you a special discount to make things right. Would that work for you?",
+      });
+      actions.push({
+        label: t("copilot.suggestedActions.transferToHuman"),
+        icon: "transfer",
+        style: "bg-red-50 hover:bg-red-100 text-red-600",
+        text: t("copilot.panel.actionTexts.transferToHuman") || "Let me connect you with a specialist who can help resolve this right away.",
+      });
+    } else if (intent === "orderInquiry") {
+      actions.push({
+        label: t("copilot.suggestedActions.checkOrderStatus"),
+        icon: "search",
+        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
+        text: t("copilot.panel.actionTexts.checkOrderStatus") || "I'd be happy to check your order status. Could you provide your order number?",
+      });
+    } else if (intent === "technicalIssue" || intent === "supportRequest") {
+      actions.push({
+        label: t("copilot.suggestedActions.checkOrderStatus"),
+        icon: "search",
+        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
+        text: t("copilot.panel.actionTexts.gatherDetails") || "I'd like to help resolve this for you. Could you describe the issue in more detail, including any error messages you're seeing?",
+      });
+      actions.push({
+        label: t("copilot.suggestedActions.transferToHuman"),
+        icon: "transfer",
+        style: "bg-red-50 hover:bg-red-100 text-red-600",
+        text: t("copilot.panel.actionTexts.transferToHuman") || "Let me connect you with a specialist who can help resolve this right away.",
+      });
+    } else if (intent === "pricingInquiry") {
+      actions.push({
+        label: t("copilot.suggestedActions.checkOrderStatus"),
+        icon: "search",
+        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
+        text: t("copilot.panel.actionTexts.sharePricing") || "Great question! Let me pull up our current pricing plans for you.",
+      });
+    }
+
+    // Always offer transfer as a fallback if not already added
+    if (!actions.find((a) => a.icon === "transfer")) {
+      actions.push({
+        label: t("copilot.suggestedActions.transferToHuman"),
+        icon: "transfer",
+        style: "bg-red-50 hover:bg-red-100 text-red-600",
+        text: t("copilot.panel.actionTexts.transferToHuman") || "Let me connect you with a specialist who can help resolve this right away.",
+      });
+    }
+
+    return actions;
+  }, [effectiveIntent, t]);
 
   return (
     <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white flex flex-col h-full animate-slide-in-right">
@@ -384,7 +386,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
         </div>
         <div className="flex-1 min-w-0">
           <p className="text-sm font-semibold text-gray-900">{t("copilot.panel.title")}</p>
-          <p className="text-[10px] text-gray-400">{aiSuggestions ? t("copilot.panel.aiPowered") : t("copilot.panel.demoMode")}</p>
+          <p className="text-[10px] text-gray-400">{aiSuggestions ? t("copilot.panel.aiPowered") : aiConfigured === false ? t("copilot.panel.notConfigured") : t("copilot.panel.demoMode")}</p>
         </div>
         <div className="flex items-center gap-2">
           {/* Regenerate button (shown when last message is outbound) */}
@@ -457,35 +459,8 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
         </div>
       </div>
 
-      {/* Mode Toggle */}
-      <div className="px-3 py-2 border-b border-gray-100 bg-white">
-        <div className="flex items-center gap-1.5 bg-gray-100 rounded-xl p-0.5">
-          {(["human", "copilot", "autonomous"] as const).map((mode) => {
-            const labels: Record<typeof mode, string> = {
-              human: t("copilot.modeToggle.humanOnly"),
-              copilot: t("copilot.modeToggle.copilot"),
-              autonomous: t("copilot.modeToggle.autonomous"),
-            };
-            return (
-              <button
-                key={mode}
-                onClick={() => setPanelMode(mode)}
-                className={clsx(
-                  "flex-1 py-1.5 text-[10px] font-semibold rounded-lg transition-all",
-                  panelMode === mode
-                    ? "bg-violet-600 text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-700"
-                )}
-              >
-                {labels[mode]}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-
-      {/* Tabs */}
-      <div className="flex bg-gray-50/50">
+      {/* Tabs — hidden when no AI Employee */}
+      {aiConfigured !== false && <div className="flex bg-gray-50/50">
         <button
           onClick={() => setActiveTab("suggest")}
           className={clsx(
@@ -497,20 +472,6 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
         >
           {t("copilot.panel.tabs.suggestions")}
           {activeTab === "suggest" && (
-            <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
-          )}
-        </button>
-        <button
-          onClick={() => setActiveTab("search")}
-          className={clsx(
-            "flex-1 py-2.5 text-xs font-medium transition-all relative",
-            activeTab === "search"
-              ? "text-primary-600"
-              : "text-gray-400 hover:text-gray-600"
-          )}
-        >
-          {t("copilot.panel.tabs.knowledgeBase")}
-          {activeTab === "search" && (
             <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
           )}
         </button>
@@ -528,11 +489,32 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
             <div className="absolute bottom-0 left-1/4 right-1/4 h-0.5 bg-primary-500 rounded-full" />
           )}
         </button>
-      </div>
+      </div>}
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
-        {activeTab === "suggest" ? (
+        {aiConfigured === false && !aiLoading ? (
+          <div className="flex-1 flex items-center justify-center p-6">
+            <div className="text-center max-w-[260px]">
+              <div className="w-14 h-14 bg-gradient-to-br from-violet-100 to-purple-100 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                <svg className="w-7 h-7 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+              </div>
+              <p className="text-sm font-semibold text-gray-800 mb-1.5">{t("copilot.panel.noAiEmployee.title")}</p>
+              <p className="text-xs text-gray-500 leading-relaxed mb-4">{t("copilot.panel.noAiEmployee.description")}</p>
+              <a
+                href="/ai-studio"
+                className="inline-flex items-center gap-1.5 px-5 py-2.5 text-xs font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-600 rounded-xl hover:from-violet-600 hover:to-purple-700 transition-all shadow-md shadow-violet-300/40"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+                </svg>
+                {t("copilot.panel.noAiEmployee.setupButton")}
+              </a>
+            </div>
+          </div>
+        ) : activeTab === "suggest" ? (
           <div className="p-3 space-y-3">
 
             {/* AI Analysis / Thinking Process */}
@@ -564,7 +546,7 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 </button>
 
                 {/* Collapsible body */}
-                <div className={clsx("transition-all duration-300 overflow-hidden", analysisCollapsed ? "max-h-0" : "max-h-[400px]")}>
+                <div className={clsx("transition-all duration-300 overflow-hidden", analysisCollapsed ? "max-h-0" : "max-h-[600px]")}>
                   <div className="px-3 pt-2.5 pb-3 space-y-1.5">
                     {/* Steps */}
                     {INITIAL_THINKING_STEPS.map((step, idx) => {
@@ -617,7 +599,14 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                         <div className="space-y-1.5">
                           <div className="flex items-baseline justify-between">
                             <span className="text-[11px] text-gray-400">{t("copilot.panel.analysis.intent")}</span>
-                            <span className="text-[11px] font-medium text-gray-700">{t(`copilot.panel.intents.${intelligence.intent}`)}</span>
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-[11px] font-medium text-gray-700">{t(`copilot.panel.intents.${effectiveIntent}`) || effectiveIntent}</span>
+                              {effectiveConfidence > 0 && (
+                                <span className={clsx("text-[9px] font-semibold px-1.5 py-0.5 rounded-full", effectiveConfidence > 0.7 ? "bg-green-50 text-green-600" : effectiveConfidence > 0.4 ? "bg-yellow-50 text-yellow-600" : "bg-gray-100 text-gray-500")}>
+                                  {Math.round(effectiveConfidence * 100)}%
+                                </span>
+                              )}
+                            </div>
                           </div>
                           <div className="flex items-baseline justify-between">
                             <span className="text-[11px] text-gray-400">{t("copilot.panel.analysis.sentiment")}</span>
@@ -641,13 +630,52 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                         </div>
                       </div>
                     )}
+
+                    {/* Suggested Actions - dynamic based on detected intent */}
+                    {analysisComplete && suggestedActions.length > 0 && (
+                      <div className="mt-3">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+                          </svg>
+                          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.suggestedActions.title")}</span>
+                        </div>
+                        <div className="flex flex-col gap-1.5">
+                          {suggestedActions.map((action, i) => (
+                            <button
+                              key={i}
+                              onClick={() => onInsertReply(action.text)}
+                              className={clsx("flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-all text-left", action.style)}
+                            >
+                              {action.icon === "search" && (
+                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+                                </svg>
+                              )}
+                              {action.icon === "ticket" && (
+                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-4.125-2.625L11.25 21.75l-4.125-2.625L3 21.75V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z" />
+                                </svg>
+                              )}
+                              {action.icon === "transfer" && (
+                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+                                </svg>
+                              )}
+                              <span className="flex-1">{action.label}</span>
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
             )}
 
+            {/* Section 2: Context */}
             {/* Context summary card */}
-            <div className="bg-gradient-to-br from-primary-50/80 to-violet-50/80 rounded-xl p-3">
+            {summary && <div className="bg-gradient-to-br from-primary-50/80 to-violet-50/80 rounded-xl p-3">
               <div className="flex items-center gap-1.5 mb-1.5">
                 <svg className="w-3.5 h-3.5 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
@@ -655,112 +683,10 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                 <span className="text-[10px] font-semibold text-primary-600 uppercase tracking-wider">{t("copilot.panel.contextSection.title")}</span>
               </div>
               <p className="text-xs text-gray-600 leading-relaxed">{summary}</p>
-            </div>
-
-            {/* Customer Context Card */}
-            {conversation && (
-              <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-                {/* Collapsible header */}
-                <button
-                  onClick={() => setCustomerContextCollapsed((v) => !v)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100/60 transition-all"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                    </svg>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.customerContext.title")}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-400">{customerContextCollapsed ? t("copilot.panel.customerContext.show") : t("copilot.panel.customerContext.hide")}</span>
-                    <svg
-                      className={clsx("w-3.5 h-3.5 text-gray-400 transition-transform duration-200", customerContextCollapsed ? "-rotate-90" : "rotate-0")}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Collapsible body */}
-                <div className={clsx("transition-all duration-300 overflow-hidden", customerContextCollapsed ? "max-h-0" : "max-h-[300px]")}>
-                  <div className="px-3 pt-2 pb-3 space-y-2">
-                    {/* Name */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.name")}</span>
-                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerName || t("copilot.panel.customerContext.unknown")}</span>
-                    </div>
-                    {/* Phone */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.phone")}</span>
-                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerPhone || "—"}</span>
-                    </div>
-                    {/* Total conversations (mock) */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.conversations")}</span>
-                      <span className="text-[11px] font-medium text-gray-700">
-                        12 <span className="text-[10px] text-violet-500 font-semibold">({t("copilot.panel.customerContext.vip")})</span>
-                      </span>
-                    </div>
-                    {/* Sentiment */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.sentiment")}</span>
-                      <div className="flex items-center gap-1">
-                        <span className={clsx(
-                          "w-2 h-2 rounded-full",
-                          intelligence.sentiment === "positive" ? "bg-green-500" :
-                          intelligence.sentiment === "negative" ? "bg-red-500" :
-                          "bg-gray-400"
-                        )} />
-                        <span className={clsx(
-                          "text-[11px] font-medium",
-                          intelligence.sentiment === "positive" ? "text-green-600" :
-                          intelligence.sentiment === "negative" ? "text-red-500" :
-                          "text-gray-500"
-                        )}>
-                          {intelligence.sentiment === "positive" ? t("copilot.panel.customerContext.happy") :
-                           intelligence.sentiment === "negative" ? t("copilot.panel.customerContext.angry") : t("copilot.panel.customerContext.neutral")}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Channel badge */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.channel")}</span>
-                      {(() => {
-                        const ch = (conversation.channel || conversation.channelType || "").toUpperCase();
-                        const isWhatsApp = ch.includes("WHATSAPP");
-                        const isInstagram = ch.includes("INSTAGRAM");
-                        return (
-                          <span className={clsx(
-                            "text-[10px] font-semibold px-2 py-0.5 rounded-full",
-                            isWhatsApp ? "bg-green-50 text-green-600" :
-                            isInstagram ? "bg-pink-50 text-pink-600" :
-                            "bg-blue-50 text-blue-600"
-                          )}>
-                            {isWhatsApp ? "WhatsApp" : isInstagram ? "Instagram" : t("copilot.panel.customerContext.web")}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    {/* Status */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.status")}</span>
-                      <span className={clsx(
-                        "text-[10px] font-medium px-2 py-0.5 rounded-full",
-                        conversation.status === "OPEN" ? "bg-green-50 text-green-600" :
-                        conversation.status === "WAITING" ? "bg-amber-50 text-amber-600" :
-                        "bg-gray-100 text-gray-500"
-                      )}>
-                        {conversation.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            )}
+            </div>}
 
             {/* Suggested replies */}
-            <div>
+            {suggestions.length > 0 && <div ref={repliesRef}>
               <div className="flex items-center gap-1.5 mb-2 px-0.5">
                 <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                   <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
@@ -828,143 +754,110 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   );
                 })}
               </div>
-            </div>
+            </div>}
 
-            {/* Suggested Actions */}
-            <div className="rounded-xl border border-gray-100 bg-white shadow-sm p-3">
-              <div className="flex items-center gap-1.5 mb-2.5">
-                <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                </svg>
-                <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.suggestedActions.title")}</span>
-              </div>
-              <div className="flex flex-col gap-2">
+            {/* Section 3: Customer Data */}
+            {conversation && (
+              <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+                {/* Collapsible header */}
                 <button
-                  onClick={() => {}}
-                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-medium transition-all text-left"
+                  onClick={() => setCustomerContextCollapsed((v) => !v)}
+                  className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100/60 transition-all"
                 >
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                  </svg>
-                  {t("copilot.suggestedActions.checkOrderStatus")}
-                </button>
-                <button
-                  onClick={() => {}}
-                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-violet-50 hover:bg-violet-100 text-violet-700 text-xs font-medium transition-all text-left"
-                >
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-4.125-2.625L11.25 21.75l-4.125-2.625L3 21.75V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z" />
-                  </svg>
-                  {t("copilot.suggestedActions.offerDiscount")}
-                </button>
-                <button
-                  onClick={() => {}}
-                  className="flex items-center gap-2 w-full px-3 py-2 rounded-lg bg-red-50 hover:bg-red-100 text-red-600 text-xs font-medium transition-all text-left"
-                >
-                  <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                  </svg>
-                  {t("copilot.suggestedActions.transferToHuman")}
-                </button>
-              </div>
-            </div>
-
-            {/* Conversation Intelligence */}
-            {messages.length > 0 && (
-              <div className="rounded-xl border border-gray-100 bg-white p-3">
-                <div className="flex items-center gap-1.5 mb-2">
-                  <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M9.75 3.104v5.714a2.25 2.25 0 01-.659 1.591L5 14.5M9.75 3.104c-.251.023-.501.05-.75.082m.75-.082a24.301 24.301 0 014.5 0m0 0v5.714c0 .597.237 1.17.659 1.591L19.8 15.3M14.25 3.104c.251.023.501.05.75.082M19.8 15.3l-1.57.393A9.065 9.065 0 0112 15a9.065 9.065 0 00-6.23-.693L5 14.5m14.8.8l1.402 1.402c1.232 1.232.65 3.318-1.067 3.611A48.309 48.309 0 0112 21c-2.773 0-5.491-.235-8.135-.687-1.718-.293-2.3-2.379-1.067-3.61L5 14.5" />
-                  </svg>
-                  <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.intelligence.title")}</span>
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {intelligence.tags.map((tag, i) => (
-                    <span
-                      key={i}
-                      className={clsx("text-[10px] font-medium px-2 py-0.5 rounded-full", tag.color)}
+                  <div className="flex items-center gap-1.5">
+                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+                    </svg>
+                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.customerContext.title")}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[10px] text-gray-400">{customerContextCollapsed ? t("copilot.panel.customerContext.show") : t("copilot.panel.customerContext.hide")}</span>
+                    <svg
+                      className={clsx("w-3.5 h-3.5 text-gray-400 transition-transform duration-200", customerContextCollapsed ? "-rotate-90" : "rotate-0")}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
                     >
-                      {t(`copilot.panel.tags.${tag.label}`)}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
-
-          </div>
-        ) : activeTab === "search" ? (
-          <div className="p-3 space-y-3">
-            {/* Search input */}
-            <div className="relative">
-              <input
-                type="text"
-                value={kbQuery}
-                onChange={(e) => setKbQuery(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-                placeholder={t("copilot.panel.search.placeholder")}
-                className="w-full pl-9 pr-3 py-2.5 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-xl text-base md:text-xs focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
-              />
-              <svg className="w-4 h-4 text-gray-400 absolute left-3 top-1/2 -translate-y-1/2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-              </svg>
-            </div>
-
-            {/* Quick search tags */}
-            <div className="flex flex-wrap gap-1.5">
-              {[{key: "refundPolicy", en: "Refund policy"}, {key: "pricingPlans", en: "Pricing plans"}, {key: "setupGuide", en: "Setup guide"}].map((tag) => (
-                <button
-                  key={tag.key}
-                  onClick={() => { setKbQuery(tag.en); setKbResults(getDemoKBResults(tag.en)); }}
-                  className="text-[10px] px-2.5 py-1 bg-primary-50 text-primary-600 rounded-lg hover:bg-primary-100 transition font-medium"
-                >
-                  {t(`copilot.panel.search.${tag.key}`)}
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+                    </svg>
+                  </div>
                 </button>
-              ))}
-            </div>
 
-            {/* Results */}
-            {kbResults.length > 0 ? (
-              <div className="space-y-2">
-                <span className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-0.5">
-                  {kbResults.length} {t("copilot.panel.search.resultsFound")}
-                </span>
-                {kbResults.map((r, i) => (
-                  <div key={i} className="bg-gray-50/50 rounded-xl p-3 hover:bg-gray-50 hover:shadow-subtle transition">
-                    <div className="flex items-start gap-2">
-                      <div className="w-6 h-6 bg-primary-50 rounded-lg flex items-center justify-center shrink-0 mt-0.5">
-                        <svg className="w-3 h-3 text-primary-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                        </svg>
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-xs font-medium text-gray-900">{r.title}</p>
-                        <p className="text-[11px] text-gray-500 leading-relaxed mt-0.5">{r.snippet}</p>
-                        <p className="text-[10px] text-primary-400 mt-1">{r.source}</p>
+                {/* Collapsible body */}
+                <div className={clsx("transition-all duration-300 overflow-hidden", customerContextCollapsed ? "max-h-0" : "max-h-[300px]")}>
+                  <div className="px-3 pt-2 pb-3 space-y-2">
+                    {/* Name */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.name")}</span>
+                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerName || t("copilot.panel.customerContext.unknown")}</span>
+                    </div>
+                    {/* Phone */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.phone")}</span>
+                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerPhone || "—"}</span>
+                    </div>
+                    {/* Total conversations (mock) */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.conversations")}</span>
+                      <span className="text-[11px] font-medium text-gray-700">
+                        12 <span className="text-[10px] text-violet-500 font-semibold">({t("copilot.panel.customerContext.vip")})</span>
+                      </span>
+                    </div>
+                    {/* Sentiment */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.sentiment")}</span>
+                      <div className="flex items-center gap-1">
+                        <span className={clsx(
+                          "w-2 h-2 rounded-full",
+                          effectiveSentiment === "positive" ? "bg-green-500" :
+                          effectiveSentiment === "negative" ? "bg-red-500" :
+                          "bg-gray-400"
+                        )} />
+                        <span className={clsx(
+                          "text-[11px] font-medium",
+                          effectiveSentiment === "positive" ? "text-green-600" :
+                          effectiveSentiment === "negative" ? "text-red-500" :
+                          "text-gray-500"
+                        )}>
+                          {effectiveSentiment === "positive" ? t("copilot.panel.customerContext.happy") :
+                           effectiveSentiment === "negative" ? t("copilot.panel.customerContext.angry") : t("copilot.panel.customerContext.neutral")}
+                        </span>
                       </div>
                     </div>
+                    {/* Channel badge */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.channel")}</span>
+                      {(() => {
+                        const ch = (conversation.channel || conversation.channelType || "").toUpperCase();
+                        const isWhatsApp = ch.includes("WHATSAPP");
+                        const isInstagram = ch.includes("INSTAGRAM");
+                        return (
+                          <span className={clsx(
+                            "text-[10px] font-semibold px-2 py-0.5 rounded-full",
+                            isWhatsApp ? "bg-green-50 text-green-600" :
+                            isInstagram ? "bg-pink-50 text-pink-600" :
+                            "bg-blue-50 text-blue-600"
+                          )}>
+                            {isWhatsApp ? "WhatsApp" : isInstagram ? "Instagram" : t("copilot.panel.customerContext.web")}
+                          </span>
+                        );
+                      })()}
+                    </div>
+                    {/* Status */}
+                    <div className="flex items-center justify-between">
+                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.status")}</span>
+                      <span className={clsx(
+                        "text-[10px] font-medium px-2 py-0.5 rounded-full",
+                        conversation.status === "OPEN" ? "bg-green-50 text-green-600" :
+                        conversation.status === "WAITING" ? "bg-amber-50 text-amber-600" :
+                        "bg-gray-100 text-gray-500"
+                      )}>
+                        {conversation.status}
+                      </span>
+                    </div>
                   </div>
-                ))}
-              </div>
-            ) : kbQuery ? (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-gray-50 rounded-xl flex items-center justify-center mx-auto mb-2">
-                  <svg className="w-6 h-6 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                  </svg>
                 </div>
-                <p className="text-xs text-gray-400">{t("copilot.panel.search.enterToSearch")}</p>
-              </div>
-            ) : (
-              <div className="text-center py-8">
-                <div className="w-12 h-12 bg-primary-50 rounded-xl flex items-center justify-center mx-auto mb-2">
-                  <svg className="w-6 h-6 text-primary-300" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-                  </svg>
-                </div>
-                <p className="text-xs text-gray-400">{t("copilot.panel.search.searchKB")}</p>
-                <p className="text-[10px] text-gray-300 mt-1">{t("copilot.panel.search.tryTags")}</p>
               </div>
             )}
+
           </div>
         ) : activeTab === "chat" ? (
           <div className="flex flex-col h-full">
@@ -1015,12 +908,12 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                   value={chatInput}
                   onChange={(e) => setChatInput(e.target.value)}
                   placeholder={t("copilot.panel.chat.inputPlaceholder")}
-                  disabled={chatLoading}
+                  disabled={chatLoading || aiConfigured === false}
                   className="flex-1 px-3 py-2 bg-gray-50/80 border-0 ring-1 ring-gray-200/60 rounded-lg text-base md:text-xs focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition disabled:opacity-50"
                 />
                 <button
                   type="submit"
-                  disabled={chatLoading || !chatInput.trim()}
+                  disabled={chatLoading || !chatInput.trim() || aiConfigured === false}
                   className="w-8 h-8 bg-violet-500 hover:bg-violet-600 text-white rounded-lg flex items-center justify-center transition disabled:opacity-40 shrink-0"
                 >
                   <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

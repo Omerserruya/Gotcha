@@ -127,6 +127,43 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Templates, Broadcasts, Scheduled Messages, Contacts (Conversation Service) ──
+        location /api/templates {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/broadcasts {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/scheduled-messages {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/contacts {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Conversation Service ─────────────────────────
         location /api/conversations {
             limit_req zone=api burst=50 nodelay;
@@ -248,6 +285,24 @@ http {
         }
 
         location /api/router-rules {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/flow-canvas {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/usage {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
@@ -396,6 +451,46 @@ http {
 
         location ~ ^/t/([^/]+)/api/router-rules(.*)$ {
             proxy_pass http://ai_service/api/router-rules$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/flow-canvas(.*)$ {
+            proxy_pass http://ai_service/api/flow-canvas$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/templates(.*)$ {
+            proxy_pass http://conversation_service/api/templates$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/broadcasts(.*)$ {
+            proxy_pass http://conversation_service/api/broadcasts$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/scheduled-messages(.*)$ {
+            proxy_pass http://conversation_service/api/scheduled-messages$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/contacts(.*)$ {
+            proxy_pass http://conversation_service/api/contacts$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

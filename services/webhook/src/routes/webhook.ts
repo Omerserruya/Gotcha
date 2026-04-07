@@ -109,6 +109,48 @@ router.post("/", async (req: Request, res: Response) => {
     for (const status of statusUpdates) {
       await handleStatusUpdate(tenantId, status);
     }
+
+    // Step 6: Handle template status updates (WhatsApp only)
+    for (const entry of body.entry || []) {
+      for (const change of entry.changes || []) {
+        if (change.field === "message_template_status_update") {
+          const templateUpdate = change.value;
+          try {
+            const event = templateUpdate.event;
+            const metaTemplateName = templateUpdate.message_template_name;
+            const metaTemplateId = String(templateUpdate.message_template_id);
+            const reason = templateUpdate.reason || null;
+
+            if (channelAccount) {
+              const statusMap: Record<string, string> = {
+                APPROVED: "APPROVED",
+                REJECTED: "REJECTED",
+                PENDING_DELETION: "APPROVED",
+                DISABLED: "REJECTED",
+              };
+              const newStatus = statusMap[event];
+              if (newStatus) {
+                await prisma.messageTemplate.updateMany({
+                  where: {
+                    tenantId: channelAccount.tenantId,
+                    name: metaTemplateName,
+                    channel: "WHATSAPP",
+                  },
+                  data: {
+                    status: newStatus as any,
+                    metaTemplateId: metaTemplateId,
+                    ...(reason ? { rejectionReason: reason } : {}),
+                  },
+                });
+                console.log(`[WEBHOOK] Template "${metaTemplateName}" status updated to ${newStatus}`);
+              }
+            }
+          } catch (tplErr) {
+            console.error("[WEBHOOK] Template status update error:", tplErr);
+          }
+        }
+      }
+    }
   } catch (err) {
     console.error("Webhook processing error:", err);
   }

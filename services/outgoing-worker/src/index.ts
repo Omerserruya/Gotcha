@@ -1,8 +1,10 @@
 import { startOutgoingWorker } from "./workers/outgoing.worker";
+import { startScheduledMessageWorker } from "./workers/scheduled.worker";
 
 console.log("[outgoing-worker] Starting standalone outgoing message worker...");
 
 startOutgoingWorker();
+startScheduledMessageWorker();
 
 // Graceful shutdown
 process.on("SIGTERM", () => {

@@ -265,8 +265,10 @@ export default function LeadsCRMPage() {
                   <tr className="border-b border-gray-100">
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Name</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Email</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Phone</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Company</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden md:table-cell">Role</th>
+                    <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden xl:table-cell">Company Size</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Status</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider hidden lg:table-cell">Source</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase tracking-wider">Date</th>
@@ -285,8 +287,10 @@ export default function LeadsCRMPage() {
                         {lead.notes && <p className="text-xs text-gray-400 truncate max-w-[140px]">{lead.notes}</p>}
                       </td>
                       <td className="px-4 py-3 text-gray-600">{lead.email}</td>
+                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{lead.phone || "—"}</td>
                       <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{lead.company || "—"}</td>
                       <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{lead.role}</td>
+                      <td className="px-4 py-3 text-gray-500 hidden xl:table-cell">{lead.companySize || "—"}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <select
                           value={lead.status}

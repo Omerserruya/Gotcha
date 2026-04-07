@@ -20,7 +20,9 @@
     "logout": "Logout",
     "tools": "Tools",
     "integrations": "Integrations",
-    "aiStudio": "AI Studio"
+    "aiStudio": "AI Studio",
+    "outbound": "Outbound",
+    "usage": "Usage"
   },
   "auth": {
     "login": "Login",
@@ -43,6 +45,9 @@
     "release": "Release",
     "transfer": "Transfer",
     "close": "Close",
+    "closeConfirmTitle": "Close Conversation",
+    "closeConfirmMessage": "Are you sure you want to close this conversation? It will be removed from the active view.",
+    "closeConfirmButton": "Approve & Close",
     "reassign": "Transfer to Agent",
     "typeMessage": "Type a message...",
     "send": "Send",
@@ -78,7 +83,22 @@
     "deleteChat": "Delete chat",
     "deleteConfirmTitle": "Delete chat?",
     "deleteConfirmMsg": "This chat and all its messages will be permanently deleted.",
-    "chatDeleted": "Chat deleted"
+    "chatDeleted": "Chat deleted",
+    "newConversation": "New Conversation",
+    "initiate": {
+      "title": "Start New Conversation",
+      "searchContact": "Search contacts...",
+      "selectContact": "Select a contact",
+      "noContacts": "No contacts found",
+      "channelAccount": "Channel Account",
+      "selectChannelAccount": "Select a channel account",
+      "message": "Message",
+      "messagePlaceholder": "Type your message...",
+      "send": "Send",
+      "sending": "Sending...",
+      "success": "Conversation started",
+      "error": "Failed to start conversation"
+    }
   },
   "dashboard": {
     "title": "Dashboard",
@@ -136,6 +156,18 @@
     "password": "Password",
     "registerButton": "Create Agent",
     "registerSuccess": "Agent created successfully",
+    "editAgent": "Edit Agent",
+    "deleteAgent": "Delete Agent",
+    "deleteAgentMsg": "Are you sure you want to delete this agent? Their conversations will be unassigned.",
+    "department": "Department",
+    "noDepartment": "No department",
+    "agentIsActive": "This agent can receive and handle conversations",
+    "agentIsInactive": "This agent is deactivated and cannot handle conversations",
+    "resetPassword": "Reset Password",
+    "newPasswordPlaceholder": "New password (min. 8 characters)",
+    "passwordReset": "Password Reset",
+    "passwordResetSuccess": "Password has been reset successfully",
+    "dangerZone": "Danger Zone",
     "autoGreeting": "Auto-Greeting Template",
     "autoGreetingDesc": "This message is sent automatically when an agent claims a chat. Use {agentName} as a placeholder.",
     "autoGreetingPlaceholder": "Hi! I'm {agentName} and I'll be helping you today.",
@@ -221,6 +253,12 @@
       "title": "AI Co-Pilot",
       "aiPowered": "AI-Powered",
       "demoMode": "Demo Mode",
+      "notConfigured": "No AI Employee",
+      "noAiEmployee": {
+        "title": "No AI Employee Configured",
+        "description": "Set up an AI Employee in AI Studio to enable AI-powered suggestions, analysis, and chat.",
+        "setupButton": "Set up in AI Studio"
+      },
       "regenerate": "Regenerate",
       "pause": "Pause",
       "paused": "Paused",
@@ -385,6 +423,8 @@
     "addManual": "Add Manually",
     "created": "Channel account created",
     "deleted": "Channel account deleted",
+    "deleteChannel": "Delete Channel",
+    "deleteChannelMsg": "This will permanently delete this channel and all its conversations and messages. This cannot be undone.",
     "confirmDelete": "Are you sure you want to remove this channel?",
     "gmail": "Gmail",
     "gmailDesc": "Connect via Google OAuth",
@@ -438,7 +478,23 @@
     "selectAgent": "Select an agent to add",
     "copilotConfig": "Co-Pilot Config",
     "copilotInherited": "Inheriting from tenant settings",
-    "copilotCustom": "Custom department settings"
+    "copilotCustom": "Custom department settings",
+    "parentDepartment": "Parent Department",
+    "noParent": "None (top-level)",
+    "expand": "Expand",
+    "collapse": "Collapse",
+    "humanAgents": "Human Agents",
+    "aiAgents": "AI Agents",
+    "noAgents": "No agents assigned",
+    "aiAgent": "AI Agent",
+    "aiEmployee": "AI Employee",
+    "aiEmployeeDesc": "Assign an AI Employee to handle conversations in this department",
+    "currentAIEmployee": "Currently assigned",
+    "assignAIEmployee": "Select an AI Employee to assign",
+    "changeAIEmployee": "Change AI Employee",
+    "unassign": "Unassign",
+    "noAIEmployees": "No AI Employees created yet",
+    "createAIEmployee": "Create AI Employee"
   },
   "copilotMode": {
     "label": "Co-Pilot Mode",
@@ -550,6 +606,244 @@
     "autoCloseMessagePlaceholder": "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
     "minutes": "min"
   },
+  "outbound": {
+    "title": "Outbound Hub",
+    "subtitle": "Templates, broadcasts, and scheduled messages",
+    "nav": {
+      "templates": "Templates",
+      "broadcasts": "Broadcasts",
+      "scheduled": "Scheduled"
+    },
+    "templates": {
+      "title": "Templates",
+      "create": "New Template",
+      "createTitle": "Create Template",
+      "editTitle": "Edit Template",
+      "deleteTitle": "Delete Template",
+      "deleteConfirm": "This will permanently delete this template.",
+      "duplicate": "Duplicate",
+      "allChannels": "All Channels",
+      "allStatuses": "All Statuses",
+      "colName": "Name",
+      "colChannel": "Channel",
+      "colCategory": "Category",
+      "colLanguage": "Language",
+      "colStatus": "Status",
+      "fieldName": "Template Name",
+      "fieldChannel": "Channel",
+      "fieldCategory": "Category",
+      "fieldLanguage": "Language",
+      "fieldHeaderType": "Header Type",
+      "fieldHeaderText": "Header Text",
+      "fieldBody": "Body",
+      "fieldFooter": "Footer",
+      "bodyPlaceholder": "Hello {{1}}, your message here...",
+      "footerPlaceholder": "Optional footer text",
+      "submitToMeta": "Submit to Meta",
+      "submitToMetaConfirm": "Submit this template to Meta for approval?",
+      "submitting": "Submitting...",
+      "submitted": "Submitted to Meta",
+      "variables": "Variable Examples",
+      "variablePlaceholder": "Example value for {{VAR}}",
+      "preview": "Preview",
+      "previewTitle": "Message Preview",
+      "statusDraft": "Draft",
+      "statusPending": "Pending Approval",
+      "statusApproved": "Approved",
+      "statusRejected": "Rejected",
+      "connectedChannelsOnly": "Only connected channels are shown",
+      "noConnectedChannels": "No connected channels"
+    },
+    "broadcasts": {
+      "title": "Broadcasts",
+      "create": "New Broadcast",
+      "createTitle": "Create Broadcast",
+      "editTitle": "Edit Broadcast",
+      "count": "broadcasts",
+      "recipients": "Recipients",
+      "scheduledAt": "Scheduled",
+      "send": "Send Now",
+      "cancel": "Cancel",
+      "showStats": "Show Stats",
+      "hideStats": "Hide Stats",
+      "analytics": "Delivery Analytics",
+      "statSent": "Sent",
+      "statDelivered": "Delivered",
+      "statRead": "Read",
+      "statReplied": "Replied",
+      "statFailed": "Failed",
+      "fieldName": "Broadcast Name",
+      "fieldChannel": "Channel",
+      "selectChannel": "Select a connected channel",
+      "fieldChannelAccount": "Channel Account ID",
+      "fieldTemplate": "Template (optional)",
+      "fieldBody": "Message Body",
+      "noTemplate": "No template — use custom body",
+      "channelAccountPlaceholder": "Leave blank for default",
+      "bodyPlaceholder": "Your broadcast message...",
+      "stepBasicInfo": "Basic Info",
+      "stepRecipients": "Recipients",
+      "stepSchedule": "Schedule & Review",
+      "next": "Next",
+      "back": "Back",
+      "recipientsCrmSegment": "CRM Segment",
+      "recipientsImport": "Import",
+      "recipientsAllContacts": "All Contacts",
+      "segmentRules": "Segment Rules",
+      "addRule": "Add Rule",
+      "removeRule": "Remove",
+      "ruleField": "Field",
+      "ruleOperator": "Operator",
+      "ruleValue": "Value",
+      "fieldChannel2": "Channel",
+      "fieldTag": "Tag",
+      "fieldPhone": "Phone",
+      "fieldEmail": "Email",
+      "fieldLastSeen": "Last Seen After",
+      "opEquals": "equals",
+      "opContains": "contains",
+      "opStartsWith": "starts with",
+      "matchingContacts": "Matching contacts will be calculated on send",
+      "importRecipients": "Import Recipients",
+      "importPlaceholder": "Paste phone numbers or IDs, one per line...",
+      "importCount": "{{count}} recipients parsed",
+      "importCsv": "Or upload a CSV file",
+      "allContactsDesc": "Send to all contacts for the selected channel",
+      "scheduleOption": "Scheduling",
+      "sendNow": "Send Immediately",
+      "scheduleLater": "Schedule for Later",
+      "fieldScheduledAt": "Send At",
+      "reviewSummary": "Review Summary",
+      "reviewChannel": "Channel",
+      "reviewTemplate": "Template",
+      "reviewRecipients": "Recipients",
+      "reviewSchedule": "Schedule",
+      "reviewImmediate": "Immediate",
+      "stepValidate": "Validate",
+      "stepSend": "Schedule & Send",
+      "validating": "Validating recipients...",
+      "validationTitle": "Pre-Send Validation",
+      "reachable": "Reachable",
+      "invalid": "Invalid",
+      "optedOut": "Opted Out",
+      "estimatedCost": "Est. Cost",
+      "warnings": "Warnings",
+      "invalidReasons": "Invalid Details",
+      "cannotSend": "Cannot send — resolve issues above",
+      "readyToSend": "Ready to send",
+      "fieldFlow": "Trigger Flow (optional)",
+      "noFlow": "No flow — send message only",
+      "fieldLastInteraction": "Last Interaction After",
+      "fieldInactiveDays": "Inactive Days",
+      "fieldSource": "Source / Campaign",
+      "fieldCreatedAfter": "Created After",
+      "fieldCreatedBefore": "Created Before",
+      "fieldHasTag": "Has Tag",
+      "excludeOptedOut": "Exclude opted-out contacts"
+    },
+    "scheduled": {
+      "title": "Scheduled Messages",
+      "create": "Schedule Message",
+      "createTitle": "Schedule a Message",
+      "count": "messages",
+      "cancel": "Cancel",
+      "cancelTitle": "Cancel Message",
+      "cancelConfirm": "This scheduled message will be cancelled and not sent.",
+      "colRecipient": "Recipient",
+      "colChannel": "Channel",
+      "colBody": "Message",
+      "colScheduledAt": "Scheduled At",
+      "colStatus": "Status",
+      "fieldChannel": "Channel",
+      "selectChannel": "Select a connected channel",
+      "fieldChannelAccount": "Channel Account ID",
+      "fieldRecipient": "Recipient ID",
+      "fieldBody": "Message",
+      "fieldScheduledAt": "Send At",
+      "channelAccountPlaceholder": "Leave blank for default",
+      "recipientSingle": "Single Recipient",
+      "recipientSegment": "CRM Segment",
+      "recipientImport": "Import",
+      "advancedOptions": "Advanced Options",
+      "sendType": "Send Type",
+      "sendTypeRegular": "Regular Message",
+      "sendTypeRegularDesc": "One-way message, no inbox entry",
+      "sendTypeConversation": "Start Conversation",
+      "sendTypeConversationDesc": "Creates inbox entry with department assignment",
+      "sendTypeFlow": "Trigger Flow",
+      "sendTypeFlowDesc": "Start an automated flow for each recipient",
+      "department": "Department",
+      "selectDepartment": "Select department",
+      "flow": "Flow",
+      "selectFlow": "Select flow",
+      "flowComingSoon": "Flow triggers coming soon",
+      "segmentRules": "Segment Rules",
+      "addRule": "Add Rule",
+      "importPlaceholder": "Paste IDs, one per line...",
+      "importCount": "{{count}} recipients parsed",
+      "fieldTemplate": "Template (optional)",
+      "noTemplate": "No template — type message",
+      "fieldFlow": "Trigger Flow",
+      "noFlow": "No flow",
+      "fieldLastInteraction": "Last Interaction After",
+      "fieldInactiveDays": "Inactive Days",
+      "fieldSource": "Source / Campaign",
+      "excludeOptedOut": "Exclude opted-out contacts",
+      "validationSummary": "Validation Summary",
+      "reachable": "Reachable",
+      "optedOutExcluded": "Opted-out contacts excluded"
+    }
+  },
+  "newConversation": {
+    "title": "New Conversation",
+    "steps": {
+      "channel": "Choose a channel to start",
+      "recipient": "Who do you want to message?",
+      "message": "Compose your message"
+    },
+    "selectChannel": "Select a channel",
+    "templateOnly": "Templates only",
+    "noChannels": "No channels connected",
+    "noChannelsDesc": "Connect a channel in settings to start messaging.",
+    "continue": "Continue",
+    "to": "To",
+    "send": "Send Message",
+    "sending": "Sending...",
+    "channelDesc": {
+      "whatsapp": "Enter the full phone number with country code (e.g. +972501234567)",
+      "messenger": "Enter the Page-scoped user ID (PSID) from Messenger",
+      "instagram": "Enter the Instagram-scoped user ID",
+      "email": "Enter the recipient's email address",
+      "slack": "Enter the Slack user or channel ID"
+    },
+    "identifier": {
+      "phone": "Phone Number",
+      "email": "Email Address",
+      "username": "Instagram User ID",
+      "psid": "Messenger PSID",
+      "slackId": "Slack User ID"
+    },
+    "recipient": {
+      "searchContacts": "Search Contacts",
+      "enterManually": "Enter Manually",
+      "searchPlaceholder": "Search by name, phone, email...",
+      "noResults": "No contacts found"
+    },
+    "message": {
+      "label": "Message",
+      "placeholder": "Type your message...",
+      "selectTemplate": "Select a Template",
+      "waTemplateNotice": "WhatsApp requires an approved template for the first message in a conversation.",
+      "noTemplates": "No approved templates found",
+      "createTemplate": "Create a template",
+      "variables": "Template Variables",
+      "preview": "Preview"
+    },
+    "errors": {
+      "contactFailed": "Failed to create contact",
+      "sendFailed": "Failed to send message"
+    }
+  },
   "common": {
     "save": "Save",
     "cancel": "Cancel",
@@ -576,7 +870,8 @@
     "disable": "Disable",
     "enable": "Enable",
     "create": "Create",
-    "saving": "Saving..."
+    "saving": "Saving...",
+    "send": "Send"
   },
   "setup": {
     "title": "Organization Setup",
@@ -858,34 +1153,60 @@
       }
     },
     "productFeatures": {
-      "label": "Features",
-      "title": "Your agents, supercharged",
-      "subtitle": "AI-powered tools that make your team faster, sharper, and unstoppable.",
-      "unifiedInbox": {
-        "title": "Omnichannel Inbox",
-        "desc": "Every channel in one place. WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — one screen, zero tab-switching."
+      "label": "Platform",
+      "title": "One AI system that runs your entire customer operation",
+      "subtitle": "Not a list of features — a living system that understands every conversation, learns from every interaction, and actively helps your team perform better.",
+      "cards": {
+        "copilot": {
+          "title": "AI Copilot",
+          "hint": "Your AI partner across every conversation and call",
+          "desc": "AI Copilot sits beside your team everywhere — live chats, email threads, voice calls, and social comments. It suggests replies, auto-responds to comments, opens conversations with leads, and coaches agents during live calls in real-time.",
+          "bullets": ["Real-time coaching during live voice calls", "Auto-reply to social comments and DMs", "Proactively opens chats with new leads", "Context-aware suggestions across every channel"]
+        },
+        "inbox": {
+          "title": "Omnichannel Inbox",
+          "hint": "Every channel, every message — one screen",
+          "desc": "WhatsApp, Instagram, Messenger, Gmail, Outlook, Slack — all flowing into a single unified inbox. Smart routing sends each conversation to the right agent, and full history follows every customer across channels.",
+          "bullets": ["6+ channels unified in one view", "Smart routing by skill, load, and priority", "Full cross-channel conversation history"]
+        },
+        "insights": {
+          "title": "Customer Intelligence",
+          "hint": "AI that learns your customers and knows how to treat them",
+          "desc": "Every interaction teaches the system more about each customer — their preferences, sentiment patterns, purchase history, and communication style. Your team gets live context cards that show exactly how to approach every conversation.",
+          "bullets": ["AI builds a profile from every interaction", "Sentiment and intent detection in real-time", "Personalized handling recommendations per customer"]
+        },
+        "knowledge": {
+          "title": "Connected Knowledge Base",
+          "hint": "Your company's brain, available in every conversation",
+          "desc": "Upload docs, FAQs, and product info — AI instantly uses them to draft replies, answer questions, and train your bots. The knowledge base learns from every resolved conversation and gets smarter over time.",
+          "bullets": ["Auto-suggests relevant articles in chat", "Powers bot answers and copilot suggestions", "Learns and improves from resolved tickets"]
+        }
+      }
+    },
+    "solutions": {
+      "label": "Solutions",
+      "title": "Solutions for every team, powered by AI",
+      "subtitle": "One platform. Every team. AI that adapts to how you work.",
+      "ops": {
+        "title": "Customer Operations",
+        "desc": "Manage all customer conversations from one unified inbox. Route messages to the right agents, automate repetitive tasks, and keep SLAs on track — all with AI that gets smarter with every interaction.",
+        "features": ["Omnichannel inbox", "Smart routing & SLA tracking", "AI-powered automation"]
       },
-      "aiAgents": {
-        "title": "Expert AI Agents",
-        "desc": "AI trained on your business and customers. Understands context, history, and intent — so every interaction feels personal."
+      "sales": {
+        "title": "Sales",
+        "desc": "Engage leads the moment they reach out — on any channel. AI qualifies prospects, suggests follow-ups, and gives your sales team the context they need to close faster.",
+        "features": ["Instant lead engagement", "AI qualification & scoring", "Full conversation history"]
       },
-      "aiCopilot": {
-        "title": "AI Copilot for Agents",
-        "desc": "Real-time suggestions and responses. The copilot reads the conversation, pulls from your knowledge base, and drafts the perfect reply."
+      "support": {
+        "title": "Support",
+        "desc": "Resolve issues faster with AI that understands your product. Copilot drafts replies from your knowledge base, bots handle FAQs, and agents focus on what matters most.",
+        "features": ["AI Copilot for agents", "Self-service bots", "Conversation intelligence"]
       },
-      "smartBot": {
-        "title": "Smart AI Bots",
-        "desc": "Resolve routine conversations automatically. Greets, qualifies, and routes — when it gets complex, seamless handover to your best agent."
-      },
-      "analytics": {
-        "title": "Conversation Intelligence",
-        "desc": "Turn conversations into insights. Sentiment analysis, topic detection, and actionable analytics from every interaction."
-      },
-      "voipCopilot": {
-        "title": "Live Voice Copilot",
-        "desc": "Real-time AI copilot for VOIP conversations. Listens, understands, and suggests responses while your agent is on the call."
-      },
-      "comingSoon": "Coming Soon"
+      "social": {
+        "title": "Social Engagement",
+        "desc": "Instagram DMs, Facebook comments, WhatsApp — every social touchpoint becomes a managed conversation with real-time sentiment analysis and AI-powered responses.",
+        "features": ["All social channels in one inbox", "Real-time sentiment detection", "Auto-responses for common questions"]
+      }
     },
     "faq": {
       "label": "FAQ",
@@ -1194,9 +1515,52 @@
     "categoryProjectManagement": "Project Management",
     "categoryCalendar": "Calendar"
   },
+  "usage": {
+    "title": "Usage",
+    "subtitle": "Track your platform usage across AI, messaging, and tools",
+    "period": "Period",
+    "last7days": "Last 7 days",
+    "last30days": "Last 30 days",
+    "last90days": "Last 90 days",
+    "allTime": "All time",
+    "totalTokens": "Total AI Tokens",
+    "messagesSent": "Messages Sent",
+    "toolCalls": "Tool Calls",
+    "automationRuns": "Automation Runs",
+    "usageByType": "Usage by Type",
+    "usageOverTime": "Usage Over Time",
+    "recentActivity": "Recent Activity",
+    "noUsage": "No usage data yet",
+    "type": "Type",
+    "quantity": "Quantity",
+    "date": "Date",
+    "ai_tokens": "AI Tokens",
+    "message_sent": "Messages",
+    "tool_call": "Tool Calls",
+    "automation_run": "Automations",
+    "allTenants": "All Tenants",
+    "tenant": "Tenant",
+    "totalUsage": "Total Usage",
+    "byTenant": "By Tenant"
+  },
   "aiStudio": {
     "title": "AI Studio",
     "subtitle": "Create AI employees, define what they know, and manage how they handle conversations",
+    "wizard": {
+      "title": "Create AI Employee",
+      "subtitle": "Let's set up your new AI team member. Answer a few questions and we'll configure everything for you.",
+      "q1Name": "What should this AI employee be called? Give it a name that fits your brand — like \"Maya\" or \"Support Bot\".",
+      "q2Responsibility": "What should this AI employee be responsible for? For example: answering customer questions, handling returns, booking appointments, qualifying leads...",
+      "q3Channels": "Where should it interact with customers? For example: WhatsApp, Instagram, Email, Webchat — you can pick multiple.",
+      "q4Communication": "How should it communicate? Describe the tone and style — professional, friendly, casual, empathetic? Should it use emojis? Keep replies short or detailed?",
+      "q5Escalation": "When should it involve a human agent? For example: when a customer is angry, asks a complex question, requests a refund, or explicitly asks for a person.",
+      "q6AiDisclosure": "Should customers know they're talking to AI? Should the bot introduce itself as AI, or behave as a regular team member?",
+      "q7Extra": "Any special instructions or knowledge it should have? For example: specific company policies, product details, things it should never say, or FAQ topics.",
+      "generating": "Creating your AI Employee configuration...",
+      "inputPlaceholder": "Type your answer...",
+      "skip": "Skip",
+      "skipAll": "Skip wizard and configure manually"
+    },
     "edit": "Edit",
     "test": "Test",
     "tabs": {
@@ -1289,7 +1653,9 @@
           "roleBilling": "Billing",
           "roleCustom": "Custom",
           "description": "Description",
-          "descriptionPlaceholder": "What does this agent handle? e.g. Handles support queries and helps customers with their orders."
+          "descriptionPlaceholder": "What does this agent handle? e.g. Handles support queries and helps customers with their orders.",
+          "tenantLevel": "Tenant-wide (all departments)",
+          "departmentHint": "Assign to a specific department or leave as tenant-wide."
         },
         "personality": {
           "title": "Personality",
@@ -1312,12 +1678,19 @@
         "skills": {
           "title": "Skills (Tools)",
           "subtitle": "Actions this agent can perform via connected integrations",
-          "addMore": "Add more tools from Integrations"
+          "addMore": "Add more tools from Integrations",
+          "panelDesc": "Connect integrations and enable tools for this agent",
+          "notConnected": "Not connected",
+          "connectIntegration": "Connect this integration"
         },
         "knowledge": {
           "title": "Knowledge",
           "subtitle": "Information sources this agent can reference when answering",
-          "addSource": "Add knowledge source"
+          "addSource": "Add knowledge source",
+          "panelDesc": "Select knowledge sources for this agent to reference",
+          "noSources": "No knowledge sources available",
+          "createFirst": "Create your first knowledge source",
+          "linked": "Linked"
         },
         "escalation": {
           "title": "Escalation Rules",

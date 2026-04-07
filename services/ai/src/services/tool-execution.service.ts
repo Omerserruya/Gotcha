@@ -1,5 +1,7 @@
 import { prisma, analyticsQueue } from "@chatcenter/shared";
 import axios from "axios";
+import { trackToolCall } from "./usage.service";
+import { logAudit } from "./audit.service";
 
 export async function getToolsForTenant(tenantId: string) {
   return prisma.tenantTool.findMany({
@@ -205,6 +207,21 @@ export async function executeTool(params: {
     },
     timestamp: new Date().toISOString(),
   });
+
+  // Track usage (fire-and-forget)
+  trackToolCall(tenantId, {
+    tool: catalogTool.name,
+    conversationId,
+  }).catch((err) => console.error("[ToolExec] Usage tracking failed:", err.message));
+
+  // Audit log (fire-and-forget)
+  logAudit({
+    tenantId,
+    actor: { type: triggeredBy === "ai" ? "ai" : "user", id: triggeredBy !== "ai" ? triggeredBy : undefined },
+    action: "tool.executed",
+    target: { type: "tool", id: tenantToolId },
+    metadata: { toolName: catalogTool.name, success, durationMs, conversationId },
+  }).catch((err) => console.error("[ToolExec] Audit logging failed:", err.message));
 
   return execution;
 }

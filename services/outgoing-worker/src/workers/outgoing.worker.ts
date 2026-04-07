@@ -66,6 +66,30 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
     timestamp: new Date().toISOString(),
   });
 
+  // Track usage + audit for sent messages (fire-and-forget)
+  if (status === "SENT") {
+    prisma.usageLog.create({
+      data: {
+        tenantId,
+        type: "message_sent",
+        quantity: 1,
+        tokensEquivalent: 1, // actual: 1 message sent
+        metadata: { channel, conversationId: job.data.conversationId, messageId },
+      },
+    }).catch((err: any) => console.error("[outgoing] Usage tracking failed:", err.message));
+
+    prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "system",
+        action: "message.sent",
+        targetType: "conversation",
+        targetId: job.data.conversationId,
+        metadata: { messageId, channel, status },
+      },
+    }).catch((err: any) => console.error("[outgoing] Audit logging failed:", err.message));
+  }
+
   if (!externalMessageId && (job.data.retryCount || 0) < 3) {
     throw new Error(`${channel} send failed - will retry`);
   }
