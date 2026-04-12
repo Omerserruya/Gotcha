@@ -378,6 +378,16 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           return;
         }
         // No rule matched — conversation stays in inbox for manual pickup
+      } else if ((conversation as any).handledBy === "ai_agent") {
+        // Ongoing AI conversation — continue processing with AI bot
+        const { processAIBot } = await import("../services/ai-bot.service");
+        await processAIBot(tenantId, conversation.id, body);
+        return;
+      } else if ((conversation as any).chatbotFlowId) {
+        // Ongoing chatbot flow — continue processing
+        const { processChatbotFlow } = await import("../services/chatbot-engine.service");
+        await processChatbotFlow(tenantId, conversation.id, body);
+        return;
       }
     } catch (err) {
       console.error("Bot processing error:", err);

@@ -17,6 +17,12 @@ interface DriveFile {
   id: string;
   name: string;
   mimeType: string;
+  parents?: string[];
+}
+
+interface SharedDrive {
+  id: string;
+  name: string;
 }
 
 async function driveFetch(integration: DriveIntegration, url: string): Promise<Response> {
@@ -70,21 +76,58 @@ async function refreshDriveToken(integration: DriveIntegration): Promise<string 
   return data.access_token;
 }
 
+export async function listSharedDrives(
+  integration: DriveIntegration
+): Promise<SharedDrive[]> {
+  const params = new URLSearchParams({
+    pageSize: "100",
+    fields: "drives(id,name)",
+  });
+
+  const res = await driveFetch(
+    integration,
+    `https://www.googleapis.com/drive/v3/drives?${params}`
+  );
+
+  if (!res.ok) throw new Error(`Drive API error: ${res.status}`);
+  const data: any = await res.json();
+  return (data.drives || []).map((d: any) => ({
+    id: d.id,
+    name: d.name,
+  }));
+}
+
 export async function listFiles(
   integration: DriveIntegration,
-  folderId?: string
+  folderId?: string,
+  driveId?: string
 ): Promise<DriveFile[]> {
-  let query = "trashed=false and (mimeType='application/vnd.google-apps.document' or mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='text/plain' or mimeType='text/markdown' or mimeType='application/vnd.google-apps.folder')";
+  const mimeFilter = "(mimeType='application/vnd.google-apps.document' or mimeType='application/pdf' or mimeType='application/vnd.openxmlformats-officedocument.wordprocessingml.document' or mimeType='text/plain' or mimeType='text/markdown' or mimeType='application/vnd.google-apps.folder')";
 
+  let query: string;
   if (folderId) {
-    query = `'${folderId}' in parents and ${query}`;
+    query = `'${folderId}' in parents and trashed=false and ${mimeFilter}`;
+  } else if (driveId) {
+    // Root of a shared drive
+    query = `'${driveId}' in parents and trashed=false and ${mimeFilter}`;
+  } else {
+    // My Drive root — show only top-level items
+    query = `'root' in parents and trashed=false and ${mimeFilter}`;
   }
 
   const params = new URLSearchParams({
     q: query,
     fields: "files(id,name,mimeType)",
-    pageSize: "100",
+    pageSize: "200",
   });
+
+  // Enable shared drive support for all queries
+  params.set("includeItemsFromAllDrives", "true");
+  params.set("supportsAllDrives", "true");
+  if (driveId) {
+    params.set("driveId", driveId);
+    params.set("corpora", "drive");
+  }
 
   const res = await driveFetch(
     integration,
@@ -93,11 +136,21 @@ export async function listFiles(
 
   if (!res.ok) throw new Error(`Drive API error: ${res.status}`);
   const data: any = await res.json();
-  return (data.files || []).map((f: any) => ({
+  const files = (data.files || []).map((f: any) => ({
     id: f.id,
     name: f.name,
     mimeType: f.mimeType,
   }));
+
+  // Sort: folders first, then alphabetically by name
+  files.sort((a: DriveFile, b: DriveFile) => {
+    const aFolder = a.mimeType === "application/vnd.google-apps.folder" ? 0 : 1;
+    const bFolder = b.mimeType === "application/vnd.google-apps.folder" ? 0 : 1;
+    if (aFolder !== bFolder) return aFolder - bFolder;
+    return a.name.localeCompare(b.name);
+  });
+
+  return files;
 }
 
 export async function fetchFileContent(
@@ -109,7 +162,7 @@ export async function fetchFileContent(
   if (mimeType === "application/vnd.google-apps.document") {
     const res = await driveFetch(
       integration,
-      `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain`
+      `https://www.googleapis.com/drive/v3/files/${fileId}/export?mimeType=text/plain&supportsAllDrives=true`
     );
     if (!res.ok) throw new Error(`Drive export error: ${res.status}`);
     return (await res.text()).trim();
@@ -118,7 +171,7 @@ export async function fetchFileContent(
   // Binary files: download and parse
   const res = await driveFetch(
     integration,
-    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`
+    `https://www.googleapis.com/drive/v3/files/${fileId}?alt=media&supportsAllDrives=true`
   );
   if (!res.ok) throw new Error(`Drive download error: ${res.status}`);
 
@@ -142,7 +195,7 @@ export async function syncFiles(
     try {
       const metaRes = await driveFetch(
         integration,
-        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType`
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType&supportsAllDrives=true`
       );
       if (!metaRes.ok) continue;
       const fileMeta: any = await metaRes.json();

@@ -416,49 +416,149 @@ export default function DepartmentsPage() {
         </div>
       </div>
 
-      {/* Create / Edit Dialog */}
+      {/* Create / Edit Side Panel */}
       {(showCreate || editDept) && (
-        <div className="fixed inset-0 bg-black/40 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl w-full max-w-md p-6 shadow-xl">
-            <h3 className="font-bold text-gray-900 mb-4">{editDept ? t("departments.editDepartment") : t("departments.addDepartment")}</h3>
-            <div className="space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("departments.name")}</label>
-                <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition" />
+        <div className="fixed inset-0 z-50 flex">
+          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => { setShowCreate(false); setEditDept(null); }} />
+          <div className="relative ms-auto w-full max-w-[420px] bg-white h-full flex flex-col shadow-2xl animate-slide-in-right">
+            {/* Header */}
+            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
+              <div className="flex-1 min-w-0">
+                <h3 className="text-base font-bold text-gray-900">
+                  {editDept ? t("departments.editDepartment") : t("departments.addDepartment")}
+                </h3>
+                {editDept && (
+                  <p className="text-xs text-gray-400 mt-0.5">{editDept.name}</p>
+                )}
               </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("departments.description")}</label>
-                <input type="text" value={formDesc} onChange={(e) => setFormDesc(e.target.value)} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition" />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("departments.queueMode")}</label>
-                <select value={formQueueMode} onChange={(e) => setFormQueueMode(e.target.value)} className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition">
-                  <option value="CLAIM">{t("departments.claim")}</option>
-                  <option value="ROUND_ROBIN">{t("departments.roundRobin")}</option>
-                </select>
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">{t("departments.parentDepartment")}</label>
-                <select
-                  value={formParentId}
-                  onChange={(e) => setFormParentId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
-                >
-                  <option value="">{t("departments.noParent")}</option>
-                  {allDepts
-                    .filter((d) => !editDept || d.id !== editDept.id)
-                    .map((d) => (
-                      <option key={d.id} value={d.id}>{d.name}</option>
-                    ))}
-                </select>
-              </div>
-            </div>
-            <div className="flex gap-2 mt-6">
-              <button onClick={editDept ? handleUpdate : handleCreate} className="flex-1 bg-primary-500 hover:bg-primary-600 text-white py-2.5 rounded-xl text-sm font-medium transition">
-                {editDept ? t("common.save") : t("departments.addDepartment")}
+              <button onClick={() => { setShowCreate(false); setEditDept(null); }} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition shrink-0">
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
               </button>
-              <button onClick={() => { setShowCreate(false); setEditDept(null); }} className="flex-1 bg-gray-100 text-gray-600 py-2.5 rounded-xl text-sm font-medium hover:bg-gray-200 transition">
-                {t("common.cancel")}
+            </div>
+
+            {/* Content */}
+            <div className="flex-1 overflow-y-auto px-5 py-5">
+              <div className="space-y-4">
+                {/* Name */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("departments.name")}</label>
+                  <input
+                    type="text"
+                    value={formName}
+                    onChange={(e) => setFormName(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+                    autoFocus
+                  />
+                </div>
+
+                {/* Description */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("departments.description")}</label>
+                  <input
+                    type="text"
+                    value={formDesc}
+                    onChange={(e) => setFormDesc(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+                  />
+                </div>
+
+                {/* Queue Mode */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("departments.queueMode")}</label>
+                  <select
+                    value={formQueueMode}
+                    onChange={(e) => setFormQueueMode(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+                  >
+                    <option value="CLAIM">{t("departments.claim")}</option>
+                    <option value="ROUND_ROBIN">{t("departments.roundRobin")}</option>
+                  </select>
+                </div>
+
+                {/* Parent Department */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("departments.parentDepartment")}</label>
+                  <select
+                    value={formParentId}
+                    onChange={(e) => setFormParentId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+                  >
+                    <option value="">{t("departments.noParent")}</option>
+                    {allDepts
+                      .filter((d) => !editDept || d.id !== editDept.id)
+                      .map((d) => (
+                        <option key={d.id} value={d.id}>{d.name}</option>
+                      ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Edit-only sections */}
+              {editDept && (
+                <div className="mt-6 space-y-4">
+                  {/* Status toggle */}
+                  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
+                    <div>
+                      <p className="text-sm font-medium text-gray-700">{t("agents.status")}</p>
+                      <p className="text-xs text-gray-400 mt-0.5">
+                        {editDept.isActive ? t("agents.agentIsActive") : t("agents.agentIsInactive")}
+                      </p>
+                    </div>
+                    <button
+                      onClick={async () => {
+                        if (!token) return;
+                        try {
+                          await updateDepartment(token, editDept.id, { isActive: !editDept.isActive } as any);
+                          setEditDept({ ...editDept, isActive: !editDept.isActive });
+                          fetchTree();
+                        } catch (err: any) { alert(err.message); }
+                      }}
+                      className={clsx(
+                        "relative w-11 h-6 rounded-full transition-colors",
+                        editDept.isActive ? "bg-green-500" : "bg-gray-300"
+                      )}
+                    >
+                      <span
+                        className={clsx(
+                          "absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform",
+                          editDept.isActive ? "start-0.5" : "start-0.5"
+                        )}
+                        style={{ transform: editDept.isActive ? "translateX(22px)" : "translateX(0)" }}
+                      />
+                    </button>
+                  </div>
+
+                  {/* Danger zone */}
+                  <div className="border border-red-200 rounded-xl p-4">
+                    <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-2">{t("agents.dangerZone")}</p>
+                    <button
+                      onClick={() => {
+                        setShowCreate(false);
+                        setEditDept(null);
+                        openDeleteConfirm(editDept.id, editDept.name);
+                      }}
+                      className="w-full py-2.5 bg-red-50 text-red-600 text-sm font-medium rounded-xl hover:bg-red-100 transition flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                      {t("common.delete")}
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div className="px-5 py-4 border-t border-gray-100">
+              <button
+                onClick={editDept ? handleUpdate : handleCreate}
+                disabled={!formName.trim()}
+                className="w-full py-3 bg-primary-500 text-white text-sm font-semibold rounded-xl hover:bg-primary-600 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow-sm"
+              >
+                {editDept ? t("common.save") : t("departments.addDepartment")}
               </button>
             </div>
           </div>

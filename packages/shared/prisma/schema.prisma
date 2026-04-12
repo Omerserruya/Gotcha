@@ -18,6 +18,7 @@ enum ChannelType {
   GMAIL
   OUTLOOK
   SLACK
+  WEBCHAT
 }
 
 enum ChannelConnectionStatus {
@@ -222,6 +223,7 @@ model Conversation {
   chatbotFlowId      String?            @map("chatbot_flow_id")
   chatbotNodeId      String?            @map("chatbot_node_id")
   isHandedOver       Boolean            @default(false) @map("is_handed_over")
+  handledBy          String?            @map("handled_by") // "ai_agent", "flow", "human", null (unrouted)
   lastMessageAt      DateTime?          @map("last_message_at")
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
@@ -346,6 +348,8 @@ model AIAgent {
   maxAutonomousMinutes  Int     @default(15) @map("max_autonomous_minutes")
   confidenceThreshold   Float   @default(0.6) @map("confidence_threshold")
   escalationMessage     String  @default("Let me connect you with a team member who can help further.") @map("escalation_message")
+  conversationFlow      Json?   @map("conversation_flow")  // [{ step, action, details }] — autonomous mode conversation flow
+  customGuardrails      Json?   @map("custom_guardrails")  // string[] — user-defined guardrails appended to static ones
 
   createdAt       DateTime      @default(now()) @map("created_at")
   updatedAt       DateTime      @updatedAt @map("updated_at")

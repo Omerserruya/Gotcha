@@ -10,6 +10,8 @@ import {
   disconnectChannel,
   deleteChannelAccount,
   getChannelStatus,
+  getWebchatSettings,
+  updateWebchatSettings,
 } from "@/lib/api";
 import { AppLayout } from "@/components/AppLayout";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
@@ -99,6 +101,13 @@ function ChannelsPageContent() {
   const [disconnecting, setDisconnecting] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
   const [deleting, setDeleting] = useState(false);
+  const [embedModal, setEmbedModal] = useState<{ open: boolean; widgetId: string; code: string; apiUrl: string; accountId: string }>({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" });
+  const [embedTab, setEmbedTab] = useState<"html" | "nextjs" | "react" | "vue" | "php">("html");
+  const [widgetColor, setWidgetColor] = useState("#7c3aed");
+  const [widgetIconUrl, setWidgetIconUrl] = useState("");
+  const [widgetTitle, setWidgetTitle] = useState("Chat with us");
+  const [widgetPosition, setWidgetPosition] = useState<"right" | "left">("right");
+  const [savingWidget, setSavingWidget] = useState(false);
   const showMessage = (msg: string, type: "success" | "error" = "success") => {
     setMessage(msg);
     setMessageType(type);
@@ -287,6 +296,42 @@ function ChannelsPageContent() {
     }
   }
 
+  // ─── Create Webchat Widget ───────────────────────────────
+
+  async function handleCreateWebchat() {
+    if (!token) return;
+    setConnecting(true);
+    try {
+      const { createWebchatWidget } = await import("@/lib/api");
+      const res = await createWebchatWidget(token);
+      const widget = res.data;
+      const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+      const embedCode = `<!-- ChatCenter Widget -->
+<script>
+(function(){
+  var w=window,d=document;
+  w.__chatcenter={widgetId:"${widget.externalId}",apiUrl:"${apiUrl}"};
+  var s=d.createElement("script");
+  s.src="${apiUrl}/widget/chatcenter-widget.js";
+  s.async=true;
+  d.head.appendChild(s);
+})();
+</script>`;
+      setEmbedModal({ open: true, widgetId: widget.externalId, code: embedCode, apiUrl, accountId: widget.id });
+      setEmbedTab("html");
+      setWidgetColor("#7c3aed");
+      setWidgetIconUrl("");
+      setWidgetTitle("Chat with us");
+      setWidgetPosition("right");
+      showMessage(t("channels.connected"), "success");
+      fetchData();
+    } catch (err: any) {
+      showMessage(err.message || t("channels.connectionFailed"), "error");
+    } finally {
+      setConnecting(false);
+    }
+  }
+
   // ─── Delete Channel ─────────────────────────────────────
 
   async function confirmDelete() {
@@ -410,6 +455,19 @@ function ChannelsPageContent() {
           onClick={() => handleOAuthConnect("slack")}
         />
 
+        <ConnectCard
+          icon={
+            <svg className="w-6 h-6 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+            </svg>
+          }
+          title="Embedded Chat"
+          description="Add a chat widget to your website"
+          buttonLabel="Create Widget"
+          onClick={handleCreateWebchat}
+          disabled={connecting}
+        />
+
       </div>
 
       {/* Connected Channels List */}
@@ -446,6 +504,33 @@ function ChannelsPageContent() {
                     </span>
                   )}
                   <StatusBadge status={account.connectionStatus || "CONNECTED"} />
+
+                  {/* Widget Settings button (WEBCHAT only) */}
+                  {account.channel === "WEBCHAT" && account.connectionStatus === "CONNECTED" && (
+                    <button
+                      onClick={async () => {
+                        const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
+                        setEmbedModal({ open: true, widgetId: account.externalId, code: "", apiUrl, accountId: account.id });
+                        setEmbedTab("html");
+                        if (token) {
+                          try {
+                            const res = await getWebchatSettings(token, account.id);
+                            const s = res.data || {};
+                            setWidgetColor(s.color || "#7c3aed");
+                            setWidgetIconUrl(s.iconUrl || "");
+                            setWidgetTitle(s.title || "Chat with us");
+                            setWidgetPosition(s.position || "right");
+                          } catch { /* use defaults */ }
+                        }
+                      }}
+                      className="text-xs text-violet-500 hover:text-violet-700 transition p-1"
+                      title="Widget Settings"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
+                      </svg>
+                    </button>
+                  )}
 
                   {/* Check Status button */}
                   {account.connectionStatus === "CONNECTED" && (
@@ -515,6 +600,210 @@ function ChannelsPageContent() {
       onConfirm={confirmDelete}
       onCancel={() => setDeleteConfirm({ open: false, id: "", name: "" })}
     />
+    {embedModal.open && (
+      <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setEmbedModal({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" })} />
+        <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-bold text-gray-900">Embed Chat Widget</h3>
+            <button onClick={() => setEmbedModal({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" })} className="text-gray-400 hover:text-gray-600">
+              <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          {/* Customization */}
+          <div className="bg-gray-50 rounded-xl p-4 space-y-3">
+            <h4 className="text-sm font-semibold text-gray-700">Customize</h4>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Brand Color</label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="color"
+                    value={widgetColor}
+                    onChange={(e) => setWidgetColor(e.target.value)}
+                    className="w-8 h-8 rounded-lg border border-gray-200 cursor-pointer p-0"
+                  />
+                  <input
+                    type="text"
+                    value={widgetColor}
+                    onChange={(e) => setWidgetColor(e.target.value)}
+                    className="flex-1 text-xs border border-gray-200 rounded-lg px-2 py-1.5 font-mono"
+                  />
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Position</label>
+                <div className="flex gap-1">
+                  <button
+                    onClick={() => setWidgetPosition("left")}
+                    className={clsx("flex-1 py-1.5 text-xs font-medium rounded-lg border transition", widgetPosition === "left" ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 text-gray-500 hover:bg-gray-100")}
+                  >
+                    Left
+                  </button>
+                  <button
+                    onClick={() => setWidgetPosition("right")}
+                    className={clsx("flex-1 py-1.5 text-xs font-medium rounded-lg border transition", widgetPosition === "right" ? "border-violet-300 bg-violet-50 text-violet-700" : "border-gray-200 text-gray-500 hover:bg-gray-100")}
+                  >
+                    Right
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Header Title</label>
+                <input
+                  type="text"
+                  value={widgetTitle}
+                  onChange={(e) => setWidgetTitle(e.target.value)}
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5"
+                />
+              </div>
+              <div>
+                <label className="text-xs text-gray-500 mb-1 block">Icon URL (optional)</label>
+                <input
+                  type="text"
+                  value={widgetIconUrl}
+                  onChange={(e) => setWidgetIconUrl(e.target.value)}
+                  placeholder="https://example.com/icon.png"
+                  className="w-full text-xs border border-gray-200 rounded-lg px-2 py-1.5"
+                />
+              </div>
+            </div>
+            {/* Preview */}
+            <div className="flex items-center gap-3 pt-2">
+              <div
+                className="w-12 h-12 rounded-full flex items-center justify-center shadow-lg"
+                style={{ background: `linear-gradient(135deg, ${widgetColor}, ${widgetColor}dd)` }}
+              >
+                {widgetIconUrl ? (
+                  <img src={widgetIconUrl} alt="" className="w-8 h-8 rounded-full object-cover" />
+                ) : (
+                  <svg className="w-6 h-6" fill="white" viewBox="0 0 24 24"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg>
+                )}
+              </div>
+              <div className="text-xs text-gray-400">Widget preview</div>
+            </div>
+          </div>
+
+          {/* Framework Tabs */}
+          <div>
+            <h4 className="text-sm font-semibold text-gray-700 mb-2">Install</h4>
+            <div className="flex gap-1 bg-gray-100 rounded-lg p-1">
+              {(["html", "nextjs", "react", "vue", "php"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setEmbedTab(tab)}
+                  className={clsx(
+                    "flex-1 py-1.5 text-xs font-medium rounded-md transition",
+                    embedTab === tab ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700"
+                  )}
+                >
+                  {tab === "html" ? "HTML" : tab === "nextjs" ? "Next.js" : tab === "react" ? "React" : tab === "vue" ? "Vue" : "PHP"}
+                </button>
+              ))}
+            </div>
+          </div>
+          {/* Code snippet */}
+          {(() => {
+            const wId = embedModal.widgetId;
+            const api = embedModal.apiUrl;
+            const configLines = [
+              `  widgetId: "${wId}",`,
+              `  apiUrl: "${api}",`,
+              widgetColor !== "#7c3aed" ? `  color: "${widgetColor}",` : "",
+              widgetIconUrl ? `  iconUrl: "${widgetIconUrl}",` : "",
+              widgetTitle !== "Chat with us" ? `  title: "${widgetTitle}",` : "",
+              widgetPosition !== "right" ? `  position: "${widgetPosition}",` : "",
+            ].filter(Boolean).join("\n");
+            const configBlock = `{\n${configLines}\n}`;
+
+            const snippets: Record<string, { imports?: string; code: string; hint: string }> = {
+              html: {
+                hint: "Paste before the closing </body> tag",
+                code: `<!-- ChatCenter Widget -->\n<script>\n(function(){\n  window.__chatcenter = ${configBlock};\n  var s = document.createElement("script");\n  s.src = "${api}/widget/chatcenter-widget.js";\n  s.async = true;\n  document.head.appendChild(s);\n})();\n</script>`,
+              },
+              nextjs: {
+                hint: "Add to app/layout.tsx or any page",
+                imports: `import Script from "next/script";`,
+                code: `<Script\n  id="chatcenter-widget"\n  strategy="afterInteractive"\n  dangerouslySetInnerHTML={{\n    __html: \`\n      window.__chatcenter = ${configBlock};\n      var s = document.createElement("script");\n      s.src = "${api}/widget/chatcenter-widget.js";\n      s.async = true;\n      document.head.appendChild(s);\n    \`,\n  }}\n/>`,
+              },
+              react: {
+                hint: "Add component to your App",
+                imports: `import { useEffect } from "react";`,
+                code: `function ChatCenterWidget() {\n  useEffect(() => {\n    window.__chatcenter = ${configBlock};\n    const s = document.createElement("script");\n    s.src = "${api}/widget/chatcenter-widget.js";\n    s.async = true;\n    document.head.appendChild(s);\n    return () => s.remove();\n  }, []);\n  return null;\n}\n\n// Render <ChatCenterWidget /> in your app`,
+              },
+              vue: {
+                hint: "Add to App.vue or main layout",
+                imports: `import { onMounted } from "vue";`,
+                code: `<script setup>\nimport { onMounted } from "vue";\n\nonMounted(() => {\n  window.__chatcenter = ${configBlock};\n  const s = document.createElement("script");\n  s.src = "${api}/widget/chatcenter-widget.js";\n  s.async = true;\n  document.head.appendChild(s);\n});\n</script>`,
+              },
+              php: {
+                hint: "Paste before closing </body> in your PHP template",
+                code: `<!-- ChatCenter Widget -->\n<script>\n(function(){\n  window.__chatcenter = ${configBlock};\n  var s = document.createElement("script");\n  s.src = "${api}/widget/chatcenter-widget.js";\n  s.async = true;\n  document.head.appendChild(s);\n})();\n</script>`,
+              },
+            };
+            const snippet = snippets[embedTab] || snippets.html;
+            return (
+              <div className="space-y-2">
+                <p className="text-xs text-gray-400">{snippet.hint}</p>
+                {snippet.imports && (
+                  <div className="relative">
+                    <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">Import</p>
+                    <pre className="bg-gray-900 text-blue-300 text-xs p-3 rounded-lg overflow-x-auto whitespace-pre-wrap">{snippet.imports}</pre>
+                    <button
+                      onClick={() => { navigator.clipboard.writeText(snippet.imports!); showMessage("Import copied!", "success"); }}
+                      className="absolute top-6 right-2 px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white text-[10px] rounded-md transition"
+                    >
+                      Copy
+                    </button>
+                  </div>
+                )}
+                <div className="relative">
+                  {snippet.imports && <p className="text-[10px] font-medium text-gray-500 uppercase tracking-wide mb-1">Code</p>}
+                  <pre className="bg-gray-900 text-green-400 text-xs p-3 rounded-lg overflow-x-auto whitespace-pre-wrap max-h-48">{snippet.code}</pre>
+                  <button
+                    onClick={() => { navigator.clipboard.writeText(snippet.code); showMessage("Copied to clipboard!", "success"); }}
+                    className="absolute top-6 right-2 px-2 py-0.5 bg-white/10 hover:bg-white/20 text-white text-[10px] rounded-md transition"
+                  >
+                    Copy
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
+          <div className="flex items-center justify-between pt-2 border-t border-gray-100">
+            <p className="text-xs text-gray-400">Widget ID: <code className="bg-gray-100 px-1.5 py-0.5 rounded">{embedModal.widgetId}</code></p>
+            {embedModal.accountId && (
+              <button
+                disabled={savingWidget}
+                onClick={async () => {
+                  if (!token || !embedModal.accountId) return;
+                  setSavingWidget(true);
+                  try {
+                    await updateWebchatSettings(token, embedModal.accountId, {
+                      color: widgetColor !== "#7c3aed" ? widgetColor : undefined,
+                      iconUrl: widgetIconUrl || undefined,
+                      title: widgetTitle !== "Chat with us" ? widgetTitle : undefined,
+                      position: widgetPosition !== "right" ? widgetPosition : undefined,
+                    });
+                    showMessage("Widget settings saved!", "success");
+                  } catch {
+                    showMessage("Failed to save settings", "error");
+                  } finally {
+                    setSavingWidget(false);
+                  }
+                }}
+                className="px-4 py-1.5 bg-violet-600 text-white text-xs font-medium rounded-lg hover:bg-violet-700 transition disabled:opacity-50"
+              >
+                {savingWidget ? "Saving..." : "Save Settings"}
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    )}
     </AppLayout>
   );
 }

@@ -320,6 +320,25 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # ─── Embedded Chat (public, CORS enabled) ────────
+        location /api/embedded-chat {
+            # CORS for widget on external sites
+            add_header Access-Control-Allow-Origin * always;
+            add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
+            add_header Access-Control-Allow-Headers "Content-Type" always;
+
+            if ($request_method = OPTIONS) {
+                return 204;
+            }
+
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # ─── Tenant-scoped routing ───────────────────────
         location ~ ^/t/([^/]+)/api/auth(.*)$ {
             proxy_pass http://auth_service/api/auth$2$is_args$args;

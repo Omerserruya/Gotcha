@@ -44,7 +44,7 @@ async function resolveAIAgent(tenantId: string, departmentId?: string | null) {
   });
 }
 
-export async function processAIBot(tenantId: string, conversationId: string, incomingMessage: string): Promise<boolean> {
+export async function processAIBot(tenantId: string, conversationId: string, incomingMessage: string, aiAgentId?: string | null): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
     include: { channelAccount: true },
@@ -52,8 +52,14 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
 
   if (!conversation || conversation.isHandedOver || conversation.assignedAgentId) return false;
 
-  // Resolve AI Employee config (unified — no legacy tables)
-  const config = await resolveAIAgent(tenantId, (conversation as any).departmentId);
+  // Use the explicitly provided AI agent, or resolve one
+  let config: any = null;
+  if (aiAgentId) {
+    config = await prisma.aIAgent.findUnique({ where: { id: aiAgentId } });
+  }
+  if (!config) {
+    config = await resolveAIAgent(tenantId, (conversation as any).departmentId);
+  }
   if (!config) return false;
 
   // Build send context

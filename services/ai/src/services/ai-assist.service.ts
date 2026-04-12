@@ -175,10 +175,12 @@ Always maintain the brand voice and follow escalation rules.`;
 
 // ─── Build CopilotConfigData from an AIAgent record ─────────
 
-function buildConfigFromAIAgent(agent: {
+export function buildConfigFromAIAgent(agent: {
   systemPrompt: string;
   sharedPrompt?: string | null;
   autonomousPrompt?: string | null;
+  conversationFlow?: any;
+  customGuardrails?: any;
   model: string;
   provider: string;
   temperature: number;
@@ -195,7 +197,12 @@ function buildConfigFromAIAgent(agent: {
   // Use new prompt assembly if sharedPrompt is available
   if (agent.sharedPrompt) {
     const mode = role === "agent" ? "agent" : "assist";
-    systemPrompt = assemblePrompt(mode, agent.sharedPrompt, agent.autonomousPrompt || "");
+    const flow = Array.isArray(agent.conversationFlow) ? agent.conversationFlow : undefined;
+    const guardrails = Array.isArray(agent.customGuardrails) ? agent.customGuardrails : undefined;
+    systemPrompt = assemblePrompt(mode, agent.sharedPrompt, agent.autonomousPrompt || "", {
+      conversationFlow: flow,
+      customGuardrails: guardrails,
+    });
   } else {
     // Legacy fallback: use old systemPrompt or assemble from blocks
     systemPrompt = agent.systemPrompt;

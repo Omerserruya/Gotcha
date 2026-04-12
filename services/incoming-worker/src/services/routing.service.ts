@@ -14,7 +14,7 @@ export interface RoutingResult {
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 
 // Ask AI service if a message matches a specific intent (true/false)
-async function checkIntentAI(message: string, intent: string): Promise<boolean> {
+async function checkIntentAI(message: string, intent: string, tenantId?: string): Promise<boolean> {
   try {
     const res = await fetch(`${AI_SERVICE_URL}/api/ai-assist/intent`, {
       method: "POST",
@@ -22,7 +22,7 @@ async function checkIntentAI(message: string, intent: string): Promise<boolean> 
         "Content-Type": "application/json",
         "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
       },
-      body: JSON.stringify({ message, intent }),
+      body: JSON.stringify({ message, intent, tenantId }),
     });
     if (!res.ok) throw new Error(`AI intent responded ${res.status}`);
     const json = await res.json() as any;
@@ -186,7 +186,7 @@ export async function routeConversation(
         for (const cond of conditions) {
           if (cond.type === "intent") {
             // Call AI: does this message match this intent?
-            const aiMatch = await checkIntentAI(message, cond.value);
+            const aiMatch = await checkIntentAI(message, cond.value, tenantId);
             const condResult = cond.operator === "is_not" ? !aiMatch : aiMatch;
             results.push(condResult);
             if (aiMatch) result.intent = cond.value; // update intent to matched value
@@ -208,7 +208,11 @@ export async function routeConversation(
             // Route to AI Agent — handle autonomously
             if (rule.aiAgentId) {
               result.handledByAI = true;
-              await processAIBot(tenantId, conversationId, message);
+              await processAIBot(tenantId, conversationId, message, rule.aiAgentId);
+              await prisma.conversation.update({
+                where: { id: conversationId },
+                data: { handledBy: "ai_agent" },
+              });
             }
             break;
           }
@@ -231,6 +235,10 @@ export async function routeConversation(
                 // Actually execute the flow for this first message
                 await processChatbotFlow(tenantId, conversationId, message);
                 result.handledByAI = true;
+                await prisma.conversation.update({
+                  where: { id: conversationId },
+                  data: { handledBy: "flow" },
+                });
               }
             }
             break;
@@ -254,7 +262,7 @@ export async function routeConversation(
                 } else {
                   await prisma.conversation.update({
                     where: { id: conversationId },
-                    data: { status: "WAITING" },
+                    data: { status: "WAITING", handledBy: "human" },
                   });
                   if (dept.queueMode === "ROUND_ROBIN") {
                     const agentId = await assignToLeastBusyAgent(tenantId, dept.id);
@@ -275,7 +283,7 @@ export async function routeConversation(
             // Route to human agent queue
             await prisma.conversation.update({
               where: { id: conversationId },
-              data: { status: "WAITING" },
+              data: { status: "WAITING", handledBy: "human" },
             });
             break;
           }

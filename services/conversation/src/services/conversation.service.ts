@@ -10,6 +10,7 @@ export interface ConversationFilters {
   search?: string;
   page?: number;
   limit?: number;
+  includeAutomated?: boolean;
   // User context for scoping
   userRole?: string;
   userId?: string;
@@ -17,9 +18,20 @@ export interface ConversationFilters {
 }
 
 export async function list(tenantId: string, filters: ConversationFilters) {
-  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, userRole, userId, userDepartmentId } = filters;
+  const { status, assignedAgentId, channel, departmentId, search, page = 1, limit = 50, includeAutomated = false, userRole, userId, userDepartmentId } = filters;
   const where: any = { tenantId };
   if (status) where.status = status;
+  // By default, exclude AI/flow-handled conversations unless explicitly requested or handed over
+  if (!includeAutomated) {
+    where.AND = where.AND || [];
+    where.AND.push({
+      OR: [
+        { handledBy: null },
+        { handledBy: "human" },
+        { isHandedOver: true },
+      ],
+    });
+  }
   if (assignedAgentId) where.assignedAgentId = assignedAgentId;
   if (channel) where.channel = channel;
   if (departmentId) where.departmentId = departmentId;

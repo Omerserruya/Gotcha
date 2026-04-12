@@ -1607,16 +1607,45 @@ router.get("/:id/status", authenticate, resolveTenant, requireRole("ADMIN"), asy
       const accessToken = credentials?.accessToken;
 
       if (accessToken) {
-        const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
-          params: { input_token: accessToken },
-          headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
-        });
+        const metaChannels = ["WHATSAPP", "MESSENGER", "INSTAGRAM"];
 
-        const tokenData = debugResponse.data?.data;
-        tokenValid = tokenData?.is_valid === true;
+        if (metaChannels.includes(account.channel)) {
+          // Meta channels: use Facebook debug_token API
+          const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
+            params: { input_token: accessToken },
+            headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
+          });
 
-        if (tokenData?.expires_at && tokenData.expires_at > 0) {
-          tokenExpiresAt = new Date(tokenData.expires_at * 1000);
+          const tokenData = debugResponse.data?.data;
+          tokenValid = tokenData?.is_valid === true;
+
+          if (tokenData?.expires_at && tokenData.expires_at > 0) {
+            tokenExpiresAt = new Date(tokenData.expires_at * 1000);
+          }
+        } else if (account.channel === "GMAIL") {
+          // Gmail: validate token via Google's tokeninfo endpoint
+          const tokenInfoRes = await axios.get("https://oauth2.googleapis.com/tokeninfo", {
+            params: { access_token: accessToken },
+          });
+          tokenValid = !!tokenInfoRes.data?.email;
+          if (tokenInfoRes.data?.expires_in) {
+            tokenExpiresAt = new Date(Date.now() + tokenInfoRes.data.expires_in * 1000);
+          }
+        } else if (account.channel === "OUTLOOK") {
+          // Outlook: validate by calling Microsoft Graph /me endpoint
+          const meRes = await axios.get("https://graph.microsoft.com/v1.0/me", {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          tokenValid = !!meRes.data?.id;
+        } else if (account.channel === "SLACK") {
+          // Slack: validate via auth.test API
+          const slackRes = await axios.post("https://slack.com/api/auth.test", null, {
+            headers: { Authorization: `Bearer ${accessToken}` },
+          });
+          tokenValid = slackRes.data?.ok === true;
+        } else {
+          // Other channels: assume connected if token exists
+          tokenValid = true;
         }
       }
     } catch (debugErr: any) {
@@ -1700,6 +1729,76 @@ router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"),
   } catch (err: any) {
     console.error("Email connection error:", err);
     res.status(500).json({ error: "Failed to connect email channel" });
+  }
+});
+
+// ─── Create Embedded Chat Widget ─────────────────────────────
+
+router.post("/webchat/create", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const widgetId = `widget_${crypto.randomBytes(12).toString("hex")}`;
+
+    const existing = await prisma.channelAccount.findFirst({
+      where: { tenantId: req.tenantId!, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
+    });
+
+    if (existing) {
+      res.json({ data: existing });
+      return;
+    }
+
+    const account = await prisma.channelAccount.create({
+      data: {
+        tenantId: req.tenantId!,
+        channel: "WEBCHAT",
+        externalId: widgetId,
+        displayName: req.body.name || "Website Chat Widget",
+        connectionStatus: "CONNECTED",
+        credentials: {},
+      },
+    });
+
+    res.status(201).json({ data: account });
+  } catch (err) {
+    console.error("Create webchat widget error:", err);
+    res.status(500).json({ error: "Failed to create widget" });
+  }
+});
+
+// ─── Update Webchat Widget Settings ─────────────────────────
+
+router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const { color, iconUrl, title, subtitle, welcome, position } = req.body;
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id, tenantId: req.tenantId!, channel: "WEBCHAT" },
+    });
+    if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
+
+    const settings = { color, iconUrl, title, subtitle, welcome, position };
+    const updated = await prisma.channelAccount.update({
+      where: { id: account.id },
+      data: { credentials: settings as any },
+    });
+    res.json({ data: updated });
+  } catch (err) {
+    console.error("Update webchat settings error:", err);
+    res.status(500).json({ error: "Failed to update widget settings" });
+  }
+});
+
+// ─── Get Webchat Widget Settings ────────────────────────────
+
+router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: req.params.id, tenantId: req.tenantId!, channel: "WEBCHAT" },
+    });
+    if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
+    res.json({ data: account.credentials || {} });
+  } catch (err) {
+    console.error("Get webchat settings error:", err);
+    res.status(500).json({ error: "Failed to get widget settings" });
   }
 });
 

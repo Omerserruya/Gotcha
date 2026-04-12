@@ -1,6 +1,8 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import { generateAndSavePrompts } from "../services/prompt-assembler.service";
+import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.service";
+import { generateResponse } from "../services/ai.service";
 
 const router = Router();
 
@@ -57,16 +59,21 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
       "זכר": "male", "נקבה": "female", "ניטרלי": "neutral",
     };
 
-    // Detect role from answers
-    const purposeLower = (answers.purpose || "").toLowerCase();
+    // Map wizard keys → normalize (wizard sends: name, responsibility, channels, communication, escalation, aiDisclosure, extra, conversationFlow, guardrails)
+    const responsibility = answers.responsibility || answers.purpose || "";
+    const communicationStyle = answers.communication || answers.tone || "";
+    const agentName = answers.name || "";
+
+    // Detect role from responsibility
+    const responsibilityLower = responsibility.toLowerCase();
     const roleLower = (answers.role || answers.department || "").toLowerCase();
     let detectedRole = "custom";
     for (const [key, val] of Object.entries(roleMap)) {
-      if (purposeLower.includes(key) || roleLower.includes(key)) { detectedRole = val; break; }
+      if (responsibilityLower.includes(key) || roleLower.includes(key)) { detectedRole = val; break; }
     }
 
-    // Detect tone
-    const toneLower = (answers.tone || "").toLowerCase();
+    // Detect tone from communication style
+    const toneLower = communicationStyle.toLowerCase();
     let detectedTone = "friendly";
     for (const [key, val] of Object.entries(toneMap)) {
       if (toneLower.includes(key)) { detectedTone = val; break; }
@@ -85,25 +92,59 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
     if (channelsRaw.includes("whatsapp") || channelsRaw.includes("ווטסאפ")) channels.push("whatsapp");
     if (channelsRaw.includes("instagram") || channelsRaw.includes("אינסטגרם")) channels.push("instagram");
     if (channelsRaw.includes("web") || channelsRaw.includes("אתר") || channelsRaw.includes("צ'אט")) channels.push("webchat");
+    if (channelsRaw.includes("email") || channelsRaw.includes("אימייל") || channelsRaw.includes("מייל")) channels.push("email");
 
     // Build the AI Employee name
-    const name = answers.purpose
-      ? answers.purpose.substring(0, 50)
-      : `AI Employee ${new Date().toLocaleDateString()}`;
+    const name = agentName || (responsibility ? responsibility.substring(0, 50) : `AI Employee ${new Date().toLocaleDateString()}`);
 
-    // Detect mode from role answer
-    const roleAnswerLower = (answers.role || "").toLowerCase();
-    let mode = "COPILOT";
-    if (roleAnswerLower.includes("agent") || roleAnswerLower.includes("respond") || roleAnswerLower.includes("autonomous") || roleAnswerLower.includes("אוטונומי")) {
-      mode = "AUTONOMOUS";
+    // Detect mode — default to AUTONOMOUS for AI agents
+    const roleAnswerLower = (answers.role || responsibility || "").toLowerCase();
+    let mode = "AUTONOMOUS";
+    if (roleAnswerLower.includes("copilot") || roleAnswerLower.includes("assist") || roleAnswerLower.includes("suggest")) {
+      mode = "COPILOT";
     } else if (roleAnswerLower.includes("hybrid") || roleAnswerLower.includes("היברידי")) {
-      mode = "COPILOT"; // Default hybrid to copilot
+      mode = "COPILOT";
+    }
+
+    // Generate rich description using AI based on all wizard answers
+    let description = responsibility;
+    try {
+      const wizardSummary = Object.entries(answers)
+        .filter(([_, v]) => v && v.trim())
+        .map(([k, v]) => `${k}: ${v}`)
+        .join("\n");
+
+      const aiRes = await generateResponse({
+        tenantId: req.tenantId! as string,
+        messages: [
+          {
+            role: "system",
+            content: `You are a product copywriter for an AI customer communication platform. Based on the user's wizard answers, generate a concise, professional description (2-4 sentences) for their AI agent. The description should explain what the agent does, how it communicates, and what channels it operates on. Write in the same language the user used in their answers. Do NOT include the agent's name in the description.`,
+          },
+          {
+            role: "user",
+            content: `Here are the wizard answers for my new AI agent:\n\n${wizardSummary}\n\nGenerate a rich description for this agent.`,
+          },
+        ],
+        temperature: 0.7,
+        maxTokens: 200,
+        metadata: { type: "agent_description" },
+      });
+      if (aiRes.content?.trim()) {
+        description = aiRes.content.trim();
+      }
+    } catch (err) {
+      console.warn("[ai-agents] AI description generation failed, using fallback:", (err as Error).message);
+      // Fallback to concatenated answers
+      const parts = [responsibility];
+      if (answers.extra) parts.push(answers.extra);
+      description = parts.filter(Boolean).join(". ");
     }
 
     const config = {
       name,
       role: detectedRole,
-      description: answers.purpose || "",
+      description,
       tone: detectedTone,
       channels,
       mode,
@@ -113,6 +154,8 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
       },
       escalationHints: answers.escalation || "",
       extraContext: answers.extra || "",
+      conversationFlow: answers.conversationFlow || "",
+      customGuardrails: answers.guardrails || "",
     };
 
     res.json({ data: config });
@@ -156,6 +199,7 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
 
     const tools = toolPermissions.map(tp => ({
       id: tp.tenantTool.catalogTool.id,
+      tenantToolId: tp.tenantToolId,
       name: tp.tenantTool.catalogTool.name,
       slug: tp.tenantTool.catalogTool.slug,
       risk: tp.tenantTool.catalogTool.riskLevel,
@@ -186,7 +230,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       interactiveMessages, systemPrompt, model, provider,
       temperature, maxTokens, identity, goals, toneConfig,
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
-      confidenceThreshold, escalationMessage,
+      confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
       knowledgeBaseIds, toolIds,
     } = req.body;
 
@@ -224,6 +268,8 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         maxAutonomousMinutes: maxAutonomousMinutes ?? 15,
         confidenceThreshold: confidenceThreshold ?? 0.6,
         escalationMessage: escalationMessage || "Let me connect you with a team member who can help further.",
+        conversationFlow: conversationFlow || null,
+        customGuardrails: customGuardrails || null,
       },
     });
 
@@ -319,6 +365,40 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
   } catch (err) {
     console.error("Update AI agent error:", err);
     res.status(500).json({ error: "Failed to update AI agent" });
+  }
+});
+
+// ─── Test Chat ───────────────────────────────────────────────
+router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const agent = await prisma.aIAgent.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! as string },
+    });
+
+    if (!agent) {
+      res.status(404).json({ error: "AI agent not found" });
+      return;
+    }
+
+    const { message, history = [] } = req.body as {
+      message: string;
+      history: Array<{ role: "user" | "assistant"; content: string }>;
+    };
+
+    const config = buildConfigFromAIAgent(agent as any, "agent");
+    const reply = await chatWithAgent({
+      tenantId: req.tenantId! as string,
+      conversationId: `test-${agent.id}`,
+      messages: [],
+      copilotConfig: config,
+      agentMessage: message,
+      chatHistory: history,
+    });
+
+    res.json({ data: { reply } });
+  } catch (err) {
+    console.error("Test chat error:", err);
+    res.status(500).json({ error: "Failed to generate response" });
   }
 });
 

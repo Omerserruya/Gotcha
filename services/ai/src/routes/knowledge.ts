@@ -106,7 +106,29 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
-    const { title, content, sourceType, sourceUrl } = req.body;
+    let { title, content, sourceType, sourceUrl } = req.body;
+
+    if (sourceType === "url" && sourceUrl) {
+      try {
+        const response = await fetch(sourceUrl, {
+          headers: { "User-Agent": "ChatCenter-Bot/1.0" },
+          signal: AbortSignal.timeout(30000),
+        });
+        const html = await response.text();
+        const textContent = html
+          .replace(/<script[\s\S]*?<\/script>/gi, "")
+          .replace(/<style[\s\S]*?<\/style>/gi, "")
+          .replace(/<[^>]+>/g, " ")
+          .replace(/\s+/g, " ")
+          .trim();
+        content = textContent.slice(0, 100000);
+        title = title || new URL(sourceUrl).hostname;
+      } catch (err) {
+        console.error("[KB] URL crawl failed:", err);
+        // Fall back to storing URL as content if fetch fails
+      }
+    }
+
     if (!title || !content) {
       res.status(400).json({ error: "Title and content are required" });
       return;

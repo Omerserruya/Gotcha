@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
+import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
@@ -67,44 +68,40 @@ router.post("/intent", (req: Request, res: Response, next) => {
   next();
 }, async (req: Request, res: Response) => {
   try {
-    const { message, intent } = req.body;
+    const { message, intent, tenantId } = req.body;
     if (!message || !intent) {
       res.status(400).json({ error: "message and intent are required" });
       return;
     }
 
-    // Ask AI directly: does this message relate to this intent?
-    const provider = aiService.getProvider() as any;
-    const client = provider.client;
-    const model = provider.defaultModel || "gpt-4o-mini";
+    // Ask AI: does this message relate to this intent?
+    // Use generateResponse from ai.service (central LLM access)
+    let match = false;
+    try {
+      const aiResponse = await generateResponse({
+        tenantId: tenantId || "system",
+        messages: [
+          {
+            role: "system",
+            content: `You determine if a customer message is related to a specific intent. Answer ONLY "true" or "false".\n\nIntent to check: "${intent}"`,
+          },
+          { role: "user", content: message },
+        ],
+        temperature: 0,
+        maxTokens: 5,
+        metadata: { type: "intent" },
+      });
 
-    if (!client) {
-      // No AI provider — fall back to keyword matching
+      const answer = aiResponse.content?.trim()?.toLowerCase();
+      match = answer === "true";
+      console.log(`[intent] message="${message.substring(0, 50)}" target="${intent}" answer="${answer}" match=${match}`);
+    } catch (err: any) {
+      // AI service not initialized — fall back to keyword matching
       const msgLower = message.toLowerCase();
       const intentLower = intent.toLowerCase();
-      const match = msgLower.includes(intentLower);
-      console.log(`[intent] no AI provider, keyword fallback: message="${message.substring(0, 50)}" target="${intentLower}" match=${match}`);
-      res.json({ data: { match } });
-      return;
+      match = msgLower.includes(intentLower);
+      console.log(`[intent] AI unavailable (${err.message}), keyword fallback: message="${message.substring(0, 50)}" target="${intentLower}" match=${match}`);
     }
-
-    const response = await client.chat.completions.create({
-      model,
-      temperature: 0,
-      max_tokens: 5,
-      messages: [
-        {
-          role: "system",
-          content: `You determine if a customer message is related to a specific intent. Answer ONLY "true" or "false".\n\nIntent to check: "${intent}"`,
-        },
-        { role: "user", content: message },
-      ],
-    });
-
-    const answer = response.choices?.[0]?.message?.content?.trim()?.toLowerCase();
-    const match = answer === "true";
-
-    console.log(`[intent] message="${message.substring(0, 50)}" target="${intent}" answer="${answer}" match=${match}`);
 
     res.json({ data: { match } });
   } catch (err) {

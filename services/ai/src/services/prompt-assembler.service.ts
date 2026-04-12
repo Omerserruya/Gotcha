@@ -173,6 +173,10 @@ export function assemblePrompt(
   mode: "assist" | "agent",
   sharedPrompt: string,
   autonomousPrompt: string,
+  options?: {
+    conversationFlow?: any[];
+    customGuardrails?: string[];
+  },
 ): string {
   const parts: string[] = [];
 
@@ -180,15 +184,61 @@ export function assemblePrompt(
     parts.push(COPILOT_INSTRUCTIONS);
     parts.push(sharedPrompt);
     parts.push(GUARDRAILS);
+    if (options?.customGuardrails?.length) {
+      parts.push(buildCustomGuardrailsSection(options.customGuardrails));
+    }
   } else {
     // Agent/autonomous mode
     parts.push(sharedPrompt);
     parts.push(autonomousPrompt);
-    parts.push(CONVERSATION_STRATEGY);
+
+    // Use custom conversation flow if defined, otherwise use static strategy
+    if (options?.conversationFlow?.length) {
+      parts.push(buildConversationFlowSection(options.conversationFlow));
+    } else {
+      parts.push(CONVERSATION_STRATEGY);
+    }
+
     parts.push(GUARDRAILS);
+    if (options?.customGuardrails?.length) {
+      parts.push(buildCustomGuardrailsSection(options.customGuardrails));
+    }
   }
 
   return parts.filter(Boolean).join("\n\n---\n\n");
+}
+
+// ─── Conversation Flow builder (autonomous mode) ──────────
+
+function buildConversationFlowSection(flow: any[]): string {
+  const steps = flow.map((step, i) => {
+    const lines = [`${i + 1}. **${step.action}**`];
+    if (step.details) lines.push(`   ${step.details}`);
+    return lines.join("\n");
+  }).join("\n");
+
+  return `# Conversation Flow
+
+Follow this conversation flow when interacting with customers:
+
+${steps}
+
+## Flow Guidelines
+- Follow the steps in order, but adapt naturally to the conversation.
+- Skip steps that are not relevant to the customer's situation.
+- Always confirm the customer's needs before proceeding to the next step.
+- If the customer asks something outside the flow, address it first, then return to the flow.`;
+}
+
+// ─── Custom Guardrails builder ─────────────────────────────
+
+function buildCustomGuardrailsSection(guardrails: string[]): string {
+  const rules = guardrails.map(g => `- ${g}`).join("\n");
+  return `# Additional Business Rules
+
+The following rules are specific to this business and must always be followed:
+
+${rules}`;
 }
 
 // ─── Load tools for an AI agent ─────────────────────────────
@@ -244,11 +294,23 @@ export async function generateAndSavePrompts(tenantId: string, agentId: string):
     : (agent.escalationRules || []);
   const autonomousPrompt = buildAutonomousSection(escalationRules);
 
+  // Parse conversation flow and custom guardrails
+  const conversationFlow = parseJsonField(agent.conversationFlow);
+  const customGuardrails = parseJsonField(agent.customGuardrails);
+
   // Save to database
   await prisma.aIAgent.update({
     where: { id: agentId },
     data: { sharedPrompt, autonomousPrompt },
   });
 
-  return { sharedPrompt, autonomousPrompt };
+  return { sharedPrompt, autonomousPrompt, conversationFlow, customGuardrails };
+}
+
+function parseJsonField(value: any): any {
+  if (!value) return undefined;
+  if (typeof value === "string") {
+    try { return JSON.parse(value); } catch { return undefined; }
+  }
+  return value;
 }

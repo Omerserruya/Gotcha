@@ -69,6 +69,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
   const [deleteLoading, setDeleteLoading] = useState(false);
+  const historyMode = false; // History is on a separate page
   const contextMenuRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
 
@@ -150,6 +151,10 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       if (search) params.search = search;
       if (channelFilter) params.channel = channelFilter;
       if (departmentFilter) params.departmentId = departmentFilter;
+      if (historyMode) {
+        params.status = "CLOSED";
+        params.includeAutomated = "true";
+      }
       const res = await getConversations(token, params);
       setConversations(res.data);
     } catch (err) {
@@ -157,7 +162,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     } finally {
       setLoading(false);
     }
-  }, [token, search, channelFilter, departmentFilter]);
+  }, [token, search, channelFilter, departmentFilter, historyMode]);
 
   const handleDeleteConfirm = useCallback(async () => {
     if (!token || !deleteTarget) return;
@@ -230,13 +235,18 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     return () => window.removeEventListener("conversation:read", handleRead);
   }, []);
 
-  // Group conversations into 3 queues
-  const { myActive, assignedToMe, generalQueue } = useMemo(() => {
+  // Group conversations into 3 queues (inbox mode) or flat history list
+  const { myActive, assignedToMe, generalQueue, closedList } = useMemo(() => {
     const myActive: any[] = [];
     const assignedToMe: any[] = [];
     const generalQueue: any[] = [];
+    const closedList: any[] = [];
 
     for (const conv of conversations) {
+      if (historyMode) {
+        closedList.push(conv);
+        continue;
+      }
       if (conv.status === "CLOSED") continue;
 
       if (conv.assignedAgentId === user?.id) {
@@ -254,8 +264,8 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       }
     }
 
-    return { myActive, assignedToMe, generalQueue };
-  }, [conversations, user]);
+    return { myActive, assignedToMe, generalQueue, closedList };
+  }, [conversations, user, historyMode]);
 
   const sections = [
     {
@@ -300,7 +310,9 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     <>
       {/* Header */}
       <div className="p-3">
-        <h2 className="text-lg font-bold text-gray-900 mb-3 ps-8 md:ps-0">{t("conversations.title")}</h2>
+        <div className="flex items-center justify-between mb-3 ps-8 md:ps-0">
+          <h2 className="text-lg font-bold text-gray-900">{t("conversations.title")}</h2>
+        </div>
         {/* Search & Filter widget */}
         <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-3">
           <div className="flex items-center gap-2">
@@ -432,6 +444,67 @@ export function ConversationList({ selectedId, onSelect }: Props) {
               <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
             </svg>
             <p className="text-sm text-gray-400">{t("conversations.noConversations")}</p>
+          </div>
+        ) : historyMode ? (
+          <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
+            <div className="px-3.5 py-2.5 flex items-center gap-2">
+              <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-500">
+                {t("conversations.filterClosed")}
+              </span>
+              <span className="text-[10px] font-bold px-1.5 py-0.5 rounded-full ms-auto bg-gray-100 text-gray-400">
+                {closedList.length}
+              </span>
+            </div>
+            {closedList.length === 0 ? (
+              <div className="px-4 py-3 text-xs text-gray-300 text-center">
+                {t("conversations.noConversations")}
+              </div>
+            ) : (
+              closedList.map((conv) => (
+                <button
+                  key={conv.id}
+                  onClick={() => handleSelect(conv.id)}
+                  className={clsx(
+                    "w-full text-start px-4 py-3 hover:bg-gray-50/80 transition-colors",
+                    selectedId === conv.id && "bg-primary-50/60 rounded-lg mx-2"
+                  )}
+                >
+                  <div className="flex items-center gap-3">
+                    <CustomerAvatar
+                      name={conv.customerName || conv.customerPhone}
+                      avatarUrl={conv.customerAvatarUrl}
+                      channel={conv.channel}
+                      size="md"
+                    />
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-semibold text-sm truncate text-gray-700">
+                          {conv.customerName || conv.customerExternalId || conv.customerPhone}
+                        </p>
+                        <span className="text-[10px] text-gray-400 shrink-0">
+                          {conv.closedAt ? shortTimeAgo(new Date(conv.closedAt)) : conv.lastMessageAt ? shortTimeAgo(new Date(conv.lastMessageAt)) : ""}
+                        </span>
+                      </div>
+                      <p className="text-xs truncate mt-0.5 text-gray-400">
+                        {conv.lastMessageBody || conv.customerPhone}
+                      </p>
+                      <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        {conv.department && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-gray-100 text-gray-600">
+                            {conv.department.name}
+                          </span>
+                        )}
+                        {conv.handledBy && conv.handledBy !== "human" && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-purple-50 text-purple-600">
+                            {conv.handledBy === "ai_agent" ? "AI" : "Flow"}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                </button>
+              ))
+            )}
           </div>
         ) : (
           sections.map((section) => (

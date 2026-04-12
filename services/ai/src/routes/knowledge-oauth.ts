@@ -264,7 +264,8 @@ router.get("/integrations/:intId/confluence/spaces/:key/pages", async (req: Requ
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
-    const pages = await confluenceService.listPages(integration as any, req.params.key);
+    const parentId = req.query.parentId as string | undefined;
+    const pages = await confluenceService.listPages(integration as any, req.params.key, parentId);
     res.json({ data: pages });
   } catch (err: any) {
     console.error("List Confluence pages error:", err.message);
@@ -297,6 +298,23 @@ router.post("/integrations/:intId/confluence/sync", async (req: Request, res: Re
   }
 });
 
+// ─── Google Drive: list shared drives ────────────────────────
+
+router.get("/integrations/:intId/drive/shared-drives", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "google_drive" },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    const drives = await googleDriveService.listSharedDrives(integration as any);
+    res.json({ data: drives });
+  } catch (err: any) {
+    console.error("List shared drives error:", err.message);
+    res.status(500).json({ error: "Failed to list shared drives" });
+  }
+});
+
 // ─── Google Drive: list files ─────────────────────────────────
 
 router.get("/integrations/:intId/drive/files", async (req: Request, res: Response) => {
@@ -307,7 +325,8 @@ router.get("/integrations/:intId/drive/files", async (req: Request, res: Respons
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
     const folderId = req.query.folderId as string | undefined;
-    const files = await googleDriveService.listFiles(integration as any, folderId);
+    const driveId = req.query.driveId as string | undefined;
+    const files = await googleDriveService.listFiles(integration as any, folderId, driveId);
     res.json({ data: files });
   } catch (err: any) {
     console.error("List Drive files error:", err.message);

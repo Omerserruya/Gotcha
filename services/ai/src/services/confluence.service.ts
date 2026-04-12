@@ -94,11 +94,21 @@ export async function listSpaces(integration: ConfluenceIntegration): Promise<Co
   return (data.results || []).map((s: any) => ({ key: s.key, name: s.name }));
 }
 
-export async function listPages(integration: ConfluenceIntegration, spaceKey: string): Promise<ConfluencePage[]> {
-  const data = await confluenceFetch(
-    integration,
-    `/wiki/api/v2/spaces/${spaceKey}/pages?limit=100&body-format=storage`
-  );
+export async function listPages(
+  integration: ConfluenceIntegration,
+  spaceKey: string,
+  parentId?: string
+): Promise<ConfluencePage[]> {
+  let path: string;
+  if (parentId) {
+    // List child pages of a specific page
+    path = `/wiki/api/v2/pages/${parentId}/children?limit=100`;
+  } else {
+    // List top-level pages in the space
+    path = `/wiki/api/v2/spaces/${spaceKey}/pages?limit=100&depth=root&body-format=storage`;
+  }
+
+  const data = await confluenceFetch(integration, path);
   return (data.results || []).map((p: any) => ({ id: p.id, title: p.title }));
 }
 

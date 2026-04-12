@@ -27,7 +27,7 @@ export const scheduledMessageQueue = new Queue("scheduled-messages", { connectio
 
 export interface IncomingMessageJob {
   tenantId: string;
-  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK";
+  channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK" | "WEBCHAT";
   channelAccountId: string;
   normalizedMessage: {
     externalMessageId: string;

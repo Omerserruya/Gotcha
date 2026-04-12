@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Inter, Assistant } from "next/font/google";
 import "./globals.css";
 import { Providers } from "./providers";
+import Script from "next/script";                                                                                                                                                                         
 
 const inter = Inter({ subsets: ["latin"], variable: "--font-inter", display: "swap" });
 const assistant = Assistant({ subsets: ["hebrew", "latin"], variable: "--font-assistant", display: "swap" });
@@ -74,7 +75,26 @@ export default function RootLayout({
     <html lang="en" dir="ltr">
       <body className={`${inter.variable} ${assistant.variable} bg-gray-50 text-gray-900 min-h-screen`}>
         <Providers>{children}</Providers>
+        <Script
+          id="chatcenter-widget"
+          strategy="afterInteractive"
+          dangerouslySetInnerHTML={{
+            __html: `
+              window.__chatcenter = {
+          widgetId: "widget_5a3961c3f5dc11493517ffac",
+          apiUrl: "https://gotcha.co.il",
+          color: "#733fee",
+          iconUrl: " https://img.icons8.com/?size=48&id=4cjwkaJ1Zo0u&format=png",
+        };
+              var s = document.createElement("script");
+              s.src = "https://gotcha.co.il/widget/chatcenter-widget.js";
+              s.async = true;
+              document.head.appendChild(s);
+            `,
+          }}
+        />
       </body>
     </html>
   );
 }
+  

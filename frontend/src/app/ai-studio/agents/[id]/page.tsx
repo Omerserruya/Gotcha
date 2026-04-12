@@ -7,6 +7,9 @@ import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, generateAIEmployeeConfig, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
 import clsx from "clsx";
+import IntegrationDrawer from "@/components/IntegrationDrawer";
+import KnowledgeDrawer from "@/components/KnowledgeDrawer";
+import TestChatModal from "@/components/TestChatModal";
 
 // ─── Types ────────────────────────────────────────────────────
 type Tone = "professional" | "friendly" | "casual" | "formal";
@@ -23,6 +26,7 @@ interface EscalationRule {
 
 interface Tool {
   id: string;
+  tenantToolId?: string;
   name: string;
   integration: string;
   risk: "low" | "medium" | "high";
@@ -47,6 +51,12 @@ interface InteractiveMessagesConfig {
   autoSuggestAlways: boolean;
 }
 
+interface ConversationFlowStep {
+  id: string;
+  action: string;
+  details: string;
+}
+
 interface AgentFormData {
   name: string;
   role: AgentRole;
@@ -68,6 +78,8 @@ interface AgentFormData {
   channels: { whatsapp: boolean; instagram: boolean; webchat: boolean };
   mode: AgentMode;
   status: "active" | "draft" | "paused";
+  conversationFlow: ConversationFlowStep[];
+  customGuardrails: string[];
 }
 
 // ─── Constants ─────────────────────────────────────────────────
@@ -124,7 +136,14 @@ function mapApiToForm(agent: any): AgentFormData {
     style: typeof agent.style === "string"
       ? JSON.parse(agent.style)
       : (agent.style || { useEmojis: false, concise: true, useFirstName: false, proactive: false }),
-    tools: [],
+    tools: (agent.tools || []).map((t: any) => ({
+      id: t.id,
+      tenantToolId: t.tenantToolId,
+      name: t.name || "Unknown",
+      integration: t.integration || "",
+      risk: (t.risk || "low").toLowerCase() as "low" | "medium" | "high",
+      enabled: t.enabled ?? true,
+    })),
     knowledge: (agent.knowledgeBases || []).map((ak: any) => ({
       id: ak.knowledgeBase?.id || ak.id,
       name: ak.knowledgeBase?.name || ak.name || "Unknown",
@@ -149,6 +168,8 @@ function mapApiToForm(agent: any): AgentFormData {
     channels: parseChannels(agent.channels),
     mode: ((agent.mode || "COPILOT").toLowerCase()) as AgentMode,
     status: ((agent.status || "DRAFT").toLowerCase()) as "active" | "draft" | "paused",
+    conversationFlow: Array.isArray(agent.conversationFlow) ? agent.conversationFlow : [],
+    customGuardrails: Array.isArray(agent.customGuardrails) ? agent.customGuardrails : [],
   };
 }
 
@@ -181,6 +202,8 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   channels: { whatsapp: false, instagram: false, webchat: false },
   mode: "copilot",
   status: "draft",
+  conversationFlow: [],
+  customGuardrails: [],
 };
 
 // ─── Small shared components ───────────────────────────────────
@@ -264,6 +287,7 @@ export default function AgentEditorPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showKnowledgePanel, setShowKnowledgePanel] = useState(false);
+  const [showTestChat, setShowTestChat] = useState(false);
   const [marketplaceIntegrations, setMarketplaceIntegrations] = useState<any[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
@@ -285,6 +309,8 @@ export default function AgentEditorPage() {
     { key: "escalation", question: t("aiStudio.wizard.q5Escalation") },
     { key: "aiDisclosure", question: t("aiStudio.wizard.q6AiDisclosure") },
     { key: "extra", question: t("aiStudio.wizard.q7Extra") },
+    { key: "conversationFlow", question: t("aiStudio.wizard.q8ConversationFlow") },
+    { key: "guardrails", question: t("aiStudio.wizard.q9Guardrails") },
   ];
 
   // Auto-scroll wizard chat
@@ -325,7 +351,7 @@ export default function AgentEditorPage() {
         if (res.data) {
           // Map generated config back to form
           const generated = res.data;
-          patch({
+          const patchData: Partial<AgentFormData> = {
             name: generated.name || answers.name || "",
             role: generated.role || "custom",
             description: generated.description || "",
@@ -335,7 +361,28 @@ export default function AgentEditorPage() {
               instagram: (answers.channels || "").toLowerCase().includes("instagram"),
               webchat: (answers.channels || "").toLowerCase().includes("web"),
             },
-          });
+          };
+
+          // Parse conversation flow from wizard answer
+          if (answers.conversationFlow) {
+            const steps = answers.conversationFlow
+              .split(/[,\n]/)
+              .map(s => s.trim())
+              .filter(Boolean)
+              .map((action, i) => ({ id: `cf_${Date.now()}_${i}`, action, details: "" }));
+            if (steps.length > 0) patchData.conversationFlow = steps;
+          }
+
+          // Parse custom guardrails from wizard answer
+          if (answers.guardrails) {
+            const rules = answers.guardrails
+              .split(/[,\n]/)
+              .map(s => s.trim())
+              .filter(Boolean);
+            if (rules.length > 0) patchData.customGuardrails = rules;
+          }
+
+          patch(patchData);
         }
       }
     } catch (err) {
@@ -381,6 +428,13 @@ export default function AgentEditorPage() {
       const channelsArr = Object.entries(form.channels)
         .filter(([, v]) => v)
         .map(([k]) => k);
+      const toolIds = form.tools
+        .filter((t) => t.enabled && t.tenantToolId)
+        .map((t) => t.tenantToolId);
+      const knowledgeBaseIds = form.knowledge
+        .filter((k) => k.enabled)
+        .map((k) => k.id);
+
       const payload = {
         name: form.name,
         role: form.role,
@@ -394,6 +448,10 @@ export default function AgentEditorPage() {
         interactiveMessages: form.interactiveMessages,
         mode: form.mode.toUpperCase(),
         status: form.status.toUpperCase(),
+        conversationFlow: form.conversationFlow.length > 0 ? form.conversationFlow : null,
+        customGuardrails: form.customGuardrails.length > 0 ? form.customGuardrails : null,
+        toolIds,
+        knowledgeBaseIds,
       };
 
       if (isNew) {
@@ -1042,8 +1100,130 @@ export default function AgentEditorPage() {
           </SectionCard>
 
 
+          {/* ── Section 6: Conversation Flow (Autonomous only) ── */}
+          {form.mode === "autonomous" && (
+            <SectionCard
+              title={t("aiStudio.agents.editor.conversationFlow.title")}
+              subtitle={t("aiStudio.agents.editor.conversationFlow.subtitle")}
+            >
+              {form.conversationFlow.length === 0 ? (
+                <p className="text-sm text-gray-400 py-2">{t("aiStudio.agents.editor.conversationFlow.emptyState")}</p>
+              ) : (
+                <div className="space-y-3">
+                  {form.conversationFlow.map((step, idx) => (
+                    <div key={step.id} className="p-3 rounded-xl border border-gray-100 bg-gray-50/40">
+                      <div className="flex items-start gap-3">
+                        <span className="w-6 h-6 rounded-full bg-violet-100 text-violet-600 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">{idx + 1}</span>
+                        <div className="flex-1 min-w-0 space-y-2">
+                          <input
+                            type="text"
+                            value={step.action}
+                            onChange={(e) => {
+                              const updated = [...form.conversationFlow];
+                              updated[idx] = { ...step, action: e.target.value };
+                              patch({ conversationFlow: updated });
+                            }}
+                            placeholder={t("aiStudio.agents.editor.conversationFlow.stepPlaceholder")}
+                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-violet-200 focus:border-violet-300 outline-none"
+                          />
+                          <input
+                            type="text"
+                            value={step.details}
+                            onChange={(e) => {
+                              const updated = [...form.conversationFlow];
+                              updated[idx] = { ...step, details: e.target.value };
+                              patch({ conversationFlow: updated });
+                            }}
+                            placeholder={t("aiStudio.agents.editor.conversationFlow.detailsPlaceholder")}
+                            className="w-full px-3 py-1.5 bg-white border border-gray-200 rounded-lg text-xs text-gray-500 focus:ring-1 focus:ring-violet-200 focus:border-violet-300 outline-none"
+                          />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => patch({ conversationFlow: form.conversationFlow.filter((_, i) => i !== idx) })}
+                          className="p-1 rounded text-gray-300 hover:text-red-400 transition shrink-0"
+                        >
+                          <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+              <button
+                type="button"
+                onClick={() => patch({ conversationFlow: [...form.conversationFlow, { id: `cf_${Date.now()}`, action: "", details: "" }] })}
+                className="mt-3 text-sm text-violet-600 hover:text-violet-700 font-medium transition"
+              >
+                {t("aiStudio.agents.editor.conversationFlow.addStep")}
+              </button>
+              <p className="mt-2 text-xs text-gray-400">{t("aiStudio.agents.editor.conversationFlow.hint")}</p>
+            </SectionCard>
+          )}
+
+          {/* ── Section 7: Custom Guardrails ── */}
+          <SectionCard
+            title={t("aiStudio.agents.editor.customGuardrails.title")}
+            subtitle={t("aiStudio.agents.editor.customGuardrails.subtitle")}
+          >
+            {form.customGuardrails.length === 0 ? (
+              <p className="text-sm text-gray-400 py-2">{t("aiStudio.agents.editor.customGuardrails.emptyState")}</p>
+            ) : (
+              <div className="space-y-2">
+                {form.customGuardrails.map((rule, idx) => (
+                  <div key={idx} className="flex items-center gap-2">
+                    <span className="text-red-400 shrink-0">
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                      </svg>
+                    </span>
+                    <input
+                      type="text"
+                      value={rule}
+                      onChange={(e) => {
+                        const updated = [...form.customGuardrails];
+                        updated[idx] = e.target.value;
+                        patch({ customGuardrails: updated });
+                      }}
+                      className="flex-1 px-3 py-1.5 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-1 focus:ring-red-200 focus:border-red-300 focus:bg-white outline-none"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => patch({ customGuardrails: form.customGuardrails.filter((_, i) => i !== idx) })}
+                      className="p-1 rounded text-gray-300 hover:text-red-400 transition shrink-0"
+                    >
+                      <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  </div>
+                ))}
+              </div>
+            )}
+            <button
+              type="button"
+              onClick={() => patch({ customGuardrails: [...form.customGuardrails, ""] })}
+              className="mt-3 text-sm text-red-500 hover:text-red-600 font-medium transition"
+            >
+              {t("aiStudio.agents.editor.customGuardrails.addRule")}
+            </button>
+            <p className="mt-2 text-xs text-gray-400">{t("aiStudio.agents.editor.customGuardrails.hint")}</p>
+          </SectionCard>
+
           {/* ── Save button ── */}
           <div className="flex items-center gap-3 pb-8">
+            <button
+              onClick={() => setShowTestChat(true)}
+              disabled={isNew && !form.name}
+              className="flex items-center gap-2 px-4 py-2.5 rounded-xl border border-violet-200 text-violet-600 hover:bg-violet-50 text-sm font-medium transition disabled:opacity-40"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
+              </svg>
+              Test Agent
+            </button>
             <button
               type="button"
               onClick={handleSave}
@@ -1094,156 +1274,65 @@ export default function AgentEditorPage() {
         </div>
       </div>
 
-      {/* Skills Panel (inline slide-over) */}
-      {showSkillsPanel && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowSkillsPanel(false)} />
-          <div className="relative ms-auto w-full max-w-[440px] bg-white h-full flex flex-col shadow-2xl animate-slide-in-right">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-              <div className="flex-1">
-                <h3 className="text-base font-bold text-gray-900">{t("aiStudio.agents.editor.skills.title")}</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.agents.editor.skills.panelDesc")}</p>
-              </div>
-              <button onClick={() => setShowSkillsPanel(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-5">
-              {panelLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
-                </div>
-              ) : marketplaceIntegrations.length === 0 ? (
-                <div className="text-center py-12 text-gray-400">
-                  <p className="text-sm">{t("common.noResults")}</p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {marketplaceIntegrations.map((integration: any) => (
-                    <div key={integration.id || integration.slug} className="p-4 rounded-xl border border-gray-100 hover:border-violet-200 transition">
-                      <div className="flex items-center gap-3 mb-2">
-                        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center text-sm font-bold text-gray-500">
-                          {(integration.name || "?").charAt(0)}
-                        </div>
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-semibold text-gray-900">{integration.name}</p>
-                          <p className="text-xs text-gray-400 truncate">{integration.description}</p>
-                        </div>
-                        <span className={clsx(
-                          "text-[10px] px-2 py-0.5 rounded-full font-medium",
-                          integration.status === "CONNECTED" ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
-                        )}>
-                          {integration.status === "CONNECTED" ? t("channels.statusConnected") : t("aiStudio.agents.editor.skills.notConnected")}
-                        </span>
-                      </div>
-                      {integration.status !== "CONNECTED" && (
-                        <a
-                          href={`/ai-studio?tab=skills`}
-                          className="text-xs text-violet-600 hover:text-violet-700 font-medium"
-                          onClick={(e) => { e.preventDefault(); setShowSkillsPanel(false); router.push("/ai-studio?tab=skills"); }}
-                        >
-                          {t("aiStudio.agents.editor.skills.connectIntegration")}
-                        </a>
-                      )}
-                      {integration.tools && integration.tools.length > 0 && (
-                        <div className="mt-2 space-y-1.5">
-                          {integration.tools.map((tool: any) => (
-                            <label key={tool.id} className="flex items-center gap-2 text-xs cursor-pointer">
-                              <input
-                                type="checkbox"
-                                checked={form.tools.some(t => t.id === tool.id && t.enabled)}
-                                onChange={() => toggleTool(tool.id)}
-                                className="w-3.5 h-3.5 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                              />
-                              <span className="text-gray-700">{tool.name}</span>
-                            </label>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Integration Drawer (inline — no navigation) */}
+      <IntegrationDrawer
+        isOpen={showSkillsPanel}
+        onClose={() => {
+          setShowSkillsPanel(false);
+          // Reload marketplace integrations and rebuild form.tools from all enabled tools
+          if (token) {
+            getMarketplaceIntegrations(token)
+              .then((res) => {
+                const intgs = res.data || [];
+                setMarketplaceIntegrations(intgs);
+                // Rebuild form.tools from all connected integrations' enabled tools
+                const allTools: Tool[] = [];
+                for (const intg of intgs) {
+                  const ti = intg.tenantConnection;
+                  if (ti?.status !== "CONNECTED") continue;
+                  for (const ct of intg.catalogTools || []) {
+                    if (!ct.tenantTool) continue;
+                    allTools.push({
+                      id: ct.id || ct.slug,
+                      tenantToolId: ct.tenantTool?.id,
+                      name: ct.name,
+                      integration: intg.name || intg.slug,
+                      risk: (ct.riskLevel || "LOW").toLowerCase() as "low" | "medium" | "high",
+                      enabled: ct.tenantTool?.isEnabled ?? false,
+                    });
+                  }
+                }
+                patch({ tools: allTools });
+              })
+              .catch(() => {});
+          }
+        }}
+      />
 
-      {/* Knowledge Panel (inline slide-over) */}
-      {showKnowledgePanel && (
-        <div className="fixed inset-0 z-50 flex">
-          <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={() => setShowKnowledgePanel(false)} />
-          <div className="relative ms-auto w-full max-w-[440px] bg-white h-full flex flex-col shadow-2xl animate-slide-in-right">
-            <div className="px-5 py-4 border-b border-gray-100 flex items-center gap-3">
-              <div className="flex-1">
-                <h3 className="text-base font-bold text-gray-900">{t("aiStudio.agents.editor.knowledge.title")}</h3>
-                <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.agents.editor.knowledge.panelDesc")}</p>
-              </div>
-              <button onClick={() => setShowKnowledgePanel(false)} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
-                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-5">
-              {panelLoading ? (
-                <div className="flex items-center justify-center py-12">
-                  <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-500 rounded-full animate-spin" />
-                </div>
-              ) : knowledgeBases.length === 0 ? (
-                <div className="text-center py-12">
-                  <p className="text-sm text-gray-400 mb-2">{t("aiStudio.agents.editor.knowledge.noSources")}</p>
-                  <button
-                    onClick={() => { setShowKnowledgePanel(false); router.push("/ai-studio?tab=knowledge"); }}
-                    className="text-xs text-violet-600 hover:text-violet-700 font-medium"
-                  >
-                    {t("aiStudio.agents.editor.knowledge.createFirst")}
-                  </button>
-                </div>
-              ) : (
-                <div className="space-y-2">
-                  {knowledgeBases.map((kb: any) => {
-                    const isLinked = form.knowledge.some(k => k.id === kb.id);
-                    return (
-                      <label
-                        key={kb.id}
-                        className={clsx(
-                          "flex items-center gap-3 p-3.5 rounded-xl border cursor-pointer transition",
-                          isLinked ? "border-violet-200 bg-violet-50/50" : "border-gray-100 hover:border-gray-200"
-                        )}
-                      >
-                        <input
-                          type="checkbox"
-                          checked={isLinked}
-                          onChange={() => {
-                            if (isLinked) {
-                              patch({ knowledge: form.knowledge.filter(k => k.id !== kb.id) });
-                            } else {
-                              patch({ knowledge: [...form.knowledge, { id: kb.id, name: kb.name, type: "Document", status: kb.isActive ? "synced" : "error", enabled: true }] });
-                            }
-                          }}
-                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                        />
-                        <div className="flex-1 min-w-0">
-                          <p className="text-sm font-medium text-gray-800">{kb.name}</p>
-                          {kb.description && <p className="text-xs text-gray-400 truncate">{kb.description}</p>}
-                        </div>
-                        {isLinked && (
-                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-violet-100 text-violet-600 font-medium">
-                            {t("aiStudio.agents.editor.knowledge.linked")}
-                          </span>
-                        )}
-                      </label>
-                    );
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
+      {/* Knowledge Drawer (inline — no navigation) */}
+      <KnowledgeDrawer
+        isOpen={showKnowledgePanel}
+        onClose={() => setShowKnowledgePanel(false)}
+        linkedKbIds={form.knowledge.map(k => k.id)}
+        onToggleKb={(kbId, linked) => {
+          if (linked) {
+            // Find KB name from knowledgeBases state or use id
+            const kb = knowledgeBases.find((k: any) => k.id === kbId);
+            patch({ knowledge: [...form.knowledge, { id: kbId, name: kb?.name || kbId, type: "Document", status: "synced", enabled: true }] });
+          } else {
+            patch({ knowledge: form.knowledge.filter(k => k.id !== kbId) });
+          }
+        }}
+      />
+
+      <TestChatModal
+        isOpen={showTestChat}
+        onClose={() => setShowTestChat(false)}
+        agentId={id}
+        agentName={form.name || "AI Agent"}
+        avatarColor={form.avatarColor}
+        token={token || ""}
+      />
     </AppLayout>
   );
 }

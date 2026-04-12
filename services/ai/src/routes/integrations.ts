@@ -11,7 +11,19 @@ router.get("/", async (req: Request, res: Response) => {
     const catalog = await prisma.integrationCatalog.findMany({
       where: { isPublished: true },
       include: {
-        catalogTools: { select: { id: true } },
+        catalogTools: {
+          select: {
+            id: true,
+            name: true,
+            slug: true,
+            riskLevel: true,
+            tenantTools: {
+              where: { tenantId: req.tenantId! },
+              select: { id: true, isEnabled: true },
+            },
+          },
+          orderBy: { name: "asc" },
+        },
         tenantConnections: {
           where: { tenantId: req.tenantId! },
           select: { id: true, status: true, createdAt: true },
@@ -22,6 +34,11 @@ router.get("/", async (req: Request, res: Response) => {
 
     const data = catalog.map((entry) => ({
       ...entry,
+      catalogTools: entry.catalogTools.map((ct: any) => ({
+        ...ct,
+        tenantTool: ct.tenantTools?.[0] || null,
+        tenantTools: undefined,
+      })),
       authType: entry.authType,
       authSchema: entry.authSchema,
       tenantConnection: entry.tenantConnections[0] || null,
@@ -312,7 +329,7 @@ router.get("/:slug/tools", async (req: Request, res: Response) => {
 
     const data = catalogTools.map((tool) => ({
       ...tool,
-      tenantActivation: (tool as any).tenantTools?.[0] || null,
+      tenantTool: (tool as any).tenantTools?.[0] || null,
       tenantTools: undefined,
     }));
 

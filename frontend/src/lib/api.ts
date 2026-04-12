@@ -280,7 +280,7 @@ export function removeAgentFromDepartment(token: string, departmentId: string, u
 // ─── Channel Accounts (legacy) ─────────────────────────────
 
 export function getChannelAccounts(token: string) {
-  return apiFetch<{ data: any[] }>("/api/agents/settings/channels", { token });
+  return apiFetch<{ data: any[] }>("/api/channels", { token });
 }
 
 export function createChannelAccount(token: string, data: { channel: string; externalId: string; displayName: string; credentials: any }) {
@@ -357,6 +357,22 @@ export function disconnectChannel(token: string, id: string) {
 
 export function getChannelStatus(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/channels/${id}/status`, { token });
+}
+
+export function createWebchatWidget(token: string, name?: string) {
+  return apiFetch<{ data: any }>("/api/channels/webchat/create", {
+    token, method: "POST", body: JSON.stringify({ name })
+  });
+}
+
+export function getWebchatSettings(token: string, accountId: string) {
+  return apiFetch<{ data: any }>(`/api/channels/webchat/${accountId}/settings`, { token });
+}
+
+export function updateWebchatSettings(token: string, accountId: string, settings: { color?: string; iconUrl?: string; title?: string; subtitle?: string; welcome?: string; position?: string }) {
+  return apiFetch<{ data: any }>(`/api/channels/webchat/${accountId}/settings`, {
+    token, method: "PUT", body: JSON.stringify(settings)
+  });
 }
 
 // ─── Tenant Channel Config ─────────────────────────────────
@@ -814,8 +830,9 @@ export function getConfluenceSpaces(token: string, intId: string) {
   return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/confluence/spaces`, { token });
 }
 
-export function getConfluencePages(token: string, intId: string, spaceKey: string) {
-  return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/confluence/spaces/${spaceKey}/pages`, { token });
+export function getConfluencePages(token: string, intId: string, spaceKey: string, parentId?: string) {
+  const qs = parentId ? `?parentId=${parentId}` : "";
+  return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/confluence/spaces/${spaceKey}/pages${qs}`, { token });
 }
 
 export function syncConfluenceSpaces(token: string, intId: string, spaceKeys: string[]) {
@@ -824,9 +841,16 @@ export function syncConfluenceSpaces(token: string, intId: string, spaceKeys: st
   });
 }
 
-export function getDriveFiles(token: string, intId: string, folderId?: string) {
-  const qs = folderId ? `?folderId=${folderId}` : "";
+export function getDriveFiles(token: string, intId: string, folderId?: string, driveId?: string) {
+  const params = new URLSearchParams();
+  if (folderId) params.set("folderId", folderId);
+  if (driveId) params.set("driveId", driveId);
+  const qs = params.toString() ? `?${params}` : "";
   return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/drive/files${qs}`, { token });
+}
+
+export function getDriveSharedDrives(token: string, intId: string) {
+  return apiFetch<{ data: any[] }>(`/api/knowledge/integrations/${intId}/drive/shared-drives`, { token });
 }
 
 export function syncDriveFiles(token: string, intId: string, fileIds: string[]) {
@@ -1019,6 +1043,12 @@ export function updateAIAgent(token: string, id: string, data: Record<string, an
 
 export function deleteAIAgent(token: string, id: string) {
   return apiFetch<{ success: boolean }>(`/api/ai-agents/${id}`, { token, method: "DELETE" });
+}
+
+export function testAgentChat(token: string, agentId: string, message: string, history: Array<{role: "user"|"assistant", content: string}>) {
+  return apiFetch<{ data: { reply: string } }>(`/api/ai-agents/${agentId}/test-chat`, {
+    token, method: "POST", body: JSON.stringify({ message, history })
+  });
 }
 
 // ─── Router Rules (Main Playbook) ────────────────────────────

@@ -8,8 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getRouterRules, getKnowledgeBases, deleteChatbotFlow } from "@/lib/api";
 import clsx from "clsx";
-import ReactFlow, { Node, Edge, Controls, Background, BackgroundVariant, MarkerType } from "reactflow";
-import "reactflow/dist/style.css";
+import TestChatModal from "@/components/TestChatModal";
 
 // ─── Tab types ────────────────────────────────────────────────
 type Tab = "team" | "playbooks" | "knowledge" | "skills";
@@ -113,6 +112,7 @@ function TeamTab({ t }: { t: (key: string) => string }) {
   const router = useRouter();
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [testAgent, setTestAgent] = useState<{ id: string; name: string } | null>(null);
 
   useEffect(() => {
     if (!token) return;
@@ -211,7 +211,7 @@ function TeamTab({ t }: { t: (key: string) => string }) {
                 {t("aiStudio.edit")}
               </Link>
               <button
-                onClick={(e) => { e.stopPropagation(); }}
+                onClick={(e) => { e.stopPropagation(); setTestAgent({ id: agent.id, name: agent.name }); }}
                 className="py-1.5 px-3 rounded-lg bg-gray-50 text-gray-500 text-xs font-medium hover:bg-gray-100 transition"
               >
                 {t("aiStudio.test")}
@@ -241,222 +241,30 @@ function TeamTab({ t }: { t: (key: string) => string }) {
         </Link>
       </div>
       )}
+
+      {testAgent && token && (
+        <TestChatModal
+          isOpen={!!testAgent}
+          onClose={() => setTestAgent(null)}
+          agentId={testAgent.id}
+          agentName={testAgent.name}
+          avatarColor="from-violet-400 to-violet-600"
+          token={token}
+        />
+      )}
     </div>
   );
 }
 
-// ─── Step type icon for Main Playbook ─────────────────────────
-function StepTypeIcon({ type }: { type: string }) {
-  const styles: Record<string, { bg: string; color: string }> = {
-    intent: { bg: "bg-blue-50", color: "text-blue-600" },
-    tag: { bg: "bg-amber-50", color: "text-amber-600" },
-    message: { bg: "bg-emerald-50", color: "text-emerald-600" },
-    fallback: { bg: "bg-gray-100", color: "text-gray-400" },
-  };
-  const s = styles[type] || styles.fallback;
+// ─── Playbooks Tab (Simplified) ──────────────────────────────
+// OLD: StepTypeIcon, RouteTypeBadge, PlaybookGraph removed
 
-  const icons: Record<string, React.ReactNode> = {
-    intent: (
-      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-      </svg>
-    ),
-    tag: (
-      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M9.568 3H5.25A2.25 2.25 0 003 5.25v4.318c0 .597.237 1.17.659 1.591l9.581 9.581c.699.699 1.78.872 2.607.33a18.095 18.095 0 005.223-5.223c.542-.827.369-1.908-.33-2.607L11.16 3.66A2.25 2.25 0 009.568 3z" />
-        <path strokeLinecap="round" strokeLinejoin="round" d="M6 6h.008v.008H6V6z" />
-      </svg>
-    ),
-    message: (
-      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" />
-      </svg>
-    ),
-    fallback: (
-      <svg className={clsx("w-3.5 h-3.5", s.color)} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-        <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 12.75a.75.75 0 110-1.5.75.75 0 010 1.5zM12 18.75a.75.75 0 110-1.5.75.75 0 010 1.5z" />
-      </svg>
-    ),
-  };
-
-  return (
-    <div className={clsx("w-7 h-7 rounded-lg flex items-center justify-center shrink-0", s.bg)}>
-      {icons[type] || icons.fallback}
-    </div>
-  );
-}
-
-// ─── Route type badge ─────────────────────────────────────────
-function RouteTypeBadge({ type, t }: { type: string; t: (k: string) => string }) {
-  const styles: Record<string, string> = {
-    subflow: "bg-violet-50 text-violet-600",
-    agent: "bg-blue-50 text-blue-600",
-    human: "bg-amber-50 text-amber-600",
-  };
-  const labels: Record<string, string> = {
-    subflow: t("aiStudio.playbooks.routeSubflow"),
-    agent: t("aiStudio.playbooks.routeAgent"),
-    human: t("aiStudio.playbooks.routeHuman"),
-  };
-  return (
-    <span className={clsx("px-1.5 py-0.5 rounded text-[10px] font-medium", styles[type] || styles.agent)}>
-      {labels[type] || type}
-    </span>
-  );
-}
-
-// ─── Playbook Graph (ReactFlow visualization) ─────────────────
-type PlaybookStep = { id: string; type: string; label: string; routeTo: string; routeType: string };
-function PlaybookGraph({ steps }: { steps: PlaybookStep[] }) {
-  const nonDefault = steps.filter((s) => s.type !== "fallback");
-  const defaultStep = steps.find((s) => s.type === "fallback");
-
-  const nodes: Node[] = [];
-  const edges: Edge[] = [];
-
-  // Start node
-  nodes.push({
-    id: "start",
-    type: "default",
-    position: { x: 200, y: 0 },
-    data: { label: "Incoming Message" },
-    style: {
-      background: "#16a34a",
-      color: "#fff",
-      border: "none",
-      borderRadius: 12,
-      fontWeight: 600,
-      fontSize: 12,
-      padding: "8px 16px",
-    },
-  });
-
-  nonDefault.forEach((step, i) => {
-    const y = 100 + i * 130;
-    const nodeId = `rule-${step.id}`;
-    nodes.push({
-      id: nodeId,
-      type: "default",
-      position: { x: 200, y },
-      data: {
-        label: (
-          <div style={{ textAlign: "center", fontSize: 11 }}>
-            <div style={{ fontWeight: 700, marginBottom: 2 }}>{step.label}</div>
-            <div style={{ color: "#7c3aed", fontSize: 10 }}>{step.routeTo}</div>
-          </div>
-        ),
-      },
-      style: {
-        background: "#f5f3ff",
-        border: "1.5px solid #7c3aed",
-        borderRadius: 8,
-        width: 180,
-        fontSize: 11,
-      },
-    });
-
-    // Edge from previous node (start or previous rule)
-    const sourceId = i === 0 ? "start" : `rule-${nonDefault[i - 1].id}`;
-    edges.push({
-      id: `e-${sourceId}-${nodeId}`,
-      source: sourceId,
-      target: nodeId,
-      label: i === 0 ? "" : "false",
-      markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: "#a78bfa" },
-    });
-
-    // "True" edge to route target node
-    const targetNodeId = `target-${step.id}`;
-    nodes.push({
-      id: targetNodeId,
-      type: "default",
-      position: { x: 450, y },
-      data: { label: step.routeTo || "Route Target" },
-      style: {
-        background: "#ede9fe",
-        border: "1px solid #c4b5fd",
-        borderRadius: 8,
-        fontSize: 11,
-        padding: "4px 10px",
-      },
-    });
-    edges.push({
-      id: `e-true-${nodeId}`,
-      source: nodeId,
-      target: targetNodeId,
-      label: "true",
-      markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: "#16a34a" },
-      labelStyle: { fill: "#16a34a", fontWeight: 600, fontSize: 10 },
-    });
-  });
-
-  // Default/fallback node
-  if (defaultStep) {
-    const y = 100 + nonDefault.length * 130;
-    nodes.push({
-      id: "default",
-      type: "default",
-      position: { x: 200, y },
-      data: {
-        label: (
-          <div style={{ textAlign: "center", fontSize: 11 }}>
-            <div style={{ fontWeight: 700, marginBottom: 2 }}>Default Fallback</div>
-            <div style={{ color: "#6b7280", fontSize: 10 }}>{defaultStep.routeTo}</div>
-          </div>
-        ),
-      },
-      style: {
-        background: "#f9fafb",
-        border: "1.5px solid #d1d5db",
-        borderRadius: 12,
-        width: 180,
-        fontSize: 11,
-      },
-    });
-    const lastSource = nonDefault.length > 0
-      ? `rule-${nonDefault[nonDefault.length - 1].id}`
-      : "start";
-    edges.push({
-      id: "e-default",
-      source: lastSource,
-      target: "default",
-      label: nonDefault.length > 0 ? "false" : "",
-      markerEnd: { type: MarkerType.ArrowClosed },
-      style: { stroke: "#9ca3af" },
-    });
-  }
-
-  const graphHeight = 120 + (nonDefault.length + (defaultStep ? 1 : 0)) * 130;
-
-  return (
-    <div style={{ height: Math.max(graphHeight, 300), width: "100%" }}>
-      <ReactFlow
-        nodes={nodes}
-        edges={edges}
-        fitView
-        nodesDraggable={false}
-        nodesConnectable={false}
-        elementsSelectable={false}
-        zoomOnScroll={false}
-        panOnDrag={true}
-      >
-        <Controls showInteractive={false} />
-        <Background variant={BackgroundVariant.Dots} gap={16} size={1} color="#e5e7eb" />
-      </ReactFlow>
-    </div>
-  );
-}
-
-// ─── Playbooks Tab (Main Playbook + Sub-Playbooks) ────────────
 function PlaybooksTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
   const router = useRouter();
   const [flows, setFlows] = useState<any[]>([]);
-  const [rules, setRules] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [viewMode, setViewMode] = useState<"list" | "graph">("list");
+  const [rulesCount, setRulesCount] = useState(0);
 
   useEffect(() => {
     if (!token) return;
@@ -466,7 +274,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
     ])
       .then(([flowsData, rulesData]) => {
         setFlows(flowsData);
-        setRules(rulesData);
+        setRulesCount(rulesData.length);
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -487,24 +295,6 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
     }
   }
 
-  function ruleToStep(rule: any, idx: number) {
-    const routeType = rule.routeType === "AI_AGENT" ? "agent"
-      : rule.routeType === "FLOW" ? "subflow"
-      : rule.routeType === "HUMAN" || rule.routeType === "DEPARTMENT" ? "human"
-      : "agent";
-    const type = rule.isDefault ? "fallback"
-      : rule.routeType === "AI_AGENT" ? "intent"
-      : rule.routeType === "FLOW" ? "message"
-      : "tag";
-    return {
-      id: rule.id || String(idx),
-      type,
-      label: rule.name,
-      routeTo: rule.routeTargetName || rule.routeTarget || "",
-      routeType,
-    };
-  }
-
   return (
     <div>
       <div className="flex items-center justify-between mb-5">
@@ -523,122 +313,50 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
         </Link>
       </div>
 
-      {/* ── Main Playbook ── */}
-      <div className="bg-white rounded-2xl shadow-card border-2 border-violet-100 overflow-hidden mb-6">
-        <div className="flex items-center justify-between px-5 py-4 bg-gradient-to-r from-violet-50 to-violet-50/30 border-b border-violet-100">
-          <div className="flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-sm">
-              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      {/* Main Playbook Card */}
+      <div
+        onClick={() => router.push("/ai-studio/router")}
+        className="bg-white rounded-2xl shadow-card border-2 border-violet-100 overflow-hidden mb-6 cursor-pointer hover:shadow-md hover:border-violet-200 transition group"
+      >
+        <div className="flex items-center justify-between px-5 py-5 bg-gradient-to-r from-violet-50 to-violet-50/30">
+          <div className="flex items-center gap-4">
+            <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-sm">
+              <svg className="w-5 h-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
               </svg>
             </div>
             <div>
-              <h3 className="text-sm font-bold text-gray-900">{t("aiStudio.playbooks.mainPlaybook")}</h3>
-              <p className="text-xs text-gray-400">{t("aiStudio.playbooks.mainPlaybookSub")}</p>
+              <h3 className="text-base font-bold text-gray-900">{t("aiStudio.playbooks.mainPlaybook")}</h3>
+              <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.playbooks.mainPlaybookSub")}</p>
+              {rulesCount > 0 && (
+                <p className="text-xs text-violet-500 mt-1 font-medium">{rulesCount} routing rule{rulesCount !== 1 ? "s" : ""} configured</p>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">
-            {/* List / Graph toggle */}
-            <div className="flex rounded-lg border border-violet-200 overflow-hidden text-xs font-medium">
-              <button
-                onClick={() => setViewMode("list")}
-                className={clsx(
-                  "px-3 py-1.5 transition",
-                  viewMode === "list"
-                    ? "bg-violet-600 text-white"
-                    : "bg-white text-violet-700 hover:bg-violet-50"
-                )}
-              >
-                List
-              </button>
-              <button
-                onClick={() => setViewMode("graph")}
-                className={clsx(
-                  "px-3 py-1.5 transition border-l border-violet-200",
-                  viewMode === "graph"
-                    ? "bg-violet-600 text-white"
-                    : "bg-white text-violet-700 hover:bg-violet-50"
-                )}
-              >
-                Graph
-              </button>
-            </div>
-            <Link
-              href="/ai-studio/router"
-              className="flex items-center gap-2 px-3 py-1.5 bg-white text-violet-700 rounded-lg text-xs font-medium hover:bg-violet-50 transition border border-violet-200 shadow-sm"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-              </svg>
+            <span className="text-xs text-violet-600 font-medium group-hover:text-violet-700 transition hidden sm:block">
               {t("aiStudio.playbooks.editMainPlaybook")}
-            </Link>
-          </div>
-        </div>
-
-        {loading ? (
-          <div className="flex items-center justify-center h-24">
-            <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
-          </div>
-        ) : rules.length === 0 ? (
-          <div className="px-5 py-8 text-center text-gray-400">
-            <p className="text-sm">No routing rules configured</p>
-          </div>
-        ) : viewMode === "graph" ? (
-          <PlaybookGraph steps={rules.map((r, i) => ruleToStep(r, i))} />
-        ) : rules.map((rule, i) => {
-          const step = ruleToStep(rule, i);
-          return (
-          <div
-            key={step.id}
-            className={clsx(
-              "flex items-center gap-3 px-5 py-2.5 hover:bg-gray-50/60 transition",
-              i < rules.length - 1 && "border-b border-gray-50",
-              step.type === "fallback" && "bg-gray-50/30"
-            )}
-          >
-            {/* Step number + connector line */}
-            <div className="flex flex-col items-center w-5 shrink-0">
-              <span className={clsx(
-                "w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold",
-                step.type === "fallback" ? "bg-gray-200 text-gray-400" : "bg-violet-100 text-violet-700"
-              )}>
-                {i + 1}
-              </span>
-            </div>
-
-            {/* Type icon */}
-            <StepTypeIcon type={step.type} />
-
-            {/* Condition label */}
-            <span className="text-sm text-gray-700 flex-1 truncate">{step.label}</span>
-
-            {/* Arrow */}
-            <svg className="w-3.5 h-3.5 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+            </span>
+            <svg className="w-5 h-5 text-violet-400 group-hover:text-violet-600 group-hover:translate-x-0.5 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" />
             </svg>
-
-            {/* Route target + type badge */}
-            <div className="flex items-center gap-2 shrink-0">
-              <span className="text-sm font-medium text-gray-800">{step.routeTo}</span>
-              <RouteTypeBadge type={step.routeType} t={t} />
-            </div>
           </div>
-          );
-        })}
-
-        <div className="px-5 py-2.5 border-t border-violet-50 bg-violet-50/20">
-          <p className="text-[11px] text-gray-400">{t("aiStudio.playbooks.mainPlaybookHint")}</p>
         </div>
       </div>
 
-      {/* ── Sub-Playbooks ── */}
+      {/* Sub-Playbooks */}
       <div className="flex items-center gap-2 mb-3">
         <h3 className="text-sm font-semibold text-gray-700">{t("aiStudio.playbooks.subPlaybooks")}</h3>
         <span className="text-xs text-gray-400">({flows.length})</span>
       </div>
 
+      {loading ? (
+        <div className="flex items-center justify-center h-24">
+          <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+        </div>
+      ) : (
       <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-        {flows.length === 0 && !loading && (
+        {flows.length === 0 && (
           <div className="px-5 py-8 text-center text-gray-400">
             <p className="text-sm">No playbooks yet</p>
           </div>
@@ -707,6 +425,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
           </div>
         ))}
       </div>
+      )}
 
       <Link
         href="/ai-studio/flows/new"
@@ -722,6 +441,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
     </div>
   );
 }
+
 
 // ─── Knowledge Tab ────────────────────────────────────────────
 function KnowledgeTab({ t }: { t: (key: string) => string }) {

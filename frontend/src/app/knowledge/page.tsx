@@ -20,6 +20,7 @@ import {
   getConfluencePages,
   syncConfluenceSpaces,
   getDriveFiles,
+  getDriveSharedDrives,
   syncDriveFiles,
 } from "@/lib/api";
 import clsx from "clsx";
@@ -90,6 +91,16 @@ export default function KnowledgePage() {
   // Confluence sub-browse: pages within a space
   const [browseSpaceKey, setBrowseSpaceKey] = useState<string | null>(null);
   const [browsePages, setBrowsePages] = useState<any[]>([]);
+
+  // Drive folder navigation
+  type BreadcrumbItem = { id: string; name: string; driveId?: string };
+  const [driveFolderStack, setDriveFolderStack] = useState<BreadcrumbItem[]>([]);
+  const [driveTab, setDriveTab] = useState<"my" | "shared">("my");
+  const [sharedDrives, setSharedDrives] = useState<any[]>([]);
+  const [sharedDrivesLoaded, setSharedDrivesLoaded] = useState(false);
+
+  // Confluence child page navigation
+  const [confluencePageStack, setConfluencePageStack] = useState<{ id: string; title: string }[]>([]);
 
   const loadKnowledgeBases = useCallback(async () => {
     if (!token) return;
@@ -246,6 +257,11 @@ export default function KnowledgePage() {
     setBrowseSelected(new Set());
     setBrowseSpaceKey(null);
     setBrowsePages([]);
+    setDriveFolderStack([]);
+    setDriveTab("my");
+    setSharedDrivesLoaded(false);
+    setSharedDrives([]);
+    setConfluencePageStack([]);
     try {
       if (integration.provider === "confluence") {
         const res = await getConfluenceSpaces(token, integration.id);
@@ -261,15 +277,118 @@ export default function KnowledgePage() {
     }
   }
 
-  async function handleBrowseSpacePages(spaceKey: string) {
+  async function handleBrowseSpacePages(spaceKey: string, parentId?: string, parentTitle?: string) {
     if (!token || !browseIntegration) return;
     setBrowseSpaceKey(spaceKey);
     setBrowseLoading(true);
+    if (parentId && parentTitle) {
+      setConfluencePageStack((prev) => [...prev, { id: parentId, title: parentTitle }]);
+    } else {
+      setConfluencePageStack([]);
+    }
     try {
-      const res = await getConfluencePages(token, browseIntegration.id, spaceKey);
+      const res = await getConfluencePages(token, browseIntegration.id, spaceKey, parentId);
       setBrowsePages(res.data);
     } catch (err) {
       console.error("Failed to load pages:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleConfluenceBack() {
+    if (!token || !browseIntegration || !browseSpaceKey) return;
+    const stack = [...confluencePageStack];
+    stack.pop();
+    setConfluencePageStack(stack);
+    setBrowseLoading(true);
+    try {
+      const parentId = stack.length > 0 ? stack[stack.length - 1].id : undefined;
+      const res = await getConfluencePages(token, browseIntegration.id, browseSpaceKey, parentId);
+      setBrowsePages(res.data);
+    } catch (err) {
+      console.error("Failed to load pages:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleDriveEnterFolder(folderId: string, folderName: string) {
+    if (!token || !browseIntegration) return;
+    const currentDriveId = driveFolderStack.length > 0 ? driveFolderStack[0].driveId : undefined;
+    setDriveFolderStack((prev) => [...prev, { id: folderId, name: folderName, driveId: currentDriveId }]);
+    setBrowseLoading(true);
+    try {
+      const res = await getDriveFiles(token, browseIntegration.id, folderId, currentDriveId);
+      setBrowseItems(res.data);
+    } catch (err) {
+      console.error("Failed to browse folder:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleDriveBack() {
+    if (!token || !browseIntegration) return;
+    const stack = [...driveFolderStack];
+    stack.pop();
+    setDriveFolderStack(stack);
+    setBrowseLoading(true);
+    try {
+      if (stack.length === 0) {
+        if (driveTab === "shared") {
+          setBrowseItems([]);
+          setBrowseLoading(false);
+          return;
+        }
+        const res = await getDriveFiles(token, browseIntegration.id);
+        setBrowseItems(res.data);
+      } else {
+        const parent = stack[stack.length - 1];
+        const res = await getDriveFiles(token, browseIntegration.id, parent.id, parent.driveId);
+        setBrowseItems(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to navigate back:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleDriveTabSwitch(tab: "my" | "shared") {
+    if (!token || !browseIntegration) return;
+    setDriveTab(tab);
+    setDriveFolderStack([]);
+    setBrowseSelected(new Set());
+    setBrowseLoading(true);
+    try {
+      if (tab === "shared") {
+        if (!sharedDrivesLoaded) {
+          const res = await getDriveSharedDrives(token, browseIntegration.id);
+          setSharedDrives(res.data);
+          setSharedDrivesLoaded(true);
+        }
+        setBrowseItems([]);
+      } else {
+        const res = await getDriveFiles(token, browseIntegration.id);
+        setBrowseItems(res.data);
+      }
+    } catch (err) {
+      console.error("Failed to switch tab:", err);
+    } finally {
+      setBrowseLoading(false);
+    }
+  }
+
+  async function handleEnterSharedDrive(driveId: string, driveName: string) {
+    if (!token || !browseIntegration) return;
+    setDriveFolderStack([{ id: driveId, name: driveName, driveId }]);
+    setBrowseLoading(true);
+    try {
+      const res = await getDriveFiles(token, browseIntegration.id, undefined, driveId);
+      setBrowseItems(res.data);
+    } catch (err) {
+      console.error("Failed to browse shared drive:", err);
     } finally {
       setBrowseLoading(false);
     }
@@ -777,36 +896,153 @@ export default function KnowledgePage() {
       {showBrowseModal && browseIntegration && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
           <div className="bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 max-h-[80vh] flex flex-col">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="font-bold text-lg text-gray-900">
-                {browseSpaceKey ? (
-                  <button onClick={() => { setBrowseSpaceKey(null); setBrowsePages([]); setBrowseSelected(new Set()); }} className="text-emerald-600 hover:text-emerald-700 mr-2">
-                    &larr;
+            {/* Header */}
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="font-bold text-lg text-gray-900 flex items-center gap-2">
+                {/* Back button */}
+                {browseIntegration.provider === "confluence" && browseSpaceKey && confluencePageStack.length > 0 ? (
+                  <button onClick={handleConfluenceBack} className="text-emerald-600 hover:text-emerald-700">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                  </button>
+                ) : browseIntegration.provider === "confluence" && browseSpaceKey ? (
+                  <button onClick={() => { setBrowseSpaceKey(null); setBrowsePages([]); setBrowseSelected(new Set()); setConfluencePageStack([]); }} className="text-emerald-600 hover:text-emerald-700">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+                  </button>
+                ) : browseIntegration.provider === "google_drive" && driveFolderStack.length > 0 ? (
+                  <button onClick={handleDriveBack} className="text-emerald-600 hover:text-emerald-700">
+                    <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
                   </button>
                 ) : null}
+
                 {browseIntegration.provider === "confluence"
-                  ? browseSpaceKey ? `Pages in ${browseSpaceKey}` : t("knowledge.browseSpaces")
-                  : t("knowledge.browseFiles")
+                  ? browseSpaceKey
+                    ? confluencePageStack.length > 0
+                      ? confluencePageStack[confluencePageStack.length - 1].title
+                      : `Pages in ${browseSpaceKey}`
+                    : t("knowledge.browseSpaces")
+                  : driveFolderStack.length > 0
+                    ? driveFolderStack[driveFolderStack.length - 1].name
+                    : t("knowledge.browseFiles")
                 }
               </h3>
               <button onClick={() => setShowBrowseModal(false)} className="text-gray-400 hover:text-gray-600 p-1">
-                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                </svg>
+                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
             </div>
 
+            {/* Breadcrumb for Drive */}
+            {browseIntegration.provider === "google_drive" && driveFolderStack.length > 0 && (
+              <div className="flex items-center gap-1 mb-3 text-xs text-gray-400 overflow-x-auto">
+                <button
+                  onClick={() => { setDriveFolderStack([]); handleDriveTabSwitch(driveTab); }}
+                  className="text-emerald-600 hover:text-emerald-700 font-medium shrink-0"
+                >
+                  {driveTab === "shared" ? "Shared Drives" : "My Drive"}
+                </button>
+                {driveFolderStack.map((crumb, i) => (
+                  <span key={crumb.id} className="flex items-center gap-1 shrink-0">
+                    <span>/</span>
+                    {i < driveFolderStack.length - 1 ? (
+                      <button
+                        onClick={async () => {
+                          if (!token || !browseIntegration) return;
+                          const newStack = driveFolderStack.slice(0, i + 1);
+                          setDriveFolderStack(newStack);
+                          setBrowseLoading(true);
+                          try {
+                            const res = await getDriveFiles(token, browseIntegration.id, crumb.id, crumb.driveId);
+                            setBrowseItems(res.data);
+                          } catch (err) { console.error(err); } finally { setBrowseLoading(false); }
+                        }}
+                        className="text-emerald-600 hover:text-emerald-700 font-medium"
+                      >
+                        {crumb.name}
+                      </button>
+                    ) : (
+                      <span className="text-gray-600 font-medium">{crumb.name}</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Breadcrumb for Confluence */}
+            {browseIntegration.provider === "confluence" && browseSpaceKey && confluencePageStack.length > 0 && (
+              <div className="flex items-center gap-1 mb-3 text-xs text-gray-400 overflow-x-auto">
+                <button
+                  onClick={() => { setBrowseSpaceKey(null); setBrowsePages([]); setBrowseSelected(new Set()); setConfluencePageStack([]); }}
+                  className="text-emerald-600 hover:text-emerald-700 font-medium shrink-0"
+                >
+                  Spaces
+                </button>
+                <span>/</span>
+                <button
+                  onClick={() => { setConfluencePageStack([]); handleBrowseSpacePages(browseSpaceKey); }}
+                  className="text-emerald-600 hover:text-emerald-700 font-medium shrink-0"
+                >
+                  {browseSpaceKey}
+                </button>
+                {confluencePageStack.map((crumb, i) => (
+                  <span key={crumb.id} className="flex items-center gap-1 shrink-0">
+                    <span>/</span>
+                    {i < confluencePageStack.length - 1 ? (
+                      <button
+                        onClick={async () => {
+                          if (!token || !browseIntegration) return;
+                          const newStack = confluencePageStack.slice(0, i + 1);
+                          setConfluencePageStack(newStack);
+                          setBrowseLoading(true);
+                          try {
+                            const res = await getConfluencePages(token, browseIntegration.id, browseSpaceKey, crumb.id);
+                            setBrowsePages(res.data);
+                          } catch (err) { console.error(err); } finally { setBrowseLoading(false); }
+                        }}
+                        className="text-emerald-600 hover:text-emerald-700 font-medium"
+                      >
+                        {crumb.title}
+                      </button>
+                    ) : (
+                      <span className="text-gray-600 font-medium">{crumb.title}</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Drive tabs: My Drive / Shared Drives */}
+            {browseIntegration.provider === "google_drive" && driveFolderStack.length === 0 && (
+              <div className="flex gap-1 mb-3 p-1 bg-gray-100 rounded-xl">
+                <button
+                  onClick={() => handleDriveTabSwitch("my")}
+                  className={clsx("flex-1 text-sm font-medium py-1.5 rounded-lg transition", driveTab === "my" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                >
+                  My Drive
+                </button>
+                <button
+                  onClick={() => handleDriveTabSwitch("shared")}
+                  className={clsx("flex-1 text-sm font-medium py-1.5 rounded-lg transition", driveTab === "shared" ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700")}
+                >
+                  Shared Drives
+                </button>
+              </div>
+            )}
+
+            {/* Content */}
             <div className="flex-1 overflow-y-auto space-y-1">
               {browseLoading ? (
                 <div className="flex items-center justify-center py-12">
                   <div className="w-6 h-6 border-2 border-emerald-200 border-t-emerald-500 rounded-full animate-spin" />
                 </div>
+
               ) : browseIntegration.provider === "confluence" && !browseSpaceKey ? (
-                // Confluence spaces list
-                browseItems.map((space: any) => (
-                  <div key={space.key} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => {
-                    toggleBrowseItem(space.key);
-                  }}>
+                browseItems.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">No spaces found</p>
+                ) : browseItems.map((space: any) => (
+                  <div
+                    key={space.key}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    onClick={() => toggleBrowseItem(space.key)}
+                  >
                     <input
                       type="checkbox"
                       checked={browseSelected.has(space.key)}
@@ -819,55 +1055,98 @@ export default function KnowledgePage() {
                     </div>
                     <button
                       onClick={(e) => { e.stopPropagation(); handleBrowseSpacePages(space.key); }}
-                      className="text-xs text-emerald-600 hover:text-emerald-700"
+                      className="text-xs text-emerald-600 hover:text-emerald-700 font-medium"
                     >
-                      View pages &rarr;
+                      Browse &rarr;
                     </button>
                   </div>
                 ))
+
               ) : browseIntegration.provider === "confluence" && browseSpaceKey ? (
-                // Confluence pages in a space
-                browsePages.map((page: any) => (
-                  <div key={page.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50">
-                    <div className="w-7 h-7 bg-blue-50 rounded flex items-center justify-center shrink-0">
-                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                      </svg>
-                    </div>
-                    <p className="text-sm text-gray-900 truncate">{page.title}</p>
-                  </div>
-                ))
-              ) : (
-                // Drive files list
-                browseItems.map((file: any) => (
-                  <div key={file.id} className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer" onClick={() => toggleBrowseItem(file.id)}>
+                browsePages.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">No pages found</p>
+                ) : browsePages.map((page: any) => (
+                  <div
+                    key={page.id}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    onClick={() => toggleBrowseItem(page.id)}
+                  >
                     <input
                       type="checkbox"
-                      checked={browseSelected.has(file.id)}
-                      onChange={() => toggleBrowseItem(file.id)}
+                      checked={browseSelected.has(page.id)}
+                      onChange={() => toggleBrowseItem(page.id)}
                       className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
                     />
-                    <div className={clsx(
-                      "w-7 h-7 rounded flex items-center justify-center shrink-0 text-xs font-bold",
-                      file.mimeType === "application/vnd.google-apps.folder" ? "bg-amber-50 text-amber-600" : "bg-green-50 text-green-600"
-                    )}>
-                      {file.mimeType === "application/vnd.google-apps.folder" ? (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
-                        </svg>
-                      ) : (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
-                        </svg>
-                      )}
+                    <div className="w-7 h-7 bg-blue-50 rounded flex items-center justify-center shrink-0">
+                      <svg className="w-3.5 h-3.5 text-blue-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
                     </div>
-                    <p className="text-sm text-gray-900 truncate">{file.name}</p>
+                    <p className="text-sm text-gray-900 truncate flex-1">{page.title}</p>
+                    <button
+                      onClick={(e) => { e.stopPropagation(); handleBrowseSpacePages(browseSpaceKey, page.id, page.title); }}
+                      className="text-xs text-emerald-600 hover:text-emerald-700 font-medium shrink-0"
+                    >
+                      Children &rarr;
+                    </button>
                   </div>
                 ))
+
+              ) : browseIntegration.provider === "google_drive" && driveTab === "shared" && driveFolderStack.length === 0 ? (
+                sharedDrives.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">No shared drives found</p>
+                ) : sharedDrives.map((drive: any) => (
+                  <div
+                    key={drive.id}
+                    className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                    onClick={() => handleEnterSharedDrive(drive.id, drive.name)}
+                  >
+                    <div className="w-7 h-7 bg-emerald-50 rounded flex items-center justify-center shrink-0">
+                      <svg className="w-3.5 h-3.5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 003.741-.479 3 3 0 00-4.682-2.72m.94 3.198l.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0112 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 016 18.719m12 0a5.971 5.971 0 00-.941-3.197m0 0A5.995 5.995 0 0012 12.75a5.995 5.995 0 00-5.058 2.772m0 0a3 3 0 00-4.681 2.72 8.986 8.986 0 003.74.477m.94-3.197a5.971 5.971 0 00-.94 3.197M15 6.75a3 3 0 11-6 0 3 3 0 016 0zm6 3a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0zm-13.5 0a2.25 2.25 0 11-4.5 0 2.25 2.25 0 014.5 0z" /></svg>
+                    </div>
+                    <p className="text-sm font-medium text-gray-900 truncate flex-1">{drive.name}</p>
+                    <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                  </div>
+                ))
+
+              ) : (
+                browseItems.length === 0 ? (
+                  <p className="text-sm text-gray-400 text-center py-8">This folder is empty</p>
+                ) : browseItems.map((file: any) => {
+                  const isFolder = file.mimeType === "application/vnd.google-apps.folder";
+                  return (
+                    <div
+                      key={file.id}
+                      className="flex items-center gap-3 p-3 rounded-lg hover:bg-gray-50 cursor-pointer"
+                      onClick={() => isFolder ? handleDriveEnterFolder(file.id, file.name) : toggleBrowseItem(file.id)}
+                    >
+                      {!isFolder && (
+                        <input
+                          type="checkbox"
+                          checked={browseSelected.has(file.id)}
+                          onChange={() => toggleBrowseItem(file.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-emerald-600 focus:ring-emerald-500"
+                        />
+                      )}
+                      <div className={clsx(
+                        "w-7 h-7 rounded flex items-center justify-center shrink-0",
+                        isFolder ? "bg-amber-50" : "bg-green-50"
+                      )}>
+                        {isFolder ? (
+                          <svg className="w-3.5 h-3.5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" /></svg>
+                        ) : (
+                          <svg className="w-3.5 h-3.5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                        )}
+                      </div>
+                      <p className="text-sm text-gray-900 truncate flex-1">{file.name}</p>
+                      {isFolder && (
+                        <svg className="w-4 h-4 text-gray-300 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+                      )}
+                    </div>
+                  );
+                })
               )}
             </div>
 
-            {browseSelected.size > 0 && !browseSpaceKey && (
+            {browseSelected.size > 0 && (
               <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between">
                 <p className="text-xs text-gray-500">{browseSelected.size} selected</p>
                 <button

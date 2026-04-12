@@ -53,6 +53,34 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       res.status(400).json({ error: "Channel not configured for this tenant" }); return;
     }
 
+    // WEBCHAT: just save the message — the widget polls for new messages
+    if (channel === "WEBCHAT") {
+      const message = await messageService.create({
+        tenantId: req.tenantId!,
+        conversationId,
+        direction: "OUTBOUND",
+        body,
+        messageType,
+        senderName: req.user!.email,
+      });
+
+      await prisma.conversation.update({
+        where: { id: conversationId },
+        data: { lastMessageAt: new Date(), updatedAt: new Date() },
+      });
+
+      const io = (req as any).io;
+      if (io) {
+        io.to(`tenant:${req.tenantId}`).emit("message:new", {
+          conversationId,
+          message,
+        });
+      }
+
+      res.status(201).json({ data: message });
+      return;
+    }
+
     const rawCreds = conversation.channelAccount.credentials;
     const creds = typeof rawCreds === "string" ? decryptCredentials(rawCreds) : (rawCreds as any);
     if (!creds?.accessToken) {
