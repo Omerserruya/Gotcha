@@ -1,4 +1,5 @@
 import { prisma } from "@chatcenter/shared";
+import { getPolicy, validateAgainstPolicy } from "./policy.service";
 
 export type ActionTool =
   | "send_message"
@@ -63,6 +64,15 @@ export async function executeAction(
   if (!("ok" in gate) || gate.ok !== true) {
     const reason = (gate as { ok: false; reason: string }).reason;
     await audit(tenantId, action, ctx, { blocked: true, reason });
+    return { tool: action.tool, ok: false, skipped: true, skipReason: reason };
+  }
+
+  // F8 — policy enforcement gate (hard)
+  const policy = await getPolicy(tenantId);
+  const policyGate = validateAgainstPolicy(policy, { tool: action.tool, params: action.params });
+  if (!("ok" in policyGate) || policyGate.ok !== true) {
+    const reason = (policyGate as { ok: false; reason: string }).reason;
+    await audit(tenantId, action, ctx, { blocked: true, policyViolation: reason });
     return { tool: action.tool, ok: false, skipped: true, skipReason: reason };
   }
 
