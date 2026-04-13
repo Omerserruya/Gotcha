@@ -82,24 +82,24 @@ model Tenant {
   botType              BotType? @map("bot_type")
   firstTakeCareEnabled Boolean  @default(false) @map("first_take_care_enabled")
 
-  users              User[]
-  conversations      Conversation[]
-  messages           Message[]
-  chatbotFlows       ChatbotFlow[]
-  channelAccounts    ChannelAccount[]
-  channelConfig      TenantChannelConfig?
-  departments        Department[]
-  departmentMembers  DepartmentMember[]
-  businessProfile    BusinessProfile?
-  onboarding         TenantOnboarding?
-  knowledgeBases     KnowledgeBase[]
-  aiAgents           AIAgent[]
-  routerRules        RouterRule[]
-  contacts           Contact[]
-  messageTemplates   MessageTemplate[]
-  broadcasts         Broadcast[]
-  scheduledMessages  ScheduledMessage[]
-  flowCanvas         FlowCanvas?
+  users             User[]
+  conversations     Conversation[]
+  messages          Message[]
+  chatbotFlows      ChatbotFlow[]
+  channelAccounts   ChannelAccount[]
+  channelConfig     TenantChannelConfig?
+  departments       Department[]
+  departmentMembers DepartmentMember[]
+  businessProfile   BusinessProfile?
+  onboarding        TenantOnboarding?
+  knowledgeBases    KnowledgeBase[]
+  aiAgents          AIAgent[]
+  routerRules       RouterRule[]
+  contacts          Contact[]
+  messageTemplates  MessageTemplate[]
+  broadcasts        Broadcast[]
+  scheduledMessages ScheduledMessage[]
+  flowCanvas        FlowCanvas?
 
   @@index([status])
   @@map("tenants")
@@ -108,31 +108,32 @@ model Tenant {
 // ─── Channel Accounts ────────────────────────────────────────
 
 model ChannelAccount {
-  id              String      @id @default(cuid())
-  tenantId        String      @map("tenant_id")
-  channel         ChannelType
-  externalId      String      @map("external_id")    // WA phone_number_id, FB page_id, or IG business_id
-  displayName     String      @map("display_name")
-  credentials     Json        @default("{}")          // { accessToken, appSecret, ... }
-  isActive        Boolean     @default(true) @map("is_active")
+  id          String      @id @default(cuid())
+  tenantId    String      @map("tenant_id")
+  channel     ChannelType
+  externalId  String      @map("external_id") // WA phone_number_id, FB page_id, or IG business_id
+  displayName String      @map("display_name")
+  credentials Json        @default("{}") // { accessToken, appSecret, ... }
+  isActive    Boolean     @default(true) @map("is_active")
 
   // Per-channel response mode (for email channels: GMAIL, OUTLOOK)
-  responseMode    ChannelResponseMode @default(HUMAN_WITH_COPILOT) @map("response_mode")
+  responseMode ChannelResponseMode @default(HUMAN_WITH_COPILOT) @map("response_mode")
 
   // Connection lifecycle
   connectionStatus ChannelConnectionStatus @default(CONNECTED) @map("connection_status")
-  connectedAt      DateTime?              @map("connected_at")
-  connectedBy      String?                @map("connected_by")   // userId who connected
-  tokenExpiresAt   DateTime?              @map("token_expires_at")
-  platformMeta     Json?                  @map("platform_meta")  // platform-specific metadata
-  lastError        String?                @map("last_error")
-  lastHealthCheck  DateTime?              @map("last_health_check")
+  connectedAt      DateTime?               @map("connected_at")
+  connectedBy      String?                 @map("connected_by") // userId who connected
+  tokenExpiresAt   DateTime?               @map("token_expires_at")
+  platformMeta     Json?                   @map("platform_meta") // platform-specific metadata
+  lastError        String?                 @map("last_error")
+  lastHealthCheck  DateTime?               @map("last_health_check")
 
-  createdAt       DateTime    @default(now()) @map("created_at")
-  updatedAt       DateTime    @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant        Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations Conversation[]
+  templates     MessageTemplate[]
 
   @@unique([channel, externalId])
   @@index([tenantId])
@@ -144,11 +145,11 @@ model ChannelAccount {
 // ─── Tenant Channel Config ───────────────────────────────────
 
 model TenantChannelConfig {
-  id           String      @id @default(cuid())
-  tenantId     String      @unique @map("tenant_id")
-  botFlowMode  BotFlowMode @default(UNIFIED) @map("bot_flow_mode")
-  createdAt    DateTime    @default(now()) @map("created_at")
-  updatedAt    DateTime    @updatedAt @map("updated_at")
+  id          String      @id @default(cuid())
+  tenantId    String      @unique @map("tenant_id")
+  botFlowMode BotFlowMode @default(UNIFIED) @map("bot_flow_mode")
+  createdAt   DateTime    @default(now()) @map("created_at")
+  updatedAt   DateTime    @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -191,8 +192,8 @@ model User {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant           Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations    Conversation[]      @relation("AssignedAgent")
+  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations    Conversation[]    @relation("AssignedAgent")
   departmentMember DepartmentMember?
 
   @@unique([tenantId, email])
@@ -231,11 +232,11 @@ model Conversation {
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
-  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
-  assignedAgent  User?           @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
-  department     Department?     @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  chatbotFlow    ChatbotFlow?    @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  assignedAgent  User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  department     Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  chatbotFlow    ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
   messages       Message[]
   intelligence   ConversationIntelligence?
 
@@ -262,28 +263,28 @@ enum MessageStatus {
 }
 
 model Message {
-  id                  String           @id @default(cuid())
-  tenantId            String           @map("tenant_id")
-  conversationId      String           @map("conversation_id")
-  channel             ChannelType?
-  externalMessageId   String?          @map("external_message_id") // WA msg ID or Messenger mid
-  direction           MessageDirection
-  body                String
-  messageType         String           @default("text") @map("message_type")
-  status              MessageStatus    @default(PENDING)
-  senderName          String?          @map("sender_name")
-  metadata            Json?
-  mediaUrl            String?          @map("media_url")
-  fileName            String?          @map("file_name")
-  broadcastId         String?          @map("broadcast_id")         // link to originating broadcast
-  scheduledMessageId  String?          @map("scheduled_message_id") // link to originating scheduled msg
-  errorMessage        String?          @map("error_message")
-  deliveredAt         DateTime?        @map("delivered_at")
-  readAt              DateTime?        @map("read_at")
-  createdAt           DateTime         @default(now()) @map("created_at")
+  id                 String           @id @default(cuid())
+  tenantId           String           @map("tenant_id")
+  conversationId     String?          @map("conversation_id")
+  channel            ChannelType?
+  externalMessageId  String?          @map("external_message_id") // WA msg ID or Messenger mid
+  direction          MessageDirection
+  body               String
+  messageType        String           @default("text") @map("message_type")
+  status             MessageStatus    @default(PENDING)
+  senderName         String?          @map("sender_name")
+  metadata           Json?
+  mediaUrl           String?          @map("media_url")
+  fileName           String?          @map("file_name")
+  broadcastId        String?          @map("broadcast_id") // link to originating broadcast
+  scheduledMessageId String?          @map("scheduled_message_id") // link to originating scheduled msg
+  errorMessage       String?          @map("error_message")
+  deliveredAt        DateTime?        @map("delivered_at")
+  readAt             DateTime?        @map("read_at")
+  createdAt          DateTime         @default(now()) @map("created_at")
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  tenant       Tenant        @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   @@index([conversationId, createdAt])
   @@index([externalMessageId])
@@ -310,53 +311,53 @@ enum AIAgentStatus {
 // ─── AI Agents (AI Studio Team Members) ─────────────────────
 
 model AIAgent {
-  id              String        @id @default(cuid())
-  tenantId        String        @map("tenant_id")
-  name            String
-  role            String        @default("customer_support")    // customer_support, sales, booking, billing, custom
-  description     String?
-  avatarColor     String        @default("#7c5cfc") @map("avatar_color")
-  mode            AIAgentMode   @default(AUTONOMOUS)
-  status          AIAgentStatus @default(DRAFT)
-  tone            String        @default("professional")        // professional, friendly, casual, formal
-  languages       Json          @default("{\"english\":true}")   // { english: bool, hebrew: bool, arabic: bool }
-  style           Json          @default("{}")                   // { useEmojis, concise, useFirstName, proactive }
-  channels        Json          @default("[]")                   // ["whatsapp", "instagram", "webchat"]
-  escalationRules Json          @default("[]") @map("escalation_rules") // [{ label, type, value, enabled }]
-  interactiveMessages Json      @default("{}") @map("interactive_messages") // { allowQuickReply, allowListMenu, ... }
+  id                  String        @id @default(cuid())
+  tenantId            String        @map("tenant_id")
+  name                String
+  role                String        @default("customer_support") // customer_support, sales, booking, billing, custom
+  description         String?
+  avatarColor         String        @default("#7c5cfc") @map("avatar_color")
+  mode                AIAgentMode   @default(AUTONOMOUS)
+  status              AIAgentStatus @default(DRAFT)
+  tone                String        @default("professional") // professional, friendly, casual, formal
+  languages           Json          @default("{\"english\":true}") // { english: bool, hebrew: bool, arabic: bool }
+  style               Json          @default("{}") // { useEmojis, concise, useFirstName, proactive }
+  channels            Json          @default("[]") // ["whatsapp", "instagram", "webchat"]
+  escalationRules     Json          @default("[]") @map("escalation_rules") // [{ label, type, value, enabled }]
+  interactiveMessages Json          @default("{}") @map("interactive_messages") // { allowQuickReply, allowListMenu, ... }
 
   // LLM settings (inherited from CopilotConfig pattern)
-  systemPrompt    String        @default("") @map("system_prompt")
-  sharedPrompt    String?       @map("shared_prompt")
-  autonomousPrompt String?      @map("autonomous_prompt")
-  model           String        @default("gpt-4o-mini")
-  provider        String        @default("openai")
-  temperature     Float         @default(0.7)
-  maxTokens       Int           @default(1024) @map("max_tokens")
+  systemPrompt     String  @default("") @map("system_prompt")
+  sharedPrompt     String? @map("shared_prompt")
+  autonomousPrompt String? @map("autonomous_prompt")
+  model            String  @default("gpt-4o-mini")
+  provider         String  @default("openai")
+  temperature      Float   @default(0.7)
+  maxTokens        Int     @default(1024) @map("max_tokens")
 
   // Persona configuration (gender-aware behavior, extensible)
-  persona         Json?         // { gender: "male"|"female"|"neutral", traits: {}, customAttributes: {} }
+  persona Json? // { gender: "male"|"female"|"neutral", traits: {}, customAttributes: {} }
 
   // Structured AI personality blocks
-  identity        Json?         // { role, responsibility, representationGuidelines[] }
-  goals           Json?         // { focus, slaAwareness, conversionObjective }
-  toneConfig      Json?         @map("tone_config") // { formalityLevel, empathyLevel, assertiveness }
-  behavioral      Json?         // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
+  identity   Json? // { role, responsibility, representationGuidelines[] }
+  goals      Json? // { focus, slaAwareness, conversionObjective }
+  toneConfig Json? @map("tone_config") // { formalityLevel, empathyLevel, assertiveness }
+  behavioral Json? // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
 
   // Autonomous behavior settings
-  maxAutonomousMessages Int     @default(10) @map("max_autonomous_messages")
-  maxAutonomousMinutes  Int     @default(15) @map("max_autonomous_minutes")
-  confidenceThreshold   Float   @default(0.6) @map("confidence_threshold")
-  escalationMessage     String  @default("Let me connect you with a team member who can help further.") @map("escalation_message")
-  conversationFlow      Json?   @map("conversation_flow")  // [{ step, action, details }] — autonomous mode conversation flow
-  customGuardrails      Json?   @map("custom_guardrails")  // string[] — user-defined guardrails appended to static ones
+  maxAutonomousMessages Int    @default(10) @map("max_autonomous_messages")
+  maxAutonomousMinutes  Int    @default(15) @map("max_autonomous_minutes")
+  confidenceThreshold   Float  @default(0.6) @map("confidence_threshold")
+  escalationMessage     String @default("Let me connect you with a team member who can help further.") @map("escalation_message")
+  conversationFlow      Json?  @map("conversation_flow") // [{ step, action, details }] — autonomous mode conversation flow
+  customGuardrails      Json?  @map("custom_guardrails") // string[] — user-defined guardrails appended to static ones
 
-  createdAt       DateTime      @default(now()) @map("created_at")
-  updatedAt       DateTime      @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant          Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  knowledgeBases  AIAgentKnowledge[]
-  routerRules     RouterRule[]        @relation("RouterRuleAIAgent")
+  tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  knowledgeBases AIAgentKnowledge[]
+  routerRules    RouterRule[]       @relation("RouterRuleAIAgent")
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -390,22 +391,22 @@ enum RouterRuleRouteType {
 }
 
 model RouterRule {
-  id          String               @id @default(cuid())
-  tenantId    String               @map("tenant_id")
-  priority    Int                  @default(0)
+  id          String              @id @default(cuid())
+  tenantId    String              @map("tenant_id")
+  priority    Int                 @default(0)
   name        String
-  conditions  Json                 @default("[]")    // [{ type: "intent"|"tag"|"keyword"|"channel", operator, value }]
-  logic       String               @default("AND")   // "AND" | "OR"
-  routeType   RouterRuleRouteType  @map("route_type")
-  routeTarget String?              @map("route_target") // ID of target (aiAgentId, flowId, departmentId)
-  aiAgentId   String?              @map("ai_agent_id")  // populated when routeType = AI_AGENT
-  enabled     Boolean              @default(true)
-  isDefault   Boolean              @default(false) @map("is_default")
-  createdAt   DateTime             @default(now()) @map("created_at")
-  updatedAt   DateTime             @updatedAt @map("updated_at")
+  conditions  Json                @default("[]") // [{ type: "intent"|"tag"|"keyword"|"channel", operator, value }]
+  logic       String              @default("AND") // "AND" | "OR"
+  routeType   RouterRuleRouteType @map("route_type")
+  routeTarget String?             @map("route_target") // ID of target (aiAgentId, flowId, departmentId)
+  aiAgentId   String?             @map("ai_agent_id") // populated when routeType = AI_AGENT
+  enabled     Boolean             @default(true)
+  isDefault   Boolean             @default(false) @map("is_default")
+  createdAt   DateTime            @default(now()) @map("created_at")
+  updatedAt   DateTime            @updatedAt @map("updated_at")
 
-  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  aiAgent     AIAgent?             @relation("RouterRuleAIAgent", fields: [aiAgentId], references: [id], onDelete: SetNull)
+  tenant  Tenant   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  aiAgent AIAgent? @relation("RouterRuleAIAgent", fields: [aiAgentId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
   @@index([tenantId, enabled, priority])
@@ -420,9 +421,9 @@ model ChatbotFlow {
   name        String
   description String?
   isActive    Boolean      @default(false) @map("is_active")
-  channel     ChannelType?                                     // null = ALL channels
-  trigger     String?                                          // trigger condition description
-  runCount    Int          @default(0) @map("run_count")       // number of times this flow has been executed
+  channel     ChannelType? // null = ALL channels
+  trigger     String? // trigger condition description
+  runCount    Int          @default(0) @map("run_count") // number of times this flow has been executed
   // JSON definition of the flow graph
   nodes       Json         @default("[]")
   edges       Json         @default("[]")
@@ -449,26 +450,26 @@ model Department {
   isActive    Boolean             @default(true) @map("is_active")
 
   // Working hours & SLA
-  workingHours   Json?   @map("working_hours")    // { timezone, schedule: { monday: { enabled, open, close }, ... } }
-  slaTarget      Int?    @map("sla_target")        // Response SLA in minutes
+  workingHours     Json? @map("working_hours") // { timezone, schedule: { monday: { enabled, open, close }, ... } }
+  slaTarget        Int?  @map("sla_target") // Response SLA in minutes
   escalationPolicy Json? @map("escalation_policy") // { escalateOnBreach, escalateTo, maxWaitMinutes }
 
   // Automation settings
-  autoGreetingEnabled Boolean @default(false) @map("auto_greeting_enabled")
-  autoGreetingMessage String? @map("auto_greeting_message")
-  autoCloseMinutes    Int?    @map("auto_close_minutes")     // Auto-close after X inactivity minutes
-  escalateOnSlaBreach Boolean @default(false) @map("escalate_on_sla_breach")
+  autoGreetingEnabled  Boolean @default(false) @map("auto_greeting_enabled")
+  autoGreetingMessage  String? @map("auto_greeting_message")
+  autoCloseMinutes     Int?    @map("auto_close_minutes") // Auto-close after X inactivity minutes
+  escalateOnSlaBreach  Boolean @default(false) @map("escalate_on_sla_breach")
   aiSuggestionsEnabled Boolean @default(true) @map("ai_suggestions_enabled")
-  autoRepliesEnabled  Boolean @default(false) @map("auto_replies_enabled")
+  autoRepliesEnabled   Boolean @default(false) @map("auto_replies_enabled")
 
-  createdAt   DateTime            @default(now()) @map("created_at")
-  updatedAt   DateTime            @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant          Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parent          Department?              @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children        Department[]             @relation("DepartmentHierarchy")
-  members         DepartmentMember[]
-  conversations   Conversation[]
+  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent               Department?           @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children             Department[]          @relation("DepartmentHierarchy")
+  members              DepartmentMember[]
+  conversations        Conversation[]
   agentToolPermissions AgentToolPermission[]
 
   @@unique([tenantId, name])
@@ -499,16 +500,16 @@ model DepartmentMember {
 // ─── Business Profile (Onboarding Step A) ───────────────────
 
 model BusinessProfile {
-  id                     String           @id @default(cuid())
-  tenantId               String           @unique @map("tenant_id")
-  organizationName       String           @map("organization_name")
-  industry               String
-  businessDescription    String           @map("business_description")
-  businessPriority       BusinessPriority @map("business_priority")
-  estimatedDailyConversations Int         @map("estimated_daily_conversations")
-  numberOfAgents         Int              @map("number_of_agents")
-  createdAt              DateTime         @default(now()) @map("created_at")
-  updatedAt              DateTime         @updatedAt @map("updated_at")
+  id                          String           @id @default(cuid())
+  tenantId                    String           @unique @map("tenant_id")
+  organizationName            String           @map("organization_name")
+  industry                    String
+  businessDescription         String           @map("business_description")
+  businessPriority            BusinessPriority @map("business_priority")
+  estimatedDailyConversations Int              @map("estimated_daily_conversations")
+  numberOfAgents              Int              @map("number_of_agents")
+  createdAt                   DateTime         @default(now()) @map("created_at")
+  updatedAt                   DateTime         @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -518,12 +519,12 @@ model BusinessProfile {
 // ─── Tenant Onboarding Tracker ──────────────────────────────
 
 model TenantOnboarding {
-  id            String         @id @default(cuid())
-  tenantId      String         @unique @map("tenant_id")
-  currentStep   OnboardingStep @default(BUSINESS_PROFILE) @map("current_step")
-  completedAt   DateTime?      @map("completed_at")
-  createdAt     DateTime       @default(now()) @map("created_at")
-  updatedAt     DateTime       @updatedAt @map("updated_at")
+  id          String         @id @default(cuid())
+  tenantId    String         @unique @map("tenant_id")
+  currentStep OnboardingStep @default(BUSINESS_PROFILE) @map("current_step")
+  completedAt DateTime?      @map("completed_at")
+  createdAt   DateTime       @default(now()) @map("created_at")
+  updatedAt   DateTime       @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -542,13 +543,13 @@ model KnowledgeBase {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   // Scoping: who can use this knowledge base
-  scope              String   @default("all")     // "all" | "agent" | "department"
-  scopeAgentId       String?  @map("scope_agent_id")
-  scopeDepartmentId  String?  @map("scope_department_id")
+  scope             String  @default("all") // "all" | "agent" | "department"
+  scopeAgentId      String? @map("scope_agent_id")
+  scopeDepartmentId String? @map("scope_department_id")
 
-  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  documents          KnowledgeDocument[]
-  integrations       KnowledgeIntegration[]
+  tenant                Tenant                 @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  documents             KnowledgeDocument[]
+  integrations          KnowledgeIntegration[]
   aiAgentKnowledgeBases AIAgentKnowledge[]
 
   @@index([tenantId])
@@ -560,10 +561,10 @@ model KnowledgeIntegration {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
   knowledgeBaseId String   @map("knowledge_base_id")
-  provider        String   // "confluence" | "google_drive"
-  credentials     Json     // encrypted { accessToken, refreshToken, cloudId, ... }
+  provider        String // "confluence" | "google_drive"
+  credentials     Json // encrypted { accessToken, refreshToken, cloudId, ... }
   displayName     String   @map("display_name")
-  config          Json?    // { spaceKeys: [], lastSyncAt, ... }
+  config          Json? // { spaceKeys: [], lastSyncAt, ... }
   isActive        Boolean  @default(true) @map("is_active")
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
@@ -589,7 +590,7 @@ model KnowledgeDocument {
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
-  knowledgeBase KnowledgeBase  @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
+  knowledgeBase KnowledgeBase    @relation(fields: [knowledgeBaseId], references: [id], onDelete: Cascade)
   chunks        KnowledgeChunk[]
 
   @@index([knowledgeBaseId])
@@ -617,8 +618,8 @@ model KnowledgeChunk {
 model TokenLog {
   id               String   @id @default(cuid())
   tenantId         String   @map("tenant_id")
-  type             String   // "chat" | "embedding" | "suggestion" | "summary" | "classification"
-  model            String   // "gpt-4o-mini", "text-embedding-3-small", etc.
+  type             String // "chat" | "embedding" | "suggestion" | "summary" | "classification"
+  model            String // "gpt-4o-mini", "text-embedding-3-small", etc.
   promptTokens     Int      @map("prompt_tokens")
   completionTokens Int      @default(0) @map("completion_tokens")
   totalTokens      Int      @map("total_tokens")
@@ -637,13 +638,13 @@ model TokenLog {
 // ─── Magic Links (passwordless onboarding) ──────────────────
 
 model MagicLink {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  tenantId  String   @map("tenant_id")
-  userId    String   @map("user_id")
-  expiresAt DateTime @map("expires_at")
+  id        String    @id @default(cuid())
+  token     String    @unique
+  tenantId  String    @map("tenant_id")
+  userId    String    @map("user_id")
+  expiresAt DateTime  @map("expires_at")
   usedAt    DateTime? @map("used_at")
-  createdAt DateTime @default(now()) @map("created_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([token])
   @@index([tenantId])
@@ -765,23 +766,23 @@ enum RiskLevel {
 }
 
 model CatalogTool {
-  id              String       @id @default(cuid())
-  integrationId   String       @map("integration_id")
-  slug            String
-  name            String
-  description     String
-  category        ToolCategory @default(READ)
-  inputSchema     Json         @default("{}") @map("input_schema")
-  outputSchema    Json         @default("{}") @map("output_schema")
-  endpoint        String?
-  method          String       @default("GET")
-  isDefault       Boolean      @default(true) @map("is_default")
-  riskLevel       RiskLevel    @default(LOW) @map("risk_level")
-  sortOrder       Int          @default(0) @map("sort_order")
-  createdAt       DateTime     @default(now()) @map("created_at")
+  id            String       @id @default(cuid())
+  integrationId String       @map("integration_id")
+  slug          String
+  name          String
+  description   String
+  category      ToolCategory @default(READ)
+  inputSchema   Json         @default("{}") @map("input_schema")
+  outputSchema  Json         @default("{}") @map("output_schema")
+  endpoint      String?
+  method        String       @default("GET")
+  isDefault     Boolean      @default(true) @map("is_default")
+  riskLevel     RiskLevel    @default(LOW) @map("risk_level")
+  sortOrder     Int          @default(0) @map("sort_order")
+  createdAt     DateTime     @default(now()) @map("created_at")
 
-  integration  IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  tenantTools  TenantTool[]
+  integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  tenantTools TenantTool[]
 
   @@unique([integrationId, slug])
   @@index([integrationId])
@@ -799,22 +800,22 @@ enum ConnectionStatus {
 }
 
 model TenantIntegration {
-  id              String           @id @default(cuid())
-  tenantId        String           @map("tenant_id")
-  integrationId   String           @map("integration_id")
-  status          ConnectionStatus @default(PENDING)
-  credentials     Json             @default("{}")
-  config          Json             @default("{}")
-  connectedBy     String?          @map("connected_by")
-  connectedAt     DateTime?        @map("connected_at")
-  lastTestedAt    DateTime?        @map("last_tested_at")
-  lastTestResult  Boolean?         @map("last_test_result")
-  lastError       String?          @map("last_error")
-  createdAt       DateTime         @default(now()) @map("created_at")
-  updatedAt       DateTime         @updatedAt @map("updated_at")
+  id             String           @id @default(cuid())
+  tenantId       String           @map("tenant_id")
+  integrationId  String           @map("integration_id")
+  status         ConnectionStatus @default(PENDING)
+  credentials    Json             @default("{}")
+  config         Json             @default("{}")
+  connectedBy    String?          @map("connected_by")
+  connectedAt    DateTime?        @map("connected_at")
+  lastTestedAt   DateTime?        @map("last_tested_at")
+  lastTestResult Boolean?         @map("last_test_result")
+  lastError      String?          @map("last_error")
+  createdAt      DateTime         @default(now()) @map("created_at")
+  updatedAt      DateTime         @updatedAt @map("updated_at")
 
-  integration  IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
-  tenantTools  TenantTool[]
+  integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
+  tenantTools TenantTool[]
 
   @@unique([tenantId, integrationId])
   @@index([tenantId])
@@ -834,8 +835,8 @@ model TenantTool {
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 
-  tenantIntegration TenantIntegration @relation(fields: [tenantIntegrationId], references: [id], onDelete: Cascade)
-  catalogTool       CatalogTool       @relation(fields: [catalogToolId], references: [id], onDelete: Cascade)
+  tenantIntegration TenantIntegration     @relation(fields: [tenantIntegrationId], references: [id], onDelete: Cascade)
+  catalogTool       CatalogTool           @relation(fields: [catalogToolId], references: [id], onDelete: Cascade)
   agentPermissions  AgentToolPermission[]
   executions        ToolExecution[]
 
@@ -851,8 +852,8 @@ model AgentToolPermission {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
   departmentId    String?  @map("department_id")
-  agentId         String?  @map("agent_id")       // human agent (User) ID
-  aiAgentId       String?  @map("ai_agent_id")    // AI agent ID
+  agentId         String?  @map("agent_id") // human agent (User) ID
+  aiAgentId       String?  @map("ai_agent_id") // AI agent ID
   tenantToolId    String   @map("tenant_tool_id")
   isAllowed       Boolean  @default(true) @map("is_allowed")
   requireApproval Boolean  @default(false) @map("require_approval")
@@ -873,17 +874,17 @@ model AgentToolPermission {
 // ─── Tool Executions (Audit Log) ────────────────────────────
 
 model ToolExecution {
-  id              String   @id @default(cuid())
-  tenantId        String   @map("tenant_id")
-  conversationId  String   @map("conversation_id")
-  tenantToolId    String   @map("tenant_tool_id")
-  input           Json     @default("{}")
-  output          Json     @default("{}")
-  success         Boolean  @default(true)
-  durationMs      Int?     @map("duration_ms")
-  triggeredBy     String   @default("ai") @map("triggered_by")
-  approvedBy      String?  @map("approved_by")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  tenantToolId   String   @map("tenant_tool_id")
+  input          Json     @default("{}")
+  output         Json     @default("{}")
+  success        Boolean  @default(true)
+  durationMs     Int?     @map("duration_ms")
+  triggeredBy    String   @default("ai") @map("triggered_by")
+  approvedBy     String?  @map("approved_by")
+  createdAt      DateTime @default(now()) @map("created_at")
 
   tenantTool TenantTool @relation(fields: [tenantToolId], references: [id], onDelete: Cascade)
 
@@ -897,22 +898,22 @@ model ToolExecution {
 // ─── Conversation Intelligence ──────────────────────────────
 
 model ConversationIntelligence {
-  id               String   @id @default(cuid())
-  tenantId         String   @map("tenant_id")
-  conversationId   String   @unique @map("conversation_id")
-  summary          String?
-  detectedIntent   String?  @map("detected_intent")
-  intentConfidence Float?   @map("intent_confidence")
-  sentiment        String?                                    // "positive" | "negative" | "neutral"
-  sentimentScore   Float?   @map("sentiment_score")           // -1.0 to 1.0
-  topics           Json     @default("[]")                    // ["billing", "refund", ...]
-  toolsUsed        Json     @default("[]") @map("tools_used") // [{ toolId, toolName, success }]
-  resolutionOutcome String? @map("resolution_outcome")        // "resolved" | "escalated" | "abandoned"
-  customerEffort    Int?    @map("customer_effort")           // 1-5 score
-  aiConfidence      Float?  @map("ai_confidence")             // overall AI confidence in handling
-  metadata         Json?
-  analyzedAt       DateTime @default(now()) @map("analyzed_at")
-  createdAt        DateTime @default(now()) @map("created_at")
+  id                String   @id @default(cuid())
+  tenantId          String   @map("tenant_id")
+  conversationId    String   @unique @map("conversation_id")
+  summary           String?
+  detectedIntent    String?  @map("detected_intent")
+  intentConfidence  Float?   @map("intent_confidence")
+  sentiment         String? // "positive" | "negative" | "neutral"
+  sentimentScore    Float?   @map("sentiment_score") // -1.0 to 1.0
+  topics            Json     @default("[]") // ["billing", "refund", ...]
+  toolsUsed         Json     @default("[]") @map("tools_used") // [{ toolId, toolName, success }]
+  resolutionOutcome String?  @map("resolution_outcome") // "resolved" | "escalated" | "abandoned"
+  customerEffort    Int?     @map("customer_effort") // 1-5 score
+  aiConfidence      Float?   @map("ai_confidence") // overall AI confidence in handling
+  metadata          Json?
+  analyzedAt        DateTime @default(now()) @map("analyzed_at")
+  createdAt         DateTime @default(now()) @map("created_at")
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
@@ -926,31 +927,31 @@ model ConversationIntelligence {
 // ─── Agent Scoring (Post-Conversation Review) ──────────────
 
 model AgentScore {
-  id              String   @id @default(cuid())
-  tenantId        String   @map("tenant_id")
-  conversationId  String   @map("conversation_id")
-  agentId         String   @map("agent_id")
+  id             String @id @default(cuid())
+  tenantId       String @map("tenant_id")
+  conversationId String @map("conversation_id")
+  agentId        String @map("agent_id")
 
   // Scores (1-5 scale)
-  responseQuality   Int?   @map("response_quality")     // Quality of agent responses
-  responseSpeed     Int?   @map("response_speed")        // How fast they responded
-  resolutionScore   Int?   @map("resolution_score")      // Did they resolve the issue?
-  protocolAdherence Int?   @map("protocol_adherence")    // Followed rules/escalation procedures?
-  customerHandling  Int?   @map("customer_handling")     // Empathy, professionalism
-  overallScore      Float? @map("overall_score")         // Weighted average (0-100)
+  responseQuality   Int?   @map("response_quality") // Quality of agent responses
+  responseSpeed     Int?   @map("response_speed") // How fast they responded
+  resolutionScore   Int?   @map("resolution_score") // Did they resolve the issue?
+  protocolAdherence Int?   @map("protocol_adherence") // Followed rules/escalation procedures?
+  customerHandling  Int?   @map("customer_handling") // Empathy, professionalism
+  overallScore      Float? @map("overall_score") // Weighted average (0-100)
 
   // AI analysis
-  strengths     Json    @default("[]")                   // ["Quick response", "Used KB effectively"]
-  improvements  Json    @default("[]")                   // ["Could have escalated sooner"]
-  summary       String?                                  // AI-generated performance summary
+  strengths    Json    @default("[]") // ["Quick response", "Used KB effectively"]
+  improvements Json    @default("[]") // ["Could have escalated sooner"]
+  summary      String? // AI-generated performance summary
 
   // Metadata
-  copilotUsageRate  Float?  @map("copilot_usage_rate")   // % of AI suggestions used
-  toolsUsedCount    Int     @default(0) @map("tools_used_count")
-  messageCount      Int     @default(0) @map("message_count")
+  copilotUsageRate Float? @map("copilot_usage_rate") // % of AI suggestions used
+  toolsUsedCount   Int    @default(0) @map("tools_used_count")
+  messageCount     Int    @default(0) @map("message_count")
 
-  analyzedAt   DateTime @default(now()) @map("analyzed_at")
-  createdAt    DateTime @default(now()) @map("created_at")
+  analyzedAt DateTime @default(now()) @map("analyzed_at")
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@unique([conversationId, agentId])
   @@index([tenantId])
@@ -963,18 +964,18 @@ model AgentScore {
 // ─── Notification Log ───────────────────────────────────────
 
 model NotificationLog {
-  id         String   @id @default(cuid())
-  tenantId   String   @map("tenant_id")
-  channel    String   // email, slack, webhook, internal
-  type       String   // onboarding_email, activation_confirmation, etc.
-  recipient  String   // email address or channel ID
-  subject    String?
-  body       String?
-  status     String   @default("pending") // pending, sent, failed
-  error      String?
-  metadata   Json?
-  sentAt     DateTime? @map("sent_at")
-  createdAt  DateTime @default(now()) @map("created_at")
+  id        String    @id @default(cuid())
+  tenantId  String    @map("tenant_id")
+  channel   String // email, slack, webhook, internal
+  type      String // onboarding_email, activation_confirmation, etc.
+  recipient String // email address or channel ID
+  subject   String?
+  body      String?
+  status    String    @default("pending") // pending, sent, failed
+  error     String?
+  metadata  Json?
+  sentAt    DateTime? @map("sent_at")
+  createdAt DateTime  @default(now()) @map("created_at")
 
   @@index([tenantId])
   @@index([type, status])
@@ -986,23 +987,23 @@ model NotificationLog {
 model Contact {
   id                String      @id @default(cuid())
   tenantId          String      @map("tenant_id")
-  externalId        String      @map("external_id")     // phone, email, PSID, etc.
+  externalId        String      @map("external_id") // phone, email, PSID, etc.
   channel           ChannelType
   displayName       String?     @map("display_name")
   email             String?
   phone             String?
   avatarUrl         String?     @map("avatar_url")
-  metadata          Json?                                // custom fields
-  tags              Json        @default("[]")           // string[] for segmentation
+  metadata          Json? // custom fields
+  tags              Json        @default("[]") // string[] for segmentation
   lastSeenAt        DateTime?   @map("last_seen_at")
   lastInteractionAt DateTime?   @map("last_interaction_at")
-  source            String?                              // campaign/channel source
-  optOutChannels    Json        @default("[]") @map("opt_out_channels")  // string[] of opted-out channel types
+  source            String? // campaign/channel source
+  optOutChannels    Json        @default("[]") @map("opt_out_channels") // string[] of opted-out channel types
   optedOutAt        DateTime?   @map("opted_out_at")
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   broadcastRecipients BroadcastRecipient[]
 
   @@unique([tenantId, channel, externalId])
@@ -1024,33 +1025,36 @@ enum TemplateStatus {
 }
 
 model MessageTemplate {
-  id              String         @id @default(cuid())
-  tenantId        String         @map("tenant_id")
-  name            String
-  category        String         @default("general")     // marketing, utility, authentication, general
-  language        String         @default("en")
-  channel         ChannelType?                            // null = all channels
-  headerType      String?        @map("header_type")     // text, image, video, document
-  headerContent   String?        @map("header_content")
-  body            String                                  // template body with {{1}} placeholders
-  footer          String?
-  buttons         Json           @default("[]")           // [{ type: "QUICK_REPLY"|"URL"|"PHONE", text, url?, phoneNumber? }]
-  variables       Json           @default("[]")           // [{ key: "1", sample: "John" }]
-  externalId      String?        @map("external_id")      // WhatsApp template ID after sync
-  metaTemplateId  String?        @map("meta_template_id") // Meta's internal template ID
-  rejectionReason String?        @map("rejection_reason") // reason if rejected by Meta
-  status          TemplateStatus @default(DRAFT)
-  version         Int            @default(1)
-  isActive        Boolean        @default(true) @map("is_active")
-  createdAt       DateTime       @default(now()) @map("created_at")
-  updatedAt       DateTime       @updatedAt @map("updated_at")
+  id               String         @id @default(cuid())
+  tenantId         String         @map("tenant_id")
+  name             String
+  category         String         @default("general") // marketing, utility, authentication, general
+  language         String         @default("en")
+  channel          ChannelType? // null = all channels
+  channelAccountId String?        @map("channel_account_id") // bind template to a specific connected account (e.g. specific WABA)
+  headerType       String?        @map("header_type") // text, image, video, document
+  headerContent    String?        @map("header_content")
+  body             String // template body with {{1}} placeholders
+  footer           String?
+  buttons          Json           @default("[]") // [{ type: "QUICK_REPLY"|"URL"|"PHONE", text, url?, phoneNumber? }]
+  variables        Json           @default("[]") // [{ key: "1", sample: "John" }]
+  externalId       String?        @map("external_id") // WhatsApp template ID after sync
+  metaTemplateId   String?        @map("meta_template_id") // Meta's internal template ID
+  rejectionReason  String?        @map("rejection_reason") // reason if rejected by Meta
+  status           TemplateStatus @default(DRAFT)
+  version          Int            @default(1)
+  isActive         Boolean        @default(true) @map("is_active")
+  createdAt        DateTime       @default(now()) @map("created_at")
+  updatedAt        DateTime       @updatedAt @map("updated_at")
 
-  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  broadcasts      Broadcast[]
+  tenant         Tenant          @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount ChannelAccount? @relation(fields: [channelAccountId], references: [id], onDelete: SetNull)
+  broadcasts     Broadcast[]
 
   @@unique([tenantId, name, language, channel])
   @@index([tenantId])
   @@index([tenantId, channel, status])
+  @@index([tenantId, channelAccountId])
   @@map("message_templates")
 }
 
@@ -1066,35 +1070,38 @@ enum BroadcastStatus {
 }
 
 model Broadcast {
-  id              String          @id @default(cuid())
-  tenantId        String          @map("tenant_id")
-  name            String
-  channel         ChannelType
-  channelAccountId String         @map("channel_account_id")
-  templateId      String?         @map("template_id")
-  body            String?                                   // for non-template messages
-  variables       Json            @default("{}")             // template variable values
-  flowId          String?         @map("flow_id")           // trigger flow for each recipient
-  status          BroadcastStatus @default(DRAFT)
-  scheduledAt     DateTime?       @map("scheduled_at")
-  startedAt       DateTime?       @map("started_at")
-  completedAt     DateTime?       @map("completed_at")
-  createdBy       String          @map("created_by")
+  id               String          @id @default(cuid())
+  tenantId         String          @map("tenant_id")
+  name             String
+  channel          ChannelType
+  channelAccountId String          @map("channel_account_id")
+  templateId       String?         @map("template_id")
+  body             String? // for non-template messages
+  variables        Json            @default("{}") // template variable values
+  flowId           String?         @map("flow_id") // trigger flow for each recipient
+  status           BroadcastStatus @default(DRAFT)
+  scheduledAt      DateTime?       @map("scheduled_at")
+  startedAt        DateTime?       @map("started_at")
+  completedAt      DateTime?       @map("completed_at")
+  createdBy        String          @map("created_by")
 
   // Analytics counters
-  totalRecipients Int             @default(0) @map("total_recipients")
-  sentCount       Int             @default(0) @map("sent_count")
-  deliveredCount  Int             @default(0) @map("delivered_count")
-  readCount       Int             @default(0) @map("read_count")
-  repliedCount    Int             @default(0) @map("replied_count")
-  failedCount     Int             @default(0) @map("failed_count")
+  totalRecipients Int @default(0) @map("total_recipients")
+  sentCount       Int @default(0) @map("sent_count")
+  deliveredCount  Int @default(0) @map("delivered_count")
+  readCount       Int @default(0) @map("read_count")
+  repliedCount    Int @default(0) @map("replied_count")
+  failedCount     Int @default(0) @map("failed_count")
 
-  createdAt       DateTime        @default(now()) @map("created_at")
-  updatedAt       DateTime        @updatedAt @map("updated_at")
+  // Last error message when broadcast halted (channel API failure, billing issue, etc.)
+  lastError String? @map("last_error")
 
-  tenant          Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  template        MessageTemplate? @relation(fields: [templateId], references: [id], onDelete: SetNull)
-  recipients      BroadcastRecipient[]
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  template   MessageTemplate?     @relation(fields: [templateId], references: [id], onDelete: SetNull)
+  recipients BroadcastRecipient[]
 
   @@index([tenantId])
   @@index([tenantId, status])
@@ -1103,21 +1110,21 @@ model Broadcast {
 }
 
 model BroadcastRecipient {
-  id              String   @id @default(cuid())
-  broadcastId     String   @map("broadcast_id")
-  contactId       String?  @map("contact_id")
-  externalId      String   @map("external_id")      // phone/PSID/email
-  messageId       String?  @map("message_id")        // outgoing message ID after send
-  status          String   @default("pending")       // pending, sent, delivered, read, replied, failed
-  error           String?
-  sentAt          DateTime? @map("sent_at")
-  deliveredAt     DateTime? @map("delivered_at")
-  readAt          DateTime? @map("read_at")
-  repliedAt       DateTime? @map("replied_at")
-  createdAt       DateTime @default(now()) @map("created_at")
+  id          String    @id @default(cuid())
+  broadcastId String    @map("broadcast_id")
+  contactId   String?   @map("contact_id")
+  externalId  String    @map("external_id") // phone/PSID/email
+  messageId   String?   @map("message_id") // outgoing message ID after send
+  status      String    @default("pending") // pending, sent, delivered, read, replied, failed
+  error       String?
+  sentAt      DateTime? @map("sent_at")
+  deliveredAt DateTime? @map("delivered_at")
+  readAt      DateTime? @map("read_at")
+  repliedAt   DateTime? @map("replied_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
 
-  broadcast       Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
-  contact         Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
+  broadcast Broadcast @relation(fields: [broadcastId], references: [id], onDelete: Cascade)
+  contact   Contact?  @relation(fields: [contactId], references: [id], onDelete: SetNull)
 
   @@index([broadcastId])
   @@index([broadcastId, status])
@@ -1135,29 +1142,29 @@ enum ScheduledMessageStatus {
 }
 
 model ScheduledMessage {
-  id                String                 @id @default(cuid())
-  tenantId          String                 @map("tenant_id")
-  conversationId    String?                @map("conversation_id")
-  channel           ChannelType
-  channelAccountId  String                 @map("channel_account_id")
-  recipientExternalId String               @map("recipient_external_id")
-  body              String
-  messageType       String                 @default("text") @map("message_type")
-  mediaUrl          String?                @map("media_url")
-  templateId        String?                @map("template_id")
-  variables         Json                   @default("{}")
-  sendType          String                 @default("regular") @map("send_type") // regular, conversation, flow
-  departmentId      String?                @map("department_id")
-  flowId            String?                @map("flow_id")
-  scheduledAt       DateTime               @map("scheduled_at")
-  status            ScheduledMessageStatus @default(PENDING)
-  sentAt            DateTime?              @map("sent_at")
-  error             String?
-  createdBy         String                 @map("created_by")
-  createdAt         DateTime               @default(now()) @map("created_at")
-  updatedAt         DateTime               @updatedAt @map("updated_at")
+  id                  String                 @id @default(cuid())
+  tenantId            String                 @map("tenant_id")
+  conversationId      String?                @map("conversation_id")
+  channel             ChannelType
+  channelAccountId    String                 @map("channel_account_id")
+  recipientExternalId String                 @map("recipient_external_id")
+  body                String
+  messageType         String                 @default("text") @map("message_type")
+  mediaUrl            String?                @map("media_url")
+  templateId          String?                @map("template_id")
+  variables           Json                   @default("{}")
+  sendType            String                 @default("regular") @map("send_type") // regular, conversation, flow
+  departmentId        String?                @map("department_id")
+  flowId              String?                @map("flow_id")
+  scheduledAt         DateTime               @map("scheduled_at")
+  status              ScheduledMessageStatus @default(PENDING)
+  sentAt              DateTime?              @map("sent_at")
+  error               String?
+  createdBy           String                 @map("created_by")
+  createdAt           DateTime               @default(now()) @map("created_at")
+  updatedAt           DateTime               @updatedAt @map("updated_at")
 
-  tenant              Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([status, scheduledAt])
@@ -1170,10 +1177,10 @@ model ScheduledMessage {
 model UsageLog {
   id               String   @id @default(cuid())
   tenantId         String   @map("tenant_id")
-  type             String   // "ai_tokens" | "message_sent" | "tool_call" | "automation_run"
+  type             String // "ai_tokens" | "message_sent" | "tool_call" | "automation_run"
   quantity         Int
   tokensEquivalent Int      @map("tokens_equivalent")
-  metadata         Json?    // { model, channel, tool, conversationId, messageId }
+  metadata         Json? // { model, channel, tool, conversationId, messageId }
   createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
@@ -1187,8 +1194,8 @@ model UsageLog {
 model CreditTransaction {
   id          String   @id @default(cuid())
   tenantId    String   @map("tenant_id")
-  amount      Int      // credits consumed (positive = consumed, negative = added)
-  source      String   // usage type that generated this: "ai_tokens", "message_sent", etc.
+  amount      Int // credits consumed (positive = consumed, negative = added)
+  source      String // usage type that generated this: "ai_tokens", "message_sent", etc.
   referenceId String?  @map("reference_id") // optional link to usage_log or other entity
   createdAt   DateTime @default(now()) @map("created_at")
 
@@ -1203,9 +1210,9 @@ model CreditTransaction {
 model AuditLog {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")
-  actorType  String   @map("actor_type")  // "user" | "ai" | "system"
-  actorId    String?  @map("actor_id")    // userId or aiAgentId or null for system
-  action     String   // "message.sent", "ai.responded", "tool.executed", "conversation.updated", etc.
+  actorType  String   @map("actor_type") // "user" | "ai" | "system"
+  actorId    String?  @map("actor_id") // userId or aiAgentId or null for system
+  action     String // "message.sent", "ai.responded", "tool.executed", "conversation.updated", etc.
   targetType String?  @map("target_type") // "conversation", "message", "tool", "user", etc.
   targetId   String?  @map("target_id")
   metadata   Json?
@@ -1223,16 +1230,16 @@ model AuditLog {
 // ─── Flow Canvas (Visual Routing) ──────────────────────────
 
 model FlowCanvas {
-  id          String   @id @default(cuid())
-  tenantId    String   @unique @map("tenant_id")
-  nodes       Json     @default("[]")    // [{ id, type: "channel"|"rule"|"flow"|"agent"|"department", position, data }]
-  edges       Json     @default("[]")    // [{ id, source, target, data }]
-  viewport    Json?                      // { x, y, zoom }
-  updatedBy   String?  @map("updated_by")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  id        String   @id @default(cuid())
+  tenantId  String   @unique @map("tenant_id")
+  nodes     Json     @default("[]") // [{ id, type: "channel"|"rule"|"flow"|"agent"|"department", position, data }]
+  edges     Json     @default("[]") // [{ id, source, target, data }]
+  viewport  Json? // { x, y, zoom }
+  updatedBy String?  @map("updated_by")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant      Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("flow_canvas")
 }

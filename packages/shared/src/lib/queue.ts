@@ -49,7 +49,7 @@ export interface IncomingMessageJob {
 
 export interface OutgoingMessageJob {
   tenantId: string;
-  conversationId: string;
+  conversationId: string | null;
   channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM" | "EMAIL" | "GMAIL" | "OUTLOOK" | "SLACK";
   channelAccountId: string;
   recipientExternalId: string;
@@ -60,6 +60,14 @@ export interface OutgoingMessageJob {
   retryCount?: number;
   mediaUrl?: string;
   fileName?: string;
+  // Broadcast linkage — when set, the outgoing worker writes the send result
+  // back to the BroadcastRecipient row and updates broadcast counters.
+  broadcastId?: string;
+  broadcastRecipientId?: string;
+  // Template fields (forwarded by broadcast worker)
+  templateName?: string;
+  templateLanguage?: string;
+  templateComponents?: any[];
 }
 
 export interface AnalyticsJob {

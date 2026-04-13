@@ -177,7 +177,10 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   });
   if (existing) return;
 
-  // Find or create conversation using channel-aware lookup
+  // Find or create conversation using channel-aware lookup.
+  // Reuse any non-closed thread first; otherwise reopen a recently-closed one
+  // so a customer's reply to a broadcast/outbound message threads back into
+  // their existing history instead of starting a fresh conversation.
   let conversation = await prisma.conversation.findFirst({
     where: {
       tenantId,
@@ -188,9 +191,37 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     orderBy: { createdAt: "desc" },
   });
 
+  if (!conversation) {
+    const REOPEN_WINDOW_DAYS = 30;
+    const since = new Date(Date.now() - REOPEN_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const recentlyClosed = await prisma.conversation.findFirst({
+      where: {
+        tenantId,
+        channel,
+        customerExternalId: senderId,
+        status: "CLOSED",
+        OR: [{ closedAt: { gte: since } }, { updatedAt: { gte: since } }],
+      },
+      orderBy: { updatedAt: "desc" },
+    });
+    if (recentlyClosed) {
+      conversation = await prisma.conversation.update({
+        where: { id: recentlyClosed.id },
+        data: { status: "OPEN", closedAt: null },
+      });
+    }
+  }
+
+  // Fall back to the saved Contact's display name + avatar so replies don't
+  // surface as raw phone numbers when the channel webhook omits the profile.
+  const savedContact = await prisma.contact.findFirst({
+    where: { tenantId, channel, externalId: senderId },
+    select: { displayName: true, avatarUrl: true },
+  });
+
   // For Messenger/Instagram, fetch display name + avatar from Graph API if not provided
-  let displayName = senderDisplayName || null;
-  let avatarUrl: string | null = null;
+  let displayName = senderDisplayName || savedContact?.displayName || null;
+  let avatarUrl: string | null = savedContact?.avatarUrl || null;
   if ((!displayName || !conversation?.customerAvatarUrl) && (channel === "MESSENGER" || channel === "INSTAGRAM") && channelAccountId) {
     const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
     const creds = channelAccount?.credentials;

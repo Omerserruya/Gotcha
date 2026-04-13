@@ -267,6 +267,8 @@ export function NewConversationPanel({ onClose, onCreated }: Props) {
         channelAccountId: selectedAccountId,
         body,
         messageType: isTemplateOnly ? "template" : "text",
+        templateId: isTemplateOnly ? selectedTemplateId : undefined,
+        variables: isTemplateOnly ? templateVariables : undefined,
       });
 
       const convId = (res as any)?.data?.id;

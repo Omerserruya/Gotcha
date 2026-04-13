@@ -1,6 +1,13 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, broadcastQueue } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, broadcastQueue, publishEvent } from "@chatcenter/shared";
 import type { BroadcastJob } from "@chatcenter/shared";
+
+async function publishBroadcastUpdate(broadcastId: string, tenantId: string) {
+  try {
+    const bc = await prisma.broadcast.findUnique({ where: { id: broadcastId } });
+    if (bc) await publishEvent({ event: "broadcast:updated", tenantId, data: bc });
+  } catch {}
+}
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
@@ -205,8 +212,8 @@ router.delete("/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    if (broadcast.status !== "DRAFT") {
-      res.status(400).json({ error: "Only DRAFT broadcasts can be deleted" });
+    if (broadcast.status === "SENDING") {
+      res.status(400).json({ error: "Cancel the broadcast before deleting" });
       return;
     }
 
@@ -214,6 +221,12 @@ router.delete("/:id", async (req: Request, res: Response) => {
       prisma.broadcastRecipient.deleteMany({ where: { broadcastId: broadcast.id } }),
       prisma.broadcast.delete({ where: { id: broadcast.id } }),
     ]);
+
+    await publishEvent({
+      event: "broadcast:deleted",
+      tenantId: broadcast.tenantId,
+      data: { id: broadcast.id },
+    });
 
     res.json({ data: { deleted: true, broadcastId: broadcast.id } });
   } catch (err) {
@@ -294,8 +307,13 @@ router.post("/:id/send", async (req: Request, res: Response) => {
       data: {
         status: newStatus,
         startedAt: isScheduled ? null : now,
+        lastError: null,
+        sentCount: 0,
+        failedCount: 0,
       },
     });
+
+    await publishBroadcastUpdate(broadcast.id, broadcast.tenantId);
 
     if (!isScheduled) {
       const recipients = await prisma.broadcastRecipient.findMany({
@@ -452,10 +470,29 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
       return;
     }
 
+    // Drain any pending jobs for this broadcast so we stop sending immediately.
+    try {
+      const waiting = await broadcastQueue.getJobs(["waiting", "delayed", "paused"]);
+      for (const job of waiting) {
+        if ((job.data as BroadcastJob)?.broadcastId === broadcast.id) {
+          await job.remove();
+        }
+      }
+    } catch (err) {
+      console.warn("Cancel broadcast: drain queue failed", err);
+    }
+
+    await prisma.broadcastRecipient.updateMany({
+      where: { broadcastId: broadcast.id, status: { in: ["pending", "queued"] } },
+      data: { status: "skipped", error: "Broadcast cancelled" },
+    });
+
     const updated = await prisma.broadcast.update({
       where: { id: broadcast.id },
-      data: { status: "CANCELLED" },
+      data: { status: "CANCELLED", completedAt: new Date() },
     });
+
+    await publishBroadcastUpdate(broadcast.id, broadcast.tenantId);
 
     res.json({ data: updated });
   } catch (err) {

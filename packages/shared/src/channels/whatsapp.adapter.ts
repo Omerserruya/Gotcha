@@ -10,6 +10,19 @@ import type {
 
 const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
 
+// Pulls the most useful human-readable error out of a WhatsApp/Graph API axios failure.
+function extractWaError(err: any): string {
+  const data = err?.response?.data;
+  const waErr = data?.error;
+  if (waErr) {
+    const code = waErr.code ? `[${waErr.code}] ` : "";
+    const title = waErr.error_user_title || waErr.message || waErr.type || "WhatsApp API error";
+    const detail = waErr.error_user_msg || waErr.error_data?.details;
+    return `${code}${title}${detail ? ": " + detail : ""}`;
+  }
+  return err?.message || "WhatsApp send failed";
+}
+
 // ─── Inbound Adapter ─────────────────────────────────────────
 
 export const whatsAppInboundAdapter: InboundAdapter = {
@@ -137,8 +150,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      console.error("WhatsApp send error:", err.response?.data || err.message);
-      return null;
+      throw new Error(extractWaError(err));
     }
   },
 
@@ -163,8 +175,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      console.error("WhatsApp interactive send error:", err.response?.data || err.message);
-      return null;
+      throw new Error(extractWaError(err));
     }
   },
 
@@ -194,8 +205,39 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      console.error(`WhatsApp ${mediaType} send error:`, err.response?.data || err.message);
-      return null;
+      throw new Error(extractWaError(err));
+    }
+  },
+
+  async sendTemplateMessage(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    templateName: string,
+    language: string,
+    components?: any[]
+  ): Promise<string | null> {
+    try {
+      const payload: any = {
+        messaging_product: "whatsapp",
+        to: recipientId,
+        type: "template",
+        template: {
+          name: templateName,
+          language: { code: language },
+        },
+      };
+      if (components && components.length > 0) {
+        payload.template.components = components;
+      }
+      const response = await axios.post(
+        `${WA_API_URL}/${accountExternalId}/messages`,
+        payload,
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
+      );
+      return response.data?.messages?.[0]?.id || null;
+    } catch (err: any) {
+      throw new Error(extractWaError(err));
     }
   },
 };

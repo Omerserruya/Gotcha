@@ -47,7 +47,7 @@ router.get("/", async (req: Request, res: Response) => {
 // POST /initiate-conversation - must be before /:id to avoid conflict
 router.post("/initiate-conversation", async (req: Request, res: Response) => {
   try {
-    const { contactId, externalId, channel, channelAccountId, body, messageType } = req.body;
+    const { contactId, externalId, channel, channelAccountId, body, messageType, templateId, variables } = req.body;
 
     if (!channelAccountId) {
       res.status(400).json({ error: "channelAccountId is required" });
@@ -59,6 +59,10 @@ router.post("/initiate-conversation", async (req: Request, res: Response) => {
     }
     if (!contactId && !(externalId && channel)) {
       res.status(400).json({ error: "contactId or (externalId + channel) is required" });
+      return;
+    }
+    if (messageType === "template" && !templateId) {
+      res.status(400).json({ error: "templateId is required when messageType is 'template'" });
       return;
     }
 
@@ -122,6 +126,31 @@ router.post("/initiate-conversation", async (req: Request, res: Response) => {
       },
     });
 
+    // Resolve template data when sending a template message (required for
+    // WhatsApp first-contact outside the 24h service window).
+    let templateData: any = {};
+    if (messageType === "template" && templateId) {
+      const tmpl = await prisma.messageTemplate.findFirst({
+        where: { id: templateId, tenantId: req.tenantId! },
+      });
+      if (!tmpl) {
+        res.status(404).json({ error: "Template not found" });
+        return;
+      }
+      const varEntries = variables && typeof variables === "object" ? Object.entries(variables) : [];
+      const ordered = varEntries
+        .map(([k, v]) => ({ idx: parseInt(k, 10), value: String(v ?? "") }))
+        .filter((e) => !Number.isNaN(e.idx))
+        .sort((a, b) => a.idx - b.idx);
+      templateData = {
+        templateName: tmpl.name,
+        templateLanguage: tmpl.language || "en",
+        templateComponents: ordered.length
+          ? [{ type: "body", parameters: ordered.map((e) => ({ type: "text", text: e.value })) }]
+          : [],
+      };
+    }
+
     // Enqueue to outgoingMessageQueue
     await outgoingMessageQueue.add("send", {
       tenantId: req.tenantId!,
@@ -133,6 +162,7 @@ router.post("/initiate-conversation", async (req: Request, res: Response) => {
       messageType: messageType || "text",
       senderName: req.user!.email,
       messageId: message.id,
+      ...templateData,
     }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
 
     res.status(201).json({ data: { conversation, message } });

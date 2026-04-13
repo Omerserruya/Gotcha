@@ -10,11 +10,13 @@ import {
   sendBroadcast,
   validateBroadcast,
   cancelBroadcast,
+  deleteBroadcast,
   getTemplates,
   getChannelAccounts,
   addBroadcastRecipients,
 } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
+import { getSocket } from "@/lib/socket";
 import clsx from "clsx";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
@@ -35,6 +37,7 @@ interface Broadcast {
   readCount: number;
   repliedCount: number;
   failedCount: number;
+  lastError?: string | null;
   createdAt: string;
 }
 
@@ -232,6 +235,35 @@ export default function BroadcastsPage() {
     fetchBroadcasts();
     fetchTemplates();
     fetchChannelAccounts();
+  }, [token]);
+
+  // Realtime updates — listen for broadcast:updated / broadcast:deleted.
+  useEffect(() => {
+    const socket = getSocket();
+    if (!socket) return;
+
+    const handleUpdate = (data: any) => {
+      if (!data?.id) return;
+      setBroadcasts((prev) => {
+        const idx = prev.findIndex((b) => b.id === data.id);
+        if (idx === -1) return [data, ...prev];
+        const next = prev.slice();
+        next[idx] = { ...next[idx], ...data };
+        return next;
+      });
+    };
+
+    const handleDelete = (data: any) => {
+      if (!data?.id) return;
+      setBroadcasts((prev) => prev.filter((b) => b.id !== data.id));
+    };
+
+    socket.on("broadcast:updated", handleUpdate);
+    socket.on("broadcast:deleted", handleDelete);
+    return () => {
+      socket.off("broadcast:updated", handleUpdate);
+      socket.off("broadcast:deleted", handleDelete);
+    };
   }, [token]);
 
   async function fetchBroadcasts() {
@@ -464,7 +496,18 @@ export default function BroadcastsPage() {
     if (!token) return;
     try {
       await cancelBroadcast(token, id);
-      fetchBroadcasts();
+      // Realtime socket will refresh; no manual fetch needed.
+    } catch (err: any) {
+      alert(err.message || t("common.error"));
+    }
+  }
+
+  async function handleDelete(id: string) {
+    if (!token) return;
+    if (!confirm(t("outbound.broadcasts.deleteConfirm"))) return;
+    try {
+      await deleteBroadcast(token, id);
+      setBroadcasts((prev) => prev.filter((b) => b.id !== id));
     } catch (err: any) {
       alert(err.message || t("common.error"));
     }
@@ -518,6 +561,8 @@ export default function BroadcastsPage() {
             const isExpanded = expandedId === bc.id;
             const canSend = bc.status === "DRAFT";
             const canCancel = bc.status === "SCHEDULED" || bc.status === "SENDING";
+            const canDelete = bc.status !== "SENDING";
+            const isTerminal = bc.status === "COMPLETED" || bc.status === "FAILED" || bc.status === "CANCELLED" || bc.status === "SENDING";
 
             return (
               <div key={bc.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -547,12 +592,12 @@ export default function BroadcastsPage() {
                     </div>
 
                     <div className="flex items-center gap-2 shrink-0">
-                      {bc.status === "COMPLETED" && (
+                      {isTerminal && (
                         <button
                           onClick={() => setExpandedId(isExpanded ? null : bc.id)}
                           className="text-xs px-3 py-1.5 rounded-lg bg-gray-50 text-gray-500 hover:bg-gray-100 transition"
                         >
-                          {isExpanded ? t("outbound.broadcasts.hideStats") : t("outbound.broadcasts.showStats")}
+                          {isExpanded ? t("outbound.broadcasts.hideStats") : t("outbound.broadcasts.view")}
                         </button>
                       )}
                       {bc.status === "DRAFT" && (
@@ -579,11 +624,33 @@ export default function BroadcastsPage() {
                           {t("outbound.broadcasts.cancel")}
                         </button>
                       )}
+                      {canDelete && (
+                        <button
+                          onClick={() => handleDelete(bc.id)}
+                          className="text-xs px-3 py-1.5 rounded-lg bg-red-50 text-red-500 hover:bg-red-100 transition"
+                          title={t("common.delete")}
+                        >
+                          {t("common.delete")}
+                        </button>
+                      )}
                     </div>
                   </div>
 
+                  {/* Error banner — show any captured broadcast-level error */}
+                  {bc.lastError && (
+                    <div className="mt-3 px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-xs text-red-700 flex items-start gap-2">
+                      <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m0-10.036A9 9 0 1021 12a9 9 0 00-9-9.286zM12 15.75h.008v.008H12v-.008z" />
+                      </svg>
+                      <span className="leading-relaxed break-words">
+                        <strong className="font-semibold">{t("outbound.broadcasts.stoppedError")}: </strong>
+                        {bc.lastError}
+                      </span>
+                    </div>
+                  )}
+
                   {/* Analytics */}
-                  {isExpanded && bc.status === "COMPLETED" && (
+                  {isExpanded && isTerminal && (
                     <div className="mt-4 pt-4 border-t border-gray-50">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
                         {t("outbound.broadcasts.analytics")}

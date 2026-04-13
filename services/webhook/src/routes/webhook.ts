@@ -59,10 +59,121 @@ router.post("/", async (req: Request, res: Response) => {
       }
     }
 
+    // Step 2.5: Template-related updates from WhatsApp arrive at the WABA level
+    // (entry.id = WABA id, no phone_number_id), so they cannot be resolved via
+    // resolveChannelAccountExternalId. Handle them independently up-front.
+    const TEMPLATE_FIELDS = new Set([
+      "message_template_status_update",
+      "template_category_update",
+      "template_correct_category_detection",
+      "message_template_components_update",
+      "message_template_quality_update",
+    ]);
+    if (adapter.channel === "WHATSAPP") {
+      for (const entry of body.entry || []) {
+        const templateChanges = (entry.changes || []).filter((c: any) => TEMPLATE_FIELDS.has(c.field));
+        if (templateChanges.length === 0) continue;
+
+        const wabaId = String(entry.id || "");
+        if (!wabaId) continue;
+
+        // Find the matching channel account by decrypting credentials (rare event, OK to iterate)
+        const candidates = await prisma.channelAccount.findMany({
+          where: { channel: "WHATSAPP", isActive: true },
+        });
+        let matchedAccount: typeof candidates[number] | null = null;
+        for (const acc of candidates) {
+          try {
+            const creds = decryptCredentials(acc.credentials as any);
+            if (String(creds?.wabaId || "") === wabaId) {
+              matchedAccount = acc;
+              break;
+            }
+          } catch {}
+        }
+        if (!matchedAccount) {
+          console.warn(`[WEBHOOK] No channel account found for WABA ${wabaId} template update`);
+          continue;
+        }
+
+        const whereTemplate = (name: string) => ({
+          tenantId: matchedAccount!.tenantId,
+          channel: "WHATSAPP" as const,
+          OR: [
+            { channelAccountId: matchedAccount!.id, name },
+            { channelAccountId: null, name },
+          ],
+        });
+
+        for (const change of templateChanges) {
+          try {
+            const tu = change.value || {};
+            const metaTemplateName = tu.message_template_name;
+            const metaTemplateId = tu.message_template_id ? String(tu.message_template_id) : null;
+            if (!metaTemplateName) continue;
+
+            const data: any = {};
+            if (metaTemplateId) data.metaTemplateId = metaTemplateId;
+
+            switch (change.field) {
+              case "message_template_status_update": {
+                const statusMap: Record<string, string> = {
+                  APPROVED: "APPROVED",
+                  REJECTED: "REJECTED",
+                  PENDING_DELETION: "APPROVED",
+                  DISABLED: "REJECTED",
+                  FLAGGED: "REJECTED",
+                };
+                const newStatus = statusMap[tu.event];
+                if (!newStatus) continue;
+                data.status = newStatus;
+                if (tu.reason) data.rejectionReason = tu.reason;
+                else if (newStatus === "APPROVED") data.rejectionReason = null;
+                break;
+              }
+              case "template_category_update": {
+                if (tu.new_category) data.category = String(tu.new_category).toUpperCase();
+                break;
+              }
+              case "template_correct_category_detection": {
+                // Meta suggests a different category; we just record it in rejectionReason for visibility
+                if (tu.correct_category) {
+                  data.rejectionReason = `Meta suggested category: ${tu.correct_category}`;
+                }
+                break;
+              }
+              case "message_template_quality_update": {
+                // Optional: we don't have a column; skip DB write but log
+                console.log(`[WEBHOOK] Template "${metaTemplateName}" quality: ${tu.new_quality_score}`);
+                if (Object.keys(data).length === 0) continue;
+                break;
+              }
+              case "message_template_components_update": {
+                // Meta edited components on their side; we can't reliably map them back, just log
+                console.log(`[WEBHOOK] Template "${metaTemplateName}" components updated on Meta`);
+                if (Object.keys(data).length === 0) continue;
+                break;
+              }
+            }
+
+            if (Object.keys(data).length === 0) continue;
+
+            await prisma.messageTemplate.updateMany({
+              where: whereTemplate(metaTemplateName),
+              data,
+            });
+            console.log(`[WEBHOOK] Template "${metaTemplateName}" updated via ${change.field}:`, data);
+          } catch (tplErr) {
+            console.error(`[WEBHOOK] ${change.field} error:`, tplErr);
+          }
+        }
+      }
+    }
+
     // Step 3: Resolve tenant via ChannelAccount
     const channelExternalId = adapter.resolveChannelAccountExternalId(body);
     if (!channelExternalId) {
-      console.warn(`No channel account ID found in ${adapter.channel} webhook`);
+      // Template-only payloads are already handled in Step 2.5; silent return is fine.
       return;
     }
 
@@ -110,47 +221,6 @@ router.post("/", async (req: Request, res: Response) => {
       await handleStatusUpdate(tenantId, status);
     }
 
-    // Step 6: Handle template status updates (WhatsApp only)
-    for (const entry of body.entry || []) {
-      for (const change of entry.changes || []) {
-        if (change.field === "message_template_status_update") {
-          const templateUpdate = change.value;
-          try {
-            const event = templateUpdate.event;
-            const metaTemplateName = templateUpdate.message_template_name;
-            const metaTemplateId = String(templateUpdate.message_template_id);
-            const reason = templateUpdate.reason || null;
-
-            if (channelAccount) {
-              const statusMap: Record<string, string> = {
-                APPROVED: "APPROVED",
-                REJECTED: "REJECTED",
-                PENDING_DELETION: "APPROVED",
-                DISABLED: "REJECTED",
-              };
-              const newStatus = statusMap[event];
-              if (newStatus) {
-                await prisma.messageTemplate.updateMany({
-                  where: {
-                    tenantId: channelAccount.tenantId,
-                    name: metaTemplateName,
-                    channel: "WHATSAPP",
-                  },
-                  data: {
-                    status: newStatus as any,
-                    metaTemplateId: metaTemplateId,
-                    ...(reason ? { rejectionReason: reason } : {}),
-                  },
-                });
-                console.log(`[WEBHOOK] Template "${metaTemplateName}" status updated to ${newStatus}`);
-              }
-            }
-          } catch (tplErr) {
-            console.error("[WEBHOOK] Template status update error:", tplErr);
-          }
-        }
-      }
-    }
   } catch (err) {
     console.error("Webhook processing error:", err);
   }

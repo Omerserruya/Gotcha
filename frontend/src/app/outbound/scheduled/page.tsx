@@ -330,7 +330,7 @@ export default function ScheduledPage() {
       const payload: Record<string, any> = {
         channel: channelValue,
         channelAccountId: channelAccountId || undefined,
-        recipientId,
+        recipientExternalId: recipientId,
         body,
         scheduledAt: new Date(scheduledAt).toISOString(),
         sendType,

@@ -1096,8 +1096,9 @@ export function updateTemplate(token: string, id: string, data: Record<string, a
   return apiFetch<{ data: any }>(`/api/templates/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
 
-export function deleteTemplate(token: string, id: string) {
-  return apiFetch<{ success: boolean }>(`/api/templates/${id}`, { token, method: "DELETE" });
+export function deleteTemplate(token: string, id: string, force?: boolean) {
+  const qs = force ? "?force=true" : "";
+  return apiFetch<{ success: boolean }>(`/api/templates/${id}${qs}`, { token, method: "DELETE" });
 }
 
 export function duplicateTemplate(token: string, id: string) {
@@ -1199,7 +1200,7 @@ export function updateContact(token: string, id: string, data: Record<string, an
   return apiFetch<{ data: any }>(`/api/contacts/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
 
-export function initiateConversation(token: string, data: { contactId?: string; externalId?: string; channel?: string; channelAccountId: string; body: string; messageType?: string }) {
+export function initiateConversation(token: string, data: { contactId?: string; externalId?: string; channel?: string; channelAccountId: string; body: string; messageType?: string; templateId?: string; variables?: Record<string, string> }) {
   return apiFetch<{ data: any }>("/api/contacts/initiate-conversation", { token, method: "POST", body: JSON.stringify(data) });
 }
 

@@ -83,4 +83,12 @@ export interface OutboundAdapter {
     fileName?: string,
     caption?: string
   ): Promise<string | null>;
+  sendTemplateMessage?(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    recipientId: string,
+    templateName: string,
+    language: string,
+    components?: any[]
+  ): Promise<string | null>;
 }

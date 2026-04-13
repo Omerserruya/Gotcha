@@ -40,6 +40,7 @@ interface Template {
   id: string;
   name: string;
   channel: string;
+  channelAccountId?: string | null;
   category: string;
   language: string;
   status: string;
@@ -61,6 +62,7 @@ interface ChannelAccount {
 const emptyForm = {
   name: "",
   channel: "WHATSAPP",
+  channelAccountId: "",
   category: "UTILITY",
   language: "en",
   headerType: "NONE",
@@ -241,23 +243,22 @@ export default function TemplatesPage() {
     }
   }
 
-  const connectedChannels = Array.from(
-    new Set(
-      channelAccounts
-        .filter((a) => a.connectionStatus === "CONNECTED")
-        .map((a) => a.channel)
-    )
-  );
+  const connectedAccounts = channelAccounts.filter((a) => a.connectionStatus === "CONNECTED");
+  const connectedChannels = Array.from(new Set(connectedAccounts.map((a) => a.channel)));
 
-  // Fallback to common channels if no connected accounts yet
+  // Filter dropdown fallback when no accounts exist yet
   const channelOptions = connectedChannels.length > 0
     ? connectedChannels
     : ["WHATSAPP", "INSTAGRAM", "TELEGRAM", "WEBCHAT"];
 
   function openCreate() {
     setEditingId(null);
-    const defaultChannel = channelOptions[0] ?? "WHATSAPP";
-    setForm({ ...emptyForm, channel: defaultChannel });
+    const defaultAccount = connectedAccounts[0];
+    setForm({
+      ...emptyForm,
+      channel: defaultAccount?.channel ?? "WHATSAPP",
+      channelAccountId: defaultAccount?.id ?? "",
+    });
     setVarExamples({});
     setError("");
     setSubmitSuccess(false);
@@ -269,6 +270,7 @@ export default function TemplatesPage() {
     setForm({
       name: tpl.name,
       channel: tpl.channel,
+      channelAccountId: tpl.channelAccountId ?? "",
       category: tpl.category,
       language: tpl.language,
       headerType: tpl.headerType ?? "NONE",
@@ -330,8 +332,19 @@ export default function TemplatesPage() {
       await deleteTemplate(token, deleteId);
       setDeleteId(null);
       fetchTemplates();
-    } catch (err) {
-      console.error(err);
+    } catch (err: any) {
+      const msg = err?.message || "";
+      if (msg.includes("broadcast") || msg.includes("409")) {
+        if (window.confirm("This template is linked to broadcasts. Delete anyway?")) {
+          try {
+            await deleteTemplate(token, deleteId, true);
+            setDeleteId(null);
+            fetchTemplates();
+          } catch (e2) { console.error(e2); }
+        }
+      } else {
+        console.error(err);
+      }
     } finally {
       setDeleting(false);
     }
@@ -583,7 +596,7 @@ export default function TemplatesPage() {
                       )}
                     </div>
                   </div>
-                  {editingTemplate.status === "DRAFT" && !submitSuccess && (
+                  {(editingTemplate.status === "DRAFT" || editingTemplate.status === "REJECTED") && !submitSuccess && (
                     <button
                       onClick={handleSubmitToMeta}
                       disabled={submitting}
@@ -596,7 +609,9 @@ export default function TemplatesPage() {
                           <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z" />
                         </svg>
                       )}
-                      {"outbound.templates.submitToMeta"}
+                      {editingTemplate.status === "REJECTED"
+                        ? "outbound.templates.resubmitToMeta"
+                        : "outbound.templates.submitToMeta"}
                     </button>
                   )}
                   {submitSuccess && (
@@ -634,15 +649,23 @@ export default function TemplatesPage() {
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("outbound.templates.fieldChannel")}</label>
                     <select
-                      value={form.channel}
-                      onChange={(e) => setForm({ ...form, channel: e.target.value })}
+                      value={form.channelAccountId}
+                      onChange={(e) => {
+                        const id = e.target.value;
+                        const acc = connectedAccounts.find((a) => a.id === id);
+                        setForm({ ...form, channelAccountId: id, channel: acc?.channel ?? form.channel });
+                      }}
                       className={selectCls}
+                      required
                     >
-                      {channelOptions.map((c) => (
-                        <option key={c} value={c}>{c}</option>
+                      {connectedAccounts.length === 0 && <option value="">—</option>}
+                      {connectedAccounts.map((a) => (
+                        <option key={a.id} value={a.id}>
+                          {a.channel} — {a.displayName}
+                        </option>
                       ))}
                     </select>
-                    {connectedChannels.length === 0 && (
+                    {connectedAccounts.length === 0 && (
                       <p className="text-xs text-amber-500 mt-1">{"outbound.templates.noConnectedChannels"}</p>
                     )}
                   </div>
