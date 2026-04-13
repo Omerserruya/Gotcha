@@ -1,5 +1,6 @@
 import { prisma } from "@chatcenter/shared";
 import { getPolicy, validateAgainstPolicy } from "./policy.service";
+import { getCrmConnector, getMessagingConnector } from "./connectors/types";
 
 export type ActionTool =
   | "send_message"
@@ -101,13 +102,43 @@ export async function executeAction(
       case "noop":
         output = { note: (action.params as { note?: string } | undefined)?.note ?? action.reason };
         break;
-      // F3.3/F3.4: delegated to integrations service — not called directly from AI layer
-      case "send_message":
+      case "send_message": {
+        const conn = getMessagingConnector();
+        if (!conn) throw new Error("no messaging connector registered");
+        const { contactId, channel, body } = action.params as {
+          contactId: string;
+          channel: "whatsapp" | "email" | "sms" | "webchat";
+          body: string;
+        };
+        output = await conn.send(tenantId, { contactId, channel, body });
+        break;
+      }
+      case "update_crm": {
+        const conn = getCrmConnector();
+        if (!conn) throw new Error("no CRM connector registered");
+        const { contactId, fields } = action.params as {
+          contactId: string;
+          fields: Record<string, unknown>;
+        };
+        output = await conn.updateContact(tenantId, { contactId, fields });
+        break;
+      }
+      case "create_ticket": {
+        const conn = getCrmConnector();
+        if (!conn) throw new Error("no CRM connector registered");
+        const { contactId, subject, body, priority } = action.params as {
+          contactId: string;
+          subject: string;
+          body: string;
+          priority?: "low" | "normal" | "high" | "urgent";
+        };
+        output = await conn.createTicket(tenantId, { contactId, subject, body, priority });
+        break;
+      }
       case "create_broadcast":
-      case "update_crm":
-      case "create_ticket":
       case "schedule_followup":
-        output = { queued: true, note: "delegated to connector service" };
+        // still delegated to domain services (broadcasts/scheduled-messages routes)
+        output = { queued: true, note: "delegated to domain service" };
         break;
       default:
         throw new Error(`unsupported tool: ${action.tool}`);

@@ -73,8 +73,8 @@ Applies to ALL tasks:
 ### Tasks
 - [x] F3.1 Action logging — reused existing `AuditLog` table (no new migration)
 - [x] F3.2 Action executor service — services/ai/src/services/action-executor.service.ts
-- [ ] F3.3 CRM connector abstraction layer — stubbed; delegated to integrations service
-- [ ] F3.4 Messaging connector abstraction layer — stubbed; delegated to outgoing-worker
+- [x] F3.3 CRM connector abstraction — CrmConnector interface + registry in connectors/types.ts (stub default)
+- [x] F3.4 Messaging connector abstraction — MessagingConnector interface + registry (stub default)
 - [x] F3.5 Safe execution wrapper — `validateAction()` risk gate + policy gate
 
 ### Done when:
