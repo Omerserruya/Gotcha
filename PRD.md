@@ -86,7 +86,7 @@ Applies to ALL tasks:
 
 ### Tasks
 - [x] F4.1 Risk scoring — `HIGH_RISK_TOOLS` list + per-action `riskLevel`
-- [ ] F4.2 Approval queue backend — deferred (AuditLog query can serve as queue)
+- [x] F4.2 Approval queue backend — GET /api/action-planner/approvals (queries AuditLog)
 - [ ] F4.3 Approval UI modal (approve / reject) — UI deferred
 - [x] F4.4 Action blocking until approval — executor returns skipped+reason when !approved
 - [x] F4.5 Audit binding for approvals — `approvedBy` written to AuditLog metadata
@@ -128,10 +128,10 @@ Applies to ALL tasks:
 
 ### Tasks
 - [x] F7.1 Conversation summary storage — existing `ConversationIntelligence` model + aiSummary
-- [ ] F7.2 Customer “state object” builder — deferred
+- [x] F7.2 Customer "state object" builder — buildCustomerState() + GET /api/ai-assist/customer-state/:contactId
 - [x] F7.3 RAG memory retrieval — existing qdrant.service + knowledge.service + embedding.service
 - [ ] F7.4 UI: Customer insight summary panel — UI deferred
-- [ ] F7.5 Decision history tracking — deferred
+- [x] F7.5 Decision history tracking — recentDecisions[] derived from AuditLog in customer state
 
 ### Done when:
 - Every customer has persistent business memory across interactions

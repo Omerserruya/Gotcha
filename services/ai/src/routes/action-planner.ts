@@ -102,6 +102,30 @@ router.post("/plan", async (req: Request, res: Response) => {
   }
 });
 
+// F4.2 — Approval queue: list pending high-risk actions that were blocked
+router.get("/approvals", async (req: Request, res: Response) => {
+  try {
+    const { prisma } = await import("@chatcenter/shared");
+    const rows = await prisma.auditLog.findMany({
+      where: {
+        tenantId: req.tenantId!,
+        actorType: "ai",
+        action: { startsWith: "action." },
+      },
+      orderBy: { createdAt: "desc" },
+      take: 100,
+    });
+    const pending = rows.filter((r) => {
+      const m = (r.metadata as any) || {};
+      return m.blocked === true && m.reason === "high-risk action requires approval";
+    });
+    return res.json({ data: pending });
+  } catch (err: any) {
+    console.error("action-planner.approvals error:", err);
+    return res.status(500).json({ error: "Failed to list approvals" });
+  }
+});
+
 // POST /execute — run a previously planned ExecutionPlan (F3 Action Engine)
 router.post("/execute", async (req: Request, res: Response) => {
   try {

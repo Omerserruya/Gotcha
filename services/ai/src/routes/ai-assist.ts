@@ -7,6 +7,7 @@ import { analyzeConversation, getConversationIntelligence, getConversationReplay
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
 import { scoreAgent, getAgentScore } from "../services/agent-scoring.service";
 import { generateFollowup } from "../services/followup-generator.service";
+import { buildCustomerState } from "../services/customer-state.service";
 
 const router = Router();
 
@@ -372,6 +373,24 @@ router.post("/:conversationId/score", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to score agent" });
   }
 });
+
+// F7.2/F7.5 — compact customer state object (decisions, summaries, tags)
+router.get(
+  "/customer-state/:contactId",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  async (req: Request, res: Response) => {
+    try {
+      const state = await buildCustomerState(req.tenantId!, String(req.params.contactId));
+      if (!state) return res.status(404).json({ error: "Contact not found" });
+      return res.json({ data: state });
+    } catch (err) {
+      console.error("customer-state error:", err);
+      return res.status(500).json({ error: "Failed to build customer state" });
+    }
+  },
+);
 
 // F6.3 — generate a contextual follow-up for a stale conversation
 router.post(
