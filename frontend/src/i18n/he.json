@@ -1916,5 +1916,32 @@
     "deleteDepartmentMsg": "פעולה זו תמחק לצמיתות מחלקה זו ואת ההגדרות שלה.",
     "deleteForce": "מחיקה מאולצת",
     "deleteForceDesc": "מחק גם אם התנאים המוקדמים לא מתקיימים (דריסת מנהל)"
+  },
+  "commandCenter": {
+    "triggerLabel": "בקש מה־AI להפעיל את העסק…",
+    "title": "מרכז הבקרה של ה־AI",
+    "subtitle": "כתוב פקודה בשפה טבעית. ה־AI יתכנן אותה, יציג לך מה יקרה, ורק אז יפעיל.",
+    "placeholderGlobal": "למשל: \"תייג את כל הלקוחות הלא פעילים כסיכון נטישה\"",
+    "placeholderConversation": "למשל: \"שלח הודעת מעקב ידידותית וסמן כלקוח VIP\"",
+    "placeholderCustomer": "למשל: \"פתח כרטיס תמיכה עבור הלקוח הזה\"",
+    "hintPreview": "↵ תצוגה",
+    "hintClose": "ESC סגירה",
+    "examplesHeader": "נסה לבקש:",
+    "exampleGlobal1": "תייג את כל הלקוחות שלא הגיבו ב־30 הימים האחרונים כסיכון נטישה",
+    "exampleGlobal2": "צור קמפיין לכל לקוחות ה־VIP על הפיצ'ר החדש",
+    "exampleConversation1": "שלח הודעת מעקב ידידותית",
+    "exampleConversation2": "תייג את הלקוח כ־VIP והעבר לתמיכה",
+    "planning": "מתכנן…",
+    "plan": "תוכנית",
+    "step": "שלב",
+    "risk": "סיכון",
+    "requiresApproval": "⚠ מכיל שלבים בסיכון גבוה — הביצוע דורש אישור.",
+    "dryRunPreview": "תצוגת הרצה יבשה",
+    "reset": "איפוס",
+    "execute": "בצע",
+    "approveExecute": "אשר ובצע",
+    "executing": "מבצע…",
+    "errorSimulate": "ההדמיה נכשלה",
+    "errorExecute": "הביצוע נכשל"
   }
 }

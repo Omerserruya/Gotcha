@@ -8,6 +8,7 @@ import {
   ExecutionPlan,
   PlannedAction,
 } from "@/lib/gotcha-api";
+import { useI18n } from "@/context/I18nContext";
 
 interface Props {
   open: boolean;
@@ -22,6 +23,7 @@ interface Props {
  * /api/action-planner endpoints via gotcha-api — no backend changes.
  */
 export default function CommandCenterModal({ open, onClose, token, context }: Props) {
+  const { t, locale, dir } = useI18n();
   const inputRef = useRef<HTMLInputElement>(null);
   const [prompt, setPrompt] = useState("");
   const [loading, setLoading] = useState(false);
@@ -61,11 +63,11 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     setPlan(null);
     setPreview(null);
     try {
-      const res = await simulateCommand(token, prompt, context);
+      const res = await simulateCommand(token, prompt, { ...context, locale });
       setPlan(res.plan);
       setPreview(res.results);
     } catch (e: any) {
-      setError(e?.message ?? "simulation failed");
+      setError(e?.message ?? t("commandCenter.errorSimulate"));
     } finally {
       setLoading(false);
     }
@@ -85,7 +87,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
       setPreview(null);
       onClose();
     } catch (e: any) {
-      setError(e?.message ?? "execution failed");
+      setError(e?.message ?? t("commandCenter.errorExecute"));
     } finally {
       setExecuting(false);
     }
@@ -97,6 +99,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     <div
       role="dialog"
       aria-modal="true"
+      dir={dir}
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -134,17 +137,24 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
           }}
           style={{ padding: 14, borderBottom: "1px solid #1e222a" }}
         >
+          <div style={{ fontSize: 11, color: "#8b95a7", textTransform: "uppercase", letterSpacing: 0.5 }}>
+            {t("commandCenter.title")}
+          </div>
+          <div style={{ fontSize: 12, color: "#6b7280", marginTop: 2, marginBottom: 8 }}>
+            {t("commandCenter.subtitle")}
+          </div>
           <input
             ref={inputRef}
             type="text"
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
+            dir={dir}
             placeholder={
               context.conversationId
-                ? "Ask the AI to operate this conversation..."
+                ? t("commandCenter.placeholderConversation")
                 : context.contactId
-                  ? "Ask the AI to operate this customer..."
-                  : "Ask the AI to operate the business..."
+                  ? t("commandCenter.placeholderCustomer")
+                  : t("commandCenter.placeholderGlobal")
             }
             disabled={loading}
             style={{
@@ -157,21 +167,60 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
             }}
           />
           <div style={{ fontSize: 11, color: "#6b7280", marginTop: 4, display: "flex", gap: 12 }}>
-            <span>↵ to preview</span>
-            <span>ESC to close</span>
+            <span>{t("commandCenter.hintPreview")}</span>
+            <span>{t("commandCenter.hintClose")}</span>
             {context.conversationId && <span>· conv: {context.conversationId.slice(0, 8)}</span>}
             {context.contactId && <span>· contact: {context.contactId.slice(0, 8)}</span>}
           </div>
         </form>
 
         <div style={{ padding: 14, overflow: "auto", flex: 1 }}>
-          {loading && <div style={{ color: "#8b95a7" }}>Planning...</div>}
+          {loading && <div style={{ color: "#8b95a7" }}>{t("commandCenter.planning")}</div>}
           {error && (
             <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>
           )}
+          {!loading && !plan && !error && (
+            <div>
+              <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                {t("commandCenter.examplesHeader")}
+              </div>
+              {[
+                context.conversationId
+                  ? t("commandCenter.exampleConversation1")
+                  : t("commandCenter.exampleGlobal1"),
+                context.conversationId
+                  ? t("commandCenter.exampleConversation2")
+                  : t("commandCenter.exampleGlobal2"),
+              ].map((ex, i) => (
+                <button
+                  key={i}
+                  type="button"
+                  onClick={() => {
+                    setPrompt(ex);
+                    setTimeout(() => inputRef.current?.focus(), 0);
+                  }}
+                  style={{
+                    display: "block",
+                    width: "100%",
+                    textAlign: dir === "rtl" ? "right" : "left",
+                    background: "#181b22",
+                    border: "1px solid #222631",
+                    color: "#cbd5e1",
+                    padding: "8px 12px",
+                    borderRadius: 8,
+                    marginBottom: 6,
+                    cursor: "pointer",
+                    fontSize: 13,
+                  }}
+                >
+                  {ex}
+                </button>
+              ))}
+            </div>
+          )}
           {plan && !loading && (
             <>
-              <div style={{ fontSize: 12, color: "#8b95a7", marginBottom: 8 }}>Plan</div>
+              <div style={{ fontSize: 12, color: "#8b95a7", marginBottom: 8 }}>{t("commandCenter.plan")}</div>
               <div style={{ fontSize: 14, marginBottom: 10 }}>{plan.summary}</div>
               <ol style={{ listStyle: "none", padding: 0, margin: 0 }}>
                 {plan.steps.map((s: PlannedAction, i: number) => (
@@ -215,12 +264,12 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
               </ol>
               {plan.requiresApproval && (
                 <div style={{ fontSize: 12, color: "#fbbf24", marginTop: 8 }}>
-                  ⚠ Contains high-risk steps — executing requires approval.
+                  {t("commandCenter.requiresApproval")}
                 </div>
               )}
               {preview && preview.length > 0 && (
                 <details style={{ marginTop: 10, fontSize: 12, color: "#8b95a7" }}>
-                  <summary>Dry-run preview</summary>
+                  <summary>{t("commandCenter.dryRunPreview")}</summary>
                   <pre style={{ fontSize: 11, whiteSpace: "pre-wrap" }}>
                     {JSON.stringify(preview, null, 2)}
                   </pre>
@@ -256,7 +305,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
                 cursor: "pointer",
               }}
             >
-              Reset
+              {t("commandCenter.reset")}
             </button>
             <button
               type="button"
@@ -272,10 +321,10 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
               }}
             >
               {executing
-                ? "Executing..."
+                ? t("commandCenter.executing")
                 : plan.requiresApproval
-                  ? "Approve & Execute"
-                  : "Execute"}
+                  ? t("commandCenter.approveExecute")
+                  : t("commandCenter.execute")}
             </button>
           </div>
         )}

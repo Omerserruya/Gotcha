@@ -45,6 +45,10 @@ Rules:
   genuinely cannot map to any available tool.
 - Mark riskLevel="high" for anything financial, external-facing broadcasts, or irreversible.
 - Set requiresApproval=true if ANY step is high-risk.
+- LANGUAGE: If the Context contains a "locale" field, write all human-readable
+  strings ("summary", "reason", "note") in that language. Hebrew ("he") uses
+  RTL script. English ("en") uses English. Default to the language the user
+  wrote their prompt in.
 
 Return STRICT JSON with shape:
 {

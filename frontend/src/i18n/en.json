@@ -1916,5 +1916,32 @@
     "deleteDepartmentMsg": "This will permanently delete this department and its configurations.",
     "deleteForce": "Force Delete",
     "deleteForceDesc": "Delete even if preconditions are not met (admin override)"
+  },
+  "commandCenter": {
+    "triggerLabel": "Ask AI to operate the business…",
+    "title": "AI Command Center",
+    "subtitle": "Type a natural-language command. The AI will plan it, show you what will happen, and only then run it.",
+    "placeholderGlobal": "e.g. \"tag all inactive customers as churn risk\"",
+    "placeholderConversation": "e.g. \"send a friendly follow-up and mark as VIP\"",
+    "placeholderCustomer": "e.g. \"create a support ticket for this customer\"",
+    "hintPreview": "↵ preview",
+    "hintClose": "ESC close",
+    "examplesHeader": "Try asking:",
+    "exampleGlobal1": "Tag all customers who haven't replied in 30 days as churn-risk",
+    "exampleGlobal2": "Create a broadcast to all VIP customers about the new feature",
+    "exampleConversation1": "Send a friendly follow-up message",
+    "exampleConversation2": "Tag this customer as VIP and escalate to support",
+    "planning": "Planning…",
+    "plan": "Plan",
+    "step": "Step",
+    "risk": "Risk",
+    "requiresApproval": "⚠ Contains high-risk steps — executing requires approval.",
+    "dryRunPreview": "Dry-run preview",
+    "reset": "Reset",
+    "execute": "Execute",
+    "approveExecute": "Approve & Execute",
+    "executing": "Executing…",
+    "errorSimulate": "Simulation failed",
+    "errorExecute": "Execution failed"
   }
 }
