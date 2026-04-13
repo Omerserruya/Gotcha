@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
 import { generateResponse } from "../services/ai.service";
+import { executeAction, PlannedAction as ExecPlannedAction } from "../services/action-executor.service";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -98,6 +99,32 @@ router.post("/plan", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("action-planner.plan error:", err);
     return res.status(500).json({ error: "Failed to generate plan", detail: err?.message });
+  }
+});
+
+// POST /execute — run a previously planned ExecutionPlan (F3 Action Engine)
+router.post("/execute", async (req: Request, res: Response) => {
+  try {
+    const { plan, approved, dryRun } = req.body ?? {};
+    if (!plan || !Array.isArray(plan.steps)) {
+      return res.status(400).json({ error: "plan.steps[] required" });
+    }
+
+    const actorId = (req as any).user?.id;
+    const results: any[] = [];
+    for (const step of plan.steps as ExecPlannedAction[]) {
+      const r = await executeAction(req.tenantId!, step, {
+        actorId,
+        approved: approved === true,
+        approvedBy: approved === true ? actorId : undefined,
+        dryRun: dryRun === true,
+      });
+      results.push(r);
+    }
+    return res.json({ results });
+  } catch (err: any) {
+    console.error("action-planner.execute error:", err);
+    return res.status(500).json({ error: "Failed to execute plan", detail: err?.message });
   }
 });
 
