@@ -11,6 +11,7 @@ import routerRuleRoutes from "./routes/router-rules";
 import flowCanvasRoutes from "./routes/flow-canvas";
 import usageRoutes from "./routes/usage";
 import embeddedChatRouter from "./routes/embedded-chat";
+import actionPlannerRoutes from "./routes/action-planner";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
@@ -49,6 +50,7 @@ app.use("/api/router-rules", routerRuleRoutes);
 app.use("/api/flow-canvas", flowCanvasRoutes);
 app.use("/api/usage", usageRoutes);
 app.use("/api/embedded-chat", embeddedChatRouter);
+app.use("/api/action-planner", actionPlannerRoutes);
 
 startService(app, config);
 export { app };
