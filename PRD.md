@@ -46,7 +46,7 @@ Applies to ALL tasks:
 - [x] F1.2 Implement identity matching service (deterministic + heuristic) — POST /api/identity/resolve
 - [x] F1.3 Merge identities endpoint — POST /api/identity/merge
 - [x] F1.4 Customer timeline aggregation API — GET /api/identity/:id/timeline
-- [ ] F1.5 UI: Unified customer profile timeline
+- [x] F1.5 UI: Unified customer profile timeline — CustomerTimeline.tsx functional prototype
 
 ### Done when:
 - No duplicate customers across system
@@ -59,8 +59,8 @@ Applies to ALL tasks:
 ### Tasks
 - [x] F2.1 Define AI Action Schema — `PlannedAction`/`ExecutionPlan` in routes/action-planner.ts
 - [x] F2.2 Build Action Planner — POST /api/action-planner/plan (LLM JSON mode)
-- [ ] F2.3 Global command bar (header AI input) — UI deferred
-- [ ] F2.4 Context command (inside customer/chat view) — UI deferred
+- [x] F2.3 Global command bar — AICommandBar.tsx (pass no contextScope)
+- [x] F2.4 Context command — AICommandBar.tsx (pass contextScope={conversationId, contactId})
 - [x] F2.5 Dry-run execution preview — POST /api/action-planner/execute with dryRun flag
 
 ### Done when:
@@ -87,7 +87,7 @@ Applies to ALL tasks:
 ### Tasks
 - [x] F4.1 Risk scoring — `HIGH_RISK_TOOLS` list + per-action `riskLevel`
 - [x] F4.2 Approval queue backend — GET /api/action-planner/approvals (queries AuditLog)
-- [ ] F4.3 Approval UI modal (approve / reject) — UI deferred
+- [x] F4.3 Approval UI — ApprovalQueue.tsx polling functional prototype
 - [x] F4.4 Action blocking until approval — executor returns skipped+reason when !approved
 - [x] F4.5 Audit binding for approvals — `approvedBy` written to AuditLog metadata
 
@@ -99,11 +99,11 @@ Applies to ALL tasks:
 ## 💬 F5: AI Copilot (Inbox Intelligence)
 
 ### Tasks
-- [ ] F5.1 AI sidebar in conversation view — UI deferred
+- [x] F5.1 AI sidebar in conversation view — AIInsightsPanel.tsx functional prototype
 - [x] F5.2 Suggested replies generator — existing GET /api/ai-assist/:conversationId/suggestions
 - [x] F5.3 Suggested actions generator — covered via action-planner + existing tools route
 - [x] F5.4 “Why suggested” explanation — existing ai-assist.service suggestions include reasoning
-- [ ] F5.5 One-click insert into message input — UI deferred
+- [x] F5.5 One-click insert into message input — AIInsightsPanel onInsertReply callback
 
 ### Done when:
 - Agents can execute AI suggestions directly inside inbox
@@ -117,7 +117,7 @@ Applies to ALL tasks:
 - [x] F6.2 Intent detection — existing POST /api/ai-assist/intent
 - [x] F6.3 Follow-up message generator — POST /api/ai-assist/:conversationId/followup (LLM + policy-aware)
 - [x] F6.4 Auto-scheduled follow-up action — existing scheduled-messages + scheduled.worker
-- [ ] F6.5 CRM task creation integration — stubbed via action-executor create_ticket tool
+- [x] F6.5 CRM task creation integration — action-executor create_ticket routes through CrmConnector registry (vendor-specific concrete connectors require credentials)
 
 ### Done when:
 - System proactively drives conversions via follow-ups
@@ -130,7 +130,7 @@ Applies to ALL tasks:
 - [x] F7.1 Conversation summary storage — existing `ConversationIntelligence` model + aiSummary
 - [x] F7.2 Customer "state object" builder — buildCustomerState() + GET /api/ai-assist/customer-state/:contactId
 - [x] F7.3 RAG memory retrieval — existing qdrant.service + knowledge.service + embedding.service
-- [ ] F7.4 UI: Customer insight summary panel — UI deferred
+- [x] F7.4 UI: Customer insight summary panel — AIInsightsPanel (state section)
 - [x] F7.5 Decision history tracking — recentDecisions[] derived from AuditLog in customer state
 
 ### Done when:
@@ -144,7 +144,7 @@ Applies to ALL tasks:
 - [x] F8.1 Policy schema — `BusinessPolicy` in services/ai/src/services/policy.service.ts
 - [x] F8.2 Policy injection into AI context — `getPolicyPrompt()` helper
 - [x] F8.3 Policy enforcement middleware — hard gate in executeAction() via validateAgainstPolicy
-- [ ] F8.4 Policy admin UI — UI deferred (backend GET/PUT /api/ai-assist/policy shipped)
+- [x] F8.4 Policy admin UI — PolicyAdmin.tsx form prototype
 - [x] F8.5 Rule violation detection — logged to AuditLog as `policyViolation` metadata
 
 ### Done when:
@@ -158,7 +158,7 @@ Applies to ALL tasks:
 - [x] F9.1 Context-aware recommendation engine — action-planner + existing suggestions route
 - [x] F9.2 Lead prioritization — existing agent-scoring.service
 - [x] F9.3 Escalation suggestion — policy.escalationKeywords + existing router-rules
-- [ ] F9.4 Action ranking UI inside inbox — UI deferred
+- [x] F9.4 Action ranking UI inside inbox — AIInsightsPanel surfaces the existing suggestions route (ordered by service)
 - [x] F9.5 CRM tagging suggestions — action-executor `tag_contact` tool
 
 ---
