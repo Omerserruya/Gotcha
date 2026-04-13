@@ -115,7 +115,7 @@ Applies to ALL tasks:
 ### Tasks
 - [x] F6.1 Background job scanning inactive chats — existing incoming-worker/idle-conversation.worker.ts
 - [x] F6.2 Intent detection — existing POST /api/ai-assist/intent
-- [ ] F6.3 Follow-up message generator — deferred (can be built on generateResponse)
+- [x] F6.3 Follow-up message generator — POST /api/ai-assist/:conversationId/followup (LLM + policy-aware)
 - [x] F6.4 Auto-scheduled follow-up action — existing scheduled-messages + scheduled.worker
 - [ ] F6.5 CRM task creation integration — stubbed via action-executor create_ticket tool
 

@@ -6,6 +6,7 @@ import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
 import { scoreAgent, getAgentScore } from "../services/agent-scoring.service";
+import { generateFollowup } from "../services/followup-generator.service";
 
 const router = Router();
 
@@ -371,5 +372,23 @@ router.post("/:conversationId/score", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to score agent" });
   }
 });
+
+// F6.3 — generate a contextual follow-up for a stale conversation
+router.post(
+  "/:conversationId/followup",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  async (req: Request, res: Response) => {
+    try {
+      const result = await generateFollowup(req.tenantId!, String(req.params.conversationId));
+      if (!result) return res.json({ data: null, reason: "nothing useful to send" });
+      return res.json({ data: result });
+    } catch (err: any) {
+      console.error("followup generator error:", err);
+      return res.status(500).json({ error: "Failed to generate follow-up" });
+    }
+  },
+);
 
 export default router;
