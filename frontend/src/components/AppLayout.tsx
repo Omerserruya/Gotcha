@@ -6,6 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Sidebar } from "./Sidebar";
 import { CommandCenterProvider } from "./CommandCenter/CommandCenterProvider";
+import { CommandCenterTrigger } from "./CommandCenter/CommandCenterTrigger";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
 import { getOnboardingStatus } from "@/lib/api";
 
@@ -104,6 +105,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
   return (
     <CommandCenterProvider>
+      <CommandCenterTrigger />
       <div className="flex min-h-screen app-bg md:p-2 md:gap-2">
         <div className="app-bg-spots" />
         {/* Desktop sidebar - hidden on mobile */}
