@@ -36,6 +36,21 @@ export default function ConversationsPage() {
     };
   }, [selectedId]);
 
+  // Publish the current command-center context so Ctrl+K knows which
+  // conversation we're operating on (the URL stays /conversations).
+  useEffect(() => {
+    window.dispatchEvent(
+      new CustomEvent("command-context:update", {
+        detail: { conversationId: selectedId ?? null },
+      }),
+    );
+    return () => {
+      window.dispatchEvent(
+        new CustomEvent("command-context:update", { detail: {} }),
+      );
+    };
+  }, [selectedId]);
+
   return (
     <AppLayout>
       <div className={`flex md:gap-3 md:p-2 ${selectedId ? "h-screen" : "h-[calc(100vh-48px)]"} md:h-[calc(100vh-16px)]`}>

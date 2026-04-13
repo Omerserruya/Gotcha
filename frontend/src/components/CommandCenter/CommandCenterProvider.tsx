@@ -58,11 +58,33 @@ export function CommandCenterProvider({ children }: { children: React.ReactNode 
   const pathname = usePathname();
   const search = useSearchParams();
   const [isOpen, setIsOpen] = useState(false);
+  const [eventCtx, setEventCtx] = useState<{ conversationId?: string | null; contactId?: string | null }>({});
 
   const open = useCallback(() => setIsOpen(true), []);
   const close = useCallback(() => setIsOpen(false), []);
 
-  const context = useMemo(() => inferContext(pathname, search), [pathname, search]);
+  // Pages can publish their client-state context via the
+  // "command-context:update" CustomEvent (used by /conversations which
+  // tracks the selected chat in React state, not the URL).
+  useEffect(() => {
+    function onUpdate(e: Event) {
+      const detail = (e as CustomEvent).detail || {};
+      setEventCtx({
+        conversationId: detail.conversationId ?? null,
+        contactId: detail.contactId ?? null,
+      });
+    }
+    window.addEventListener("command-context:update", onUpdate);
+    return () => window.removeEventListener("command-context:update", onUpdate);
+  }, []);
+
+  const context = useMemo(() => {
+    const urlCtx = inferContext(pathname, search);
+    return {
+      conversationId: eventCtx.conversationId || urlCtx.conversationId,
+      contactId: eventCtx.contactId || urlCtx.contactId,
+    };
+  }, [pathname, search, eventCtx]);
 
   useEffect(() => {
     function isTypingTarget(t: EventTarget | null) {
