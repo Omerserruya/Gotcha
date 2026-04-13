@@ -87,7 +87,8 @@ export async function executeAction(
     switch (action.tool) {
       case "tag_contact": {
         const { contactId, tags } = action.params as { contactId: string; tags: string[] };
-        const existing = await prisma.contact.findUnique({ where: { id: contactId } });
+        // Tenant-scoped lookup — prevents cross-tenant mutation if an id leaks.
+        const existing = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
         if (!existing) throw new Error("contact not found");
         const merged = Array.from(
           new Set([...(existing.tags as string[] | null ?? []), ...(tags ?? [])]),
@@ -148,6 +149,14 @@ export async function executeAction(
     return { tool: action.tool, ok: false, error: err?.message };
   }
 
+  // Propagate connector-level failures (non-throwing {ok:false}).
+  const connOk = (output as any)?.ok;
+  if (connOk === false) {
+    const connError = (output as any)?.error ?? "connector reported failure";
+    await audit(tenantId, action, ctx, { output, connectorError: connError });
+    return { tool: action.tool, ok: false, output, error: connError };
+  }
+
   await audit(tenantId, action, ctx, { output });
   return { tool: action.tool, ok: true, output };
 }
@@ -159,14 +168,18 @@ async function audit(
   result: Record<string, unknown>,
 ) {
   try {
+    const contactId =
+      typeof (action.params as any)?.contactId === "string"
+        ? ((action.params as any).contactId as string)
+        : null;
     await prisma.auditLog.create({
       data: {
         tenantId,
         actorType: "ai",
         actorId: ctx.actorId ?? null,
         action: `action.${action.tool}`,
-        targetType: "action",
-        targetId: null,
+        targetType: contactId ? "contact" : "action",
+        targetId: contactId,
         metadata: {
           reason: action.reason,
           riskLevel: action.riskLevel,

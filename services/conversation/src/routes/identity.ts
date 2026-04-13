@@ -80,9 +80,28 @@ router.post("/merge", async (req: Request, res: Response) => {
     ]);
     if (!target || !source) return res.status(404).json({ error: "Contact not found" });
 
+    const targetMeta = (target.metadata as Record<string, unknown>) || {};
+    const sourceMeta = (source.metadata as Record<string, unknown>) || {};
+    // Preserve source (channel, externalId) so timeline can still find its
+    // conversations after the source contact row is deleted.
+    const existingAliases = Array.isArray((targetMeta as any).aliases)
+      ? ((targetMeta as any).aliases as Array<{ channel: string; externalId: string }>)
+      : [];
+    const sourceAliases = Array.isArray((sourceMeta as any).aliases)
+      ? ((sourceMeta as any).aliases as Array<{ channel: string; externalId: string }>)
+      : [];
+    const mergedAliases = [
+      ...existingAliases,
+      ...sourceAliases,
+      { channel: source.channel as string, externalId: source.externalId },
+    ].filter(
+      (a, i, arr) =>
+        arr.findIndex((x) => x.channel === a.channel && x.externalId === a.externalId) === i,
+    );
     const mergedMetadata = {
-      ...((source.metadata as Record<string, unknown>) || {}),
-      ...((target.metadata as Record<string, unknown>) || {}),
+      ...sourceMeta,
+      ...targetMeta,
+      aliases: mergedAliases,
     };
     const mergedTags = Array.from(
       new Set([
@@ -146,11 +165,17 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       },
     });
 
+    // Include aliases preserved from prior merges in target.metadata.aliases
+    const meta = (contact.metadata as Record<string, unknown>) || {};
+    const aliases = Array.isArray((meta as any).aliases)
+      ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
+      : [];
+    const orClauses = [
+      ...siblings.map((s) => ({ channel: s.channel, customerExternalId: s.externalId })),
+      ...aliases.map((a) => ({ channel: a.channel as any, customerExternalId: a.externalId })),
+    ];
     const convos = await prisma.conversation.findMany({
-      where: {
-        tenantId,
-        OR: siblings.map((s) => ({ channel: s.channel, customerExternalId: s.externalId })),
-      },
+      where: { tenantId, OR: orClauses },
       orderBy: { updatedAt: "desc" },
       take: 50,
       include: {

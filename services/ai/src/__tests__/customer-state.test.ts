@@ -34,16 +34,13 @@ vi.mock("@chatcenter/shared", () => ({
       ]),
     },
     auditLog: {
+      // Customer-state now queries with targetType="contact" + targetId,
+      // so the mock already returns only matching rows.
       findMany: vi.fn().mockResolvedValue([
         {
           action: "action.tag_contact",
           createdAt: new Date("2026-04-11T00:00:00Z"),
-          metadata: { params: { contactId: "c1" }, reason: "churn", riskLevel: "low" },
-        },
-        {
-          action: "action.send_message",
-          createdAt: new Date("2026-04-09T00:00:00Z"),
-          metadata: { params: { contactId: "other" }, reason: "ignore", riskLevel: "low" },
+          metadata: { reason: "churn", riskLevel: "low" },
         },
       ]),
     },

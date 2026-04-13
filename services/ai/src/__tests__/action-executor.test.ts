@@ -4,6 +4,7 @@ vi.mock("@chatcenter/shared", () => ({
   prisma: {
     auditLog: { create: vi.fn().mockResolvedValue({}) },
     contact: {
+      findFirst: vi.fn().mockResolvedValue({ id: "c1", tenantId: "t1", tags: ["vip"] }),
       findUnique: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip"] }),
       update: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip", "churn"] }),
     },

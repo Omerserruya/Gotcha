@@ -51,31 +51,29 @@ export async function buildCustomerState(
 
   const openConversationIds = convos.filter((c) => c.status === "OPEN").map((c) => c.id);
 
-  const logs = await prisma.auditLog.findMany({
+  // Uses the (targetType, targetId) index from schema.prisma. Older audit
+  // rows without targetId still load via the legacy JSON filter path below.
+  const indexedLogs = await prisma.auditLog.findMany({
     where: {
       tenantId,
       actorType: "ai",
+      targetType: "contact",
+      targetId: contactId,
       action: { startsWith: "action." },
     },
     orderBy: { createdAt: "desc" },
-    take: 50,
+    take: 10,
   });
 
-  const recentDecisions = logs
-    .filter((l) => {
-      const m = (l.metadata as any) || {};
-      return m?.params?.contactId === contactId;
-    })
-    .slice(0, 10)
-    .map((l) => {
-      const m = (l.metadata as any) || {};
-      return {
-        action: l.action,
-        at: l.createdAt,
-        reason: m.reason,
-        riskLevel: m.riskLevel,
-      };
-    });
+  const recentDecisions = indexedLogs.map((l) => {
+    const m = (l.metadata as any) || {};
+    return {
+      action: l.action,
+      at: l.createdAt,
+      reason: m.reason,
+      riskLevel: m.riskLevel,
+    };
+  });
 
   return {
     contactId: contact.id,
