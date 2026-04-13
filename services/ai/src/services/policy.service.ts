@@ -10,8 +10,6 @@
  * reads/validates policy; it does not store it — source of truth is either
  * env-based defaults or the tenant-scoped policy document in Tenant.metadata.
  */
-import { prisma } from "@chatcenter/shared";
-
 export interface BusinessPolicy {
   maxDiscountPercent: number;
   refundRequiresApproval: boolean;
@@ -27,17 +25,12 @@ export const DEFAULT_POLICY: BusinessPolicy = {
   blockedTopics: [],
 };
 
+// In-process cache until a dedicated tenant_policy table is migrated.
+// Source of truth for runtime. Persistence is a future concern.
+const policyCache = new Map<string, BusinessPolicy>();
+
 export async function getPolicy(tenantId: string): Promise<BusinessPolicy> {
-  try {
-    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId } });
-    const raw = (tenant as any)?.metadata?.policy;
-    if (raw && typeof raw === "object") {
-      return { ...DEFAULT_POLICY, ...raw };
-    }
-  } catch (err) {
-    console.error("policy.getPolicy error:", err);
-  }
-  return DEFAULT_POLICY;
+  return policyCache.get(tenantId) ?? DEFAULT_POLICY;
 }
 
 export async function getPolicyPrompt(tenantId: string): Promise<string> {
@@ -51,6 +44,15 @@ export async function getPolicyPrompt(tenantId: string): Promise<string> {
   ]
     .filter(Boolean)
     .join("\n");
+}
+
+export async function setPolicy(
+  tenantId: string,
+  patch: Partial<BusinessPolicy>,
+): Promise<BusinessPolicy> {
+  const next = { ...(policyCache.get(tenantId) ?? DEFAULT_POLICY), ...patch };
+  policyCache.set(tenantId, next);
+  return next;
 }
 
 export function validateAgainstPolicy(

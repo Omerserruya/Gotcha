@@ -8,6 +8,7 @@ import { getToolsForTenant, executeTool, getToolExecutions } from "../services/t
 import { scoreAgent, getAgentScore } from "../services/agent-scoring.service";
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
+import { getPolicy, setPolicy } from "../services/policy.service";
 
 const router = Router();
 
@@ -373,6 +374,34 @@ router.post("/:conversationId/score", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Failed to score agent" });
   }
 });
+
+// F8.4 — business policy admin API (UI-neutral)
+router.get(
+  "/policy",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  async (req: Request, res: Response) => {
+    const policy = await getPolicy(req.tenantId!);
+    res.json({ data: policy });
+  },
+);
+router.put(
+  "/policy",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    try {
+      const policy = await setPolicy(req.tenantId!, req.body ?? {});
+      res.json({ data: policy });
+    } catch (err) {
+      console.error("policy update error:", err);
+      res.status(500).json({ error: "Failed to update policy" });
+    }
+  },
+);
 
 // F7.2/F7.5 — compact customer state object (decisions, summaries, tags)
 router.get(

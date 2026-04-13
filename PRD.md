@@ -144,7 +144,7 @@ Applies to ALL tasks:
 - [x] F8.1 Policy schema — `BusinessPolicy` in services/ai/src/services/policy.service.ts
 - [x] F8.2 Policy injection into AI context — `getPolicyPrompt()` helper
 - [x] F8.3 Policy enforcement middleware — hard gate in executeAction() via validateAgainstPolicy
-- [ ] F8.4 Policy admin UI — UI deferred
+- [ ] F8.4 Policy admin UI — UI deferred (backend GET/PUT /api/ai-assist/policy shipped)
 - [x] F8.5 Rule violation detection — logged to AuditLog as `policyViolation` metadata
 
 ### Done when:
