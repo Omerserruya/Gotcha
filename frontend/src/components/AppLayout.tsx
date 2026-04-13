@@ -5,6 +5,7 @@ import { useRouter, usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Sidebar } from "./Sidebar";
+import { CommandCenterProvider } from "./CommandCenter/CommandCenterProvider";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
 import { getOnboardingStatus } from "@/lib/api";
 
@@ -102,26 +103,28 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
   const isConversationPage = pathname === "/conversations";
 
   return (
-    <div className="flex min-h-screen app-bg md:p-2 md:gap-2">
-      <div className="app-bg-spots" />
-      {/* Desktop sidebar - hidden on mobile */}
-      <div className="hidden md:block relative z-10">
-        <Sidebar collapsed={collapsed} onToggle={handleToggle} />
+    <CommandCenterProvider>
+      <div className="flex min-h-screen app-bg md:p-2 md:gap-2">
+        <div className="app-bg-spots" />
+        {/* Desktop sidebar - hidden on mobile */}
+        <div className="hidden md:block relative z-10">
+          <Sidebar collapsed={collapsed} onToggle={handleToggle} />
+        </div>
+
+        {/* Mobile layout */}
+        <div className="flex-1 flex flex-col md:contents overflow-hidden relative z-10">
+          {/* Mobile header - hidden when chat is open on mobile */}
+          {!chatOpen && <MobileHeader />}
+
+          {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
+          <main className={`flex-1 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
+            {children}
+          </main>
+
+          {/* Mobile bottom nav - admin only, hidden on desktop and when chat is open */}
+          {!chatOpen && <MobileBottomNav />}
+        </div>
       </div>
-
-      {/* Mobile layout */}
-      <div className="flex-1 flex flex-col md:contents overflow-hidden relative z-10">
-        {/* Mobile header - hidden when chat is open on mobile */}
-        {!chatOpen && <MobileHeader />}
-
-        {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
-        <main className={`flex-1 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
-          {children}
-        </main>
-
-        {/* Mobile bottom nav - admin only, hidden on desktop and when chat is open */}
-        {!chatOpen && <MobileBottomNav />}
-      </div>
-    </div>
+    </CommandCenterProvider>
   );
 }
