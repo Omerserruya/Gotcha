@@ -83,6 +83,15 @@ export function getApprovalQueue(token: string) {
   return req("GET", "/api/action-planner/approvals", token);
 }
 
+export function simulateCommand(token: string, prompt: string, context?: unknown) {
+  return req<{ plan: ExecutionPlan; results: any[] }>(
+    "POST",
+    "/api/action-planner/simulate",
+    token,
+    { prompt, context },
+  );
+}
+
 // ─── F5/F7: Copilot + Customer State ──────────────────────
 
 export function getSuggestions(token: string, conversationId: string) {

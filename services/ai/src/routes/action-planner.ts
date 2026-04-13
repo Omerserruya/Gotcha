@@ -102,6 +102,56 @@ router.post("/plan", async (req: Request, res: Response) => {
   }
 });
 
+// POST /simulate — one-shot "plan + dry-run execute". Handy for the F2.5
+// dry-run preview: the UI sends a prompt, gets back the plan AND the
+// executor's predicted outcomes without touching real state.
+router.post("/simulate", async (req: Request, res: Response) => {
+  try {
+    const { prompt, context } = req.body ?? {};
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: "prompt (string) is required" });
+    }
+
+    const planResp = await generateResponse({
+      tenantId: req.tenantId!,
+      messages: [
+        { role: "system", content: SYSTEM_PROMPT },
+        {
+          role: "user",
+          content:
+            `Request: ${prompt}` +
+            (context ? `\n\nContext:\n${JSON.stringify(context).slice(0, 4000)}` : ""),
+        },
+      ],
+      temperature: 0.1,
+      responseFormat: { type: "json_object" },
+      metadata: { type: "action_simulate" },
+    });
+
+    let plan: ExecutionPlan;
+    try {
+      plan = JSON.parse(planResp.content);
+    } catch {
+      return res.status(502).json({ error: "Planner returned non-JSON", raw: planResp.content });
+    }
+    plan.steps = Array.isArray(plan.steps) ? plan.steps : [];
+    plan.requiresApproval =
+      plan.requiresApproval === true || plan.steps.some((s) => s?.riskLevel === "high");
+
+    const actorId = (req as any).user?.id;
+    const results: any[] = [];
+    for (const step of plan.steps as ExecPlannedAction[]) {
+      results.push(
+        await executeAction(req.tenantId!, step, { actorId, dryRun: true, approved: true, approvedBy: actorId }),
+      );
+    }
+    return res.json({ plan, results, usage: planResp.usage });
+  } catch (err: any) {
+    console.error("action-planner.simulate error:", err);
+    return res.status(500).json({ error: "Failed to simulate", detail: err?.message });
+  }
+});
+
 // F4.2 — Approval queue: list pending high-risk actions that were blocked
 router.get("/approvals", async (req: Request, res: Response) => {
   try {
