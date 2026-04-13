@@ -25,6 +25,7 @@ export interface ExecutionResult {
   error?: string;
   skipped?: boolean;
   skipReason?: string;
+  auditFailed?: boolean;
 }
 
 const HIGH_RISK_TOOLS: ActionTool[] = [
@@ -56,10 +57,18 @@ export function validateAction(
  * immutable audit log (AuditLog). Service connectors (F3.3 CRM, F3.4
  * messaging) are stubbed — integrations service handles real dispatch.
  */
+export interface ExecutorContext {
+  actorId?: string;
+  approved?: boolean;
+  approvedBy?: string;
+  dryRun?: boolean;
+  idempotencyKey?: string;
+}
+
 export async function executeAction(
   tenantId: string,
   action: PlannedAction,
-  ctx: { actorId?: string; approved?: boolean; approvedBy?: string; dryRun?: boolean },
+  ctx: ExecutorContext,
 ): Promise<ExecutionResult> {
   const gate = validateAction(action, ctx);
   if (!("ok" in gate) || gate.ok !== true) {
@@ -153,20 +162,20 @@ export async function executeAction(
   const connOk = (output as any)?.ok;
   if (connOk === false) {
     const connError = (output as any)?.error ?? "connector reported failure";
-    await audit(tenantId, action, ctx, { output, connectorError: connError });
-    return { tool: action.tool, ok: false, output, error: connError };
+    const auditOk = await audit(tenantId, action, ctx, { output, connectorError: connError });
+    return { tool: action.tool, ok: false, output, error: connError, auditFailed: !auditOk };
   }
 
-  await audit(tenantId, action, ctx, { output });
-  return { tool: action.tool, ok: true, output };
+  const auditOk = await audit(tenantId, action, ctx, { output });
+  return { tool: action.tool, ok: true, output, auditFailed: !auditOk };
 }
 
 async function audit(
   tenantId: string,
   action: PlannedAction,
-  ctx: { actorId?: string; approved?: boolean; approvedBy?: string; dryRun?: boolean },
+  ctx: ExecutorContext,
   result: Record<string, unknown>,
-) {
+): Promise<boolean> {
   try {
     const contactId =
       typeof (action.params as any)?.contactId === "string"
@@ -187,11 +196,14 @@ async function audit(
           approved: ctx.approved === true,
           approvedBy: ctx.approvedBy ?? null,
           dryRun: ctx.dryRun === true,
+          idempotencyKey: ctx.idempotencyKey ?? null,
           ...result,
         } as any,
       },
     });
+    return true;
   } catch (err) {
     console.error("action-executor audit failed:", err);
+    return false;
   }
 }

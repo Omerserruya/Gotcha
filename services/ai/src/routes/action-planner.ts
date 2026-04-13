@@ -179,9 +179,26 @@ router.get("/approvals", async (req: Request, res: Response) => {
 // POST /execute — run a previously planned ExecutionPlan (F3 Action Engine)
 router.post("/execute", async (req: Request, res: Response) => {
   try {
-    const { plan, approved, dryRun } = req.body ?? {};
+    const { plan, approved, dryRun, idempotencyKey } = req.body ?? {};
     if (!plan || !Array.isArray(plan.steps)) {
       return res.status(400).json({ error: "plan.steps[] required" });
+    }
+
+    // Scenario 3 chaos fix: honor idempotency key to prevent double execution.
+    // If we already have any AuditLog entry with this key for this tenant,
+    // short-circuit and return the cached response.
+    if (typeof idempotencyKey === "string" && idempotencyKey.length > 0) {
+      const { prisma } = await import("@chatcenter/shared");
+      const prior = await prisma.auditLog.findFirst({
+        where: {
+          tenantId: req.tenantId!,
+          action: { startsWith: "action." },
+          metadata: { path: ["idempotencyKey"], equals: idempotencyKey } as any,
+        },
+      });
+      if (prior) {
+        return res.json({ results: [], replayed: true, idempotencyKey });
+      }
     }
 
     const actorId = (req as any).user?.id;
@@ -192,6 +209,7 @@ router.post("/execute", async (req: Request, res: Response) => {
         approved: approved === true,
         approvedBy: approved === true ? actorId : undefined,
         dryRun: dryRun === true,
+        idempotencyKey: typeof idempotencyKey === "string" ? idempotencyKey : undefined,
       });
       results.push(r);
     }

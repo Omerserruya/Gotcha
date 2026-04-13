@@ -44,18 +44,33 @@ router.post("/resolve", async (req: Request, res: Response) => {
       if (!channel || !externalId) {
         return res.json({ matched: false, contact: null });
       }
-      contact = await prisma.contact.create({
-        data: {
-          tenantId,
-          channel,
-          externalId,
-          email: email ?? null,
-          phone: phone ?? null,
-          displayName: displayName ?? null,
-          metadata: metadata ?? undefined,
-        },
-      });
-      return res.json({ matched: false, created: true, contact });
+      // Race-safe create: the unique index (tenantId, channel, externalId)
+      // gives us a concurrency guarantee. If two concurrent callers both
+      // miss the initial findFirst, the second create throws P2002 and we
+      // re-read the row the winner inserted. Returning { matched: true }
+      // for the loser keeps the caller idempotent.
+      try {
+        contact = await prisma.contact.create({
+          data: {
+            tenantId,
+            channel,
+            externalId,
+            email: email ?? null,
+            phone: phone ?? null,
+            displayName: displayName ?? null,
+            metadata: metadata ?? undefined,
+          },
+        });
+        return res.json({ matched: false, created: true, contact });
+      } catch (e: any) {
+        if (e?.code === "P2002") {
+          contact = await prisma.contact.findFirst({
+            where: { tenantId, channel, externalId },
+          });
+          if (contact) return res.json({ matched: true, raced: true, contact });
+        }
+        throw e;
+      }
     }
 
     return res.json({ matched: true, contact });
@@ -137,7 +152,11 @@ router.post("/merge", async (req: Request, res: Response) => {
     });
 
     return res.json({ merged: true, contact: result });
-  } catch (err) {
+  } catch (err: any) {
+    // P2025 = record not found (source already merged by a concurrent caller)
+    if (err?.code === "P2025") {
+      return res.status(409).json({ error: "merge conflict: source already removed" });
+    }
     console.error("identity.merge error:", err);
     return res.status(500).json({ error: "Failed to merge identities" });
   }
