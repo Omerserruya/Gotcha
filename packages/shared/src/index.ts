@@ -51,6 +51,11 @@ export {
   unifyContact,
   findSiblingContacts,
 } from "./lib/identity-resolver";
+export {
+  evaluateToolGate,
+  getDefaultHighRiskTools,
+} from "./lib/tool-gate";
+export type { ToolGateDecision, ToolGateResult } from "./lib/tool-gate";
 export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
 export type { AIUsageEvent } from "./lib/ai-usage";
 export { getRedis, closeRedis } from "./lib/redis";
