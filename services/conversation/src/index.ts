@@ -10,6 +10,7 @@ import broadcastRoutes from "./routes/broadcasts";
 import scheduledMessageRoutes from "./routes/scheduled-messages";
 import contactRoutes from "./routes/contacts";
 import identityRoutes from "./routes/identity";
+import approvalRoutes from "./routes/approvals";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
 const app = createServiceApp(config);
@@ -40,6 +41,7 @@ app.use("/api/broadcasts", broadcastRoutes);
 app.use("/api/scheduled-messages", scheduledMessageRoutes);
 app.use("/api/contacts", contactRoutes);
 app.use("/api/identity", identityRoutes);
+app.use("/api/approvals", approvalRoutes);
 
 // NOTE: Outgoing message worker has been extracted to @chatcenter/outgoing-worker service
 // for independent scaling. This service is now API + WebSocket only.
