@@ -227,6 +227,16 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # F4 bot-approval surface (conversation service)
+        location /api/approvals {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # F2/F3/F4 action planner (ai service)
         location /api/action-planner {
             limit_req zone=api burst=20 nodelay;
@@ -545,9 +555,18 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
 
-        # F2/F3/F4 action planner + executor + approvals (ai service)
+        # F2/F3/F4 action planner + executor (ai service)
         location ~ ^/t/([^/]+)/api/action-planner(.*)$ {
             proxy_pass http://ai_service/api/action-planner$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # F4 bot-approval surface (conversation service, tenant-scoped)
+        location ~ ^/t/([^/]+)/api/approvals(.*)$ {
+            proxy_pass http://conversation_service/api/approvals$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

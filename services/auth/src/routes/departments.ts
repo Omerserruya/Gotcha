@@ -50,7 +50,7 @@ router.get("/tree", async (req: Request, res: Response) => {
     // Get AI agents assigned to departments via router rules
     const aiAgents = await prisma.aIAgent.findMany({
       where: { tenantId: req.tenantId!, status: "ACTIVE" },
-      select: { id: true, name: true, role: true, mode: true, avatarColor: true },
+      select: { id: true, name: true, role: true, avatarColor: true },
     });
 
     // Build tree: root departments (no parent) with nested children
@@ -372,7 +372,7 @@ router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Req
     if (rule?.aiAgentId) {
       const agent = await prisma.aIAgent.findUnique({
         where: { id: rule.aiAgentId },
-        select: { id: true, name: true, role: true, mode: true, status: true, avatarColor: true, description: true },
+        select: { id: true, name: true, role: true, status: true, avatarColor: true, description: true },
       });
       res.json({ data: agent, ruleId: rule.id });
       return;
