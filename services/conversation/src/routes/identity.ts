@@ -206,22 +206,20 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
     if (!contact) return res.status(404).json({ error: "Contact not found" });
 
-    // Conversation is keyed on (tenantId, channel, customerExternalId).
-    // Match by the contact's channel/externalId AND any other contacts
-    // sharing the same email/phone (unified timeline across channels).
-    const siblings = await prisma.contact.findMany({
-      where: {
-        tenantId,
-        OR: [
-          { id: contact.id },
-          ...(contact.email ? [{ email: contact.email as string }] : []),
-          ...(contact.phone ? [{ phone: contact.phone as string }] : []),
-        ],
-      },
-    });
+    // Follow soft-merge pointer if the entry point itself was merged away
+    const effective = contact.mergedIntoId
+      ? await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })
+      : contact;
+    if (!effective) return res.status(404).json({ error: "Contact target not found" });
+
+    // Pull all rows belonging to the same person — personId-first path
+    // covers contacts auto-unified via /capture, fallback email/phone
+    // covers legacy contacts created before the personId column.
+    const { findSiblingContacts } = await import("@chatcenter/shared");
+    const siblings = await findSiblingContacts(tenantId, effective);
 
     // Include aliases preserved from prior merges in target.metadata.aliases
-    const meta = (contact.metadata as Record<string, unknown>) || {};
+    const meta = (effective.metadata as Record<string, unknown>) || {};
     const aliases = Array.isArray((meta as any).aliases)
       ? ((meta as any).aliases as Array<{ channel: string; externalId: string }>)
       : [];
@@ -253,7 +251,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
     );
     events.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
 
-    return res.json({ contact, events });
+    return res.json({ contact: effective, events });
   } catch (err) {
     console.error("identity.timeline error:", err);
     return res.status(500).json({ error: "Failed to load timeline" });
