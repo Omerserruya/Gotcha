@@ -819,6 +819,41 @@ model TenantTool {
   @@map("tenant_tools")
 }
 
+// ─── Tenant Tool Permission (iOS-style privacy toggle + HITL) ───
+// Cross-cuts INTERNAL tools (static TOOL_REGISTRY entries) AND EXTERNAL
+// integration tools (catalog). A single row per (tenantId, toolName)
+// lets tenants:
+//   - Disable individual tools entirely (enabled=false)
+//   - Force HITL approval per tool (requiresApproval=true) — even when
+//     the tool is normally low-risk
+//   - Configure approver role + notification channels + expiry
+//   - Allow the approver to modify params before running
+// Used by the unified evaluatePolicies() entry point called from
+// both the bot engine (autonomous actions) and action-executor
+// (Command Center plans). Replaces the hardcoded HIGH_RISK_TOOLS list.
+model TenantToolPermission {
+  id                String   @id @default(cuid())
+  tenantId          String   @map("tenant_id")
+  toolName          String   @map("tool_name") // "send_message" | "integration.hubspot.create_deal" | ...
+  enabled           Boolean  @default(true)
+  // HITL config — when true, actions using this tool pause and create
+  // an ApprovalRequest; the bot conversation is held until a human
+  // decides. See memory/bug_f4_approval_wrong_surface.md.
+  requiresApproval  Boolean  @default(false) @map("requires_approval")
+  approverRole      String?  @map("approver_role") // "supervisor" | "finance" | "admin" | null
+  notifyChannels    Json     @default("[\"in_app\"]") @map("notify_channels") // ["in_app","email","slack"]
+  expiresAfterMin   Int      @default(30) @map("expires_after_min")
+  allowModification Boolean  @default(false) @map("allow_modification") // approver can edit params
+  updatedBy         String?  @map("updated_by")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, toolName])
+  @@index([tenantId])
+  @@index([tenantId, enabled])
+  @@map("tenant_tool_permissions")
+}
+
 // ─── Agent Tool Permissions ─────────────────────────────────
 
 model AgentToolPermission {
