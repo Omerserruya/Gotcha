@@ -195,10 +195,12 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
 
   // Fall back to the saved Contact's display name + avatar so replies don't
   // surface as raw phone numbers when the channel webhook omits the profile.
-  const savedContact = await prisma.contact.findFirst({
-    where: { tenantId, channel, externalId: senderId },
-    select: { displayName: true, avatarUrl: true },
-  });
+  // Use the resolver so merged-away contacts route to their surviving
+  // target (personId) instead of presenting as a fresh row. Without this,
+  // a merged WhatsApp contact would miss the direct lookup and downstream
+  // code would see null, losing displayName/avatar continuity.
+  const { resolveContactByChannelId } = await import("@chatcenter/shared");
+  const savedContact = await resolveContactByChannelId(tenantId, channel, senderId);
 
   // For Messenger/Instagram, fetch display name + avatar from Graph API if not provided
   let displayName = senderDisplayName || savedContact?.displayName || null;
@@ -251,10 +253,12 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     }
   }
 
-  // Also update Contact avatarUrl if we got one
-  if (avatarUrl) {
-    await prisma.contact.updateMany({
-      where: { tenantId, channel, externalId: senderId, avatarUrl: null },
+  // Also update Contact avatarUrl if we got one. Target the resolved
+  // contact's id so a merged-away row doesn't receive the write (and so
+  // avatars keep updating on the surviving target).
+  if (avatarUrl && savedContact && !savedContact.avatarUrl) {
+    await prisma.contact.update({
+      where: { id: savedContact.id },
       data: { avatarUrl },
     });
   }
