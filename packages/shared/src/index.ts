@@ -46,6 +46,11 @@ export {
 
 // Lib
 export { prisma, withCrossTenantAccess, crossTenantMiddleware } from "./lib/prisma";
+export {
+  resolveContactByChannelId,
+  unifyContact,
+  findSiblingContacts,
+} from "./lib/identity-resolver";
 export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
 export type { AIUsageEvent } from "./lib/ai-usage";
 export { getRedis, closeRedis } from "./lib/redis";
