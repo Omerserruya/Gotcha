@@ -202,6 +202,7 @@ export interface BusinessPolicy {
   refundRequiresApproval: boolean;
   escalationKeywords: string[];
   blockedTopics: string[];
+  outboundQuietHours?: { startHour: number; endHour: number; tz?: string };
 }
 
 export function getPolicy(token: string) {
@@ -210,4 +211,32 @@ export function getPolicy(token: string) {
 
 export function updatePolicy(token: string, patch: Partial<BusinessPolicy>) {
   return req<{ data: BusinessPolicy }>("PUT", "/api/ai-assist/policy", token, patch);
+}
+
+// ─── F4/F8: Tenant Tool Permissions ────────────────────────
+
+export interface ToolPermissionRow {
+  toolName: string;
+  kind: "system" | "action" | "integration";
+  category: string;
+  description: string;
+  enabled: boolean;
+  requiresApproval: boolean;
+  isDefault: boolean;
+  approverRole: string | null;
+  expiresAfterMin: number;
+  allowModification: boolean;
+  updatedAt: string | null;
+}
+
+export function listToolPermissions(token: string) {
+  return req<{ data: ToolPermissionRow[] }>("GET", "/api/tool-permissions", token);
+}
+
+export function updateToolPermission(
+  token: string,
+  toolName: string,
+  patch: Partial<Pick<ToolPermissionRow, "enabled" | "requiresApproval" | "approverRole" | "expiresAfterMin" | "allowModification">>,
+) {
+  return req("PUT", `/api/tool-permissions/${encodeURIComponent(toolName)}`, token, patch);
 }
