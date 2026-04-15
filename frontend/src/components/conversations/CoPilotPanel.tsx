@@ -24,53 +24,14 @@ interface ThinkingStep {
   detail?: string;
 }
 
-// Derive conversation intelligence from last inbound message
-function deriveConversationIntelligence(messages: any[]): {
-  intent: string;
-  sentiment: "positive" | "neutral" | "negative";
-  priority: "low" | "medium" | "high";
-  tags: { label: string; color: string }[];
-} {
-  const lastInbound = [...messages].reverse().find((m) => m.direction === "INBOUND");
-  const body = (lastInbound?.body || "").toLowerCase();
-
-  // Intent detection (returns i18n key)
-  let intent = "generalInquiry";
-  if (body.includes("refund") || body.includes("money back")) intent = "refundRequest";
-  else if (body.includes("cancel")) intent = "cancellation";
-  else if (body.includes("return")) intent = "returnRequest";
-  else if (body.includes("broken") || body.includes("not working") || body.includes("error")) intent = "technicalIssue";
-  else if (body.includes("price") || body.includes("cost") || body.includes("how much")) intent = "pricingInquiry";
-  else if (body.includes("help") || body.includes("issue") || body.includes("problem")) intent = "supportRequest";
-  else if (body.includes("order")) intent = "orderInquiry";
-  else if (body.includes("thank") || body.includes("great") || body.includes("awesome")) intent = "positiveFeedback";
-
-  // Sentiment detection
-  let sentiment: "positive" | "neutral" | "negative" = "neutral";
-  const negativeWords = ["broken", "terrible", "awful", "frustrated", "angry", "upset", "disappointed", "worst", "useless", "hate", "problem", "issue", "not working"];
-  const positiveWords = ["great", "awesome", "love", "fantastic", "excellent", "happy", "perfect", "thank", "wonderful", "amazing"];
-  const negCount = negativeWords.filter((w) => body.includes(w)).length;
-  const posCount = positiveWords.filter((w) => body.includes(w)).length;
-  if (negCount > posCount) sentiment = "negative";
-  else if (posCount > negCount) sentiment = "positive";
-
-  // Priority detection
-  let priority: "low" | "medium" | "high" = "medium";
-  if (body.includes("urgent") || body.includes("asap") || body.includes("immediately") || body.includes("critical") || body.includes("broken") || body.includes("not working")) priority = "high";
-  else if (body.includes("thank") || body.includes("just wondering") || body.includes("curious")) priority = "low";
-
-  // Tags (label is i18n key)
-  const tags: { label: string; color: string }[] = [];
-  if (body.includes("return") || body.includes("refund")) tags.push({ label: "returnRequest", color: "bg-orange-100 text-orange-600" });
-  if (body.includes("order")) tags.push({ label: "orderIssue", color: "bg-blue-100 text-blue-600" });
-  if (priority === "high") tags.push({ label: "highPriority", color: "bg-red-100 text-red-600" });
-  if (body.includes("cancel")) tags.push({ label: "churnRisk", color: "bg-amber-100 text-amber-700" });
-  if (body.includes("broken") || body.includes("error") || body.includes("not working")) tags.push({ label: "technical", color: "bg-purple-100 text-purple-600" });
-  if (body.includes("price") || body.includes("cost")) tags.push({ label: "pricing", color: "bg-green-100 text-green-600" });
-  if (tags.length === 0) tags.push({ label: "general", color: "bg-gray-100 text-gray-500" });
-
-  return { intent, sentiment, priority, tags };
-}
+// NOTE: deriveConversationIntelligence() used to live here as a client-side
+// English-keyword regex fallback. It produced the "generic English placeholder
+// suggestions" that flashed before the real backend intelligence arrived —
+// regardless of tenant system language (Hebrew/Arabic/etc) — which the product
+// owner called "worst UX ever". Deleted. Downstream values (effectiveIntent,
+// effectiveSentiment, effectivePriority) now come from realIntelligence only.
+// When realIntelligence is null the sidebar shows a loading skeleton instead
+// of fake data. See memory/bug_f5_copilot_not_mounted.md Bug 11.
 
 const INITIAL_THINKING_STEPS: ThinkingStep[] = [
   { id: "read", label: "readingConversation", status: "pending" },
@@ -149,7 +110,8 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
   const lastIsOutbound = lastMessage?.direction === "OUTBOUND";
 
-  const intelligence = useMemo(() => deriveConversationIntelligence(messages), [messages]);
+  // realIntelligence populated asynchronously from the backend — no local
+  // English-keyword fallback. Downstream effective* values are null-safe.
 
   // Only show real AI suggestions — no demo/mock fallback
   const suggestions = aiSuggestions || [];
@@ -299,20 +261,32 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
     }
   }
 
-  // Use real intelligence from backend, fall back to local keyword-based
-  const effectiveSentiment = realIntelligence?.sentiment || intelligence.sentiment;
-  const effectiveIntent = realIntelligence?.detectedIntent || intelligence.intent;
+  // Real backend intelligence only — no local keyword fallback. When
+  // realIntelligence is null we leave effective* unset so the render path
+  // can show a skeleton instead of fake localized-to-English data.
+  const effectiveSentiment = realIntelligence?.sentiment ?? null;
+  const effectiveIntent = realIntelligence?.detectedIntent ?? null;
   const effectiveConfidence = realIntelligence?.intentConfidence ?? 0;
   const effectiveEffort = realIntelligence?.customerEffort ?? 0;
-
-  // Derive priority from real intelligence customerEffort, or fallback
-  const effectivePriority = realIntelligence
+  const effectivePriority: "high" | "medium" | "low" | null = realIntelligence
     ? (realIntelligence.customerEffort >= 4 ? "high" : realIntelligence.customerEffort >= 2 ? "medium" : "low")
-    : intelligence.priority;
+    : null;
 
-  const sentimentLabel = effectiveSentiment === "positive" ? t("copilot.panel.sentiments.positive") : effectiveSentiment === "negative" ? t("copilot.panel.sentiments.slightlyNegative") : t("copilot.panel.sentiments.neutral");
-  const sentimentColor = effectiveSentiment === "positive" ? "text-green-600" : effectiveSentiment === "negative" ? "text-red-500" : "text-gray-500";
-  const priorityLabel = effectivePriority === "high" ? t("copilot.panel.priorities.high") : effectivePriority === "low" ? t("copilot.panel.priorities.low") : t("copilot.panel.priorities.medium");
+  const sentimentLabel = effectiveSentiment === "positive"
+    ? t("copilot.panel.sentiments.positive")
+    : effectiveSentiment === "negative"
+    ? t("copilot.panel.sentiments.slightlyNegative")
+    : effectiveSentiment === "neutral"
+    ? t("copilot.panel.sentiments.neutral")
+    : "";
+  const sentimentColor = effectiveSentiment === "positive" ? "text-green-600" : effectiveSentiment === "negative" ? "text-red-500" : "text-gray-400";
+  const priorityLabel = effectivePriority === "high"
+    ? t("copilot.panel.priorities.high")
+    : effectivePriority === "low"
+    ? t("copilot.panel.priorities.low")
+    : effectivePriority === "medium"
+    ? t("copilot.panel.priorities.medium")
+    : "";
   const priorityColor = effectivePriority === "high" ? "text-red-500" : effectivePriority === "low" ? "text-gray-400" : "text-amber-500";
 
   // Dynamic suggested actions based on real detected intent
