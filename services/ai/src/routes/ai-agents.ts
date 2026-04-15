@@ -184,7 +184,7 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
 
     // Get assigned tools
     const toolPermissions = await prisma.agentToolPermission.findMany({
-      where: { aiAgentId: agent.id, isAllowed: true },
+      where: { tenantId: req.tenantId! as string, aiAgentId: agent.id, isAllowed: true },
       include: {
         tenantTool: {
           include: {

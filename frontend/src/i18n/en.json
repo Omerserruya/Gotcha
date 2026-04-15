@@ -22,7 +22,8 @@
     "integrations": "Integrations",
     "aiStudio": "AI Studio",
     "outbound": "Outbound",
-    "usage": "Usage"
+    "usage": "Usage",
+    "approvals": "Approvals"
   },
   "auth": {
     "login": "Login",

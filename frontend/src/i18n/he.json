@@ -22,7 +22,8 @@
     "integrations": "אינטגרציות",
     "aiStudio": "סטודיו AI",
     "outbound": "יוצא",
-    "usage": "צריכה"
+    "usage": "צריכה",
+    "approvals": "אישורים"
   },
   "auth": {
     "login": "התחברות",
