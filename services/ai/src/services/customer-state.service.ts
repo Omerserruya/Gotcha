@@ -30,11 +30,22 @@ export async function buildCustomerState(
   const contact = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
   if (!contact) return null;
 
+  // Follow soft-merge pointer if the caller passed a merged-away id
+  const effective = contact.mergedIntoId
+    ? (await prisma.contact.findFirst({ where: { id: contact.mergedIntoId, tenantId } })) ?? contact
+    : contact;
+
+  // Cross-channel: gather all contact rows that belong to the same real
+  // person (personId match, or legacy email/phone fallback). Previously
+  // this query was per-(channel, externalId), so a WA contact view would
+  // miss the same person's IG and Gmail history entirely.
+  const { findSiblingContacts } = await import("@chatcenter/shared");
+  const siblings = await findSiblingContacts(tenantId, effective);
+
   const convos = await prisma.conversation.findMany({
     where: {
       tenantId,
-      channel: contact.channel,
-      customerExternalId: contact.externalId,
+      OR: siblings.map((s) => ({ channel: s.channel, customerExternalId: s.externalId })),
     },
     orderBy: { updatedAt: "desc" },
     take: 10,
@@ -51,14 +62,16 @@ export async function buildCustomerState(
 
   const openConversationIds = convos.filter((c) => c.status === "OPEN").map((c) => c.id);
 
-  // Uses the (targetType, targetId) index from schema.prisma. Older audit
-  // rows without targetId still load via the legacy JSON filter path below.
+  // Pull AI decisions across ALL sibling contacts, not just the single
+  // row the caller passed in. Same cross-channel logic as the summaries
+  // query above — a decision taken on the IG contact row should show up
+  // in the customer state fetched via the WA contact row.
   const indexedLogs = await prisma.auditLog.findMany({
     where: {
       tenantId,
       actorType: "ai",
       targetType: "contact",
-      targetId: contactId,
+      targetId: { in: siblings.map((s) => s.id) },
       action: { startsWith: "action." },
     },
     orderBy: { createdAt: "desc" },
@@ -76,12 +89,12 @@ export async function buildCustomerState(
   });
 
   return {
-    contactId: contact.id,
-    displayName: contact.displayName,
-    email: contact.email,
-    phone: contact.phone,
-    tags: (contact.tags as string[] | null) ?? [],
-    lastInteractionAt: contact.lastInteractionAt,
+    contactId: effective.id,
+    displayName: effective.displayName,
+    email: effective.email,
+    phone: effective.phone,
+    tags: (effective.tags as string[] | null) ?? [],
+    lastInteractionAt: effective.lastInteractionAt,
     recentSummaries,
     recentDecisions,
     openConversationIds,
