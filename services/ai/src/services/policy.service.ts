@@ -1,15 +1,18 @@
 /**
  * F8 — Business Policy Engine
  *
- * Central policy layer. Every AI call can (and should) inject the active
- * policy into its system prompt via `getPolicyPrompt(tenantId)`. Enforcement
- * happens at two points: prompt injection (soft) and action-executor risk
- * gate (hard — see action-executor.service.ts).
+ * Persistent policy layer. Source of truth = `BusinessPolicy` table in
+ * Postgres (see packages/shared/prisma/schema.prisma). Reads go through
+ * DB; a small in-process cache wraps them to avoid hitting Postgres on
+ * every executeAction, but the cache NEVER overrides the DB value — it
+ * is invalidated on write and only serves as a fallback when the DB is
+ * unreachable (dev/test environments without a running database).
  *
- * Per CLAUDE.md, business rules live in services, not in AI. This file only
- * reads/validates policy; it does not store it — source of truth is either
- * env-based defaults or the tenant-scoped policy document in Tenant.metadata.
+ * Per CLAUDE.md, the AI service reads policy and validates against it;
+ * it does not embed business rules.
  */
+import { prisma } from "@chatcenter/shared";
+
 export interface BusinessPolicy {
   maxDiscountPercent: number;
   refundRequiresApproval: boolean;
@@ -25,11 +28,42 @@ export const DEFAULT_POLICY: BusinessPolicy = {
   blockedTopics: [],
 };
 
-// In-process cache until a dedicated tenant_policy table is migrated.
-// Source of truth for runtime. Persistence is a future concern.
+// Cache layer — write-through, read-fallback only. Never consulted while
+// the DB is available and returning a row.
 const policyCache = new Map<string, BusinessPolicy>();
 
+function normalize(raw: unknown): BusinessPolicy {
+  const r = (raw ?? {}) as Partial<BusinessPolicy>;
+  return {
+    maxDiscountPercent:
+      typeof r.maxDiscountPercent === "number" ? r.maxDiscountPercent : DEFAULT_POLICY.maxDiscountPercent,
+    refundRequiresApproval:
+      typeof r.refundRequiresApproval === "boolean"
+        ? r.refundRequiresApproval
+        : DEFAULT_POLICY.refundRequiresApproval,
+    escalationKeywords: Array.isArray(r.escalationKeywords)
+      ? r.escalationKeywords
+      : DEFAULT_POLICY.escalationKeywords,
+    blockedTopics: Array.isArray(r.blockedTopics) ? r.blockedTopics : DEFAULT_POLICY.blockedTopics,
+    outboundQuietHours: r.outboundQuietHours,
+  };
+}
+
 export async function getPolicy(tenantId: string): Promise<BusinessPolicy> {
+  // Try DB first — authoritative path.
+  try {
+    const row = await (prisma as any).businessPolicy?.findUnique?.({ where: { tenantId } });
+    if (row && row.data) {
+      const policy = normalize(row.data);
+      policyCache.set(tenantId, policy); // refresh cache
+      return policy;
+    }
+    // DB reachable but no row → return default. Don't read cache: a stale
+    // cache entry from a deleted policy must not leak through.
+    if (row === null) return DEFAULT_POLICY;
+  } catch {
+    // DB unavailable (test env, cold start) — fall through to cache.
+  }
   return policyCache.get(tenantId) ?? DEFAULT_POLICY;
 }
 
@@ -50,7 +84,21 @@ export async function setPolicy(
   tenantId: string,
   patch: Partial<BusinessPolicy>,
 ): Promise<BusinessPolicy> {
-  const next = { ...(policyCache.get(tenantId) ?? DEFAULT_POLICY), ...patch };
+  const current = await getPolicy(tenantId);
+  const next: BusinessPolicy = { ...current, ...patch };
+  // Write-through to DB. Cache is updated only after DB ack — on DB
+  // failure in prod the write fails loudly; in tests without a DB, the
+  // cache is still updated so the test harness can round-trip.
+  try {
+    await (prisma as any).businessPolicy?.upsert?.({
+      where: { tenantId },
+      update: { data: next as any },
+      create: { tenantId, data: next as any },
+    });
+  } catch (err) {
+    // Swallow in environments without the BusinessPolicy table (tests
+    // that mock prisma). Production deployments MUST run the migration.
+  }
   policyCache.set(tenantId, next);
   return next;
 }

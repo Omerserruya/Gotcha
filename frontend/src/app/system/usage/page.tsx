@@ -8,6 +8,29 @@ import clsx from "clsx";
 
 type Period = 7 | 30 | 90 | 365;
 
+interface AiFeatureRow {
+  feature: string;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  calls: number;
+}
+interface AiModelRow {
+  model: string;
+  totalTokens: number;
+  promptTokens: number;
+  completionTokens: number;
+  costUsd: number;
+  calls: number;
+}
+interface TenantAiRow {
+  tenant: { id: string; name: string; slug: string };
+  usage: Record<string, { total: number; count: number; costUsd: number }>;
+  aiByFeature: AiFeatureRow[];
+  aiCostUsd: number;
+}
+
 const TYPE_LABELS: Record<string, string> = {
   ai_tokens: "AI Tokens",
   message_sent: "Messages",
@@ -29,13 +52,34 @@ const TYPE_BG: Record<string, string> = {
   automation_run: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
+function formatNumber(n: number): string {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  return n.toLocaleString();
+}
+function formatCost(usd: number): string {
+  if (!usd) return "$0.00";
+  if (usd < 0.01) return "<$0.01";
+  return `$${usd.toFixed(2)}`;
+}
+
 export default function SystemUsagePage() {
   const { token } = useAuth();
   const [period, setPeriod] = useState<Period>(30);
-  const [stats, setStats] = useState<Record<string, { total: number; count: number }>>({});
+  const [stats, setStats] = useState<Record<string, { total: number; count: number; costUsd: number }>>({});
+  const [aiTokens, setAiTokens] = useState<{
+    totalTokens: number;
+    promptTokens: number;
+    completionTokens: number;
+    costUsd: number;
+    calls: number;
+    byFeature: AiFeatureRow[];
+    byModel: AiModelRow[];
+  } | null>(null);
   const [totalEvents, setTotalEvents] = useState(0);
-  const [byTenant, setByTenant] = useState<any[]>([]);
+  const [byTenant, setByTenant] = useState<TenantAiRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [expandedTenantId, setExpandedTenantId] = useState<string | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -46,8 +90,9 @@ export default function SystemUsagePage() {
         getSystemUsageByTenant(token, period),
       ]);
       setStats(statsRes.data?.stats || {});
+      setAiTokens(statsRes.data?.aiTokens || null);
       setTotalEvents(statsRes.data?.totalEvents || 0);
-      setByTenant(tenantRes.data || []);
+      setByTenant((tenantRes.data as TenantAiRow[]) || []);
     } catch (err) {
       console.error("System usage fetch error:", err);
     } finally {
@@ -57,16 +102,12 @@ export default function SystemUsagePage() {
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
-  const statCards = [
-    { key: "ai_tokens", label: "AI Tokens", icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" },
-    { key: "message_sent", label: "Messages Sent", icon: "M8.625 12a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H8.25m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0H12m4.125 0a.375.375 0 11-.75 0 .375.375 0 01.75 0zm0 0h-.375M21 12c0 4.556-4.03 8.25-9 8.25a9.764 9.764 0 01-2.555-.337A5.972 5.972 0 015.41 20.97a5.969 5.969 0 01-.474-.065 4.48 4.48 0 00.978-2.025c.09-.457-.133-.901-.467-1.226C3.93 16.178 3 14.189 3 12c0-4.556 4.03-8.25 9-8.25s9 3.694 9 8.25z" },
-    { key: "tool_call", label: "Tool Calls", icon: "M11.42 15.17l-5.66 5.66a2.25 2.25 0 01-3.182-3.182l5.66-5.66m3.182 3.182l5.66-5.66a2.25 2.25 0 00-3.182-3.182l-5.66 5.66m3.182 3.182L12 21m-3.182-3.182L3 12" },
-    { key: "automation_run", label: "Automations", icon: "M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" },
-  ];
+  const aiTotalCost = aiTokens?.costUsd ?? 0;
+  const aiTotalTokens = aiTokens?.totalTokens ?? 0;
 
-  // Calculate max for bar sizing
+  // Max tenant total for bar sizing (falls back to 1 to avoid NaN)
   const maxTenantUsage = Math.max(1, ...byTenant.map((t) =>
-    Object.values(t.usage as Record<string, { total: number }>).reduce((sum, u) => sum + u.total, 0)
+    Object.values(t.usage).reduce((sum, u) => sum + u.total, 0)
   ));
 
   return (
@@ -76,7 +117,10 @@ export default function SystemUsagePage() {
         <div className="flex items-center justify-between mb-6">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Platform Usage</h1>
-            <p className="text-sm text-gray-400 mt-0.5">Usage across all tenants &middot; {totalEvents.toLocaleString()} total events</p>
+            <p className="text-sm text-gray-400 mt-0.5">
+              {totalEvents.toLocaleString()} total events &middot; {aiTokens ? `${formatNumber(aiTotalTokens)} AI tokens` : ""}
+              {aiTotalCost > 0 && ` · est. ${formatCost(aiTotalCost)}`}
+            </p>
           </div>
           <select
             value={period}
@@ -96,35 +140,123 @@ export default function SystemUsagePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Global Stat Cards */}
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-              {statCards.map(({ key, label, icon }) => (
-                <div key={key} className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-                  <div className="flex items-center gap-3 mb-3">
-                    <div className={clsx("w-9 h-9 rounded-xl flex items-center justify-center", TYPE_BG[key])}>
-                      <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d={icon} />
-                      </svg>
-                    </div>
-                  </div>
-                  <p className="text-2xl font-bold text-gray-900">{(stats[key]?.total || 0).toLocaleString()}</p>
-                  <p className="text-xs text-gray-400 mt-1">{label}</p>
-                  <p className="text-[10px] text-gray-300 mt-0.5">{stats[key]?.count || 0} events</p>
-                </div>
-              ))}
+            {/* Global Stat Cards — includes AI cost */}
+            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+              <StatCard
+                label="Est. AI Cost"
+                value={formatCost(aiTotalCost)}
+                sub={`${aiTokens?.calls || 0} calls`}
+                highlight
+              />
+              <StatCard
+                label="AI Tokens"
+                value={formatNumber(aiTotalTokens)}
+                sub={`${formatNumber(aiTokens?.promptTokens || 0)} in / ${formatNumber(aiTokens?.completionTokens || 0)} out`}
+              />
+              <StatCard
+                label="Messages Sent"
+                value={formatNumber(stats.message_sent?.total || 0)}
+                sub={`${stats.message_sent?.count || 0} events`}
+              />
+              <StatCard
+                label="Tool Calls"
+                value={formatNumber(stats.tool_call?.total || 0)}
+                sub={`${stats.tool_call?.count || 0} events`}
+              />
+              <StatCard
+                label="Automations"
+                value={formatNumber(stats.automation_run?.total || 0)}
+                sub={`${stats.automation_run?.count || 0} events`}
+              />
             </div>
 
-            {/* Usage by Tenant */}
+            {/* AI Tokens by Feature */}
+            {aiTokens && aiTokens.byFeature.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="font-semibold text-gray-900 mb-4">AI Tokens by Feature</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                        <th className="text-start py-2 px-3">Feature</th>
+                        <th className="text-end py-2 px-3">Calls</th>
+                        <th className="text-end py-2 px-3">Prompt</th>
+                        <th className="text-end py-2 px-3">Completion</th>
+                        <th className="text-end py-2 px-3">Total</th>
+                        <th className="text-end py-2 px-3">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {aiTokens.byFeature
+                        .sort((a, b) => b.totalTokens - a.totalTokens)
+                        .map((row) => (
+                        <tr key={row.feature} className="hover:bg-gray-50/50">
+                          <td className="py-2 px-3">
+                            <span className="inline-flex items-center gap-2">
+                              <span className="w-2 h-2 rounded-full bg-violet-400" />
+                              <span className="font-medium text-gray-900">{row.feature}</span>
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{row.calls.toLocaleString()}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{formatNumber(row.promptTokens)}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{formatNumber(row.completionTokens)}</td>
+                          <td className="py-2 px-3 text-end font-semibold text-gray-900 font-mono text-xs">{formatNumber(row.totalTokens)}</td>
+                          <td className="py-2 px-3 text-end font-semibold text-green-600 font-mono text-xs">{formatCost(row.costUsd)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* AI Tokens by Model */}
+            {aiTokens && aiTokens.byModel.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+                <h3 className="font-semibold text-gray-900 mb-4">AI Tokens by Model</h3>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-100 text-xs uppercase tracking-wider text-gray-400">
+                        <th className="text-start py-2 px-3">Model</th>
+                        <th className="text-end py-2 px-3">Calls</th>
+                        <th className="text-end py-2 px-3">Total Tokens</th>
+                        <th className="text-end py-2 px-3">Cost</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-gray-50">
+                      {aiTokens.byModel
+                        .sort((a, b) => b.costUsd - a.costUsd)
+                        .map((row) => (
+                        <tr key={row.model} className="hover:bg-gray-50/50">
+                          <td className="py-2 px-3 font-mono text-xs text-gray-700">{row.model}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{row.calls.toLocaleString()}</td>
+                          <td className="py-2 px-3 text-end font-semibold text-gray-900 font-mono text-xs">{formatNumber(row.totalTokens)}</td>
+                          <td className="py-2 px-3 text-end font-semibold text-green-600 font-mono text-xs">{formatCost(row.costUsd)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* Usage by Tenant (click to expand feature breakdown) */}
             <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
               <h3 className="font-semibold text-gray-900 mb-4">Usage by Tenant</h3>
               {byTenant.length === 0 ? (
                 <p className="text-sm text-gray-400 text-center py-8">No usage data yet</p>
               ) : (
                 <div className="space-y-3">
-                  {byTenant.map((entry: any) => {
-                    const tenantTotal = Object.values(entry.usage as Record<string, { total: number }>).reduce((sum, u) => sum + u.total, 0);
+                  {byTenant.map((entry) => {
+                    const tenantTotal = Object.values(entry.usage).reduce((sum, u) => sum + u.total, 0);
+                    const isExpanded = expandedTenantId === entry.tenant.id;
                     return (
-                      <div key={entry.tenant.id} className="p-4 rounded-xl border border-gray-100 hover:bg-gray-50/50 transition">
+                      <div
+                        key={entry.tenant.id}
+                        className="p-4 rounded-xl border border-gray-100 hover:bg-gray-50/50 transition cursor-pointer"
+                        onClick={() => setExpandedTenantId(isExpanded ? null : entry.tenant.id)}
+                      >
                         <div className="flex items-center justify-between mb-2">
                           <div className="flex items-center gap-3">
                             <div className="w-8 h-8 bg-gradient-to-br from-violet-400 to-violet-600 rounded-lg flex items-center justify-center text-white font-bold text-xs">
@@ -135,11 +267,14 @@ export default function SystemUsagePage() {
                               <p className="text-xs text-gray-400">{entry.tenant.slug}</p>
                             </div>
                           </div>
-                          <span className="text-sm font-semibold text-gray-700">{tenantTotal.toLocaleString()}</span>
+                          <div className="text-end">
+                            <p className="text-sm font-semibold text-gray-700">{tenantTotal.toLocaleString()}</p>
+                            <p className="text-xs text-green-600 font-semibold">{formatCost(entry.aiCostUsd)}</p>
+                          </div>
                         </div>
                         {/* Stacked bar */}
                         <div className="h-3 bg-gray-100 rounded-full overflow-hidden flex">
-                          {Object.entries(entry.usage as Record<string, { total: number }>).map(([type, u]) => (
+                          {Object.entries(entry.usage).map(([type, u]) => (
                             <div
                               key={type}
                               className={clsx("h-full transition-all", TYPE_COLORS[type] || "bg-gray-300")}
@@ -150,12 +285,41 @@ export default function SystemUsagePage() {
                         </div>
                         {/* Breakdown badges */}
                         <div className="flex flex-wrap gap-2 mt-2">
-                          {Object.entries(entry.usage as Record<string, { total: number; count: number }>).map(([type, u]) => (
+                          {Object.entries(entry.usage).map(([type, u]) => (
                             <span key={type} className={clsx("text-[10px] px-2 py-0.5 rounded-full border font-medium", TYPE_BG[type] || "bg-gray-50 text-gray-500 border-gray-200")}>
                               {TYPE_LABELS[type] || type}: {u.total.toLocaleString()}
                             </span>
                           ))}
                         </div>
+
+                        {/* Expanded: AI-by-feature for this tenant */}
+                        {isExpanded && entry.aiByFeature.length > 0 && (
+                          <div className="mt-4 pt-4 border-t border-gray-100">
+                            <p className="text-xs font-medium text-gray-500 uppercase tracking-wider mb-2">AI Tokens by Feature</p>
+                            <table className="w-full text-xs">
+                              <thead>
+                                <tr className="text-[10px] uppercase tracking-wider text-gray-400">
+                                  <th className="text-start py-1">Feature</th>
+                                  <th className="text-end py-1">Calls</th>
+                                  <th className="text-end py-1">Tokens</th>
+                                  <th className="text-end py-1">Cost</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {entry.aiByFeature
+                                  .sort((a, b) => b.totalTokens - a.totalTokens)
+                                  .map((row) => (
+                                    <tr key={row.feature}>
+                                      <td className="py-1 text-gray-700 font-medium">{row.feature}</td>
+                                      <td className="py-1 text-end font-mono text-gray-500">{row.calls.toLocaleString()}</td>
+                                      <td className="py-1 text-end font-mono text-gray-900">{formatNumber(row.totalTokens)}</td>
+                                      <td className="py-1 text-end font-mono text-green-600">{formatCost(row.costUsd)}</td>
+                                    </tr>
+                                  ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        )}
                       </div>
                     );
                   })}
@@ -176,5 +340,28 @@ export default function SystemUsagePage() {
         )}
       </div>
     </SystemLayout>
+  );
+}
+
+function StatCard({
+  label,
+  value,
+  sub,
+  highlight,
+}: {
+  label: string;
+  value: string;
+  sub?: string;
+  highlight?: boolean;
+}) {
+  return (
+    <div className={clsx(
+      "rounded-2xl border p-5",
+      highlight ? "bg-green-50 border-green-200" : "bg-white border-gray-200"
+    )}>
+      <p className={clsx("text-xs font-medium uppercase tracking-wider", highlight ? "text-green-600" : "text-gray-500")}>{label}</p>
+      <p className={clsx("text-2xl font-bold mt-1", highlight ? "text-green-700" : "text-gray-900")}>{value}</p>
+      {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
+    </div>
   );
 }

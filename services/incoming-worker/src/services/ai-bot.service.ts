@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { prisma, getOutboundAdapter, decryptCredentials, publishEvent } from "@chatcenter/shared";
+import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, trackAIUsage } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge-retrieval.service";
 
@@ -123,25 +123,30 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
     });
 
     const usage = response.usage;
-    const totalTokens = usage?.total_tokens ?? 0;
 
-    // Track token usage via usage_logs + credit_transactions
+    // Track token usage via centralized shared helper (fire-and-forget)
     if (usage) {
-      // Legacy token log (backward compat)
-      prisma.tokenLog.create({
+      trackAIUsage({
+        tenantId,
+        feature: "ai_bot",
+        model,
+        promptTokens: usage.prompt_tokens,
+        completionTokens: usage.completion_tokens,
+        totalTokens: usage.total_tokens,
+        metadata: { conversationId, aiAgentId: config.id },
+      }).catch((err: any) => console.error("[AI-Bot] Usage tracking failed:", err.message));
+
+      // Audit log (separate from usage)
+      prisma.auditLog.create({
         data: {
           tenantId,
-          type: "chat",
-          model,
-          promptTokens: usage.prompt_tokens,
-          completionTokens: usage.completion_tokens,
-          totalTokens: usage.total_tokens,
-          conversationId,
+          actorType: "ai",
+          action: "ai.responded",
+          targetType: "conversation",
+          targetId: conversationId,
+          metadata: { model, tokens: usage.total_tokens, source: "ai_bot" },
         },
-      }).catch((err: any) => console.error("[AI-Bot] Token log failed:", err.message));
-
-      // New: centralized usage tracking
-      trackUsageAndAudit(tenantId, conversationId, totalTokens, model).catch(() => {});
+      }).catch((err: any) => console.error("[AI-Bot] Audit log failed:", err.message));
     }
 
     const replyText = response.choices[0]?.message?.content?.trim();
@@ -199,34 +204,15 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
   }
 }
 
-// ─── Usage + Audit Tracking Helpers ─────────────────────────
+// ─── Legacy helper (no longer used — kept stubbed for any stale imports) ──
 
-async function trackUsageAndAudit(tenantId: string, conversationId: string, totalTokens: number, model: string) {
+async function trackUsageAndAudit(_tenantId: string, _conversationId: string, _totalTokens: number, _model: string) {
+  // Replaced by trackAIUsage() from @chatcenter/shared + inline auditLog.create.
+  // See the call site inside processAIBot().
   try {
-    // Usage log - actual tokens from model response
-    await prisma.usageLog.create({
-      data: {
-        tenantId,
-        type: "ai_tokens",
-        quantity: totalTokens,
-        tokensEquivalent: totalTokens,
-        metadata: { model, conversationId, type: "autonomous_bot" },
-      },
-    });
-
-    // Audit log
-    await prisma.auditLog.create({
-      data: {
-        tenantId,
-        actorType: "ai",
-        action: "ai.responded",
-        targetType: "conversation",
-        targetId: conversationId,
-        metadata: { model, tokens: totalTokens, source: "ai_bot" },
-      },
-    });
+    /* noop */
   } catch (err: any) {
-    console.error("[AI-Bot] Usage/audit tracking failed:", err.message);
+    console.error("[AI-Bot] (legacy) tracking failed:", err.message);
   }
 }
 

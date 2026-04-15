@@ -198,7 +198,7 @@ router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMI
 router.get("/kb/:kbId/integrations", async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
-      where: { id: req.params.kbId, tenantId: req.tenantId! },
+      where: { id: String(req.params.kbId), tenantId: req.tenantId! },
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
@@ -226,7 +226,7 @@ router.get("/kb/:kbId/integrations", async (req: Request, res: Response) => {
 router.delete("/integrations/:intId", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId! },
+      where: { id: String(req.params.intId), tenantId: req.tenantId! },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
@@ -243,7 +243,7 @@ router.delete("/integrations/:intId", async (req: Request, res: Response) => {
 router.get("/integrations/:intId/confluence/spaces", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "confluence" },
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "confluence" },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
@@ -260,12 +260,12 @@ router.get("/integrations/:intId/confluence/spaces", async (req: Request, res: R
 router.get("/integrations/:intId/confluence/spaces/:key/pages", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "confluence" },
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "confluence" },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
     const parentId = req.query.parentId as string | undefined;
-    const pages = await confluenceService.listPages(integration as any, req.params.key, parentId);
+    const pages = await confluenceService.listPages(integration as any, String(req.params.key), parentId);
     res.json({ data: pages });
   } catch (err: any) {
     console.error("List Confluence pages error:", err.message);
@@ -278,7 +278,7 @@ router.get("/integrations/:intId/confluence/spaces/:key/pages", async (req: Requ
 router.post("/integrations/:intId/confluence/sync", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "confluence" },
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "confluence" },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
@@ -303,7 +303,7 @@ router.post("/integrations/:intId/confluence/sync", async (req: Request, res: Re
 router.get("/integrations/:intId/drive/shared-drives", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "google_drive" },
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
@@ -320,7 +320,7 @@ router.get("/integrations/:intId/drive/shared-drives", async (req: Request, res:
 router.get("/integrations/:intId/drive/files", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "google_drive" },
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 
@@ -339,7 +339,7 @@ router.get("/integrations/:intId/drive/files", async (req: Request, res: Respons
 router.post("/integrations/:intId/drive/sync", async (req: Request, res: Response) => {
   try {
     const integration = await prisma.knowledgeIntegration.findFirst({
-      where: { id: req.params.intId, tenantId: req.tenantId!, provider: "google_drive" },
+      where: { id: String(req.params.intId), tenantId: req.tenantId!, provider: "google_drive" },
     });
     if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
 

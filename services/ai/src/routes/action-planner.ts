@@ -1,7 +1,33 @@
 import { Router, Request, Response } from "express";
+import fs from "fs";
+import path from "path";
 import { authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
 import { generateResponse } from "../services/ai.service";
 import { executeAction, PlannedAction as ExecPlannedAction } from "../services/action-executor.service";
+import {
+  getAvailableTools,
+  renderPlannerTools,
+  renderSystemCapabilities,
+} from "../services/tool-registry";
+
+/**
+ * Command Center prompts live on disk as editable markdown files under
+ * `services/ai/src/prompts/`. They are loaded once at module init. Edit the
+ * .md files to tune the planner/classifier behavior — no code change needed.
+ *
+ *  - action-planner.md   : main ExecutionPlan system prompt. Must contain
+ *                          `{{toolsBlock}}` and `{{capabilitiesBlock}}`
+ *                          placeholders that are filled per-tenant at
+ *                          request time by getAvailableTools().
+ *  - intent-classifier.md: the chat/execution/ambiguous gate prompt.
+ */
+const PROMPTS_DIR = path.resolve(__dirname, "../prompts");
+const ACTION_PLANNER_TEMPLATE = fs
+  .readFileSync(path.join(PROMPTS_DIR, "action-planner.md"), "utf8")
+  .trim();
+const INTENT_CLASSIFIER_PROMPT = fs
+  .readFileSync(path.join(PROMPTS_DIR, "intent-classifier.md"), "utf8")
+  .trim();
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -14,9 +40,20 @@ export type ActionTool =
   | "send_message"
   | "create_broadcast"
   | "update_crm"
+  | "update_contact"
   | "create_ticket"
+  | "create_task"
   | "schedule_followup"
   | "tag_contact"
+  | "get_contact"
+  | "get_conversation"
+  | "list_recent_messages"
+  | "preview_broadcast"
+  | "schedule_broadcast"
+  | "create_workflow"
+  | "list_workflows"
+  | "resolve_identity"
+  | "merge_contacts"
   | "noop";
 
 export interface PlannedAction {
@@ -32,41 +69,11 @@ export interface ExecutionPlan {
   requiresApproval: boolean;
 }
 
-const SYSTEM_PROMPT = `You are the GOTCHA Action Planner.
-You convert a user's natural-language request into a structured ExecutionPlan.
-
-Rules:
-- Respect service boundaries — only use the documented tools.
-- Prefer the simplest correct plan. Reuse existing data, do not invent state.
-- Use the provided Context (conversationId, contactId) whenever present —
-  the user already selected it. Do not ask the user to specify it again.
-- Be PROACTIVE: even if the prompt is terse, infer the most likely intent
-  and propose a plan. Only return a single "noop" step when the request
-  genuinely cannot map to any available tool.
-- Mark riskLevel="high" for anything financial, external-facing broadcasts, or irreversible.
-- Set requiresApproval=true if ANY step is high-risk.
-- LANGUAGE: If the Context contains a "locale" field, write all human-readable
-  strings ("summary", "reason", "note") in that language. Hebrew ("he") uses
-  RTL script. English ("en") uses English. Default to the language the user
-  wrote their prompt in.
-
-Return STRICT JSON with shape:
-{
-  "summary": string,
-  "steps": [
-    { "tool": string, "params": object, "reason": string, "riskLevel": "low"|"medium"|"high" }
-  ],
-  "requiresApproval": boolean
+function buildSystemPrompt(toolsBlock: string, capabilitiesBlock: string): string {
+  return ACTION_PLANNER_TEMPLATE
+    .replace("{{toolsBlock}}", toolsBlock)
+    .replace("{{capabilitiesBlock}}", capabilitiesBlock);
 }
-
-Available tools:
-- send_message(contactId, channel, body)
-- create_broadcast(name, audience, templateId)
-- update_crm(contactId, fields)
-- create_ticket(contactId, subject, body, priority)
-- schedule_followup(contactId, delayHours, body)
-- tag_contact(contactId, tags[])
-- noop(note)`;
 
 // POST /plan — produce an ExecutionPlan for a prompt (dry-run by default)
 router.post("/plan", async (req: Request, res: Response) => {
@@ -80,10 +87,15 @@ router.post("/plan", async (req: Request, res: Response) => {
       `Request: ${prompt}` +
       (context ? `\n\nContext:\n${JSON.stringify(context).slice(0, 4000)}` : "");
 
+    const tools = await getAvailableTools(req.tenantId!, context);
+    const systemPrompt = buildSystemPrompt(
+      renderPlannerTools(tools),
+      renderSystemCapabilities(tools),
+    );
     const response = await generateResponse({
       tenantId: req.tenantId!,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         { role: "user", content: userContent },
       ],
       temperature: 0.1,
@@ -110,9 +122,58 @@ router.post("/plan", async (req: Request, res: Response) => {
   }
 });
 
-// POST /simulate — one-shot "plan + dry-run execute". Handy for the F2.5
-// dry-run preview: the UI sends a prompt, gets back the plan AND the
-// executor's predicted outcomes without touching real state.
+// POST /classify — decide chat vs execution mode for a prompt.
+router.post("/classify", async (req: Request, res: Response) => {
+  try {
+    const { prompt, context } = req.body ?? {};
+    if (!prompt || typeof prompt !== "string") {
+      return res.status(400).json({ error: "prompt (string) is required" });
+    }
+    const result = await classifyIntent(req.tenantId!, prompt, context);
+    return res.json(result);
+  } catch (err: any) {
+    console.error("action-planner.classify error:", err);
+    return res.status(500).json({ error: "Failed to classify", detail: err?.message });
+  }
+});
+
+async function classifyIntent(
+  tenantId: string,
+  prompt: string,
+  context?: unknown,
+): Promise<{ mode: "chat" | "execution"; confidence: number; answer: string | null; clarification: string | null }> {
+  try {
+    const resp = await generateResponse({
+      tenantId,
+      messages: [
+        { role: "system", content: INTENT_CLASSIFIER_PROMPT },
+        {
+          role: "user",
+          content:
+            `Input: ${prompt}` +
+            (context ? `\n\nContext:\n${JSON.stringify(context).slice(0, 2000)}` : ""),
+        },
+      ],
+      temperature: 0.1,
+      responseFormat: { type: "json_object" },
+      metadata: { type: "intent_classify" },
+    });
+    const parsed = JSON.parse(resp.content);
+    const mode: "chat" | "execution" = parsed.mode === "execution" ? "execution" : "chat";
+    return {
+      mode,
+      confidence: typeof parsed.confidence === "number" ? parsed.confidence : 0.5,
+      answer: typeof parsed.answer === "string" ? parsed.answer : null,
+      clarification: typeof parsed.clarification === "string" ? parsed.clarification : null,
+    };
+  } catch {
+    // Fallback: treat as execution so existing behavior is preserved.
+    return { mode: "execution", confidence: 0.3, answer: null, clarification: null };
+  }
+}
+
+// POST /simulate — dual-mode. Classifies first: chat-mode returns a natural
+// answer with no plan; execution-mode plans + dry-run executes as before.
 router.post("/simulate", async (req: Request, res: Response) => {
   try {
     const { prompt, context } = req.body ?? {};
@@ -120,10 +181,27 @@ router.post("/simulate", async (req: Request, res: Response) => {
       return res.status(400).json({ error: "prompt (string) is required" });
     }
 
+    // Dual-mode gate: question vs action.
+    const intent = await classifyIntent(req.tenantId!, prompt, context);
+    if (intent.mode === "chat") {
+      return res.json({
+        mode: "chat",
+        answer: intent.answer ?? intent.clarification ?? "",
+        clarification: intent.clarification,
+        plan: null,
+        results: [],
+      });
+    }
+
+    const tools = await getAvailableTools(req.tenantId!, context);
+    const systemPrompt = buildSystemPrompt(
+      renderPlannerTools(tools),
+      renderSystemCapabilities(tools),
+    );
     const planResp = await generateResponse({
       tenantId: req.tenantId!,
       messages: [
-        { role: "system", content: SYSTEM_PROMPT },
+        { role: "system", content: systemPrompt },
         {
           role: "user",
           content:
@@ -147,13 +225,20 @@ router.post("/simulate", async (req: Request, res: Response) => {
       plan.requiresApproval === true || plan.steps.some((s) => s?.riskLevel === "high");
 
     const actorId = (req as any).user?.id;
+    const authToken = (req.headers.authorization as string | undefined) ?? undefined;
     const results: any[] = [];
     for (const step of plan.steps as ExecPlannedAction[]) {
       results.push(
-        await executeAction(req.tenantId!, step, { actorId, dryRun: true, approved: true, approvedBy: actorId }),
+        await executeAction(req.tenantId!, step, {
+          actorId,
+          dryRun: true,
+          approved: true,
+          approvedBy: actorId,
+          authToken,
+        }),
       );
     }
-    return res.json({ plan, results, usage: planResp.usage });
+    return res.json({ mode: "execution", plan, results, usage: planResp.usage });
   } catch (err: any) {
     console.error("action-planner.simulate error:", err);
     return res.status(500).json({ error: "Failed to simulate", detail: err?.message });
@@ -210,6 +295,7 @@ router.post("/execute", async (req: Request, res: Response) => {
     }
 
     const actorId = (req as any).user?.id;
+    const authToken = (req.headers.authorization as string | undefined) ?? undefined;
     const results: any[] = [];
     for (const step of plan.steps as ExecPlannedAction[]) {
       const r = await executeAction(req.tenantId!, step, {
@@ -218,6 +304,7 @@ router.post("/execute", async (req: Request, res: Response) => {
         approvedBy: approved === true ? actorId : undefined,
         dryRun: dryRun === true,
         idempotencyKey: typeof idempotencyKey === "string" ? idempotencyKey : undefined,
+        authToken,
       });
       results.push(r);
     }

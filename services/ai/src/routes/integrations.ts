@@ -140,8 +140,8 @@ router.post("/:slug/connect", async (req: Request, res: Response) => {
       data: {
         tenantId: req.tenantId!,
         integrationId: entry.id,
-        status: initialStatus,
-        credentials: storedCredentials,
+        status: initialStatus as any,
+        credentials: storedCredentials as any,
         tenantTools: {
           create: entry.catalogTools.map((tool) => ({
             tenantId: req.tenantId!,

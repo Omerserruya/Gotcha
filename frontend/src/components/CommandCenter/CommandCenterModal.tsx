@@ -32,6 +32,22 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
   const [error, setError] = useState<string | null>(null);
   const [executing, setExecuting] = useState(false);
   const [mounted, setMounted] = useState(false);
+  const [chatAnswer, setChatAnswer] = useState<string | null>(null);
+
+  // Derive glow state: thinking (loading), error, approval, ready, idle.
+  const glowState: "idle" | "thinking" | "ready" | "approval" | "error" =
+    error ? "error"
+      : executing || loading ? "thinking"
+      : plan?.requiresApproval ? "approval"
+      : plan || chatAnswer ? "ready"
+      : "idle";
+  const glowColor = {
+    idle: "rgba(99,102,241,0.25)",
+    thinking: "rgba(59,130,246,0.65)",
+    ready: "rgba(34,197,94,0.55)",
+    approval: "rgba(249,115,22,0.65)",
+    error: "rgba(239,68,68,0.65)",
+  }[glowState];
 
   useEffect(() => setMounted(true), []);
 
@@ -62,10 +78,17 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     setError(null);
     setPlan(null);
     setPreview(null);
+    setChatAnswer(null);
     try {
       const res = await simulateCommand(token, prompt, { ...context, locale });
-      setPlan(res.plan);
-      setPreview(res.results);
+      if (res.mode === "chat") {
+        setChatAnswer(res.answer ?? res.clarification ?? "");
+        setPlan(null);
+        setPreview(null);
+      } else {
+        setPlan(res.plan);
+        setPreview(res.results);
+      }
     } catch (e: any) {
       setError(e?.message ?? t("commandCenter.errorSimulate"));
     } finally {
@@ -116,18 +139,27 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
         paddingTop: "12vh",
       }}
     >
+      <style>{`
+        @keyframes gotchaGlowPulse {
+          0%, 100% { box-shadow: 0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px var(--gc-glow), 0 0 24px 2px var(--gc-glow), 0 0 60px 6px var(--gc-glow-soft); }
+          50%      { box-shadow: 0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px var(--gc-glow), 0 0 36px 4px var(--gc-glow), 0 0 88px 12px var(--gc-glow-soft); }
+        }
+      `}</style>
       <div
         style={{
           width: "min(640px, 92vw)",
           background: "#111317",
           color: "#f2f4f7",
           borderRadius: 12,
-          boxShadow: "0 30px 80px rgba(0,0,0,0.55)",
           border: "1px solid #242831",
           overflow: "hidden",
           display: "flex",
           flexDirection: "column",
           maxHeight: "76vh",
+          ["--gc-glow" as any]: glowColor,
+          ["--gc-glow-soft" as any]: glowColor.replace(/[\d.]+\)$/, "0.18)"),
+          animation: "gotchaGlowPulse 3.6s ease-in-out infinite",
+          transition: "--gc-glow 400ms ease",
         }}
       >
         <form
@@ -179,7 +211,17 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
           {error && (
             <div style={{ color: "#ef4444", fontSize: 13 }}>{error}</div>
           )}
-          {!loading && !plan && !error && (
+          {!loading && chatAnswer && !plan && (
+            <div>
+              <div style={{ fontSize: 11, color: "#8b95a7", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
+                {t("commandCenter.title")}
+              </div>
+              <div style={{ fontSize: 14, lineHeight: 1.5, color: "#e2e8f0", whiteSpace: "pre-wrap" }}>
+                {chatAnswer}
+              </div>
+            </div>
+          )}
+          {!loading && !plan && !error && !chatAnswer && (
             <div>
               <div style={{ fontSize: 11, color: "#6b7280", textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 8 }}>
                 {t("commandCenter.examplesHeader")}
@@ -294,6 +336,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
               onClick={() => {
                 setPlan(null);
                 setPreview(null);
+                setChatAnswer(null);
               }}
               disabled={executing}
               style={{

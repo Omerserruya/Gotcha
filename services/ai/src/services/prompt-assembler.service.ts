@@ -273,6 +273,8 @@ export async function loadToolsForAgent(tenantId: string, aiAgentId?: string): P
 export async function generateAndSavePrompts(tenantId: string, agentId: string): Promise<{
   sharedPrompt: string;
   autonomousPrompt: string;
+  conversationFlow?: unknown;
+  customGuardrails?: unknown;
 }> {
   const agent = await prisma.aIAgent.findFirst({
     where: { id: agentId, tenantId },

@@ -9,18 +9,25 @@ import {
 } from "../services/connectors/types";
 
 describe("connector registry", () => {
-  it("default stub CRM connector is registered and returns ok", async () => {
+  it("default CRM connector refuses with explicit error (no fake success)", async () => {
+    // Per OMC_EXECUTION_MAP: no fake success is allowed. The default CRM
+    // connector is "unconfigured" and returns ok:false with a clear error
+    // so callers must register a real connector before CRM actions can ship.
     const c = getCrmConnector();
     expect(c).not.toBeNull();
     const r = await c!.updateContact("t1", { contactId: "c1", fields: { tier: "vip" } });
-    expect(r.ok).toBe(true);
+    expect(r.ok).toBe(false);
+    expect(r.error).toMatch(/no CRM connector/i);
   });
 
-  it("default stub messaging connector sends successfully", async () => {
+  it("default messaging connector is the real queue-backed implementation", async () => {
+    // The default messaging connector enqueues to outgoingMessageQueue — a
+    // real side effect. Without a DB it naturally fails; we only assert the
+    // connector is registered and has the expected name so tests that do
+    // provide a DB exercise the real path.
     const c = getMessagingConnector();
     expect(c).not.toBeNull();
-    const r = await c!.send("t1", { contactId: "c1", channel: "whatsapp", body: "hi" });
-    expect(r.ok).toBe(true);
+    expect(c!.name).toBe("outgoing-queue");
   });
 
   it("named lookup returns null for unknown connector", () => {

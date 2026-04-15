@@ -61,23 +61,70 @@ export function getMessagingConnector(name?: string): MessagingConnector | null 
   return messagingRegistry.get(name) ?? null;
 }
 
-// ─── Default stub connectors (no-op, always OK) ─────────────
-// These let the action-executor run end-to-end in dev without real creds.
+// ─── Default connectors ────────────────────────────────────
+// CRM has no in-repo owner — fail loudly rather than fake success.
+// Messaging enqueues to the shared outgoingMessageQueue (same path the
+// conversation service uses), so send_message has a REAL side effect.
 
-const stubCrm: CrmConnector = {
-  name: "stub",
+const failingCrm: CrmConnector = {
+  name: "unconfigured",
   async updateContact() {
-    return { ok: true, externalId: "stub" };
+    return { ok: false, error: "no CRM connector configured — register via registerCrmConnector()" };
   },
   async createTicket() {
-    return { ok: true, externalId: "stub" };
+    return { ok: false, error: "no CRM connector configured — register via registerCrmConnector()" };
   },
 };
-const stubMessaging: MessagingConnector = {
-  name: "stub",
-  async send() {
-    return { ok: true, messageId: "stub" };
+
+const queueMessaging: MessagingConnector = {
+  name: "outgoing-queue",
+  async send(tenantId, msg) {
+    try {
+      const { prisma, outgoingMessageQueue } = await import("@chatcenter/shared");
+      const contact = await prisma.contact.findFirst({
+        where: { id: msg.contactId, tenantId },
+        select: { id: true, externalId: true, channel: true },
+      });
+      if (!contact) return { ok: false, error: "contact not found" };
+      // Conversation and Contact are linked by (tenantId, customerExternalId,
+      // channel) — not by FK. Find the most recent conversation matching the
+      // requested outbound channel, falling back to the contact's primary.
+      const convo = await prisma.conversation.findFirst({
+        where: {
+          tenantId,
+          customerExternalId: contact.externalId,
+          channel: msg.channel.toUpperCase() as any,
+        },
+        orderBy: { updatedAt: "desc" },
+        select: { id: true },
+      });
+      if (!convo) return { ok: false, error: "no conversation for contact on requested channel" };
+      const message = await prisma.message.create({
+        data: {
+          tenantId,
+          conversationId: convo.id,
+          direction: "OUTBOUND" as any,
+          body: msg.body,
+          channel: msg.channel.toUpperCase() as any,
+          status: "PENDING" as any,
+          senderName: "AI",
+        },
+        select: { id: true },
+      });
+      await outgoingMessageQueue.add("send", {
+        tenantId,
+        conversationId: convo.id,
+        messageId: message.id,
+        channel: msg.channel,
+        body: msg.body,
+        source: "ai-action-executor",
+      });
+      return { ok: true, messageId: message.id };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? "queue enqueue failed" };
+    }
   },
 };
-registerCrmConnector(stubCrm);
-registerMessagingConnector(stubMessaging);
+
+registerCrmConnector(failingCrm);
+registerMessagingConnector(queueMessaging);

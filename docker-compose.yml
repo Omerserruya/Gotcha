@@ -220,6 +220,9 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
     depends_on:
       db:
         condition: service_healthy
@@ -245,6 +248,8 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads

@@ -10,10 +10,18 @@ import {
   outlookInboundAdapter,
   slackInboundAdapter,
   decryptCredentials,
+  crossTenantMiddleware,
 } from "@chatcenter/shared";
 import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcenter/shared";
 
 const router = Router();
+
+// Inbound webhooks arrive without a user JWT — the tenant is derived by
+// looking up the target ChannelAccount across all tenants. That lookup
+// is a legitimate cross-tenant query; enable the Prisma tenant-guard
+// opt-out for this entire router. Safe because these endpoints verify
+// provider signatures before touching anything.
+router.use(crossTenantMiddleware);
 
 // Webhook verification (GET) - shared by WhatsApp and Messenger
 router.get("/", (req: Request, res: Response) => {

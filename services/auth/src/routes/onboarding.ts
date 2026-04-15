@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage } from "@chatcenter/shared";
 import { sendActivationConfirmation } from "../services/notification.service";
 import OpenAI from "openai";
 
@@ -83,6 +83,7 @@ interface BusinessContext {
 }
 
 async function getOnboardingChatReply(
+  tenantId: string,
   message: string,
   businessContext: BusinessContext,
   chatHistory: Array<{ role: string; content: string }>,
@@ -141,17 +142,15 @@ ${deptDetails}`;
       messages,
     });
 
-    // Track usage + audit (fire-and-forget, never block onboarding)
+    // Track usage via shared helper (fire-and-forget, never block onboarding)
     if (response.usage) {
-      const totalTokens = response.usage.total_tokens;
-      prisma.usageLog.create({
-        data: {
-          tenantId: businessContext.organizationName, // best available identifier
-          type: "ai_tokens",
-          quantity: totalTokens,
-          tokensEquivalent: totalTokens, // actual tokens from model
-          metadata: { model, type: "onboarding" },
-        },
+      trackAIUsage({
+        tenantId,
+        feature: "onboarding",
+        model,
+        promptTokens: response.usage.prompt_tokens,
+        completionTokens: response.usage.completion_tokens,
+        totalTokens: response.usage.total_tokens,
       }).catch((err: any) => console.error("[Onboarding] Usage tracking failed:", err.message));
     }
 
@@ -508,7 +507,7 @@ router.post("/ai-chat", requireRole("ADMIN"), async (req: Request, res: Response
       })),
     };
 
-    const result = await getOnboardingChatReply(message, context, chatHistory, locale);
+    const result = await getOnboardingChatReply(req.tenantId!, message, context, chatHistory, locale);
 
     res.json({ data: { reply: result.reply, readyToGenerate: result.readyToGenerate } });
   } catch (err) {

@@ -1,4 +1,5 @@
 import { Queue, Worker, Job, WorkerOptions } from "bullmq";
+import { withCrossTenantAccess } from "./prisma";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
 
@@ -108,7 +109,17 @@ export function createWorker<T>(
       ? { ...baseOptions, concurrency: concurrencyOrOptions }
       : { ...baseOptions, ...concurrencyOrOptions };
 
-  const worker = new Worker<T>(queueName, processor, options);
+  // Every worker legitimately operates across tenants (polling due
+  // scheduled messages, idle conversations, channel health, etc). Wrap
+  // each job in `withCrossTenantAccess` so the Prisma tenant-guard is
+  // disabled for background worker work — the work is trusted,
+  // tenant-scoped at the data level, and has no user to derive tenant
+  // context from. Individual job processors are still responsible for
+  // passing the correct tenantId when writing rows.
+  const wrappedProcessor = (job: Job<T>): Promise<void> =>
+    withCrossTenantAccess(() => processor(job));
+
+  const worker = new Worker<T>(queueName, wrappedProcessor, options);
 
   worker.on("failed", (job, err) => {
     console.error(`Job ${job?.id} in ${queueName} failed:`, err.message);

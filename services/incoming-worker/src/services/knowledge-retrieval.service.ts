@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { prisma } from "@chatcenter/shared";
+import { prisma, trackAIUsage } from "@chatcenter/shared";
 import { QdrantClient } from "@qdrant/js-client-rest";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -30,16 +30,15 @@ async function generateEmbedding(text: string, tenantId?: string): Promise<numbe
     input: text.replace(/\n/g, " ").trim(),
   });
 
-  // Track embedding usage (fire-and-forget)
+  // Track embedding usage (fire-and-forget) via centralized shared helper
   if (response.usage && tenantId) {
-    prisma.usageLog.create({
-      data: {
-        tenantId,
-        type: "ai_tokens",
-        quantity: response.usage.total_tokens,
-        tokensEquivalent: response.usage.total_tokens,
-        metadata: { model: EMBEDDING_MODEL, type: "embedding" },
-      },
+    trackAIUsage({
+      tenantId,
+      feature: "knowledge_retrieval",
+      model: EMBEDDING_MODEL,
+      promptTokens: response.usage.prompt_tokens ?? response.usage.total_tokens,
+      completionTokens: 0,
+      totalTokens: response.usage.total_tokens,
     }).catch((err: any) => console.error("[Knowledge] Usage tracking failed:", err.message));
   }
 

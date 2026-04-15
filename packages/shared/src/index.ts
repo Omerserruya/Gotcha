@@ -45,7 +45,9 @@ export {
 } from "./channels";
 
 // Lib
-export { prisma } from "./lib/prisma";
+export { prisma, withCrossTenantAccess, crossTenantMiddleware } from "./lib/prisma";
+export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
+export type { AIUsageEvent } from "./lib/ai-usage";
 export { getRedis, closeRedis } from "./lib/redis";
 export { signToken, verifyToken, generateRefreshToken, getJwtExpiresInMs } from "./lib/jwt";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
@@ -66,7 +68,7 @@ export { createServiceApp, startService } from "./lib/service-app";
 // Middleware
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
-export { resolveTenant } from "./middleware/tenant";
+export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 

@@ -114,11 +114,11 @@ const updateDepartmentSchema = z.object({
 
 router.patch("/:id", requireRole("ADMIN"), validate(updateDepartmentSchema), async (req: Request, res: Response) => {
   try {
-    const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     const updated = await prisma.department.update({
-      where: { id: req.params.id },
+      where: { id: String(req.params.id) },
       data: req.body,
     });
     res.json({ data: updated });
@@ -131,10 +131,10 @@ router.patch("/:id", requireRole("ADMIN"), validate(updateDepartmentSchema), asy
 // DELETE /:id - Delete department (ADMIN only)
 router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
-    await prisma.department.delete({ where: { id: req.params.id } });
+    await prisma.department.delete({ where: { id: String(req.params.id) } });
     res.json({ success: true });
   } catch (err) {
     console.error("Delete department error:", err);
@@ -145,11 +145,11 @@ router.delete("/:id", requireRole("ADMIN"), async (req: Request, res: Response) 
 // GET /:id/members - List department members (ADMIN or MANAGER)
 router.get("/:id/members", requireDepartmentRole("MANAGER"), async (req: Request, res: Response) => {
   try {
-    const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     const members = await prisma.departmentMember.findMany({
-      where: { departmentId: req.params.id },
+      where: { departmentId: String(req.params.id) },
       include: {
         user: {
           select: { id: true, name: true, email: true, isActive: true,
@@ -173,7 +173,7 @@ const addMemberSchema = z.object({
 
 router.post("/:id/members", requireRole("ADMIN"), validate(addMemberSchema), async (req: Request, res: Response) => {
   try {
-    const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     const user = await prisma.user.findFirst({ where: { id: req.body.userId, tenantId: req.tenantId! } });
@@ -187,7 +187,7 @@ router.post("/:id/members", requireRole("ADMIN"), validate(addMemberSchema), asy
       data: {
         tenantId: req.tenantId!,
         userId: req.body.userId,
-        departmentId: req.params.id,
+        departmentId: String(req.params.id),
         departmentRole: req.body.departmentRole || "AGENT",
       },
       include: { user: { select: { id: true, name: true, email: true } } },
@@ -207,7 +207,7 @@ const updateMemberSchema = z.object({
 router.patch("/:id/members/:userId", requireRole("ADMIN"), validate(updateMemberSchema), async (req: Request, res: Response) => {
   try {
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: req.params.userId, departmentId: req.params.id },
+      where: { userId: String(req.params.userId), departmentId: String(req.params.id) },
     });
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 
@@ -227,7 +227,7 @@ router.patch("/:id/members/:userId", requireRole("ADMIN"), validate(updateMember
 router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: req.params.userId, departmentId: req.params.id },
+      where: { userId: String(req.params.userId), departmentId: String(req.params.id) },
     });
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 
@@ -239,10 +239,125 @@ router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request,
   }
 });
 
+// ─── Department Copilot (= AI Employee attached to the department) ──
+// The "department copilot" is the AIAgent attached to this department via
+// RouterRule (routeType=AI_AGENT, routeTarget=<departmentId>). There is no
+// separate copilot-config blob — reading/writing this route resolves the
+// attached AIAgent and maps its fields to the UI payload shape expected by
+// `frontend/src/lib/api.ts` (`getDepartmentCopilot` / `updateDepartmentCopilot`).
+//
+// If no AI Employee is attached yet, GET returns { data: null, source: "default" }
+// and PUT returns 400 asking the caller to attach one first via PUT /:id/ai-employee.
+
+function aiAgentToCopilotPayload(agent: any) {
+  return {
+    copilotMode: agent.mode === "COPILOT" ? "READY_MESSAGE" : "AUTONOMOUS",
+    systemPrompt: agent.systemPrompt ?? "",
+    rules: agent.escalationRules ?? [],
+    model: agent.model,
+    provider: agent.provider,
+    temperature: agent.temperature,
+    maxTokens: agent.maxTokens,
+    isActive: agent.status === "ACTIVE",
+    identity: agent.identity ?? null,
+    goals: agent.goals ?? null,
+    tone: agent.toneConfig ?? null,
+    behavioral: agent.behavioral ?? null,
+  };
+}
+
+async function resolveDepartmentAIAgent(tenantId: string, departmentId: string) {
+  const rule = await prisma.routerRule.findFirst({
+    where: {
+      tenantId,
+      routeType: "AI_AGENT",
+      aiAgentId: { not: null },
+      routeTarget: departmentId,
+    },
+    orderBy: { priority: "asc" },
+  });
+  if (!rule?.aiAgentId) return null;
+  return prisma.aIAgent.findFirst({
+    where: { id: rule.aiAgentId, tenantId },
+  });
+}
+
+router.get("/:id/copilot", async (req: Request, res: Response) => {
+  try {
+    const dept = await prisma.department.findFirst({
+      where: { id: String(req.params.id), tenantId: req.tenantId! },
+      select: { id: true, name: true },
+    });
+    if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
+    const agent = await resolveDepartmentAIAgent(req.tenantId!, dept.id);
+    if (!agent) {
+      res.json({ data: null, source: "default" });
+      return;
+    }
+    res.json({ data: aiAgentToCopilotPayload(agent), source: "department" });
+  } catch (err) {
+    console.error("Get department copilot error:", err);
+    res.status(500).json({ error: "Failed to get department copilot" });
+  }
+});
+
+const updateCopilotSchema = z.object({}).passthrough();
+router.put(
+  "/:id/copilot",
+  requireRole("ADMIN"),
+  validate(updateCopilotSchema),
+  async (req: Request, res: Response) => {
+    try {
+      const dept = await prisma.department.findFirst({
+        where: { id: String(req.params.id), tenantId: req.tenantId! },
+        select: { id: true },
+      });
+      if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
+      const agent = await resolveDepartmentAIAgent(req.tenantId!, dept.id);
+      if (!agent) {
+        res.status(400).json({
+          error:
+            "No AI Employee attached to this department. Attach one via PUT /:id/ai-employee before editing its configuration.",
+        });
+        return;
+      }
+      const body = req.body ?? {};
+      const data: any = {};
+      if (body.copilotMode !== undefined) {
+        data.mode = body.copilotMode === "AUTONOMOUS" ? "AUTONOMOUS" : "COPILOT";
+      }
+      if (typeof body.systemPrompt === "string") data.systemPrompt = body.systemPrompt;
+      if (Array.isArray(body.rules)) data.escalationRules = body.rules as any;
+      if (typeof body.model === "string") data.model = body.model;
+      if (typeof body.provider === "string") data.provider = body.provider;
+      if (typeof body.temperature === "number") data.temperature = body.temperature;
+      if (typeof body.maxTokens === "number") data.maxTokens = body.maxTokens;
+      if (typeof body.isActive === "boolean") {
+        data.status = body.isActive ? "ACTIVE" : "DRAFT";
+      }
+      if (body.identity !== undefined) data.identity = body.identity;
+      if (body.goals !== undefined) data.goals = body.goals;
+      if (body.tone !== undefined) data.toneConfig = body.tone;
+      if (body.behavioral !== undefined) data.behavioral = body.behavioral;
+      // Note: `tools` in the UI payload is NOT persisted here — per-department
+      // tool permissions live on `AgentToolPermission` and are managed via
+      // PUT /api/tools/permissions/:departmentId.
+      const updated = await prisma.aIAgent.update({
+        where: { id: agent.id },
+        data,
+      });
+      res.json({ data: aiAgentToCopilotPayload(updated) });
+    } catch (err) {
+      console.error("Update department copilot error:", err);
+      res.status(500).json({ error: "Failed to update department copilot" });
+    }
+  },
+);
+
 // GET /:id/ai-employee - Get assigned AI Employee for department
 router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Request, res: Response) => {
   try {
-    const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     // Find AI employee assigned via router rule
@@ -252,7 +367,7 @@ router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Req
         routeType: "AI_AGENT",
         aiAgentId: { not: null },
         enabled: true,
-        routeTarget: req.params.id,
+        routeTarget: String(req.params.id),
       },
       orderBy: { priority: "asc" },
     });
@@ -280,7 +395,7 @@ const assignAIEmployeeSchema = z.object({
 
 router.put("/:id/ai-employee", requireRole("ADMIN"), validate(assignAIEmployeeSchema), async (req: Request, res: Response) => {
   try {
-    const dept = await prisma.department.findFirst({ where: { id: req.params.id, tenantId: req.tenantId! } });
+    const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
     const { aiAgentId } = req.body;
@@ -290,7 +405,7 @@ router.put("/:id/ai-employee", requireRole("ADMIN"), validate(assignAIEmployeeSc
       where: {
         tenantId: req.tenantId!,
         routeType: "AI_AGENT",
-        routeTarget: req.params.id,
+        routeTarget: String(req.params.id),
       },
     });
 
@@ -326,10 +441,10 @@ router.put("/:id/ai-employee", requireRole("ADMIN"), validate(assignAIEmployeeSc
           tenantId: req.tenantId!,
           name: `${dept.name} AI Employee`,
           priority: (maxPriority._max.priority || 0) + 1,
-          conditions: [{ field: "department", operator: "equals", value: req.params.id }],
+          conditions: [{ field: "department", operator: "equals", value: String(req.params.id) }],
           logic: "AND",
           routeType: "AI_AGENT",
-          routeTarget: req.params.id,
+          routeTarget: String(req.params.id),
           aiAgentId,
           enabled: true,
         },

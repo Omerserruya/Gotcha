@@ -1771,7 +1771,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
   try {
     const { color, iconUrl, title, subtitle, welcome, position } = req.body;
     const account = await prisma.channelAccount.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId!, channel: "WEBCHAT" },
+      where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
     if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
 
@@ -1792,7 +1792,7 @@ router.put("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId!, channel: "WEBCHAT" },
+      where: { id: String(req.params.id), tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
     if (!account) { res.status(404).json({ error: "Widget not found" }); return; }
     res.json({ data: account.credentials || {} });

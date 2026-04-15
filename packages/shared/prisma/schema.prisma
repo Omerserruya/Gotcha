@@ -294,13 +294,7 @@ model Message {
   @@map("messages")
 }
 
-// ─── AI Agent Mode & Status ─────────────────────────────────
-
-enum AIAgentMode {
-  AUTONOMOUS
-  COPILOT
-  HUMAN_ONLY
-}
+// ─── AI Agent Status ─────────────────────────────────────────
 
 enum AIAgentStatus {
   ACTIVE
@@ -317,7 +311,6 @@ model AIAgent {
   role                String        @default("customer_support") // customer_support, sales, booking, billing, custom
   description         String?
   avatarColor         String        @default("#7c5cfc") @map("avatar_color")
-  mode                AIAgentMode   @default(AUTONOMOUS)
   status              AIAgentStatus @default(DRAFT)
   tone                String        @default("professional") // professional, friendly, casual, formal
   languages           Json          @default("{\"english\":true}") // { english: bool, hebrew: bool, arabic: bool }
@@ -614,26 +607,6 @@ model KnowledgeChunk {
 }
 
 // ─── Token Usage Logs ────────────────────────────────────────
-
-model TokenLog {
-  id               String   @id @default(cuid())
-  tenantId         String   @map("tenant_id")
-  type             String // "chat" | "embedding" | "suggestion" | "summary" | "classification"
-  model            String // "gpt-4o-mini", "text-embedding-3-small", etc.
-  promptTokens     Int      @map("prompt_tokens")
-  completionTokens Int      @default(0) @map("completion_tokens")
-  totalTokens      Int      @map("total_tokens")
-  conversationId   String?  @map("conversation_id")
-  documentId       String?  @map("document_id")
-  metadata         Json?
-  createdAt        DateTime @default(now()) @map("created_at")
-
-  @@index([tenantId])
-  @@index([tenantId, type])
-  @@index([tenantId, createdAt])
-  @@index([conversationId])
-  @@map("token_logs")
-}
 
 // ─── Magic Links (passwordless onboarding) ──────────────────
 
@@ -991,7 +964,9 @@ model Contact {
   channel           ChannelType
   displayName       String?     @map("display_name")
   email             String?
+  emailVerified     Boolean     @default(false) @map("email_verified")
   phone             String?
+  phoneVerified     Boolean     @default(false) @map("phone_verified")
   avatarUrl         String?     @map("avatar_url")
   metadata          Json? // custom fields
   tags              Json        @default("[]") // string[] for segmentation
@@ -1000,6 +975,17 @@ model Contact {
   source            String? // campaign/channel source
   optOutChannels    Json        @default("[]") @map("opt_out_channels") // string[] of opted-out channel types
   optedOutAt        DateTime?   @map("opted_out_at")
+  // Cross-channel identity: multiple contact rows sharing the same personId
+  // represent one real human across WA/IG/Gmail/Messenger/etc. Assigned by
+  // the unifier when a shared identifier is discovered (email/phone match
+  // or explicit capture via /api/identity/capture).
+  personId          String?     @map("person_id")
+  // Soft-merge pointer: when set, this row has been merged into mergedIntoId.
+  // The row is kept (not deleted) so incoming webhook lookups by
+  // (tenantId, channel, externalId) still resolve — `resolveContactByChannelId`
+  // follows the pointer to the surviving target. Replaces the old
+  // hard-delete path that created "ghost" contacts after merges.
+  mergedIntoId      String?     @map("merged_into_id")
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
@@ -1012,7 +998,49 @@ model Contact {
   @@index([tenantId, phone])
   @@index([tenantId, email])
   @@index([tenantId, lastInteractionAt])
+  @@index([tenantId, personId])
+  @@index([mergedIntoId])
   @@map("contacts")
+}
+
+// ─── Identity Link Suggestions ─────────────────────────────
+// AI-proposed or system-proposed links between contacts. A suggestion is
+// created when an identifier (email/phone) extracted from one contact is
+// already attached to a different contact in the same tenant. Merging is
+// a separate, explicit, approval-gated operation — this table is the
+// pending queue feeding that decision. Never auto-merged on insert.
+
+enum IdentityLinkStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  APPLIED
+}
+
+enum IdentityLinkIdentifierType {
+  EMAIL
+  PHONE
+}
+
+model IdentityLinkSuggestion {
+  id              String                     @id @default(cuid())
+  tenantId        String                     @map("tenant_id")
+  sourceContactId String                     @map("source_contact_id")
+  targetContactId String                     @map("target_contact_id")
+  identifierType  IdentityLinkIdentifierType @map("identifier_type")
+  identifierValue String                     @map("identifier_value")
+  confidence      Float                      @default(0)
+  status          IdentityLinkStatus         @default(PENDING)
+  reason          String?
+  messageId       String?                    @map("message_id")
+  createdAt       DateTime                   @default(now()) @map("created_at")
+  decidedAt       DateTime?                  @map("decided_at")
+  decidedBy       String?                    @map("decided_by")
+
+  @@unique([tenantId, sourceContactId, targetContactId, identifierType, identifierValue], map: "identity_link_unique")
+  @@index([tenantId, status])
+  @@index([tenantId, targetContactId])
+  @@map("identity_link_suggestions")
 }
 
 // ─── Message Templates ─────────────────────────────────────
@@ -1180,12 +1208,22 @@ model UsageLog {
   type             String // "ai_tokens" | "message_sent" | "tool_call" | "automation_run"
   quantity         Int
   tokensEquivalent Int      @map("tokens_equivalent")
-  metadata         Json? // { model, channel, tool, conversationId, messageId }
+  // AI-specific denormalized columns — populated when type="ai_tokens" so the
+  // Platform Usage admin view can aggregate by model/feature and price the
+  // prompt/completion split accurately without hitting the metadata JSON.
+  feature          String? // "chat" | "suggestion" | "summary" | "classification" | "embedding" | "action_plan" | "intent_classify" | "onboarding" | "followup" | "ai_bot" | "knowledge_retrieval"
+  model            String?
+  promptTokens     Int?     @map("prompt_tokens")
+  completionTokens Int?     @map("completion_tokens")
+  costUsd          Decimal? @db.Decimal(12, 6) @map("cost_usd")
+  metadata         Json? // { channel, tool, conversationId, messageId, ... }
   createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([tenantId])
   @@index([tenantId, type])
   @@index([tenantId, createdAt])
+  @@index([tenantId, feature])
+  @@index([tenantId, model])
   @@map("usage_logs")
 }
 
@@ -1242,4 +1280,18 @@ model FlowCanvas {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("flow_canvas")
+}
+
+// ─── Business Policy (Per-tenant AI execution policy) ─────
+// Persistent source of truth for the AI service's policy engine. Read
+// by services/ai/src/services/policy.service.ts on every executeAction.
+// Written via the same service's setPolicy(). In-process caching may
+// wrap reads but MUST NOT override the DB value.
+model BusinessPolicy {
+  tenantId  String   @id @map("tenant_id")
+  data      Json     @default("{}") // BusinessPolicy shape (maxDiscountPercent, refundRequiresApproval, escalationKeywords, blockedTopics, outboundQuietHours)
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("business_policies")
 }

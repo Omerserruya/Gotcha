@@ -14,7 +14,7 @@ router.get("/", async (req: Request, res: Response) => {
         catalogTool: true,
         tenantIntegration: {
           include: {
-            integration: { select: { name: true, slug: true, icon: true } },
+            integration: { select: { name: true, slug: true } },
           },
         },
       },
@@ -44,7 +44,7 @@ router.get("/permissions/:departmentId", async (req: Request, res: Response) => 
       where: { tenantId: req.tenantId!, isEnabled: true },
       include: {
         catalogTool: true,
-        agentToolPermissions: {
+        agentPermissions: {
           where: { departmentId },
           select: { id: true, isAllowed: true, requireApproval: true },
         },
@@ -83,12 +83,14 @@ router.put("/permissions/:departmentId", async (req: Request, res: Response) => 
         (p: { tenantToolId: string; isAllowed: boolean; requireApproval?: boolean }) =>
           prisma.agentToolPermission.upsert({
             where: {
-              tenantToolId_departmentId: {
+              tenantToolId_departmentId_agentId: {
                 tenantToolId: p.tenantToolId,
                 departmentId,
+                agentId: null as any,
               },
             },
             create: {
+              tenantId: req.tenantId!,
               tenantToolId: p.tenantToolId,
               departmentId,
               isAllowed: p.isAllowed,

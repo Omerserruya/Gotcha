@@ -9,7 +9,7 @@
  */
 
 import OpenAI from "openai";
-import { trackUsage } from "./usage.service";
+import { trackAIUsage } from "@chatcenter/shared";
 import { logAudit } from "./audit.service";
 
 // ─── Types ──────────────────────────────────────────────────
@@ -113,16 +113,16 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   const content = response.choices[0]?.message?.content || "";
 
   // Track usage (fire-and-forget, never block the response)
-  trackUsage({
+  trackAIUsage({
     tenantId: params.tenantId,
-    type: "ai_tokens",
-    quantity: usage.total_tokens,
+    feature: type,
+    model,
+    promptTokens: usage.input_tokens,
+    completionTokens: usage.output_tokens,
+    totalTokens: usage.total_tokens,
     metadata: {
-      model,
       conversationId: params.metadata?.conversationId,
-      type,
-      input_tokens: usage.input_tokens,
-      output_tokens: usage.output_tokens,
+      aiAgentId: params.metadata?.aiAgentId,
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
 
@@ -164,13 +164,14 @@ export async function generateEmbedding(params: EmbeddingRequestParams): Promise
   };
 
   // Track usage (fire-and-forget)
-  trackUsage({
+  trackAIUsage({
     tenantId: params.tenantId,
-    type: "ai_tokens",
-    quantity: usage.total_tokens,
+    feature: "embedding",
+    model,
+    promptTokens: usage.input_tokens,
+    completionTokens: 0,
+    totalTokens: usage.total_tokens,
     metadata: {
-      model,
-      type: "embedding",
       documentId: params.metadata?.documentId,
     },
   }).catch((err) => console.error("[aiService] Embedding usage tracking failed:", err.message));

@@ -61,7 +61,7 @@ router.post("/", async (req: Request, res: Response) => {
 router.patch("/:id", async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
@@ -85,7 +85,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
 router.delete("/:id", async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
@@ -102,7 +102,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 router.post("/:id/documents", async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
@@ -156,7 +156,7 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
 router.delete("/:id/documents/:docId", async (req: Request, res: Response) => {
   try {
     const doc = await prisma.knowledgeDocument.findFirst({
-      where: { id: req.params.docId, knowledgeBaseId: req.params.id, tenantId: req.tenantId! },
+      where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
@@ -173,7 +173,7 @@ router.delete("/:id/documents/:docId", async (req: Request, res: Response) => {
 router.post("/:id/documents/upload", upload.single("file"), async (req: Request, res: Response) => {
   try {
     const kb = await prisma.knowledgeBase.findFirst({
-      where: { id: req.params.id, tenantId: req.tenantId! },
+      where: { id: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!kb) { res.status(404).json({ error: "Knowledge base not found" }); return; }
 
@@ -226,7 +226,7 @@ router.post("/:id/documents/upload", upload.single("file"), async (req: Request,
 router.post("/:id/documents/:docId/process", async (req: Request, res: Response) => {
   try {
     const doc = await prisma.knowledgeDocument.findFirst({
-      where: { id: req.params.docId, knowledgeBaseId: req.params.id, tenantId: req.tenantId! },
+      where: { id: String(req.params.docId), knowledgeBaseId: String(req.params.id), tenantId: req.tenantId! },
     });
     if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 

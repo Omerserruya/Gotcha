@@ -248,17 +248,23 @@ export async function getToolUsageStats(tenantId: string, from?: string, to?: st
 
   const executions = await prisma.toolExecution.findMany({
     where: { tenantId, createdAt: dateFilter },
-    select: { toolId: true, success: true, durationMs: true, tool: { select: { name: true } } },
+    select: {
+      tenantToolId: true,
+      success: true,
+      durationMs: true,
+      tenantTool: { select: { catalogTool: { select: { name: true } } } },
+    },
   });
 
   const byTool: Record<string, { toolName: string; total: number; successes: number; durations: number[] }> = {};
   for (const ex of executions) {
-    if (!byTool[ex.toolId]) {
-      byTool[ex.toolId] = { toolName: ex.tool.name, total: 0, successes: 0, durations: [] };
+    const toolName = ex.tenantTool?.catalogTool?.name ?? "unknown";
+    if (!byTool[ex.tenantToolId]) {
+      byTool[ex.tenantToolId] = { toolName, total: 0, successes: 0, durations: [] };
     }
-    byTool[ex.toolId].total += 1;
-    if (ex.success) byTool[ex.toolId].successes += 1;
-    if (ex.durationMs != null) byTool[ex.toolId].durations.push(ex.durationMs);
+    byTool[ex.tenantToolId].total += 1;
+    if (ex.success) byTool[ex.tenantToolId].successes += 1;
+    if (ex.durationMs != null) byTool[ex.tenantToolId].durations.push(ex.durationMs);
   }
 
   return Object.entries(byTool).map(([toolId, stats]) => ({
@@ -292,7 +298,9 @@ export async function getChannelPerformance(tenantId: string, from?: string, to?
 
   const msgCountByConv: Record<string, number> = {};
   for (const m of messages) {
-    msgCountByConv[m.conversationId] = m._count.id;
+    if (m.conversationId) {
+      msgCountByConv[m.conversationId] = m._count.id;
+    }
   }
 
   type ChannelStats = {
@@ -401,9 +409,9 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
       where: { tenantId, analyzedAt: dateFilter },
       select: { aiConfidence: true, resolutionOutcome: true },
     }),
-    prisma.tokenLog.aggregate({
-      where: { tenantId, createdAt: dateFilter },
-      _sum: { totalTokens: true, promptTokens: true, completionTokens: true },
+    prisma.usageLog.aggregate({
+      where: { tenantId, type: "ai_tokens", createdAt: dateFilter },
+      _sum: { quantity: true, promptTokens: true, completionTokens: true },
     }),
   ]);
 
@@ -430,7 +438,7 @@ export async function getAIPerformance(tenantId: string, from?: string, to?: str
     avgAIConfidence,
     escalationRate,
     tokenUsage: {
-      total: tokenSums._sum.totalTokens || 0,
+      total: tokenSums._sum.quantity || 0,
       prompt: tokenSums._sum.promptTokens || 0,
       completion: tokenSums._sum.completionTokens || 0,
     },

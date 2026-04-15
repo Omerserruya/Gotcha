@@ -2,11 +2,38 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import request from "supertest";
 import express from "express";
 
+vi.mock("../services/ai-assist.service", () => ({
+  getEffectiveCopilotConfig: vi.fn().mockResolvedValue({
+    copilotMode: "READY_MESSAGE",
+    model: "gpt-4o-mini",
+    systemPrompt: "test",
+  }),
+  getSuggestions: vi.fn().mockResolvedValue([
+    { id: "s1", text: "Thanks for reaching out!", confidence: 0.9, type: "reply" },
+  ]),
+  summarizeConversation: vi.fn().mockResolvedValue("stub summary"),
+}));
+
+vi.mock("../services/ai.service", () => ({
+  generateResponse: vi.fn().mockResolvedValue({
+    content: JSON.stringify({
+      summary: "stub summary",
+      suggestions: ["Thanks for reaching out", "How can I help?", "One moment please"],
+    }),
+    usage: { promptTokens: 1, completionTokens: 1, totalTokens: 2 },
+  }),
+  getDefaultModel: vi.fn().mockReturnValue("gpt-4o-mini"),
+}));
+
 vi.mock("@chatcenter/shared", () => {
   const mockPrisma = {
     conversation: { findFirst: vi.fn() },
     message: { findMany: vi.fn() },
+    aIAgent: { findMany: vi.fn().mockResolvedValue([]) },
+    businessPolicy: { findUnique: vi.fn().mockResolvedValue(null), upsert: vi.fn() },
   };
+  const passthrough = (_req: any, _res: any, next: any) => next();
+  const factory = () => passthrough;
 
   return {
     prisma: mockPrisma,
@@ -19,6 +46,9 @@ vi.mock("@chatcenter/shared", () => {
       req.tenantId = req.tenantId || "tenant-1";
       next();
     },
+    requireActiveTenant: factory,
+    requireRole: () => passthrough,
+    requireSystemAdmin: passthrough,
     createServiceApp: (config: any) => {
       const app = express();
       app.use(express.json());

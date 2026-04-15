@@ -1,3 +1,18 @@
+/**
+ * Integration Tool Executor
+ *
+ * Executes tenant-scoped integration tools resolved via
+ * TenantTool → CatalogTool. Uses the REAL schema fields:
+ *
+ *   CatalogTool.endpoint    — target URL (required)
+ *   CatalogTool.method      — HTTP verb (default GET)
+ *   CatalogTool.inputSchema — JSON-Schema-ish params contract
+ *   CatalogTool.category    — READ | WRITE | DELETE | ACTION
+ *
+ * Credentials and per-tenant config come from TenantIntegration.
+ * No silent fallback: missing endpoint, unreachable host, 4xx/5xx →
+ * structured failure with { ok:false, error }.
+ */
 import { prisma, analyticsQueue } from "@chatcenter/shared";
 import axios from "axios";
 import { trackToolCall } from "./usage.service";
@@ -22,13 +37,43 @@ export async function getToolsForTenant(tenantId: string) {
   });
 }
 
+export interface ToolExecutionResult {
+  ok: boolean;
+  output?: unknown;
+  error?: string;
+  status?: number;
+  durationMs?: number;
+  executionId?: string;
+}
+
+/**
+ * Validate `input` against a CatalogTool.inputSchema.
+ * Very permissive intentionally — we only enforce presence of keys the
+ * schema's top-level `required` array asks for. The LLM tool call surface
+ * is otherwise loosely typed, so we refuse to invent stricter gates here.
+ */
+function validateInput(
+  inputSchema: unknown,
+  input: Record<string, unknown>,
+): { ok: true } | { ok: false; reason: string } {
+  if (!inputSchema || typeof inputSchema !== "object") return { ok: true };
+  const schema = inputSchema as Record<string, unknown>;
+  const required = Array.isArray(schema.required) ? (schema.required as string[]) : [];
+  for (const key of required) {
+    if (!(key in input) || input[key] === undefined || input[key] === null || input[key] === "") {
+      return { ok: false, reason: `missing required param: ${key}` };
+    }
+  }
+  return { ok: true };
+}
+
 export async function executeTool(params: {
   tenantId: string;
   conversationId: string;
   tenantToolId: string;
   input: Record<string, any>;
   triggeredBy: string;
-}) {
+}): Promise<ToolExecutionResult> {
   const { tenantId, conversationId, tenantToolId, input, triggeredBy } = params;
 
   const tenantTool = await prisma.tenantTool.findFirst({
@@ -39,156 +84,106 @@ export async function executeTool(params: {
     },
   });
 
-  if (!tenantTool) throw new Error("Tool not found");
-  if (!tenantTool.isEnabled) throw new Error("Tool is not active");
+  if (!tenantTool) {
+    return { ok: false, error: "tool not found" };
+  }
+  if (!tenantTool.isEnabled) {
+    return { ok: false, error: "tool is disabled" };
+  }
 
   const catalogTool = tenantTool.catalogTool;
-  const credentials = tenantTool.tenantIntegration.credentials as any;
-  const config = { ...((catalogTool.config as any) || {}), ...credentials };
+  const integration = tenantTool.tenantIntegration;
+  const credentials = (integration.credentials as Record<string, any>) || {};
+  const integrationConfig = (integration.config as Record<string, any>) || {};
+  const overrides = (tenantTool.configOverrides as Record<string, any>) || {};
+
+  // Fail loudly on missing endpoint — no silent fallback.
+  if (!catalogTool.endpoint) {
+    return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
+  }
+
+  // Validate params against catalog schema before dispatching.
+  const gate = validateInput(catalogTool.inputSchema, input);
+  if (!gate.ok) {
+    return { ok: false, error: gate.reason };
+  }
+
+  const method = (catalogTool.method || "GET").toUpperCase() as
+    | "GET"
+    | "POST"
+    | "PUT"
+    | "PATCH"
+    | "DELETE";
+
+  // URL template support: replace :param placeholders from `input` or
+  // from integrationConfig.  e.g. "/contacts/:id" + { id: "c1" }.
+  let url = catalogTool.endpoint;
+  url = url.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key: string) => {
+    const v = input[key] ?? integrationConfig[key] ?? overrides[key];
+    return v !== undefined && v !== null ? encodeURIComponent(String(v)) : "";
+  });
+
+  // Credential injection. Common patterns: bearer token, API key header,
+  // or explicit headers from integration.config.headers.
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (typeof credentials.accessToken === "string") {
+    headers["Authorization"] = `Bearer ${credentials.accessToken}`;
+  } else if (typeof credentials.apiKey === "string") {
+    headers["Authorization"] = `Bearer ${credentials.apiKey}`;
+  }
+  if (integrationConfig.headers && typeof integrationConfig.headers === "object") {
+    Object.assign(headers, integrationConfig.headers);
+  }
 
   const startTime = Date.now();
-  let output: Record<string, any>;
-  let success = true;
+  let output: unknown = null;
+  let success = false;
+  let statusCode: number | undefined;
+  let errorMessage: string | undefined;
 
   try {
-    switch (catalogTool.toolType) {
-      case "INTERNAL_API": {
-        if (config?.apiUrl) {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
-          if (config.headers && typeof config.headers === "object") Object.assign(headers, config.headers);
-
-          const method = (input.method || "GET").toUpperCase();
-          const axiosConfig: any = { url: config.apiUrl, method, headers, timeout: 10000 };
-
-          if (method === "GET") {
-            axiosConfig.params = input.params || input;
-          } else {
-            axiosConfig.data = input.body || input;
-          }
-
-          const response = await axios(axiosConfig);
-          output = { status: response.status, data: response.data };
-        } else {
-          output = { result: "Internal API executed successfully" };
-        }
-        break;
-      }
-
-      case "CRM": {
-        if (config?.apiUrl) {
-          const action = input.action || "lookup";
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
-
-          let endpoint = config.apiUrl;
-          let response: any;
-
-          if (action === "lookup" && input.customerId) {
-            endpoint += `/contacts/${input.customerId}`;
-            response = await axios.get(endpoint, { headers, timeout: 10000 });
-          } else if (action === "search" && input.query) {
-            endpoint += `/contacts/search?q=${encodeURIComponent(input.query)}`;
-            response = await axios.get(endpoint, { headers, timeout: 10000 });
-          } else if (action === "create") {
-            response = await axios.post(`${endpoint}/contacts`, input.body || input, { headers, timeout: 10000 });
-          } else {
-            response = await axios.get(endpoint, { headers, timeout: 10000 });
-          }
-
-          output = { status: response.status, data: response.data };
-        } else {
-          output = { customer: { name: "Unknown", status: "active" } };
-        }
-        break;
-      }
-
-      case "ECOMMERCE": {
-        if (config?.apiUrl) {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (config.apiKey) headers["X-Shopify-Access-Token"] = config.apiKey;
-          if (config.headers && typeof config.headers === "object") Object.assign(headers, config.headers);
-
-          const action = input.action || "lookup";
-          let endpoint = config.apiUrl;
-          let response: any;
-
-          if (action === "refund" && input.orderId) {
-            response = await axios.post(
-              `${endpoint}/orders/${input.orderId}/refunds.json`,
-              input.body || {},
-              { headers, timeout: 10000 }
-            );
-            output = { status: response.status, data: response.data };
-          } else {
-            if (action === "order_lookup" && input.orderId) {
-              endpoint += `/orders/${input.orderId}.json`;
-            } else if (action === "customer_lookup" && input.customerId) {
-              endpoint += `/customers/${input.customerId}.json`;
-            }
-            response = await axios.get(endpoint, { headers, timeout: 10000 });
-            output = { status: response.status, data: response.data };
-          }
-        } else {
-          output = { order: { id: "ORD-UNKNOWN", status: "shipped" } };
-        }
-        break;
-      }
-
-      case "KNOWLEDGE_BASE": {
-        if (config?.apiUrl) {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
-          const response = await axios.post(
-            config.apiUrl,
-            { query: input.query || input.text || "" },
-            { headers, timeout: 10000 }
-          );
-          output = { status: response.status, data: response.data };
-        } else {
-          output = { result: "Knowledge base search completed", note: "Configure apiUrl for external KB" };
-        }
-        break;
-      }
-
-      case "CUSTOM":
-      default: {
-        if (config?.apiUrl) {
-          const headers: Record<string, string> = { "Content-Type": "application/json" };
-          if (config.apiKey) headers["Authorization"] = `Bearer ${config.apiKey}`;
-          if (config.headers && typeof config.headers === "object") Object.assign(headers, config.headers);
-
-          const method = (config.method || input.method || "POST").toUpperCase();
-          const response = await axios({ url: config.apiUrl, method, headers, data: input, timeout: 10000 });
-          output = { status: response.status, data: response.data };
-        } else {
-          output = { result: "Tool executed successfully" };
-        }
-        break;
-      }
-    }
-  } catch (err: any) {
-    success = false;
-    if (err.code === "ECONNABORTED" || err.message?.includes("timeout")) {
-      output = { error: "Tool execution timed out" };
+    const axiosConfig: any = {
+      url,
+      method,
+      headers,
+      timeout: 10000,
+    };
+    if (method === "GET" || method === "DELETE") {
+      axiosConfig.params = input;
     } else {
-      output = {
-        error: err.message || "Tool execution failed",
-        status: err.response?.status,
-        data: err.response?.data,
-      };
+      axiosConfig.data = input;
+    }
+    const response = await axios(axiosConfig);
+    statusCode = response.status;
+    output = response.data;
+    success = true;
+  } catch (err: any) {
+    if (err?.code === "ECONNABORTED" || err?.message?.includes("timeout")) {
+      errorMessage = "tool execution timed out";
+    } else if (err?.response) {
+      statusCode = err.response.status;
+      errorMessage = `upstream ${err.response.status}: ${
+        typeof err.response.data === "string"
+          ? err.response.data
+          : JSON.stringify(err.response.data)
+      }`;
+      output = err.response.data;
+    } else {
+      errorMessage = err?.message ?? "tool execution failed";
     }
   }
 
   const durationMs = Date.now() - startTime;
 
+  // Always record the execution — success or failure — for the audit
+  // trail. Never silently swallow.
   const execution = await prisma.toolExecution.create({
     data: {
       tenantId,
       conversationId,
       tenantToolId,
       input,
-      output,
+      output: output as any,
       success,
       durationMs,
       triggeredBy,
@@ -208,22 +203,36 @@ export async function executeTool(params: {
     timestamp: new Date().toISOString(),
   });
 
-  // Track usage (fire-and-forget)
-  trackToolCall(tenantId, {
-    tool: catalogTool.name,
-    conversationId,
-  }).catch((err) => console.error("[ToolExec] Usage tracking failed:", err.message));
+  trackToolCall(tenantId, { tool: catalogTool.name, conversationId }).catch((err) =>
+    console.error("[ToolExec] Usage tracking failed:", err.message),
+  );
 
-  // Audit log (fire-and-forget)
   logAudit({
     tenantId,
     actor: { type: triggeredBy === "ai" ? "ai" : "user", id: triggeredBy !== "ai" ? triggeredBy : undefined },
     action: "tool.executed",
     target: { type: "tool", id: tenantToolId },
-    metadata: { toolName: catalogTool.name, success, durationMs, conversationId },
+    metadata: {
+      toolName: catalogTool.name,
+      slug: catalogTool.slug,
+      endpoint: catalogTool.endpoint,
+      method,
+      success,
+      status: statusCode,
+      durationMs,
+      conversationId,
+      error: errorMessage,
+    },
   }).catch((err) => console.error("[ToolExec] Audit logging failed:", err.message));
 
-  return execution;
+  return {
+    ok: success,
+    output,
+    error: errorMessage,
+    status: statusCode,
+    durationMs,
+    executionId: execution.id,
+  };
 }
 
 export async function getToolExecutions(tenantId: string, conversationId: string) {
@@ -233,7 +242,7 @@ export async function getToolExecutions(tenantId: string, conversationId: string
     include: {
       tenantTool: {
         include: {
-          catalogTool: { select: { name: true, toolType: true } },
+          catalogTool: { select: { name: true, slug: true, category: true } },
         },
       },
     },

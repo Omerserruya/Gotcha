@@ -110,7 +110,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
     let description = responsibility;
     try {
       const wizardSummary = Object.entries(answers)
-        .filter(([_, v]) => v && v.trim())
+        .filter(([, v]) => typeof v === "string" && v.trim().length > 0)
         .map(([k, v]) => `${k}: ${v}`)
         .join("\n");
 

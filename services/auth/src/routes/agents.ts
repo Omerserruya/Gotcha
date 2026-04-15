@@ -94,7 +94,7 @@ router.post("/:id/reset-password", requireRole("ADMIN"), validate(resetAgentPass
 
     const bcrypt = require("bcryptjs");
     const hashed = await bcrypt.hash(req.body.newPassword, 12);
-    await prisma.user.update({ where: { id: agent.id }, data: { passwordHash: hashed } });
+    await prisma.user.update({ where: { id: agent.id }, data: { password: hashed } });
     res.json({ success: true });
   } catch (err) {
     console.error("Reset agent password error:", err);
@@ -407,7 +407,7 @@ router.put("/settings/sla/department/:departmentId", requireRole("ADMIN"), valid
   try {
     // Verify department belongs to tenant
     const dept = await prisma.department.findFirst({
-      where: { id: req.params.departmentId, tenantId: req.tenantId! },
+      where: { id: String(req.params.departmentId), tenantId: req.tenantId! },
     });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 

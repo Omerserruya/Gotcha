@@ -83,10 +83,27 @@ export function getApprovalQueue(token: string) {
   return req("GET", "/api/action-planner/approvals", token);
 }
 
+export interface SimulateResponse {
+  mode: "chat" | "execution";
+  plan: ExecutionPlan | null;
+  results: any[];
+  answer?: string;
+  clarification?: string | null;
+}
+
 export function simulateCommand(token: string, prompt: string, context?: unknown) {
-  return req<{ plan: ExecutionPlan; results: any[] }>(
+  return req<SimulateResponse>(
     "POST",
     "/api/action-planner/simulate",
+    token,
+    { prompt, context },
+  );
+}
+
+export function classifyIntent(token: string, prompt: string, context?: unknown) {
+  return req<{ mode: "chat" | "execution"; confidence: number; answer: string | null; clarification: string | null }>(
+    "POST",
+    "/api/action-planner/classify",
     token,
     { prompt, context },
   );

@@ -1,0 +1,18 @@
+export const C = {
+  canvas: '#F8F9FF',
+  white: '#FFFFFF',
+  ink: '#0F172A',
+  secondary: '#64748B',
+  muted: '#94A3B8',
+  border: '#E2E8F0',
+  indigo: '#6366F1',
+  indigoSoft: '#818CF8',
+  indigoPale: '#EDE9FE',
+  green: '#10B981',
+  greenPale: '#D1FAE5',
+  amber: '#F59E0B',
+  amberPale: '#FEF3C7',
+  red: '#EF4444',
+  warmCream: '#F5F0E8',
+  dotGrid: 'rgba(99,102,241,0.10)',
+};

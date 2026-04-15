@@ -14,7 +14,6 @@ const navItems = [
   { href: "/system/tenants", icon: TenantsIcon, label: "Tenants" },
   { href: "/system/onboarding", icon: OnboardingIcon, label: "Onboarding" },
   { href: "/system/chat", icon: ChatIcon, label: "AI Chat" },
-  { href: "/system/token-usage", icon: TokenUsageIcon, label: "Token Usage" },
   { href: "/system/usage", icon: UsageIcon, label: "Platform Usage" },
 ];
 

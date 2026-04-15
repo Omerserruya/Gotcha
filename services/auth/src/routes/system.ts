@@ -8,11 +8,19 @@ import {
   validate,
   signToken,
   publishEvent,
+  crossTenantMiddleware,
 } from "@chatcenter/shared";
 import { sendOnboardingEmail } from "../services/notification.service";
 
 const router = Router();
 const SALT_ROUNDS = 10;
+
+// System-admin routes legitimately need cross-tenant reads (list all
+// tenants, aggregate usage across tenants, create new tenant admins,
+// etc). Enable the Prisma tenant-guard opt-out for this entire router.
+// Safe because every handler below is already gated by authenticate +
+// requireSystemAdmin() — only SYSTEM_ADMIN users ever reach this code.
+router.use(crossTenantMiddleware);
 
 // ─── System Admin Login (no tenant slug needed) ──────────────
 
@@ -616,19 +624,71 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
     const byType = await prisma.usageLog.groupBy({
       by: ["type"],
       where: { createdAt: { gte: since } },
-      _sum: { quantity: true },
+      _sum: { quantity: true, costUsd: true },
       _count: { id: true },
     });
 
-    const stats: Record<string, { total: number; count: number }> = {};
+    const stats: Record<string, { total: number; count: number; costUsd: number }> = {};
     for (const row of byType) {
-      stats[row.type] = { total: row._sum.quantity || 0, count: row._count.id };
+      stats[row.type] = {
+        total: row._sum.quantity || 0,
+        count: row._count.id,
+        costUsd: Number(row._sum.costUsd ?? 0),
+      };
     }
+
+    // AI-specific: feature + model breakdowns (only rows where type='ai_tokens')
+    const aiWhere = { type: "ai_tokens", createdAt: { gte: since } };
+    const [byFeature, byModel, aiTotals] = await Promise.all([
+      prisma.usageLog.groupBy({
+        by: ["feature"],
+        where: aiWhere,
+        _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
+        _count: { id: true },
+        orderBy: { feature: "asc" },
+      }),
+      prisma.usageLog.groupBy({
+        by: ["model"],
+        where: aiWhere,
+        _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
+        _count: { id: true },
+        orderBy: { model: "asc" },
+      }),
+      prisma.usageLog.aggregate({
+        where: aiWhere,
+        _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
+        _count: { id: true },
+      }),
+    ]);
+
+    const aiTokens = {
+      totalTokens: aiTotals._sum.quantity || 0,
+      promptTokens: aiTotals._sum.promptTokens || 0,
+      completionTokens: aiTotals._sum.completionTokens || 0,
+      costUsd: Number(aiTotals._sum.costUsd ?? 0),
+      calls: aiTotals._count.id || 0,
+      byFeature: byFeature.map((r) => ({
+        feature: r.feature ?? "unknown",
+        totalTokens: r._sum.quantity || 0,
+        promptTokens: r._sum.promptTokens || 0,
+        completionTokens: r._sum.completionTokens || 0,
+        costUsd: Number(r._sum.costUsd ?? 0),
+        calls: r._count.id,
+      })),
+      byModel: byModel.map((r) => ({
+        model: r.model ?? "unknown",
+        totalTokens: r._sum.quantity || 0,
+        promptTokens: r._sum.promptTokens || 0,
+        completionTokens: r._sum.completionTokens || 0,
+        costUsd: Number(r._sum.costUsd ?? 0),
+        calls: r._count.id,
+      })),
+    };
 
     // Total events
     const totalEvents = await prisma.usageLog.count({ where: { createdAt: { gte: since } } });
 
-    res.json({ data: { stats, totalEvents, period: days } });
+    res.json({ data: { stats, aiTokens, totalEvents, period: days } });
   } catch (err) {
     console.error("System usage stats error:", err);
     res.status(500).json({ error: "Failed to get system usage stats" });
@@ -642,10 +702,20 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
     const days = parseInt(req.query.days as string) || 30;
     const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
 
+    // Per-tenant type totals (includes cost for ai_tokens rows)
     const byTenant = await prisma.usageLog.groupBy({
       by: ["tenantId", "type"],
       where: { createdAt: { gte: since } },
-      _sum: { quantity: true },
+      _sum: { quantity: true, costUsd: true },
+      _count: { id: true },
+    });
+
+    // Per-tenant AI feature breakdown — answers "which feature used how many
+    // tokens per tenant" directly, no JSON probing needed.
+    const byTenantFeature = await prisma.usageLog.groupBy({
+      by: ["tenantId", "feature"],
+      where: { type: "ai_tokens", createdAt: { gte: since } },
+      _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
       _count: { id: true },
     });
 
@@ -658,15 +728,49 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
     const tenantMap = new Map(tenants.map((t) => [t.id, t]));
 
     // Group by tenant
-    const grouped: Record<string, { tenant: any; usage: Record<string, { total: number; count: number }> }> = {};
+    const grouped: Record<
+      string,
+      {
+        tenant: any;
+        usage: Record<string, { total: number; count: number; costUsd: number }>;
+        aiByFeature: Array<{
+          feature: string;
+          totalTokens: number;
+          promptTokens: number;
+          completionTokens: number;
+          costUsd: number;
+          calls: number;
+        }>;
+        aiCostUsd: number;
+      }
+    > = {};
     for (const row of byTenant) {
       if (!grouped[row.tenantId]) {
         grouped[row.tenantId] = {
           tenant: tenantMap.get(row.tenantId) || { id: row.tenantId, name: "Unknown", slug: "" },
           usage: {},
+          aiByFeature: [],
+          aiCostUsd: 0,
         };
       }
-      grouped[row.tenantId].usage[row.type] = { total: row._sum.quantity || 0, count: row._count.id };
+      grouped[row.tenantId].usage[row.type] = {
+        total: row._sum.quantity || 0,
+        count: row._count.id,
+        costUsd: Number(row._sum.costUsd ?? 0),
+      };
+    }
+    for (const row of byTenantFeature) {
+      if (!grouped[row.tenantId]) continue;
+      const cost = Number(row._sum.costUsd ?? 0);
+      grouped[row.tenantId].aiByFeature.push({
+        feature: row.feature ?? "unknown",
+        totalTokens: row._sum.quantity || 0,
+        promptTokens: row._sum.promptTokens || 0,
+        completionTokens: row._sum.completionTokens || 0,
+        costUsd: cost,
+        calls: row._count.id,
+      });
+      grouped[row.tenantId].aiCostUsd += cost;
     }
 
     // Sort by total usage descending
