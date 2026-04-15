@@ -151,6 +151,20 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     endpoint: "POST /api/identity/merge",
   },
   {
+    name: "generate_followup",
+    kind: "action",
+    category: "messaging",
+    description:
+      "Draft a context-aware follow-up message for a stalled conversation. " +
+      "Considers customer state, conversation history, and policy. Returns a draft body; " +
+      "use schedule_followup or send_message to actually dispatch it.",
+    input: {
+      conversationId: "string",
+      maxMessages: "number?",
+    },
+    endpoint: "virtual:generate_followup",
+  },
+  {
     name: "link_customer_identifier",
     kind: "action",
     category: "identity",

@@ -61,6 +61,7 @@ export type ActionTool =
   | "create_ticket"
   | "create_task"
   | "schedule_followup"
+  | "generate_followup"
   | "tag_contact"
   | "get_contact"
   | "get_conversation"
@@ -448,6 +449,26 @@ export async function executeAction(
         });
         if (!r.ok) throw new Error(`link_customer_identifier upstream: ${r.error}`);
         output = r.data;
+        break;
+      }
+      case "generate_followup": {
+        // F6.3 as a first-class tool. Calls the existing LLM-powered
+        // generator directly (no HTTP hop) so cron, planner, and bot
+        // engine all share the same code path. Returns a draft — the
+        // caller decides whether to send_message / schedule_followup.
+        const { generateFollowup } = await import("./followup-generator.service");
+        const p = action.params as { conversationId?: string; maxMessages?: number };
+        if (!p.conversationId) {
+          throw new Error("generate_followup requires conversationId");
+        }
+        const draft = await generateFollowup(tenantId, p.conversationId, {
+          maxMessages: p.maxMessages,
+        });
+        if (!draft) {
+          output = { ok: true, skipped: true, reason: "nothing useful to send" };
+        } else {
+          output = { ok: true, body: draft.body, reason: draft.reason };
+        }
         break;
       }
       case "schedule_followup": {
