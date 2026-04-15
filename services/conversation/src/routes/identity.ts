@@ -402,4 +402,124 @@ router.post("/link", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /capture ───────────────────────────────────────────
+// Strong-signal identity capture. Called when a bot/flow/agent
+// EXPLICITLY asked the customer for their email or phone and the
+// customer responded with an identifier. Distinct from /link, which
+// handles weak-signal LLM extraction.
+//
+// Behavior:
+//   1. Format-validate + normalize the identifier
+//   2. Mark it verified=true on the current contact (they volunteered it)
+//   3. Sibling check: does another contact in this tenant already have
+//      this identifier?
+//     - YES → assign the same personId to both. Auto-link across
+//       channels. No merge, no data loss.
+//     - NO  → set the identifier on the current contact. Seed planted
+//       for a future collision on another channel.
+//
+// Rate limit: max 3 captures per contact per 24h (reuses the
+// identity-link suggestion count as a proxy since both record
+// identity-related activity).
+router.post("/capture", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { contactId, type, value, source } = req.body ?? {};
+
+    if (!contactId || typeof contactId !== "string") {
+      return res.status(400).json({ error: "contactId required" });
+    }
+    if (type !== "email" && type !== "phone") {
+      return res.status(400).json({ error: "type must be 'email' or 'phone'" });
+    }
+    if (!value || typeof value !== "string") {
+      return res.status(400).json({ error: "value required" });
+    }
+
+    // Normalize
+    const raw = value.trim();
+    if (type === "email") {
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(raw)) {
+        return res.status(400).json({ error: "invalid email format" });
+      }
+    } else {
+      const digits = raw.replace(/[^\d]/g, "");
+      if (digits.length < 8 || digits.length > 15) {
+        return res.status(400).json({ error: "invalid phone format" });
+      }
+    }
+    const normalized = type === "email" ? raw.toLowerCase() : raw;
+
+    const current = await prisma.contact.findFirst({
+      where: { id: contactId, tenantId, mergedIntoId: null },
+    });
+    if (!current) return res.status(404).json({ error: "contact not found" });
+
+    // Rate limit (best-effort)
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recent = await prisma.identityLinkSuggestion.count({
+      where: { tenantId, sourceContactId: contactId, createdAt: { gt: since } },
+    });
+    if (recent >= 3) {
+      return res.status(429).json({ error: "identity capture rate limit exceeded" });
+    }
+
+    // Sibling lookup: is another contact already using this identifier?
+    const field = type === "email" ? "email" : "phone";
+    const sibling = await prisma.contact.findFirst({
+      where: {
+        tenantId,
+        mergedIntoId: null,
+        NOT: { id: contactId },
+        [field]: normalized,
+      } as any,
+    });
+
+    // Resolve target personId — adopt sibling's if present, otherwise mint
+    const { randomUUID } = await import("crypto");
+    const personId =
+      sibling?.personId ?? current.personId ?? `person_${randomUUID()}`;
+
+    const updates: any = { personId };
+    if (type === "email") {
+      updates.email = normalized;
+      updates.emailVerified = true;
+    } else {
+      updates.phone = normalized;
+      updates.phoneVerified = true;
+    }
+
+    const updated = await prisma.contact.update({
+      where: { id: contactId },
+      data: updates,
+      select: {
+        id: true,
+        email: true,
+        phone: true,
+        emailVerified: true,
+        phoneVerified: true,
+        personId: true,
+      },
+    });
+
+    // Backfill sibling's personId so the link is bidirectional
+    if (sibling && !sibling.personId) {
+      await prisma.contact.update({
+        where: { id: sibling.id },
+        data: { personId },
+      });
+    }
+
+    return res.json({
+      outcome: sibling ? "auto_linked" : "attached",
+      contact: updated,
+      linkedTo: sibling?.id ?? null,
+      source: source ?? "unknown",
+    });
+  } catch (err: any) {
+    console.error("identity.capture error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to capture identity" });
+  }
+});
+
 export default router;
