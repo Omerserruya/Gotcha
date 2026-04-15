@@ -1,4 +1,5 @@
-import { prisma } from "@chatcenter/shared";
+import { prisma, evaluateToolGate } from "@chatcenter/shared";
+import type { ToolGateResult } from "@chatcenter/shared";
 import { getPolicy, validateAgainstPolicy } from "./policy.service";
 import { getCrmConnector, getMessagingConnector } from "./connectors/types";
 
@@ -90,25 +91,53 @@ export interface ExecutionResult {
   auditFailed?: boolean;
 }
 
-const HIGH_RISK_TOOLS: ActionTool[] = [
-  "send_message",
-  "create_broadcast",
-  "update_crm",
-  "schedule_followup",
-];
-
 /**
  * F3.5 — Safe execution wrapper.
- * Blocks high-risk actions unless explicitly approved (F4 gate).
+ *
+ * Historical: this function used to hardcode a HIGH_RISK_TOOLS list.
+ * That list was incomplete (missing merge_contacts, schedule_broadcast,
+ * etc.) and couldn't express tenant overrides. It has been replaced by
+ * validateActionAsync() below which calls the unified evaluateToolGate()
+ * from @chatcenter/shared — a single entry point that reads
+ * TenantToolPermission per (tenantId, toolName) and falls back to a
+ * well-known INTERNAL_HIGH_RISK_DEFAULTS set.
+ *
+ * The old sync validateAction() is kept as a thin shim that treats
+ * `action.riskLevel === "high"` as requires-approval for any caller
+ * that hasn't been migrated yet, but new callers MUST use
+ * validateActionAsync(tenantId, action, opts).
  */
 export function validateAction(
   action: PlannedAction,
   opts: { approved?: boolean; approvedBy?: string },
 ): { ok: true } | { ok: false; reason: string } {
   if (!action.tool) return { ok: false, reason: "missing tool" };
-  if (action.riskLevel === "high" || HIGH_RISK_TOOLS.includes(action.tool)) {
+  if (action.riskLevel === "high") {
     if (!opts.approved || !opts.approvedBy) {
       return { ok: false, reason: "high-risk action requires approval" };
+    }
+  }
+  return { ok: true };
+}
+
+export async function validateActionAsync(
+  tenantId: string,
+  action: PlannedAction,
+  opts: { approved?: boolean; approvedBy?: string },
+): Promise<{ ok: true } | { ok: false; reason: string; gate?: ToolGateResult }> {
+  if (!action.tool) return { ok: false, reason: "missing tool" };
+  // Planner-declared risk level still forces approval even if the tenant
+  // permission says ALLOW — the LLM flagged it as risky for a reason.
+  if (action.riskLevel === "high" && (!opts.approved || !opts.approvedBy)) {
+    return { ok: false, reason: "planner-declared high-risk action requires approval" };
+  }
+  const gate = await evaluateToolGate(tenantId, action.tool);
+  if (gate.decision === "DENY") {
+    return { ok: false, reason: gate.reason, gate };
+  }
+  if (gate.decision === "REQUIRE_APPROVAL") {
+    if (!opts.approved || !opts.approvedBy) {
+      return { ok: false, reason: gate.reason, gate };
     }
   }
   return { ok: true };
@@ -138,11 +167,15 @@ export async function executeAction(
   action: PlannedAction,
   ctx: ExecutorContext,
 ): Promise<ExecutionResult> {
-  const gate = validateAction(action, ctx);
+  const gate = await validateActionAsync(tenantId, action, ctx);
   if (!("ok" in gate) || gate.ok !== true) {
-    const reason = (gate as { ok: false; reason: string }).reason;
-    await audit(tenantId, action, ctx, { blocked: true, reason });
-    return { tool: action.tool, ok: false, skipped: true, skipReason: reason };
+    const failure = gate as { ok: false; reason: string; gate?: ToolGateResult };
+    await audit(tenantId, action, ctx, {
+      blocked: true,
+      reason: failure.reason,
+      toolGate: failure.gate ?? null,
+    });
+    return { tool: action.tool, ok: false, skipped: true, skipReason: failure.reason };
   }
 
   // F8 — policy enforcement gate (hard)
