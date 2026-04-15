@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useCallback, FormEvent, DragEvent, ChangeEvent } from "react";
 import { useAuth } from "@/context/AuthContext";
+import ApprovalCard from "@/components/approvals/ApprovalCard";
 import { useI18n } from "@/context/I18nContext";
 import ConfirmModal from "@/components/ConfirmModal";
 import {
@@ -408,6 +409,10 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               </div>
             </div>
           )}
+          {/* F4: in-conversation approval card — shown when the bot
+              hit a REQUIRE_APPROVAL tool and paused waiting for a
+              human. Polls /api/approvals itself. */}
+          {token && <ApprovalCard token={token} conversationId={conversationId} />}
           {messages.map((msg) =>
             msg.messageType === "system" ? (
               <SystemDivider key={msg.id} metadata={msg.metadata} timestamp={msg.createdAt} t={t} />
