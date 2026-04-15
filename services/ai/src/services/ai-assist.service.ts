@@ -340,7 +340,7 @@ export async function getAIEmployeeForDepartment(tenantId: string, departmentId:
   if (rule?.aiAgentId) {
     return prisma.aIAgent.findUnique({
       where: { id: rule.aiAgentId },
-      select: { id: true, name: true, role: true, mode: true, status: true, avatarColor: true, description: true, persona: true },
+      select: { id: true, name: true, role: true, status: true, avatarColor: true, description: true, persona: true },
     });
   }
   return null;

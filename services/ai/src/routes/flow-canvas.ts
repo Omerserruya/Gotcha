@@ -26,7 +26,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
       }),
       prisma.aIAgent.findMany({
         where: { tenantId },
-        select: { id: true, name: true, status: true, mode: true },
+        select: { id: true, name: true, status: true },
       }),
       prisma.department.findMany({
         where: { tenantId },
@@ -101,7 +101,7 @@ router.post("/auto-generate", authenticate, resolveTenant, requireActiveTenant()
       }),
       prisma.aIAgent.findMany({
         where: { tenantId },
-        select: { id: true, name: true, status: true, mode: true },
+        select: { id: true, name: true, status: true },
       }),
       prisma.department.findMany({
         where: { tenantId },

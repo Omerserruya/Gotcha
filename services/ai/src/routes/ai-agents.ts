@@ -225,7 +225,7 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
 router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const {
-      name, role, description, avatarColor, mode, status,
+      name, role, description, avatarColor, status,
       tone, languages, style, channels, escalationRules,
       interactiveMessages, systemPrompt, model, provider,
       temperature, maxTokens, identity, goals, toneConfig,
@@ -246,7 +246,6 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         role: role || "customer_support",
         description: description || null,
         avatarColor: avatarColor || "#7c5cfc",
-        mode: mode || "AUTONOMOUS",
         status: status || "DRAFT",
         tone: tone || "professional",
         languages: languages || { english: true },
@@ -317,7 +316,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       return;
     }
 
-    const { knowledgeBaseIds, toolIds, ...updateData } = req.body;
+    const { knowledgeBaseIds, toolIds, mode: _dropMode, ...updateData } = req.body;
 
     const agent = await prisma.aIAgent.update({
       where: { id: req.params.id as string },
