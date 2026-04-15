@@ -29,6 +29,25 @@ export interface AgentToolSideEffect {
     priority?: "low" | "medium" | "high";
     summary?: string;
   };
+  /**
+   * The tool call was gated by evaluateToolGate and requires human
+   * approval. The caller MUST stop generating further replies and
+   * pause the conversation until the approval is decided.
+   * approvalRequestId references the created ApprovalRequest row.
+   */
+  awaitingApproval?: {
+    approvalRequestId: string;
+    tool: string;
+    reason: string;
+  };
+  /**
+   * The tool call was explicitly denied by tenant permission. The bot
+   * should NOT retry and should optionally inform the customer.
+   */
+  denied?: {
+    tool: string;
+    reason: string;
+  };
 }
 
 export interface AgentToolDispatchResult {
@@ -174,6 +193,89 @@ export async function dispatchToolCall(
     };
   }
 
+  // ── F4 gate: tenant-scoped tool permission + HITL approval ──
+  // Every bot-initiated tool call flows through evaluateToolGate before
+  // dispatch. DENY short-circuits with an error the LLM can see and
+  // pivot from. REQUIRE_APPROVAL creates an ApprovalRequest row and
+  // returns a side-effect that tells the caller to pause the
+  // conversation until a human decides.
+  //
+  // The two tools hardcoded here today (link_customer_identifier,
+  // escalate_to_human) are low-risk by default so this is a no-op for
+  // them — but it means ANY new tool added to this dispatcher is
+  // automatically gated through the same code path. That's the whole
+  // point: replace scattered ad-hoc checks with one entry point.
+  try {
+    const { evaluateToolGate, createApprovalRequest } = await import("./tool-gate").then(
+      async (g) => ({
+        evaluateToolGate: g.evaluateToolGate,
+        createApprovalRequest: (await import("./approval-requests")).createApprovalRequest,
+      }),
+    );
+    const gate = await evaluateToolGate(ctx.tenantId, name);
+    if (gate.decision === "DENY") {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: gate.reason, denied: true }),
+        sideEffect: { denied: { tool: name, reason: gate.reason } },
+      };
+    }
+    if (gate.decision === "REQUIRE_APPROVAL") {
+      // Only create an approval row if we have enough context to route
+      // a human back to it. Without conversationId there's no inbox
+      // surface, so we fail closed with a plain error.
+      if (!ctx.conversationId) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({
+            ok: false,
+            error: "tool requires approval but no conversation context available",
+          }),
+        };
+      }
+      const approval = await createApprovalRequest({
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        contactId: ctx.contactId,
+        messageId: ctx.messageId,
+        tool: name,
+        params: args,
+        summary: summarizeToolCall(name, args),
+        reason: gate.reason,
+        riskLevel: "high",
+        riskTags: ["REQUIRES_APPROVAL"],
+        requestedBy: "bot",
+        gate,
+      });
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          awaiting_approval: true,
+          approval_request_id: approval.id,
+          message: "This action needs a human to approve it. I've paused and notified the team.",
+        }),
+        sideEffect: {
+          awaitingApproval: {
+            approvalRequestId: approval.id,
+            tool: name,
+            reason: gate.reason,
+          },
+        },
+      };
+    }
+  } catch (err: any) {
+    // Gate failures must NOT silently allow — fail closed.
+    console.error("[agent-tools] gate evaluation failed:", err?.message);
+    return {
+      toolCallId: toolCall.id,
+      content: JSON.stringify({
+        ok: false,
+        error: "permission gate unavailable; refusing to run tool",
+      }),
+    };
+  }
+
   if (name === "link_customer_identifier") {
     if (!ctx.contactId) {
       return {
@@ -216,4 +318,20 @@ export async function dispatchToolCall(
     toolCallId: toolCall.id,
     content: JSON.stringify({ ok: false, error: `unknown tool: ${name}` }),
   };
+}
+
+/**
+ * Lightweight human-readable summary of a tool call for the approval
+ * card. Stays a plain string — no LLM call, no localization, no fancy
+ * formatting. The rich card in the inbox renders richer UI from the
+ * raw (tool, params); this is just the "one-sentence first line"
+ * fallback for lists and notifications.
+ */
+function summarizeToolCall(name: string, args: Record<string, unknown>): string {
+  const preview = Object.entries(args)
+    .filter(([, v]) => v !== undefined && v !== null && v !== "")
+    .slice(0, 3)
+    .map(([k, v]) => `${k}=${typeof v === "string" ? v : JSON.stringify(v)}`)
+    .join(", ");
+  return preview ? `${name}(${preview})` : `${name}()`;
 }

@@ -186,17 +186,50 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
           tool_calls: toolCalls,
         } as any);
 
+        let pausedForApproval: { approvalRequestId: string; tool: string; reason: string } | null = null;
         for (const tc of toolCalls) {
           const result = await dispatchToolCall(
             { id: tc.id, function: { name: tc.function?.name, arguments: tc.function?.arguments || "{}" } },
             agentToolCtx,
           );
           if (result.sideEffect?.escalate) pendingEscalation = result.sideEffect.escalate;
+          if (result.sideEffect?.awaitingApproval && !pausedForApproval) {
+            pausedForApproval = result.sideEffect.awaitingApproval;
+          }
           chatMessages.push({
             role: "tool",
             tool_call_id: result.toolCallId,
             content: result.content,
           } as any);
+        }
+        // F4: if any tool call needs approval, pause the conversation
+        // and STOP generating. The resume worker will pick up the
+        // approval when a human decides and restart the bot turn with
+        // the approved params merged into the tool result.
+        if (pausedForApproval) {
+          try {
+            await prisma.conversation.update({
+              where: { id: conversationId },
+              data: { handledBy: "awaiting_approval" },
+            });
+            await prisma.auditLog.create({
+              data: {
+                tenantId,
+                actorType: "ai",
+                action: "ai.paused_for_approval",
+                targetType: "conversation",
+                targetId: conversationId,
+                metadata: {
+                  approvalRequestId: pausedForApproval.approvalRequestId,
+                  tool: pausedForApproval.tool,
+                  reason: pausedForApproval.reason,
+                },
+              },
+            });
+          } catch (err: any) {
+            console.error("[AI-Bot] Failed to pause conversation:", err.message);
+          }
+          return true;
         }
         // Loop again so the model can use the tool results to finalize its reply.
         continue;
