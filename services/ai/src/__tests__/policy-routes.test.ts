@@ -31,7 +31,7 @@ vi.mock("../services/tool-execution.service", () => ({
   executeTool: vi.fn(),
   getToolExecutions: vi.fn(),
 }));
-vi.mock("../services/agent-scoring.service", () => ({
+vi.mock("../services/agent-performance.service", () => ({
   scoreAgent: vi.fn(),
   getAgentScore: vi.fn(),
 }));

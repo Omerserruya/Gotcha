@@ -5,7 +5,7 @@ import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
-import { scoreAgent, getAgentScore } from "../services/agent-scoring.service";
+import { scoreAgent, getAgentScore } from "../services/agent-performance.service";
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
 import { getPolicy, setPolicy } from "../services/policy.service";

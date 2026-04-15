@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
-import { getAgentOverview } from "../services/agent-scoring.service";
+import { getAgentOverview } from "../services/agent-performance.service";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
