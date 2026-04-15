@@ -33,6 +33,48 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
 async function processIdleConversations(job: Job<IdleConversationJob>): Promise<void> {
   console.log("[idle-check] Running idle conversation check...");
 
+  // ── F4 approval expiry sweep ────────────────────────────
+  // PENDING approvals past their expiresAt get EXPIRED status and the
+  // underlying conversation is routed to a human so the customer isn't
+  // left hanging. Done at the top of the cron so it runs every 5 min
+  // regardless of whether any tenants have idle config enabled.
+  try {
+    const expired = await (prisma as any).approvalRequest.findMany({
+      where: { status: "PENDING", expiresAt: { lt: new Date() } },
+      take: 100,
+    });
+    for (const ar of expired) {
+      try {
+        await (prisma as any).approvalRequest.update({
+          where: { id: ar.id },
+          data: {
+            status: "EXPIRED",
+            decidedAt: new Date(),
+            decisionReason: "auto-expired (no human decision within TTL)",
+          },
+        });
+        await prisma.conversation.update({
+          where: { id: ar.conversationId },
+          data: { handledBy: "human", isHandedOver: true },
+        });
+        publishEvent({
+          event: "approval:expired",
+          tenantId: ar.tenantId,
+          data: {
+            approvalId: ar.id,
+            conversationId: ar.conversationId,
+            tool: ar.tool,
+          },
+        }).catch(() => {});
+        console.log(`[idle-check] Expired approval ${ar.id} — conversation ${ar.conversationId} routed to human`);
+      } catch (err: any) {
+        console.error(`[idle-check] Failed to expire approval ${ar.id}:`, err.message);
+      }
+    }
+  } catch (err: any) {
+    console.error("[idle-check] Approval expiry sweep failed:", err.message);
+  }
+
   // Get all active tenants
   const tenants = await prisma.tenant.findMany({
     where: { isActive: true },
