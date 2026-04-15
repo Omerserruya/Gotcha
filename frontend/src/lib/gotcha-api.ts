@@ -83,6 +83,78 @@ export function getApprovalQueue(token: string) {
   return req("GET", "/api/action-planner/approvals", token);
 }
 
+// ─── F4 bot-surface approvals (new) ────────────────────────
+// These target the NEW conversation-service /api/approvals route
+// (not the legacy action-planner one) and power the in-inbox
+// approval card flow.
+
+export interface ApprovalRequestRow {
+  id: string;
+  tenantId: string;
+  conversationId: string;
+  contactId: string | null;
+  messageId: string | null;
+  tool: string;
+  params: Record<string, unknown>;
+  summary: string;
+  reason: string;
+  policyRuleName: string | null;
+  riskLevel: "low" | "medium" | "high";
+  riskTags: string[];
+  status: "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED" | "CANCELLED";
+  requestedBy: string;
+  decidedBy: string | null;
+  decidedAt: string | null;
+  decisionReason: string | null;
+  expiresAt: string;
+  createdAt: string;
+}
+
+export interface ApprovalDetailResponse {
+  approval: ApprovalRequestRow;
+  conversation: any;
+  contact: any;
+  recentMessages: Array<{
+    id: string;
+    direction: "INBOUND" | "OUTBOUND";
+    body: string | null;
+    createdAt: string;
+    senderName: string | null;
+  }>;
+}
+
+export function listApprovals(
+  token: string,
+  opts: { status?: string; conversationId?: string; contactId?: string } = {},
+) {
+  const qs = new URLSearchParams();
+  if (opts.status) qs.set("status", opts.status);
+  if (opts.conversationId) qs.set("conversationId", opts.conversationId);
+  if (opts.contactId) qs.set("contactId", opts.contactId);
+  const q = qs.toString();
+  return req<{ data: ApprovalRequestRow[] }>(
+    "GET",
+    `/api/approvals${q ? `?${q}` : ""}`,
+    token,
+  );
+}
+
+export function getApprovalDetail(token: string, id: string) {
+  return req<ApprovalDetailResponse>("GET", `/api/approvals/${id}`, token);
+}
+
+export function approveApproval(
+  token: string,
+  id: string,
+  opts: { modifiedParams?: Record<string, unknown>; decisionReason?: string } = {},
+) {
+  return req("POST", `/api/approvals/${id}/approve`, token, opts);
+}
+
+export function rejectApproval(token: string, id: string, decisionReason: string) {
+  return req("POST", `/api/approvals/${id}/reject`, token, { decisionReason });
+}
+
 export interface SimulateResponse {
   mode: "chat" | "execution";
   plan: ExecutionPlan | null;
