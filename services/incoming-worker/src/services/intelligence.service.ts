@@ -44,6 +44,14 @@ function determineResolutionOutcome(messages: { direction: string; metadata: any
   return "abandoned";
 }
 
+/**
+ * Run full intelligence analysis on a conversation.
+ *
+ * Name kept historically as `analyzeClosedConversation` but the function
+ * is no longer close-only — it now also fires on bot→human handoff
+ * milestones so the incoming human gets an instant summary. The
+ * `analyzeConversation` alias below is the preferred name for new callers.
+ */
 export async function analyzeClosedConversation(tenantId: string, conversationId: string): Promise<void> {
   // Try AI service first
   try {
@@ -138,4 +146,19 @@ export async function analyzeClosedConversation(tenantId: string, conversationId
   } catch (err: any) {
     console.error(`[intelligence] Analysis failed for ${conversationId}:`, err.message);
   }
+}
+
+/**
+ * Preferred name for new callers. Runs the same analysis pipeline as
+ * `analyzeClosedConversation` but labels the trigger so log lines and
+ * future AuditLog entries can distinguish close / handoff / manual
+ * invocations.
+ */
+export async function analyzeConversation(
+  tenantId: string,
+  conversationId: string,
+  trigger: "close" | "handoff" | "manual" | "reopen" = "close",
+): Promise<void> {
+  console.log(`[intelligence] analyzeConversation(${conversationId}) triggeredBy=${trigger}`);
+  return analyzeClosedConversation(tenantId, conversationId);
 }

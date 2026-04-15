@@ -305,6 +305,32 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
       console.error("approvals.reject: failed to reroute conversation:", err.message);
     }
 
+    // F7 handoff trigger: fire-and-forget analysis on the AI service so
+    // the agent about to pick this up sees a ready-made summary instead
+    // of scrolling the raw transcript.
+    (async () => {
+      try {
+        const base = process.env.AI_SERVICE_URL ?? "http://ai:4006";
+        const internalToken = process.env.INTERNAL_SERVICE_TOKEN;
+        const headers: Record<string, string> = {
+          "Content-Type": "application/json",
+          "x-tenant-id": tenantId,
+        };
+        if (internalToken) {
+          headers["Authorization"] = internalToken.startsWith("Bearer ")
+            ? internalToken
+            : `Bearer ${internalToken}`;
+        }
+        await fetch(`${base.replace(/\/$/, "")}/api/ai-assist/${row.conversationId}/analyze`, {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ tenantId, trigger: "handoff" }),
+        });
+      } catch (err: any) {
+        console.error("approvals.reject: analyzeConversation failed:", err?.message);
+      }
+    })();
+
     publishEvent({
       event: "approval:rejected",
       tenantId,

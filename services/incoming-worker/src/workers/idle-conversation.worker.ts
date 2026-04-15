@@ -57,6 +57,15 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
           where: { id: ar.conversationId },
           data: { handledBy: "human", isHandedOver: true },
         });
+        // F7 handoff trigger: fire analysis so the incoming human has an
+        // instant summary + intent + sentiment of the stalled thread.
+        import("../services/intelligence.service")
+          .then(({ analyzeConversation }) =>
+            analyzeConversation(ar.tenantId, ar.conversationId, "handoff"),
+          )
+          .catch((err: any) =>
+            console.error(`[idle-check] analyzeConversation failed for ${ar.conversationId}:`, err?.message),
+          );
         publishEvent({
           event: "approval:expired",
           tenantId: ar.tenantId,
