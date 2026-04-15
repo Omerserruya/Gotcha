@@ -20,14 +20,18 @@ router.post("/resolve", async (req: Request, res: Response) => {
     if (phone) orClauses.push({ phone });
     if (externalId && channel) orClauses.push({ channel, externalId });
 
+    // Exclude soft-merged rows from match candidates so /resolve never
+    // hands back a ghost that's been merged into another contact.
     let contact = orClauses.length
-      ? await prisma.contact.findFirst({ where: { tenantId, OR: orClauses } })
+      ? await prisma.contact.findFirst({
+          where: { tenantId, mergedIntoId: null, OR: orClauses },
+        })
       : null;
 
     // Heuristic match: metadata keys overlap
     if (!contact && metadata && typeof metadata === "object") {
       const candidates = await prisma.contact.findMany({
-        where: { tenantId, metadata: { not: null as any } },
+        where: { tenantId, mergedIntoId: null, metadata: { not: null as any } },
         take: 50,
         orderBy: { lastInteractionAt: "desc" },
       });
@@ -94,6 +98,16 @@ router.post("/merge", async (req: Request, res: Response) => {
       prisma.contact.findFirst({ where: { id: sourceId, tenantId } }),
     ]);
     if (!target || !source) return res.status(404).json({ error: "Contact not found" });
+    if (source.mergedIntoId) {
+      return res
+        .status(409)
+        .json({ error: "source contact is already merged", mergedIntoId: source.mergedIntoId });
+    }
+    if (target.mergedIntoId) {
+      return res
+        .status(409)
+        .json({ error: "target contact is itself merged", mergedIntoId: target.mergedIntoId });
+    }
 
     const targetMeta = (target.metadata as Record<string, unknown>) || {};
     const sourceMeta = (source.metadata as Record<string, unknown>) || {};
@@ -125,6 +139,21 @@ router.post("/merge", async (req: Request, res: Response) => {
       ]),
     );
 
+    // SOFT MERGE: previously we hard-deleted the source row here. That
+    // created "ghost contacts" — the next inbound message on the merged
+    // channel would miss the direct (tenantId, channel, externalId)
+    // lookup and create a brand-new row, silently defeating the merge.
+    //
+    // Now we keep the source row and set `mergedIntoId` on it. Callers
+    // that use resolveContactByChannelId() transparently route to the
+    // target. broadcastRecipients still move to the target so audience
+    // lists stay accurate.
+    //
+    // If target has no personId, propagate to source; if target has
+    // one, use it. Either way the two rows share a personId afterwards.
+    const { randomUUID } = await import("crypto");
+    const sharedPersonId = target.personId ?? source.personId ?? `person_${randomUUID()}`;
+
     const result = await prisma.$transaction(async (tx) => {
       await tx.broadcastRecipient.updateMany({
         where: { contactId: sourceId },
@@ -139,6 +168,7 @@ router.post("/merge", async (req: Request, res: Response) => {
           avatarUrl: target.avatarUrl ?? source.avatarUrl,
           metadata: mergedMetadata as any,
           tags: mergedTags as any,
+          personId: sharedPersonId,
           lastInteractionAt:
             target.lastInteractionAt && source.lastInteractionAt
               ? target.lastInteractionAt > source.lastInteractionAt
@@ -147,7 +177,13 @@ router.post("/merge", async (req: Request, res: Response) => {
               : target.lastInteractionAt ?? source.lastInteractionAt,
         },
       });
-      await tx.contact.delete({ where: { id: sourceId } });
+      await tx.contact.update({
+        where: { id: sourceId },
+        data: {
+          mergedIntoId: targetId,
+          personId: sharedPersonId,
+        },
+      });
       return updated;
     });
 
