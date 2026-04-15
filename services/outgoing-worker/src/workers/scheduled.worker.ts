@@ -14,10 +14,15 @@ async function processScheduledMessages(): Promise<void> {
 
   for (const scheduledMessage of dueMessages) {
     try {
-      // Check opt-out
-      const contact = await prisma.contact.findFirst({
-        where: { tenantId: scheduledMessage.tenantId, externalId: scheduledMessage.recipientExternalId, channel: scheduledMessage.channel as any },
-      });
+      // Check opt-out — use the resolver so a merged-away contact's
+      // scheduled messages (authored before the merge) still honor the
+      // opt-out state of the surviving target.
+      const { resolveContactByChannelId } = await import("@chatcenter/shared");
+      const contact = await resolveContactByChannelId(
+        scheduledMessage.tenantId,
+        scheduledMessage.channel as any,
+        scheduledMessage.recipientExternalId,
+      );
       if (contact) {
         const optOutChannels = ((contact as any).optOutChannels as string[]) || [];
         if (optOutChannels.includes(scheduledMessage.channel as string)) {
