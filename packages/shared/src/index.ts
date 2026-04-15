@@ -56,6 +56,13 @@ export {
   getDefaultHighRiskTools,
 } from "./lib/tool-gate";
 export type { ToolGateDecision, ToolGateResult } from "./lib/tool-gate";
+export {
+  createApprovalRequest,
+  findPendingByConversation,
+  approveRequest,
+  rejectRequest,
+} from "./lib/approval-requests";
+export type { CreateApprovalRequestInput } from "./lib/approval-requests";
 export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
 export type { AIUsageEvent } from "./lib/ai-usage";
 export { getRedis, closeRedis } from "./lib/redis";
