@@ -152,14 +152,16 @@ Applies to ALL tasks:
 
 ---
 
-## 🎯 F9: Suggested Actions Layer
+## 🎯 F9: Suggested Actions Layer — [DELETED 2026-04-15 — folded into F2/F3/F5/F7/F8]
 
-### Tasks
-- [x] F9.1 Context-aware recommendation engine — action-planner + existing suggestions route
-- [x] F9.2 Lead prioritization — existing agent-scoring.service
-- [x] F9.3 Escalation suggestion — policy.escalationKeywords + existing router-rules
-- [x] F9.4 Action ranking UI inside inbox — AIInsightsPanel surfaces the existing suggestions route (ordered by service)
-- [x] F9.5 CRM tagging suggestions — action-executor `tag_contact` tool
+F9 was a symptom of PRD bloat. "Suggested actions" is a UI surface (a view), not a system layer. Every sub-task is already owned by another feature. Keeping F9 created split-brain logic, hardcoded UX pretending to be AI, and confused ownership.
+
+### Fold mapping
+- **F9.1 Context-aware recommendations** → F2 action planner. Already reuses F2; redundant framing removed.
+- **F9.2 Lead prioritization** → F7 memory layer. `agent-scoring.service.ts` is misnamed — it scores AGENTS (operational analytics), not leads. Renamed to `agent-performance.service.ts`. Real lead prioritization will live in F7 CustomerState as `priorityScore` when the handoff-milestone trigger lands.
+- **F9.3 Escalation suggestion** → F8 policy engine. `policy.escalationKeywords` is the owner. NOTE: `services/ai/src/routes/router-rules.ts` is NOT keyword-escalation — it is the live CRUD backing `prisma.routerRule`, used by `incoming-worker/routing.service.ts` for production conversation routing. It STAYS. Previous plan to migrate/delete was based on a misread.
+- **F9.4 Action ranking UI** → F5 copilot sidebar. Hardcoded `suggestedActions` useMemo in CoPilotPanel deleted; copilot now renders planner output only.
+- **F9.5 CRM tagging suggestions** → F3 action engine + F5 sidebar via `tag_contact` tool. Future `suggest_tags` tool covered by background-automation-is-tools principle.
 
 ---
 

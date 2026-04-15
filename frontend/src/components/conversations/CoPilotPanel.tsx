@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getAISuggestions, getAISummary, sendCopilotChat, getConversationIntelligence } from "@/lib/api";
@@ -289,65 +289,6 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
     : "";
   const priorityColor = effectivePriority === "high" ? "text-red-500" : effectivePriority === "low" ? "text-gray-400" : "text-amber-500";
 
-  // Dynamic suggested actions based on real detected intent
-  const suggestedActions = useMemo(() => {
-    const intent = effectiveIntent;
-    const actions: Array<{ label: string; icon: string; style: string; text: string }> = [];
-
-    if (intent === "refundRequest" || intent === "returnRequest" || intent === "cancellation") {
-      actions.push({
-        label: t("copilot.suggestedActions.offerDiscount"),
-        icon: "ticket",
-        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
-        text: t("copilot.panel.actionTexts.offerDiscount") || "I understand your concern. As a valued customer, I'd like to offer you a special discount to make things right. Would that work for you?",
-      });
-      actions.push({
-        label: t("copilot.suggestedActions.transferToHuman"),
-        icon: "transfer",
-        style: "bg-red-50 hover:bg-red-100 text-red-600",
-        text: t("copilot.panel.actionTexts.transferToHuman") || "Let me connect you with a specialist who can help resolve this right away.",
-      });
-    } else if (intent === "orderInquiry") {
-      actions.push({
-        label: t("copilot.suggestedActions.checkOrderStatus"),
-        icon: "search",
-        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
-        text: t("copilot.panel.actionTexts.checkOrderStatus") || "I'd be happy to check your order status. Could you provide your order number?",
-      });
-    } else if (intent === "technicalIssue" || intent === "supportRequest") {
-      actions.push({
-        label: t("copilot.suggestedActions.checkOrderStatus"),
-        icon: "search",
-        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
-        text: t("copilot.panel.actionTexts.gatherDetails") || "I'd like to help resolve this for you. Could you describe the issue in more detail, including any error messages you're seeing?",
-      });
-      actions.push({
-        label: t("copilot.suggestedActions.transferToHuman"),
-        icon: "transfer",
-        style: "bg-red-50 hover:bg-red-100 text-red-600",
-        text: t("copilot.panel.actionTexts.transferToHuman") || "Let me connect you with a specialist who can help resolve this right away.",
-      });
-    } else if (intent === "pricingInquiry") {
-      actions.push({
-        label: t("copilot.suggestedActions.checkOrderStatus"),
-        icon: "search",
-        style: "bg-violet-50 hover:bg-violet-100 text-violet-700",
-        text: t("copilot.panel.actionTexts.sharePricing") || "Great question! Let me pull up our current pricing plans for you.",
-      });
-    }
-
-    // Always offer transfer as a fallback if not already added
-    if (!actions.find((a) => a.icon === "transfer")) {
-      actions.push({
-        label: t("copilot.suggestedActions.transferToHuman"),
-        icon: "transfer",
-        style: "bg-red-50 hover:bg-red-100 text-red-600",
-        text: t("copilot.panel.actionTexts.transferToHuman") || "Let me connect you with a specialist who can help resolve this right away.",
-      });
-    }
-
-    return actions;
-  }, [effectiveIntent, t]);
 
   return (
     <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white flex flex-col h-full animate-slide-in-right">
@@ -605,43 +546,6 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
                       </div>
                     )}
 
-                    {/* Suggested Actions - dynamic based on detected intent */}
-                    {analysisComplete && suggestedActions.length > 0 && (
-                      <div className="mt-3">
-                        <div className="flex items-center gap-1.5 mb-2">
-                          <svg className="w-3.5 h-3.5 text-violet-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
-                          </svg>
-                          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.suggestedActions.title")}</span>
-                        </div>
-                        <div className="flex flex-col gap-1.5">
-                          {suggestedActions.map((action, i) => (
-                            <button
-                              key={i}
-                              onClick={() => onInsertReply(action.text)}
-                              className={clsx("flex items-center gap-2 w-full px-3 py-2 rounded-lg text-xs font-medium transition-all text-left", action.style)}
-                            >
-                              {action.icon === "search" && (
-                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
-                                </svg>
-                              )}
-                              {action.icon === "ticket" && (
-                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M9 14.25l6-6m4.5-3.493V21.75l-4.125-2.625L11.25 21.75l-4.125-2.625L3 21.75V4.757c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0c1.1.128 1.907 1.077 1.907 2.185z" />
-                                </svg>
-                              )}
-                              {action.icon === "transfer" && (
-                                <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                  <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
-                                </svg>
-                              )}
-                              <span className="flex-1">{action.label}</span>
-                            </button>
-                          ))}
-                        </div>
-                      </div>
-                    )}
                   </div>
                 </div>
               </div>
