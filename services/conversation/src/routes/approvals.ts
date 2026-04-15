@@ -26,7 +26,61 @@ import {
   approveRequest,
   rejectRequest,
   findPendingByConversation,
+  publishEvent,
 } from "@chatcenter/shared";
+
+/**
+ * Dispatch an approved action by calling the ai service's action
+ * executor over HTTP. We POST a single-step plan with approved=true so
+ * the executor's gate recognizes the approval. Best-effort: failure
+ * here logs an error but does NOT roll the ApprovalRequest back to
+ * PENDING — the human already decided. A follow-up worker can retry.
+ */
+async function dispatchApprovedAction(args: {
+  tenantId: string;
+  approvalId: string;
+  tool: string;
+  params: Record<string, unknown>;
+  approvedBy: string;
+  authToken?: string;
+}): Promise<{ ok: boolean; error?: string; result?: unknown }> {
+  const base = process.env.AI_SERVICE_URL ?? "http://ai:4006";
+  const url = `${base.replace(/\/$/, "")}/api/action-planner/execute`;
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const token = args.authToken ?? process.env.INTERNAL_SERVICE_TOKEN;
+  if (token) headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+  headers["x-tenant-id"] = args.tenantId;
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({
+        plan: {
+          summary: `Approved action: ${args.tool}`,
+          requiresApproval: true,
+          steps: [
+            {
+              tool: args.tool,
+              params: args.params,
+              reason: `Human-approved via approval request ${args.approvalId}`,
+              riskLevel: "high",
+            },
+          ],
+        },
+        approved: true,
+        approvedBy: args.approvedBy,
+        idempotencyKey: `approval:${args.approvalId}`,
+      }),
+    });
+    if (!res.ok) {
+      return { ok: false, error: `executor returned ${res.status}` };
+    }
+    const data = await res.json();
+    return { ok: true, result: data };
+  } catch (err: any) {
+    return { ok: false, error: err?.message ?? "fetch failed" };
+  }
+}
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -144,6 +198,11 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       });
     }
 
+    const effectiveParams =
+      req.body?.modifiedParams && typeof req.body.modifiedParams === "object"
+        ? (req.body.modifiedParams as Record<string, unknown>)
+        : (row.params as Record<string, unknown>);
+
     const updated = await approveRequest(
       tenantId,
       row.id,
@@ -151,7 +210,57 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       req.body?.modifiedParams,
       req.body?.decisionReason,
     );
-    return res.json({ approval: updated });
+
+    // Un-pause the conversation so the bot can resume on next inbound
+    // (or so the dispatched action's side effect lands cleanly). We
+    // reset handledBy back to ai_bot — the resume path re-establishes
+    // the autonomous loop. If the tenant later wants "hand to human
+    // after approval" they can express it via policy.
+    try {
+      await prisma.conversation.update({
+        where: { id: row.conversationId },
+        data: { handledBy: "ai_bot" },
+      });
+    } catch (err: any) {
+      console.error("approvals.approve: failed to un-pause conversation:", err.message);
+    }
+
+    // Fire the approved action via the ai service executor. Best-effort:
+    // failure is logged but does NOT roll back the approval record.
+    const authToken = (req.headers.authorization as string | undefined) ?? undefined;
+    const dispatch = await dispatchApprovedAction({
+      tenantId,
+      approvalId: row.id,
+      tool: row.tool,
+      params: effectiveParams,
+      approvedBy: actorId,
+      authToken,
+    });
+    if (!dispatch.ok) {
+      console.error(
+        `[approvals] dispatch failed for ${row.id}: ${dispatch.error}`,
+      );
+    }
+
+    // Notify subscribers (inbox UIs, worker retry, etc.)
+    publishEvent({
+      event: "approval:approved",
+      tenantId,
+      data: {
+        approvalId: row.id,
+        conversationId: row.conversationId,
+        tool: row.tool,
+        dispatchOk: dispatch.ok,
+      },
+    }).catch(() => {});
+
+    return res.json({
+      approval: updated,
+      dispatch: {
+        ok: dispatch.ok,
+        error: dispatch.error,
+      },
+    });
   } catch (err: any) {
     console.error("approvals.approve error:", err);
     return res.status(500).json({ error: "Failed to approve" });
@@ -183,6 +292,30 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     }
 
     const updated = await rejectRequest(tenantId, row.id, actorId, decisionReason);
+
+    // Un-pause the conversation but route to human. Rejected actions
+    // mean the bot shouldn't retry — hand off to a human so they can
+    // respond directly.
+    try {
+      await prisma.conversation.update({
+        where: { id: row.conversationId },
+        data: { handledBy: "human", isHandedOver: true },
+      });
+    } catch (err: any) {
+      console.error("approvals.reject: failed to reroute conversation:", err.message);
+    }
+
+    publishEvent({
+      event: "approval:rejected",
+      tenantId,
+      data: {
+        approvalId: row.id,
+        conversationId: row.conversationId,
+        tool: row.tool,
+        reason: decisionReason,
+      },
+    }).catch(() => {});
+
     return res.json({ approval: updated });
   } catch (err: any) {
     console.error("approvals.reject error:", err);
