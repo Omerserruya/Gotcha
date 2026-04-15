@@ -224,4 +224,146 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
   }
 });
 
+// ─── POST /link ──────────────────────────────────────────────
+// Progressive identity linker. Called by the AI tool executor when an
+// email or phone is extracted from a customer message. NEVER merges —
+// either attaches the identifier to the current contact (safe) or
+// records a pending IdentityLinkSuggestion when the identifier already
+// belongs to a DIFFERENT contact in the same tenant.
+//
+// Security rules:
+//   - verified identifier on current contact → never overwrite
+//   - new identifier for a contact that already has one (unverified) → keep
+//     existing, still create a suggestion so an admin can decide
+//   - rate-limited: max 3 new identifiers per contact per 24h
+//   - idempotent per messageId + identifier
+router.post("/link", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const { contactId, type, value, confidence, messageId, reason } = req.body ?? {};
+
+    if (!contactId || typeof contactId !== "string") {
+      return res.status(400).json({ error: "contactId required" });
+    }
+    if (type !== "email" && type !== "phone") {
+      return res.status(400).json({ error: "type must be 'email' or 'phone'" });
+    }
+    if (!value || typeof value !== "string") {
+      return res.status(400).json({ error: "value required" });
+    }
+
+    // Validate format
+    const normalized = value.trim();
+    if (type === "email") {
+      const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRe.test(normalized)) {
+        return res.status(400).json({ error: "invalid email format" });
+      }
+    } else {
+      // Loose E.164 check — digits, optional +, 8–15 total digits
+      const digits = normalized.replace(/[^\d]/g, "");
+      if (digits.length < 8 || digits.length > 15) {
+        return res.status(400).json({ error: "invalid phone format" });
+      }
+    }
+    const normalizedValue = type === "email" ? normalized.toLowerCase() : normalized;
+    const conf = typeof confidence === "number" ? Math.max(0, Math.min(1, confidence)) : 0.5;
+
+    // Load current contact (tenant-scoped)
+    const current = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
+    if (!current) return res.status(404).json({ error: "contact not found" });
+
+    // Idempotency: if a suggestion already exists with this (messageId, value)
+    // for this contact, short-circuit. Attach-path idempotency is inherent —
+    // writing the same value twice is a no-op.
+    if (messageId) {
+      const existingSuggestion = await prisma.identityLinkSuggestion.findFirst({
+        where: {
+          tenantId,
+          messageId,
+          identifierType: type === "email" ? "EMAIL" : "PHONE",
+          identifierValue: normalizedValue,
+        },
+      });
+      if (existingSuggestion) {
+        return res.json({ outcome: "duplicate", suggestion: existingSuggestion });
+      }
+    }
+
+    // Rate limit: max 3 identifier changes per contact per 24h (based on
+    // recent suggestions + the contact's own updatedAt field, best-effort).
+    const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+    const recent = await prisma.identityLinkSuggestion.count({
+      where: { tenantId, sourceContactId: contactId, createdAt: { gt: since } },
+    });
+    if (recent >= 3) {
+      return res.status(429).json({ error: "identity update rate limit exceeded" });
+    }
+
+    // Resolve — is this identifier already attached to another contact?
+    const field = type === "email" ? "email" : "phone";
+    const otherContact = await prisma.contact.findFirst({
+      where: { tenantId, [field]: normalizedValue, NOT: { id: contactId } },
+    });
+
+    // Current contact's existing value for this field
+    const currentValue = type === "email" ? current.email : current.phone;
+    const currentVerified = type === "email" ? current.emailVerified : current.phoneVerified;
+
+    // Never overwrite a verified value on the current contact.
+    if (currentValue && currentVerified && currentValue !== normalizedValue) {
+      return res.json({
+        outcome: "rejected",
+        reason: "current contact already has a verified identifier of this type",
+      });
+    }
+
+    // Branch B: matches another contact → suggestion (never auto-merge).
+    if (otherContact) {
+      const suggestion = await prisma.identityLinkSuggestion.create({
+        data: {
+          tenantId,
+          sourceContactId: contactId,
+          targetContactId: otherContact.id,
+          identifierType: type === "email" ? "EMAIL" : "PHONE",
+          identifierValue: normalizedValue,
+          confidence: conf,
+          messageId: messageId ?? null,
+          reason: reason ?? null,
+        },
+      });
+      return res.json({ outcome: "suggestion_created", suggestion });
+    }
+
+    // Branch A: no match anywhere → attach to current contact (unverified).
+    // If the current contact already has an unverified value, we keep it
+    // untouched and still surface a suggestion so an admin can decide.
+    if (currentValue && currentValue !== normalizedValue) {
+      const suggestion = await prisma.identityLinkSuggestion.create({
+        data: {
+          tenantId,
+          sourceContactId: contactId,
+          targetContactId: contactId,
+          identifierType: type === "email" ? "EMAIL" : "PHONE",
+          identifierValue: normalizedValue,
+          confidence: conf,
+          messageId: messageId ?? null,
+          reason: reason ?? "conflicts with existing unverified value",
+        },
+      });
+      return res.json({ outcome: "conflict_pending", suggestion });
+    }
+
+    const updated = await prisma.contact.update({
+      where: { id: contactId },
+      data: type === "email" ? { email: normalizedValue } : { phone: normalizedValue },
+      select: { id: true, email: true, phone: true, emailVerified: true, phoneVerified: true },
+    });
+    return res.json({ outcome: "attached", contact: updated });
+  } catch (err: any) {
+    console.error("identity.link error:", err);
+    return res.status(500).json({ error: err?.message || "Failed to link identity" });
+  }
+});
+
 export default router;

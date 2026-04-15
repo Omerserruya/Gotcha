@@ -6,6 +6,8 @@
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
+import { prisma, buildAgentTools, dispatchToolCall } from "@chatcenter/shared";
+import type { AgentToolContext } from "@chatcenter/shared";
 
 export class OpenAIProvider implements AIProvider {
   private defaultModel: string;
@@ -198,20 +200,66 @@ export class OpenAIProvider implements AIProvider {
     // Add current agent message
     messages.push({ role: "user", content: params.agentMessage });
 
-    try {
-      const result = await generateResponse({
-        tenantId: params.tenantId,
-        model,
-        messages,
-        temperature: config?.temperature ?? 0.7,
-        maxTokens: config?.maxTokens ?? 1024,
-        metadata: {
-          type: "chat",
-          conversationId: params.conversationId,
+    // Resolve contactId so link_customer_identifier can target the right row.
+    let contactId: string | undefined;
+    if (params.tenantId && params.customerData?.externalId && params.customerData?.channel) {
+      const contact = await prisma.contact.findFirst({
+        where: {
+          tenantId: params.tenantId,
+          channel: params.customerData.channel as any,
+          externalId: params.customerData.externalId,
         },
+        select: { id: true },
       });
+      contactId = contact?.id;
+    }
+    const toolCtx: AgentToolContext = {
+      tenantId: params.tenantId || "",
+      conversationId: params.conversationId,
+      contactId,
+      authToken: process.env.INTERNAL_SERVICE_TOKEN,
+    };
+    const tools = buildAgentTools({ identityLinking: !!contactId, escalation: true });
 
-      return result.content || "I couldn't generate a response. Please try again.";
+    try {
+      // Tool-calling loop, capped at 3 rounds. The assist path will rarely
+      // need more than one round — the agent asks a question, the model
+      // maybe calls a tool, then produces final text.
+      for (let round = 0; round < 3; round++) {
+        const result = await generateResponse({
+          tenantId: params.tenantId || "",
+          model,
+          messages,
+          temperature: config?.temperature ?? 0.7,
+          maxTokens: config?.maxTokens ?? 1024,
+          metadata: { type: "chat", conversationId: params.conversationId },
+          tools,
+        });
+
+        const toolCalls = result.toolCalls;
+        if (!toolCalls || toolCalls.length === 0) {
+          return result.content || "I couldn't generate a response. Please try again.";
+        }
+
+        messages.push({
+          role: "assistant",
+          content: result.content || "",
+          tool_calls: toolCalls,
+        } as any);
+
+        for (const tc of toolCalls) {
+          const res = await dispatchToolCall(
+            { id: tc.id, function: { name: tc.function.name, arguments: tc.function.arguments } },
+            toolCtx,
+          );
+          messages.push({
+            role: "tool",
+            tool_call_id: res.toolCallId,
+            content: res.content,
+          } as any);
+        }
+      }
+      return "I couldn't finalize a response after using tools. Please try again.";
     } catch (err: any) {
       console.error("OpenAI agent chat error:", err.message);
       return "Failed to get AI response. Please check API configuration.";

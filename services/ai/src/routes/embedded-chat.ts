@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, incomingMessageQueue } from "@chatcenter/shared";
+import { prisma, incomingMessageQueue, withCrossTenantAccess } from "@chatcenter/shared";
 import crypto from "crypto";
 
 const router = Router();
@@ -14,10 +14,16 @@ router.post("/init", async (req: Request, res: Response) => {
       return;
     }
 
-    // Find the channel account for this widget
-    const channelAccount = await prisma.channelAccount.findFirst({
-      where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
-    });
+    // Find the channel account for this widget. Widget init is public — the
+    // anonymous caller has no tenant context yet, and widgetId is globally
+    // unique by design, so this lookup MUST be cross-tenant. We then derive
+    // tenantId from the channel account and scope everything downstream to it.
+    const channelAccount = await withCrossTenantAccess(
+      async () =>
+        await prisma.channelAccount.findFirst({
+          where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
+        }),
+    );
 
     if (!channelAccount) {
       res.status(404).json({ error: "Widget not found or not active" });
@@ -144,7 +150,16 @@ router.get("/messages/:sessionId", async (req: Request, res: Response) => {
     const { sessionId } = req.params;
     const after = req.query.after as string | undefined;
 
-    const where: any = { conversationId: sessionId };
+    const conversation = await prisma.conversation.findUnique({
+      where: { id: sessionId },
+      select: { tenantId: true },
+    });
+    if (!conversation) {
+      res.status(404).json({ error: "Session not found" });
+      return;
+    }
+
+    const where: any = { tenantId: conversation.tenantId, conversationId: sessionId };
     if (after) {
       where.createdAt = { gt: new Date(after) };
     }

@@ -22,7 +22,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
     // Enrich with tool count
     const enriched = await Promise.all(agents.map(async (agent) => {
       const toolCount = await prisma.agentToolPermission.count({
-        where: { aiAgentId: agent.id, isAllowed: true },
+        where: { tenantId: req.tenantId! as string, aiAgentId: agent.id, isAllowed: true },
       });
       return {
         ...agent,

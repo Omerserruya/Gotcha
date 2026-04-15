@@ -1,6 +1,14 @@
 import OpenAI from "openai";
-import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, trackAIUsage } from "@chatcenter/shared";
-import type { ChannelCredentials } from "@chatcenter/shared";
+import {
+  prisma,
+  getOutboundAdapter,
+  decryptCredentials,
+  publishEvent,
+  trackAIUsage,
+  buildAgentTools,
+  dispatchToolCall,
+} from "@chatcenter/shared";
+import type { ChannelCredentials, AgentToolContext } from "@chatcenter/shared";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge-retrieval.service";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -115,41 +123,109 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
 
   try {
     const model = config.model || "gpt-4o-mini";
-    const response = await openai.chat.completions.create({
-      model,
-      temperature: config.temperature ?? 0.7,
-      max_tokens: config.maxTokens ?? 1024,
-      messages: chatMessages,
+
+    // Resolve the Contact row for this conversation so the AI can link
+    // identifiers it extracts from the customer's message.
+    const contact = await prisma.contact.findFirst({
+      where: { tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
+      select: { id: true },
     });
 
-    const usage = response.usage;
+    const agentToolCtx: AgentToolContext = {
+      tenantId,
+      conversationId,
+      contactId: contact?.id,
+      authToken: process.env.INTERNAL_SERVICE_TOKEN,
+    };
 
-    // Track token usage via centralized shared helper (fire-and-forget)
-    if (usage) {
-      trackAIUsage({
-        tenantId,
-        feature: "ai_bot",
+    const tools = buildAgentTools({
+      identityLinking: !!contact?.id,
+      escalation: true,
+    });
+
+    // Tool-calling loop. Up to 3 rounds is plenty: the model either emits a
+    // tool call once and then the final reply, or it replies directly. The
+    // cap exists to bound the worst case without letting a buggy model
+    // ping-pong forever.
+    let pendingEscalation: { reason: string; priority?: "low"|"medium"|"high"; summary?: string } | null = null;
+    let replyText: string | undefined;
+    let totalTokens = 0;
+
+    for (let round = 0; round < 3; round++) {
+      const response = await openai.chat.completions.create({
         model,
-        promptTokens: usage.prompt_tokens,
-        completionTokens: usage.completion_tokens,
-        totalTokens: usage.total_tokens,
-        metadata: { conversationId, aiAgentId: config.id },
-      }).catch((err: any) => console.error("[AI-Bot] Usage tracking failed:", err.message));
+        temperature: config.temperature ?? 0.7,
+        max_tokens: config.maxTokens ?? 1024,
+        messages: chatMessages,
+        tools: tools as any,
+      });
 
-      // Audit log (separate from usage)
-      prisma.auditLog.create({
-        data: {
+      if (response.usage) {
+        totalTokens += response.usage.total_tokens || 0;
+        trackAIUsage({
           tenantId,
-          actorType: "ai",
-          action: "ai.responded",
-          targetType: "conversation",
-          targetId: conversationId,
-          metadata: { model, tokens: usage.total_tokens, source: "ai_bot" },
-        },
-      }).catch((err: any) => console.error("[AI-Bot] Audit log failed:", err.message));
+          feature: "ai_bot",
+          model,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+          metadata: { conversationId, aiAgentId: config.id },
+        }).catch((err: any) => console.error("[AI-Bot] Usage tracking failed:", err.message));
+      }
+
+      const choice = response.choices[0]?.message;
+      if (!choice) break;
+
+      const toolCalls = (choice as any).tool_calls as any[] | undefined;
+      if (toolCalls && toolCalls.length > 0) {
+        // Append the assistant turn that contained the tool_calls, then each
+        // tool result message — required by OpenAI's tool-calling protocol.
+        chatMessages.push({
+          role: "assistant",
+          content: choice.content ?? "",
+          tool_calls: toolCalls,
+        } as any);
+
+        for (const tc of toolCalls) {
+          const result = await dispatchToolCall(
+            { id: tc.id, function: { name: tc.function?.name, arguments: tc.function?.arguments || "{}" } },
+            agentToolCtx,
+          );
+          if (result.sideEffect?.escalate) pendingEscalation = result.sideEffect.escalate;
+          chatMessages.push({
+            role: "tool",
+            tool_call_id: result.toolCallId,
+            content: result.content,
+          } as any);
+        }
+        // Loop again so the model can use the tool results to finalize its reply.
+        continue;
+      }
+
+      // No tool calls — this is the final answer.
+      replyText = choice.content?.trim();
+      break;
     }
 
-    const replyText = response.choices[0]?.message?.content?.trim();
+    // Audit the full AI interaction (fire-and-forget).
+    prisma.auditLog.create({
+      data: {
+        tenantId,
+        actorType: "ai",
+        action: "ai.responded",
+        targetType: "conversation",
+        targetId: conversationId,
+        metadata: { model, tokens: totalTokens, source: "ai_bot", escalated: !!pendingEscalation },
+      },
+    }).catch((err: any) => console.error("[AI-Bot] Audit log failed:", err.message));
+
+    // If the model escalated, route through the existing human-handoff path
+    // and do not send an AI reply downstream.
+    if (pendingEscalation) {
+      await escalateToHuman(tenantId, conversationId, sendContext, config.escalationMessage);
+      return true;
+    }
+
     if (!replyText) return false;
 
     // Send the reply via channel adapter

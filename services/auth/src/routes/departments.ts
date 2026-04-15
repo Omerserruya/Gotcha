@@ -251,7 +251,7 @@ router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request,
 
 function aiAgentToCopilotPayload(agent: any) {
   return {
-    copilotMode: agent.mode === "COPILOT" ? "READY_MESSAGE" : "AUTONOMOUS",
+    copilotMode: "READY_MESSAGE",
     systemPrompt: agent.systemPrompt ?? "",
     rules: agent.escalationRules ?? [],
     model: agent.model,
@@ -323,9 +323,6 @@ router.put(
       }
       const body = req.body ?? {};
       const data: any = {};
-      if (body.copilotMode !== undefined) {
-        data.mode = body.copilotMode === "AUTONOMOUS" ? "AUTONOMOUS" : "COPILOT";
-      }
       if (typeof body.systemPrompt === "string") data.systemPrompt = body.systemPrompt;
       if (Array.isArray(body.rules)) data.escalationRules = body.rules as any;
       if (typeof body.model === "string") data.model = body.model;

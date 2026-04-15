@@ -87,25 +87,6 @@ function RiskBadge({ risk }: { risk: string }) {
   );
 }
 
-// ─── Mode badge ───────────────────────────────────────────────
-function ModeBadge({ mode, t }: { mode: string; t: (k: string) => string }) {
-  const styles: Record<string, string> = {
-    autonomous: "bg-violet-100 text-violet-700",
-    copilot: "bg-blue-100 text-blue-700",
-    human_only: "bg-gray-100 text-gray-600",
-  };
-  const labels: Record<string, string> = {
-    autonomous: t("aiStudio.team.modeAutonomous"),
-    copilot: t("aiStudio.team.modeCopilot"),
-    human_only: t("aiStudio.team.modeHuman"),
-  };
-  return (
-    <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide", styles[mode] || styles.autonomous)}>
-      {labels[mode] || mode}
-    </span>
-  );
-}
-
 // ─── Team Members Tab ─────────────────────────────────────────
 function TeamTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
@@ -151,7 +132,6 @@ function TeamTab({ t }: { t: (key: string) => string }) {
             ? (() => { try { return JSON.parse(agent.channels); } catch { return []; } })()
             : (agent.channels || []);
           const status = agent.status?.toLowerCase() || "draft";
-          const mode = agent.mode?.toLowerCase() || "autonomous";
           const knowledgeCount = agent.knowledgeSources?.length || 0;
           const skillsCount = agent.toolCount || 0;
           return (
@@ -168,11 +148,6 @@ function TeamTab({ t }: { t: (key: string) => string }) {
             </div>
             <h3 className="font-semibold text-gray-900">{agent.name}</h3>
             <p className="text-xs text-gray-400 mt-0.5 mb-2">{agent.role}</p>
-
-            {/* Mode badge */}
-            <div className="mb-3">
-              <ModeBadge mode={mode} t={t} />
-            </div>
 
             {/* Connected resources */}
             <div className="flex items-center gap-3 text-xs text-gray-500 mb-3">

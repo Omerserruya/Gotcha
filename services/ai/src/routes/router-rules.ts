@@ -21,7 +21,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
 
     const flows = flowIds.length > 0
       ? await prisma.chatbotFlow.findMany({
-          where: { id: { in: flowIds } },
+          where: { tenantId: req.tenantId! as string, id: { in: flowIds } },
           select: { id: true, name: true },
         })
       : [];

@@ -194,7 +194,7 @@ router.delete("/:id", async (req: Request, res: Response) => {
 
     // Delete messages first, then conversation
     await prisma.$transaction([
-      prisma.message.deleteMany({ where: { conversationId } }),
+      prisma.message.deleteMany({ where: { tenantId: req.tenantId!, conversationId } }),
       prisma.conversation.delete({ where: { id: conversationId } }),
     ]);
 

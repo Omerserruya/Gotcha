@@ -70,6 +70,7 @@ export type ActionTool =
   | "list_workflows"
   | "resolve_identity"
   | "merge_contacts"
+  | "link_customer_identifier"
   | "noop";
 
 export interface PlannedAction {
@@ -396,6 +397,23 @@ export async function executeAction(
           authToken: ctx.authToken,
         });
         if (!r.ok) throw new Error(`merge_contacts upstream: ${r.error}`);
+        output = r.data;
+        break;
+      }
+      case "link_customer_identifier": {
+        // Progressive identity linker. The handler decides attach-vs-suggest
+        // based on tenant-scoped resolution; executor just forwards params
+        // with the idempotency key from ExecutorContext surfaced as messageId.
+        const body = {
+          ...(action.params as Record<string, unknown>),
+          messageId: ctx.idempotencyKey ?? (action.params as any)?.messageId ?? null,
+          reason: action.reason,
+        };
+        const r = await callConversationService("POST", "/api/identity/link", body, {
+          tenantId,
+          authToken: ctx.authToken,
+        });
+        if (!r.ok) throw new Error(`link_customer_identifier upstream: ${r.error}`);
         output = r.data;
         break;
       }

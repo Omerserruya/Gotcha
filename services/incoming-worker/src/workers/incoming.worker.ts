@@ -178,9 +178,11 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   if (existing) return;
 
   // Find or create conversation using channel-aware lookup.
-  // Reuse any non-closed thread first; otherwise reopen a recently-closed one
-  // so a customer's reply to a broadcast/outbound message threads back into
-  // their existing history instead of starting a fresh conversation.
+  // A closed conversation stays closed — the next inbound from the same
+  // customer starts a brand-new conversation. Reopening leaks stale state
+  // (assignment, handoff, chatbot flow, escalation clock) and causes the
+  // customer to hit whatever the previous session's terminal state was
+  // instead of being routed fresh.
   let conversation = await prisma.conversation.findFirst({
     where: {
       tenantId,
@@ -190,27 +192,6 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     },
     orderBy: { createdAt: "desc" },
   });
-
-  if (!conversation) {
-    const REOPEN_WINDOW_DAYS = 30;
-    const since = new Date(Date.now() - REOPEN_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    const recentlyClosed = await prisma.conversation.findFirst({
-      where: {
-        tenantId,
-        channel,
-        customerExternalId: senderId,
-        status: "CLOSED",
-        OR: [{ closedAt: { gte: since } }, { updatedAt: { gte: since } }],
-      },
-      orderBy: { updatedAt: "desc" },
-    });
-    if (recentlyClosed) {
-      conversation = await prisma.conversation.update({
-        where: { id: recentlyClosed.id },
-        data: { status: "OPEN", closedAt: null },
-      });
-    }
-  }
 
   // Fall back to the saved Contact's display name + avatar so replies don't
   // surface as raw phone numbers when the channel webhook omits the profile.

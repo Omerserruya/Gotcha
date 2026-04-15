@@ -13,7 +13,6 @@ import TestChatModal from "@/components/TestChatModal";
 
 // ─── Types ────────────────────────────────────────────────────
 type Tone = "professional" | "friendly" | "casual" | "formal";
-type AgentMode = "human_only" | "copilot" | "autonomous";
 type AgentRole = "customer_support" | "sales" | "booking" | "billing" | "custom";
 
 interface EscalationRule {
@@ -76,7 +75,6 @@ interface AgentFormData {
   escalationRules: EscalationRule[];
   interactiveMessages: InteractiveMessagesConfig;
   channels: { whatsapp: boolean; instagram: boolean; webchat: boolean };
-  mode: AgentMode;
   status: "active" | "draft" | "paused";
   conversationFlow: ConversationFlowStep[];
   customGuardrails: string[];
@@ -166,7 +164,6 @@ function mapApiToForm(agent: any): AgentFormData {
           autoSuggestAlways: false,
         }),
     channels: parseChannels(agent.channels),
-    mode: ((agent.mode || "COPILOT").toLowerCase()) as AgentMode,
     status: ((agent.status || "DRAFT").toLowerCase()) as "active" | "draft" | "paused",
     conversationFlow: Array.isArray(agent.conversationFlow) ? agent.conversationFlow : [],
     customGuardrails: Array.isArray(agent.customGuardrails) ? agent.customGuardrails : [],
@@ -200,7 +197,6 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
     autoSuggestAlways: false,
   },
   channels: { whatsapp: false, instagram: false, webchat: false },
-  mode: "copilot",
   status: "draft",
   conversationFlow: [],
   customGuardrails: [],
@@ -446,7 +442,6 @@ export default function AgentEditorPage() {
         channels: channelsArr,
         escalationRules: form.escalationRules,
         interactiveMessages: form.interactiveMessages,
-        mode: form.mode.toUpperCase(),
         status: form.status.toUpperCase(),
         conversationFlow: form.conversationFlow.length > 0 ? form.conversationFlow : null,
         customGuardrails: form.customGuardrails.length > 0 ? form.customGuardrails : null,
@@ -1100,12 +1095,11 @@ export default function AgentEditorPage() {
           </SectionCard>
 
 
-          {/* ── Section 6: Conversation Flow (Autonomous only) ── */}
-          {form.mode === "autonomous" && (
-            <SectionCard
-              title={t("aiStudio.agents.editor.conversationFlow.title")}
-              subtitle={t("aiStudio.agents.editor.conversationFlow.subtitle")}
-            >
+          {/* ── Section 6: Conversation Flow ── */}
+          <SectionCard
+            title={t("aiStudio.agents.editor.conversationFlow.title")}
+            subtitle={t("aiStudio.agents.editor.conversationFlow.subtitle")}
+          >
               {form.conversationFlow.length === 0 ? (
                 <p className="text-sm text-gray-400 py-2">{t("aiStudio.agents.editor.conversationFlow.emptyState")}</p>
               ) : (
@@ -1161,7 +1155,6 @@ export default function AgentEditorPage() {
               </button>
               <p className="mt-2 text-xs text-gray-400">{t("aiStudio.agents.editor.conversationFlow.hint")}</p>
             </SectionCard>
-          )}
 
           {/* ── Section 7: Custom Guardrails ── */}
           <SectionCard

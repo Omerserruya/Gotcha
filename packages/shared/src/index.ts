@@ -64,6 +64,19 @@ export {
 } from "./lib/queue";
 export { publishEvent, subscribeToEvents, closeEventBus } from "./lib/event-bus";
 export { createServiceApp, startService } from "./lib/service-app";
+export {
+  LINK_IDENTIFIER_TOOL,
+  ESCALATE_TOOL,
+  buildAgentTools,
+  dispatchToolCall,
+} from "./lib/agent-tools";
+export type {
+  AgentToolContext,
+  AgentToolSideEffect,
+  AgentToolDispatchResult,
+  BuildAgentToolsOptions,
+  ToolCallLike,
+} from "./lib/agent-tools";
 
 // Middleware
 export { authenticate } from "./middleware/auth";

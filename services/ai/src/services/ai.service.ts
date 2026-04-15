@@ -17,7 +17,9 @@ import { logAudit } from "./audit.service";
 export interface AIRequestParams {
   tenantId: string;
   model?: string;
-  messages: Array<{ role: "system" | "user" | "assistant"; content: string }>;
+  // Loosened to `any[]` so callers can pass tool/tool-call roles (OpenAI's
+  // ChatCompletionMessageParam is a union that includes those variants).
+  messages: any[];
   metadata?: {
     conversationId?: string;
     aiAgentId?: string;
@@ -27,10 +29,19 @@ export interface AIRequestParams {
   temperature?: number;
   maxTokens?: number;
   responseFormat?: { type: "json_object" | "text" };
+  /** OpenAI function-calling tool schemas. Passed through untouched. */
+  tools?: any[];
+  toolChoice?: any;
 }
 
 export interface AIResponse {
   content: string;
+  /** Raw tool_calls from the assistant message if the model emitted any. */
+  toolCalls?: Array<{
+    id: string;
+    type: "function";
+    function: { name: string; arguments: string };
+  }>;
   usage: {
     input_tokens: number;
     output_tokens: number;
@@ -101,6 +112,10 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   if (params.responseFormat) {
     requestParams.response_format = params.responseFormat;
   }
+  if (params.tools && params.tools.length > 0) {
+    (requestParams as any).tools = params.tools;
+    if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
+  }
 
   const response = await client.chat.completions.create(requestParams);
 
@@ -111,6 +126,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   };
 
   const content = response.choices[0]?.message?.content || "";
+  const rawToolCalls = (response.choices[0]?.message as any)?.tool_calls as any[] | undefined;
 
   // Track usage (fire-and-forget, never block the response)
   trackAIUsage({
@@ -144,7 +160,11 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     },
   }).catch((err) => console.error("[aiService] Audit logging failed:", err.message));
 
-  return { content, usage };
+  return {
+    content,
+    toolCalls: rawToolCalls as AIResponse["toolCalls"],
+    usage,
+  };
 }
 
 // ─── Core: Generate Embedding ───────────────────────────────

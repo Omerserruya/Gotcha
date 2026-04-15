@@ -150,6 +150,23 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     input: { targetId: "string", sourceId: "string" },
     endpoint: "POST /api/identity/merge",
   },
+  {
+    name: "link_customer_identifier",
+    kind: "action",
+    category: "identity",
+    description:
+      "Progressively link an email or phone extracted from a customer message to their contact. " +
+      "Safe: attaches new identifiers or creates a pending link suggestion when the identifier " +
+      "already belongs to another contact. Never merges directly. Use when the user clearly states " +
+      "ownership of an email or phone.",
+    input: {
+      contactId: "string",
+      type: "email|phone",
+      value: "string",
+      confidence: "number",
+    },
+    endpoint: "POST /api/identity/link",
+  },
 ];
 
 export interface AvailableTools {

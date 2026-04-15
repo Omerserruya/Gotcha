@@ -399,7 +399,6 @@ export async function generateAgentConfig(
         name: `${department.name} AI Employee`,
         role: "customer_support",
         description: `AI Employee for ${department.name} department`,
-        mode: "COPILOT",
         ...agentData,
       },
     });
