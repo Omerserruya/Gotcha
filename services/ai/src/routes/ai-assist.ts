@@ -9,6 +9,7 @@ import { scoreAgent, getAgentScore } from "../services/agent-performance.service
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
 import { getPolicy, setPolicy } from "../services/policy.service";
+import voiceRouter from "./ai-assist-voice";
 
 const router = Router();
 
@@ -113,6 +114,10 @@ router.post("/intent", (req: Request, res: Response, next) => {
   }
 });
 
+// ─── Voice stream handler (internal auth, no tenant session required) ───
+
+router.use("/voice", voiceRouter);
+
 // ─── Main AI Routes (require active tenant) ─────────────────
 
 router.use(authenticate, resolveTenant, requireActiveTenant());
@@ -131,6 +136,99 @@ router.get("/config", async (req: Request, res: Response) => {
     const config = await aiService.getTenantCopilotConfig(req.tenantId!);
     res.json({ data: config });
   } catch (err) { console.error("AI config error:", err); res.status(500).json({ error: "Failed to get config" }); }
+});
+
+// ─── Compose: AI-assisted message drafting ──────────────────
+// Drafts a single outbound message from a natural-language instruction.
+// Used by: template editor, scheduled-message composer, inbox input,
+// and the Command Center. Returns plain text (no JSON).
+router.post("/compose", async (req: Request, res: Response) => {
+  try {
+    const {
+      instruction,
+      surface = "inbox",
+      conversationId,
+      channel,
+      locale,
+      currentDraft,
+      asTemplate = false,
+    } = req.body || {};
+
+    if (!instruction || typeof instruction !== "string" || !instruction.trim()) {
+      res.status(400).json({ error: "instruction is required" });
+      return;
+    }
+
+    const sys: string[] = [
+      "You are a senior customer-engagement copywriter inside ChatCenter.",
+      "Draft the text of a single outbound message from the operator's instruction.",
+      "Output ONLY the message body — no JSON, no surrounding quotes, no prefaces like 'Here is…', no sign-off disclaimers.",
+      "Keep it natural, clear, and on-brand. Do not invent facts, prices, dates, links, names, or order numbers that were not provided.",
+    ];
+    if (channel) sys.push(`The message will be sent via ${channel}. Match the medium's conventions (short, no markdown on WhatsApp/SMS).`);
+    if (asTemplate) {
+      sys.push("This draft is for a message TEMPLATE. Use placeholders like {{1}}, {{2}} for per-recipient variables (names, amounts, dates). Number from {{1}}.");
+    } else {
+      sys.push("Do NOT use placeholder syntax like {{1}}. Write concrete finished text.");
+    }
+    const langMap: Record<string, string> = {
+      he: "Hebrew", ar: "Arabic", es: "Spanish", fr: "French",
+      de: "German", pt: "Portuguese", ru: "Russian", zh: "Chinese", ja: "Japanese",
+    };
+    if (locale && langMap[locale]) sys.push(`Write the message in ${langMap[locale]}.`);
+
+    const blocks: string[] = [];
+
+    if (surface === "inbox" && conversationId) {
+      const conversation = await prisma.conversation.findFirst({
+        where: { id: conversationId, tenantId: req.tenantId! },
+      });
+      if (conversation) {
+        const msgs = await prisma.message.findMany({
+          where: { conversationId, tenantId: req.tenantId! },
+          orderBy: { createdAt: "desc" },
+          take: 20,
+          select: { direction: true, body: true, senderName: true },
+        });
+        const transcript = msgs
+          .reverse()
+          .filter((m: any) => m.body?.trim())
+          .map((m: any) => `${m.direction === "INBOUND" ? "Customer" : (m.senderName || "Agent")}: ${m.body}`)
+          .join("\n");
+        if (transcript) blocks.push(`## Recent conversation\n${transcript}`);
+        if (conversation.customerName) blocks.push(`## Customer name\n${conversation.customerName}`);
+      }
+    }
+
+    if (currentDraft && typeof currentDraft === "string" && currentDraft.trim()) {
+      blocks.push(`## Current draft (refine — keep what works, rewrite what's off)\n${currentDraft.trim()}`);
+    }
+
+    blocks.push(`## Operator instruction\n${instruction.trim()}`);
+
+    const result = await generateResponse({
+      tenantId: req.tenantId!,
+      messages: [
+        { role: "system", content: sys.join("\n") },
+        { role: "user", content: blocks.join("\n\n") },
+      ],
+      temperature: 0.7,
+      maxTokens: 512,
+      metadata: { type: "compose", conversationId },
+    });
+
+    // Strip accidental surrounding quotes or code fences.
+    const text = (result.content || "")
+      .trim()
+      .replace(/^```[a-z]*\s*|\s*```$/gi, "")
+      .replace(/^["'`]+|["'`]+$/g, "")
+      .trim();
+
+    res.json({ data: { text, surface } });
+  } catch (err: any) {
+    console.error("AI compose error:", err);
+    res.status(500).json({ error: err?.message || "Failed to compose message" });
+  }
 });
 
 router.get("/:conversationId/suggestions", async (req: Request, res: Response) => {
@@ -153,6 +251,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       return;
     }
 
+    const locale = (req.query.locale as string) || undefined;
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
@@ -160,6 +259,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
         direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
       })),
       copilotConfig,
+      locale,
     };
     const suggestions = await aiService.getSuggestions(context);
     res.json({ data: suggestions, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" });
@@ -185,6 +285,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       return;
     }
 
+    const locale = (req.query.locale as string) || undefined;
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
@@ -192,6 +293,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
         direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
       })),
       copilotConfig,
+      locale,
     };
     const summary = await aiService.summarizeConversation(context);
     res.json({ data: { summary }, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" });
@@ -202,7 +304,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
 router.post("/:conversationId/chat", async (req: Request, res: Response) => {
   try {
     const convId = req.params.conversationId as string;
-    const { message, history } = req.body;
+    const { message, history, locale } = req.body;
 
     if (!message || typeof message !== "string") {
       res.status(400).json({ error: "message is required" });
@@ -239,6 +341,7 @@ router.post("/:conversationId/chat", async (req: Request, res: Response) => {
         direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
       })),
       copilotConfig,
+      locale: locale || undefined,
       agentMessage: message,
       chatHistory: Array.isArray(history) ? history : [],
       customerData: {

@@ -1,14 +1,30 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense, useState, useEffect } from "react";
+import { useSearchParams } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import { AppLayout } from "@/components/AppLayout";
 import { ConversationList } from "@/components/conversations/ConversationList";
 import { ChatPanel } from "@/components/conversations/ChatPanel";
 
 export default function ConversationsPage() {
+  return (
+    <Suspense fallback={null}>
+      <ConversationsInner />
+    </Suspense>
+  );
+}
+
+function ConversationsInner() {
   const { t } = useI18n();
-  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const searchParams = useSearchParams();
+  const [selectedId, setSelectedId] = useState<string | null>(() => searchParams.get("id"));
+
+  // Honor ?id=... whenever the URL changes (e.g. post-call redirect).
+  useEffect(() => {
+    const id = searchParams.get("id");
+    if (id && id !== selectedId) setSelectedId(id);
+  }, [searchParams, selectedId]);
 
   // Handle browser back button: push state when selecting a chat, pop to deselect
   useEffect(() => {

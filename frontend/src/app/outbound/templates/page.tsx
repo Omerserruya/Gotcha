@@ -12,6 +12,7 @@ import {
   getChannelAccounts,
 } from "@/lib/api";
 import clsx from "clsx";
+import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 
 // ─── Inline API helper ───────────────────────────────────────
 async function submitTemplateToMeta(token: string, id: string) {
@@ -721,15 +722,24 @@ export default function TemplatesPage() {
                 {/* Body + WhatsApp Preview */}
                 <div className={clsx(isWhatsApp && "flex flex-col lg:flex-row gap-5")}>
                   <div className={clsx("flex-1 min-w-0 space-y-4")}>
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        {t("outbound.templates.fieldBody")}
-                        {isWhatsApp && (
-                          <span className="ms-2 text-xs text-gray-400 font-normal">
-                            {"outbound.templates.variableHint"}
-                          </span>
-                        )}
-                      </label>
+                    <AIComposeScope
+                      surface="template"
+                      asTemplate
+                      channel={form.channel}
+                      currentValue={form.body}
+                      onApply={(text) => setForm((f) => ({ ...f, body: text }))}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-medium text-gray-700">
+                          {t("outbound.templates.fieldBody")}
+                          {isWhatsApp && (
+                            <span className="ms-2 text-xs text-gray-400 font-normal">
+                              {"outbound.templates.variableHint"}
+                            </span>
+                          )}
+                        </label>
+                        <AIComposeTrigger />
+                      </div>
                       <textarea
                         value={form.body}
                         onChange={(e) => setForm({ ...form, body: e.target.value })}
@@ -738,7 +748,8 @@ export default function TemplatesPage() {
                         className={inputCls}
                         placeholder={t("outbound.templates.bodyPlaceholder")}
                       />
-                    </div>
+                      <AIComposePanel />
+                    </AIComposeScope>
 
                     {/* Variable example inputs for WhatsApp */}
                     {isWhatsApp && bodyVars.length > 0 && (

@@ -86,6 +86,48 @@
     "deleteConfirmMsg": "שיחה זו וכל ההודעות שלה יימחקו לצמיתות.",
     "chatDeleted": "השיחה נמחקה",
     "newConversation": "שיחה חדשה",
+    "historyButton": "היסטוריה",
+    "copilotButton": "עוזר AI",
+    "dropFilesHere": "שחרר קבצים כאן",
+    "addCaption": "הוסף כיתוב...",
+    "downloadFile": "הורד קובץ",
+    "transferSubtitle": "העבר שיחה זו לנציג או למחלקה",
+    "suggestion": {
+      "aiRecommendation": "המלצת AI",
+      "allSuggestions": "כל ההצעות",
+      "dismiss": "סגור",
+      "applyToInput": "הכנס לשדה"
+    },
+    "messageStatus": {
+      "sending": "שולח...",
+      "sent": "נשלח",
+      "delivered": "נמסר",
+      "read": "נקרא",
+      "failed": "שליחה נכשלה"
+    },
+    "historyPanel": {
+      "title": "היסטוריה והערות",
+      "closeHistory": "סגור היסטוריה",
+      "pastConversations": "שיחות קודמות",
+      "noHistory": "אין היסטוריית שיחות",
+      "messages": "הודעות",
+      "current": "נוכחי",
+      "started": "התחלה",
+      "closed": "סגירה",
+      "aiSummary": "סיכום AI",
+      "lastActivity": "פעילות אחרונה",
+      "viewConversation": "צפה בשיחה",
+      "notes": "הערות",
+      "demo": "הדגמה",
+      "addNotePlaceholder": "הוסף הערה...",
+      "addNote": "הוסף",
+      "noNotes": "אין הערות עדיין",
+      "noNotesHint": "הוסף הערות למעקב אחר פרטים חשובים",
+      "footer": "הערות נשמרות מקומית (מצב הדגמה). אינטגרציה מלאה בקרוב.",
+      "statusOpen": "פתוח",
+      "statusWaiting": "ממתין",
+      "statusClosed": "סגור"
+    },
     "initiate": {
       "title": "התחל שיחה חדשה",
       "searchContact": "חפש אנשי קשר...",
@@ -364,7 +406,8 @@
         "askAnything": "שאל את ה-AI כל דבר",
         "askHint": "שאלות על השיחה, הלקוח, חיפוש בבסיס הידע, טיוטת תגובות...",
         "inputPlaceholder": "שאל את ה-AI...",
-        "failedResponse": "לא ניתן לקבל תגובה. נסה שוב."
+        "failedResponse": "לא ניתן לקבל תגובה. נסה שוב.",
+        "useAsReply": "השתמש כתגובה"
       },
       "aiReplyLabel": "תגובת AI",
       "actionLabel": "פעולה",
@@ -514,7 +557,10 @@
     "selectCustomer": "בחר לקוח כדי לצפות בהיסטוריית השיחות",
     "chats": "שיחות",
     "timeline": "שיחות",
-    "next": "הבא"
+    "next": "הבא",
+    "noMessages": "אין הודעות",
+    "aiReplay": "הקרנה חוזרת AI",
+    "hideReplay": "הסתר הקרנה"
   },
   "knowledge": {
     "title": "בסיס ידע",
@@ -562,6 +608,12 @@
   "settings": {
     "title": "הגדרות",
     "subtitle": "ניהול שעות פעילות והודעת תגובה אוטומטית",
+    "nav": {
+      "general": "כללי",
+      "policy": "מדיניות עסקית",
+      "tools": "כלים",
+      "voiceCopilot": "[TODO: he translation]"
+    },
     "businessHours": "שעות פעילות",
     "businessHoursDesc": "הגדר מתי הצוות שלך זמין לטפל בשיחות",
     "enabled": "הפעל שעות פעילות",
@@ -610,12 +662,70 @@
     "autoCloseDelayDesc": "זמן המתנה לאחר ההודעה האחרונה של הנציג לפני סגירת השיחה",
     "autoCloseMessage": "הודעת סגירה אוטומטית",
     "autoCloseMessagePlaceholder": "בשל חוסר מענה, השיחה נסגרה. אל תהסס לפנות אלינו שוב בכל עת!",
-    "minutes": "דק׳"
+    "minutes": "דק׳",
+    "voiceCopilot": {
+      "title": "[TODO: he translation]",
+      "tabs": {
+        "stt": "[TODO: he translation]",
+        "twilio": "[TODO: he translation]",
+        "live": "[TODO: he translation]"
+      },
+      "stt": {
+        "provider": "[TODO: he translation]",
+        "providerStub": "[TODO: he translation]",
+        "providerGoogle": "[TODO: he translation]",
+        "apiKey": "[TODO: he translation]",
+        "apiKeyPlaceholder": "[TODO: he translation]",
+        "apiKeySaved": "[TODO: he translation]",
+        "language": "[TODO: he translation]",
+        "languageHe": "[TODO: he translation]",
+        "languageEn": "[TODO: he translation]",
+        "interimResults": "[TODO: he translation]",
+        "speakerSeparation": "[TODO: he translation]",
+        "speakerSeparationTooltip": "[TODO: he translation]",
+        "save": "[TODO: he translation]",
+        "saving": "[TODO: he translation]",
+        "saved": "[TODO: he translation]"
+      },
+      "twilio": {
+        "accountSid": "[TODO: he translation]",
+        "authToken": "[TODO: he translation]",
+        "phoneNumber": "[TODO: he translation]",
+        "phoneNumberPlaceholder": "[TODO: he translation]",
+        "webhookUrl": "[TODO: he translation]",
+        "copy": "[TODO: he translation]",
+        "copied": "[TODO: he translation]",
+        "test": "[TODO: he translation]",
+        "testing": "[TODO: he translation]",
+        "testOk": "[TODO: he translation]",
+        "testErr": "[TODO: he translation]",
+        "save": "[TODO: he translation]"
+      },
+      "live": {
+        "title": "[TODO: he translation]",
+        "columns": {
+          "callSid": "[TODO: he translation]",
+          "conversationId": "[TODO: he translation]",
+          "agent": "[TODO: he translation]",
+          "duration": "[TODO: he translation]",
+          "latency": "[TODO: he translation]",
+          "health": "[TODO: he translation]"
+        },
+        "empty": "[TODO: he translation]",
+        "refreshingEvery": "[TODO: he translation]"
+      },
+      "errors": {
+        "loadFailed": "[TODO: he translation]",
+        "saveFailed": "[TODO: he translation]",
+        "invalidPhone": "[TODO: he translation]"
+      }
+    }
   },
   "outbound": {
     "title": "מרכז יוצא",
     "subtitle": "תבניות, שידורים והודעות מתוזמנות",
     "nav": {
+      "call": "שיחה",
       "templates": "תבניות",
       "broadcasts": "שידורים",
       "scheduled": "מתוזמנות"
@@ -1219,25 +1329,42 @@
           "title": "AI Copilot",
           "hint": "השותף ה-AI שלכם בכל שיחה ושיחת טלפון",
           "desc": "AI Copilot יושב לצד הצוות שלכם בכל מקום — צ׳אטים, מיילים, שיחות קוליות ותגובות ברשתות חברתיות. הוא מציע תשובות, מגיב אוטומטית לתגובות, פותח שיחות עם לידים ומאמן נציגים בזמן אמת במהלך שיחות חיות.",
-          "bullets": ["אימון בזמן אמת בשיחות קוליות", "תגובה אוטומטית לתגובות ו-DMs ברשתות", "פתיחת שיחות יזומה עם לידים חדשים", "הצעות מותאמות הקשר בכל ערוץ"]
+          "bullets": [
+            "אימון בזמן אמת בשיחות קוליות",
+            "תגובה אוטומטית לתגובות ו-DMs ברשתות",
+            "פתיחת שיחות יזומה עם לידים חדשים",
+            "הצעות מותאמות הקשר בכל ערוץ"
+          ]
         },
         "inbox": {
           "title": "תיבת דואר רב-ערוצית",
           "hint": "כל ערוץ, כל הודעה — מסך אחד",
           "desc": "WhatsApp, Instagram, Messenger, Gmail, Outlook, Slack — הכל זורם לתיבה מאוחדת אחת. ניתוב חכם שולח כל שיחה לנציג הנכון, והיסטוריה מלאה מלווה כל לקוח בין הערוצים.",
-          "bullets": ["6+ ערוצים מאוחדים במבט אחד", "ניתוב חכם לפי מיומנות, עומס ועדיפות", "היסטוריית שיחות מלאה בין ערוצים"]
+          "bullets": [
+            "6+ ערוצים מאוחדים במבט אחד",
+            "ניתוב חכם לפי מיומנות, עומס ועדיפות",
+            "היסטוריית שיחות מלאה בין ערוצים"
+          ]
         },
         "insights": {
           "title": "אינטליגנציה לקוחות",
           "hint": "AI שלומד את הלקוחות ויודע איך לטפל בהם",
           "desc": "כל אינטראקציה מלמדת את המערכת עוד על כל לקוח — העדפות, דפוסי סנטימנט, היסטוריית רכישות וסגנון תקשורת. הצוות שלכם מקבל כרטיסי הקשר חיים שמראים בדיוק איך לגשת לכל שיחה.",
-          "bullets": ["AI בונה פרופיל מכל אינטראקציה", "זיהוי סנטימנט וכוונה בזמן אמת", "המלצות טיפול מותאמות לכל לקוח"]
+          "bullets": [
+            "AI בונה פרופיל מכל אינטראקציה",
+            "זיהוי סנטימנט וכוונה בזמן אמת",
+            "המלצות טיפול מותאמות לכל לקוח"
+          ]
         },
         "knowledge": {
           "title": "בסיס ידע מחובר",
           "hint": "המוח של החברה שלכם, זמין בכל שיחה",
           "desc": "העלו מסמכים, שאלות נפוצות ומידע מוצר — AI משתמש בהם מיידית לניסוח תשובות, מענה על שאלות ואימון הבוטים שלכם. בסיס הידע לומד מכל שיחה שנפתרה ומשתפר עם הזמן.",
-          "bullets": ["הצעות מאמרים אוטומטיות בצ׳אט", "מניע תשובות בוט והצעות קופיילוט", "לומד ומשתפר מפניות שנפתרו"]
+          "bullets": [
+            "הצעות מאמרים אוטומטיות בצ׳אט",
+            "מניע תשובות בוט והצעות קופיילוט",
+            "לומד ומשתפר מפניות שנפתרו"
+          ]
         }
       }
     },
@@ -1248,22 +1375,38 @@
       "ops": {
         "title": "תפעול לקוחות",
         "desc": "נהלו את כל שיחות הלקוחות מתיבה מאוחדת אחת. נתבו הודעות לנציגים הנכונים, אוטמטו משימות חוזרות ושמרו על SLA — עם AI שמשתפר עם כל אינטראקציה.",
-        "features": ["תיבת דואר רב-ערוצית", "ניתוב חכם ומעקב SLA", "אוטומציה מבוססת AI"]
+        "features": [
+          "תיבת דואר רב-ערוצית",
+          "ניתוב חכם ומעקב SLA",
+          "אוטומציה מבוססת AI"
+        ]
       },
       "sales": {
         "title": "מכירות",
         "desc": "צרו קשר עם לידים ברגע שהם פונים — בכל ערוץ. AI מסנן ומדרג לידים, מציע פולואפים ונותן לצוות המכירות את ההקשר שצריך כדי לסגור מהר יותר.",
-        "features": ["מענה מיידי ללידים", "סינון ודירוג AI", "היסטוריית שיחות מלאה"]
+        "features": [
+          "מענה מיידי ללידים",
+          "סינון ודירוג AI",
+          "היסטוריית שיחות מלאה"
+        ]
       },
       "support": {
         "title": "תמיכה",
         "desc": "פתרו בעיות מהר יותר עם AI שמבין את המוצר שלכם. הקופיילוט מנסח תשובות מבסיס הידע, בוטים מטפלים בשאלות נפוצות והנציגים מתמקדים במה שחשוב באמת.",
-        "features": ["AI Copilot לנציגים", "בוטים לשירות עצמי", "אינטליגנציה שיחתית"]
+        "features": [
+          "AI Copilot לנציגים",
+          "בוטים לשירות עצמי",
+          "אינטליגנציה שיחתית"
+        ]
       },
       "social": {
         "title": "מעורבות חברתית",
         "desc": "הודעות באינסטגרם, תגובות בפייסבוק, WhatsApp — כל נקודת מגע חברתית הופכת לשיחה מנוהלת עם ניתוח סנטימנט בזמן אמת ותגובות מבוססות AI.",
-        "features": ["כל הערוצים החברתיים בתיבה אחת", "זיהוי סנטימנט בזמן אמת", "תגובות אוטומטיות לשאלות נפוצות"]
+        "features": [
+          "כל הערוצים החברתיים בתיבה אחת",
+          "זיהוי סנטימנט בזמן אמת",
+          "תגובות אוטומטיות לשאלות נפוצות"
+        ]
       }
     },
     "faq": {
@@ -1943,6 +2086,24 @@
     "approveExecute": "אשר ובצע",
     "executing": "מבצע…",
     "errorSimulate": "ההדמיה נכשלה",
-    "errorExecute": "הביצוע נכשל"
+    "errorExecute": "הביצוע נכשל",
+    "aiComposeExampleConversation": "✨ נסח תשובה: התנצל על העיכוב והצע 10% הנחה",
+    "aiComposeExampleGlobal": "✨ נסח הודעה: תזכורת חידוש ידידותית עם שם הלקוח"
+  },
+  "aiCompose": {
+    "button": "כתוב עם AI",
+    "title": "כתוב עם AI",
+    "placeholderTemplate": "לדוגמה: תזכורת ידידותית לפגישה עם שם הלקוח והשעה",
+    "placeholderScheduled": "לדוגמה: תזכורת מנומסת על חידוש שמתקרב",
+    "placeholderInbox": "לדוגמה: התנצל על העיכוב והצע 10% הנחה",
+    "placeholderDefault": "תאר את ההודעה שברצונך לנסח…",
+    "refineHint": "טיפ: ה־AI יחדד את הטיוטה הנוכחית שלך.",
+    "shortcutHint": "⌘/Ctrl + Enter ליצירה",
+    "generate": "צור",
+    "generating": "מנסח…",
+    "regenerate": "נסח שוב",
+    "tryAgain": "נסה שוב",
+    "apply": "השתמש בזה",
+    "error": "יצירת הטיוטה נכשלה"
   }
 }

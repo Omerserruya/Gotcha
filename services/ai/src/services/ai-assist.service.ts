@@ -14,6 +14,7 @@ export interface ConversationContext {
   messages: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; senderName?: string; createdAt: string }>;
   metadata?: Record<string, any>;
   copilotConfig?: CopilotConfigData | null;
+  locale?: string;
 }
 
 export interface CopilotConfigData {

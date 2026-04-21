@@ -11,7 +11,6 @@ import {
   getDepartments, getDepartmentSla, updateDepartmentSla,
   changePassword as changePasswordApi,
 } from "@/lib/api";
-import { AppLayout } from "@/components/AppLayout";
 import clsx from "clsx";
 
 const DAYS = ["sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday"] as const;
@@ -222,17 +221,14 @@ export default function SettingsPage() {
 
   if (user?.role !== "ADMIN") {
     return (
-      <AppLayout>
-        <div className="flex items-center justify-center h-full">
-          <p className="text-gray-400">Admin access required</p>
-        </div>
-      </AppLayout>
+      <div className="flex items-center justify-center h-full">
+        <p className="text-gray-400">Admin access required</p>
+      </div>
     );
   }
 
   return (
-    <AppLayout>
-    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-screen pb-20">
+    <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-full pb-20">
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
@@ -705,6 +701,5 @@ export default function SettingsPage() {
         </>
       )}
     </div>
-    </AppLayout>
   );
 }

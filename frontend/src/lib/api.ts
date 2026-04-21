@@ -517,21 +517,40 @@ export function transferToDepartment(token: string, conversationId: string, depa
 
 // ─── AI Assist ──────────────────────────────────────────────
 
-export function getAISuggestions(token: string, conversationId: string) {
-  return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions`, { token });
+export function getAISuggestions(token: string, conversationId: string, locale?: string) {
+  const params = locale ? `?locale=${locale}` : "";
+  return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions${params}`, { token });
 }
 
 export function getAIPrompt(token: string, departmentId: string) {
   return apiFetch<{ data: any }>(`/api/ai-assist/prompt/${departmentId}`, { token });
 }
 
-export function getAISummary(token: string, conversationId: string) {
-  return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary`, { token });
+export function getAISummary(token: string, conversationId: string, locale?: string) {
+  const params = locale ? `?locale=${locale}` : "";
+  return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary${params}`, { token });
 }
 
-export function sendCopilotChat(token: string, conversationId: string, data: { message: string; history?: Array<{ role: string; content: string }> }) {
+export function sendCopilotChat(token: string, conversationId: string, data: { message: string; history?: Array<{ role: string; content: string }>; locale?: string }) {
   return apiFetch<{ data: { reply: string } }>(`/api/ai-assist/${conversationId}/chat`, {
     token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+export function composeAIMessage(
+  token: string,
+  params: {
+    instruction: string;
+    surface: "template" | "scheduled" | "inbox" | "command-center";
+    conversationId?: string;
+    channel?: string;
+    locale?: string;
+    currentDraft?: string;
+    asTemplate?: boolean;
+  },
+) {
+  return apiFetch<{ data: { text: string; surface: string } }>(`/api/ai-assist/compose`, {
+    token, method: "POST", body: JSON.stringify(params),
   });
 }
 

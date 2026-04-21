@@ -2,7 +2,6 @@
 
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
-import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import {
   listToolPermissions,
@@ -103,7 +102,6 @@ export default function ToolPermissionsPage() {
   };
 
   return (
-    <AppLayout>
       <div className="p-6 max-w-5xl">
         <header className="mb-5">
           <h1 className="text-xl font-semibold text-gray-900">Tool Permissions</h1>
@@ -193,7 +191,6 @@ export default function ToolPermissionsPage() {
           )}
         </div>
       </div>
-    </AppLayout>
   );
 }
 

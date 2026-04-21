@@ -233,6 +233,9 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
                 context.conversationId
                   ? t("commandCenter.exampleConversation2")
                   : t("commandCenter.exampleGlobal2"),
+                context.conversationId
+                  ? "✨ Draft a reply: apologize for the delay and offer a 10% discount"
+                  : "✨ Draft a message: friendly renewal reminder with the customer's name",
               ].map((ex, i) => (
                 <button
                   key={i}

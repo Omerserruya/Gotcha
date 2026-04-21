@@ -19,13 +19,16 @@ const httpServer = createServer(app);
 // Initialize Socket.IO
 initSocket(httpServer);
 
-// Subscribe to cross-service events and relay to Socket.IO
+// Subscribe to cross-service events and relay to Socket.IO.
+// This is pure projection — no side effects, no DB writes. Voice-copilot
+// writes final VOICE-channel messages directly to Postgres via its
+// StreamRouter.PersistenceSink; we only forward the events to browsers.
 subscribeToEvents((event) => {
   try {
     const io = getIO();
     io.to(`tenant:${event.tenantId}`).emit(event.event, event.data);
   } catch {
-    // Socket not ready yet
+    // Socket not ready yet — event is dropped (acceptable per MVP spec)
   }
 });
 

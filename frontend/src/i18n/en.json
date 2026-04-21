@@ -86,6 +86,48 @@
     "deleteConfirmMsg": "This chat and all its messages will be permanently deleted.",
     "chatDeleted": "Chat deleted",
     "newConversation": "New Conversation",
+    "historyButton": "History",
+    "copilotButton": "Co-Pilot",
+    "dropFilesHere": "Drop files here",
+    "addCaption": "Add a caption...",
+    "downloadFile": "Download file",
+    "transferSubtitle": "Transfer this conversation to an agent or department",
+    "suggestion": {
+      "aiRecommendation": "AI Recommendation",
+      "allSuggestions": "All suggestions",
+      "dismiss": "Dismiss",
+      "applyToInput": "Apply to input"
+    },
+    "messageStatus": {
+      "sending": "Sending...",
+      "sent": "Sent",
+      "delivered": "Delivered",
+      "read": "Read",
+      "failed": "Failed to send"
+    },
+    "historyPanel": {
+      "title": "History & Notes",
+      "closeHistory": "Close History",
+      "pastConversations": "Past Conversations",
+      "noHistory": "No conversation history",
+      "messages": "messages",
+      "current": "CURRENT",
+      "started": "Started",
+      "closed": "Closed",
+      "aiSummary": "AI Summary",
+      "lastActivity": "Last activity",
+      "viewConversation": "View conversation",
+      "notes": "Notes",
+      "demo": "Demo",
+      "addNotePlaceholder": "Add a note...",
+      "addNote": "Add",
+      "noNotes": "No notes yet",
+      "noNotesHint": "Add notes to track important details",
+      "footer": "Notes are stored locally (demo mode). Full integration coming soon.",
+      "statusOpen": "Open",
+      "statusWaiting": "Waiting",
+      "statusClosed": "Closed"
+    },
     "initiate": {
       "title": "Start New Conversation",
       "searchContact": "Search contacts...",
@@ -364,7 +406,8 @@
         "askAnything": "Ask the AI anything",
         "askHint": "Questions about the conversation, customer, KB lookups, draft replies...",
         "inputPlaceholder": "Ask the AI...",
-        "failedResponse": "Failed to get response. Please try again."
+        "failedResponse": "Failed to get response. Please try again.",
+        "useAsReply": "Use as reply"
       },
       "aiReplyLabel": "AI Reply",
       "actionLabel": "Action",
@@ -514,7 +557,10 @@
     "selectCustomer": "Select a customer to view their chat history",
     "chats": "chats",
     "timeline": "Conversations",
-    "next": "Next"
+    "next": "Next",
+    "noMessages": "No messages",
+    "aiReplay": "AI Replay",
+    "hideReplay": "Hide Replay"
   },
   "knowledge": {
     "title": "Knowledge Base",
@@ -562,6 +608,65 @@
   "settings": {
     "title": "Settings",
     "subtitle": "Manage business hours and auto-response settings",
+    "nav": {
+      "general": "General",
+      "policy": "Business Policy",
+      "tools": "Tools",
+      "voiceCopilot": "Voice Copilot"
+    },
+    "voiceCopilot": {
+      "title": "Voice Copilot",
+      "tabs": { "stt": "Speech-to-Text", "twilio": "Twilio", "live": "Live Monitoring" },
+      "stt": {
+        "provider": "Provider",
+        "providerStub": "Stub (dev)",
+        "providerGoogle": "Google Cloud STT (coming soon)",
+        "apiKey": "API Key",
+        "apiKeyPlaceholder": "Paste your key",
+        "apiKeySaved": "Saved (ends with {last4})",
+        "language": "Language",
+        "languageHe": "Hebrew (he-IL)",
+        "languageEn": "English (en-US)",
+        "interimResults": "Show interim (partial) transcripts",
+        "speakerSeparation": "Speaker separation (agent/customer)",
+        "speakerSeparationTooltip": "Required for agent/customer split. Always on.",
+        "save": "Save",
+        "saving": "Saving\u2026",
+        "saved": "Saved"
+      },
+      "twilio": {
+        "accountSid": "Account SID",
+        "authToken": "Auth Token",
+        "phoneNumber": "Phone Number",
+        "phoneNumberPlaceholder": "+12025550123",
+        "webhookUrl": "Webhook URL",
+        "copy": "Copy",
+        "copied": "Copied",
+        "test": "Test connection",
+        "testing": "Testing\u2026",
+        "testOk": "Connected to {name}",
+        "testErr": "Connection failed: {reason}",
+        "save": "Save"
+      },
+      "live": {
+        "title": "Active calls",
+        "columns": {
+          "callSid": "Call",
+          "conversationId": "Conversation",
+          "agent": "Agent",
+          "duration": "Duration",
+          "latency": "Latency",
+          "health": "Health"
+        },
+        "empty": "No active calls",
+        "refreshingEvery": "Refreshing every 5s"
+      },
+      "errors": {
+        "loadFailed": "Failed to load configuration",
+        "saveFailed": "Failed to save",
+        "invalidPhone": "Phone must be E.164 (e.g. +12025550123)"
+      }
+    },
     "businessHours": "Business Hours",
     "businessHoursDesc": "Configure when your team is available to handle conversations",
     "enabled": "Enable Business Hours",
@@ -616,6 +721,7 @@
     "title": "Outbound Hub",
     "subtitle": "Templates, broadcasts, and scheduled messages",
     "nav": {
+      "call": "Call",
       "templates": "Templates",
       "broadcasts": "Broadcasts",
       "scheduled": "Scheduled"
@@ -1943,6 +2049,24 @@
     "approveExecute": "Approve & Execute",
     "executing": "Executing…",
     "errorSimulate": "Simulation failed",
-    "errorExecute": "Execution failed"
+    "errorExecute": "Execution failed",
+    "aiComposeExampleConversation": "✨ Draft a reply: apologize for the delay and offer a 10% discount",
+    "aiComposeExampleGlobal": "✨ Draft a message: friendly renewal reminder with the customer's name"
+  },
+  "aiCompose": {
+    "button": "Write with AI",
+    "title": "Write with AI",
+    "placeholderTemplate": "e.g. friendly appointment reminder with customer name and time",
+    "placeholderScheduled": "e.g. polite nudge about an upcoming renewal",
+    "placeholderInbox": "e.g. apologize for the delay and offer a 10% discount",
+    "placeholderDefault": "describe the message you want to draft…",
+    "refineHint": "Tip: AI will refine your current draft.",
+    "shortcutHint": "⌘/Ctrl + Enter to generate",
+    "generate": "Generate",
+    "generating": "Drafting…",
+    "regenerate": "Regenerate",
+    "tryAgain": "Try again",
+    "apply": "Use this",
+    "error": "Failed to generate"
   }
 }

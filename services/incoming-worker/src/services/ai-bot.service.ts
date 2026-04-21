@@ -150,6 +150,7 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
     let pendingEscalation: { reason: string; priority?: "low"|"medium"|"high"; summary?: string } | null = null;
     let replyText: string | undefined;
     let totalTokens = 0;
+    const toolCallLog: Array<{ tool: string; args: Record<string, unknown>; result: string; decision?: string; sideEffect?: string }> = [];
 
     for (let round = 0; round < 3; round++) {
       const response = await openai.chat.completions.create({
@@ -188,10 +189,46 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
 
         let pausedForApproval: { approvalRequestId: string; tool: string; reason: string } | null = null;
         for (const tc of toolCalls) {
+          const toolName = tc.function?.name || "unknown";
+          let toolArgs: Record<string, unknown> = {};
+          try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+
           const result = await dispatchToolCall(
-            { id: tc.id, function: { name: tc.function?.name, arguments: tc.function?.arguments || "{}" } },
+            { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
             agentToolCtx,
           );
+
+          // Log every tool call for audit trail
+          const sideEffectType = result.sideEffect?.awaitingApproval ? "awaiting_approval"
+            : result.sideEffect?.denied ? "denied"
+            : result.sideEffect?.escalate ? "escalate"
+            : undefined;
+          toolCallLog.push({
+            tool: toolName,
+            args: toolArgs,
+            result: result.content,
+            decision: sideEffectType || "executed",
+            sideEffect: sideEffectType,
+          });
+
+          // Audit each tool call individually
+          prisma.auditLog.create({
+            data: {
+              tenantId,
+              actorType: "ai",
+              action: `ai.tool_call.${toolName}`,
+              targetType: "conversation",
+              targetId: conversationId,
+              metadata: {
+                tool: toolName,
+                args: toolArgs,
+                decision: sideEffectType || "executed",
+                result: result.content.slice(0, 500),
+                source: "ai_bot",
+              },
+            },
+          }).catch((err: any) => console.error(`[AI-Bot] Tool call audit failed for ${toolName}:`, err.message));
+
           if (result.sideEffect?.escalate) pendingEscalation = result.sideEffect.escalate;
           if (result.sideEffect?.awaitingApproval && !pausedForApproval) {
             pausedForApproval = result.sideEffect.awaitingApproval;
@@ -248,7 +285,13 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
         action: "ai.responded",
         targetType: "conversation",
         targetId: conversationId,
-        metadata: { model, tokens: totalTokens, source: "ai_bot", escalated: !!pendingEscalation },
+        metadata: {
+          model,
+          tokens: totalTokens,
+          source: "ai_bot",
+          escalated: !!pendingEscalation,
+          toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
+        },
       },
     }).catch((err: any) => console.error("[AI-Bot] Audit log failed:", err.message));
 
@@ -286,7 +329,10 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
         senderName: "AI Bot",
         externalMessageId: extId,
         status: extId ? "SENT" : "FAILED",
-        metadata: { source: "ai_bot" },
+        metadata: {
+          source: "ai_bot",
+          ...(toolCallLog.length > 0 && { toolCalls: toolCallLog.map(tc => ({ tool: tc.tool, decision: tc.decision })) }),
+        },
       },
     });
 

@@ -33,11 +33,13 @@ router.get("/", async (req: Request, res: Response) => {
     });
 
     const broadcastIds = broadcasts.map((b) => b.id);
-    const recipientStatusCounts = await prisma.broadcastRecipient.groupBy({
-      by: ["broadcastId", "status"],
-      where: { broadcastId: { in: broadcastIds } },
-      _count: { status: true },
-    });
+    const recipientStatusCounts = broadcastIds.length
+      ? await prisma.broadcastRecipient.groupBy({
+          by: ["broadcastId", "status"],
+          where: { broadcastId: { in: broadcastIds } },
+          _count: { status: true },
+        })
+      : [];
 
     const countsByBroadcast: Record<string, Record<string, number>> = {};
     for (const row of recipientStatusCounts) {

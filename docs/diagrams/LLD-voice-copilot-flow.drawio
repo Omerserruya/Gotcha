@@ -1,0 +1,198 @@
+<mxfile host="65bd71144e">
+    <diagram name="Voice Copilot Flow" id="voice-copilot-flow">
+        <mxGraphModel dx="1569" dy="761" grid="1" gridSize="10" guides="1" tooltips="1" connect="1" arrows="1" fold="1" page="1" pageScale="1" pageWidth="1700" pageHeight="1200" math="0" shadow="0">
+            <root>
+                <mxCell id="0"/>
+                <mxCell id="1" parent="0"/>
+                <mxCell id="title" value="Voice Copilot — Live Call + Transcript Flow" style="text;html=1;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;whiteSpace=wrap;rounded=0;fontSize=22;fontStyle=1;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;" parent="1" vertex="1">
+                    <mxGeometry x="400" y="20" width="800" height="40" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-clients" value="CLIENTS" style="swimlane;horizontal=0;startSize=30;sketch=1;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=14;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="90" width="260" height="1000" as="geometry"/>
+                </mxCell>
+                <mxCell id="browser" value="🖥️ Agent Browser&#xa;Twilio Voice SDK&#xa;(WebRTC)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="150" width="160" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="phone" value="📞 Customer Phone&#xa;(PSTN)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=12;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="280" width="160" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="stage-ui" value="🎭 Stage UI&#xa;/outbound/call&#xa;• committedTranscripts&#xa;• currentUtterance[speaker]" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="90" y="880" width="160" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-twilio" value="TWILIO CLOUD" style="swimlane;horizontal=0;startSize=30;sketch=1;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=14;fillColor=#ffe6cc;strokeColor=#d79b00;" parent="1" vertex="1">
+                    <mxGeometry x="320" y="90" width="240" height="380" as="geometry"/>
+                </mxCell>
+                <mxCell id="twiml-app" value="🔧 TwiML App&#xa;/twiml/outbound&#xa;&lt;Start&gt;&lt;Stream/&gt;&#xa;&lt;Dial&gt;&lt;Number/&gt;" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="150" width="160" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="twilio-bridge" value="🌉 Bridge&#xa;browser ↔ PSTN&#xa;(WebRTC + SIP)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="280" width="160" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="twilio-stream" value="🎤 Media Stream&#xa;outbound_track only&#xa;(μ-law 8 kHz, 20 ms)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="360" y="380" width="160" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-voice" value="voice-copilot service" style="swimlane;horizontal=0;startSize=30;sketch=1;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=14;fillColor=#e1d5e7;strokeColor=#9673a6;" parent="1" vertex="1">
+                    <mxGeometry x="580" y="90" width="320" height="1000" as="geometry"/>
+                </mxCell>
+                <mxCell id="nginx" value="🌐 nginx&#xa;/twilio/media-stream/:tenantId&#xa;/api/voice-copilot/*" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="150" width="240" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="ws-handler" value="🔌 twilio-handler&#xa;Twilio WS ingress&#xa;• signature verify (wss/https/ws/http)&#xa;• start | media | stop&#xa;• pendingMedia ring-buffer (200)&#xa;  ↳ replay after bootstrap" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="230" width="240" height="120" as="geometry"/>
+                </mxCell>
+                <mxCell id="session" value="🗃️ Session&#xa;• μ-law → Int16 PCM decode&#xa;• speaker map:&#xa;  inbound_track → agent&#xa;  outbound_track → customer&#xa;• BoundedAudioQueue per speaker&#xa;• ReorderBuffer (final dedupe)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="370" width="240" height="140" as="geometry"/>
+                </mxCell>
+                <mxCell id="dg-provider" value="🧠 DeepgramSTTProvider&#xa;• 2 WS conns per session (agent/customer)&#xa;• push(pcm): open→send / !open→preOpenBuffer&#xa;• preOpenBuffer: drop-oldest cap 200&#xa;• Open→flush buffer in order&#xa;• is_final dedupe (lastFinalText)&#xa;• Reconnect: exp backoff 500ms→5s" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="530" width="240" height="160" as="geometry"/>
+                </mxCell>
+                <mxCell id="dispatcher" value="📤 Dispatcher + Event Bus&#xa;• finals → POST /api/ai-assist/voice&#xa;• partials+finals → publishEvent&#xa;  (&#39;voice.transcript&#39;)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="710" width="240" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="outbound-routes" value="🔑 REST routes&#xa;• POST /token (Twilio AccessToken)&#xa;• POST /twiml/outbound (TwiML)&#xa;• POST /twiml/status (callbacks)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#e1d5e7;strokeColor=#9673a6;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="620" y="830" width="240" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-dg" value="DEEPGRAM CLOUD" style="swimlane;horizontal=0;startSize=30;sketch=1;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=14;fillColor=#d5e8d4;strokeColor=#82b366;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="490" width="240" height="220" as="geometry"/>
+                </mxCell>
+                <mxCell id="dg" value="🔊 Deepgram Live STT&#xa;model: nova-3&#xa;language: he | en-US&#xa;interim + smart_format&#xa;endpointing: 500ms&#xa;utterance_end_ms: 1000ms" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#d5e8d4;strokeColor=#82b366;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="960" y="540" width="160" height="150" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-bus" value="BACKEND FAN-OUT" style="swimlane;horizontal=0;startSize=30;sketch=1;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=14;fillColor=#f5f5f5;strokeColor=#666666;" parent="1" vertex="1">
+                    <mxGeometry x="920" y="730" width="360" height="360" as="geometry"/>
+                </mxCell>
+                <mxCell id="redis" value="🟥 Redis pub/sub&#xa;channel: service-events" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#f8cecc;strokeColor=#b85450;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="960" y="790" width="160" height="60" as="geometry"/>
+                </mxCell>
+                <mxCell id="conversation" value="💬 conversation service&#xa;subscribeToEvents()&#xa;→ io.to(tenant:X).emit(&#39;voice.transcript&#39;)&#xa;→ if isFinal: persist Message(VOICE)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#dae8fc;strokeColor=#6c8ebf;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="960" y="880" width="300" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="ai-service" value="🤖 ai service&#xa;/api/ai-assist/voice&#xa;(Finals only — copilot context)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#ffe6cc;strokeColor=#d79b00;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="960" y="1010" width="300" height="70" as="geometry"/>
+                </mxCell>
+                <mxCell id="lane-db" value="PERSISTENCE + SOCKET" style="swimlane;horizontal=0;startSize=30;sketch=1;curveFitting=1;jiggle=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=14;fillColor=#fff2cc;strokeColor=#d6b656;" parent="1" vertex="1">
+                    <mxGeometry x="1300" y="730" width="360" height="360" as="geometry"/>
+                </mxCell>
+                <mxCell id="postgres" value="🗄️ Postgres&#xa;Conversation (VOICE)&#xa;Message (INBOUND/OUTBOUND)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1340" y="790" width="280" height="80" as="geometry"/>
+                </mxCell>
+                <mxCell id="socketio" value="📡 Socket.IO&#xa;tenant:{tenantId} room&#xa;event: voice.transcript&#xa;(payload includes isFinal + speaker)" style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#fff2cc;strokeColor=#d6b656;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=11;" parent="1" vertex="1">
+                    <mxGeometry x="1340" y="900" width="280" height="100" as="geometry"/>
+                </mxCell>
+                <mxCell id="e1" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#333;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="browser" target="twiml-app" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="300" y="190"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e1lbl" value="① Device.connect()&#xa;AccessToken (voice grant)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e1" vertex="1" connectable="0">
+                    <mxGeometry x="-0.2" y="-1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2" style="endArrow=classic;startArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#333;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="phone" target="twilio-bridge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e2lbl" value="② PSTN leg&#xa;(bidirectional)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e2" vertex="1" connectable="0">
+                    <mxGeometry x="-0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#d79b00;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="twiml-app" target="twilio-bridge" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e3lbl" value="③ &lt;Dial&gt;&lt;Number&gt;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e3" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#d79b00;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="twilio-bridge" target="twilio-stream" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e4lbl" value="④ &lt;Start&gt;&lt;Stream&gt;&#xa;fork outbound_track" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e4" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#b85450;strokeWidth=3;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="twilio-stream" target="nginx" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e5lbl" value="⑤ wss://.../twilio/media-stream/:tenantId" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;rotation=-30;" parent="e5" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" y="-1" relative="1" as="geometry">
+                        <mxPoint x="-15" y="-7" as="offset"/>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e6" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#9673a6;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="nginx" target="ws-handler" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#9673a6;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="ws-handler" target="session" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e7lbl" value="⑥ handleMediaFrame()" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e7" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#9673a6;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="session" target="dg-provider" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e8lbl" value="⑦ push(pcm, speaker)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e8" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9" style="endArrow=classic;startArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#82b366;strokeWidth=3;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="dg-provider" target="dg" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e9lbl" value="⑧ WS (linear16)&#xa;← Results / UtteranceEnd" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e9" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" y="-1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#9673a6;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="dg-provider" target="dispatcher" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e10lbl" value="⑨ Transcript {speaker, text, isFinal}" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e10" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#b85450;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="dispatcher" target="redis" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e11lbl" value="⑩ publishEvent&#xa;&#39;voice.transcript&#39;" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e11" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e12" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#d79b00;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;dashed=1;" parent="1" source="dispatcher" target="ai-service" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e12lbl" value="⑪ finals only → /ai-assist/voice" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e12" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e13" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#6c8ebf;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="redis" target="conversation" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e13lbl" value="⑫ subscribeToEvents()" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e13" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e14" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#d6b656;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="conversation" target="postgres" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e14lbl" value="⑬ if isFinal: prisma.message.create" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e14" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e15" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#d6b656;strokeWidth=2;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="conversation" target="socketio" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e15lbl" value="⑭ io.to(tenant:X).emit()" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e15" vertex="1" connectable="0">
+                    <mxGeometry x="0.1" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e16" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#82b366;strokeWidth=3;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="socketio" target="stage-ui" edge="1">
+                    <mxGeometry relative="1" as="geometry">
+                        <Array as="points">
+                            <mxPoint x="1480" y="1070"/>
+                            <mxPoint x="170" y="1070"/>
+                        </Array>
+                    </mxGeometry>
+                </mxCell>
+                <mxCell id="e16lbl" value="⑮ Socket.IO → browser&#xa;partial → currentUtterance&#xa;final → committedTranscripts" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e16" vertex="1" connectable="0">
+                    <mxGeometry x="0.2" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e17" style="endArrow=classic;html=1;sketch=1;curveFitting=1;jiggle=2;strokeColor=#6c8ebf;strokeWidth=2;dashed=1;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="1" source="stage-ui" target="outbound-routes" edge="1">
+                    <mxGeometry relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="e17lbl" value="⓪ POST /token&#xa;(at page mount)" style="edgeLabel;html=1;align=center;verticalAlign=middle;resizable=0;points=[];fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;" parent="e17" vertex="1" connectable="0">
+                    <mxGeometry x="0.2" relative="1" as="geometry"/>
+                </mxCell>
+                <mxCell id="legend" value="LEGEND&#xa;━━━  red/thick   = audio path (Twilio Media Stream)&#xa;━━━  green/thick = STT WS (Deepgram)&#xa;━━━  purple       = internal voice-copilot flow&#xa;━ ━ ━ dashed     = control/REST (out-of-band)&#xa;&#xa;Known limit: only outbound_track arrives from Twilio&#xa;(browser mic WebRTC isn&#39;t forked to &lt;Start&gt;&lt;Stream&gt;)&#xa;→ agent audio transcription needs Conference rewrite." style="rounded=1;whiteSpace=wrap;html=1;sketch=1;curveFitting=1;jiggle=2;fillColor=#ffffff;strokeColor=#666666;fontFamily=Architects Daughter;fontSource=https%3A%2F%2Ffonts.googleapis.com%2Fcss%3Ffamily%3DArchitects%2BDaughter;fontSize=10;align=left;verticalAlign=top;" parent="1" vertex="1">
+                    <mxGeometry x="40" y="1100" width="520" height="140" as="geometry"/>
+                </mxCell>
+            </root>
+        </mxGraphModel>
+    </diagram>
+</mxfile>

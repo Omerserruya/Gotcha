@@ -52,8 +52,9 @@ services:
       CHATBOT_PORT: ${CHATBOT_PORT:-4005}
       AI_PORT: ${AI_PORT:-4006}
       FRONTEND_PORT: ${FRONTEND_PORT:-3000}
+      VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
     command: >
-      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT'
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT'
       < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     depends_on:
@@ -64,6 +65,7 @@ services:
       - chatbot
       - ai
       - frontend
+      - voice-copilot
 
   # ─── Microservices ───────────────────────────────────────
   auth:
@@ -128,6 +130,7 @@ services:
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -231,6 +234,40 @@ services:
       qdrant:
         condition: service_healthy
 
+  voice-copilot:
+    build:
+      context: .
+      dockerfile: services/voice-copilot/Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${VOICE_COPILOT_PORT:-4007}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      STT_PROVIDER: ${STT_PROVIDER:-stub}
+      STT_STUB_SEED: ${STT_STUB_SEED:-42}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      TWILIO_AUTH_TOKEN: ${TWILIO_AUTH_TOKEN:-}
+      TWILIO_ACCOUNT_SID: ${TWILIO_ACCOUNT_SID:-}
+      TWILIO_API_KEY_SID: ${TWILIO_API_KEY_SID:-}
+      TWILIO_API_KEY_SECRET: ${TWILIO_API_KEY_SECRET:-}
+      TWILIO_TWIML_APP_SID: ${TWILIO_TWIML_APP_SID:-}
+      TWILIO_CALLER_ID: ${TWILIO_CALLER_ID:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${VOICE_COPILOT_PORT:-4007}/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
   # ─── Workers (independently scalable) ────────────────────
   incoming-worker:
     build:
@@ -249,7 +286,9 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatcenter-internal-2026}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
+      CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads

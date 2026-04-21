@@ -11,6 +11,18 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
 
   try {
     const token = header.slice(7);
+
+    // Internal service-to-service calls use a shared secret instead of a JWT.
+    // The caller must also set x-tenant-id so we know which tenant scope to use.
+    const internalKey = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN;
+    if (internalKey && token === internalKey) {
+      const tenantId = req.headers["x-tenant-id"] as string | undefined;
+      req.user = { userId: "system", role: "ADMIN", tenantId: tenantId || "" } as any;
+      req.tenantId = tenantId || undefined;
+      next();
+      return;
+    }
+
     const payload = verifyToken(token);
     req.user = payload;
     req.tenantId = payload.tenantId;

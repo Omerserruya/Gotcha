@@ -95,6 +95,10 @@ export type {
   ToolCallLike,
 } from "./lib/agent-tools";
 
+// Secrets
+export { getSecret, requireSecret, setSecretProvider, resetSecretProvider } from "./secrets";
+export type { SecretProvider } from "./secrets";
+
 // Middleware
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";

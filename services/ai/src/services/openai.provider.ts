@@ -9,6 +9,49 @@ import { generateResponse, getDefaultModel } from "./ai.service";
 import { prisma, buildAgentTools, dispatchToolCall } from "@chatcenter/shared";
 import type { AgentToolContext } from "@chatcenter/shared";
 
+/** Map locale code to language name for prompt injection */
+const LOCALE_LANGUAGE: Record<string, string> = {
+  he: "Hebrew",
+  ar: "Arabic",
+  en: "English",
+  es: "Spanish",
+  fr: "French",
+  de: "German",
+  pt: "Portuguese",
+  ru: "Russian",
+  zh: "Chinese",
+  ja: "Japanese",
+};
+
+function getLanguageInstruction(locale?: string): string {
+  if (!locale) return "";
+  const lang = LOCALE_LANGUAGE[locale];
+  if (!lang || lang === "English") return "";
+  return `\n\n## Language Requirement\nYou MUST respond in ${lang}. All suggestions, summaries, analysis, and responses must be written in ${lang}. This is a strict requirement.`;
+}
+
+/**
+ * Quick heuristic: does this message look like it would benefit from a KB lookup?
+ * Skip KB for greetings, thank-yous, confirmations, and very short non-question messages.
+ */
+function shouldSearchKB(text: string): boolean {
+  if (!text || text.trim().length < 8) return false;
+  const lower = text.trim().toLowerCase();
+  // Common patterns that don't need KB
+  const skipPatterns = [
+    /^(hi|hello|hey|shalom|שלום|היי|מה קורה|בוקר טוב|ערב טוב|לילה טוב)\b/,
+    /^(thanks?|thank you|thx|ty|תודה|מעולה|סבבה|אחלה)\b/,
+    /^(ok|okay|sure|yes|no|yep|nope|בסדר|כן|לא|אוקי|נכון)\b/,
+    /^(bye|goodbye|see you|להתראות|ביי)\b/,
+    /^(good morning|good evening|good night)\b/,
+    /^👍|^❤️|^🙏|^😊|^👋/,
+  ];
+  for (const pattern of skipPatterns) {
+    if (pattern.test(lower)) return false;
+  }
+  return true;
+}
+
 export class OpenAIProvider implements AIProvider {
   private defaultModel: string;
 
@@ -23,12 +66,12 @@ export class OpenAIProvider implements AIProvider {
       return [{ id: "disabled", text: "Co-Pilot is disabled for this tenant.", confidence: 0, type: "info" }];
     }
 
-    let systemPrompt = this.buildSystemPrompt(config);
+    let systemPrompt = this.buildSystemPrompt(config, context.locale);
 
-    // RAG: Retrieve relevant knowledge base context
+    // RAG: Retrieve relevant knowledge base context (only when the message warrants it)
     if (context.tenantId) {
       const lastInbound = [...context.messages].reverse().find((m) => m.direction === "INBOUND");
-      if (lastInbound?.body) {
+      if (lastInbound?.body && shouldSearchKB(lastInbound.body)) {
         try {
           const chunks = await retrieveRelevantChunks(context.tenantId, lastInbound.body, 5);
           const kbContext = buildKnowledgeContext(chunks);
@@ -91,7 +134,7 @@ export class OpenAIProvider implements AIProvider {
         tenantId: context.tenantId || "",
         model,
         messages: [
-          { role: "system", content: "Summarize this customer support conversation in 2-3 concise sentences. Focus on the customer's issue and current status." },
+          { role: "system", content: "Summarize this customer conversation concisely as bullet points (2-4 key points). Structure:\n• **Why they contacted**: the customer's original reason/intent from their first message\n• **What they need now**: what the customer is asking for or waiting on right now (from their latest message)\n• **Status**: where things stand (resolved, pending, escalated, etc.)\n• **Next step**: what the agent should do next\nBe brief — one line per point." + getLanguageInstruction(context.locale) },
           { role: "user", content: messagesText },
         ],
         temperature: 0.3,
@@ -137,7 +180,7 @@ export class OpenAIProvider implements AIProvider {
     if (config && !config.isActive) return "Co-Pilot is disabled.";
 
     const model = config?.model || this.defaultModel;
-    const systemPrompt = this.buildSystemPrompt(config);
+    const systemPrompt = this.buildSystemPrompt(config, params.locale);
     const chatMode = this.getModeInstruction("CHAT");
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
@@ -174,15 +217,15 @@ export class OpenAIProvider implements AIProvider {
     }
 
     if (transcript) {
-      messages.push({ role: "user", content: `## Conversation Transcript\n${transcript}` });
-      messages.push({ role: "assistant", content: "I've reviewed the conversation. How can I help you?" });
+      messages.push({ role: "user", content: `## Live Conversation Transcript (between customer and agent)\n${transcript}` });
+      messages.push({ role: "assistant", content: "I've reviewed the conversation. How can I help you, agent?" });
     }
 
-    // Add KB context if available
+    // Add KB context only when the query warrants it (skip greetings, small talk, etc.)
     try {
       const lastCustomerMsg = [...params.messages].reverse().find((m) => m.direction === "INBOUND");
       const query = params.agentMessage || lastCustomerMsg?.body || "";
-      if (query) {
+      if (query && shouldSearchKB(query)) {
         const chunks = await retrieveRelevantChunks(params.tenantId, query, 5);
         if (chunks.length > 0) {
           const kbContext = buildKnowledgeContext(chunks);
@@ -266,7 +309,7 @@ export class OpenAIProvider implements AIProvider {
     }
   }
 
-  private buildSystemPrompt(config?: ConversationContext["copilotConfig"] | null): string {
+  private buildSystemPrompt(config?: ConversationContext["copilotConfig"] | null, locale?: string): string {
     let prompt = config?.systemPrompt || "You are a helpful customer support co-pilot. Suggest professional, empathetic replies for the agent to send to the customer.";
 
     if (config?.rules && Array.isArray(config.rules) && config.rules.length > 0) {
@@ -275,18 +318,36 @@ export class OpenAIProvider implements AIProvider {
 
     prompt += "\n\n## Truthfulness & Knowledge Base Rules\n- When knowledge base context is provided, base your suggestions on that information.\n- NEVER suggest responses that fabricate information not present in the knowledge base or conversation context.\n- If there is insufficient information to answer, suggest the agent tell the customer they will look into it.\n- Accuracy is more important than sounding helpful — do not invent details.";
 
+    prompt += getLanguageInstruction(locale);
+
     return prompt;
   }
 
   private getModeInstruction(copilotMode: "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT"): string {
     if (copilotMode === "CONTEXT_ONLY") {
-      return 'Analyze this conversation. Provide key points, sentiment, and suggested next actions. Do NOT draft replies.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the analysis point), "confidence" (0-1), and "type" ("info"). Provide 2-4 insights.';
+      return 'Analyze this conversation. First identify why the customer originally contacted (their first intent), then what they need NOW based on their latest message. Provide 2-4 brief insights covering: original reason, current need, sentiment, and recommended next step. Do NOT draft replies.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the insight — keep it to 1 sentence), "confidence" (0-1), and "type" ("info").';
     }
     if (copilotMode === "CHAT") {
-      return 'You are an AI assistant for the agent. The agent can ask you anything about this conversation, the customer, or for help drafting responses. Use the knowledge base and available tools to provide accurate, helpful answers. Respond naturally in plain text — do NOT use JSON format. Be concise and actionable.';
+      return `You are an AI Co-Pilot assistant. You are talking to the HUMAN AGENT (not the customer).
+The agent is handling a live customer conversation and needs your help.
+
+What you can do for the agent:
+- Answer questions about the conversation, customer history, or policies
+- Draft message suggestions the agent can send to the customer
+- Look up information from the knowledge base
+- Analyze customer sentiment and intent
+- Suggest next steps or actions
+
+When drafting a message for the agent to send to the customer:
+- Write it exactly as the customer should receive it
+- Use the same language the customer is using in the conversation
+- The agent can click "Use as reply" to insert your draft into the message input
+
+Respond naturally in plain text — do NOT use JSON format. Be concise and actionable.
+Always respond in the same language the agent is using to talk to you.`;
     }
     // READY_MESSAGE (default)
-    return 'Based on this conversation, suggest 2-3 reply options the agent could send next.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the suggested reply), "confidence" (0-1), and "type" ("reply", "action", or "info"). Provide 2-3 suggestions.';
+    return 'Understand the customer\'s original reason for contacting AND what they need NOW based on their latest message. Suggest 2-3 reply options the agent could send as the next response that address their current need. Keep each suggestion SHORT and direct — no more than 2-3 sentences.\n\nRespond with a JSON object containing a "suggestions" array. Each suggestion should have "text" (the suggested reply), "confidence" (0-1), and "type" ("reply", "action", or "info"). Provide 2-3 suggestions.';
   }
 
   private buildChatMessages(context: ConversationContext, systemPrompt: string): Array<{ role: "system" | "user" | "assistant"; content: string }> {

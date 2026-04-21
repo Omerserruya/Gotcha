@@ -18,6 +18,7 @@ import {
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 import { getSocket } from "@/lib/socket";
 import clsx from "clsx";
+import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -790,10 +791,18 @@ export default function BroadcastsPage() {
                   </div>
 
                   {!wizard.templateId && (
-                    <div>
-                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                        {t("outbound.broadcasts.fieldBody")}
-                      </label>
+                    <AIComposeScope
+                      surface="scheduled"
+                      channel={wizard.channel}
+                      currentValue={wizard.body}
+                      onApply={(text) => setW("body", text)}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <label className="block text-sm font-medium text-gray-700">
+                          {t("outbound.broadcasts.fieldBody")}
+                        </label>
+                        <AIComposeTrigger />
+                      </div>
                       <textarea
                         value={wizard.body}
                         onChange={(e) => setW("body", e.target.value)}
@@ -801,7 +810,8 @@ export default function BroadcastsPage() {
                         className={inputCls}
                         placeholder={t("outbound.broadcasts.bodyPlaceholder")}
                       />
-                    </div>
+                      <AIComposePanel />
+                    </AIComposeScope>
                   )}
                 </div>
               )}

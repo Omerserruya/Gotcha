@@ -18,6 +18,7 @@ enum ChannelType {
   GMAIL
   OUTLOOK
   SLACK
+  VOICE
   WEBCHAT
 }
 
@@ -866,28 +867,28 @@ model TenantToolPermission {
 //
 // See memory/bug_f4_approval_wrong_surface.md for the full design.
 model ApprovalRequest {
-  id             String          @id @default(cuid())
-  tenantId       String          @map("tenant_id")
-  conversationId String          @map("conversation_id")
-  messageId      String?         @map("message_id")  // the inbound that triggered the action
-  contactId      String?         @map("contact_id")
-  tool           String          // "cancel_order" | "issue_refund" | "integration.hubspot.create_deal"
-  params         Json            // the full PlannedAction.params the bot wanted to run
-  summary        String          // one-sentence human-facing: "Cancel order #12345 and refund $89.50"
-  reason         String          // bot's own reasoning: "Customer requested cancellation within 24h window"
-  policyRuleId   String?         @map("policy_rule_id") // which rule fired (nullable — could be simple HITL flag)
-  policyRuleName String?         @map("policy_rule_name") // denormalized for display even if rule deleted
-  riskLevel      String          @default("medium") @map("risk_level") // low | medium | high
-  riskTags       Json            @default("[]") @map("risk_tags") // ["HIGH","IRREVERSIBLE","FINANCIAL"]
-  status         ApprovalStatus  @default(PENDING)
-  requestedBy    String          @map("requested_by") // "bot" | "flow:<id>" | "ai-agent:<id>"
-  decidedBy      String?         @map("decided_by")
-  decidedAt      DateTime?       @map("decided_at")
-  decisionReason String?         @map("decision_reason")
-  modifiedParams Json?           @map("modified_params") // if approver edited before running
-  expiresAt      DateTime        @map("expires_at")
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  id             String         @id @default(cuid())
+  tenantId       String         @map("tenant_id")
+  conversationId String         @map("conversation_id")
+  messageId      String?        @map("message_id") // the inbound that triggered the action
+  contactId      String?        @map("contact_id")
+  tool           String // "cancel_order" | "issue_refund" | "integration.hubspot.create_deal"
+  params         Json // the full PlannedAction.params the bot wanted to run
+  summary        String // one-sentence human-facing: "Cancel order #12345 and refund $89.50"
+  reason         String // bot's own reasoning: "Customer requested cancellation within 24h window"
+  policyRuleId   String?        @map("policy_rule_id") // which rule fired (nullable — could be simple HITL flag)
+  policyRuleName String?        @map("policy_rule_name") // denormalized for display even if rule deleted
+  riskLevel      String         @default("medium") @map("risk_level") // low | medium | high
+  riskTags       Json           @default("[]") @map("risk_tags") // ["HIGH","IRREVERSIBLE","FINANCIAL"]
+  status         ApprovalStatus @default(PENDING)
+  requestedBy    String         @map("requested_by") // "bot" | "flow:<id>" | "ai-agent:<id>"
+  decidedBy      String?        @map("decided_by")
+  decidedAt      DateTime?      @map("decided_at")
+  decisionReason String?        @map("decision_reason")
+  modifiedParams Json?          @map("modified_params") // if approver edited before running
+  expiresAt      DateTime       @map("expires_at")
+  createdAt      DateTime       @default(now()) @map("created_at")
+  updatedAt      DateTime       @updatedAt @map("updated_at")
 
   @@index([tenantId, status])
   @@index([tenantId, conversationId])
@@ -1300,7 +1301,7 @@ model UsageLog {
   model            String?
   promptTokens     Int?     @map("prompt_tokens")
   completionTokens Int?     @map("completion_tokens")
-  costUsd          Decimal? @db.Decimal(12, 6) @map("cost_usd")
+  costUsd          Decimal? @map("cost_usd") @db.Decimal(12, 6)
   metadata         Json? // { channel, tool, conversationId, messageId, ... }
   createdAt        DateTime @default(now()) @map("created_at")
 

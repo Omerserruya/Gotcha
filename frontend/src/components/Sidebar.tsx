@@ -11,15 +11,11 @@ import clsx from "clsx";
 const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
   { href: "/history", icon: HistoryIcon, labelKey: "nav.history", managerOrAdmin: true },
-  { href: "/outbound", icon: OutboundIcon, labelKey: "nav.outbound", adminOnly: true },
+  { href: "/approvals", icon: ApprovalsIcon, labelKey: "nav.approvals", adminOnly: true },
   { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true },
   { href: "/analytics", icon: AnalyticsIcon, labelKey: "nav.analytics", adminOnly: true },
-  { href: "/departments", icon: DepartmentsIcon, labelKey: "nav.departments", adminOnly: true },
-  { href: "/agents", icon: UsersIcon, labelKey: "nav.agents", adminOnly: true },
+  { href: "/outbound", icon: OutboundIcon, labelKey: "nav.outbound", adminOnly: true },
   { href: "/ai-studio", icon: AIStudioIcon, labelKey: "nav.aiStudio", adminOnly: true },
-  { href: "/channels", icon: ChannelsIcon, labelKey: "nav.channels", adminOnly: true },
-  { href: "/approvals", icon: ApprovalsIcon, labelKey: "nav.approvals", adminOnly: true },
-  { href: "/usage", icon: UsageIcon, labelKey: "nav.usage", adminOnly: true },
   { href: "/settings", icon: SettingsIcon, labelKey: "nav.settings", adminOnly: true },
 ];
 

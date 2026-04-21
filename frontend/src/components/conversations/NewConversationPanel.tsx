@@ -6,6 +6,7 @@ import { useI18n } from "@/context/I18nContext";
 import { getChannelAccounts, getContacts, getTemplates, createContact, initiateConversation } from "@/lib/api";
 import Image from "next/image";
 import clsx from "clsx";
+import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 
 interface Props {
   onClose: () => void;
@@ -662,10 +663,18 @@ export function NewConversationPanel({ onClose, onCreated }: Props) {
                 </div>
               ) : (
                 /* Non-WhatsApp: Free text message */
-                <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                    {t("newConversation.message.label")}
-                  </label>
+                <AIComposeScope
+                  surface="inbox"
+                  channel={selectedChannel}
+                  currentValue={messageBody}
+                  onApply={(text) => setMessageBody(text)}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <label className="block text-sm font-medium text-gray-700">
+                      {t("newConversation.message.label")}
+                    </label>
+                    <AIComposeTrigger />
+                  </div>
                   <textarea
                     value={messageBody}
                     onChange={(e) => setMessageBody(e.target.value)}
@@ -674,7 +683,8 @@ export function NewConversationPanel({ onClose, onCreated }: Props) {
                     className="w-full px-4 py-3 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition resize-none"
                     autoFocus
                   />
-                </div>
+                  <AIComposePanel />
+                </AIComposeScope>
               )}
 
               {/* Error */}

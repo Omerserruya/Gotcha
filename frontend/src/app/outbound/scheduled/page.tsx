@@ -11,6 +11,7 @@ import {
   getTemplates,
 } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
+import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 import clsx from "clsx";
 
 // ---------------------------------------------------------------------------
@@ -781,36 +782,47 @@ export default function ScheduledPage() {
               {/* 3. Message content                                          */}
               {/* ---------------------------------------------------------- */}
               <section>
-                <label className="block text-sm font-semibold text-gray-800 mb-2">
-                  {t("outbound.scheduled.fieldBody")}
-                </label>
-
-                {templates.length > 0 && (
-                  <div className="mb-3">
-                    <select
-                      value={selectedTemplateId}
-                      onChange={(e) => handleTemplateSelect(e.target.value)}
-                      className={inputCls}
-                    >
-                      <option value="">
-                        {t("outbound.scheduled.selectTemplate")}
-                      </option>
-                      {templates.map((tpl) => (
-                        <option key={tpl.id} value={tpl.id}>
-                          {tpl.name}
-                        </option>
-                      ))}
-                    </select>
+                <AIComposeScope
+                  surface="scheduled"
+                  channel={channelValue}
+                  currentValue={body}
+                  onApply={(text) => setBody(text)}
+                >
+                  <div className="flex items-center justify-between mb-2">
+                    <label className="block text-sm font-semibold text-gray-800">
+                      {t("outbound.scheduled.fieldBody")}
+                    </label>
+                    <AIComposeTrigger />
                   </div>
-                )}
 
-                <textarea
-                  value={body}
-                  onChange={(e) => setBody(e.target.value)}
-                  rows={5}
-                  className={inputCls}
-                  placeholder={t("outbound.scheduled.bodyPlaceholder")}
-                />
+                  {templates.length > 0 && (
+                    <div className="mb-3">
+                      <select
+                        value={selectedTemplateId}
+                        onChange={(e) => handleTemplateSelect(e.target.value)}
+                        className={inputCls}
+                      >
+                        <option value="">
+                          {t("outbound.scheduled.selectTemplate")}
+                        </option>
+                        {templates.map((tpl) => (
+                          <option key={tpl.id} value={tpl.id}>
+                            {tpl.name}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+
+                  <textarea
+                    value={body}
+                    onChange={(e) => setBody(e.target.value)}
+                    rows={5}
+                    className={inputCls}
+                    placeholder={t("outbound.scheduled.bodyPlaceholder")}
+                  />
+                  <AIComposePanel />
+                </AIComposeScope>
               </section>
 
               {/* ---------------------------------------------------------- */}

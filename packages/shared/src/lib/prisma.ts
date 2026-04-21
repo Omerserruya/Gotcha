@@ -19,7 +19,9 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "AgentToolPermission",
   "AuditLog",
   "Broadcast",
-  "BroadcastRecipient",
+  // BroadcastRecipient intentionally NOT guarded: the model has no tenantId
+  // column (see schema.prisma). Isolation is transitive via broadcastId →
+  // Broadcast.tenantId, enforced by every caller filtering on broadcastId.
   "BusinessPolicy",
   "ChannelAccount",
   "ChatbotFlow",
