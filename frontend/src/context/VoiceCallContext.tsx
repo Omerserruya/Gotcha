@@ -31,6 +31,15 @@ export interface CommittedUtterance {
   seq: number;
 }
 
+export interface CopilotSuggestion {
+  id?: string;
+  title?: string;
+  body?: string;
+  text?: string;
+  kind?: string;
+  confidence?: number;
+}
+
 interface VoiceCallContextType {
   state: CallState;
   call: CallInfo | null;
@@ -42,6 +51,8 @@ interface VoiceCallContextType {
   committedTranscripts: CommittedUtterance[];
   /** The live "building" text for each speaker, overwritten on every partial. */
   currentUtterance: { agent: string; customer: string };
+  /** Latest AI copilot suggestions fired after each customer final. */
+  copilotSuggestions: CopilotSuggestion[];
   placeCall: (to: string, opts?: { contactName?: string; conversationId?: string; notes?: string }) => Promise<void>;
   hangup: () => void;
   toggleMute: () => void;
@@ -61,12 +72,18 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const [isReady, setIsReady] = useState(false);
   const [committed, setCommitted] = useState<CommittedUtterance[]>([]);
   const [currentUtterance, setCurrentUtterance] = useState<{ agent: string; customer: string }>({ agent: "", customer: "" });
+  const [copilotSuggestions, setCopilotSuggestions] = useState<CopilotSuggestion[]>([]);
   const [isMuted, setIsMuted] = useState(false);
 
   const deviceRef = useRef<Device | null>(null);
   const twilioTokenRef = useRef<string | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Kept in sync with call?.conversationId so the socket handler (which closes
+  // over a single `call` snapshot) can filter tenant-wide broadcasts down to
+  // the current agent's call. Without this, every agent in the tenant sees
+  // every call's suggestions.
+  const activeConversationIdRef = useRef<string | undefined>(undefined);
 
   const resetToIdleSoon = useCallback(() => {
     window.setTimeout(() => {
@@ -76,6 +93,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setError(null);
       setCommitted([]);
       setCurrentUtterance({ agent: "", customer: "" });
+      setCopilotSuggestions([]);
     }, 2000);
   }, []);
 
@@ -114,12 +132,23 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setCurrentUtterance({ agent: "", customer: "" });
     };
 
+    // AI copilot suggestions — fired by ai-service after each customer final
+    // (debounced 1500ms). Expected payload: { conversationId, suggestions: [...] }.
+    // publishEvent broadcasts to the entire tenant room, so filter down to
+    // the conversation this agent is actively on.
+    const suggestionsHandler = (data: any) => {
+      if (!data || !Array.isArray(data.suggestions)) return;
+      if (!data.conversationId || data.conversationId !== activeConversationIdRef.current) return;
+      setCopilotSuggestions(data.suggestions.slice(0, 5));
+    };
+
     const attach = () => {
       const s = getSocket();
       if (!s) return false;
       socket = s;
       s.on("voice.transcript", handler);
       s.on("voice.session.ended", endedHandler);
+      s.on("voice.copilot.suggestions", suggestionsHandler);
       return true;
     };
 
@@ -137,9 +166,17 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       if (socket) {
         socket.off("voice.transcript", handler);
         socket.off("voice.session.ended", endedHandler);
+        socket.off("voice.copilot.suggestions", suggestionsHandler);
       }
     };
   }, [token]);
+
+  // Mirror the active call's conversationId into a ref so the socket handler
+  // (attached once per token) can always read the current value without
+  // re-attaching on every call state change.
+  useEffect(() => {
+    activeConversationIdRef.current = call?.conversationId;
+  }, [call?.conversationId]);
 
   const stopTimer = useCallback(() => {
     if (tickRef.current) {
@@ -346,6 +383,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     isMuted,
     committedTranscripts: committed,
     currentUtterance,
+    copilotSuggestions,
     placeCall,
     hangup,
     toggleMute,

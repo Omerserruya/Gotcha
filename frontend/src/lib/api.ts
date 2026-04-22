@@ -1017,6 +1017,15 @@ export function toggleIntegrationTool(token: string, slug: string, toolSlug: str
   });
 }
 
+/**
+ * Kick off the OAuth flow for an integration. Currently only `zoho_crm` has a
+ * server-side init endpoint; other OAuth providers will 404 until wired.
+ * Returns the provider's authorize URL — caller should window.location = url.
+ */
+export function initIntegrationOAuth(token: string, slug: string) {
+  return apiFetch<{ url: string }>(`/api/integrations/oauth/${slug}/init`, { token });
+}
+
 // ─── Tools (Active tenant tools) ────────────────────────────
 
 export function getActiveTenantTools(token: string) {

@@ -17,6 +17,7 @@ import { prisma, analyticsQueue } from "@chatcenter/shared";
 import axios from "axios";
 import { trackToolCall } from "./usage.service";
 import { logAudit } from "./audit.service";
+import { maybeRefreshZohoToken } from "./zoho.service";
 
 export async function getToolsForTenant(tenantId: string) {
   return prisma.tenantTool.findMany({
@@ -80,7 +81,9 @@ export async function executeTool(params: {
     where: { id: tenantToolId, tenantId },
     include: {
       catalogTool: true,
-      tenantIntegration: true,
+      tenantIntegration: {
+        include: { integration: { select: { slug: true } } },
+      },
     },
   });
 
@@ -93,9 +96,25 @@ export async function executeTool(params: {
 
   const catalogTool = tenantTool.catalogTool;
   const integration = tenantTool.tenantIntegration;
+  const integrationSlug = (integration as any).integration?.slug as string | undefined;
   const credentials = (integration.credentials as Record<string, any>) || {};
   const integrationConfig = (integration.config as Record<string, any>) || {};
   const overrides = (tenantTool.configOverrides as Record<string, any>) || {};
+
+  // Provider-specific: Zoho access tokens live ~1h. Refresh pre-emptively
+  // so the downstream request doesn't eat an avoidable 401. If the refresh
+  // fails we fall through with the stale token — axios will surface the
+  // eventual 401 and the audit log records it.
+  if (integrationSlug === "zoho_crm") {
+    try {
+      const fresh = await maybeRefreshZohoToken(integration.id);
+      if (fresh && fresh !== credentials.accessToken) {
+        credentials.accessToken = fresh;
+      }
+    } catch (err: any) {
+      console.warn("[ToolExec] Zoho token refresh failed:", err?.message ?? err);
+    }
+  }
 
   // Fail loudly on missing endpoint — no silent fallback.
   if (!catalogTool.endpoint) {
@@ -117,19 +136,28 @@ export async function executeTool(params: {
 
   // URL template support: replace :param placeholders from `input` or
   // from integrationConfig.  e.g. "/contacts/:id" + { id: "c1" }.
+  // If endpoint is relative ("/..."), prepend integrationConfig.baseUrl —
+  // used for providers with per-tenant hosts (Zoho api_domain, Zendesk
+  // subdomain, etc.). Absolute URLs in the catalog are honored as-is.
   let url = catalogTool.endpoint;
+  if (url.startsWith("/") && typeof integrationConfig.baseUrl === "string" && integrationConfig.baseUrl) {
+    url = integrationConfig.baseUrl.replace(/\/$/, "") + url;
+  }
   url = url.replace(/:([a-zA-Z_][a-zA-Z0-9_]*)/g, (_, key: string) => {
     const v = input[key] ?? integrationConfig[key] ?? overrides[key];
     return v !== undefined && v !== null ? encodeURIComponent(String(v)) : "";
   });
 
-  // Credential injection. Common patterns: bearer token, API key header,
-  // or explicit headers from integration.config.headers.
+  // Credential injection. Default scheme is Bearer; providers that use a
+  // custom scheme (Zoho: "Zoho-oauthtoken") override via integration.config.authScheme.
   const headers: Record<string, string> = { "Content-Type": "application/json" };
+  const authScheme: string = typeof integrationConfig.authScheme === "string" && integrationConfig.authScheme
+    ? integrationConfig.authScheme
+    : "Bearer";
   if (typeof credentials.accessToken === "string") {
-    headers["Authorization"] = `Bearer ${credentials.accessToken}`;
+    headers["Authorization"] = `${authScheme} ${credentials.accessToken}`;
   } else if (typeof credentials.apiKey === "string") {
-    headers["Authorization"] = `Bearer ${credentials.apiKey}`;
+    headers["Authorization"] = `${authScheme} ${credentials.apiKey}`;
   }
   if (integrationConfig.headers && typeof integrationConfig.headers === "object") {
     Object.assign(headers, integrationConfig.headers);

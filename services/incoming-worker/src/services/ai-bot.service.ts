@@ -6,6 +6,7 @@ import {
   publishEvent,
   trackAIUsage,
   buildAgentTools,
+  buildAgentToolsForAIAgent,
   dispatchToolCall,
 } from "@chatcenter/shared";
 import type { ChannelCredentials, AgentToolContext } from "@chatcenter/shared";
@@ -138,7 +139,11 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
       authToken: process.env.INTERNAL_SERVICE_TOKEN,
     };
 
-    const tools = buildAgentTools({
+    // Load integration tools the operator enabled for this AI agent in
+    // AI Studio → Tools. Without this, the LLM only sees the two static
+    // helpers (link_customer_identifier + escalate_to_human) and can
+    // never call things like integration.create_lead.
+    const tools = await buildAgentToolsForAIAgent(tenantId, config.id, {
       identityLinking: !!contact?.id,
       escalation: true,
     });

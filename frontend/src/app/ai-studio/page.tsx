@@ -13,26 +13,10 @@ import TestChatModal from "@/components/TestChatModal";
 // ─── Tab types ────────────────────────────────────────────────
 type Tab = "team" | "playbooks" | "knowledge" | "skills";
 
-const MOCK_TOOLS = [
-  {
-    integration: "Shopify",
-    status: "connected",
-    tools: [
-      { name: "Order Lookup", risk: "low", enabled: true, usedBy: "Maya" },
-      { name: "Track Shipment", risk: "low", enabled: true, usedBy: "Maya" },
-      { name: "Process Refund", risk: "high", enabled: false, usedBy: null },
-      { name: "Cancel Order", risk: "high", enabled: true, usedBy: "Maya" },
-    ],
-  },
-  {
-    integration: "HubSpot",
-    status: "connected",
-    tools: [
-      { name: "Customer Lookup", risk: "low", enabled: true, usedBy: "All" },
-      { name: "Create Deal", risk: "medium", enabled: true, usedBy: "Sales Bot" },
-    ],
-  },
-];
+// Real connected tools come from the /api/integrations response
+// (shape: [{name, slug, tenantConnection:{status}, catalogTools:[{name, riskLevel, tenantTool:{isEnabled}}]}]).
+// The hardcoded MOCK_TOOLS list that used to live here has been replaced with
+// live data — see the "connectedIntegrations" derivation inside SkillsTab.
 
 // ─── Stat card ────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, color }: {
@@ -647,39 +631,70 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
 
       {subView === "connected" ? (
         <>
-          {/* Connected tools */}
-          <div className="space-y-4">
-            {MOCK_TOOLS.map((intg) => (
-              <div key={intg.integration} className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-                <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50 bg-gray-50/40">
-                  <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 shadow-sm">
-                    {intg.integration.charAt(0)}
-                  </div>
-                  <span className="font-semibold text-gray-800">{intg.integration}</span>
-                  <StatusBadge status={intg.status} />
+          {/* Connected tools — derived from real marketplace data */}
+          {(() => {
+            const connected = integrations
+              .filter((intg: any) => intg.tenantConnection?.status === "CONNECTED")
+              .map((intg: any) => ({
+                name: intg.name || intg.slug,
+                slug: intg.slug,
+                tools: (intg.catalogTools || []).map((ct: any) => ({
+                  name: ct.name,
+                  risk: (ct.riskLevel || "LOW").toLowerCase(),
+                  enabled: ct.tenantTool?.isEnabled ?? false,
+                })),
+              }));
+
+            if (loading) {
+              return <div className="text-sm text-gray-400 py-8 text-center">…</div>;
+            }
+            if (connected.length === 0) {
+              return (
+                <div className="bg-white rounded-2xl border border-dashed border-gray-200 p-8 text-center">
+                  <p className="text-sm text-gray-500">{t("aiStudio.tools.noneConnected") || "No integrations connected yet."}</p>
+                  <p className="text-xs text-gray-400 mt-1">{t("aiStudio.tools.connectNewSub")}</p>
                 </div>
-                {intg.tools.map((tool, i) => (
-                  <div
-                    key={tool.name}
-                    className={clsx(
-                      "flex items-center gap-4 px-5 py-3 hover:bg-gray-50/40 transition",
-                      i < intg.tools.length - 1 && "border-b border-gray-50"
+              );
+            }
+            return (
+              <div className="space-y-4">
+                {connected.map((intg) => (
+                  <div key={intg.slug} className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
+                    <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50 bg-gray-50/40">
+                      <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 shadow-sm">
+                        {intg.name.charAt(0)}
+                      </div>
+                      <span className="font-semibold text-gray-800">{intg.name}</span>
+                      <StatusBadge status="connected" />
+                    </div>
+                    {intg.tools.length === 0 ? (
+                      <div className="px-5 py-3 text-xs text-gray-400">{t("aiStudio.tools.noTools") || "No tools available for this integration."}</div>
+                    ) : (
+                      intg.tools.map((tool: { name: string; risk: string; enabled: boolean }, i: number) => (
+                        <div
+                          key={tool.name}
+                          className={clsx(
+                            "flex items-center gap-4 px-5 py-3 hover:bg-gray-50/40 transition",
+                            i < intg.tools.length - 1 && "border-b border-gray-50"
+                          )}
+                        >
+                          <div className={clsx("w-2 h-2 rounded-full shrink-0", tool.enabled ? "bg-green-400" : "bg-gray-200")} />
+                          <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
+                          <RiskBadge risk={tool.risk} />
+                          <span className="text-xs text-gray-400 w-28 text-right">
+                            {tool.enabled
+                              ? <span className="text-green-600">{t("aiStudio.tools.enabled") || "enabled"}</span>
+                              : <span className="text-gray-400">{t("aiStudio.tools.disabled") || "disabled"}</span>
+                            }
+                          </span>
+                        </div>
+                      ))
                     )}
-                  >
-                    <div className={clsx("w-2 h-2 rounded-full shrink-0", tool.enabled ? "bg-green-400" : "bg-gray-200")} />
-                    <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
-                    <RiskBadge risk={tool.risk} />
-                    <span className="text-xs text-gray-400 w-24 text-right">
-                      {tool.usedBy
-                        ? <span className="text-gray-600">{t("aiStudio.tools.usedBy")}: <strong>{tool.usedBy}</strong></span>
-                        : <span className="text-gray-300">{t("aiStudio.tools.notAssigned")}</span>
-                      }
-                    </span>
                   </div>
                 ))}
               </div>
-            ))}
-          </div>
+            );
+          })()}
 
           <div
             className="mt-4 bg-white rounded-2xl border-2 border-dashed border-gray-200 p-6 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer"

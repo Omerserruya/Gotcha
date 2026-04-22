@@ -136,6 +136,74 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   return tools;
 }
 
+/**
+ * Load the tool surface for an autonomous AI agent, merging:
+ *   - The static `link_customer_identifier` + `escalate_to_human` helpers
+ *   - Integration tools the operator explicitly allowed for THIS ai agent
+ *     via AgentToolPermission. Filtered to enabled TenantTool rows on a
+ *     CONNECTED integration.
+ *
+ * The result is shaped as OpenAI function-call tool specs, ready to pass
+ * to chat.completions.create({ tools }). Each integration tool is named
+ * `integration.<catalogToolSlug>` so the dispatcher can recognise it.
+ *
+ * Returns the exact same shape as `buildAgentTools` so callers can swap
+ * in-place.
+ */
+export async function buildAgentToolsForAIAgent(
+  tenantId: string,
+  aiAgentId: string | null | undefined,
+  opts: BuildAgentToolsOptions = {},
+): Promise<Array<Record<string, unknown>>> {
+  const base = buildAgentTools(opts);
+  if (!aiAgentId) return base;
+
+  let integrationTools: Array<Record<string, unknown>> = [];
+  try {
+    const { prisma } = await import("./prisma");
+    const rows = await prisma.agentToolPermission.findMany({
+      where: {
+        tenantId,
+        aiAgentId,
+        isAllowed: true,
+        tenantTool: {
+          isEnabled: true,
+          tenantIntegration: { status: "CONNECTED" },
+        },
+      },
+      include: {
+        tenantTool: {
+          include: { catalogTool: true },
+        },
+      },
+    });
+    integrationTools = rows.map((row: any) => {
+      const ct = row.tenantTool.catalogTool;
+      // Prefer the catalog's own inputSchema if it's a JSON-schema object;
+      // otherwise emit an empty-object schema so OpenAI will still accept
+      // the tool and let the model emit a free-form payload.
+      const parameters =
+        ct.inputSchema && typeof ct.inputSchema === "object" && !Array.isArray(ct.inputSchema)
+          ? ct.inputSchema
+          : { type: "object", properties: {} };
+      return {
+        type: "function",
+        function: {
+          name: `integration_${ct.slug}`,
+          description: ct.description || ct.name,
+          parameters,
+        },
+      };
+    });
+  } catch (err: any) {
+    // Integration tool loading must never break the bot. Fall back to base
+    // tools so link_customer_identifier + escalate_to_human still work.
+    console.warn("[agent-tools] failed to load integration tools:", err?.message);
+  }
+
+  return [...base, ...integrationTools];
+}
+
 // ─── Dispatcher ──────────────────────────────────────────────
 
 async function callConversationService(
@@ -312,6 +380,79 @@ export async function dispatchToolCall(
         },
       },
     };
+  }
+
+  // ── Integration tools — dispatched via the AI service's execute endpoint ──
+  // Tool name shape: `integration.<catalogToolSlug>`. We resolve the slug
+  // back to a TenantTool row for this tenant, then POST to ai's
+  // /api/ai-assist/:conversationId/tools/execute which handles the HTTP
+  // call to the third-party API (Zoho/HubSpot/etc.) plus credentials,
+  // audit, and usage tracking.
+  // OpenAI function names must match ^[a-zA-Z0-9_-]+$ — dots are rejected —
+  // so we use underscore as the prefix separator. The catalog slug itself
+  // (after the first underscore) is already in snake_case per our seed.
+  if (name?.startsWith("integration_")) {
+    const slug = name.slice("integration_".length);
+    if (!ctx.conversationId) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: "integration tools require a conversation context" }),
+      };
+    }
+    try {
+      const { prisma } = await import("./prisma");
+      const tenantTool = await prisma.tenantTool.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          isEnabled: true,
+          tenantIntegration: { status: "CONNECTED" },
+          catalogTool: { slug },
+        },
+        select: { id: true },
+      });
+      if (!tenantTool) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: false, error: `no connected tool for slug "${slug}"` }),
+        };
+      }
+
+      const base = (process.env.AI_SERVICE_URL || "http://ai:4006").replace(/\/$/, "");
+      const token = ctx.authToken ?? process.env.INTERNAL_SERVICE_TOKEN ?? process.env.INTERNAL_SERVICE_KEY;
+      const headers: Record<string, string> = { "Content-Type": "application/json" };
+      if (token) headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
+      headers["x-tenant-id"] = ctx.tenantId;
+
+      const res = await fetch(
+        `${base}/api/ai-assist/${encodeURIComponent(ctx.conversationId)}/tools/execute`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ tenantToolId: tenantTool.id, input: args }),
+        },
+      );
+      const json: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: false, error: json?.error || `upstream ${res.status}` }),
+        };
+      }
+      const exec = json?.data;
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify(
+          exec?.ok
+            ? { ok: true, result: exec.output }
+            : { ok: false, error: exec?.error || "tool execution failed", status: exec?.status },
+        ),
+      };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: err?.message ?? "integration dispatch failed" }),
+      };
+    }
   }
 
   return {

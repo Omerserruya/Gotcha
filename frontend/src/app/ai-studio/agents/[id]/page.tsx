@@ -1272,33 +1272,32 @@ export default function AgentEditorPage() {
         isOpen={showSkillsPanel}
         onClose={() => {
           setShowSkillsPanel(false);
-          // Reload marketplace integrations and rebuild form.tools from all enabled tools
-          if (token) {
-            getMarketplaceIntegrations(token)
-              .then((res) => {
-                const intgs = res.data || [];
-                setMarketplaceIntegrations(intgs);
-                // Rebuild form.tools from all connected integrations' enabled tools
-                const allTools: Tool[] = [];
-                for (const intg of intgs) {
-                  const ti = intg.tenantConnection;
-                  if (ti?.status !== "CONNECTED") continue;
-                  for (const ct of intg.catalogTools || []) {
-                    if (!ct.tenantTool) continue;
-                    allTools.push({
-                      id: ct.id || ct.slug,
-                      tenantToolId: ct.tenantTool?.id,
-                      name: ct.name,
-                      integration: intg.name || intg.slug,
-                      risk: (ct.riskLevel || "LOW").toLowerCase() as "low" | "medium" | "high",
-                      enabled: ct.tenantTool?.isEnabled ?? false,
-                    });
-                  }
-                }
-                patch({ tools: allTools });
-              })
-              .catch(() => {});
-          }
+          // Refresh both the marketplace list (drawer UI) AND this agent's
+          // tool list. The Skills section under the agent is scoped to
+          // AgentToolPermission — NOT to every tenant-enabled tool — so we
+          // re-read the agent from the backend rather than rebuilding from
+          // the marketplace response (which would wipe per-agent grants
+          // on the next save).
+          if (!token || !id || id === "new") return;
+          Promise.all([
+            getMarketplaceIntegrations(token).catch(() => ({ data: [] })),
+            getAIAgent(token, id).catch(() => null),
+          ]).then(([mkt, agentRes]) => {
+            setMarketplaceIntegrations((mkt as any)?.data || []);
+            const fresh = (agentRes as any)?.data;
+            if (fresh?.tools) {
+              patch({
+                tools: fresh.tools.map((t: any) => ({
+                  id: t.id,
+                  tenantToolId: t.tenantToolId,
+                  name: t.name || "Unknown",
+                  integration: t.integration || "",
+                  risk: (t.risk || "low").toLowerCase() as "low" | "medium" | "high",
+                  enabled: t.enabled ?? true,
+                })),
+              });
+            }
+          });
         }}
       />
 

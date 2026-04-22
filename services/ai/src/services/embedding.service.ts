@@ -52,7 +52,7 @@ export async function processDocument(documentId: string): Promise<void> {
     await deleteByDocumentId(documentId);
 
     // Delete existing chunk records from Postgres
-    await prisma.knowledgeChunk.deleteMany({ where: { documentId } });
+    await prisma.knowledgeChunk.deleteMany({ where: { tenantId: document.tenantId, documentId } });
 
     // Chunk the document
     const chunks = chunkDocument(document.content);

@@ -1,157 +1,217 @@
 # Voice Copilot Service
 
-Ingests Twilio Media Streams, demultiplexes dual-channel audio (agent + customer), and dispatches structured voice transcripts to the AI assist engine for real-time copilot and analysis features.
+Ingests Twilio Media Streams for outbound browser-to-PSTN calls, runs
+per-speaker Deepgram streaming STT (Hebrew + English), and fans transcripts
+out to two independent sinks: Redis Pub/Sub (live UI projection) and Postgres
+(durable Message rows). The AI co-pilot subscribes to the same bus and fires
+suggestions after every customer-final utterance.
 
 ## Architecture
 
 ```
-┌──────────────────────────────────────────────────────────────────┐
-│ Twilio Media Streams (TwiML bin / webhook)                       │
-└────────────────────┬─────────────────────────────────────────────┘
-                     │ WSS /twilio/media-stream/:tenantId
-                     ↓
-┌──────────────────────────────────────────────────────────────────┐
-│ voice-copilot service                                             │
-│  ┌─────────────┐   ┌──────────────────┐   ┌─────────────────┐  │
-│  │ WS handler  │──→│ Session (state   │───→│ STT provider    │  │
-│  │ (Twilio     │   │ machine,         │   │ (stub/Google)   │  │
-│  │ signature   │   │ reconnect logic) │   └─────────────────┘  │
-│  └─────────────┘   └──────────────────┘          ↓              │
-│                            ↑                 ┌──────────────┐   │
-│                            └─────────────────│ Reorder      │   │
-│                                              │ buffer       │   │
-│                                              └──────┬───────┘   │
-│                                                     ↓            │
-│                                            ┌──────────────┐    │
-│                                            │ Dispatcher   │    │
-│                                            │ (batch,      │    │
-│                                            │  retry,      │    │
-│                                            │  idempotency)│    │
-│                                            └──────┬───────┘    │
-└─────────────────────────────────────────────────────────────────┘
-                                                    ↓
-                            ┌───────────────────────────────────┐
-                            │ Redis (session store + reaper)    │
-                            └───────────────────────────────────┘
-                                    ↓
-                 ┌──────────────────────────────────────┐
-                 │ ai-service /api/ai-assist/voice      │
-                 └──────────────────────────────────────┘
+ ┌─ agent browser (Twilio Voice SDK) ──────────────────────────┐
+ │                                                             │
+ │  device.connect(To) ─── TwiML App ──► /twiml/outbound       │
+ │                                           │                 │
+ │                                           ▼                 │
+ │                     <Dial><Conference participantLabel=…>   │
+ │                                           │                 │
+ └───────────────────────────────────────────┼─────────────────┘
+                                             ▼
+                       ┌──────────────────────────────────────┐
+                       │ Twilio Conference mixer              │
+                       │   • agent leg (Voice-SDK client)     │
+                       │   • customer leg (PSTN, dialed REST) │
+                       └──────────────┬───────────────────────┘
+                                      │ participant-join events
+                                      ▼
+                    /twiml/conference-status
+                                      │ streams.create per leg
+                                      │ (track=inbound_track,
+                                      │  parameter.N = speaker/
+                                      │  conversationId/tenantId)
+                                      ▼
+ ┌──────────────────────────────────────────────────────────────────┐
+ │ voice-copilot service                                           │
+ │                                                                  │
+ │   WSS /twilio/media-stream/:tenantId  (one WS per participant)  │
+ │      │                                                           │
+ │      ▼                                                           │
+ │   Session (per conversation × participant)                      │
+ │      • fixedSpeaker = customParameters.speaker                  │
+ │      • μ-law → Int16 PCM @ 8 kHz                                │
+ │      │                                                           │
+ │      ▼                                                           │
+ │   StreamRouter                                                   │
+ │    ├── audio branch → Deepgram (nova-3, lang per tenant)        │
+ │    │                    └── transcript events (partial/final)   │
+ │    └── transcript branch (fire-and-forget fan-out)               │
+ │            ├─→ Redis Pub/Sub  "voice.transcript"                │
+ │            └─→ Postgres Message rows  (finals only, dedup'd)    │
+ └──────────────────────────────────────────────────────────────────┘
+                               │
+                               ├───────────────┐
+                               ▼               ▼
+              conversation-service     ai-service
+              (Socket.IO bridge →      (voice-copilot-subscriber:
+               agent browser)          on customer-final, debounced
+                                       1500 ms → getSuggestions →
+                                       publishes voice.copilot.suggestions
+                                       → bridged back to agent UI)
 ```
 
 ## Endpoints
 
 | Method | Path | Auth | Purpose |
 |--------|------|------|---------|
-| WSS | `/twilio/media-stream/:tenantId` | HMAC signature | Twilio Media Streams ingress (dual-channel audio demux) |
-| GET | `/healthz` | None | Liveness (always 200) |
-| GET | `/readyz` | None | Readiness (200 if Redis ping < 300ms, else 503) |
-| GET | `/metrics` | None | Prometheus metrics (text format) |
-| GET | `/api/voice-copilot/live` | Tenant admin | Active call sessions (scoped to tenant) |
+| POST | `/api/voice-copilot/token` | Agent JWT | Mint short-lived Twilio AccessToken (Voice grant) for the browser Device |
+| POST | `/api/voice-copilot/twiml/outbound` | Twilio signature | Returns TwiML that joins the agent into a per-call Conference; stashes metadata in Redis |
+| POST | `/api/voice-copilot/twiml/conference-status` | Twilio signature | Dials the customer on the first agent `participant-join`; attaches per-participant Media Streams with speaker metadata via `parameter.N` |
+| POST | `/api/voice-copilot/twiml/status` | Twilio signature | Call-progress webhook (logged) |
+| WSS  | `/twilio/media-stream/:tenantId` | HMAC signature | Twilio Media Stream ingress (one stream per participant, carries speaker/conversationId via customParameters) |
+| GET  | `/healthz` / `/readyz` / `/metrics` | None | Liveness / readiness / Prometheus |
+| GET  | `/api/voice-copilot/live` | Tenant admin | Active sessions scoped to the tenant |
+
+## Speaker Attribution
+
+Because Twilio does **not** include `body.Caller` in conference status
+callbacks, agent vs. customer is resolved with a two-stage check:
+
+1. **`body.ParticipantLabel`** — set via `label: "customer"` when we dial the
+   customer via `conferences.participants.create`. Authoritative when present.
+2. **CallSid comparison** — the agent's parent-leg CallSid (from `/outbound`)
+   is stashed in Redis with the conference metadata. On `participant-join`,
+   if `body.CallSid === meta.agentCallSid`, that's the agent.
+
+The resolved speaker is passed to the Media Stream via Twilio's native
+`parameter1.name=speaker` / `parameter1.value=agent|customer` fields —
+arrives as `customParameters` on the WS `start` frame. URL query strings
+were being stripped between Twilio and our nginx, hence the switch.
+
+## Conference Dialing
+
+`conference-start` does not reliably fire with `startConferenceOnEnter=true`
+when only one participant joins via TwiML. The customer is therefore dialed
+on the **first `participant-join` where `speaker === "agent"`**, guarded by
+a `customerDialed` flag in the Redis metadata to prevent double-dialing.
+
+## StreamRouter
+
+Per-session fan-out into two independent failure domains:
+
+| Branch       | Sink                  | Delivery             | Failure behavior                 |
+|--------------|-----------------------|----------------------|----------------------------------|
+| audio        | Deepgram (per speaker) | sync enqueue         | pre-open buffer (drop-oldest 200) |
+| transcript   | Redis Pub/Sub          | fire-and-forget      | logged, dropped (partials okay) |
+| transcript   | Postgres Message row   | fire-and-forget      | retries via `externalMessageId` traceability; finals only |
+
+Guarantees:
+- **Ordering** per-speaker preserved (single-threaded event loop + per-speaker seq).
+- **No shared await** between branches — slow Postgres does not stall Pub/Sub.
+- **Partials may be lost** (projection only). **Finals must not be lost** —
+  each final carries a stable `externalMessageId` = `voice:{callSid}:{speaker}:{seq}`.
+- **In-memory dedupe**: ReorderBuffer (`emittedFinalsSeq`) + Deepgram provider
+  (`lastFinalText`) prevent duplicate rows within a session.
+
+## AI Co-pilot Integration
+
+`ai-service` starts a `voice-copilot-subscriber` on boot that listens on the
+shared event bus. Every `voice.transcript` event with
+`isFinal && speaker === "customer"` calls `scheduleAssistTrigger(tenantId,
+conversationId)` — debounced 1500 ms. On fire:
+
+1. Load conversation + last 20 messages from Postgres.
+2. Resolve effective copilot config (`getEffectiveCopilotConfig`).
+3. Run `getSuggestions()` (existing flow).
+4. Publish `voice.copilot.suggestions` to the bus → conversation-service
+   bridges to `tenant:{id}` Socket.IO room → frontend renders in Stage Mode.
+
+No HTTP coupling between voice-copilot and ai-service; the single writer
+to Postgres is still voice-copilot's StreamRouter.
 
 ## Environment Variables
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `NODE_ENV` | `development` | Node environment |
+| `NODE_ENV` | `development` | |
 | `PORT` | `4007` | HTTP/WS listening port |
-| `REDIS_URL` | `redis://redis:6379` | Redis connection string |
-| `AI_SERVICE_URL` | `http://ai:4006` | AI service endpoint for voice transcript dispatch |
-| `INTERNAL_SERVICE_KEY` | `chatcenter-internal-2026` | Bearer token for internal service calls |
-| `STT_PROVIDER` | `stub` | Speech-to-text: `stub` (deterministic phrases) or `google` (Phase 3) |
-| `STT_STUB_SEED` | `42` | Random seed for stub STT (for determinism in tests) |
-| `LOG_LEVEL` | `info` | Pino log level (`fatal`, `error`, `warn`, `info`, `debug`, `trace`) |
+| `REDIS_URL` | `redis://redis:6379` | Shared Redis (session store + pub/sub + conference metadata) |
+| `STT_PROVIDER` | `deepgram` | `stub` / `google` / `deepgram` |
+| `DEEPGRAM_API_KEY` | (empty) | Deepgram Nova-3 streaming STT key |
+| `STT_LANGUAGE` | `he-IL` | `he-IL` or `en-US` |
+| `TWILIO_ACCOUNT_SID` | (empty) | Twilio account SID |
+| `TWILIO_AUTH_TOKEN` | (empty) | Twilio auth token (signature validation, REST) |
+| `TWILIO_API_KEY_SID` / `TWILIO_API_KEY_SECRET` | (empty) | Browser-AccessToken signing key |
+| `TWILIO_TWIML_APP_SID` | (empty) | TwiML App the Voice-SDK Device dials into |
+| `TWILIO_CALLER_ID` | (empty) | E.164 caller-ID shown to customer |
+| `PUBLIC_BASE_URL` | `http://localhost` | Public HTTPS base — Twilio callbacks + WSS |
+| `LOG_LEVEL` | `info` | pino level. `debug` shows `stt opened`, `stt reconnect`, per-frame audio counters |
 | `SESSION_TTL_SECONDS` | `900` | Redis session key TTL |
-| `RECONNECT_GRACE_MS` | `10_000` | Grace period before ending a disconnected session |
-| `REAPER_INTERVAL_MS` | `60_000` | How often the reaper scans for stale sessions |
-| `REAPER_STALE_THRESHOLD_MS` | `120_000` | Session considered stale if no frames in this window |
-| `MAX_CONCURRENT_SESSIONS` | `50` | Maximum live call sessions per service instance |
-| `DISPATCHER_BATCH_WINDOW_MS` | `100` | Coalesce transcripts for up to this duration |
-| `DISPATCHER_BATCH_MAX` | `5` | Max transcripts per batch before flush |
-| `TWILIO_ACCOUNT_SID` | (empty) | Twilio account SID (for Twilio signature validation) |
-| `TWILIO_AUTH_TOKEN` | (empty) | Twilio auth token (for Twilio signature validation) |
-| `TWILIO_API_KEY_SID` | (empty) | Standard API Key SID — used to mint browser AccessTokens |
-| `TWILIO_API_KEY_SECRET` | (empty) | Standard API Key secret — keep private, never ship to browser |
-| `TWILIO_TWIML_APP_SID` | (empty) | TwiML App SID; browser Device uses this to place outbound calls |
-| `TWILIO_CALLER_ID` | (empty) | E.164 Twilio number to display as caller ID for outbound calls |
-| `PUBLIC_BASE_URL` | `http://localhost` | Public HTTPS base that Twilio can reach (used for TwiML `<Stream>`) |
+| `RECONNECT_GRACE_MS` | `10000` | Grace before ending a disconnected session |
+| `MAX_CONCURRENT_SESSIONS` | `50` | Per-instance concurrency cap |
 
-## Outbound Calling Setup (browser → Twilio → customer)
+## Outbound Calling — Twilio Console Setup
 
-Outbound browser calls need three objects in your Twilio Console in addition to the credentials above:
+Three objects in Twilio Console (plus the creds above):
 
-1. **Phone number** — Phone Numbers → Buy a number. Copy it into `TWILIO_CALLER_ID` (E.164, e.g. `+15551234567`).
-2. **API Key** — Account → API keys & tokens → Create API Key, type **Standard**. Copy SID → `TWILIO_API_KEY_SID`, Secret → `TWILIO_API_KEY_SECRET`. (Keys can be revoked individually; never reuse the master auth token for browser-minted AccessTokens.)
-3. **TwiML App** — Voice → TwiML → TwiML Apps → Create. Voice Request URL = `${PUBLIC_BASE_URL}/api/voice-copilot/twiml/outbound`, method POST. Optionally set Voice Status Callback URL = `${PUBLIC_BASE_URL}/api/voice-copilot/twiml/status`. Copy the App SID → `TWILIO_TWIML_APP_SID`.
-
-Endpoint summary for outbound:
-
-| Method | Path | Auth | Purpose |
-|--------|------|------|---------|
-| POST | `/api/voice-copilot/token` | Agent JWT | Mint short-lived Twilio AccessToken (Voice grant) for the agent's browser Device |
-| POST | `/api/voice-copilot/twiml/outbound` | Twilio signature | TwiML that `<Dial>`s the `To` param + forks audio into `<Stream>` |
-| POST | `/api/voice-copilot/twiml/status` | Twilio signature | Call-progress webhook (logged) |
+1. **Phone number** — Phone Numbers → Buy. Put into `TWILIO_CALLER_ID` (E.164).
+2. **API Key** — Account → API keys & tokens → Create (Standard). SID →
+   `TWILIO_API_KEY_SID`, Secret → `TWILIO_API_KEY_SECRET`. Never reuse the
+   master auth token for browser-minted AccessTokens.
+3. **TwiML App** — Voice → TwiML → TwiML Apps → Create.
+   - Voice Request URL: `${PUBLIC_BASE_URL}/api/voice-copilot/twiml/outbound` (POST).
+   - Voice Status Callback URL: `${PUBLIC_BASE_URL}/api/voice-copilot/twiml/status` (POST, optional).
+   - Copy the App SID into `TWILIO_TWIML_APP_SID`.
 
 ## Running Locally
 
-Install dependencies at repo root:
 ```bash
-npm install
-```
-
-Start the service:
-```bash
+npm install                           # from repo root
 cd services/voice-copilot
-npm run dev
+npm run dev                           # listens on :4007
 ```
-
-Service listens on `http://localhost:4007` with stub STT by default.
-
-## Testing
-
-Run all tests (unit + integration):
-```bash
-npm run test
-```
-
-Tests include:
-- **Unit tests** (15 files, 100+ cases): audio decoding, queuing, session state machine, STT provider, reorder buffer, dispatcher batching/retry, WebSocket frame parsing, routes.
-- **Integration test** (e2e): full pipeline with in-memory Redis, stub STT, mocked ai-assist, assertion of message ordering and deduplication.
-
-All 114 tests pass with deterministic seeding.
 
 ## Runbook
 
-**Session appears to hang or doesn't progress**
-- Check `/metrics` for `voice_sessions_active` gauge and `voice_audio_queue_dropped_total` counter.
-- Check `/api/voice-copilot/live` (admin only) to see active sessions and their state.
-- Reaper logs indicate if a session was auto-ended (check `voice.session.ended` events in logs).
+**No transcripts during a live call**
+- Look for `stt opened` in logs. Absent → Deepgram WS auth/network problem.
+- Look for `audio frames sent to deepgram framesSent=1,50,500`. Absent →
+  audio isn't reaching Deepgram; check `session: first media frame` logs
+  for the track value (should be `"inbound"`).
+- Look for `session: skipping non-inbound track (mixed audio)`. If seen →
+  Twilio is sending outbound_track frames; they're filtered to avoid echo.
+- Look for `first transcript received`. If `stt opened` fires but no
+  transcripts → audio is silence, language/model mismatch, or the stream
+  is attached to the wrong leg.
 
-**Dispatch failures or messages not reaching ai-assist**
-- Check Redis DLQ: `redis-cli LLEN voice:dlq:{tenantId}` (queue of failed dispatch batches).
-- Check ai-service logs for 5xx errors or timeout on `/api/ai-assist/voice` endpoint.
-- Verify `INTERNAL_SERVICE_KEY` env var matches ai-service configuration.
+**Two participants, two sessions per call**
+- Expected: each Twilio participant-join opens a dedicated WS → one Session
+  per participant, both scoped to the same `conversationId`. Each session
+  holds its own Deepgram provider instance and pushes only its fixed
+  speaker's audio. Wasteful but correct. Future work can share a single
+  session across participants.
 
-**Twilio 401 (signature validation failed)**
-- Ensure `TWILIO_AUTH_TOKEN` is set (or `TENANT_{ID}_TWILIO_AUTH_TOKEN` for per-tenant override).
-- Verify X-Twilio-Signature header matches HMAC-SHA1(URL-encoded body, auth token).
+**Co-pilot suggestions never appear in the UI**
+- Check ai-service logs: `[voice-copilot-subscriber] listening` on boot.
+- On a customer final, ai-service should log the debounced trigger and
+  publish `voice.copilot.suggestions`. If it fires but the UI is silent,
+  confirm the conversation-service Socket.IO bridge is relaying the event
+  (it does so generically for every published event on `tenant:{id}` rooms).
 
-**High audio drop rate**
-- Increase `MAX_CONCURRENT_SESSIONS` if instances are approaching capacity.
-- Check `voice_audio_queue_dropped_total` metric per session to identify bottlenecks.
-- Verify ai-assist `/api/ai-assist/voice` is responding within 2s (dispatcher timeout).
-
-## Phase 3 TODO
-
-- [ ] **Google Cloud STT integration**: Implement `google-provider.ts` with streaming transcription (Phase 3 work packet).
-- [ ] **DLQ drain worker**: Automatic or manual retry of failed dispatches from Redis DLQ.
-- [ ] **Per-tenant KMS encryption**: Encrypt session state at rest in Redis (security hardening).
-- [ ] **Partial transcript UI**: Render live partial transcripts in frontend (currently only finals trigger assist; partials available in dispatcher queue).
-- [ ] **Conversation auto-creation**: Handle cases where inbound Twilio call references a conversation not yet created (out of scope Phase 1+2).
+**Twilio 401 / 403 on conference-status**
+- Signature validation trips if the request URL reconstruction doesn't
+  match what Twilio signed. The handler tries both `https://` and `http://`
+  with `X-Forwarded-Host` / `Host`. Check that nginx is forwarding both.
 
 ## Development Notes
 
-- **Service ownership boundary (CLAUDE.md §2)**: voice-copilot interacts with ai-service exclusively via POST `/api/ai-assist/voice` public API. Redis session store is internal state, not owned by another service.
-- **Idempotency**: All dispatches to ai-assist include `X-Idempotency-Key` header to ensure exactly-once semantics (Redis SET NX EX 3600).
-- **Circuit breaker**: Per-tenant failure rate monitored; if ≥20 failures/min and ≥50% failure ratio, dispatcher enters OPEN state (rejects all, direct DLQ) for 30s.
-- **Graceful shutdown**: SIGTERM/SIGINT drain queues, close WebSocket server, then stop HTTP server.
+- **Ordering**: per-speaker Deepgram channels preserve seq order; single
+  JS event loop guarantees no interleaving per session.
+- **Idempotency**: `externalMessageId` tags every persisted voice message;
+  in-memory ReorderBuffer (`emittedFinalsSeq`) and Deepgram provider
+  (`lastFinalText`) prevent duplicates.
+- **Logging**: pino (async, level-gated). Per-frame `console.log` was
+  removed — the old hot-path logging caused 10–15 s latency buildup on
+  long calls.
+- **Graceful shutdown**: SIGTERM/SIGINT close the STT streams (which
+  flush pending interims as finals), stop the WSS, then exit.

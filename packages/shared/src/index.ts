@@ -85,6 +85,7 @@ export {
   LINK_IDENTIFIER_TOOL,
   ESCALATE_TOOL,
   buildAgentTools,
+  buildAgentToolsForAIAgent,
   dispatchToolCall,
 } from "./lib/agent-tools";
 export type {

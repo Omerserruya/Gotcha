@@ -43,7 +43,7 @@ const debounceVersions = new Map<string, number>();
 // one is set.  The Redis key `voice:assist:debounce:{t}:{c}` stores
 // the latest version so timers that fire late detect the staleness.
 
-async function scheduleAssistTrigger(tenantId: string, conversationId: string, delayMs = 1500): Promise<void> {
+export async function scheduleAssistTrigger(tenantId: string, conversationId: string, delayMs = 1500): Promise<void> {
   const redis = getRedis();
   const debounceKey = `voice:assist:debounce:${tenantId}:${conversationId}`;
   const ver = Date.now();
@@ -213,16 +213,10 @@ export async function handleVoiceStream(
     });
   }
 
-  // 6. Debounced assist trigger: fires only on customer finals in persistList
-  const hasCustomerFinal = persistList.some(
-    (m: TranscriptMsg) => m.speaker === "customer" && m.isFinal,
-  );
-  if (hasCustomerFinal) {
-    // Fire-and-forget; errors logged inside scheduleAssistTrigger
-    scheduleAssistTrigger(tenantId, conversationId, 1500).catch((err) =>
-      console.error("[voice-assist] scheduleAssistTrigger rejection:", err),
-    );
-  }
+  // 6. Assist trigger is owned by voice-copilot-subscriber (pub/sub path).
+  //    The HTTP dispatcher path persists only; triggering here would schedule
+  //    twice per final (Redis debounce collapses to one execution, but the
+  //    extra timer is wasted work).
 
   // 7. Respond
   res.status(200).json({

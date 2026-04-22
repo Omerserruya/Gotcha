@@ -246,7 +246,7 @@ router.post("/:slug/disconnect", async (req: Request, res: Response) => {
     // Explicitly delete tenant tools (cascade on TenantIntegration deletion handles this,
     // but we delete them explicitly to be safe when only updating status)
     await prisma.tenantTool.deleteMany({
-      where: { tenantIntegrationId: tenantIntegration.id },
+      where: { tenantId: req.tenantId!, tenantIntegrationId: tenantIntegration.id },
     });
 
     const updated = await prisma.tenantIntegration.update({

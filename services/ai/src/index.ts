@@ -5,6 +5,7 @@ import knowledgeOauthRoutes from "./routes/knowledge-oauth";
 import systemChatRoutes from "./routes/system-chat";
 import toolRoutes from "./routes/tools";
 import integrationRoutes from "./routes/integrations";
+import crmOauthRoutes from "./routes/crm-oauth";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
 import routerRuleRoutes from "./routes/router-rules";
@@ -16,6 +17,7 @@ import toolPermissionRoutes from "./routes/tool-permissions";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
+import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
 
 // Initialize central AI service (MUST be done before provider)
 if (process.env.OPENAI_API_KEY) {
@@ -44,6 +46,10 @@ app.use("/api/knowledge-bases", knowledgeRoutes);
 app.use("/api/knowledge", knowledgeOauthRoutes);
 app.use("/api/system-chat", systemChatRoutes);
 app.use("/api/tools", toolRoutes);
+// CRM OAuth (Zoho) must mount BEFORE integrationRoutes — the latter applies
+// `authenticate` to its entire router, which would reject Zoho's unauthenticated
+// /callback redirect. Public routes here validate a JWT state param instead.
+app.use("/api/integrations", crmOauthRoutes);
 app.use("/api/integrations", integrationRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
@@ -53,6 +59,10 @@ app.use("/api/usage", usageRoutes);
 app.use("/api/embedded-chat", embeddedChatRouter);
 app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
+
+// Hook AI copilot into voice-copilot's transcript pub/sub. Fires the
+// debounced suggestions pipeline on every customer-final utterance.
+startVoiceCopilotSubscriber();
 
 startService(app, config);
 export { app };

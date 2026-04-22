@@ -149,6 +149,12 @@
       "type": "directory"
     },
     {
+      "path": "src/app/ai-studio/page.tsx",
+      "accessCount": 51,
+      "lastAccessed": 1776887461617,
+      "type": "file"
+    },
+    {
       "path": "src/components/conversations/CoPilotPanel.tsx",
       "accessCount": 47,
       "lastAccessed": 1776347402039,
@@ -158,12 +164,6 @@
       "path": "src/components/landing/LandingPage.tsx",
       "accessCount": 44,
       "lastAccessed": 1774624070116,
-      "type": "file"
-    },
-    {
-      "path": "src/app/ai-studio/page.tsx",
-      "accessCount": 44,
-      "lastAccessed": 1776365300636,
       "type": "file"
     },
     {

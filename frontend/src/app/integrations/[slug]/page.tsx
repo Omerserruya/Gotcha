@@ -13,6 +13,7 @@ import {
   updateIntegrationCredentials,
   getIntegrationTools,
   toggleIntegrationTool,
+  initIntegrationOAuth,
 } from "@/lib/api";
 import clsx from "clsx";
 
@@ -118,7 +119,7 @@ export default function IntegrationDetailPage() {
     load();
   }, [token, slug]);
 
-  const ti = integration?.tenantIntegration;
+  const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
   const status = ti?.status || "DISCONNECTED";
 
@@ -357,7 +358,15 @@ export default function IntegrationDetailPage() {
                     This integration uses OAuth 2.0. Click below to authorize access.
                   </p>
                   <button
-                    onClick={() => setTestResult({ ok: false, msg: "OAuth coming soon" })}
+                    onClick={async () => {
+                      if (!token) return;
+                      try {
+                        const { url } = await initIntegrationOAuth(token, slug);
+                        window.location.href = url;
+                      } catch (err: any) {
+                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check ZOHO_CLIENT_ID/SECRET/REDIRECT_URI on the server." });
+                      }
+                    }}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
                   >
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

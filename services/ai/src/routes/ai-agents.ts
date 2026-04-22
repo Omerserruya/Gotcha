@@ -339,7 +339,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
 
     // Update tool assignments if provided
     if (toolIds && Array.isArray(toolIds)) {
-      await prisma.agentToolPermission.deleteMany({ where: { aiAgentId: agent.id } });
+      await prisma.agentToolPermission.deleteMany({ where: { tenantId: req.tenantId! as string, aiAgentId: agent.id } });
       if (toolIds.length > 0) {
         await prisma.agentToolPermission.createMany({
           data: toolIds.map((toolId: string) => ({

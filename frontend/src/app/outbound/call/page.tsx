@@ -4,7 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
-import { useVoiceCall, type CommittedUtterance } from "@/context/VoiceCallContext";
+import { useVoiceCall, type CommittedUtterance, type CopilotSuggestion } from "@/context/VoiceCallContext";
 import { getContacts } from "@/lib/api";
 
 function normalizeE164(input: string): string | null {
@@ -42,7 +42,7 @@ interface Contact {
 export default function OutboundCallPage() {
   const { token, user } = useAuth();
   const router = useRouter();
-  const { placeCall, hangup, toggleMute, isMuted, state, call, elapsedMs, isReady, committedTranscripts, currentUtterance } = useVoiceCall();
+  const { placeCall, hangup, toggleMute, isMuted, state, call, elapsedMs, isReady, committedTranscripts, currentUtterance, copilotSuggestions } = useVoiceCall();
 
   // Post-call navigation: when the call ends and we have a conversationId,
   // route the agent into the chat view so the persisted transcript is visible.
@@ -153,6 +153,7 @@ export default function OutboundCallPage() {
         elapsedMs={elapsedMs}
         committedTranscripts={committedTranscripts}
         currentUtterance={currentUtterance}
+        copilotSuggestions={copilotSuggestions}
         agentName={user?.name || "You"}
         onHangup={hangup}
         onToggleMute={toggleMute}
@@ -276,12 +277,13 @@ function PhoneCallUI(props: {
   elapsedMs: number;
   committedTranscripts: CommittedUtterance[];
   currentUtterance: { agent: string; customer: string };
+  copilotSuggestions: CopilotSuggestion[];
   agentName: string;
   onHangup: () => void;
   onToggleMute: () => void;
   isMuted: boolean;
 }) {
-  const { call, state, elapsedMs, committedTranscripts, currentUtterance, agentName, onHangup, onToggleMute, isMuted } = props;
+  const { call, state, elapsedMs, committedTranscripts, currentUtterance, copilotSuggestions, agentName, onHangup, onToggleMute, isMuted } = props;
   const feedRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
@@ -379,10 +381,30 @@ function PhoneCallUI(props: {
         )}
       </div>
 
-      {/* Subtle AI Copilot hint slot (placeholder; AI wiring comes later) */}
-      <div className="pointer-events-none absolute top-20 right-6 md:right-10 max-w-xs">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-1">Co-pilot</div>
-        <div className="text-xs text-gray-600 italic">Hints will appear here during the call.</div>
+      {/* AI Copilot suggestions — fired by ai-service after each customer final
+          (debounced 1500ms). Rendered as a stack of hint cards in the upper
+          right. Fades in/out per refresh. */}
+      <div className="pointer-events-none absolute top-20 right-6 md:right-10 max-w-xs w-72">
+        <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Co-pilot</div>
+        {copilotSuggestions.length === 0 ? (
+          <div className="text-xs text-gray-600 italic">Listening — hints appear after the customer speaks.</div>
+        ) : (
+          <div className="flex flex-col gap-2">
+            {copilotSuggestions.map((s, i) => {
+              const title = s.title || s.kind || "Suggestion";
+              const body = s.body || s.text || "";
+              return (
+                <div
+                  key={s.id || `${i}:${title}`}
+                  className="rounded-lg border border-white/10 bg-white/5 backdrop-blur px-3 py-2 text-xs text-gray-100 shadow-subtle"
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-300 mb-0.5">{title}</div>
+                  {body && <div className="text-gray-200 leading-snug">{body}</div>}
+                </div>
+              );
+            })}
+          </div>
+        )}
       </div>
 
       {/* Controls */}
