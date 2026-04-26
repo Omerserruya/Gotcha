@@ -33,6 +33,31 @@ interface ChannelSendContext {
   recipientId: string;
 }
 
+// Node types introduced by the unified n8n-style palette. When a sub-flow's
+// graph contains ANY of these, we hand off to the new graph walker
+// (executeSubFlow) which follows exactly what the flow says. Otherwise we run
+// the legacy state-machine walker below for back-compat with pre-unified flows.
+const UNIFIED_NODE_TYPES = new Set([
+  "condition_group",
+  "route_target",
+  "send_message_text",
+  "send_message_interactive",
+  "send_message_quick_reply",
+  "send_message_image",
+  "send_message_file",
+  // Second batch — control / data / integrations / triggers
+  "wait",
+  "collect_input",
+  "set_variable",
+  "http_request",
+  "ai_generate",
+  "update_customer",
+  "bring_user_data",
+  "comment_trigger",
+  "keyword_trigger",
+  "schedule_trigger",
+]);
+
 export async function processChatbotFlow(tenantId: string, conversationId: string, incomingMessage: string): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -51,6 +76,22 @@ export async function processChatbotFlow(tenantId: string, conversationId: strin
     flow = await selectBotFlow(tenantId, conversation.channel as "WHATSAPP" | "MESSENGER");
     if (!flow) return false;
     await prisma.conversation.update({ where: { id: conversationId }, data: { chatbotFlowId: flow.id } });
+  }
+
+  // Unified-graph short-circuit: delegate to the shared graph walker.
+  const rawNodes = (flow.nodes as unknown as Array<{ type: string }>) || [];
+  if (rawNodes.some((n) => UNIFIED_NODE_TYPES.has(n?.type))) {
+    const { executeSubFlow } = await import("./flow-executor.service");
+    const channel = String(conversation.channel || "whatsapp").toLowerCase();
+    const result = await executeSubFlow({
+      tenantId,
+      conversationId,
+      message: incomingMessage,
+      channel,
+      flowId: flow.id,
+      resumeNodeId: conversation.chatbotNodeId ?? null,
+    });
+    return result.executed;
   }
 
   const definition: FlowDefinition = {

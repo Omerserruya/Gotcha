@@ -18,7 +18,7 @@ router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole(
       }),
       prisma.routerRule.findMany({
         where: { tenantId },
-        select: { id: true, name: true, routeType: true, routeTarget: true, enabled: true, priority: true },
+        select: { id: true, name: true, routeType: true, routeTarget: true, enabled: true, position: true },
       }),
       prisma.chatbotFlow.findMany({
         where: { tenantId },
@@ -92,8 +92,8 @@ router.post("/auto-generate", authenticate, resolveTenant, requireActiveTenant()
       }),
       prisma.routerRule.findMany({
         where: { tenantId },
-        select: { id: true, name: true, routeType: true, routeTarget: true, enabled: true, priority: true },
-        orderBy: { priority: "asc" },
+        select: { id: true, name: true, routeType: true, routeTarget: true, enabled: true, position: true },
+        orderBy: { position: "asc" } as any,
       }),
       prisma.chatbotFlow.findMany({
         where: { tenantId },

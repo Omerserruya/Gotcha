@@ -309,6 +309,23 @@ export function getChannels(token: string) {
   return apiFetch<{ data: any[] }>("/api/channels", { token });
 }
 
+// Recent posts for a Facebook/Instagram channel — used by the Comment
+// Trigger inspector to let users pick a post by clicking instead of
+// pasting an ID. Group posts are not supported (Meta Groups API was
+// deprecated April 2024); the inspector exposes a manual URL field for
+// those.
+export interface ChannelPost {
+  id: string;
+  caption: string;
+  thumbnailUrl: string | null;
+  permalink: string | null;
+  createdAt: string | null;
+  source: "page";
+}
+export function getChannelPosts(token: string, channelId: string, limit = 20) {
+  return apiFetch<{ data: ChannelPost[] }>(`/api/channels/${channelId}/posts?limit=${limit}`, { token });
+}
+
 export function getChannelConfig2(token: string) {
   return apiFetch<{ data: any }>("/api/channels/config", { token });
 }

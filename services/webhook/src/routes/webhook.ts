@@ -223,6 +223,33 @@ router.post("/", async (req: Request, res: Response) => {
       );
     }
 
+    // Step 4b: Extract and enqueue comment events (IG comments, FB feed
+    // comments). Different job name → handled by a separate processor on the
+    // same incoming-worker. Adapters that don't implement extractCommentEvents
+    // simply yield no events.
+    const commentEvents = adapter.extractCommentEvents?.(body) || [];
+    for (const ev of commentEvents) {
+      await incomingMessageQueue.add(
+        "process-comment",
+        {
+          tenantId,
+          channel: adapter.channel as "INSTAGRAM" | "MESSENGER",
+          channelAccountId,
+          comment: {
+            commentId: ev.commentId,
+            postId: ev.postId,
+            postPermalink: ev.postPermalink,
+            text: ev.text,
+            fromUserId: ev.fromUserId,
+            fromUsername: ev.fromUsername,
+            timestamp: ev.timestamp.toISOString(),
+            parentCommentId: ev.parentCommentId,
+          },
+        },
+        { attempts: 3, backoff: { type: "exponential", delay: 1000 } }
+      );
+    }
+
     // Step 5: Handle status updates inline (lightweight)
     const statusUpdates = adapter.extractStatusUpdates(body);
     for (const status of statusUpdates) {

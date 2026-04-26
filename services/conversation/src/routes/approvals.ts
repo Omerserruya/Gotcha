@@ -27,6 +27,7 @@ import {
   rejectRequest,
   findPendingByConversation,
   publishEvent,
+  outgoingMessageQueue,
 } from "@chatcenter/shared";
 
 /**
@@ -178,7 +179,7 @@ router.get("/:id", async (req: Request, res: Response) => {
 router.post("/:id/approve", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
-    const actorId = (req as any).user?.id;
+    const actorId = (req as any).user?.userId ?? (req as any).user?.id;
     if (!actorId) return res.status(401).json({ error: "authentication required" });
 
     const row = await (prisma as any).approvalRequest.findFirst({
@@ -211,15 +212,12 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       req.body?.decisionReason,
     );
 
-    // Un-pause the conversation so the bot can resume on next inbound
-    // (or so the dispatched action's side effect lands cleanly). We
-    // reset handledBy back to ai_bot — the resume path re-establishes
-    // the autonomous loop. If the tenant later wants "hand to human
-    // after approval" they can express it via policy.
+    // Un-pause the conversation so the bot resumes on the next inbound.
+    // incoming-worker continues the bot loop only on "ai_agent".
     try {
       await prisma.conversation.update({
         where: { id: row.conversationId },
-        data: { handledBy: "ai_bot" },
+        data: { handledBy: "ai_agent" },
       });
     } catch (err: any) {
       console.error("approvals.approve: failed to un-pause conversation:", err.message);
@@ -240,6 +238,70 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       console.error(
         `[approvals] dispatch failed for ${row.id}: ${dispatch.error}`,
       );
+    }
+
+    // Customer-facing confirmation: once the action succeeds, send a short
+    // follow-up on the conversation's channel so the chat doesn't go quiet
+    // after the bridge ack. Language mirrors the last inbound message.
+    if (dispatch.ok) {
+      try {
+        const conv = await prisma.conversation.findFirst({
+          where: { id: row.conversationId, tenantId },
+          select: {
+            id: true,
+            channel: true,
+            channelAccountId: true,
+            customerExternalId: true,
+          },
+        });
+        const lastInbound = await prisma.message.findFirst({
+          where: { tenantId, conversationId: row.conversationId, direction: "INBOUND" },
+          orderBy: { createdAt: "desc" },
+          select: { body: true },
+        });
+        const isHebrew = /[֐-׿]/.test(lastInbound?.body || "");
+        const body = isHebrew
+          ? "מעולה! אושר ונרשמת במערכת ✓ נציג שלנו יחזור אליך בקרוב לסגירת הפרטים."
+          : "Great — you're all set ✓ A team member will reach out shortly to take it from here.";
+        if (conv && conv.channelAccountId && conv.customerExternalId) {
+          const msg = await prisma.message.create({
+            data: {
+              tenantId,
+              conversationId: conv.id,
+              channel: conv.channel,
+              direction: "OUTBOUND",
+              body,
+              senderName: "AI Bot",
+              status: "PENDING",
+              metadata: { source: "approval_confirmation", approvalId: row.id },
+            },
+          });
+          await outgoingMessageQueue.add(
+            "send",
+            {
+              tenantId,
+              conversationId: conv.id,
+              channel: conv.channel,
+              channelAccountId: conv.channelAccountId,
+              recipientExternalId: conv.customerExternalId,
+              body,
+              messageType: "text",
+              senderName: "AI Bot",
+              messageId: msg.id,
+            },
+            { attempts: 3, backoff: { type: "exponential", delay: 1000 } },
+          );
+          await prisma.conversation.update({
+            where: { id: conv.id },
+            data: { lastMessageAt: new Date() },
+          });
+        }
+      } catch (err: any) {
+        console.error(
+          "approvals.approve: post-approval customer message failed:",
+          err?.message,
+        );
+      }
     }
 
     // Notify subscribers (inbox UIs, worker retry, etc.)
@@ -276,7 +338,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 router.post("/:id/reject", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
-    const actorId = (req as any).user?.id;
+    const actorId = (req as any).user?.userId ?? (req as any).user?.id;
     if (!actorId) return res.status(401).json({ error: "authentication required" });
     const { decisionReason } = req.body ?? {};
     if (!decisionReason || typeof decisionReason !== "string") {

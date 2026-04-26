@@ -83,6 +83,16 @@ model Tenant {
   botType              BotType? @map("bot_type")
   firstTakeCareEnabled Boolean  @default(false) @map("first_take_care_enabled")
 
+  // Routing fallback ladder — used when no RouterRule matches an inbound.
+  // Resolution order: defaultAgentId → defaultRoutineId → defaultDepartmentId → unassigned.
+  defaultAgentId                String? @map("default_agent_id")
+  defaultRoutineId              String? @map("default_routine_id")
+  defaultDepartmentId           String? @map("default_department_id")
+
+  // Human-handoff behaviour. null = never resume bot after a human unclaims.
+  // Integer N = resume AUTO mode after N idle minutes since last human touch.
+  autoResumeAfterUnclaimMinutes Int?    @map("auto_resume_after_unclaim_minutes")
+
   users             User[]
   conversations     Conversation[]
   messages          Message[]
@@ -224,6 +234,11 @@ model Conversation {
   // Chatbot state tracking
   chatbotFlowId      String?            @map("chatbot_flow_id")
   chatbotNodeId      String?            @map("chatbot_node_id")
+  // Per-conversation variable store populated by flow nodes (Collect Input,
+  // Set Variable, HTTP Request, AI Generate, Bring User Data). Flat JSON
+  // object: { "customer_email": "foo@bar.com", "http_response": {...}, ... }.
+  // Interpolated into outbound Send* nodes via {{var_name}} syntax.
+  flowVariables      Json?              @map("flow_variables")
   isHandedOver       Boolean            @default(false) @map("is_handed_over")
   handledBy          String?            @map("handled_by") // "ai_agent", "flow", "human", null (unrouted)
   lastMessageAt      DateTime?          @map("last_message_at")
@@ -346,6 +361,20 @@ model AIAgent {
   conversationFlow      Json?  @map("conversation_flow") // [{ step, action, details }] — autonomous mode conversation flow
   customGuardrails      Json?  @map("custom_guardrails") // string[] — user-defined guardrails appended to static ones
 
+  // Mode capabilities — which runtime modes this agent may run in.
+  // { auto: bool, assist: bool }. Both default true.
+  capabilities          Json   @default("{\"auto\":true,\"assist\":true}") @map("capabilities")
+
+  // Behavioral anchors — guidance, NOT executable logic.
+  // [{ id, condition, intent, guidance }] — rendered into the system prompt.
+  behavioralAnchors     Json   @default("[]") @map("behavioral_anchors")
+
+  // Deterministic escalation gates (LLM-independent triggers).
+  // [{ type: "max_messages"|"keyword"|"max_minutes", value, enabled }]
+  // Differs from escalationRules (LLM-judged). Checked in evaluatePolicies()
+  // pre-flight so the bot can't bypass them.
+  escalationGates       Json   @default("[]") @map("escalation_gates")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -387,7 +416,9 @@ enum RouterRuleRouteType {
 model RouterRule {
   id          String              @id @default(cuid())
   tenantId    String              @map("tenant_id")
-  priority    Int                 @default(0)
+  // Evaluation order within non-default rules. Default rules always evaluate last.
+  // Lower position runs first. UI drag-to-reorder writes this field.
+  position    Int                 @default(0)
   name        String
   conditions  Json                @default("[]") // [{ type: "intent"|"tag"|"keyword"|"channel", operator, value }]
   logic       String              @default("AND") // "AND" | "OR"
@@ -403,7 +434,7 @@ model RouterRule {
   aiAgent AIAgent? @relation("RouterRuleAIAgent", fields: [aiAgentId], references: [id], onDelete: SetNull)
 
   @@index([tenantId])
-  @@index([tenantId, enabled, priority])
+  @@index([tenantId, enabled, position])
   @@map("router_rules")
 }
 
@@ -745,6 +776,37 @@ model CatalogTool {
   slug          String
   name          String
   description   String
+
+  // NEW — complete tool contract for the LLM tool-surface.
+  // `whenToUse` is human-written guidance that the prompt renders alongside
+  // `description`. `exampleUsage` gives the LLM a worked example so it can
+  // infer call shapes without relying only on description heuristics.
+  whenToUse     String?      @map("when_to_use") @db.Text
+  exampleUsage  Json?        @map("example_usage") // [{ input, output, note }]
+
+  // Which execution modes this tool is valid in. Filtered at buildToolSurface time.
+  // Default: both. Examples of AUTO-only: send_message, close_conversation.
+  allowedModes  Json         @default("[\"AUTO\",\"ASSIST\"]") @map("allowed_modes")
+
+  // HITL policy — this is the FLOOR. Tenant (via TenantTool.configOverrides)
+  // and agent (via AgentToolPermission.requireApproval) can only tighten,
+  // never loosen. Shape:
+  //   { mode: "never" | "always" | "on_condition",
+  //     condition?: string,       // CEL-lite predicate over args
+  //     approverRole?: string,
+  //     notifyChannels?: string[] }
+  hitlPolicy    Json         @default("{\"mode\":\"never\"}") @map("hitl_policy")
+
+  // Runtime limits honored by the tool executor.
+  timeoutMs                Int  @default(10000) @map("timeout_ms")
+  maxRetries               Int  @default(0)     @map("max_retries")
+  retryBackoffMs           Int  @default(1000)  @map("retry_backoff_ms")
+  circuitBreakerThreshold  Int? @map("circuit_breaker_threshold")
+
+  // Schema version for the inputSchema — bumped when args shape changes;
+  // forces prompt regeneration on agents referencing this tool.
+  schemaVersion Int          @default(1) @map("schema_version")
+
   category      ToolCategory @default(READ)
   inputSchema   Json         @default("{}") @map("input_schema")
   outputSchema  Json         @default("{}") @map("output_schema")

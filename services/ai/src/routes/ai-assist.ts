@@ -72,42 +72,92 @@ router.post("/intent", (req: Request, res: Response, next) => {
   next();
 }, async (req: Request, res: Response) => {
   try {
-    const { message, intent, tenantId } = req.body;
-    if (!message || !intent) {
-      res.status(400).json({ error: "message and intent are required" });
+    const { message, intent, intents, tenantId } = req.body;
+    // Accept both shapes:
+    //   Batch (preferred): { message, intents: ["sales","support",...] }
+    //     → returns { data: { matches: string[] } } AND { match, intent }
+    //       (single-intent back-compat when exactly one intent was checked)
+    //   Single (legacy):   { message, intent: "sales" }
+    //     → returns { data: { match: boolean } } plus `matches` array for new callers.
+    if (!message || (!intent && (!Array.isArray(intents) || intents.length === 0))) {
+      res.status(400).json({ error: "message is required, plus `intent` (string) or `intents` (string[])" });
       return;
     }
 
-    // Ask AI: does this message relate to this intent?
-    // Use generateResponse from ai.service (central LLM access)
-    let match = false;
+    const intentList: string[] = Array.isArray(intents) && intents.length > 0
+      ? intents.filter((x: any) => typeof x === "string" && x.trim()).map((x: string) => x.trim())
+      : [intent].filter((x: any) => typeof x === "string" && x.trim()).map((x: string) => x.trim());
+
+    let matches: string[] = [];
     try {
+      // Ask the LLM once: which of these intents does the message match?
+      // Output contract: a JSON array of matching intent strings (may be empty).
+      // We use a tight system prompt + low temperature to keep it deterministic.
       const aiResponse = await generateResponse({
         tenantId: tenantId || "system",
         messages: [
           {
             role: "system",
-            content: `You determine if a customer message is related to a specific intent. Answer ONLY "true" or "false".\n\nIntent to check: "${intent}"`,
+            content:
+              `You classify a customer message against a finite list of intents.\n` +
+              `Return ONLY a JSON array of the intents from the list that clearly apply.\n` +
+              `Example: intents=["sales","support","billing"], message about pricing → ["sales"].\n` +
+              `If none apply, return [].\n\n` +
+              `Intents: ${JSON.stringify(intentList)}`,
           },
           { role: "user", content: message },
         ],
         temperature: 0,
-        maxTokens: 5,
-        metadata: { type: "intent" },
+        maxTokens: 64,
+        metadata: { type: "intent_batch", count: intentList.length },
       });
 
-      const answer = aiResponse.content?.trim()?.toLowerCase();
-      match = answer === "true";
-      console.log(`[intent] message="${message.substring(0, 50)}" target="${intent}" answer="${answer}" match=${match}`);
+      const raw = (aiResponse.content ?? "").trim();
+      // Strip code fences / trailing junk if any.
+      const jsonStart = raw.indexOf("[");
+      const jsonEnd = raw.lastIndexOf("]");
+      if (jsonStart >= 0 && jsonEnd >= jsonStart) {
+        const slice = raw.slice(jsonStart, jsonEnd + 1);
+        try {
+          const parsed = JSON.parse(slice);
+          if (Array.isArray(parsed)) {
+            matches = parsed
+              .filter((v) => typeof v === "string")
+              .map((v: string) => v.trim())
+              .filter((v) => intentList.includes(v));
+          }
+        } catch {
+          // ignore parse errors — fallthrough to keyword heuristic below
+        }
+      }
+      if (matches.length === 0 && raw && !raw.startsWith("[")) {
+        // Some models answer with plain text. Recover a single-intent reply
+        // if it looks like one of our intents.
+        const lower = raw.toLowerCase();
+        matches = intentList.filter((i) => lower.includes(i.toLowerCase()));
+      }
+      console.log(`[intent] batch message="${String(message).substring(0, 50)}" intents=${JSON.stringify(intentList)} matches=${JSON.stringify(matches)}`);
     } catch (err: any) {
-      // AI service not initialized — fall back to keyword matching
-      const msgLower = message.toLowerCase();
-      const intentLower = intent.toLowerCase();
-      match = msgLower.includes(intentLower);
-      console.log(`[intent] AI unavailable (${err.message}), keyword fallback: message="${message.substring(0, 50)}" target="${intentLower}" match=${match}`);
+      // AI unavailable — keyword fallback per intent.
+      const msgLower = String(message).toLowerCase();
+      matches = intentList.filter((i) => msgLower.includes(i.toLowerCase()));
+      console.log(`[intent] AI unavailable (${err.message}); keyword fallback matches=${JSON.stringify(matches)}`);
     }
 
-    res.json({ data: { match } });
+    // Shape the response for both old and new callers:
+    //   - Legacy single-intent callers read `data.match` (boolean)
+    //   - New batch callers read `data.matches` (string[])
+    if (intent && !Array.isArray(intents)) {
+      res.json({
+        data: {
+          match: matches.includes(intent),
+          intent,
+          matches, // harmless extra field for forward-compat
+        },
+      });
+      return;
+    }
+    res.json({ data: { matches } });
   } catch (err) {
     console.error("Intent classification error:", err);
     res.status(500).json({ error: "Failed to classify intent" });

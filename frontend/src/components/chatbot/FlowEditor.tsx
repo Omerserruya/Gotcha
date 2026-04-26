@@ -16,6 +16,7 @@ import ReactFlow, {
   ConnectionLineType,
   MarkerType,
   ReactFlowInstance,
+  ReactFlowProvider,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
@@ -28,8 +29,31 @@ import { ConditionNode } from "./nodes/ConditionNode";
 import { HandoverNode } from "./nodes/HandoverNode";
 import { DepartmentRouteNode } from "./nodes/DepartmentRouteNode";
 import { EndNode } from "./nodes/EndNode";
+// Unified node types shared with the Main Playbook. Authoring a sub-flow uses
+// the SAME palette and the SAME runtime walker (executeSubFlow), so everything
+// the main flow can do, a sub-flow can do — and vice-versa.
+import { ConditionGroupNode } from "../mainPlaybook/ConditionGroupNode";
+import { RouteTargetNode } from "../mainPlaybook/RouteTargetNode";
+import { SendMessageTextNode } from "../mainPlaybook/SendMessageTextNode";
+import { SendMessageInteractiveNode } from "../mainPlaybook/SendMessageInteractiveNode";
+import { SendMessageQuickReplyNode } from "../mainPlaybook/SendMessageQuickReplyNode";
+import { SendMessageImageNode } from "../mainPlaybook/SendMessageImageNode";
+import { SendMessageFileNode } from "../mainPlaybook/SendMessageFileNode";
+import { WaitNode } from "../mainPlaybook/WaitNode";
+import { CollectInputNode } from "../mainPlaybook/CollectInputNode";
+import { SetVariableNode } from "../mainPlaybook/SetVariableNode";
+import { HttpRequestNode } from "../mainPlaybook/HttpRequestNode";
+import { AIGenerateNode } from "../mainPlaybook/AIGenerateNode";
+import { UpdateCustomerNode } from "../mainPlaybook/UpdateCustomerNode";
+import { BringUserDataNode } from "../mainPlaybook/BringUserDataNode";
+import { CommentTriggerNode } from "../mainPlaybook/CommentTriggerNode";
+import { KeywordTriggerNode } from "../mainPlaybook/KeywordTriggerNode";
+import { ScheduleTriggerNode } from "../mainPlaybook/ScheduleTriggerNode";
+import { NodeInspector } from "../mainPlaybook/NodeInspector";
+import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
 
 const nodeTypes: NodeTypes = {
+  // Legacy types — still supported for existing flows
   start: StartNode,
   message: MessageNode,
   quick_reply: QuickReplyNode,
@@ -37,6 +61,25 @@ const nodeTypes: NodeTypes = {
   handover: HandoverNode,
   department_route: DepartmentRouteNode,
   end: EndNode,
+  // Unified types (new)
+  condition_group: ConditionGroupNode,
+  route_target: RouteTargetNode,
+  send_message_text: SendMessageTextNode,
+  send_message_interactive: SendMessageInteractiveNode,
+  send_message_quick_reply: SendMessageQuickReplyNode,
+  send_message_image: SendMessageImageNode,
+  send_message_file: SendMessageFileNode,
+  // Control / data / integrations / triggers
+  wait: WaitNode,
+  collect_input: CollectInputNode,
+  set_variable: SetVariableNode,
+  http_request: HttpRequestNode,
+  ai_generate: AIGenerateNode,
+  update_customer: UpdateCustomerNode,
+  bring_user_data: BringUserDataNode,
+  comment_trigger: CommentTriggerNode,
+  keyword_trigger: KeywordTriggerNode,
+  schedule_trigger: ScheduleTriggerNode,
 };
 
 // ─── Node palette config ────────────────────────────────────────
@@ -169,6 +212,265 @@ const NODE_PALETTE = [
       },
     ],
   },
+  // Unified palette — these are the same node types used by the Main Playbook.
+  // They produce n8n-style flow graphs that the single graph walker executes
+  // exactly as drawn. Prefer these for new sub-flows.
+  {
+    category: "Unified (new)",
+    items: [
+      {
+        type: "condition_group",
+        label: "Condition (unified)",
+        desc: "Branch on keyword / regex / channel",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />
+          </svg>
+        ),
+        color: "amber",
+        bg: "bg-amber-50",
+        border: "border-amber-200",
+        text: "text-amber-600",
+        iconBg: "bg-amber-100",
+        hoverBg: "hover:bg-amber-100",
+        ring: "ring-amber-300",
+        dot: "bg-amber-500",
+      },
+      {
+        type: "send_message_text",
+        label: "Send Text",
+        desc: "Plain text message",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+          </svg>
+        ),
+        color: "sky",
+        bg: "bg-sky-50",
+        border: "border-sky-200",
+        text: "text-sky-600",
+        iconBg: "bg-sky-100",
+        hoverBg: "hover:bg-sky-100",
+        ring: "ring-sky-300",
+        dot: "bg-sky-500",
+      },
+      {
+        type: "send_message_interactive",
+        label: "Send Interactive (Link)",
+        desc: "Text + CTA URL button",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+          </svg>
+        ),
+        color: "indigo",
+        bg: "bg-indigo-50",
+        border: "border-indigo-200",
+        text: "text-indigo-600",
+        iconBg: "bg-indigo-100",
+        hoverBg: "hover:bg-indigo-100",
+        ring: "ring-indigo-300",
+        dot: "bg-indigo-500",
+      },
+      {
+        type: "send_message_quick_reply",
+        label: "Send Quick Reply",
+        desc: "Prompt with tappable options",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 12.75V12A2.25 2.25 0 014.5 9.75h15A2.25 2.25 0 0121.75 12v.75m-8.69-6.44l-2.12-2.12a1.5 1.5 0 00-1.061-.44H4.5A2.25 2.25 0 002.25 6v12a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9a2.25 2.25 0 00-2.25-2.25h-5.379a1.5 1.5 0 01-1.06-.44z" />
+          </svg>
+        ),
+        color: "teal",
+        bg: "bg-teal-50",
+        border: "border-teal-200",
+        text: "text-teal-600",
+        iconBg: "bg-teal-100",
+        hoverBg: "hover:bg-teal-100",
+        ring: "ring-teal-300",
+        dot: "bg-teal-500",
+      },
+      {
+        type: "send_message_image",
+        label: "Send Image",
+        desc: "Image from URL + caption",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" />
+          </svg>
+        ),
+        color: "fuchsia",
+        bg: "bg-fuchsia-50",
+        border: "border-fuchsia-200",
+        text: "text-fuchsia-600",
+        iconBg: "bg-fuchsia-100",
+        hoverBg: "hover:bg-fuchsia-100",
+        ring: "ring-fuchsia-300",
+        dot: "bg-fuchsia-500",
+      },
+      {
+        type: "send_message_file",
+        label: "Send File",
+        desc: "File from URL (PDF, doc, ...)",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+        ),
+        color: "slate",
+        bg: "bg-slate-50",
+        border: "border-slate-200",
+        text: "text-slate-600",
+        iconBg: "bg-slate-100",
+        hoverBg: "hover:bg-slate-100",
+        ring: "ring-slate-300",
+        dot: "bg-slate-500",
+      },
+      {
+        type: "route_target",
+        label: "Route To",
+        desc: "AI agent / sub-flow / human",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" />
+          </svg>
+        ),
+        color: "violet",
+        bg: "bg-violet-50",
+        border: "border-violet-200",
+        text: "text-violet-600",
+        iconBg: "bg-violet-100",
+        hoverBg: "hover:bg-violet-100",
+        ring: "ring-violet-300",
+        dot: "bg-violet-500",
+      },
+      {
+        type: "wait",
+        label: "Wait / Delay",
+        desc: "Pause N seconds/minutes",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
+          </svg>
+        ),
+        color: "orange", bg: "bg-orange-50", border: "border-orange-200", text: "text-orange-600",
+        iconBg: "bg-orange-100", hoverBg: "hover:bg-orange-100", ring: "ring-orange-300", dot: "bg-orange-500",
+      },
+      {
+        type: "collect_input",
+        label: "Collect Input",
+        desc: "Ask + capture user reply",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+          </svg>
+        ),
+        color: "blue", bg: "bg-blue-50", border: "border-blue-200", text: "text-blue-600",
+        iconBg: "bg-blue-100", hoverBg: "hover:bg-blue-100", ring: "ring-blue-300", dot: "bg-blue-500",
+      },
+      {
+        type: "set_variable",
+        label: "Set Variable",
+        desc: "Assign a flow variable",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+          </svg>
+        ),
+        color: "purple", bg: "bg-purple-50", border: "border-purple-200", text: "text-purple-600",
+        iconBg: "bg-purple-100", hoverBg: "hover:bg-purple-100", ring: "ring-purple-300", dot: "bg-purple-500",
+      },
+      {
+        type: "http_request",
+        label: "HTTP Request",
+        desc: "Call external API",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747" />
+          </svg>
+        ),
+        color: "zinc", bg: "bg-zinc-50", border: "border-zinc-200", text: "text-zinc-700",
+        iconBg: "bg-zinc-100", hoverBg: "hover:bg-zinc-100", ring: "ring-zinc-300", dot: "bg-zinc-500",
+      },
+      {
+        type: "ai_generate",
+        label: "AI Generate",
+        desc: "Single-shot LLM call",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" />
+          </svg>
+        ),
+        color: "violet", bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-600",
+        iconBg: "bg-violet-100", hoverBg: "hover:bg-violet-100", ring: "ring-violet-300", dot: "bg-violet-500",
+      },
+      {
+        type: "bring_user_data",
+        label: "Bring User Data",
+        desc: "Load contact into vars",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 6.375c0 2.278-3.694 4.125-8.25 4.125S3.75 8.653 3.75 6.375" />
+          </svg>
+        ),
+        color: "rose", bg: "bg-rose-50", border: "border-rose-200", text: "text-rose-600",
+        iconBg: "bg-rose-100", hoverBg: "hover:bg-rose-100", ring: "ring-rose-300", dot: "bg-rose-500",
+      },
+      {
+        type: "update_customer",
+        label: "Update Customer",
+        desc: "Tag / attribute",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
+          </svg>
+        ),
+        color: "pink", bg: "bg-pink-50", border: "border-pink-200", text: "text-pink-600",
+        iconBg: "bg-pink-100", hoverBg: "hover:bg-pink-100", ring: "ring-pink-300", dot: "bg-pink-500",
+      },
+    ],
+  },
+  {
+    category: "Triggers",
+    items: [
+      {
+        type: "comment_trigger",
+        label: "Comment Received",
+        desc: "IG/FB post comments",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M12 20.25c4.97 0 9-3.694 9-8.25s-4.03-8.25-9-8.25S3 7.444 3 12" />
+          </svg>
+        ),
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300", dot: "bg-emerald-500",
+      },
+      {
+        type: "keyword_trigger",
+        label: "Keyword Trigger",
+        desc: "Fires on inbound keyword",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+          </svg>
+        ),
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300", dot: "bg-emerald-500",
+      },
+      {
+        type: "schedule_trigger",
+        label: "Schedule Trigger",
+        desc: "Cron schedule",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25" />
+          </svg>
+        ),
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300", dot: "bg-emerald-500",
+      },
+    ],
+  },
 ];
 
 const NODE_WIDTH = 300;
@@ -296,13 +598,55 @@ function findClearPosition(existingNodes: Node[]): { x: number; y: number } {
 
 function getDefaultData(type: string) {
   switch (type) {
+    // Legacy types
     case "message": return { text: "Hello!" };
     case "quick_reply": return { text: "Choose an option:", buttons: [{ id: "opt1", title: "Option 1" }] };
     case "condition": return { field: "intent", operator: "equals", value: "" };
     case "handover": return { departmentId: "" };
     case "department_route": return { departmentId: "" };
-    case "end": return {};
-    default: return {};
+    case "end": return { kind: "wait_for_reply" };
+    case "start": return { trigger: "message_received" };
+    // Unified types (same as Main Playbook)
+    case "condition_group":
+      return {
+        name: "New Condition",
+        logic: "AND",
+        conditions: [{ id: `c_${Date.now()}`, type: "keyword", operator: "contains", value: "" }],
+      };
+    case "route_target":
+      return { routeType: "agent", targetId: "" };
+    case "send_message_text":
+      return { text: "" };
+    case "send_message_interactive":
+      return { text: "", buttonLabel: "", buttonUrl: "" };
+    case "send_message_quick_reply":
+      return { text: "", replies: [{ id: `r_${Date.now()}`, label: "Yes", payload: "yes" }] };
+    case "send_message_image":
+      return { url: "", caption: "" };
+    case "send_message_file":
+      return { url: "", filename: "", caption: "" };
+    case "wait":
+      return { amount: 5, unit: "seconds" };
+    case "collect_input":
+      return { prompt: "", variable: "", validation: "any" };
+    case "set_variable":
+      return { variable: "", value: "" };
+    case "http_request":
+      return { method: "GET", url: "", headers: [{ id: `h_${Date.now()}`, key: "", value: "" }], body: "", responseVariable: "response", jsonPath: "" };
+    case "ai_generate":
+      return { prompt: "", responseVariable: "ai_output", model: "fast" };
+    case "update_customer":
+      return { action: "add_tag", key: "", value: "" };
+    case "bring_user_data":
+      return { fields: ["displayName", "email"], prefix: "customer" };
+    case "comment_trigger":
+      return { platform: "instagram", postId: "", keywords: [], replyPublicly: true };
+    case "keyword_trigger":
+      return { keywords: [], matchType: "any", caseSensitive: false };
+    case "schedule_trigger":
+      return { cron: "0 9 * * *", timezone: "UTC" };
+    default:
+      return {};
   }
 }
 
@@ -314,7 +658,18 @@ interface Props {
   onCreated?: (id: string) => void;
 }
 
-export function FlowEditor({ flowId, onBack, onCreated }: Props) {
+export function FlowEditor(props: Props) {
+  // ReactFlowProvider so the side-panel Inspector (rendered as a sibling of
+  // <ReactFlow>) can call useReactFlow — VariableMentionInput needs it to
+  // scan the canvas for available variables.
+  return (
+    <ReactFlowProvider>
+      <FlowEditorInner {...props} />
+    </ReactFlowProvider>
+  );
+}
+
+function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
   const isNew = flowId === "new";
   const { token } = useAuth();
   const { t } = useI18n();
@@ -327,6 +682,9 @@ export function FlowEditor({ flowId, onBack, onCreated }: Props) {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
+  // Selection drives the side-panel Inspector (unified nodes only — the
+  // legacy `./nodes/*` set still uses inline editing for now).
+  const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
   const onDragStart = useCallback((event: DragEvent, nodeType: string) => {
     event.dataTransfer.setData("application/reactflow", nodeType);
@@ -623,6 +981,8 @@ export function FlowEditor({ flowId, onBack, onCreated }: Props) {
             onInit={setReactFlowInstance}
             onDrop={onDrop}
             onDragOver={onDragOver}
+            onNodeClick={(_, n) => { if (n.type && NODE_REGISTRY[n.type]) setSelectedNodeId(n.id); }}
+            onPaneClick={() => setSelectedNodeId(null)}
             nodeTypes={nodeTypes}
             connectionLineType={ConnectionLineType.SmoothStep}
             defaultEdgeOptions={{ type: "smoothstep" }}
@@ -637,6 +997,26 @@ export function FlowEditor({ flowId, onBack, onCreated }: Props) {
           </ReactFlow>
         </div>
       </div>
+
+      {/* Inspector for unified node types (canvas cards are read-only). */}
+      <NodeInspector
+        node={selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null}
+        onChange={(id, patch) => setNodes((nds) => nds.map((n) => n.id === id ? { ...n, data: { ...n.data, ...patch } } : n))}
+        onClose={() => setSelectedNodeId(null)}
+        onDelete={(id) => {
+          setNodes((nds) => nds.filter((n) => n.id !== id));
+          setEdges((eds) => eds.filter((e) => e.source !== id && e.target !== id));
+          setSelectedNodeId(null);
+        }}
+        onDuplicate={(id) => {
+          setNodes((nds) => {
+            const orig = nds.find((n) => n.id === id);
+            if (!orig) return nds;
+            const newId = `${orig.type}-${Date.now()}`;
+            return [...nds, { id: newId, type: orig.type, position: { x: orig.position.x + 60, y: orig.position.y + 60 }, data: JSON.parse(JSON.stringify(orig.data || {})) }];
+          });
+        }}
+      />
     </div>
   );
 }

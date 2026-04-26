@@ -23,6 +23,10 @@ export const channelHealthQueue = new Queue("channel-health", { connection: { ur
 export const idleConversationQueue = new Queue("idle-conversations", { connection: { url: REDIS_URL } });
 export const broadcastQueue = new Queue("broadcast-messages", { connection: { url: REDIS_URL } });
 export const scheduledMessageQueue = new Queue("scheduled-messages", { connection: { url: REDIS_URL } });
+// Delayed resume for flow Wait nodes. When a flow hits a Wait(5s), the
+// walker enqueues a job here with { delay: 5000 } and halts. The worker
+// picks it up after the delay and resumes the flow at the next node.
+export const flowResumeQueue = new Queue("flow-resume", { connection: { url: REDIS_URL } });
 
 // ─── Job types ──────────────────────────────────────────────
 
@@ -45,6 +49,27 @@ export interface IncomingMessageJob {
     };
     mediaUrl?: string;
     fileName?: string;
+  };
+}
+
+// Comment-trigger job. Shares the "incoming-messages" BullMQ queue with the
+// existing message processor (one worker, two job names) — discriminated by
+// job.name = "process-comment". Comments are NOT messages: no Conversation
+// row, no Message row; they fan out into 0..N flow runs based on which
+// comment_trigger nodes target this post.
+export interface IncomingCommentJob {
+  tenantId: string;
+  channel: "MESSENGER" | "INSTAGRAM";
+  channelAccountId: string;
+  comment: {
+    commentId: string;
+    postId: string;
+    postPermalink?: string;
+    text: string;
+    fromUserId: string;
+    fromUsername?: string;
+    timestamp: string; // ISO
+    parentCommentId?: string;
   };
 }
 
@@ -94,6 +119,20 @@ export interface BroadcastJob {
 export interface ScheduledMessageJob {
   tenantId: string;
   scheduledMessageId: string;
+}
+
+export interface FlowResumeJob {
+  tenantId: string;
+  conversationId: string;
+  // "main" | ChatbotFlow.id — which graph to resume
+  flowKind: "main" | "sub";
+  flowId?: string;
+  // Node to resume AT — the walker restarts from here
+  resumeNodeId: string;
+  // Inbound channel (used to pick adapter / channel_entry when re-entering)
+  channel: string;
+  // Message to carry through on resume (usually empty for a Wait resume)
+  message: string;
 }
 
 // ─── Worker factory ─────────────────────────────────────────

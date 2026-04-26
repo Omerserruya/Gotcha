@@ -30,7 +30,7 @@ async function resolveAIAgent(tenantId: string, departmentId?: string | null) {
   if (departmentId) {
     const rule = await prisma.routerRule.findFirst({
       where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, routeTarget: departmentId },
-      orderBy: { priority: "asc" },
+      orderBy: { position: "asc" } as any,
     });
     if (rule?.aiAgentId) {
       const agent = await prisma.aIAgent.findUnique({ where: { id: rule.aiAgentId } });
@@ -40,7 +40,7 @@ async function resolveAIAgent(tenantId: string, departmentId?: string | null) {
   // 2. Default tenant AI agent
   const defaultRule = await prisma.routerRule.findFirst({
     where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, isDefault: true },
-    orderBy: { priority: "asc" },
+    orderBy: { position: "asc" } as any,
   });
   if (defaultRule?.aiAgentId) {
     const agent = await prisma.aIAgent.findUnique({ where: { id: defaultRule.aiAgentId } });
@@ -270,6 +270,47 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
             });
           } catch (err: any) {
             console.error("[AI-Bot] Failed to pause conversation:", err.message);
+          }
+          // Don't leave the customer in silence while a human decides. Send a
+          // short bridge ack in the same language as the incoming message.
+          try {
+            const isHebrew = /[֐-׿]/.test(incomingMessage);
+            const ack = isHebrew
+              ? "תודה! קיבלתי את הפרטים ואני מעביר אותם לצוות — נציג יחזור אליך בהקדם."
+              : "Thanks — I've got your details and I'm passing them on to the team. Someone will reach out shortly.";
+            const adapter = getOutboundAdapter(sendContext.channel);
+            if (adapter) {
+              const extId = await adapter.sendTextMessage(
+                sendContext.credentials,
+                sendContext.channelAccountExternalId,
+                sendContext.recipientId,
+                ack,
+              );
+              const bridgeMsg = await prisma.message.create({
+                data: {
+                  tenantId,
+                  conversationId,
+                  channel: sendContext.channel,
+                  direction: "OUTBOUND",
+                  body: ack,
+                  senderName: "AI Bot",
+                  externalMessageId: extId,
+                  status: extId ? "SENT" : "FAILED",
+                  metadata: { source: "ai_bot", kind: "bridge_ack_for_approval" },
+                },
+              });
+              await prisma.conversation.update({
+                where: { id: conversationId },
+                data: { lastMessageAt: new Date() },
+              });
+              await publishEvent({
+                event: "message:new",
+                tenantId,
+                data: { message: bridgeMsg, conversationId, channel: sendContext.channel },
+              });
+            }
+          } catch (err: any) {
+            console.error("[AI-Bot] bridge ack failed:", err.message);
           }
           return true;
         }

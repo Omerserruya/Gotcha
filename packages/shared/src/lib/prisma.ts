@@ -113,6 +113,20 @@ function hasTenantIdInWhere(where: unknown): boolean {
   if (!where || typeof where !== "object") return false;
   const w = where as Record<string, unknown>;
   if ("tenantId" in w && w.tenantId !== undefined) return true;
+  // Compound unique-index selectors are nested one level under their
+  // generated key, e.g. `where: { tenantId_channel_externalId: { tenantId,
+  // channel, externalId } }`. Prisma exposes the compound index as a single
+  // top-level field whose value is an object containing each component. We
+  // accept it as guarded when the nested object itself includes tenantId.
+  // Limited to one level deep on direct object values — this avoids false
+  // positives from JSON-column filters like `where: { metadata: { equals: {
+  // tenantId: "X" } } }`, which don't actually filter on tenant.
+  for (const v of Object.values(w)) {
+    if (v && typeof v === "object" && !Array.isArray(v)) {
+      const nv = v as Record<string, unknown>;
+      if ("tenantId" in nv && nv.tenantId !== undefined) return true;
+    }
+  }
   // Nested AND/OR/NOT — walk the structure.
   for (const key of ["AND", "OR", "NOT"] as const) {
     const branch = w[key];

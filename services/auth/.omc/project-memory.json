@@ -108,6 +108,12 @@
       "type": "file"
     },
     {
+      "path": "src/routes/channels.ts",
+      "accessCount": 12,
+      "lastAccessed": 1777199093844,
+      "type": "file"
+    },
+    {
       "path": "src/services/notification.service.ts",
       "accessCount": 10,
       "lastAccessed": 1772396291706,
@@ -117,12 +123,6 @@
       "path": "src/routes/waitlist.ts",
       "accessCount": 8,
       "lastAccessed": 1772475906703,
-      "type": "file"
-    },
-    {
-      "path": "src/routes/channels.ts",
-      "accessCount": 5,
-      "lastAccessed": 1772564718338,
       "type": "file"
     },
     {

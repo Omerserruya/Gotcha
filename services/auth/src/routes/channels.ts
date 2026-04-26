@@ -132,6 +132,84 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
   }
 });
 
+// ─── List recent posts for a connected page (Comment Trigger picker) ─────
+//
+// Returns a normalized list of the page's own posts so flow authors can
+// select which post a Comment Trigger should listen on, instead of pasting
+// raw IDs. Group posts intentionally NOT supported — the Meta Groups API
+// was deprecated April 2024; for those, the trigger UI exposes a manual
+// post-URL paste field that the runtime later matches via the page webhook.
+//
+// Supports MESSENGER (Facebook page) and INSTAGRAM (IG Business account).
+router.get("/:id/posts", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const channelId = String(req.params.id);
+    const account = await prisma.channelAccount.findFirst({
+      where: { id: channelId, tenantId: req.tenantId! },
+      select: { channel: true, externalId: true, credentials: true, platformMeta: true },
+    });
+    if (!account) return res.status(404).json({ error: "Channel not found" });
+    if (account.channel !== "MESSENGER" && account.channel !== "INSTAGRAM") {
+      return res.status(400).json({ error: "Posts are only available for Facebook and Instagram channels" });
+    }
+    const creds = (typeof account.credentials === "string"
+      ? decryptCredentials(account.credentials as string)
+      : (account.credentials as any)) || {};
+    const accessToken = creds.accessToken;
+    if (!accessToken) return res.status(400).json({ error: "Channel is missing an access token" });
+
+    const limit = Math.min(50, Math.max(1, Number(req.query.limit) || 20));
+
+    if (account.channel === "MESSENGER") {
+      const pageId = creds.pageId || account.externalId;
+      const url = `${FB_API_URL}/${pageId}/posts`;
+      const resp = await axios.get(url, {
+        params: {
+          fields: "id,message,full_picture,permalink_url,created_time",
+          limit,
+          access_token: accessToken,
+        },
+        timeout: 10_000,
+      });
+      const items = (resp.data?.data || []).map((p: any) => ({
+        id: p.id,
+        caption: p.message || "",
+        thumbnailUrl: p.full_picture || null,
+        permalink: p.permalink_url || null,
+        createdAt: p.created_time || null,
+        source: "page" as const,
+      }));
+      return res.json({ data: items });
+    }
+
+    // Instagram
+    const igUserId = creds.igBusinessId || account.externalId;
+    const url = `${FB_API_URL}/${igUserId}/media`;
+    const resp = await axios.get(url, {
+      params: {
+        fields: "id,caption,media_url,thumbnail_url,permalink,timestamp,media_type",
+        limit,
+        access_token: accessToken,
+      },
+      timeout: 10_000,
+    });
+    const items = (resp.data?.data || []).map((m: any) => ({
+      id: m.id,
+      caption: m.caption || "",
+      // VIDEO posts use thumbnail_url; IMAGE posts use media_url.
+      thumbnailUrl: m.media_type === "VIDEO" ? (m.thumbnail_url || m.media_url || null) : (m.media_url || null),
+      permalink: m.permalink || null,
+      createdAt: m.timestamp || null,
+      source: "page" as const,
+    }));
+    return res.json({ data: items });
+  } catch (err: any) {
+    const detail = err?.response?.data?.error?.message || err?.message;
+    console.error(`[channels] GET /${String(req.params.id)}/posts failed:`, detail);
+    return res.status(502).json({ error: "Failed to load posts", detail });
+  }
+});
+
 // ─── WhatsApp Embedded Signup Connect ────────────────────────
 
 const whatsappConnectSchema = z.object({
@@ -275,9 +353,12 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
         console.warn(`[WA-CONNECT] Phone registration note for ${phoneNumberId}:`, regErr.response?.data?.error?.message);
       }
 
-      // Check if already connected
-      const existing = await prisma.channelAccount.findFirst({
-        where: { channel: "WHATSAPP", externalId: phoneNumberId },
+      // Check if already connected. findUnique on the (channel, externalId)
+      // compound unique index — TenantGuard exempts single-row lookups by
+      // unique key, so this works whether the row belongs to us or another
+      // tenant; we still gate on existing.tenantId before mutating.
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "WHATSAPP", externalId: phoneNumberId } },
       });
 
       if (existing && existing.tenantId !== req.tenantId!) {
@@ -406,8 +487,9 @@ router.post("/connect/whatsapp-session", authenticate, resolveTenant, requireRol
         );
       } catch {}
 
-      const existing = await prisma.channelAccount.findFirst({
-        where: { channel: "WHATSAPP", externalId: pnId },
+      // Unique-key lookup (see /connect/whatsapp).
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "WHATSAPP", externalId: pnId } },
       });
       if (existing && existing.tenantId !== req.tenantId!) continue;
 
@@ -551,7 +633,7 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     } else {
       const scopes: Record<string, string> = {
         messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
-        instagram: "pages_show_list,instagram_basic,instagram_manage_messages,pages_manage_metadata,pages_read_engagement",
+        instagram: "pages_show_list,instagram_basic,instagram_manage_messages,instagram_manage_comments,pages_manage_metadata,pages_read_engagement",
       };
       oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
     }
@@ -752,8 +834,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           console.warn(`[WA-CALLBACK] Phone reg note ${phoneNumberId}:`, regErr.response?.data?.error?.message);
         }
 
-        const existing = await prisma.channelAccount.findFirst({
-          where: { channel: "WHATSAPP", externalId: phoneNumberId },
+        // Unique-key lookup; refuse if already bound to a different tenant.
+        const existing = await prisma.channelAccount.findUnique({
+          where: { channel_externalId: { channel: "WHATSAPP", externalId: phoneNumberId } },
         });
         if (existing && existing.tenantId !== tenantId) continue;
 
@@ -844,21 +927,27 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           continue;
         }
 
-        // Subscribe page to webhooks
+        // Subscribe page to webhooks. `feed` delivers comment + post events
+        // for the FB page — required for the Comment Trigger to fire.
+        // `message_reactions` delivers reactions to inbound messages.
         try {
-          await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
+          const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
             params: {
-              subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads",
+              subscribed_fields: "messages,messaging_postbacks,messaging_optins,message_deliveries,message_reads,message_reactions,feed",
               access_token: pageAccessToken,
             },
           });
+          console.log(`[MESSENGER-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
         } catch (subErr: any) {
-          console.warn(`[MESSENGER-CALLBACK] Webhook subscription warning for page ${pageId}:`, subErr.response?.data?.error?.message);
+          console.error(`[MESSENGER-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
         }
 
-        // Check if already connected
-        const existing = await prisma.channelAccount.findFirst({
-          where: { channel: "MESSENGER", externalId: pageId },
+        // Unique-key lookup on (channel, externalId). Detects a page bound
+        // to a different tenant so we can refuse instead of silently
+        // overwriting; findUnique on a unique index is exempt from
+        // TenantGuard (see prisma.ts).
+        const existing = await prisma.channelAccount.findUnique({
+          where: { channel_externalId: { channel: "MESSENGER", externalId: pageId } },
         });
 
         if (existing && existing.tenantId !== tenantId) {
@@ -991,16 +1080,20 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           igUsername = igBusinessId;
         }
 
-        // Subscribe page to Instagram webhooks
+        // Subscribe the linked Page to your app. This is the gate that
+        // lets Meta deliver IG Messaging events for the linked IG account.
+        // Only Page-level field names are valid here (`comments` is an
+        // IG-level field; it flows via the app-level instagram webhook).
         try {
-          await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
+          const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
             params: {
               subscribed_fields: "messages,messaging_postbacks,message_reads",
               access_token: pageAccessToken,
             },
           });
+          console.log(`[INSTAGRAM-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
         } catch (subErr: any) {
-          console.warn(`[INSTAGRAM-CALLBACK] Page subscription warning for ${pageId}:`, subErr.response?.data?.error?.message);
+          console.error(`[INSTAGRAM-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
         }
 
         // Subscribe app to Instagram webhooks (required for receiving DMs)
@@ -1016,7 +1109,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
                 object: "instagram",
                 callback_url: WEBHOOK_URL,
                 verify_token: WEBHOOK_VERIFY_TOKEN,
-                fields: "messages,messaging_postbacks",
+                fields: "messages,messaging_postbacks,comments,message_reactions",
                 access_token: `${META_APP_ID}|${META_APP_SECRET}`,
               },
             });
@@ -1026,9 +1119,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
           }
         }
 
-        // Check if already connected
-        const existing = await prisma.channelAccount.findFirst({
-          where: { channel: "INSTAGRAM", externalId: igBusinessId },
+        // Unique-key lookup on (channel, externalId) — see Messenger.
+        const existing = await prisma.channelAccount.findUnique({
+          where: { channel_externalId: { channel: "INSTAGRAM", externalId: igBusinessId } },
         });
 
         if (existing && existing.tenantId !== tenantId) {
@@ -1137,9 +1230,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         console.warn("[GMAIL-CALLBACK] Failed to get historyId:", histErr.response?.data || histErr.message);
       }
 
-      // Check if already connected
-      const existing = await prisma.channelAccount.findFirst({
-        where: { channel: "GMAIL", externalId: emailAddress },
+      // Unique-key lookup; refuse if mailbox is already bound elsewhere.
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "GMAIL", externalId: emailAddress } },
       });
 
       if (existing && existing.tenantId !== tenantId) {
@@ -1256,9 +1349,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         }
       }
 
-      // Check if already connected
-      const existing = await prisma.channelAccount.findFirst({
-        where: { channel: "OUTLOOK", externalId: emailAddress },
+      // Unique-key lookup; refuse if mailbox is already bound elsewhere.
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "OUTLOOK", externalId: emailAddress } },
       });
 
       if (existing && existing.tenantId !== tenantId) {
@@ -1349,9 +1442,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         return;
       }
 
-      // Check if already connected
-      const existing = await prisma.channelAccount.findFirst({
-        where: { channel: "SLACK", externalId: teamId },
+      // Unique-key lookup; refuse if workspace is already bound elsewhere.
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "SLACK", externalId: teamId } },
       });
 
       if (existing && existing.tenantId !== tenantId) {

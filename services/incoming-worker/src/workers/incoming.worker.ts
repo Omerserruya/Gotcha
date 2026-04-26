@@ -3,7 +3,8 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { prisma, createWorker, IncomingMessageJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
+import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
 const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
@@ -411,8 +412,20 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   }
 }
 
+// Dispatcher: same queue, two job names. Keeps DM and comment-trigger
+// processing in one worker process — same Redis connection, same DLQ, same
+// concurrency budget — but each job kind has its own handler.
+async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob>): Promise<void> {
+  if (job.name === "process-comment") {
+    await processCommentTrigger(job as Job<IncomingCommentJob>);
+    return;
+  }
+  // Default ("process") — DM / message path.
+  await processIncomingMessage(job as Job<IncomingMessageJob>);
+}
+
 let worker: any;
 export function startIncomingWorker() {
-  worker = createWorker<IncomingMessageJob>("incoming-messages", processIncomingMessage, 3);
-  console.log("[incoming-worker] Incoming message worker started");
+  worker = createWorker<IncomingMessageJob | IncomingCommentJob>("incoming-messages", dispatch, 3);
+  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment)");
 }

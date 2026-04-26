@@ -403,24 +403,25 @@ export async function generateAgentConfig(
       },
     });
 
-    // Create router rule to link agent to department
-    const maxPriority = await prisma.routerRule.aggregate({
+    // Create router rule to link agent to department.
+    // Position (renamed from priority) — new rule goes to the end.
+    const maxPos = await prisma.routerRule.aggregate({
       where: { tenantId },
-      _max: { priority: true },
+      _max: { position: true as any } as any,
     });
 
     await prisma.routerRule.create({
       data: {
         tenantId,
         name: `${department.name} AI Employee`,
-        priority: (maxPriority._max.priority || 0) + 1,
+        position: (((maxPos as any)?._max?.position ?? 0) + 1) as any,
         conditions: [{ field: "department", operator: "equals", value: departmentId }],
         logic: "AND",
         routeType: "AI_AGENT",
         routeTarget: departmentId,
         aiAgentId: agent.id,
         enabled: true,
-      },
+      } as any,
     });
   }
 

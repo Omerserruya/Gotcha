@@ -251,7 +251,7 @@ async function findAIAgentForDepartment(tenantId: string, departmentId: string, 
       enabled: true,
       routeTarget: departmentId,
     },
-    orderBy: { priority: "asc" },
+    orderBy: { position: "asc" } as any,
   });
 
   if (rule?.aiAgentId) {
@@ -271,7 +271,7 @@ async function findDefaultAIAgent(tenantId: string, role: AIEmployeeRole = "copi
       enabled: true,
       isDefault: true,
     },
-    orderBy: { priority: "asc" },
+    orderBy: { position: "asc" } as any,
   });
 
   if (defaultRule?.aiAgentId) {
@@ -335,7 +335,7 @@ export async function getAIEmployeeForDepartment(tenantId: string, departmentId:
       enabled: true,
       routeTarget: departmentId,
     },
-    orderBy: { priority: "asc" },
+    orderBy: { position: "asc" } as any,
   });
 
   if (rule?.aiAgentId) {

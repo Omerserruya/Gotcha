@@ -4,10 +4,12 @@ export type { ServiceEvent } from "./lib/event-bus";
 export type { ServiceConfig } from "./lib/service-app";
 export type {
   IncomingMessageJob,
+  IncomingCommentJob,
   OutgoingMessageJob,
   AnalyticsJob,
   BroadcastJob,
   ScheduledMessageJob,
+  FlowResumeJob,
 } from "./lib/queue";
 
 // Channel types & adapters
@@ -15,6 +17,7 @@ export type {
   ChannelType,
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
+  NormalizedCommentEvent,
   MessageContent,
   OutboundMessagePayload,
   ChannelCredentials,
@@ -53,9 +56,17 @@ export {
 } from "./lib/identity-resolver";
 export {
   evaluateToolGate,
+  evaluatePolicies,
   getDefaultHighRiskTools,
 } from "./lib/tool-gate";
-export type { ToolGateDecision, ToolGateResult } from "./lib/tool-gate";
+export type {
+  ToolGateDecision,
+  ToolGateResult,
+  PolicyResult,
+  PolicySnapshot,
+  HitlPolicy,
+  HitlMode,
+} from "./lib/tool-gate";
 export {
   createApprovalRequest,
   findPendingByConversation,
@@ -76,6 +87,7 @@ export {
   idleConversationQueue,
   broadcastQueue,
   scheduledMessageQueue,
+  flowResumeQueue,
   createWorker,
   CHANNEL_RATE_LIMITS,
 } from "./lib/queue";
