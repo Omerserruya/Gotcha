@@ -346,6 +346,24 @@ async function walk(
       case "send_message_text": {
         await sendText(String(node.data?.text || ""), ctx);
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent" });
+        // Optional pause: when the author flipped "Wait for user reply", halt
+        // here and resume on next inbound. Resume path (executeMainFlow's
+        // generic branch) continues from the first outgoing edge.
+        if (node.data?.waitForReply) {
+          await persistVars(ctx);
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id },
+          });
+          ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply" });
+          return {
+            executed: true,
+            halted: true,
+            reason: "wait_for_reply",
+            matchedNodeId: node.id,
+            trace: ctx.trace,
+          };
+        }
         currentId = outgoing[0]?.target || null;
         break;
       }
@@ -763,7 +781,7 @@ async function persistOutbound(
       channel: ctx.sendCtx.channel as any,
       direction: "OUTBOUND",
       body,
-      messageType: messageType === "text" ? null : messageType,
+      messageType,
       senderName: "Flow",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",

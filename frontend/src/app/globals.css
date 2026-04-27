@@ -10,6 +10,46 @@
   --text-secondary: #64748b;
   --border-color: #e2e8f0;
   --accent: #7c5cfc;
+
+  /* ── Automation Builder Canvas (Manychat-style) ─────────────── */
+  --surface-card: #ffffff;
+  --surface-canvas: #fafafa;
+  --border-hairline: rgba(0, 0, 0, 0.06);
+  --canvas-text-primary: #1c1c1e;
+  --canvas-text-secondary: rgba(28, 28, 30, 0.6);
+  --edge-color: #c7c7cc;
+  --edge-color-active: #7c5cfc;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --radius-card: 12px;
+  --accent-trigger: #10b981;
+  --accent-flow: #f59e0b;
+  --accent-logic: #3b82f6;
+  --accent-messages: #8b5cf6;
+  --accent-actions: #ec4899;
+  --accent-integrations: #6366f1;
+}
+
+.dark {
+  --surface-card: #1c1c1e;
+  --surface-canvas: #0d0d0e;
+  --border-hairline: rgba(255, 255, 255, 0.08);
+  --canvas-text-primary: #f5f5f7;
+  --canvas-text-secondary: rgba(245, 245, 247, 0.6);
+  --edge-color: #3a3a3c;
+  --edge-color-active: #a78bfa;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+
+/* Calmer canvas edges — soft default, no animation by default. */
+.react-flow__edge .react-flow__edge-path {
+  stroke-width: 1.5px;
+}
+.react-flow__edge.animated .react-flow__edge-path {
+  stroke-dasharray: none;
+  animation: none;
+}
+.react-flow__edge:hover .react-flow__edge-path {
+  filter: drop-shadow(0 0 4px var(--edge-color-active));
 }
 
 html {

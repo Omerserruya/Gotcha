@@ -184,6 +184,7 @@ function friendlyType(t: string): string {
     send_message_quick_reply: "Quick Reply",
     send_message_image: "Send Image",
     send_message_file: "Send File",
+    send_comment_reply: "Reply to Comment",
     wait: "Wait",
     collect_input: "Collect Input",
     set_variable: "Set Variable",
@@ -216,6 +217,14 @@ function missingRequiredFields(n: Node): RequiredCheck[] {
     case "send_message_image":
     case "send_message_file":
       if (empty(d.url)) r.push({ key: "url", label: "File URL", hint: "Paste a public https:// URL to the media." });
+      break;
+    case "send_comment_reply":
+      // Two modes: "text" needs `data.text`; "ai" needs `data.agentId`.
+      if (d.mode === "ai") {
+        if (empty(d.agentId)) r.push({ key: "agentId", label: "AI Agent", hint: "Pick which agent should draft the public reply." });
+      } else {
+        if (empty(d.text)) r.push({ key: "text", label: "Reply text", hint: "Type the public reply." });
+      }
       break;
     case "route_target":
       if (empty(d.targetId)) r.push({ key: "targetId", label: "Target", hint: "Pick an AI agent, sub-flow, or department from the dropdown." });
@@ -298,6 +307,8 @@ function collectVarUsages(n: Node): string[] {
       scan(d.url); scan(d.caption); break;
     case "send_message_file":
       scan(d.url); scan(d.filename); scan(d.caption); break;
+    case "send_comment_reply":
+      scan(d.text); scan(d.fallbackText); break;
     case "set_variable":
       scan(d.value); break;
     case "http_request":

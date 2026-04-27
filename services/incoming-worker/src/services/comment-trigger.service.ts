@@ -1,3 +1,4 @@
+
 /**
  * Comment-trigger pipeline.
  *
@@ -23,6 +24,7 @@ import {
   type IncomingCommentJob,
   type ChannelCredentials,
 } from "@chatcenter/shared";
+import { generateOneShotReply } from "./ai-bot.service";
 
 interface GraphNode {
   id: string;
@@ -278,6 +280,67 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
         break;
       }
 
+      case "send_message_image": {
+        const url = interpolate(String(node.data?.url || ""), vars);
+        const caption = node.data?.caption != null
+          ? interpolate(String(node.data.caption), vars)
+          : undefined;
+        if (url.trim()) await sendOutboundMedia(args.send, url, "image", caption, undefined);
+        break;
+      }
+
+      case "send_message_file": {
+        const url = interpolate(String(node.data?.url || ""), vars);
+        const caption = node.data?.caption != null
+          ? interpolate(String(node.data.caption), vars)
+          : undefined;
+        const filename = node.data?.filename != null
+          ? interpolate(String(node.data.filename), vars)
+          : undefined;
+        if (url.trim()) await sendOutboundMedia(args.send, url, "document", caption, filename);
+        break;
+      }
+
+      case "send_comment_reply": {
+        // Public reply on the original post — visible to everyone, distinct
+        // from Private Reply DM. data.mode picks "text" or "ai":
+        //   text — use data.text (interpolated). Simple announce-and-reply.
+        //   ai   — call data.agentId with the inbound comment text and use
+        //          the agent's response. data.fallbackText (optional) is sent
+        //          when generation fails so the flow doesn't go silent.
+        // Doesn't change recipientPsid — the run can still continue into
+        // Private Reply / DM nodes after this.
+        const mode = String(node.data?.mode || "text").toLowerCase();
+        let body = "";
+        if (mode === "ai") {
+          const agentId = String(node.data?.agentId || "").trim();
+          if (!agentId) {
+            console.warn(`[comment-trigger] send_comment_reply ${node.id} mode=ai but no agentId set; skipping`);
+            break;
+          }
+          const generated = await generateOneShotReply(
+            args.tenantId,
+            agentId,
+            args.comment.text || "",
+            { feature: "comment_reply" },
+          );
+          body = (generated || "").trim();
+          if (!body) {
+            const fallback = interpolate(String(node.data?.fallbackText || ""), vars).trim();
+            if (!fallback) {
+              console.warn(`[comment-trigger] AI generated empty reply at ${node.id} and no fallback; skipping`);
+              break;
+            }
+            body = fallback;
+          }
+        } else {
+          body = interpolate(String(node.data?.text || ""), vars).trim();
+          if (!body) break;
+        }
+        await sendCommentReplyOutbound(args.send, body);
+        break;
+      }
+
       case "end":
       case "route_target":
       case "default_fallback": {
@@ -401,19 +464,32 @@ async function promoteToConversation(
 }
 
 // ─── Outbound: Private Reply, then DM by PSID ──────────────────────────────
+//
+// Three send shapes, all using the same first-send-is-Private-Reply rule:
+//   sendOutbound            — plain text
+//   sendOutboundWithButtons — quick-reply / buttons (IG+Messenger render as
+//                             quick_replies; Meta supports them on the very
+//                             first private reply)
+//   sendOutboundMedia       — image / document. Private Reply doesn't accept
+//                             media payloads, so we prime the PSID with a
+//                             text private reply (caption / filename / URL)
+//                             and emit the media via the regular DM endpoint.
+//
+// All three return boolean so the walker can bail when Private Reply fails
+// (no PSID = no chance of resuming).
 
-async function sendOutbound(send: CommentSendCtx, text: string): Promise<void> {
+async function sendOutbound(send: CommentSendCtx, text: string): Promise<boolean> {
   const adapter = getOutboundAdapter(send.channel);
   if (!adapter) {
     console.warn(`[comment-trigger] No outbound adapter for ${send.channel}`);
-    return;
+    return false;
   }
 
   // First send in this run: Private Reply on the comment. Captures the PSID.
   if (!send.recipientPsid) {
     if (!adapter.sendPrivateReply) {
       console.warn(`[comment-trigger] Adapter ${send.channel} lacks sendPrivateReply`);
-      return;
+      return false;
     }
     const result = await adapter.sendPrivateReply(
       send.credentials,
@@ -423,13 +499,13 @@ async function sendOutbound(send: CommentSendCtx, text: string): Promise<void> {
     );
     if (!result) {
       console.error(`[comment-trigger] Private reply failed (${send.channel}, comment=${send.commentId})`);
-      return;
+      return false;
     }
     send.recipientPsid = result.recipientPsid;
     console.log(
       `[comment-trigger] Private reply sent (${send.channel}, message=${result.messageId}, psid=${result.recipientPsid || "<none>"})`,
     );
-    return;
+    return true;
   }
 
   // Subsequent sends: regular DM by PSID. The 24-hour standard messaging
@@ -443,6 +519,142 @@ async function sendOutbound(send: CommentSendCtx, text: string): Promise<void> {
   console.log(
     `[comment-trigger] Follow-up DM sent (${send.channel}, message=${extId || "<failed>"})`,
   );
+  return Boolean(extId);
+}
+
+async function sendOutboundWithButtons(
+  send: CommentSendCtx,
+  bodyText: string,
+  buttons: Array<{ id: string; title: string }>,
+): Promise<boolean> {
+  if (!bodyText.trim()) return false;
+  if (buttons.length === 0) return sendOutbound(send, bodyText);
+
+  const adapter = getOutboundAdapter(send.channel);
+  if (!adapter) {
+    console.warn(`[comment-trigger] No outbound adapter for ${send.channel}`);
+    return false;
+  }
+
+  // First send: Private Reply with quick_replies attached. IG and Messenger
+  // adapters both pass a `quickReplies` arg straight through to Meta — buttons
+  // land on the very first private reply.
+  if (!send.recipientPsid) {
+    if (!adapter.sendPrivateReply) {
+      console.warn(`[comment-trigger] Adapter ${send.channel} lacks sendPrivateReply`);
+      return false;
+    }
+    const result = await adapter.sendPrivateReply(
+      send.credentials,
+      send.channelAccountExternalId,
+      send.commentId,
+      bodyText,
+      buttons,
+    );
+    if (!result) {
+      console.error(`[comment-trigger] Private reply with buttons failed (${send.channel}, comment=${send.commentId})`);
+      return false;
+    }
+    send.recipientPsid = result.recipientPsid;
+    console.log(
+      `[comment-trigger] Private reply (with buttons) sent (${send.channel}, message=${result.messageId}, psid=${result.recipientPsid || "<none>"})`,
+    );
+    return true;
+  }
+
+  // Subsequent: regular interactive DM by PSID.
+  const extId = await adapter.sendInteractiveMessage(
+    send.credentials,
+    send.channelAccountExternalId,
+    send.recipientPsid,
+    bodyText,
+    buttons,
+  );
+  console.log(
+    `[comment-trigger] Follow-up interactive sent (${send.channel}, message=${extId || "<failed>"})`,
+  );
+  return Boolean(extId);
+}
+
+async function sendOutboundMedia(
+  send: CommentSendCtx,
+  mediaUrl: string,
+  mediaType: "image" | "document",
+  caption: string | undefined,
+  filename: string | undefined,
+): Promise<boolean> {
+  if (!mediaUrl.trim()) return false;
+  const adapter = getOutboundAdapter(send.channel);
+  if (!adapter) {
+    console.warn(`[comment-trigger] No outbound adapter for ${send.channel}`);
+    return false;
+  }
+
+  // Prime the PSID via a text Private Reply, since Meta's Private Reply API
+  // only accepts text + quick_replies — never an attachment payload. Caption
+  // (when present) doubles as the priming message; otherwise filename, then
+  // the URL itself, so the user always sees coherent content.
+  if (!send.recipientPsid) {
+    const priming =
+      (caption && caption.trim()) ||
+      (filename && filename.trim()) ||
+      mediaUrl;
+    const ok = await sendOutbound(send, priming);
+    if (!ok) return false;
+    // Caption already shown by the priming send — don't echo it on the media.
+    caption = undefined;
+  }
+
+  if (!send.recipientPsid) {
+    console.warn(`[comment-trigger] No PSID after priming send; cannot deliver ${mediaType}`);
+    return false;
+  }
+
+  if (!adapter.sendMediaMessage) {
+    // No native media support on this adapter — degrade to a text DM with the
+    // URL so the user at least sees the link.
+    const fallback = caption ? `${caption}\n${mediaUrl}` : mediaUrl;
+    return sendOutbound(send, fallback);
+  }
+
+  const extId = await adapter.sendMediaMessage(
+    send.credentials,
+    send.channelAccountExternalId,
+    send.recipientPsid,
+    mediaUrl,
+    mediaType,
+    filename,
+    caption,
+  );
+  console.log(
+    `[comment-trigger] ${mediaType} sent (${send.channel}, message=${extId || "<failed>"})`,
+  );
+  return Boolean(extId);
+}
+
+// Public-comment reply (NOT a DM). IG: POST /{ig-comment-id}/replies.
+// Messenger: POST /{comment-id}/comments. The walker continues regardless of
+// outcome — the run is allowed to drop into a private DM afterwards.
+async function sendCommentReplyOutbound(send: CommentSendCtx, text: string): Promise<boolean> {
+  const adapter = getOutboundAdapter(send.channel);
+  if (!adapter) {
+    console.warn(`[comment-trigger] No outbound adapter for ${send.channel}`);
+    return false;
+  }
+  if (!adapter.sendCommentReply) {
+    console.warn(`[comment-trigger] Adapter ${send.channel} lacks sendCommentReply`);
+    return false;
+  }
+  const newCommentId = await adapter.sendCommentReply(
+    send.credentials,
+    send.channelAccountExternalId,
+    send.commentId,
+    text,
+  );
+  console.log(
+    `[comment-trigger] Public comment reply sent (${send.channel}, parent=${send.commentId}, new=${newCommentId || "<failed>"})`,
+  );
+  return Boolean(newCommentId);
 }
 
 // ─── Local helpers (kept inline so we don't import private flow-executor utils) ──

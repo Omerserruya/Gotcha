@@ -305,4 +305,28 @@ export const instagramOutboundAdapter: OutboundAdapter = {
       return null;
     }
   },
+
+  async sendCommentReply(
+    credentials: ChannelCredentials,
+    _accountExternalId: string,
+    commentId: string,
+    text: string,
+  ): Promise<string | null> {
+    // Public reply on IG: POST /{ig-comment-id}/replies with `message`.
+    // Auth needs `instagram_basic` + `instagram_manage_comments`. Subject to
+    // Meta's comment moderation rules (length, banned terms). Returns the new
+    // comment's id, which is useful for downstream moderation operations but
+    // not required by the walker.
+    try {
+      const response = await axios.post(
+        `${FB_API_URL}/${commentId}/replies`,
+        { message: text },
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } },
+      );
+      return response.data?.id || null;
+    } catch (err: any) {
+      console.error("Instagram comment-reply error:", err.response?.data || err.message);
+      return null;
+    }
+  },
 };

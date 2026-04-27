@@ -123,4 +123,15 @@ export interface OutboundAdapter {
     text: string,
     quickReplies?: Array<{ id: string; title: string }>
   ): Promise<{ messageId: string | null; recipientPsid: string | null } | null>;
+  // Public reply — post a child comment under the original comment, visible to
+  // everyone on the post. Distinct from sendPrivateReply: there is no PSID,
+  // no DM channel opened, no 24-hour window, and the message is public. IG
+  // uses POST /{ig-comment-id}/replies; Messenger uses POST /{comment-id}/comments.
+  // Returns the new comment id on success. Only IG and Messenger implement it.
+  sendCommentReply?(
+    credentials: ChannelCredentials,
+    accountExternalId: string,
+    commentId: string,
+    text: string
+  ): Promise<string | null>;
 }

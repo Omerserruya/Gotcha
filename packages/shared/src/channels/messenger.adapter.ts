@@ -312,4 +312,27 @@ export const messengerOutboundAdapter: OutboundAdapter = {
       return null;
     }
   },
+
+  async sendCommentReply(
+    credentials: ChannelCredentials,
+    _accountExternalId: string,
+    commentId: string,
+    text: string,
+  ): Promise<string | null> {
+    // Public reply on FB: POST /{comment-id}/comments with `message`. Posts a
+    // child comment under the original. Page must have `pages_manage_engagement`
+    // (and the page access token must be on `credentials.accessToken`).
+    // Returns the new comment id.
+    try {
+      const response = await axios.post(
+        `${FB_API_URL}/${commentId}/comments`,
+        { message: text },
+        { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } },
+      );
+      return response.data?.id || null;
+    } catch (err: any) {
+      console.error("Messenger comment-reply error:", err.response?.data || err.message);
+      return null;
+    }
+  },
 };

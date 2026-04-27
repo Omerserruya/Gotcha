@@ -21,7 +21,7 @@ import ReactFlow, {
 import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getChatbotFlow, createChatbotFlow, updateChatbotFlow, activateChatbotFlow, deactivateChatbotFlow } from "@/lib/api";
+import { getChatbotFlow, createChatbotFlow, updateChatbotFlow, activateChatbotFlow, deactivateChatbotFlow, getChannels } from "@/lib/api";
 import { StartNode } from "./nodes/StartNode";
 import { MessageNode } from "./nodes/MessageNode";
 import { QuickReplyNode } from "./nodes/QuickReplyNode";
@@ -49,6 +49,8 @@ import { BringUserDataNode } from "../mainPlaybook/BringUserDataNode";
 import { CommentTriggerNode } from "../mainPlaybook/CommentTriggerNode";
 import { KeywordTriggerNode } from "../mainPlaybook/KeywordTriggerNode";
 import { ScheduleTriggerNode } from "../mainPlaybook/ScheduleTriggerNode";
+import { ChannelEntryNode } from "../mainPlaybook/ChannelEntryNode";
+import { SendCommentReplyNode } from "../mainPlaybook/SendCommentReplyNode";
 import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
 
@@ -69,6 +71,7 @@ const nodeTypes: NodeTypes = {
   send_message_quick_reply: SendMessageQuickReplyNode,
   send_message_image: SendMessageImageNode,
   send_message_file: SendMessageFileNode,
+  send_comment_reply: SendCommentReplyNode,
   // Control / data / integrations / triggers
   wait: WaitNode,
   collect_input: CollectInputNode,
@@ -80,6 +83,7 @@ const nodeTypes: NodeTypes = {
   comment_trigger: CommentTriggerNode,
   keyword_trigger: KeywordTriggerNode,
   schedule_trigger: ScheduleTriggerNode,
+  channel_entry: ChannelEntryNode,
 };
 
 // ─── Node palette config ────────────────────────────────────────
@@ -327,6 +331,24 @@ const NODE_PALETTE = [
         dot: "bg-slate-500",
       },
       {
+        type: "send_comment_reply",
+        label: "Reply to Comment",
+        desc: "Public reply on the original comment",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h9a2.25 2.25 0 002.25-2.25v-1.5M16.5 7.5l-9 9M16.5 7.5h-3M16.5 7.5v3" />
+          </svg>
+        ),
+        color: "emerald",
+        bg: "bg-emerald-50",
+        border: "border-emerald-200",
+        text: "text-emerald-600",
+        iconBg: "bg-emerald-100",
+        hoverBg: "hover:bg-emerald-100",
+        ring: "ring-emerald-300",
+        dot: "bg-emerald-500",
+      },
+      {
         type: "route_target",
         label: "Route To",
         desc: "AI agent / sub-flow / human",
@@ -433,6 +455,18 @@ const NODE_PALETTE = [
   {
     category: "Triggers",
     items: [
+      {
+        type: "channel_entry",
+        label: "Channel Entry",
+        desc: "Channel-specific entry point",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
+          </svg>
+        ),
+        color: "violet", bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-600",
+        iconBg: "bg-violet-100", hoverBg: "hover:bg-violet-100", ring: "ring-violet-300", dot: "bg-violet-500",
+      },
       {
         type: "comment_trigger",
         label: "Comment Received",
@@ -625,6 +659,8 @@ function getDefaultData(type: string) {
       return { url: "", caption: "" };
     case "send_message_file":
       return { url: "", filename: "", caption: "" };
+    case "send_comment_reply":
+      return { mode: "text", text: "", agentId: "", fallbackText: "" };
     case "wait":
       return { amount: 5, unit: "seconds" };
     case "collect_input":
@@ -639,6 +675,8 @@ function getDefaultData(type: string) {
       return { action: "add_tag", key: "", value: "" };
     case "bring_user_data":
       return { fields: ["displayName", "email"], prefix: "customer" };
+    case "channel_entry":
+      return { channelId: "", channelType: "", label: "", connected: false };
     case "comment_trigger":
       return { platform: "instagram", postId: "", keywords: [], replyPublicly: true };
     case "keyword_trigger":
@@ -685,6 +723,12 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
   // Selection drives the side-panel Inspector (unified nodes only — the
   // legacy `./nodes/*` set still uses inline editing for now).
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
+  // Connected channels — feeds the channel_entry inspector picker.
+  const [channels, setChannels] = useState<any[]>([]);
+  useEffect(() => {
+    if (!token) return;
+    getChannels(token).then((r: any) => setChannels(r?.data || r || [])).catch(() => setChannels([]));
+  }, [token]);
 
   const onDragStart = useCallback((event: DragEvent, nodeType: string) => {
     event.dataTransfer.setData("application/reactflow", nodeType);
@@ -752,10 +796,10 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
           source: e.source,
           target: e.target,
           sourceHandle: e.sourceHandle,
-          type: "smoothstep",
-          animated: true,
-          style: { stroke: "#7c5cfc", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+          type: "bezier",
+          animated: false,
+          style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
         }))
       );
     });
@@ -766,10 +810,10 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
       setEdges((eds) =>
         addEdge({
           ...params,
-          type: "smoothstep",
-          animated: true,
-          style: { stroke: "#7c5cfc", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+          type: "bezier",
+          animated: false,
+          style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
         }, eds)
       );
     },
@@ -984,15 +1028,21 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
             onNodeClick={(_, n) => { if (n.type && NODE_REGISTRY[n.type]) setSelectedNodeId(n.id); }}
             onPaneClick={() => setSelectedNodeId(null)}
             nodeTypes={nodeTypes}
-            connectionLineType={ConnectionLineType.SmoothStep}
-            defaultEdgeOptions={{ type: "smoothstep" }}
+            connectionLineType={ConnectionLineType.Bezier}
+            defaultEdgeOptions={{
+              type: "bezier",
+              animated: false,
+              style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
+            }}
             fitView
             fitViewOptions={{ padding: 0.3 }}
             snapToGrid
             snapGrid={[15, 15]}
             minZoom={0.2}
+            className="bg-[var(--surface-canvas)]"
           >
-            <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#e2e8f0" />
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="rgba(0,0,0,0.06)" />
             <Controls />
           </ReactFlow>
         </div>
@@ -1001,6 +1051,7 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
       {/* Inspector for unified node types (canvas cards are read-only). */}
       <NodeInspector
         node={selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null}
+        shared={{ channels }}
         onChange={(id, patch) => setNodes((nds) => nds.map((n) => n.id === id ? { ...n, data: { ...n.data, ...patch } } : n))}
         onClose={() => setSelectedNodeId(null)}
         onDelete={(id) => {

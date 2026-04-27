@@ -459,7 +459,7 @@ function buildSendContext(conversation: any): SendContext | null {
   };
 }
 
-function buildSystemPrompt(config: any): string {
+export function buildSystemPrompt(config: any): string {
   let prompt = config.systemPrompt || "You are a helpful customer support AI assistant.";
 
   // Add rules
@@ -608,4 +608,72 @@ async function escalateToHuman(
     tenantId,
     data: { id: conversationId, isHandedOver: true, status: "WAITING" },
   });
+}
+
+// ─── One-shot reply generator (for surfaces without a Conversation row) ──
+//
+// Used by the comment-trigger walker for `send_comment_reply` (mode=ai), and
+// any future surface that wants an AI Employee to draft a single response
+// without participating in the full inbox-conversation pipeline.
+//
+// Compared to processAIBot this skips:
+//   - conversation lookup, history fetch, message persistence
+//   - tool-calling loop (no tools given to the model)
+//   - escalation / human-handoff side effects
+//   - knowledge-base retrieval (kept off by default; flow author can switch
+//     to text mode if they want curated copy)
+//
+// Returns the model's reply text, or null on any failure (caller decides
+// whether to fall back to a static string).
+export async function generateOneShotReply(
+  tenantId: string,
+  aiAgentId: string,
+  userInput: string,
+  options: { maxTokens?: number; feature?: string } = {},
+): Promise<string | null> {
+  const config = await prisma.aIAgent.findUnique({ where: { id: aiAgentId } });
+  if (!config || config.tenantId !== tenantId) {
+    console.warn(`[AI-OneShot] Agent ${aiAgentId} not found / wrong tenant`);
+    return null;
+  }
+  if (config.status === "PAUSED") {
+    console.warn(`[AI-OneShot] Agent ${aiAgentId} is PAUSED; skipping`);
+    return null;
+  }
+
+  const systemPrompt = buildSystemPrompt(config);
+  const model = config.model || "gpt-4o-mini";
+  const maxTokens = options.maxTokens ?? Math.min(config.maxTokens ?? 1024, 400);
+  // Cap output: comment replies should be short. 400 tokens ≈ 300 words is
+  // plenty; trims runaway responses on chatty agents.
+
+  try {
+    const response = await openai.chat.completions.create({
+      model,
+      temperature: config.temperature ?? 0.7,
+      max_tokens: maxTokens,
+      messages: [
+        { role: "system", content: systemPrompt },
+        { role: "user", content: userInput },
+      ],
+    });
+
+    if (response.usage) {
+      trackAIUsage({
+        tenantId,
+        feature: options.feature || "comment_reply",
+        model,
+        promptTokens: response.usage.prompt_tokens,
+        completionTokens: response.usage.completion_tokens,
+        totalTokens: response.usage.total_tokens,
+        metadata: { aiAgentId },
+      }).catch((err: any) => console.error("[AI-OneShot] Usage tracking failed:", err.message));
+    }
+
+    const text = response.choices[0]?.message?.content?.trim() || "";
+    return text || null;
+  } catch (err: any) {
+    console.error("[AI-OneShot] OpenAI error:", err.message);
+    return null;
+  }
 }

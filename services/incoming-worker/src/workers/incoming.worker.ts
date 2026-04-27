@@ -405,6 +405,19 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         const { processChatbotFlow } = await import("../services/chatbot-engine.service");
         await processChatbotFlow(tenantId, conversation.id, body);
         return;
+      } else if ((conversation as any).chatbotNodeId) {
+        // Main FlowCanvas paused at Collect Input / Quick Reply — resume the
+        // graph walker from that node with the user's reply as the captured
+        // value (or quick-reply payload).
+        const { executeMainFlow } = await import("../services/flow-executor.service");
+        await executeMainFlow({
+          tenantId,
+          conversationId: conversation.id,
+          message: body,
+          channel: channel.toLowerCase(),
+          resumeNodeId: (conversation as any).chatbotNodeId,
+        });
+        return;
       }
     } catch (err) {
       console.error("Bot processing error:", err);

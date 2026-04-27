@@ -49,6 +49,10 @@ export interface NodeRegistryEntry {
     target?: "top" | "left";
     sources: HandleSpec[];
   };
+  // Optional override: when present, the canvas uses these sources instead
+  // of the static `handles.sources`. Lets node types render one exit per
+  // user-configured option (e.g. one exit per quick-reply button).
+  getSources?: (data: any) => HandleSpec[];
 }
 
 // ─── Tailwind color tokens ───────────────────────────────────────
@@ -123,6 +127,63 @@ const ICONS: Record<string, React.ReactNode> = {
 export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   // ── Triggers ──────────────────────────────────────────────────────
+  // Channel-specific entry. Renders on canvas via the dedicated
+  // ChannelEntryNode (gradient header) — this registry entry only drives
+  // the side-panel Inspector + palette. Useful for sub-flows that should
+  // only fire on a specific channel (e.g. Instagram-only).
+  channel_entry: {
+    type: "channel_entry", label: "Channel Entry", color: "violet", icon: ICONS.start, category: "Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({ channelId: "", channelType: "", label: "", connected: false }),
+    summary: (d) => {
+      const names: Record<string, string> = {
+        whatsapp: "WhatsApp", instagram: "Instagram", facebook: "Facebook",
+        messenger: "Messenger", email: "Email", gmail: "Gmail",
+        sms: "SMS", webchat: "Webchat",
+      };
+      if (!d.channelId && !d.channelType) return "(pick a channel)";
+      const platform = names[d.channelType] || d.channelType || "Channel";
+      return d.label ? `${platform}: ${d.label}` : `On: ${platform}`;
+    },
+    Body: ({ data, onChange, shared }) => {
+      const list = shared?.channels || [];
+      const accounts = list.map((c) => ({
+        id: c.id,
+        channel: c.channel,
+        displayName: c.displayName || c.externalId || c.id,
+        externalId: c.externalId,
+      }));
+      return (
+        <div className="space-y-3">
+          <Field label="Channel" hint={list.length === 0 ? "Connect a channel in Settings → Channels first." : "Pick a specific connected channel — this entry fires only on that account."}>
+            <ChannelAccountPicker
+              accounts={accounts}
+              value={data.channelId || ""}
+              onChange={(id, channel) => {
+                const ch = list.find((c) => c.id === id);
+                onChange({
+                  channelId: id,
+                  channelType: (channel || "").toLowerCase(),
+                  label: ch?.displayName || "",
+                  connected: true,
+                });
+              }}
+              placeholder={list.length === 0 ? "No connected channels" : "Select a channel"}
+            />
+          </Field>
+          <Field label="Label" hint="Display name on the canvas card.">
+            <input
+              className={inspectorInput}
+              value={data.label || ""}
+              onChange={(e) => onChange({ label: e.target.value })}
+              placeholder={data.channelType || "Channel"}
+            />
+          </Field>
+        </div>
+      );
+    },
+  },
+
   start: {
     type: "start", label: "Start", color: "emerald", icon: ICONS.start, category: "Flow Control",
     handles: { sources: [{ position: "bottom" }] },
@@ -211,13 +272,22 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   send_message_text: {
     type: "send_message_text", label: "Send Text", color: "sky", icon: ICONS.text, category: "Messages",
     handles: { target: "top", sources: [{ position: "bottom" }] },
-    defaultData: () => ({ text: "" }),
+    defaultData: () => ({ text: "", waitForReply: false }),
     validate: (d) => d.text ? "ok" : "missing",
-    summary: (d) => d.text ? `"${truncate(d.text, 40)}"` : "(empty)",
+    summary: (d) => {
+      const base = d.text ? `"${truncate(d.text, 40)}"` : "(empty)";
+      return d.waitForReply ? `${base} · waits for reply` : base;
+    },
     Body: ({ data, onChange }) => (
-      <Field label="Message text" hint="Click {x} to insert a variable from another node.">
-        <VariableMentionInput value={data.text || ""} onChange={(v) => onChange({ text: v })} multiline rows={6} placeholder="Type the message to send..." tone="sky" />
-      </Field>
+      <div className="space-y-3">
+        <Field label="Message text" hint="Click {x} to insert a variable from another node.">
+          <VariableMentionInput value={data.text || ""} onChange={(v) => onChange({ text: v })} multiline rows={6} placeholder="Type the message to send..." tone="sky" />
+        </Field>
+        <label className="flex items-center gap-2 text-sm text-gray-700">
+          <input type="checkbox" checked={!!data.waitForReply} onChange={(e) => onChange({ waitForReply: e.target.checked })} className="accent-sky-500" />
+          Wait for user reply before continuing
+        </label>
+      </div>
     ),
   },
 
@@ -245,6 +315,16 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   send_message_quick_reply: {
     type: "send_message_quick_reply", label: "Send Quick Reply", color: "teal", icon: ICONS.reply, category: "Messages",
     handles: { target: "top", sources: [{ position: "bottom" }] },
+    // One exit per reply — handle id matches the lowercased payload so the
+    // runtime (flow-executor) can route by `sourceHandle === payload`.
+    getSources: (d) => {
+      const replies = Array.isArray(d.replies) ? d.replies : [];
+      if (replies.length === 0) return [{ position: "bottom" }];
+      return replies.map((r: any) => {
+        const handleId = String(r.payload || r.label || r.id || "").toLowerCase();
+        return { id: handleId, position: "bottom" as const, label: r.label || r.payload || handleId };
+      });
+    },
     defaultData: () => ({ text: "", replies: [{ id: `r_${Date.now()}`, label: "Yes", payload: "yes" }] }),
     validate: (d) => (d.text && Array.isArray(d.replies) && d.replies.some((r: any) => r.label)) ? "ok" : "missing",
     summary: (d) => `${(d.replies || []).length} option${(d.replies || []).length === 1 ? "" : "s"}`,
@@ -293,6 +373,31 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
         </Field>
       </div>
     ),
+  },
+
+  // Public reply on the original comment (NOT a DM). Distinct from
+  // send_message_*: it goes through the IG/Messenger comments API and is
+  // visible to everyone on the post. Pairs naturally with comment_trigger.
+  // Two modes: static text (with {{vars}}), or AI Agent (drafts a reply
+  // from the inbound comment text, with optional fallback if the LLM
+  // returns nothing). Doesn't change PSID — flow can still drop into a DM
+  // afterwards via send_message_*.
+  send_comment_reply: {
+    type: "send_comment_reply", label: "Reply to Comment", color: "emerald", icon: ICONS.reply, category: "Messages",
+    handles: { target: "top", sources: [{ position: "bottom" }] },
+    defaultData: () => ({ mode: "text", text: "", agentId: "", fallbackText: "" }),
+    validate: (d) => {
+      if (d.mode === "ai") return d.agentId ? "ok" : "missing";
+      return d.text ? "ok" : "missing";
+    },
+    summary: (d, shared) => {
+      if (d.mode === "ai") {
+        const name = shared?.agents?.find((a) => a.id === d.agentId)?.name;
+        return `Public reply (AI: ${name || "unselected"})`;
+      }
+      return d.text ? `Public: ${truncate(String(d.text), 28)}` : "(no text)";
+    },
+    Body: SendCommentReplyBody,
   },
 
   // ── Actions / data ────────────────────────────────────────────────
@@ -734,6 +839,60 @@ function RouteTargetBody({ data, onChange, shared }: { data: any; onChange: (p: 
           {(list || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </Field>
+    </div>
+  );
+}
+
+// ─── Reply to Comment body ───────────────────────────────────────
+// Two modes share one card via a tab toggle:
+//   text — author writes a literal reply (with {{vars}} interpolation)
+//   ai   — author picks an AI Agent; runtime calls generateOneShotReply
+//          on the inbound comment text. Fallback text is sent when the
+//          LLM returns nothing so the run never goes silent.
+function SendCommentReplyBody({ data, onChange, shared }: { data: any; onChange: (p: any) => void; shared?: SharedData }) {
+  const mode = data.mode === "ai" ? "ai" : "text";
+  return (
+    <div className="space-y-3">
+      <Field label="Reply with" hint="Posts a public reply on the original comment.">
+        <div className="flex rounded-lg border border-gray-200 overflow-hidden">
+          {(["text", "ai"] as const).map((t) => (
+            <button
+              key={t}
+              onClick={() => onChange({ mode: t })}
+              className={`flex-1 py-2 text-xs font-semibold transition ${mode === t ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}
+            >
+              {t === "text" ? "Static text" : "AI Agent"}
+            </button>
+          ))}
+        </div>
+      </Field>
+      {mode === "ai" ? (
+        <>
+          <Field label="AI Agent" hint="Drafts the reply using this agent's tone and policy.">
+            <select className={inspectorInput} value={data.agentId || ""} onChange={(e) => onChange({ agentId: e.target.value })}>
+              <option value="">Select agent...</option>
+              {(shared?.agents || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </select>
+          </Field>
+          <Field label="Fallback text (optional)" hint="Sent when the AI returns nothing — keeps the flow from going silent.">
+            <VariableMentionInput
+              value={data.fallbackText || ""}
+              onChange={(v) => onChange({ fallbackText: v })}
+              placeholder="Thanks for the comment! 🙏"
+              tone="emerald"
+            />
+          </Field>
+        </>
+      ) : (
+        <Field label="Reply text" hint="Use {{comment.text}}, {{comment.from.username}}, etc.">
+          <VariableMentionInput
+            value={data.text || ""}
+            onChange={(v) => onChange({ text: v })}
+            placeholder="Thanks for asking, {{comment.from.username}}!"
+            tone="emerald"
+          />
+        </Field>
+      )}
     </div>
   );
 }

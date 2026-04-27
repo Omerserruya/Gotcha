@@ -16,7 +16,6 @@ import ReactFlow, {
   MarkerType,
   ReactFlowInstance,
   ReactFlowProvider,
-  MiniMap,
 } from "reactflow";
 import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
@@ -48,6 +47,7 @@ import { HttpRequestNode } from "./HttpRequestNode";
 import { AIGenerateNode } from "./AIGenerateNode";
 import { UpdateCustomerNode } from "./UpdateCustomerNode";
 import { BringUserDataNode } from "./BringUserDataNode";
+import { SendCommentReplyNode } from "./SendCommentReplyNode";
 import { CommentTriggerNode } from "./CommentTriggerNode";
 import { KeywordTriggerNode } from "./KeywordTriggerNode";
 import { ScheduleTriggerNode } from "./ScheduleTriggerNode";
@@ -55,10 +55,19 @@ import { TemplateGalleryModal } from "./TemplateGalleryModal";
 import { validateFlow } from "./flow-validator";
 import { FlowIssuesPill } from "./FlowIssuesPill";
 import { NodeInspector } from "./NodeInspector";
+import { TRIGGER_TYPES, isTriggerNode } from "./trigger-types";
+import { TriggerCardNode } from "./TriggerCardNode";
+import { TriggerSectionHeaderNode } from "./TriggerSectionHeaderNode";
 
 // ─── Node types ────────────────────────────────────────────────
 const nodeTypes: NodeTypes = {
-  channel_entry: ChannelEntryNode,
+  // Triggers — all share the canvas-integrated TriggerCardNode (When… style)
+  channel_entry: TriggerCardNode,
+  comment_trigger: TriggerCardNode,
+  keyword_trigger: TriggerCardNode,
+  schedule_trigger: TriggerCardNode,
+  // Decorative section header rendered above each trigger bucket.
+  trigger_section_header: TriggerSectionHeaderNode,
   condition_group: ConditionGroupNode,
   route_target: RouteTargetNode,
   default_fallback: DefaultFallbackNode,
@@ -69,6 +78,7 @@ const nodeTypes: NodeTypes = {
   send_message_quick_reply: SendMessageQuickReplyNode,
   send_message_image: SendMessageImageNode,
   send_message_file: SendMessageFileNode,
+  send_comment_reply: SendCommentReplyNode,
   // Control / actions
   wait: WaitNode,
   collect_input: CollectInputNode,
@@ -79,10 +89,6 @@ const nodeTypes: NodeTypes = {
   // Customer data
   update_customer: UpdateCustomerNode,
   bring_user_data: BringUserDataNode,
-  // Triggers (entry variants)
-  comment_trigger: CommentTriggerNode,
-  keyword_trigger: KeywordTriggerNode,
-  schedule_trigger: ScheduleTriggerNode,
 };
 
 // ─── Node palette ──────────────────────────────────────────────
@@ -92,6 +98,18 @@ export const NODE_PALETTE = [
   {
     category: "Triggers",
     items: [
+      {
+        type: "channel_entry",
+        label: "Channel Entry",
+        desc: "Channel-specific entry point",
+        color: "violet", bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-600",
+        iconBg: "bg-violet-100", hoverBg: "hover:bg-violet-100", ring: "ring-violet-300",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M8.288 15.038a5.25 5.25 0 017.424 0M5.106 11.856c3.807-3.808 9.98-3.808 13.788 0M1.924 8.674c5.565-5.565 14.587-5.565 20.152 0M12.53 18.22l-.53.53-.53-.53a.75.75 0 011.06 0z" />
+          </svg>
+        ),
+      },
       {
         type: "comment_trigger",
         label: "Comment Received",
@@ -291,6 +309,23 @@ export const NODE_PALETTE = [
           </svg>
         ),
       },
+      {
+        type: "send_comment_reply",
+        label: "Reply to Comment",
+        desc: "Public reply on the original comment",
+        color: "emerald",
+        bg: "bg-emerald-50",
+        border: "border-emerald-200",
+        text: "text-emerald-600",
+        iconBg: "bg-emerald-100",
+        hoverBg: "hover:bg-emerald-100",
+        ring: "ring-emerald-300",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9 8.25H7.5a2.25 2.25 0 00-2.25 2.25v9a2.25 2.25 0 002.25 2.25h9a2.25 2.25 0 002.25-2.25v-1.5M16.5 7.5l-9 9M16.5 7.5h-3M16.5 7.5v3" />
+          </svg>
+        ),
+      },
     ],
   },
   {
@@ -423,7 +458,7 @@ const SIBLING_GAP_Y = 200;
 function getDefaultData(type: string, shared: { agents: any[]; flows: any[]; departments: any[] }) {
   switch (type) {
     case "channel_entry":
-      return { channelType: "webchat", label: "New Channel", connected: true };
+      return { channelId: "", channelType: "", label: "", connected: false };
     case "condition_group":
       return { name: "New Condition", logic: "AND", conditions: [{ id: `c_${Date.now()}`, type: "intent", operator: "equals", value: "" }] };
     case "route_target":
@@ -435,7 +470,7 @@ function getDefaultData(type: string, shared: { agents: any[]; flows: any[]; dep
     case "end":
       return { kind: "wait_for_reply" };
     case "send_message_text":
-      return { text: "" };
+      return { text: "", waitForReply: false };
     case "send_message_interactive":
       return { text: "", buttonLabel: "", buttonUrl: "" };
     case "send_message_quick_reply":
@@ -444,6 +479,8 @@ function getDefaultData(type: string, shared: { agents: any[]; flows: any[]; dep
       return { url: "", caption: "" };
     case "send_message_file":
       return { url: "", filename: "", caption: "" };
+    case "send_comment_reply":
+      return { mode: "text", text: "", agentId: "", fallbackText: "" };
     case "wait":
       return { amount: 5, unit: "seconds" };
     case "collect_input":
@@ -506,10 +543,10 @@ function buildNodesFromData(
       source: e.source,
       target: e.target,
       sourceHandle: e.sourceHandle,
-      type: "smoothstep",
-      animated: true,
-      style: { stroke: "#7c5cfc", strokeWidth: 2 },
-      markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+      type: "bezier",
+      animated: false,
+      style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+      markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
     }));
     return { nodes: restoredNodes, edges: restoredEdges };
   }
@@ -612,10 +649,10 @@ function buildNodesFromData(
         id: `e_${chId}_${condId}`,
         source: chId,
         target: condId,
-        type: "smoothstep",
-        animated: true,
-        style: { stroke: "#7c5cfc", strokeWidth: 2 },
-        markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+        type: "bezier",
+        animated: false,
+        style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+        markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
       });
     }
 
@@ -625,9 +662,9 @@ function buildNodesFromData(
       source: condId,
       sourceHandle: "true",
       target: routeId,
-      type: "smoothstep",
-      animated: true,
-      style: { stroke: "#16a34a", strokeWidth: 2 },
+      type: "bezier",
+      animated: false,
+      style: { stroke: "#16a34a", strokeWidth: 1.5 },
       markerEnd: { type: MarkerType.ArrowClosed, color: "#16a34a", width: 16, height: 16 },
     });
 
@@ -656,9 +693,9 @@ function buildNodesFromData(
         source: lastCondId,
         sourceHandle: "false",
         target: fallbackId,
-        type: "smoothstep",
-        animated: true,
-        style: { stroke: "#ef4444", strokeWidth: 2 },
+        type: "bezier",
+        animated: false,
+        style: { stroke: "#ef4444", strokeWidth: 1.5 },
         markerEnd: { type: MarkerType.ArrowClosed, color: "#ef4444", width: 16, height: 16 },
       });
     } else {
@@ -668,10 +705,10 @@ function buildNodesFromData(
           id: `e_${chId}_fallback`,
           source: chId,
           target: fallbackId,
-          type: "smoothstep",
-          animated: true,
-          style: { stroke: "#7c5cfc", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+          type: "bezier",
+          animated: false,
+          style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
         });
       }
     }
@@ -748,7 +785,11 @@ function MainPlaybookEditorInner({ onBack }: Props) {
 
   // Validator — recomputed whenever the graph changes. Cheap, O(nodes+edges).
   const issues = useMemo(
-    () => validateFlow(nodes as any, edges as any),
+    () =>
+      validateFlow(
+        nodes.filter((n) => n.type !== "trigger_section_header") as any,
+        edges as any,
+      ),
     [nodes, edges],
   );
 
@@ -811,10 +852,10 @@ function MainPlaybookEditorInner({ onBack }: Props) {
             source: e.source,
             target: e.target,
             sourceHandle: e.sourceHandle,
-            type: "smoothstep",
-            animated: true,
-            style: { stroke: "#7c5cfc", strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+            type: "bezier",
+            animated: false,
+            style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
           }));
           setNodes(restoredNodes);
           setEdges(restoredEdges);
@@ -856,13 +897,26 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       event.preventDefault();
       const type = event.dataTransfer.getData("application/reactflow");
       if (!type || !reactFlowInstance || !reactFlowWrapper.current) return;
+      const id = `${type}-${Date.now()}`;
+      const shared = { agents, flows, departments };
+
+      if (TRIGGER_TYPES.has(type)) {
+        // Triggers belong in the static column, not the canvas. Drop position
+        // is ignored — the column auto-routes by category bucket.
+        const newNode: Node = {
+          id, type,
+          position: { x: 0, y: 0 },
+          data: getDefaultData(type, shared),
+        };
+        setNodes((nds) => [...nds, newNode]);
+        return;
+      }
+
       const bounds = reactFlowWrapper.current.getBoundingClientRect();
       const position = reactFlowInstance.project({
         x: event.clientX - bounds.left,
         y: event.clientY - bounds.top,
       });
-      const id = `${type}-${Date.now()}`;
-      const shared = { agents, flows, departments };
       const newNode: Node = { id, type, position, data: getDefaultData(type, shared) };
       setNodes((nds) => [...nds, newNode]);
     },
@@ -874,10 +928,10 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       setEdges((eds) =>
         addEdge({
           ...params,
-          type: "smoothstep",
-          animated: true,
-          style: { stroke: "#7c5cfc", strokeWidth: 2 },
-          markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+          type: "bezier",
+          animated: false,
+          style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+          markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
         }, eds)
       );
     },
@@ -886,8 +940,14 @@ function MainPlaybookEditorInner({ onBack }: Props) {
 
   function addNode(type: string) {
     const id = `${type}-${Date.now()}`;
-    const position = findClearPosition(nodes);
     const shared = { agents, flows, departments };
+    if (TRIGGER_TYPES.has(type)) {
+      // Trigger nodes live in the static column — position is unused.
+      const newNode: Node = { id, type, position: { x: 0, y: 0 }, data: getDefaultData(type, shared) };
+      setNodes((nds) => [...nds, newNode]);
+      return;
+    }
+    const position = findClearPosition(nodes);
     const newNode: Node = { id, type, position, data: getDefaultData(type, shared) };
     setNodes((nds) => [...nds, newNode]);
   }
@@ -907,17 +967,19 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       // Strip the ephemeral shared-data (agents/flows/departments lists) injected
       // into route_target / default_fallback nodes — it belongs to the session,
       // not the persisted graph.
-      const serializedNodes = nodes.map((n) => ({
-        id: n.id,
-        type: n.type,
-        position: n.position,
-        data: {
-          ...n.data,
-          agents: undefined,
-          flows: undefined,
-          departments: undefined,
-        },
-      }));
+      const serializedNodes = nodes
+        .filter((n) => n.type !== "trigger_section_header")
+        .map((n) => ({
+          id: n.id,
+          type: n.type,
+          position: n.position,
+          data: {
+            ...n.data,
+            agents: undefined,
+            flows: undefined,
+            departments: undefined,
+          },
+        }));
       const serializedEdges = edges.map((e) => ({
         id: e.id,
         source: e.source,
@@ -960,6 +1022,130 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     setSelectedNodeId(null);
   }, [setNodes, setEdges]);
 
+  // ─── Keyboard shortcuts ──────────────────────────────────────
+  // Ctrl/Cmd+A: select all (excluding synthetic section headers).
+  // Ctrl/Cmd+C: copy selected nodes + edges between them to an in-memory
+  //             clipboard (we don't touch the OS clipboard).
+  // Ctrl/Cmd+V: paste with new IDs and a small position offset; rewires
+  //             internal edges to the cloned nodes.
+  // Ctrl/Cmd+S: save the canvas.
+  // Delete:     handled by ReactFlow's `deleteKeyCode` (set on the canvas).
+  // Skips when an input/textarea/contenteditable is focused so the editor
+  // never hijacks shortcuts inside the side-panel Inspector.
+  const clipboardRef = useRef<{ nodes: Node[]; edges: Edge[] } | null>(null);
+  const stateRef = useRef({ nodes, edges, selectedNodeId });
+  stateRef.current = { nodes, edges, selectedNodeId };
+  const handleSaveRef = useRef<() => Promise<void> | void>(() => {});
+  handleSaveRef.current = handleSave;
+  useEffect(() => {
+    function isTextTarget(t: EventTarget | null): boolean {
+      const el = t as HTMLElement | null;
+      if (!el) return false;
+      const tag = el.tagName;
+      return tag === "INPUT" || tag === "TEXTAREA" || el.isContentEditable;
+    }
+    function isSelectedFor(n: Node): boolean {
+      if (n.type === "trigger_section_header") return false;
+      if (n.selected) return true;
+      return n.id === stateRef.current.selectedNodeId;
+    }
+    function onKeyDown(e: KeyboardEvent) {
+      if (isTextTarget(e.target)) return;
+      const k = e.key.toLowerCase();
+      // Delete / Backspace work without a modifier — and without requiring
+      // ReactFlow to have focus — so the popup-selected node is deletable.
+      if (k === "delete" || k === "backspace") {
+        const { nodes: ns, selectedNodeId: sid } = stateRef.current;
+        const targetIds = new Set(ns.filter(isSelectedFor).map((n) => n.id));
+        if (targetIds.size === 0) return;
+        e.preventDefault();
+        setNodes((nds) => nds.filter((n) => !targetIds.has(n.id)));
+        setEdges((eds) =>
+          eds.filter(
+            (ed) => !targetIds.has(ed.source) && !targetIds.has(ed.target),
+          ),
+        );
+        if (sid && targetIds.has(sid)) setSelectedNodeId(null);
+        return;
+      }
+      const mod = e.ctrlKey || e.metaKey;
+      if (!mod) return;
+      if (k === "a") {
+        e.preventDefault();
+        setNodes((nds) =>
+          nds.map((n) =>
+            n.type === "trigger_section_header" || n.selected
+              ? n
+              : { ...n, selected: true },
+          ),
+        );
+        setEdges((eds) =>
+          eds.map((ed) => (ed.selected ? ed : { ...ed, selected: true })),
+        );
+      } else if (k === "c") {
+        e.preventDefault();
+        const { nodes: ns, edges: es } = stateRef.current;
+        const sel = ns.filter(isSelectedFor);
+        if (sel.length === 0) return;
+        const ids = new Set(sel.map((n) => n.id));
+        const selEdges = es.filter(
+          (ed) => ids.has(ed.source) && ids.has(ed.target),
+        );
+        clipboardRef.current = {
+          nodes: JSON.parse(JSON.stringify(sel)),
+          edges: JSON.parse(JSON.stringify(selEdges)),
+        };
+      } else if (k === "v") {
+        e.preventDefault();
+        const cb = clipboardRef.current;
+        if (!cb || cb.nodes.length === 0) return;
+        const idMap = new Map<string, string>();
+        const stamp = Date.now();
+        const offset = 40;
+        const newNodes: Node[] = cb.nodes.map((n, i) => {
+          const newId = `${n.type}-${stamp}-${i}`;
+          idMap.set(n.id, newId);
+          const isTrigger = n.type ? TRIGGER_TYPES.has(n.type) : false;
+          // Triggers get auto-snapped by the trigger-layout effect, so the
+          // initial position is irrelevant — but reset draggable so the
+          // pasted node isn't accidentally locked before that effect runs.
+          return {
+            ...n,
+            id: newId,
+            position: isTrigger
+              ? { x: 0, y: 0 }
+              : {
+                  x: (n.position?.x ?? 0) + offset,
+                  y: (n.position?.y ?? 0) + offset,
+                },
+            selected: true,
+            draggable: isTrigger ? false : undefined,
+          };
+        });
+        const newEdges: Edge[] = cb.edges.map((ed, i) => ({
+          ...ed,
+          id: `e-${stamp}-${i}`,
+          source: idMap.get(ed.source) ?? ed.source,
+          target: idMap.get(ed.target) ?? ed.target,
+          selected: false,
+        }));
+        setNodes((nds) => [
+          ...nds.map((n) => (n.selected ? { ...n, selected: false } : n)),
+          ...newNodes,
+        ]);
+        setEdges((eds) => [
+          ...eds.map((ed) => (ed.selected ? { ...ed, selected: false } : ed)),
+          ...newEdges,
+        ]);
+      } else if (k === "s") {
+        e.preventDefault();
+        void handleSaveRef.current();
+      }
+    }
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [setNodes, setEdges]);
+
   const handleDuplicateNode = useCallback((id: string) => {
     setNodes((nds) => {
       const orig = nds.find((n) => n.id === id);
@@ -978,6 +1164,92 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null;
   const sharedForInspector = useMemo(() => ({ agents, flows, departments, channels }), [agents, flows, departments, channels]);
 
+  // ─── Trigger placement ──────────────────────────────────────
+  // Triggers ARE rendered on the canvas, but auto-laid-out as a static
+  // left-edge stack: the user can't drag or reposition them. Wiring is
+  // explicit — the user drags from the "Then ●" handle to whatever node
+  // should fire next. We do NOT auto-create trigger→entry edges (that
+  // caused arrows to retarget on every drag).
+  const triggerNodes = useMemo(() => nodes.filter((n) => isTriggerNode(n)), [nodes]);
+
+  // Auto-layout triggers down the left edge, in stable bucket order, with a
+  // small section header above each present bucket ("Chats", "Comments", etc.).
+  // Triggers and headers are pinned as `draggable: false`. Headers are
+  // synthetic — never persisted — and are stripped on save and from the
+  // validator.
+  const TRIGGER_BUCKET_ORDER: { type: string; label: string }[] = [
+    { type: "channel_entry", label: "Chats" },
+    { type: "comment_trigger", label: "Comments" },
+    { type: "keyword_trigger", label: "Keywords" },
+    { type: "schedule_trigger", label: "Schedule" },
+  ];
+  useEffect(() => {
+    const PIN_X = -360;
+    const HEADER_H = 24;
+    const HEADER_GAP = 6;
+    const CARD_H = 150;
+    const BUCKET_GAP = 18;
+
+    const buckets = TRIGGER_BUCKET_ORDER.map(({ type, label }) => ({
+      type,
+      label,
+      headerId: `__sh_${type}`,
+      items: triggerNodes
+        .filter((n) => n.type === type)
+        .sort((a, b) => a.id.localeCompare(b.id)),
+    })).filter((b) => b.items.length > 0);
+
+    // Desired position map for triggers + their section headers.
+    const targets = new Map<string, { x: number; y: number }>();
+    const desiredHeaderIds = new Set<string>();
+    let y = 0;
+    for (const b of buckets) {
+      targets.set(b.headerId, { x: PIN_X, y });
+      desiredHeaderIds.add(b.headerId);
+      y += HEADER_H + HEADER_GAP;
+      for (const item of b.items) {
+        targets.set(item.id, { x: PIN_X, y });
+        y += CARD_H;
+      }
+      y += BUCKET_GAP;
+    }
+
+    setNodes((nds) => {
+      // Drop section-header nodes whose bucket is no longer present.
+      const trimmed = nds.filter(
+        (n) => n.type !== "trigger_section_header" || desiredHeaderIds.has(n.id),
+      );
+      // Inject any missing headers.
+      const presentIds = new Set(trimmed.map((n) => n.id));
+      const missing = buckets
+        .filter((b) => !presentIds.has(b.headerId))
+        .map<Node>((b) => ({
+          id: b.headerId,
+          type: "trigger_section_header",
+          position: targets.get(b.headerId)!,
+          data: { label: b.label },
+          draggable: false,
+          selectable: false,
+          deletable: false,
+        }));
+      const withHeaders = missing.length > 0 ? [...trimmed, ...missing] : trimmed;
+      // Apply target positions; pin trigger + header nodes as non-draggable.
+      const next = withHeaders.map((n) => {
+        const t = targets.get(n.id);
+        if (!t) return n;
+        const samePos = n.position?.x === t.x && n.position?.y === t.y;
+        const isPinned = (n as any).draggable === false;
+        if (samePos && isPinned) return n;
+        return { ...n, position: { x: t.x, y: t.y }, draggable: false };
+      });
+      // Bail if nothing actually changed (avoids effect feedback loop).
+      if (next.length === nds.length && next.every((n, i) => n === nds[i])) {
+        return nds;
+      }
+      return next;
+    });
+  }, [triggerNodes, setNodes]);
+
   if (loading) {
     return (
       <div className="h-screen flex items-center justify-center">
@@ -987,32 +1259,29 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   }
 
   return (
-    <div className="h-screen flex flex-col">
-      {/* Toolbar */}
-      <div className="bg-white border-b border-gray-100 px-2 md:px-4 py-2 md:py-3 flex items-center gap-2 md:gap-3 shadow-sm z-10">
+    // Editor must own its own height: AppLayout's <main> is `flex-1` with no
+    // explicit height, so `h-full` (= 100% of parent) collapses to auto.
+    // Use viewport units, subtracting AppLayout's 8px top + 8px bottom padding.
+    <div className="h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden">
+      {/* Toolbar — breadcrumb left, secondary actions middle, primary CTA right */}
+      <div className="bg-white border-b border-[var(--border-hairline)] px-2 md:px-4 h-14 flex items-center gap-2 md:gap-3 z-10">
         {onBack && (
-          <button onClick={onBack} className="text-gray-400 hover:text-gray-600 p-1 rounded-lg hover:bg-gray-100 transition shrink-0">
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <button onClick={onBack} className="text-gray-400 hover:text-gray-700 p-1.5 rounded-md hover:bg-black/[0.04] transition shrink-0">
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
             </svg>
           </button>
         )}
 
-        <div className="flex items-center gap-2 flex-1 min-w-0">
-          <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-violet-500 to-violet-700 flex items-center justify-center shadow-sm shrink-0">
-            <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 006 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0118 16.5h-2.25m-7.5 0h7.5m-7.5 0l-1 3m8.5-3l1 3m0 0l.5 1.5m-.5-1.5h-9.5m0 0l-.5 1.5" />
-            </svg>
-          </div>
-          <div>
-            <h1 className="text-sm md:text-base font-bold text-gray-900">Main Playbook</h1>
-            <p className="text-[10px] text-gray-400 hidden sm:block">Define how incoming messages are routed</p>
-          </div>
+        <div className="flex items-center gap-1.5 flex-1 min-w-0 text-sm">
+          <span className="text-gray-400 hidden sm:inline">Automations</span>
+          <span className="text-gray-300 hidden sm:inline">/</span>
+          <span className="font-medium text-gray-900 truncate">Main Playbook</span>
         </div>
 
         <button
           onClick={() => setTemplateGalleryOpen(true)}
-          className="px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 bg-gray-50 hover:bg-gray-100 text-gray-600"
+          className="px-2.5 md:px-3 py-1.5 rounded-md text-xs font-medium text-gray-600 hover:bg-black/[0.04] transition flex items-center gap-1.5 shrink-0"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25z" />
@@ -1022,10 +1291,10 @@ function MainPlaybookEditorInner({ onBack }: Props) {
 
         <button
           onClick={() => setPaletteOpen(!paletteOpen)}
-          className={`px-2 md:px-3 py-2 rounded-xl text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
+          className={`px-2.5 md:px-3 py-1.5 rounded-md text-xs font-medium transition flex items-center gap-1.5 shrink-0 ${
             paletteOpen
-              ? "bg-violet-50 text-violet-600 ring-1 ring-violet-200"
-              : "bg-gray-50 hover:bg-gray-100 text-gray-600"
+              ? "bg-black/[0.06] text-gray-900"
+              : "text-gray-600 hover:bg-black/[0.04]"
           }`}
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -1039,9 +1308,9 @@ function MainPlaybookEditorInner({ onBack }: Props) {
         <button
           onClick={handleSave}
           disabled={saving}
-          className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-5 py-2 rounded-xl text-xs md:text-sm font-medium transition disabled:opacity-50 shadow-sm shrink-0"
+          className="bg-violet-600 hover:bg-violet-700 text-white px-3 md:px-4 py-1.5 rounded-md text-xs md:text-sm font-medium transition disabled:opacity-50 shrink-0"
         >
-          {saving ? "Saving..." : "Save"}
+          {saving ? "Saving…" : "Save"}
         </button>
       </div>
 
@@ -1049,40 +1318,34 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       <div className="flex-1 flex overflow-hidden">
         {/* Node Palette */}
         <div
-          className={`bg-white border-e border-gray-100 transition-all duration-300 ease-in-out overflow-y-auto overflow-x-hidden flex-shrink-0 ${
-            paletteOpen ? "w-[240px] opacity-100" : "w-0 opacity-0"
+          className={`bg-white border-e border-[var(--border-hairline)] transition-all duration-300 ease-in-out overflow-y-auto overflow-x-hidden flex-shrink-0 ${
+            paletteOpen ? "w-[260px] opacity-100" : "w-0 opacity-0"
           }`}
         >
-          <div className="p-3 space-y-4 w-[240px]">
-            <div className="flex items-center gap-2 px-1 pt-1">
-              <div className="w-6 h-6 rounded-lg bg-violet-100 flex items-center justify-center">
-                <svg className="w-3.5 h-3.5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25z" />
-                </svg>
-              </div>
-              <span className="text-xs font-semibold text-gray-700 tracking-wide">Node Palette</span>
+          <div className="p-4 space-y-5 w-[260px]">
+            <div className="px-1">
+              <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em]">Node Palette</p>
+              <p className="text-[11px] text-gray-400 mt-1">Drag onto canvas, or click to add</p>
             </div>
-
-            <p className="text-[10px] text-gray-400 px-1">Drag nodes to the canvas or click to add</p>
 
             {NODE_PALETTE.map((cat) => (
               <div key={cat.category}>
-                <p className="text-[10px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">{cat.category}</p>
-                <div className="space-y-1.5">
+                <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-[0.08em] px-1 mb-1.5">{cat.category}</p>
+                <div className="space-y-0.5">
                   {cat.items.map((item) => (
                     <div
                       key={item.type}
                       draggable
                       onDragStart={(e) => onDragStart(e, item.type)}
                       onClick={() => addNode(item.type)}
-                      className={`group flex items-center gap-2.5 px-2.5 py-2 rounded-xl border cursor-grab active:cursor-grabbing transition-all duration-150 ${item.bg} ${item.border} ${item.hoverBg} hover:shadow-sm hover:ring-1 ${item.ring}`}
+                      className="group flex items-center gap-2.5 px-2 py-1.5 rounded-lg cursor-grab active:cursor-grabbing transition-colors duration-150 hover:bg-black/[0.04]"
                     >
-                      <div className={`w-8 h-8 rounded-lg ${item.iconBg} flex items-center justify-center ${item.text} shrink-0 transition-transform duration-150 group-hover:scale-110`}>
+                      <div className={`w-7 h-7 rounded-md ${item.iconBg} ${item.text} flex items-center justify-center shrink-0 [&_svg]:w-4 [&_svg]:h-4`}>
                         {item.icon}
                       </div>
                       <div className="min-w-0">
-                        <p className={`text-xs font-semibold ${item.text}`}>{item.label}</p>
-                        <p className="text-[10px] text-gray-400 truncate">{item.desc}</p>
+                        <p className="text-[13px] font-medium text-gray-800 truncate">{item.label}</p>
+                        <p className="text-[11px] text-gray-400 truncate">{item.desc}</p>
                       </div>
                     </div>
                   ))}
@@ -1092,7 +1355,8 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           </div>
         </div>
 
-        {/* ReactFlow Canvas */}
+        {/* ReactFlow Canvas — triggers are pinned at the left as static
+            (non-draggable) nodes, connected by bezier edges to the entry node. */}
         <div className="flex-1" ref={reactFlowWrapper}>
           <ReactFlow
             nodes={nodes}
@@ -1104,46 +1368,48 @@ function MainPlaybookEditorInner({ onBack }: Props) {
             onDragOver={onDragOver}
             onDrop={onDrop}
             onInit={setReactFlowInstance}
-            onNodeClick={(_, n) => setSelectedNodeId(n.id)}
-            onPaneClick={() => setSelectedNodeId(null)}
+            onNodeClick={(e, n) => {
+              setSelectedNodeId(n.id);
+              // Mirror the click into ReactFlow's selection state so
+              // Ctrl+C / Delete shortcuts find the node as "selected" and
+              // the violet ring renders. Ctrl/Cmd/Shift-click extends the
+              // current selection instead of replacing it.
+              const multi = e.ctrlKey || e.metaKey || e.shiftKey;
+              setNodes((nds) =>
+                nds.map((x) => {
+                  if (x.id === n.id) return x.selected ? x : { ...x, selected: true };
+                  if (multi) return x;
+                  return x.selected ? { ...x, selected: false } : x;
+                }),
+              );
+            }}
+            onPaneClick={() => {
+              setSelectedNodeId(null);
+              setNodes((nds) =>
+                nds.map((x) => (x.selected ? { ...x, selected: false } : x)),
+              );
+            }}
             nodeTypes={nodeTypes}
-            connectionLineType={"smoothstep" as any}
+            connectionLineType={"bezier" as any}
+            defaultEdgeOptions={{
+              type: "bezier",
+              animated: false,
+              style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+              markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
+            }}
             fitView
             fitViewOptions={{ padding: 0.2 }}
             snapToGrid
             snapGrid={[15, 15]}
-            deleteKeyCode={["Backspace", "Delete"]}
-            className="bg-gray-50"
+            // Delete handling is owned by our window keydown listener so it
+            // works even when ReactFlow doesn't have focus (e.g., the user
+            // clicked a node, the Inspector opened, then they hit Delete).
+            deleteKeyCode={null}
+            proOptions={{ hideAttribution: true }}
+            className="bg-[var(--surface-canvas)]"
           >
-            <Controls className="!rounded-xl !shadow-lg !border-gray-200" />
-            <MiniMap
-              className="!rounded-xl !shadow-lg !border-gray-200"
-              nodeColor={(n) => {
-                if (n.type === "channel_entry") return "#8b5cf6";
-                if (n.type === "condition_group") return "#f59e0b";
-                if (n.type === "route_target") return "#7c3aed";
-                if (n.type === "default_fallback") return "#9ca3af";
-                if (n.type === "start") return "#10b981";
-                if (n.type === "end") return "#f43f5e";
-                if (n.type === "send_message_text") return "#0ea5e9";
-                if (n.type === "send_message_interactive") return "#6366f1";
-                if (n.type === "send_message_quick_reply") return "#14b8a6";
-                if (n.type === "send_message_image") return "#d946ef";
-                if (n.type === "send_message_file") return "#64748b";
-                if (n.type === "wait") return "#f97316";
-                if (n.type === "collect_input") return "#3b82f6";
-                if (n.type === "set_variable") return "#a855f7";
-                if (n.type === "http_request") return "#52525b";
-                if (n.type === "ai_generate") return "#8b5cf6";
-                if (n.type === "update_customer") return "#ec4899";
-                if (n.type === "bring_user_data") return "#f43f5e";
-                if (n.type === "comment_trigger") return "#10b981";
-                if (n.type === "keyword_trigger") return "#10b981";
-                if (n.type === "schedule_trigger") return "#10b981";
-                return "#e5e7eb";
-              }}
-            />
-            <Background variant={BackgroundVariant.Dots} gap={15} size={1} color="#d1d5db" />
+            <Controls className="!rounded-lg !shadow-sm !border !border-[var(--border-hairline)]" />
+            <Background variant={BackgroundVariant.Dots} gap={22} size={1} color="rgba(0,0,0,0.06)" />
           </ReactFlow>
         </div>
       </div>
@@ -1178,10 +1444,10 @@ function MainPlaybookEditorInner({ onBack }: Props) {
             source: e.source,
             target: e.target,
             sourceHandle: e.sourceHandle ?? undefined,
-            type: "smoothstep",
-            animated: true,
-            style: { stroke: "#7c5cfc", strokeWidth: 2 },
-            markerEnd: { type: MarkerType.ArrowClosed, color: "#7c5cfc", width: 16, height: 16 },
+            type: "bezier",
+            animated: false,
+            style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
+            markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
           }));
           setNodes(nextNodes);
           setEdges(nextEdges);

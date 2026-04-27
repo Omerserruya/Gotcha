@@ -137,6 +137,12 @@
       "type": "directory"
     },
     {
+      "path": "src/components/mainPlaybook/MainPlaybookEditor.tsx",
+      "accessCount": 61,
+      "lastAccessed": 1777281331044,
+      "type": "file"
+    },
+    {
       "path": "src/app/ai-studio/agents/[id]/page.tsx",
       "accessCount": 58,
       "lastAccessed": 1776365300733,
@@ -197,12 +203,6 @@
       "type": "file"
     },
     {
-      "path": "src/components/mainPlaybook/MainPlaybookEditor.tsx",
-      "accessCount": 26,
-      "lastAccessed": 1777196780406,
-      "type": "file"
-    },
-    {
       "path": "src/components/conversations/ChatPanel.tsx",
       "accessCount": 23,
       "lastAccessed": 1776359584485,
@@ -215,6 +215,12 @@
       "type": "file"
     },
     {
+      "path": "src/app/globals.css",
+      "accessCount": 18,
+      "lastAccessed": 1777278681396,
+      "type": "file"
+    },
+    {
       "path": "src",
       "accessCount": 16,
       "lastAccessed": 1776615533412,
@@ -224,12 +230,6 @@
       "path": "src/app/outbound/broadcasts/page.tsx",
       "accessCount": 16,
       "lastAccessed": 1776615651161,
-      "type": "file"
-    },
-    {
-      "path": "src/app/globals.css",
-      "accessCount": 15,
-      "lastAccessed": 1776347733947,
       "type": "file"
     },
     {
@@ -255,6 +255,12 @@
       "accessCount": 10,
       "lastAccessed": 1776364608583,
       "type": "directory"
+    },
+    {
+      "path": "src/components/chatbot/FlowEditor.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1777279011803,
+      "type": "file"
     },
     {
       "path": "src/components/MobileNav.tsx",
@@ -303,12 +309,6 @@
       "accessCount": 5,
       "lastAccessed": 1776365307185,
       "type": "directory"
-    },
-    {
-      "path": "src/components/chatbot/FlowEditor.tsx",
-      "accessCount": 5,
-      "lastAccessed": 1777196797686,
-      "type": "file"
     },
     {
       "path": "src/app",
@@ -389,6 +389,12 @@
       "type": "file"
     },
     {
+      "path": "package.json",
+      "accessCount": 2,
+      "lastAccessed": 1777278487526,
+      "type": "file"
+    },
+    {
       "path": "src/app/integrations/page.tsx",
       "accessCount": 1,
       "lastAccessed": 1773507895607,
@@ -404,12 +410,6 @@
       "path": "src/app/he/page.tsx",
       "accessCount": 1,
       "lastAccessed": 1774270950993,
-      "type": "file"
-    },
-    {
-      "path": "package.json",
-      "accessCount": 1,
-      "lastAccessed": 1774871858091,
       "type": "file"
     },
     {

@@ -132,7 +132,7 @@ interface Props {
   multiline?: boolean;
   rows?: number;
   className?: string;
-  tone?: "sky" | "indigo" | "teal" | "fuchsia" | "slate" | "purple" | "zinc" | "violet" | "pink" | "rose" | "gray";
+  tone?: "sky" | "indigo" | "teal" | "fuchsia" | "slate" | "purple" | "zinc" | "violet" | "pink" | "rose" | "gray" | "emerald";
 }
 
 const TONE_RING: Record<NonNullable<Props["tone"]>, string> = {
@@ -147,6 +147,7 @@ const TONE_RING: Record<NonNullable<Props["tone"]>, string> = {
   pink:    "focus-within:ring-pink-300 focus-within:border-pink-300",
   rose:    "focus-within:ring-rose-300 focus-within:border-rose-300",
   gray:    "focus-within:ring-gray-300 focus-within:border-gray-300",
+  emerald: "focus-within:ring-emerald-300 focus-within:border-emerald-300",
 };
 
 export function VariableMentionInput({
