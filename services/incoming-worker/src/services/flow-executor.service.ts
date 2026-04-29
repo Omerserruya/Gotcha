@@ -352,7 +352,7 @@ async function walk(
           await persistVars(ctx);
           await prisma.conversation.update({
             where: { id: ctx.conversationId },
-            data: { chatbotNodeId: node.id },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
           });
           ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply" });
           return {
@@ -410,7 +410,7 @@ async function walk(
         await persistVars(ctx);
         await prisma.conversation.update({
           where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id },
+          data: { chatbotNodeId: node.id, handledBy: "flow" },
         });
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent_and_paused" });
         return {
@@ -521,7 +521,7 @@ async function walk(
         await persistVars(ctx);
         await prisma.conversation.update({
           where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id },
+          data: { chatbotNodeId: node.id, handledBy: "flow" },
         });
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "prompted_and_paused" });
         return {
@@ -541,7 +541,7 @@ async function walk(
         await persistVars(ctx);
         await prisma.conversation.update({
           where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id },
+          data: { chatbotNodeId: node.id, handledBy: "flow" },
         });
         // Enqueue a delayed resume job. The flow-resume worker picks it up
         // after `delay` ms and calls executeMainFlow/executeSubFlow with
@@ -860,18 +860,29 @@ async function applyEnd(
   kind: "close" | "handoff_human" | "wait_for_reply",
   ctx: FlowExecCtx,
 ) {
+  // The flow has terminated — drop chatbot state so the next inbound is NOT
+  // resumed back into the last paused node (which would re-capture every
+  // future message into the Collect Input variable and loop the greeting).
+  const clearFlow = { chatbotNodeId: null, chatbotFlowId: null } as const;
   if (kind === "close") {
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
-      data: { status: "CLOSED" as any },
+      data: { ...clearFlow, status: "CLOSED" as any, handledBy: null },
     });
   } else if (kind === "handoff_human") {
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
-      data: { status: "WAITING", handledBy: "human" },
+      data: { ...clearFlow, status: "WAITING", handledBy: "human" },
+    });
+  } else {
+    // "wait_for_reply" — flow is done; release the conversation back to the
+    // inbox (handledBy=null) so the next inbound surfaces for a human and
+    // does not re-enter the graph walker.
+    await prisma.conversation.update({
+      where: { id: ctx.conversationId },
+      data: { ...clearFlow, handledBy: null },
     });
   }
-  // "wait_for_reply" — leave the conversation as-is; next inbound resumes.
 }
 
 // ─── Helpers ─────────────────────────────────────────────────
