@@ -400,15 +400,37 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
         const { processAIBot } = await import("../services/ai-bot.service");
         await processAIBot(tenantId, conversation.id, body);
         return;
-      } else if ((conversation as any).chatbotFlowId) {
-        // Ongoing chatbot flow — continue processing
-        const { processChatbotFlow } = await import("../services/chatbot-engine.service");
-        await processChatbotFlow(tenantId, conversation.id, body);
-        return;
       } else if ((conversation as any).chatbotNodeId) {
-        // Main FlowCanvas paused at Collect Input / Quick Reply — resume the
-        // graph walker from that node with the user's reply as the captured
-        // value (or quick-reply payload).
+        // Main FlowCanvas paused at Collect Input / Quick Reply.
+        // First gate: 24h comment→DM bridge. If the bridge expired, Meta
+        // blocks further DMs — close the conversation, drop chatbot state,
+        // do NOT send anything back. The inbound is dropped on the floor.
+        const expiresAt = (conversation as any).flowExpiresAt as Date | null;
+        if (expiresAt && expiresAt.getTime() < Date.now()) {
+          console.log(
+            `[incoming] flow_expired conversation=${conversation.id} expired_at=${expiresAt.toISOString()}`,
+          );
+          await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: {
+              status: "CLOSED" as any,
+              chatbotNodeId: null,
+              chatbotFlowId: null,
+              flowExpiresAt: null,
+              closedAt: new Date(),
+            },
+          });
+          return;
+        }
+        // Within window — resume the graph walker. Clear the bridge marker:
+        // once the user replied, the conversation is a normal DM and isn't
+        // governed by the comment-DM expiry anymore.
+        if (expiresAt) {
+          await prisma.conversation.update({
+            where: { id: conversation.id },
+            data: { flowExpiresAt: null },
+          });
+        }
         const { executeMainFlow } = await import("../services/flow-executor.service");
         await executeMainFlow({
           tenantId,

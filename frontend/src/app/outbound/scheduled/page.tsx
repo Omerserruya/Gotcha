@@ -204,7 +204,18 @@ export default function ScheduledPage() {
     try {
       const res = await getChannelAccounts(token);
       const all: ChannelAccount[] = res.data ?? [];
-      setChannelAccounts(all.filter((a) => a.connectionStatus === "CONNECTED"));
+      // Hide Meta channels — Facebook / Instagram / Messenger DMs cannot be
+      // initiated by the business; outbound is restricted to user-initiated
+      // 24h messaging windows, so they don't belong in a scheduled-send
+      // picker. Plus the standard "must be CONNECTED" filter.
+      const blocked = new Set(["INSTAGRAM", "MESSENGER", "FACEBOOK"]);
+      setChannelAccounts(
+        all.filter(
+          (a) =>
+            a.connectionStatus === "CONNECTED"
+            && !blocked.has(String(a.channel || "").toUpperCase()),
+        ),
+      );
     } catch (err) {
       console.error(err);
     }

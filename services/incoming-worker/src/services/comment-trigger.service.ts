@@ -102,40 +102,63 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
     });
   }
 
-  let matched = 0;
-  for (const src of sources) {
-    const triggerNodes = src.nodes.filter((n) => n.type === "comment_trigger");
-    if (triggerNodes.length === 0) continue;
+  // Find every candidate trigger across all sources and score by specificity.
+  // Priority (higher wins):
+  //   3 — keyword match AND specific postId
+  //   2 — keyword match (any post)  OR  specific postId (any keywords)
+  //   1 — any comment (no keyword filter, any post)
+  // Ties are broken by source order (canvas before sub-flows) then trigger id.
+  type Candidate = {
+    src: { id: string; nodes: GraphNode[]; edges: GraphEdge[] };
+    trig: GraphNode;
+    score: number;
+  };
+  const candidates: Candidate[] = [];
+  for (let i = 0; i < sources.length; i++) {
+    const src = sources[i];
+    if (!src) continue;
+    for (const trig of src.nodes.filter((n) => n.type === "comment_trigger")) {
+      const score = scoreTriggerMatch(trig, channel, channelAccountId, comment);
+      if (score > 0) candidates.push({ src, trig, score });
+    }
+  }
 
-    for (const trig of triggerNodes) {
-      if (!matchesTrigger(trig, channel, channelAccountId, comment.postId)) continue;
-      matched++;
-      console.log(
-        `[comment-trigger] Match: source=${src.id} trigger=${trig.id} post=${comment.postId} commenter=${comment.fromUsername || comment.fromUserId}`,
-      );
-      try {
-        await runCommentFlow({
-          tenantId,
-          nodes: src.nodes,
-          edges: src.edges,
-          startNodeId: firstOutgoingTarget(src.edges, trig.id),
-          comment,
-          // canvas source has id "canvas:<tenantId>"; only sub-flows have
-          // real ChatbotFlow ids that the resume path can store as
-          // conversation.chatbotFlowId.
-          sourceChatbotFlowId: src.id.startsWith("canvas:") ? null : src.id,
-          send: {
-            channel,
-            channelAccountId,
-            channelAccountExternalId: channelAccount.externalId,
-            credentials: credentials as ChannelCredentials,
-            commentId: comment.commentId,
-            recipientPsid: null,
-          },
-        });
-      } catch (err) {
-        console.error(`[comment-trigger] Flow ${src.id} failed:`, (err as Error).message);
-      }
+  let matched = 0;
+  if (candidates.length > 0) {
+    candidates.sort((a, b) => {
+      if (a.score !== b.score) return b.score - a.score;
+      const ai = sources.indexOf(a.src);
+      const bi = sources.indexOf(b.src);
+      if (ai !== bi) return ai - bi;
+      return a.trig.id.localeCompare(b.trig.id);
+    });
+    const winner = candidates[0]!;
+    matched = 1;
+    console.log(
+      `[comment-trigger] Match (score=${winner.score}): source=${winner.src.id} `
+      + `trigger=${winner.trig.id} post=${comment.postId} `
+      + `commenter=${comment.fromUsername || comment.fromUserId} `
+      + `(${candidates.length - 1} lower-priority candidate(s) skipped)`,
+    );
+    try {
+      await runCommentFlow({
+        tenantId,
+        nodes: winner.src.nodes,
+        edges: winner.src.edges,
+        startNodeId: firstOutgoingTarget(winner.src.edges, winner.trig.id),
+        comment,
+        sourceChatbotFlowId: winner.src.id.startsWith("canvas:") ? null : winner.src.id,
+        send: {
+          channel,
+          channelAccountId,
+          channelAccountExternalId: channelAccount.externalId,
+          credentials: credentials as ChannelCredentials,
+          commentId: comment.commentId,
+          recipientPsid: null,
+        },
+      });
+    } catch (err) {
+      console.error(`[comment-trigger] Flow ${winner.src.id} failed:`, (err as Error).message);
     }
   }
 
@@ -160,34 +183,55 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
   }
 }
 
-// ─── Trigger matching ────────────────────────────────────────
+// ─── Trigger matching + specificity scoring ──────────────────
 
-function matchesTrigger(
+/**
+ * Returns a positive score when the trigger matches the inbound comment,
+ * higher = more specific. Returns 0 when the trigger doesn't match at all.
+ *
+ *   3 — keyword match AND specific postId
+ *   2 — keyword match (any post)  OR  specific postId (any keywords)
+ *   1 — any-comment trigger (no keyword filter, no postId)
+ *   0 — channel mismatch / channelAccount mismatch / keyword filter missed
+ */
+function scoreTriggerMatch(
   trig: GraphNode,
   channel: "INSTAGRAM" | "MESSENGER",
   channelAccountId: string,
-  postId: string,
-): boolean {
-  // The CommentTrigger UI saves:
-  //   data.channelId    — ChannelAccount.id selected by the author
-  //   data.postId       — post / IG media id (or "" for wildcard)
-  //   data.postSource   — "page" | "group"
-  // We require the trigger's channelId to match (so a flow on one IG account
-  // doesn't fire for another), and either (a) postId equals the inbound, or
-  // (b) postId is empty/undefined (wildcard — matches every post on that
-  // channel). No-op if neither field is set.
+  comment: { postId: string; text: string },
+): number {
+  if (channel !== "INSTAGRAM" && channel !== "MESSENGER") return 0;
+
   const trigChannelId = String(trig.data?.channelId || "").trim();
-  if (!trigChannelId) return false;
-  if (trigChannelId !== channelAccountId) return false;
+  if (!trigChannelId) return 0;
+  if (trigChannelId !== channelAccountId) return 0;
 
   const trigPostId = String(trig.data?.postId || "").trim();
-  if (trigPostId && trigPostId !== postId) return false;
+  const postSpecific = trigPostId.length > 0;
+  if (postSpecific && trigPostId !== comment.postId) return 0;
 
-  // Channel sanity — a comment_trigger only ever fires for FB/IG, but guard
-  // anyway in case the UI lets a future channel slip through.
-  if (channel !== "INSTAGRAM" && channel !== "MESSENGER") return false;
+  const keywords: string[] = Array.isArray(trig.data?.keywords)
+    ? (trig.data.keywords as unknown[]).filter((k): k is string => typeof k === "string" && k.trim().length > 0)
+    : [];
+  const caseSensitive = !!trig.data?.caseSensitive;
+  const haystack = caseSensitive ? comment.text || "" : (comment.text || "").toLowerCase();
+  const matchType = String(trig.data?.matchType || "any");
+  const keywordsConfigured = keywords.length > 0;
+  let keywordHit = false;
+  if (keywordsConfigured) {
+    const needles = keywords.map((k) => (caseSensitive ? k : k.toLowerCase()));
+    keywordHit =
+      matchType === "exact"
+        ? needles.some((n) => haystack.trim() === n.trim())
+        : matchType === "all"
+        ? needles.every((n) => haystack.includes(n))
+        : needles.some((n) => haystack.includes(n));
+    if (!keywordHit) return 0; // configured filter that didn't match → reject
+  }
 
-  return true;
+  if (keywordsConfigured && postSpecific) return 3;
+  if (keywordsConfigured || postSpecific) return 2;
+  return 1;
 }
 
 function firstOutgoingTarget(edges: GraphEdge[], fromId: string): string | null {
@@ -437,6 +481,10 @@ async function promoteToConversation(
     },
     orderBy: { createdAt: "desc" },
   });
+  // Meta only allows one DM per comment; the user has 24h to reply before the
+  // bridge expires and we lose the right to message in that thread. Persist
+  // the deadline so the inbound resume path can hard-stop after expiry.
+  const flowExpiresAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
   if (!conv) {
     conv = await prisma.conversation.create({
       data: {
@@ -449,6 +497,7 @@ async function promoteToConversation(
         chatbotFlowId: args.sourceChatbotFlowId,
         chatbotNodeId: pausedNodeId,
         flowVariables: vars as any,
+        flowExpiresAt,
       },
     });
   } else {
@@ -458,6 +507,7 @@ async function promoteToConversation(
         chatbotFlowId: args.sourceChatbotFlowId,
         chatbotNodeId: pausedNodeId,
         flowVariables: vars as any,
+        flowExpiresAt,
       },
     });
   }

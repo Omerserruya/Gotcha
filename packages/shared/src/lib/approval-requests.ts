@@ -9,6 +9,7 @@
  * See memory/bug_f4_approval_wrong_surface.md for the design.
  */
 import { prisma } from "./prisma";
+import { publishEvent } from "./event-bus";
 import type { ToolGateResult } from "./tool-gate";
 
 export interface CreateApprovalRequestInput {
@@ -50,9 +51,25 @@ export async function createApprovalRequest(
       requestedBy: input.requestedBy,
       expiresAt,
     },
-    select: { id: true, expiresAt: true },
+    select: { id: true, expiresAt: true, conversationId: true, tool: true, summary: true, riskLevel: true, requestedBy: true, createdAt: true },
   });
-  return created;
+  // Surface as a tenant-scoped socket event so the Approvals page (and any
+  // open inbox view) can render live without polling.
+  await publishEvent({
+    event: "approval:created",
+    tenantId: input.tenantId,
+    data: {
+      id: created.id,
+      conversationId: created.conversationId,
+      tool: created.tool,
+      summary: created.summary,
+      riskLevel: created.riskLevel,
+      requestedBy: created.requestedBy,
+      createdAt: created.createdAt,
+      expiresAt: created.expiresAt,
+    },
+  }).catch(() => {});
+  return { id: created.id, expiresAt: created.expiresAt };
 }
 
 export async function findPendingByConversation(

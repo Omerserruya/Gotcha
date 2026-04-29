@@ -21,38 +21,6 @@ interface SendContext {
   recipientId: string;
 }
 
-/**
- * Resolve the AI Employee config for a conversation.
- * Priority: department-assigned AI agent → default tenant AI agent → any active agent.
- */
-async function resolveAIAgent(tenantId: string, departmentId?: string | null) {
-  // 1. Department-specific AI agent
-  if (departmentId) {
-    const rule = await prisma.routerRule.findFirst({
-      where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, routeTarget: departmentId },
-      orderBy: { position: "asc" } as any,
-    });
-    if (rule?.aiAgentId) {
-      const agent = await prisma.aIAgent.findUnique({ where: { id: rule.aiAgentId } });
-      if (agent && agent.status !== "PAUSED") return agent;
-    }
-  }
-  // 2. Default tenant AI agent
-  const defaultRule = await prisma.routerRule.findFirst({
-    where: { tenantId, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, isDefault: true },
-    orderBy: { position: "asc" } as any,
-  });
-  if (defaultRule?.aiAgentId) {
-    const agent = await prisma.aIAgent.findUnique({ where: { id: defaultRule.aiAgentId } });
-    if (agent && agent.status !== "PAUSED") return agent;
-  }
-  // 3. Any active AI agent for this tenant
-  return prisma.aIAgent.findFirst({
-    where: { tenantId, status: { in: ["ACTIVE", "DRAFT"] } },
-    orderBy: { createdAt: "asc" },
-  });
-}
-
 export async function processAIBot(tenantId: string, conversationId: string, incomingMessage: string, aiAgentId?: string | null): Promise<boolean> {
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
@@ -61,13 +29,20 @@ export async function processAIBot(tenantId: string, conversationId: string, inc
 
   if (!conversation || conversation.isHandedOver || conversation.assignedAgentId) return false;
 
-  // Use the explicitly provided AI agent, or resolve one
+  // Resolution order (graph is source of truth):
+  //   1. Explicit `aiAgentId` argument (graph dispatched this call).
+  //   2. `conversation.assignedAiAgentId` (set by a prior graph dispatch).
+  // No legacy RouterRule fallback — if the graph never picked an agent for
+  // this conversation, the AI bot does nothing and the conversation stays
+  // unassigned for a human to claim.
   let config: any = null;
   if (aiAgentId) {
     config = await prisma.aIAgent.findUnique({ where: { id: aiAgentId } });
   }
-  if (!config) {
-    config = await resolveAIAgent(tenantId, (conversation as any).departmentId);
+  if (!config && (conversation as any).assignedAiAgentId) {
+    config = await prisma.aIAgent.findUnique({
+      where: { id: (conversation as any).assignedAiAgentId as string },
+    });
   }
   if (!config) return false;
 

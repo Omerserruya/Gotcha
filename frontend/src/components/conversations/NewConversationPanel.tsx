@@ -27,6 +27,10 @@ const CHANNEL_CONFIG: Record<string, {
   templateOnly: boolean;
   description: string;
 }> = {
+  // Meta channels (Facebook / Instagram / Messenger) intentionally absent —
+  // they don't support business-initiated outbound (Meta only allows DMs
+  // inside a 24h messaging window after a user-initiated message). Listing
+  // them here would let agents start chats that the platform then rejects.
   WHATSAPP: {
     label: "WhatsApp",
     logo: "/icons/wa.png",
@@ -37,28 +41,6 @@ const CHANNEL_CONFIG: Record<string, {
     identifierType: "tel",
     templateOnly: true,
     description: "newConversation.channelDesc.whatsapp",
-  },
-  MESSENGER: {
-    label: "Messenger",
-    logo: "/icons/msn.png",
-    color: "text-blue-600",
-    bg: "bg-blue-50 border-blue-200 hover:bg-blue-100",
-    identifierLabel: "newConversation.identifier.psid",
-    identifierPlaceholder: "Page-scoped ID",
-    identifierType: "text",
-    templateOnly: false,
-    description: "newConversation.channelDesc.messenger",
-  },
-  INSTAGRAM: {
-    label: "Instagram",
-    logo: "/icons/ins.png",
-    color: "text-pink-600",
-    bg: "bg-pink-50 border-pink-200 hover:bg-pink-100",
-    identifierLabel: "newConversation.identifier.username",
-    identifierPlaceholder: "@username",
-    identifierType: "text",
-    templateOnly: false,
-    description: "newConversation.channelDesc.instagram",
   },
   GMAIL: {
     label: "Gmail",
@@ -135,8 +117,18 @@ export function NewConversationPanel({ onClose, onCreated }: Props) {
     getChannelAccounts(token)
       .then((res) => {
         const accounts = Array.isArray(res) ? res : (res as any)?.data || [];
-        // Only show active & connected accounts
-        setChannelAccounts(accounts.filter((a: any) => a.isActive !== false));
+        // Only show active & connected accounts. Hide Meta channels —
+        // Facebook/Instagram/Messenger DMs cannot be initiated by the
+        // business; outbound is restricted to user-initiated 24h messaging
+        // windows, so these never belong in a new-conversation picker.
+        const blocked = new Set(["INSTAGRAM", "MESSENGER", "FACEBOOK"]);
+        setChannelAccounts(
+          accounts.filter(
+            (a: any) =>
+              a.isActive !== false
+              && !blocked.has(String(a.channel || "").toUpperCase()),
+          ),
+        );
       })
       .catch(() => {})
       .finally(() => setLoadingAccounts(false));

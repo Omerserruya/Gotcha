@@ -1,17 +1,23 @@
 "use client";
 
-import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useState, useEffect, useCallback, Suspense } from "react";
+import { useRouter, useSearchParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getRouterRules, getKnowledgeBases, deleteChatbotFlow } from "@/lib/api";
+import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow } from "@/lib/api";
 import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
 
 // ─── Tab types ────────────────────────────────────────────────
 type Tab = "team" | "playbooks" | "knowledge" | "skills";
+
+const TAB_KEYS: Tab[] = ["team", "playbooks", "knowledge", "skills"];
+
+function isTab(value: string | null): value is Tab {
+  return value !== null && (TAB_KEYS as string[]).includes(value);
+}
 
 // Real connected tools come from the /api/integrations response
 // (shape: [{name, slug, tenantConnection:{status}, catalogTools:[{name, riskLevel, tenantTool:{isEnabled}}]}]).
@@ -223,17 +229,23 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
   const router = useRouter();
   const [flows, setFlows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [rulesCount, setRulesCount] = useState(0);
+  // Main Playbook node count — surfaces actual flow-canvas content rather
+  // than the legacy RouterRule count (those are a separate, sibling system).
+  // Excludes the synthetic `trigger_section_header` decorations.
+  const [mainPlaybookNodeCount, setMainPlaybookNodeCount] = useState(0);
 
   useEffect(() => {
     if (!token) return;
     Promise.all([
       getChatbotFlows(token).then((r) => (Array.isArray(r) ? r : (r as any).data || [])),
-      getRouterRules(token).then((r) => r.data || []),
+      getFlowCanvas(token).then((r) => (r.data || { nodes: [] })),
     ])
-      .then(([flowsData, rulesData]) => {
+      .then(([flowsData, canvas]) => {
         setFlows(flowsData);
-        setRulesCount(rulesData.length);
+        const nodes = Array.isArray((canvas as any).nodes) ? (canvas as any).nodes : [];
+        setMainPlaybookNodeCount(
+          nodes.filter((n: any) => n?.type !== "trigger_section_header").length,
+        );
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -262,6 +274,15 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
           <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.playbooks.subtitle")}</p>
         </div>
         <Link
+          href="/ai-studio/router?templates=open"
+          className="flex items-center gap-2 px-3 py-2 bg-white border border-gray-200 text-gray-700 rounded-xl text-sm font-medium hover:bg-gray-50 hover:border-gray-300 transition shadow-sm mr-2"
+        >
+          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h2.25A2.25 2.25 0 0110.5 6v2.25a2.25 2.25 0 01-2.25 2.25H6a2.25 2.25 0 01-2.25-2.25V6zM3.75 15.75A2.25 2.25 0 016 13.5h2.25a2.25 2.25 0 012.25 2.25V18a2.25 2.25 0 01-2.25 2.25H6A2.25 2.25 0 013.75 18v-2.25zM13.5 6a2.25 2.25 0 012.25-2.25H18A2.25 2.25 0 0120.25 6v2.25A2.25 2.25 0 0118 10.5h-2.25a2.25 2.25 0 01-2.25-2.25V6zM13.5 15.75a2.25 2.25 0 012.25-2.25H18a2.25 2.25 0 012.25 2.25V18A2.25 2.25 0 0118 20.25h-2.25a2.25 2.25 0 01-2.25-2.25v-2.25z" />
+          </svg>
+          Templates
+        </Link>
+        <Link
           href="/ai-studio/flows/new"
           className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-700 transition shadow-sm"
         >
@@ -287,8 +308,8 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
             <div>
               <h3 className="text-base font-bold text-gray-900">{t("aiStudio.playbooks.mainPlaybook")}</h3>
               <p className="text-xs text-gray-400 mt-0.5">{t("aiStudio.playbooks.mainPlaybookSub")}</p>
-              {rulesCount > 0 && (
-                <p className="text-xs text-violet-500 mt-1 font-medium">{rulesCount} routing rule{rulesCount !== 1 ? "s" : ""} configured</p>
+              {mainPlaybookNodeCount > 0 && (
+                <p className="text-xs text-violet-500 mt-1 font-medium">{mainPlaybookNodeCount} node{mainPlaybookNodeCount !== 1 ? "s" : ""} configured</p>
               )}
             </div>
           </div>
@@ -833,10 +854,40 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
 }
 
 // ─── Main Page ────────────────────────────────────────────────
+// `useSearchParams` triggers Next 14's CSR bailout, which the static-export
+// build refuses to render unless the consumer is inside a Suspense boundary.
+// Default export wraps the inner component to satisfy that requirement.
 export default function AIStudioPage() {
+  return (
+    <Suspense fallback={null}>
+      <AIStudioPageInner />
+    </Suspense>
+  );
+}
+
+function AIStudioPageInner() {
   const { t } = useI18n();
   const { token } = useAuth();
-  const [activeTab, setActiveTab] = useState<Tab>("team");
+  // Persist tab selection in the URL (?tab=…) so refresh + back/forward + share-link
+  // all land on the same tab. Falls back to "team" when the param is missing or junk.
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const tabFromUrl = searchParams.get("tab");
+  const [activeTab, setActiveTabState] = useState<Tab>(isTab(tabFromUrl) ? tabFromUrl : "team");
+  // Keep state in sync if the URL changes (e.g. browser back/forward).
+  useEffect(() => {
+    if (isTab(tabFromUrl) && tabFromUrl !== activeTab) setActiveTabState(tabFromUrl);
+  }, [tabFromUrl, activeTab]);
+  const setActiveTab = useCallback(
+    (next: Tab) => {
+      setActiveTabState(next);
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.set("tab", next);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
   const [stats, setStats] = useState({ agents: 0, playbooks: 0, knowledge: 0, skills: 0 });
 
   useEffect(() => {

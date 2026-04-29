@@ -229,6 +229,10 @@ model Conversation {
   customerName       String?            @map("customer_name")
   customerAvatarUrl  String?            @map("customer_avatar_url")
   assignedAgentId    String?            @map("assigned_agent_id")
+  // AI agent assigned by the Main Playbook flow (route_target → "agent").
+  // Resolved on first dispatch; subsequent inbound messages prefer this over
+  // legacy RouterRule lookup so resume is deterministic.
+  assignedAiAgentId  String?            @map("assigned_ai_agent_id")
   departmentId       String?            @map("department_id")
   status             ConversationStatus @default(OPEN)
   // Chatbot state tracking
@@ -239,6 +243,14 @@ model Conversation {
   // object: { "customer_email": "foo@bar.com", "http_response": {...}, ... }.
   // Interpolated into outbound Send* nodes via {{var_name}} syntax.
   flowVariables      Json?              @map("flow_variables")
+  // Comment→DM bridge expiry. Set when a comment-trigger flow promotes itself
+  // into a paused conversation (private-reply DM sent, awaiting the user's
+  // reply). If the user doesn't reply within 24h, the bridge is dead — Meta
+  // disallows further DMs in that thread (one-DM-per-comment policy). On
+  // expiry the conversation is closed and the chatbot state cleared. Cleared
+  // when the user replies within the window (the conversation graduates to a
+  // normal DM and is no longer Meta-restricted).
+  flowExpiresAt      DateTime?          @map("flow_expires_at")
   isHandedOver       Boolean            @default(false) @map("is_handed_over")
   handledBy          String?            @map("handled_by") // "ai_agent", "flow", "human", null (unrouted)
   lastMessageAt      DateTime?          @map("last_message_at")
@@ -258,8 +270,10 @@ model Conversation {
 
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])
+  @@index([tenantId, assignedAiAgentId])
   @@index([tenantId, departmentId])
   @@index([tenantId, channel, customerExternalId])
+  @@index([flowExpiresAt])
   @@map("conversations")
 }
 

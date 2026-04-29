@@ -109,7 +109,33 @@ router.get("/", async (req: Request, res: Response) => {
       orderBy: { createdAt: "desc" },
       take: 100,
     });
-    return res.json({ data: rows });
+    // Resolve user ids → display names so the UI doesn't render raw cuids.
+    // `requestedBy` may be a user id, "bot", or "flow:<id>" / "ai-agent:<id>";
+    // only treat it as a user id when it's a bare cuid (no prefix).
+    const userIds = new Set<string>();
+    for (const r of rows) {
+      if (r.decidedBy) userIds.add(r.decidedBy as string);
+      if (r.requestedBy && !String(r.requestedBy).includes(":") && r.requestedBy !== "bot") {
+        userIds.add(r.requestedBy as string);
+      }
+    }
+    const userMap = new Map<string, string>();
+    if (userIds.size > 0) {
+      const users = await prisma.user.findMany({
+        where: { id: { in: [...userIds] } },
+        select: { id: true, name: true, email: true },
+      });
+      for (const u of users) userMap.set(u.id, u.name || u.email || u.id);
+    }
+    const enriched = rows.map((r: any) => ({
+      ...r,
+      decidedByName: r.decidedBy ? userMap.get(r.decidedBy as string) ?? null : null,
+      requestedByName:
+        r.requestedBy && !String(r.requestedBy).includes(":") && r.requestedBy !== "bot"
+          ? userMap.get(r.requestedBy as string) ?? null
+          : null,
+    }));
+    return res.json({ data: enriched });
   } catch (err: any) {
     console.error("approvals.list error:", err);
     return res.status(500).json({ error: "Failed to list approvals" });

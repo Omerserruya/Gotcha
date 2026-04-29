@@ -84,6 +84,51 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
     console.error("[idle-check] Approval expiry sweep failed:", err.message);
   }
 
+  // ── Comment→DM 24h bridge expiry sweep ─────────────────
+  // Conversations promoted from a comment trigger have a flowExpiresAt set
+  // (24h from the private-reply DM). If the user never replies, the bridge
+  // is dead — Meta blocks further DMs. Close them proactively so they don't
+  // sit in inbox indefinitely waiting for an inbound that won't come.
+  try {
+    const expiredBridges = await prisma.conversation.findMany({
+      where: {
+        flowExpiresAt: { not: null, lt: new Date() },
+        status: { not: "CLOSED" as any },
+      },
+      take: 200,
+      select: { id: true, tenantId: true },
+    });
+    for (const conv of expiredBridges) {
+      try {
+        await prisma.conversation.update({
+          where: { id: conv.id },
+          data: {
+            status: "CLOSED" as any,
+            chatbotNodeId: null,
+            chatbotFlowId: null,
+            flowExpiresAt: null,
+            closedAt: new Date(),
+          },
+        });
+        await publishEvent({
+          event: "conversation:updated",
+          tenantId: conv.tenantId,
+          data: { id: conv.id, status: "CLOSED" },
+        }).catch(() => {});
+        console.log(
+          `[idle-check] flow_expired conversation=${conv.id} (24h comment-DM bridge auto-closed)`,
+        );
+      } catch (err: any) {
+        console.error(
+          `[idle-check] Failed to close expired bridge ${conv.id}:`,
+          err.message,
+        );
+      }
+    }
+  } catch (err: any) {
+    console.error("[idle-check] Flow expiry sweep failed:", err.message);
+  }
+
   // Get all active tenants
   const tenants = await prisma.tenant.findMany({
     where: { isActive: true },

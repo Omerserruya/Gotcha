@@ -294,7 +294,15 @@ export default function BroadcastsPage() {
     if (!token) return;
     try {
       const res = await getChannelAccounts(token);
-      setChannelAccounts(res.data ?? []);
+      // Hide Meta channels — Facebook / Instagram / Messenger DMs cannot be
+      // initiated by the business; outbound is restricted to user-initiated
+      // 24h messaging windows, so they don't belong in a broadcast picker.
+      const blocked = new Set(["INSTAGRAM", "MESSENGER", "FACEBOOK"]);
+      setChannelAccounts(
+        (res.data ?? []).filter(
+          (a: any) => !blocked.has(String(a.channel || "").toUpperCase()),
+        ),
+      );
     } catch (err) {
       console.error(err);
     }

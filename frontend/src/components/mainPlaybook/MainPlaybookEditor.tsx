@@ -21,7 +21,6 @@ import "reactflow/dist/style.css";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
-  getRouterRules,
   getAIAgents,
   getChatbotFlows,
   getChannels,
@@ -775,6 +774,15 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   // starting point. We track whether we've already auto-opened so a user who
   // dismisses it doesn't get re-prompted every render.
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
+  // Open the gallery automatically when the editor was navigated to with
+  // `?templates=open` (e.g. from the Playbooks tab "Templates" button).
+  // Reading window.location.search here avoids the Next 14 Suspense bailout
+  // that `useSearchParams` would force on this page.
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("templates") === "open") setTemplateGalleryOpen(true);
+  }, []);
   const [savedToast, setSavedToast] = useState<string | null>(null);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
@@ -808,25 +816,22 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   const [flows, setFlows] = useState<any[]>([]);
   const [departments, setDepartments] = useState<any[]>([]);
   const [channels, setChannels] = useState<any[]>([]);
-  const [rules, setRules] = useState<any[]>([]);
 
   // Load all data.
   // Source of truth for the graph is the server-persisted FlowCanvas.
-  // Only fall back to the legacy RouterRule-derived layout when no canvas
-  // exists yet (first open on a tenant that still has only old rules).
+  // Empty canvas → open the template gallery so authors get a concrete
+  // starting point instead of a blank sheet.
   useEffect(() => {
     if (!token) return;
     Promise.all([
       getChannels(token).then((r) => r.data || r || []),
-      getRouterRules(token).then((r) => r.data || []),
       getAIAgents(token).then((r) => r.data || []),
       getChatbotFlows(token).then((r) => (Array.isArray(r) ? r : (r as any).data || [])),
       getDepartments(token).then((r) => r.data || []),
       getFlowCanvas(token).then((r) => r.data || null).catch(() => null),
     ])
-      .then(([channelsData, rulesData, agentsData, flowsData, deptsData, canvasData]) => {
+      .then(([channelsData, agentsData, flowsData, deptsData, canvasData]) => {
         setChannels(channelsData);
-        setRules(rulesData);
         setAgents(agentsData);
         setFlows(flowsData);
         setDepartments(deptsData);
@@ -860,21 +865,11 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           setNodes(restoredNodes);
           setEdges(restoredEdges);
         } else {
-          // One-time bootstrap from legacy RouterRule data.
-          const savedLayout = loadLayout();
-          const { nodes: initNodes, edges: initEdges } = buildNodesFromData(
-            channelsData, rulesData, agentsData, flowsData, deptsData, savedLayout
-          );
-          setNodes(initNodes);
-          setEdges(initEdges);
-          // Auto-open the template gallery when the canvas is essentially
-          // empty — the user has never saved a flow, and the bootstrap only
-          // produced placeholder channel nodes. Gives new users a concrete
-          // starting point instead of a blank sheet.
-          const hasRealContent = initNodes.some(
-            (n) => n.type !== "channel_entry" && n.type !== "default_fallback",
-          );
-          if (!hasRealContent) setTemplateGalleryOpen(true);
+          // No saved canvas yet — open the template gallery so the author
+          // can pick a starting point instead of seeing a blank sheet.
+          setNodes([]);
+          setEdges([]);
+          setTemplateGalleryOpen(true);
         }
       })
       .catch(console.error)
@@ -1420,26 +1415,46 @@ function MainPlaybookEditorInner({ onBack }: Props) {
         open={templateGalleryOpen}
         onClose={() => setTemplateGalleryOpen(false)}
         onPick={({ nodes: tNodes, edges: tEdges }) => {
-          // Keep any existing channel_entry nodes so the user's already-
-          // connected channels remain wired. If the template supplies its own
-          // channel_entry (or none at all), just use the template as-is.
-          const existingChannels = nodes.filter((n) => n.type === "channel_entry");
-          const templateHasChannelEntry = tNodes.some((n: any) => n.type === "channel_entry");
+          // ADDITIVE — drop the template into the existing canvas instead of
+          // replacing it. Trigger nodes get re-pinned into the left column by
+          // the auto-layout effect, so we only need to offset the non-trigger
+          // flow nodes so they don't collide with what's already there.
           const shared = { agents, flows, departments };
-          const hydrated: Node[] = tNodes.map((n: any) => ({
-            id: n.id,
-            type: n.type,
-            position: n.position,
-            data: {
-              ...n.data,
-              ...(n.type === "route_target" || n.type === "default_fallback" ? shared : {}),
-            },
-          }));
-          const nextNodes =
-            templateHasChannelEntry || existingChannels.length === 0
-              ? hydrated
-              : [...existingChannels, ...hydrated.filter((n) => n.type !== "channel_entry")];
-          const nextEdges: Edge[] = tEdges.map((e: any) => ({
+          const existingFlowNodes = nodes.filter(
+            (n) =>
+              !isTriggerNode(n)
+              && n.type !== "trigger_section_header",
+          );
+          const maxExistingX = existingFlowNodes.reduce(
+            (acc, n) => Math.max(acc, (n.position?.x ?? 0) + 280),
+            0,
+          );
+          const offsetX = existingFlowNodes.length > 0 ? maxExistingX + 80 : 0;
+          const minTemplateNonTriggerX = tNodes
+            .filter((n: any) => !TRIGGER_TYPES.has(n.type))
+            .reduce(
+              (acc: number, n: any) => Math.min(acc, n.position?.x ?? 0),
+              Number.POSITIVE_INFINITY,
+            );
+          const shiftX =
+            offsetX > 0 && Number.isFinite(minTemplateNonTriggerX)
+              ? offsetX - (minTemplateNonTriggerX as number)
+              : 0;
+          const hydrated: Node[] = tNodes.map((n: any) => {
+            const isTrigger = TRIGGER_TYPES.has(n.type);
+            return {
+              id: n.id,
+              type: n.type,
+              position: isTrigger
+                ? n.position
+                : { x: (n.position?.x ?? 0) + shiftX, y: n.position?.y ?? 0 },
+              data: {
+                ...n.data,
+                ...(n.type === "route_target" || n.type === "default_fallback" ? shared : {}),
+              },
+            };
+          });
+          const newEdges: Edge[] = tEdges.map((e: any) => ({
             id: e.id,
             source: e.source,
             target: e.target,
@@ -1449,8 +1464,8 @@ function MainPlaybookEditorInner({ onBack }: Props) {
             style: { stroke: "#c7c7cc", strokeWidth: 1.5 },
             markerEnd: { type: MarkerType.ArrowClosed, color: "#c7c7cc", width: 16, height: 16 },
           }));
-          setNodes(nextNodes);
-          setEdges(nextEdges);
+          setNodes((nds) => [...nds, ...hydrated]);
+          setEdges((eds) => [...eds, ...newEdges]);
         }}
       />
 

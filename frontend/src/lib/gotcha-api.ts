@@ -108,6 +108,11 @@ export interface ApprovalRequestRow {
   decisionReason: string | null;
   expiresAt: string;
   createdAt: string;
+  // Display-name resolutions populated by the list endpoint so the UI
+  // doesn't render raw user cuids. `null` when the id wasn't a real user
+  // (e.g. requestedBy = "bot" / "flow:xxx" / "ai-agent:xxx").
+  decidedByName?: string | null;
+  requestedByName?: string | null;
 }
 
 export interface ApprovalDetailResponse {

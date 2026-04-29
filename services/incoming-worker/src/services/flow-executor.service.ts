@@ -27,7 +27,6 @@
 import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot } from "./ai-bot.service";
-import { processChatbotFlow } from "./chatbot-engine.service";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
 
@@ -803,11 +802,14 @@ async function dispatchRoute(
   ctx: FlowExecCtx,
 ): Promise<"AI_AGENT" | "FLOW" | "HUMAN" | "DEPARTMENT"> {
   if (routeType === "agent" && targetId) {
-    await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId);
+    // Persist the assigned AI agent on the conversation so subsequent inbound
+    // messages resume against the same agent without re-routing through the
+    // graph or the legacy RouterRule lookup.
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
-      data: { handledBy: "ai_agent" },
+      data: { handledBy: "ai_agent", assignedAiAgentId: targetId },
     });
+    await processAIBot(ctx.tenantId, ctx.conversationId, ctx.message, targetId);
     return "AI_AGENT";
   }
   if (routeType === "flow" && targetId) {
