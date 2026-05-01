@@ -1,0 +1,798 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+    <title>ai-flow.md</title>
+    <meta http-equiv="Content-type" content="text/html;charset=UTF-8">
+    
+<style>
+/* https://github.com/microsoft/vscode/blob/master/extensions/markdown-language-features/media/markdown.css */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+body {
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+	padding: 0 26px;
+	line-height: var(--vscode-markdown-line-height, 22px);
+	word-wrap: break-word;
+}
+
+html,footer,header{
+	font-family: var(--vscode-markdown-font-family, -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif);
+	font-size: var(--vscode-markdown-font-size, 14px);
+}
+
+#code-csp-warning {
+	position: fixed;
+	top: 0;
+	right: 0;
+	color: white;
+	margin: 16px;
+	text-align: center;
+	font-size: 12px;
+	font-family: sans-serif;
+	background-color:#444444;
+	cursor: pointer;
+	padding: 6px;
+	box-shadow: 1px 1px 1px rgba(0,0,0,.25);
+}
+
+#code-csp-warning:hover {
+	text-decoration: none;
+	background-color:#007acc;
+	box-shadow: 2px 2px 2px rgba(0,0,0,.25);
+}
+
+body.scrollBeyondLastLine {
+	margin-bottom: calc(100vh - 22px);
+}
+
+body.showEditorSelection .code-line {
+	position: relative;
+}
+
+body.showEditorSelection .code-active-line:before,
+body.showEditorSelection .code-line:hover:before {
+	content: "";
+	display: block;
+	position: absolute;
+	top: 0;
+	left: -12px;
+	height: 100%;
+}
+
+body.showEditorSelection li.code-active-line:before,
+body.showEditorSelection li.code-line:hover:before {
+	left: -30px;
+}
+
+.vscode-light.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.15);
+}
+
+.vscode-light.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(0, 0, 0, 0.40);
+}
+
+.vscode-light.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-dark.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.4);
+}
+
+.vscode-dark.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 255, 255, 0.60);
+}
+
+.vscode-dark.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+.vscode-high-contrast.showEditorSelection .code-active-line:before {
+	border-left: 3px solid rgba(255, 160, 0, 0.7);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line:hover:before {
+	border-left: 3px solid rgba(255, 160, 0, 1);
+}
+
+.vscode-high-contrast.showEditorSelection .code-line .code-line:hover:before {
+	border-left: none;
+}
+
+img {
+	max-width: 100%;
+	max-height: 100%;
+}
+
+a {
+	text-decoration: none;
+}
+
+a:hover {
+	text-decoration: underline;
+}
+
+a:focus,
+input:focus,
+select:focus,
+textarea:focus {
+	outline: 1px solid -webkit-focus-ring-color;
+	outline-offset: -1px;
+}
+
+hr {
+	border: 0;
+	height: 2px;
+	border-bottom: 2px solid;
+}
+
+h1 {
+	padding-bottom: 0.3em;
+	line-height: 1.2;
+	border-bottom-width: 1px;
+	border-bottom-style: solid;
+}
+
+h1, h2, h3 {
+	font-weight: normal;
+}
+
+table {
+	border-collapse: collapse;
+}
+
+table > thead > tr > th {
+	text-align: left;
+	border-bottom: 1px solid;
+}
+
+table > thead > tr > th,
+table > thead > tr > td,
+table > tbody > tr > th,
+table > tbody > tr > td {
+	padding: 5px 10px;
+}
+
+table > tbody > tr + tr > td {
+	border-top: 1px solid;
+}
+
+blockquote {
+	margin: 0 7px 0 5px;
+	padding: 0 16px 0 10px;
+	border-left-width: 5px;
+	border-left-style: solid;
+}
+
+code {
+	font-family: Menlo, Monaco, Consolas, "Droid Sans Mono", "Courier New", monospace, "Droid Sans Fallback";
+	font-size: 1em;
+	line-height: 1.357em;
+}
+
+body.wordWrap pre {
+	white-space: pre-wrap;
+}
+
+pre:not(.hljs),
+pre.hljs code > div {
+	padding: 16px;
+	border-radius: 3px;
+	overflow: auto;
+}
+
+pre code {
+	color: var(--vscode-editor-foreground);
+	tab-size: 4;
+}
+
+/** Theming */
+
+.vscode-light pre {
+	background-color: rgba(220, 220, 220, 0.4);
+}
+
+.vscode-dark pre {
+	background-color: rgba(10, 10, 10, 0.4);
+}
+
+.vscode-high-contrast pre {
+	background-color: rgb(0, 0, 0);
+}
+
+.vscode-high-contrast h1 {
+	border-color: rgb(0, 0, 0);
+}
+
+.vscode-light table > thead > tr > th {
+	border-color: rgba(0, 0, 0, 0.69);
+}
+
+.vscode-dark table > thead > tr > th {
+	border-color: rgba(255, 255, 255, 0.69);
+}
+
+.vscode-light h1,
+.vscode-light hr,
+.vscode-light table > tbody > tr + tr > td {
+	border-color: rgba(0, 0, 0, 0.18);
+}
+
+.vscode-dark h1,
+.vscode-dark hr,
+.vscode-dark table > tbody > tr + tr > td {
+	border-color: rgba(255, 255, 255, 0.18);
+}
+
+</style>
+
+<style>
+/* Tomorrow Theme */
+/* http://jmblog.github.com/color-themes-for-google-code-highlightjs */
+/* Original theme - https://github.com/chriskempson/tomorrow-theme */
+
+/* Tomorrow Comment */
+.hljs-comment,
+.hljs-quote {
+	color: #8e908c;
+}
+
+/* Tomorrow Red */
+.hljs-variable,
+.hljs-template-variable,
+.hljs-tag,
+.hljs-name,
+.hljs-selector-id,
+.hljs-selector-class,
+.hljs-regexp,
+.hljs-deletion {
+	color: #c82829;
+}
+
+/* Tomorrow Orange */
+.hljs-number,
+.hljs-built_in,
+.hljs-builtin-name,
+.hljs-literal,
+.hljs-type,
+.hljs-params,
+.hljs-meta,
+.hljs-link {
+	color: #f5871f;
+}
+
+/* Tomorrow Yellow */
+.hljs-attribute {
+	color: #eab700;
+}
+
+/* Tomorrow Green */
+.hljs-string,
+.hljs-symbol,
+.hljs-bullet,
+.hljs-addition {
+	color: #718c00;
+}
+
+/* Tomorrow Blue */
+.hljs-title,
+.hljs-section {
+	color: #4271ae;
+}
+
+/* Tomorrow Purple */
+.hljs-keyword,
+.hljs-selector-tag {
+	color: #8959a8;
+}
+
+.hljs {
+	display: block;
+	overflow-x: auto;
+	color: #4d4d4c;
+	padding: 0.5em;
+}
+
+.hljs-emphasis {
+	font-style: italic;
+}
+
+.hljs-strong {
+	font-weight: bold;
+}
+</style>
+
+<style>
+/*
+ * Custom MD PDF CSS
+ */
+html,footer,header{
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+
+ }
+body {
+	font-family: -apple-system, BlinkMacSystemFont, "Segoe WPC", "Segoe UI", "Ubuntu", "Droid Sans", sans-serif, "Meiryo";
+	padding: 0 12px;
+}
+
+pre {
+	background-color: #f8f8f8;
+	border: 1px solid #cccccc;
+	border-radius: 3px;
+	overflow-x: auto;
+	white-space: pre-wrap;
+	overflow-wrap: break-word;
+}
+
+pre:not(.hljs) {
+	padding: 23px;
+	line-height: 19px;
+}
+
+blockquote {
+	background: rgba(127, 127, 127, 0.1);
+	border-color: rgba(0, 122, 204, 0.5);
+}
+
+.emoji {
+	height: 1.4em;
+}
+
+code {
+	font-size: 14px;
+	line-height: 19px;
+}
+
+/* for inline code */
+:not(pre):not(.hljs) > code {
+	color: #C9AE75; /* Change the old color so it seems less like an error */
+	font-size: inherit;
+}
+
+/* Page Break : use <div class="page"/> to insert page break
+-------------------------------------------------------- */
+.page {
+	page-break-after: always;
+}
+
+</style>
+<link rel="stylesheet" href="file:///home/ocs/projects/ChatCenter/R%3A%5C2.Travail%5C1.Enseignement%5CCours%5C_1.Outils%5C2.Developpement%5C1.SCSS%5Cmain.css" type="text/css"><link rel="stylesheet" href="file:///home/ocs/projects/ChatCenter/D%3A%5Crdaros%5CCours%5C_1.Outils%5C2.Developpement%5C1.SCSS%5Cmain.css" type="text/css">
+</head>
+
+<body>
+    <h1 id="ai-flow--end-to-end">AI Flow — End-to-End</h1>
+<p>How an AI Employee answers a customer (autonomous mode) and how the CoPilot helps a human agent. Covers prompt assembly, tool-calling, RAG, config resolution, and the debug surface.</p>
+<blockquote>
+<p><strong>Architectural rule (2026-04 onward):</strong> every LLM call lives in the <strong>AI service</strong>. The incoming-worker, comment-trigger walker, and any other surface that needs an LLM go through HTTP to the AI service — they do not import the OpenAI SDK directly. The single exception still pending migration is <code>services/auth/src/routes/onboarding.ts</code>.</p>
+</blockquote>
+<hr>
+<h2 id="1-the-two-surfaces">1. The two surfaces</h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Mode</th>
+<th>Trigger</th>
+<th>Who reads the reply</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Autonomous bot</strong></td>
+<td><code>agent</code></td>
+<td>Webhook → queue → flow-executor / incoming.worker</td>
+<td>The customer (sent over WhatsApp/Messenger/Instagram)</td>
+</tr>
+<tr>
+<td><strong>CoPilot</strong></td>
+<td><code>assist</code></td>
+<td>Human agent opens the inbox UI</td>
+<td>The human agent (suggestions, summary, chat)</td>
+</tr>
+</tbody>
+</table>
+<p>Both share the same <code>AIAgent</code> row in the DB, but they assemble prompts differently and the autonomous bot has access to integration tools while the copilot does not.</p>
+<hr>
+<h2 id="2-autonomous-bot--full-call-chain">2. Autonomous bot — full call chain</h2>
+<h3 id="21-trigger-paths-into-processaibot">2.1 Trigger paths into <code>processAIBot</code></h3>
+<pre class="hljs"><code><div>Meta webhook (WA / IG / Messenger)
+        ↓
+gateway → /api/webhook → webhook-service
+        ↓
+BullMQ enqueue: incoming-messages
+        ↓
+incoming-worker.processIncomingMessage(job)
+        ↓
+   ┌────────────────────────────────────────┐
+   │ Worker decides what to do with this    │
+   │ inbound based on conversation state:   │
+   │                                        │
+   │ messageCount &lt;= 1  → routing.service   │
+   │   → flow-executor.executeMainFlow      │
+   │     → on `route_target { agent }`:     │
+   │        dispatchRoute(&quot;agent&quot;)          │
+   │        → processAIBot(...)             │
+   │                                        │
+   │ handledBy === &quot;ai_agent&quot;               │
+   │   → processAIBot(...)                  │
+   │                                        │
+   │ chatbotNodeId set                      │
+   │   → executeMainFlow(resumeNodeId)      │
+   │     (may dispatch to AI again)         │
+   └────────────────────────────────────────┘
+</div></code></pre>
+<p><code>processAIBot</code> is the single entry point for &quot;AI replies to customer&quot; — three paths feed into it.</p>
+<h3 id="22-what-the-worker-does-side-effects-only">2.2 What the worker does (side effects only)</h3>
+<p><code>services/incoming-worker/src/services/ai-bot.service.ts</code></p>
+<pre class="hljs"><code><div>processAIBot(tenantId, conversationId, message, agentId?)
+  1. Load conversation (+ channelAccount creds)
+  2. Resolve aiAgentId (param → conversation.assignedAiAgentId)
+  3. Load AIAgent (lite slice — escalationMessage, max thresholds, status)
+  4. Build SendContext (channel, externalId, decrypted credentials)
+  5. ── Pre-flight ────────────────────────────────────
+     a. checkEscalationThresholds (max messages, max minutes)
+        → escalateToHuman()  (sends escalationMessage, sets WAITING)
+     b. isHumanRequest (regex over user message)
+        → escalateToHuman()
+  6. ── Delegate to AI service ─────────────────────────
+     POST http://ai:4006/api/ai-bot/reply
+     headers: { X-Internal-Key: $INTERNAL_SERVICE_KEY }
+     body:    { tenantId, conversationId, aiAgentId, incomingMessage }
+  7. ── Act on result ─────────────────────────────────
+     awaitingApproval → set handledBy=&quot;awaiting_approval&quot;,
+                        audit, send bridge-ack to customer, return
+     escalation       → escalateToHuman(), return
+     reply            → adapter.sendTextMessage() → DB persist
+                        → trackMessageUsage → publish message:new
+</div></code></pre>
+<p>The worker <strong>never imports <code>openai</code></strong> anymore. It calls AI service for the reply decision and acts on three return signals: <code>awaitingApproval</code>, <code>escalation</code>, or <code>reply</code>.</p>
+<h3 id="23-what-the-ai-service-does-the-llm-work">2.3 What the AI service does (the LLM work)</h3>
+<p><code>services/ai/src/services/ai-bot.service.ts:generateAIBotReply()</code></p>
+<pre class="hljs"><code><div>1. Load AIAgent row (validate tenant match)
+2. Load last 50 messages (asc by createdAt)
+3. systemPrompt = buildSystemPrompt(config)        ← see §4.1
+4. RAG: retrieveRelevantChunks(tenantId, msg, 5)   ← see §6
+        if any → systemPrompt += &quot;\n\n## KB ...&quot;
+5. Build chatMessages:
+     [{ role: &quot;system&quot;, content: systemPrompt }, ...history(user/assistant)]
+6. Resolve contactId for tool context
+7. tools = buildAgentToolsForAIAgent(tenantId, agentId, …)
+        → escalate_to_human + link_customer_identifier (static)
+        → all enabled TenantTool rows whose integration is CONNECTED
+8. Tool-calling loop (MAX 3 rounds):
+     resp = generateResponse({ messages, tools, model, temp, max_tokens })
+       → which calls openai.chat.completions.create() inside
+         the central ai.service.ts gateway
+     if resp.toolCalls.length === 0:
+        replyText = resp.content  ← FINAL TEXT
+        break
+     else:
+        push assistant turn (with tool_calls)
+        for each tool_call:
+          dispatchToolCall(tc, agentToolCtx)   ← from @chatcenter/shared
+          audit ai.tool_call.&lt;name&gt;
+          push role: &quot;tool&quot; message with result
+          if sideEffect.escalate    → pendingEscalation = …
+          if sideEffect.awaitingApproval → break early, signal pause
+9. Audit ai.bot_turn (one summary record per inbound)
+10. Return { reply, escalation, awaitingApproval, toolCallLog,
+             modelUsed, totalTokens }
+</div></code></pre>
+<h3 id="24-token-usage--audit">2.4 Token usage &amp; audit</h3>
+<ul>
+<li>The central <code>generateResponse()</code> (<code>services/ai/src/services/ai.service.ts</code>) writes:
+<ul>
+<li><code>usage_logs</code> row (via <code>trackAIUsage</code>)</li>
+<li><code>audit_logs</code> row with action <code>ai.responded</code> per LLM call</li>
+</ul>
+</li>
+<li><code>generateAIBotReply</code> adds:
+<ul>
+<li><code>audit_logs</code> <code>ai.tool_call.&lt;tool_name&gt;</code> per tool call</li>
+<li><code>audit_logs</code> <code>ai.bot_turn</code> summary per inbound message</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2 id="3-copilot--full-call-chain">3. CoPilot — full call chain</h2>
+<h3 id="31-trigger-paths">3.1 Trigger paths</h3>
+<table>
+<thead>
+<tr>
+<th>Endpoint</th>
+<th>When</th>
+<th>Mode</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/ai-assist/:conversationId/suggestions</code></td>
+<td>Agent opens conversation, draft suggestions</td>
+<td><code>READY_MESSAGE</code> or <code>CONTEXT_ONLY</code></td>
+</tr>
+<tr>
+<td><code>GET /api/ai-assist/:conversationId/summary</code></td>
+<td>Agent clicks &quot;summarize&quot;</td>
+<td>n/a (separate prompt)</td>
+</tr>
+<tr>
+<td><code>POST /api/ai-assist/:conversationId/chat</code></td>
+<td>Agent types into the CoPilot chat panel</td>
+<td><code>CHAT</code></td>
+</tr>
+<tr>
+<td><code>POST /api/ai-assist/compose</code></td>
+<td>Agent uses AI compose in inbox / template editor</td>
+<td>n/a (one-shot copy)</td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-inside-the-request">3.2 Inside the request</h3>
+<pre class="hljs"><code><div>1. Load conversation + last N messages (20 for suggestions, all for summary, all for chat)
+2. config = getEffectiveCopilotConfig(tenantId, departmentId, &quot;copilot&quot;)  ← see §5
+   → returns CopilotConfigData { systemPrompt, model, temperature, maxTokens,
+                                  copilotMode, tools, isActive }
+3. OpenAIProvider.suggestResponse() / .summarize() / .chatWithAgent():
+   a. systemPrompt = config.systemPrompt
+   b. + truthfulness footer
+   c. + locale-specific language instruction (e.g. &quot;respond in Hebrew&quot;)
+   d. RAG: if last inbound looks &quot;worth searching&quot; (`shouldSearchKB`),
+      retrieveRelevantChunks → append &quot;## Knowledge Base&quot; block
+   e. messages = [
+        { role: &quot;system&quot;, content: systemPrompt },
+        { role: &quot;user&quot;,   content: &quot;## Conversation Transcript\n[Customer]: ...\n[Agent]: ...&quot; },
+        { role: &quot;user&quot;,   content: &lt;mode instruction&gt;   ← see §3.3 }
+      ]
+   f. tools = buildAgentTools({ identityLinking, escalation: true })
+              ← only the 2 static helpers (no integrations in copilot)
+4. generateResponse(...) → OpenAI
+5. Suggestions endpoint parses JSON; chat returns plain text.
+</div></code></pre>
+<h3 id="33-mode-instruction-decides-response-shape">3.3 Mode instruction (decides response shape)</h3>
+<table>
+<thead>
+<tr>
+<th><code>copilotMode</code></th>
+<th>Instruction</th>
+<th>Response format</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>READY_MESSAGE</code> (default)</td>
+<td>&quot;Suggest 2-3 reply options the agent could send. JSON suggestions[].&quot;</td>
+<td>JSON <code>{ suggestions: [{text, confidence, type}] }</code></td>
+</tr>
+<tr>
+<td><code>CONTEXT_ONLY</code></td>
+<td>&quot;Provide 2-4 brief insights — original reason, current need, sentiment, next step. JSON suggestions[] type:info.&quot;</td>
+<td>JSON insight bullets</td>
+</tr>
+<tr>
+<td><code>CHAT</code></td>
+<td>&quot;You are talking to the HUMAN AGENT, not the customer. Plain text, no JSON.&quot;</td>
+<td>Plain markdown text</td>
+</tr>
+</tbody>
+</table>
+<p>Mode is selected per request from <code>config.copilotMode</code> (set on the AI Agent record).</p>
+<hr>
+<h2 id="4-prompt-assembly--the-two-builders">4. Prompt assembly — the two builders</h2>
+<h3 id="41-autonomous-bot--buildsystempromptconfig">4.1 Autonomous bot — <code>buildSystemPrompt(config)</code></h3>
+<p><code>services/ai/src/services/ai-bot.service.ts</code></p>
+<p>This is the <strong>legacy builder</strong>, preserved from the original worker code so production agents (e.g. &quot;Rotem&quot;) keep producing the same prompt they always have.</p>
+<p>Reads from the <code>AIAgent</code> row:</p>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Effect</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>systemPrompt</code> (long text)</td>
+<td>The base of the prompt — this is the big free-text block authors edit in AI Studio</td>
+</tr>
+<tr>
+<td><code>rules[]</code></td>
+<td>Appended as <code>Rules you must follow:\n- …</code></td>
+</tr>
+<tr>
+<td><code>identity.{role, responsibility, representationGuidelines[]}</code></td>
+<td>Appended as <code>Your role: …</code> block</td>
+</tr>
+<tr>
+<td><code>toneConfig.{formalityLevel, empathyLevel, assertiveness, brandAlignment}</code></td>
+<td>Appended as <code>Tone guidelines:</code></td>
+</tr>
+<tr>
+<td><code>behavioral.{forbiddenActions[], safetyBoundaries[]}</code></td>
+<td>Appended as <code>Forbidden actions:</code> / <code>Safety boundaries:</code></td>
+</tr>
+</tbody>
+</table>
+<p>Then <strong>two hardcoded sections</strong> are always appended:</p>
+<ul>
+<li><code>## Truthfulness &amp; Knowledge Base Rules</code> (don't fabricate, base on KB, etc.)</li>
+<li><code>IMPORTANT: You are chatting directly with the customer.</code></li>
+</ul>
+<p><strong>Tool schemas are NOT duplicated in the prompt</strong> — they're sent only via the OpenAI <code>tools</code> field. The author should write tool <em>policy</em> (when to call which tool, in what order) inside <code>agent.systemPrompt</code>, NOT the schemas.</p>
+<h3 id="42-copilot--assembleprompt%22assist%22">4.2 CoPilot — <code>assemblePrompt(&quot;assist&quot;, …)</code></h3>
+<p><code>services/ai/src/services/prompt-assembler.service.ts</code></p>
+<p>Modern, opinionated builder. Order:</p>
+<pre class="hljs"><code><div>[CoPilot Instructions]   ← static MD: services/ai/src/prompts/copilot-instructions.md
+       ↓
+[Shared Section]         ← built from agent.{name, role, description, tone, style, tools}
+                           = Overview + Behavioral Rules + Tools section *
+       ↓
+[Guardrails]             ← static MD: services/ai/src/prompts/guardrails.md
+       ↓
+[Custom Guardrails]      ← agent.customGuardrails[] (optional)
+</div></code></pre>
+<p>Joined with <code>\n\n---\n\n</code>.</p>
+<blockquote>
+<p><strong>*Note:</strong> The Tools section in <code>Shared Section</code> <em>currently duplicates</em> tool descriptions inside the prompt — even though the same tools are also passed via the API <code>tools[]</code> field. This is bloat (double-billing tokens, drift risk). Tracked as cleanup; remove <code>buildToolsSection()</code> from <code>prompt-assembler.service.ts:buildSharedSection()</code> to fix.</p>
+</blockquote>
+<p>For the agent autonomous mode, <code>assemblePrompt(&quot;agent&quot;, …)</code> adds an <code>[Autonomous Section]</code> (escalation rules) and <code>[Conversation Strategy]</code> instead of CoPilot Instructions — but <strong>this path is currently NOT used</strong> by the autonomous bot. The bot uses <code>buildSystemPrompt</code> (§4.1). A future migration could switch the bot to <code>assemblePrompt(&quot;agent&quot;)</code>; that's a behavior change and not done yet.</p>
+<h3 id="43-decision-tree--which-builder-runs">4.3 Decision tree — which builder runs?</h3>
+<pre class="hljs"><code><div>Surface          | Builder
+────────────────────────────────────────────────────────────
+Autonomous bot   | buildSystemPrompt   (§4.1)
+CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;) if agent.sharedPrompt
+                 |                       → fallback: agent.systemPrompt + COPILOT_MODE_INJECTION
+                                            + assembleFromBlocks (legacy) if no systemPrompt
+                                          [legacy fallback: rare, only for old agents
+                                           that were never opened in the new editor]
+</div></code></pre>
+<p>The fallback is in <code>services/ai/src/services/ai-assist.service.ts:buildConfigFromAIAgent()</code>.</p>
+<hr>
+<h2 id="5-ai-agent-resolution--which-agent-answers">5. AI Agent resolution — which agent answers</h2>
+<p><code>services/ai/src/services/ai-assist.service.ts:getEffectiveCopilotConfig(tenantId, departmentId, role)</code></p>
+<pre class="hljs"><code><div>1. departmentId set?
+   → query RouterRule { tenantId, routeType: &quot;AI_AGENT&quot;, routeTarget: deptId, enabled }
+     → if found → load AIAgent → buildConfigFromAIAgent(agent, role)
+2. Otherwise (or no dept rule):
+   → query RouterRule { tenantId, routeType: &quot;AI_AGENT&quot;, isDefault: true, enabled }
+     → if found → load AIAgent
+3. Final fallback:
+   → first AIAgent for tenant where status IN (ACTIVE, DRAFT), oldest first
+</div></code></pre>
+<p>For the autonomous bot the resolution is different — the <strong>Main Flow Canvas's <code>route_target { agent }</code> node decides</strong> which agent to dispatch. Once dispatched, <code>conversation.assignedAiAgentId</code> is set so subsequent inbound messages re-enter the same agent without re-routing through the graph.</p>
+<hr>
+<h2 id="6-rag--knowledge-base-retrieval">6. RAG — knowledge base retrieval</h2>
+<p>Retrieval is the <strong>same code</strong> from both autonomous bot and copilot — <code>services/ai/src/services/knowledge.service.ts:retrieveRelevantChunks(tenantId, query, limit=5)</code>.</p>
+<pre class="hljs"><code><div>1. Embed query  →  openai.embeddings.create() via central ai.service
+2. Filter active KnowledgeBase rows for the tenant
+3. qdrant.search(&quot;knowledge_chunks&quot;, { vector, filter: tenantId + KB ids, limit })
+4. Return top-k chunks: { content, score, documentTitle, chunkIndex }
+</div></code></pre>
+<p><strong>When it fires:</strong></p>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Probe</th>
+<th>Skip on</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Autonomous bot</td>
+<td>The current inbound message (always)</td>
+<td>(always tries)</td>
+</tr>
+<tr>
+<td>CoPilot suggestions / chat</td>
+<td>The last inbound message — only if <code>shouldSearchKB(msg)</code> is true</td>
+<td>Greetings, thanks, &quot;ok&quot;, emoji-only, etc. (regex skip-list)</td>
+</tr>
+</tbody>
+</table>
+<p>If chunks are returned, they're formatted into a <code>## Knowledge Base Context</code> markdown block and <strong>appended to the system prompt</strong> (not pushed as a separate user message — except in <code>chatWithAgent</code> which uses a fake user/assistant turn pair to inject KB).</p>
+<hr>
+<h2 id="7-tool-calling-protocol">7. Tool-calling protocol</h2>
+<h3 id="71-tool-list">7.1 Tool list</h3>
+<ul>
+<li><strong>Autonomous bot:</strong> <code>buildAgentToolsForAIAgent(tenantId, agentId, …)</code> from <code>@chatcenter/shared</code>
+<ul>
+<li>Static: <code>escalate_to_human</code>, <code>link_customer_identifier</code></li>
+<li>Dynamic: every <code>TenantTool</code> row that's <code>isEnabled</code> AND whose <code>TenantIntegration.status === &quot;CONNECTED&quot;</code></li>
+</ul>
+</li>
+<li><strong>CoPilot:</strong> <code>buildAgentTools({ identityLinking, escalation: true })</code> — only the 2 static helpers</li>
+</ul>
+<h3 id="72-openai-request-shape">7.2 OpenAI request shape</h3>
+<pre class="hljs"><code><div>openai.chat.completions.create({
+  model, messages, temperature, max_tokens,
+  <span class="hljs-attr">tools</span>: [
+    { <span class="hljs-attr">type</span>: <span class="hljs-string">"function"</span>, <span class="hljs-attr">function</span>: { name, description, <span class="hljs-attr">parameters</span>: {jsonSchema} } },
+    ...
+  ],
+  <span class="hljs-attr">tool_choice</span>: <span class="hljs-string">"auto"</span>   <span class="hljs-comment">// implicit default</span>
+})
+</div></code></pre>
+<h3 id="73-response-%E2%86%92-loop">7.3 Response → loop</h3>
+<p>If the response has <code>tool_calls</code>:</p>
+<pre class="hljs"><code><div>1. Append assistant turn (with tool_calls) to messages
+2. For each tc:
+     args = JSON.parse(tc.function.arguments)
+     result = dispatchToolCall(tc, agentToolCtx)
+     audit ai.tool_call.&lt;name&gt;
+     append { role: &quot;tool&quot;, tool_call_id: tc.id, content: result.content }
+   sideEffects:
+     - sideEffect.escalate → store, will escalateToHuman after loop
+     - sideEffect.awaitingApproval → break early, return signal to worker
+3. Loop again so the model can write the final text reply
+</div></code></pre>
+<p>Capped at <strong>3 rounds</strong>. After 3 rounds with no final text, return <code>null</code> and the worker drops the turn.</p>
+<p><code>dispatchToolCall</code> lives in <code>@chatcenter/shared/src/lib/agent-tools.ts</code> and handles routing by tool name — it's used by both autonomous-bot and copilot-chat paths.</p>
+<hr>
+<h2 id="8-debug-surface--see-what-the-llm-gets">8. Debug surface — see what the LLM gets</h2>
+<p><code>services/ai/src/routes/ai-debug.ts</code> — mounted at <code>/api/ai-debug</code>.</p>
+<ul>
+<li><code>POST /api/ai-debug/jit</code> — SYSTEM_ADMIN only; mints a single-use, short-TTL token bound to a <code>tenantId</code> (and optional <code>agentId</code>).</li>
+<li><code>GET /api/ai-debug/prompt?tenantId=…&amp;agentId=…&amp;mode=agent|assist&amp;conversationId=…&amp;message=…</code>
+<ul>
+<li>Auth: <code>X-Debug-Key: $AI_DEBUG_KEY</code> header <strong>or</strong> <code>Authorization: Bearer &lt;jit&gt;</code>.</li>
+<li>Returns: <code>{ tenant, agent, mode, context, systemPrompt, tools, messages, stringified }</code>.</li>
+<li><strong>The exact <code>messages</code> and <code>tools</code> arrays the LLM would receive.</strong></li>
+</ul>
+</li>
+</ul>
+<p><code>mode=agent</code> calls the same <code>buildSystemPrompt</code> as production. <code>mode=assist</code> calls the same <code>assemblePrompt(&quot;assist&quot;)</code> as production. There's no drift — debug and runtime share one builder per mode.</p>
+<hr>
+<h2 id="9-end-to-end-timing-diagram-autonomous-bot">9. End-to-end timing diagram (autonomous bot)</h2>
+<pre class="hljs"><code><div>Customer (WhatsApp)
+   │  &quot;אני רוצה לקנות חבילה&quot;
+   ▼
+Meta webhook (POST /api/webhook)
+   │
+gateway-1 → webhook-service → BullMQ &quot;incoming-messages&quot;
+   │
+incoming-worker (Job N)
+   │  conversation lookup → status check → assignedAiAgentId resolve
+   │  pre-flight: thresholds, &quot;human&quot; keyword
+   │
+   │   POST http://ai:4006/api/ai-bot/reply
+   ▼
+ai-service
+   │  load agent + history(50)
+   │  buildSystemPrompt(agent)  + RAG (qdrant search)
+   │  build tools: static + tenant integrations
+   │  ROUND 1: generateResponse({ messages, tools })
+   │    ↳ central ai.service → openai.chat.completions.create
+   │    response: tool_calls = [integration_create_lead]
+   │  dispatchToolCall → POST Zoho CRM (via tool dispatcher)
+   │  push tool result message
+   │  ROUND 2: generateResponse(...)
+   │    response: content = &quot;מעולה, יצרתי לך פנייה...&quot;
+   │  audit ai.bot_turn
+   │   ↑
+   │   ▼  return { reply: &quot;מעולה...&quot;, toolCallLog: [...], modelUsed, totalTokens }
+incoming-worker
+   │  outboundAdapter.sendTextMessage()  ← WhatsApp Cloud API
+   │  prisma.message.create  ← OUTBOUND row with toolCalls metadata
+   │  publishEvent message:new  ← socket.io fan-out to inbox UIs
+   ▼
+Customer receives the reply
+</div></code></pre>
+<p>Latency budget: typical round trip is ~2-4s for one round, ~5-8s when a tool is called (because of round 2).</p>
+<hr>
+<h2 id="10-what-changed-in-2026-04-migration-notes">10. What changed in 2026-04 (migration notes)</h2>
+<ul>
+<li><strong>All OpenAI calls moved to AI service.</strong> Worker no longer imports <code>openai</code>. The bot path now goes through <code>POST /api/ai-bot/reply</code>. The one-shot path (comment-trigger) goes through <code>POST /api/ai-bot/oneshot</code>.</li>
+<li><strong><code>services/incoming-worker/src/services/knowledge-retrieval.service.ts</code></strong> is now dead code — nothing imports it. Safe to delete.</li>
+<li><strong><code>services/auth/src/routes/onboarding.ts</code></strong> still has a direct OpenAI client — pending migration.</li>
+<li><strong>Debug route</strong> (<code>/api/ai-debug/prompt</code>) added for inspecting the assembled prompt + tools before it hits OpenAI.</li>
+</ul>
+
+</body>
+
+</html>

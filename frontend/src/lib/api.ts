@@ -1024,13 +1024,33 @@ export function updateIntegrationCredentials(token: string, slug: string, creden
   });
 }
 
-export function getIntegrationTools(token: string, slug: string) {
-  return apiFetch<{ data: any[] }>(`/api/integrations/${slug}/tools`, { token });
+export function getIntegrationTools(token: string, slug: string, opts?: { aiAgentId?: string }) {
+  const qs = opts?.aiAgentId ? `?aiAgentId=${encodeURIComponent(opts.aiAgentId)}` : "";
+  return apiFetch<{ data: any[] }>(`/api/integrations/${slug}/tools${qs}`, { token });
 }
 
 export function toggleIntegrationTool(token: string, slug: string, toolSlug: string, isEnabled: boolean) {
   return apiFetch<{ data: any }>(`/api/integrations/${slug}/tools/${toolSlug}`, {
     token, method: "PUT", body: JSON.stringify({ isEnabled }),
+  });
+}
+
+/**
+ * Toggle a single tool for one AI agent. Writes `AgentToolPermission`.
+ * Use after `toggleIntegrationTool` so the underlying `TenantTool` is
+ * also enabled — both layers must be true for the bot to see the tool.
+ */
+export function toggleAgentTool(
+  token: string,
+  agentId: string,
+  tenantToolId: string,
+  isAllowed: boolean,
+  requireApproval?: boolean,
+) {
+  return apiFetch<{ data: any }>(`/api/ai-agents/${agentId}/tools/${tenantToolId}`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify({ isAllowed, ...(typeof requireApproval === "boolean" ? { requireApproval } : {}) }),
   });
 }
 

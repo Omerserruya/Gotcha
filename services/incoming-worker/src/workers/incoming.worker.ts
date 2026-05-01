@@ -395,8 +395,17 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           return;
         }
         // No rule matched — conversation stays in inbox for manual pickup
-      } else if ((conversation as any).handledBy === "ai_agent") {
-        // Ongoing AI conversation — continue processing with AI bot
+      } else if (
+        (conversation as any).handledBy === "ai_agent" ||
+        (conversation as any).handledBy === "awaiting_approval"
+      ) {
+        // Ongoing AI conversation — continue processing with AI bot.
+        // We keep the bot driving even while a HITL approval is still
+        // pending: the AI service surfaces the pending approval to the
+        // model and drops integration_* tools for that turn so the bot
+        // can chat freely without re-firing the gated action and creating
+        // duplicate ApprovalRequest rows. Dedupe in the dispatcher is the
+        // belt-and-suspenders second line of defense.
         const { processAIBot } = await import("../services/ai-bot.service");
         await processAIBot(tenantId, conversation.id, body);
         return;

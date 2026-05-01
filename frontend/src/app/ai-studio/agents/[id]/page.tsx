@@ -1270,6 +1270,7 @@ export default function AgentEditorPage() {
       {/* Integration Drawer (inline — no navigation) */}
       <IntegrationDrawer
         isOpen={showSkillsPanel}
+        aiAgentId={id !== "new" ? id : undefined}
         onClose={() => {
           setShowSkillsPanel(false);
           // Refresh both the marketplace list (drawer UI) AND this agent's

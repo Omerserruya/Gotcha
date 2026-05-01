@@ -179,16 +179,16 @@
       "type": "file"
     },
     {
+      "path": "src/lib/api.ts",
+      "accessCount": 40,
+      "lastAccessed": 1777573407305,
+      "type": "directory"
+    },
+    {
       "path": "public/widget/chatcenter-widget.js",
       "accessCount": 39,
       "lastAccessed": 1776004395158,
       "type": "file"
-    },
-    {
-      "path": "src/lib/api.ts",
-      "accessCount": 39,
-      "lastAccessed": 1776365311518,
-      "type": "directory"
     },
     {
       "path": "src/components/landing/SolutionsSection.tsx",
@@ -233,6 +233,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/IntegrationDrawer.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1777573446715,
+      "type": "file"
+    },
+    {
       "path": "src/app/knowledge/page.tsx",
       "accessCount": 12,
       "lastAccessed": 1776002199581,
@@ -273,12 +279,6 @@
       "accessCount": 9,
       "lastAccessed": 1776359684121,
       "type": "directory"
-    },
-    {
-      "path": "src/components/IntegrationDrawer.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1775734094642,
-      "type": "file"
     },
     {
       "path": "src/app/ai-studio",

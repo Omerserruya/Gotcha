@@ -31,28 +31,97 @@ import {
 } from "@chatcenter/shared";
 
 /**
- * Dispatch an approved action by calling the ai service's action
- * executor over HTTP. We POST a single-step plan with approved=true so
- * the executor's gate recognizes the approval. Best-effort: failure
- * here logs an error but does NOT roll the ApprovalRequest back to
- * PENDING — the human already decided. A follow-up worker can retry.
+ * Dispatch an approved action by calling the AI service.
+ *
+ * Two paths because the bot's tool surface has two shapes:
+ *   - `integration_<slug>` (e.g. integration_create_lead) — the bot's
+ *     auto-dispatch path resolves slug → TenantTool and POSTs to
+ *     /api/ai-assist/:conversationId/tools/execute. Approved-tool
+ *     dispatch must use the SAME path so the lead/deal/etc. actually
+ *     reaches the connected integration. Without this branch, approval
+ *     would silently no-op — the action-planner executor's switch only
+ *     knows the legacy hardcoded action names (tag_contact, update_crm,
+ *     create_ticket, …) and throws on anything else.
+ *   - Everything else falls through to the legacy action-planner
+ *     /execute path with `approved=true`.
+ *
+ * In both cases we parse the inner result so we don't return ok:true
+ * just because the HTTP call returned 200. Without that, a downstream
+ * tool error would still trigger the post-approval customer message,
+ * confusing the user.
+ *
+ * Best-effort: failure is logged but does NOT roll the ApprovalRequest
+ * back to PENDING — the human already decided. A follow-up worker can
+ * retry from APPROVED rows.
  */
 async function dispatchApprovedAction(args: {
   tenantId: string;
   approvalId: string;
+  conversationId: string;
   tool: string;
   params: Record<string, unknown>;
   approvedBy: string;
   authToken?: string;
 }): Promise<{ ok: boolean; error?: string; result?: unknown }> {
-  const base = process.env.AI_SERVICE_URL ?? "http://ai:4006";
-  const url = `${base.replace(/\/$/, "")}/api/action-planner/execute`;
+  const base = (process.env.AI_SERVICE_URL ?? "http://ai:4006").replace(/\/$/, "");
   const headers: Record<string, string> = { "Content-Type": "application/json" };
   const token = args.authToken ?? process.env.INTERNAL_SERVICE_TOKEN;
   if (token) headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   headers["x-tenant-id"] = args.tenantId;
+
+  // ── Integration tools — same path the bot uses ─────────────
+  if (args.tool.startsWith("integration_")) {
+    const slug = args.tool.slice("integration_".length);
+    let tenantTool: { id: string } | null = null;
+    try {
+      tenantTool = await prisma.tenantTool.findFirst({
+        where: {
+          tenantId: args.tenantId,
+          isEnabled: true,
+          tenantIntegration: { status: "CONNECTED" },
+          catalogTool: { slug },
+        },
+        select: { id: true },
+      });
+    } catch (err: any) {
+      return { ok: false, error: `tenantTool lookup failed: ${err?.message}` };
+    }
+    if (!tenantTool) {
+      return { ok: false, error: `no connected tool for slug "${slug}"` };
+    }
+
+    try {
+      const res = await fetch(
+        `${base}/api/ai-assist/${encodeURIComponent(args.conversationId)}/tools/execute`,
+        {
+          method: "POST",
+          headers,
+          body: JSON.stringify({ tenantToolId: tenantTool.id, input: args.params }),
+        },
+      );
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        return { ok: false, error: data?.error || `executor returned ${res.status}` };
+      }
+      // The /tools/execute endpoint wraps the connector result in
+      // `{ data: { ok, output|error, status } }` — propagate inner failure.
+      const exec = data?.data;
+      if (exec && exec.ok === false) {
+        return {
+          ok: false,
+          error: exec.error || `tool ${args.tool} failed (status ${exec.status ?? "?"})`,
+          result: exec,
+        };
+      }
+      return { ok: true, result: exec ?? data };
+    } catch (err: any) {
+      return { ok: false, error: err?.message ?? "fetch failed" };
+    }
+  }
+
+  // ── Legacy action-planner path ─────────────────────────────
   try {
-    const res = await fetch(url, {
+    const res = await fetch(`${base}/api/action-planner/execute`, {
       method: "POST",
       headers,
       body: JSON.stringify({
@@ -73,10 +142,18 @@ async function dispatchApprovedAction(args: {
         idempotencyKey: `approval:${args.approvalId}`,
       }),
     });
+    const data: any = await res.json().catch(() => ({}));
     if (!res.ok) {
-      return { ok: false, error: `executor returned ${res.status}` };
+      return { ok: false, error: data?.error || `executor returned ${res.status}` };
     }
-    const data = await res.json();
+    // /api/action-planner/execute returns { results: [{ ok, error, ... }] }
+    // — propagate the first non-ok step so a tool failure doesn't fire the
+    // post-approval customer message.
+    const results = Array.isArray(data?.results) ? data.results : [];
+    const firstFail = results.find((r: any) => r && r.ok === false);
+    if (firstFail) {
+      return { ok: false, error: firstFail.error || firstFail.skipReason || `tool ${args.tool} failed`, result: data };
+    }
     return { ok: true, result: data };
   } catch (err: any) {
     return { ok: false, error: err?.message ?? "fetch failed" };
@@ -122,7 +199,7 @@ router.get("/", async (req: Request, res: Response) => {
     const userMap = new Map<string, string>();
     if (userIds.size > 0) {
       const users = await prisma.user.findMany({
-        where: { id: { in: [...userIds] } },
+        where: { tenantId, id: { in: [...userIds] } },
         select: { id: true, name: true, email: true },
       });
       for (const u of users) userMap.set(u.id, u.name || u.email || u.id);
@@ -255,6 +332,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
     const dispatch = await dispatchApprovedAction({
       tenantId,
       approvalId: row.id,
+      conversationId: row.conversationId,
       tool: row.tool,
       params: effectiveParams,
       approvedBy: actorId,
@@ -266,9 +344,11 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
       );
     }
 
-    // Customer-facing confirmation: once the action succeeds, send a short
-    // follow-up on the conversation's channel so the chat doesn't go quiet
-    // after the bridge ack. Language mirrors the last inbound message.
+    // Customer-facing continuation: once the action succeeds, ask the AI
+    // agent to continue the conversation in the customer's language. The
+    // bot stays in charge — no "team member will reach out" hand-off.
+    // If the oneshot fails, fall back to silence — the next inbound
+    // message will trigger a normal bot turn anyway.
     if (dispatch.ok) {
       try {
         const conv = await prisma.conversation.findFirst({
@@ -278,18 +358,66 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
             channel: true,
             channelAccountId: true,
             customerExternalId: true,
+            customerName: true,
+            assignedAiAgentId: true,
           },
         });
-        const lastInbound = await prisma.message.findFirst({
+        // Pull a few recent inbound messages so the model can detect the
+        // conversation's language even when the most-recent message is
+        // language-less (e.g. just an email or "ok").
+        const recentInbound = await prisma.message.findMany({
           where: { tenantId, conversationId: row.conversationId, direction: "INBOUND" },
           orderBy: { createdAt: "desc" },
+          take: 5,
           select: { body: true },
         });
-        const isHebrew = /[֐-׿]/.test(lastInbound?.body || "");
-        const body = isHebrew
-          ? "מעולה! אושר ונרשמת במערכת ✓ נציג שלנו יחזור אליך בקרוב לסגירת הפרטים."
-          : "Great — you're all set ✓ A team member will reach out shortly to take it from here.";
-        if (conv && conv.channelAccountId && conv.customerExternalId) {
+        const inboundSample = recentInbound
+          .map((m) => m.body?.trim())
+          .filter((s): s is string => !!s)
+          .reverse()
+          .join("\n");
+
+        const aiAgentId = (conv as any)?.assignedAiAgentId as string | undefined;
+        let body: string | null = null;
+        if (conv && aiAgentId) {
+          const userInput =
+            `[INTERNAL CONTEXT — do not echo to the customer]\n` +
+            `A background action you triggered (${row.tool}) just succeeded.\n` +
+            `Customer's recent messages (oldest → newest):\n${inboundSample}\n\n` +
+            (conv.customerName ? `Customer name: ${conv.customerName}\n` : "") +
+            `\nTASK: Send ONE short reply to the customer that keeps the conversation moving forward.\n` +
+            `Rules:\n` +
+            `- Detect the language from the FIRST customer message above (or any earlier non-trivial message). Reply in THAT language. If any message contains Hebrew characters, the language is Hebrew. Do not default to English.\n` +
+            `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies handing off — you are still handling this conversation.\n` +
+            `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
+            `- Be brief, in-character, and propose the next step in the conversation if appropriate.\n`;
+
+          const aiBase = (process.env.AI_SERVICE_URL ?? "http://ai:4006").replace(/\/$/, "");
+          const internalKey = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+          try {
+            const oneshotRes = await fetch(`${aiBase}/api/ai-bot/oneshot`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json", "X-Internal-Key": internalKey },
+              body: JSON.stringify({
+                tenantId,
+                aiAgentId,
+                userInput,
+                feature: "post_approval_continuation",
+              }),
+            });
+            const data: any = await oneshotRes.json().catch(() => ({}));
+            if (oneshotRes.ok && data?.reply && typeof data.reply === "string") {
+              body = data.reply.trim();
+            }
+          } catch (err: any) {
+            console.warn(
+              "approvals.approve: post-approval oneshot failed; staying silent:",
+              err?.message,
+            );
+          }
+        }
+
+        if (body && conv && conv.channelAccountId && conv.customerExternalId) {
           const msg = await prisma.message.create({
             data: {
               tenantId,
@@ -299,7 +427,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
               body,
               senderName: "AI Bot",
               status: "PENDING",
-              metadata: { source: "approval_confirmation", approvalId: row.id },
+              metadata: { source: "approval_confirmation", approvalId: row.id, tool: row.tool },
             },
           });
           await outgoingMessageQueue.add(

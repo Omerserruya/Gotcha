@@ -112,12 +112,6 @@ export default function DepartmentCopilotPage() {
     );
   }
 
-  function togglePermApproval(tenantToolId: string, requireApproval: boolean) {
-    setToolPermissions((prev) =>
-      prev.map((p) => p.tenantToolId === tenantToolId ? { ...p, requireApproval } : p)
-    );
-  }
-
   // Group tool permissions by integration name
   const permsByIntegration = toolPermissions.reduce<Record<string, DeptToolPermission[]>>((acc, perm) => {
     const intgName = perm.tenantTool?.catalogTool?.integration?.name || "Other";
@@ -256,16 +250,6 @@ export default function DepartmentCopilotPage() {
                                   <p className="text-xs text-gray-400 truncate">{tool.description}</p>
                                 )}
                               </div>
-                              {perm.isAllowed && (
-                                <select
-                                  value={perm.requireApproval ? "approval" : "auto"}
-                                  onChange={(e) => togglePermApproval(perm.tenantToolId, e.target.value === "approval")}
-                                  className="text-xs px-2 py-1 bg-gray-50 border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-violet-200"
-                                >
-                                  <option value="auto">{t("marketplace.auto")}</option>
-                                  <option value="approval">{t("marketplace.requiresApproval")}</option>
-                                </select>
-                              )}
                             </div>
                           );
                         })}

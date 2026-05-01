@@ -20,6 +20,15 @@ export interface AgentToolContext {
   authToken?: string;
   /** Surfaced into /identity/link for idempotent dedupe. */
   messageId?: string;
+  /**
+   * Execution mode. Defaults to "agent" (autonomous bot replying to a
+   * customer). When set to "copilot" (human agent is in the loop), the
+   * dispatcher diverts gate REQUIRE_APPROVAL decisions to a
+   * `proposeQuickAction` side effect instead of creating an
+   * ApprovalRequest — the human agent in the inbox decides whether to
+   * fire the action from the suggestions panel.
+   */
+  mode?: "agent" | "copilot";
 }
 
 export interface AgentToolSideEffect {
@@ -46,6 +55,18 @@ export interface AgentToolSideEffect {
    */
   denied?: {
     tool: string;
+    reason: string;
+  };
+  /**
+   * Copilot-mode replacement for `awaitingApproval`. The tool was gated
+   * as REQUIRE_APPROVAL but the human agent is already in the loop, so
+   * we surface it as a "proposed quick action" the agent can fire from
+   * the suggestions panel instead of opening a separate approval page.
+   * Only emitted when AgentToolContext.mode === "copilot".
+   */
+  proposeQuickAction?: {
+    tool: string;
+    args: Record<string, unknown>;
     reason: string;
   };
 }
@@ -126,6 +147,13 @@ export interface BuildAgentToolsOptions {
   escalation?: boolean;
   /** Extra tenant-defined function schemas to append. */
   extra?: Array<Record<string, unknown>>;
+  /**
+   * Filter integration tools by execution mode (CatalogTool.allowedModes).
+   * "AUTO" — autonomous bot. "ASSIST" — copilot (human in the loop).
+   * Tools whose allowedModes array does not include this mode are dropped.
+   * Omit to include every tool the agent has permission for.
+   */
+  allowedMode?: "AUTO" | "ASSIST";
 }
 
 export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record<string, unknown>> {
@@ -177,7 +205,18 @@ export async function buildAgentToolsForAIAgent(
         },
       },
     });
-    integrationTools = rows.map((row: any) => {
+    const allowedMode = opts.allowedMode;
+    const filtered = allowedMode
+      ? rows.filter((row: any) => {
+          const am = row.tenantTool?.catalogTool?.allowedModes;
+          // CatalogTool.allowedModes default is ["AUTO","ASSIST"]; treat
+          // missing/malformed as "permits all" so a botched seed doesn't
+          // silently drop tools.
+          if (!Array.isArray(am)) return true;
+          return am.includes(allowedMode);
+        })
+      : rows;
+    integrationTools = filtered.map((row: any) => {
       const ct = row.tenantTool.catalogTool;
       // Prefer the catalog's own inputSchema if it's a JSON-schema object;
       // otherwise emit an empty-object schema so OpenAI will still accept
@@ -190,7 +229,7 @@ export async function buildAgentToolsForAIAgent(
         type: "function",
         function: {
           name: `integration_${ct.slug}`,
-          description: ct.description || ct.name,
+          description: composeToolDescription(ct),
           parameters,
         },
       };
@@ -202,6 +241,51 @@ export async function buildAgentToolsForAIAgent(
   }
 
   return [...base, ...integrationTools];
+}
+
+/**
+ * Build the OpenAI tool `description` field for an integration tool.
+ *
+ * Concatenates (in priority order for the LLM's selection signal):
+ *   - the bare `description` (what the tool does),
+ *   - `whenToUse` if present (the operator-authored selection rule),
+ *   - one worked example from `exampleUsage` if present.
+ *
+ * This is what gates "should I call this tool right now?" — putting the
+ * gating language here, in the tool spec the LLM sees, decouples it from
+ * the agent's hand-written system prompt and stops over-firing when the
+ * prompt forgets to mention a tool.
+ */
+function composeToolDescription(ct: {
+  name: string;
+  description: string | null;
+  whenToUse?: string | null;
+  exampleUsage?: unknown;
+}): string {
+  const parts: string[] = [];
+  parts.push(ct.description || ct.name);
+  if (ct.whenToUse && ct.whenToUse.trim()) {
+    parts.push(`When to use: ${ct.whenToUse.trim()}`);
+  }
+  const example = pickFirstExample(ct.exampleUsage);
+  if (example) parts.push(`Example: ${example}`);
+  return parts.join("\n\n");
+}
+
+function pickFirstExample(raw: unknown): string | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const first = raw[0];
+  if (!first || typeof first !== "object") return null;
+  const e = first as Record<string, unknown>;
+  const segments: string[] = [];
+  if (e.input !== undefined) {
+    segments.push(`input=${typeof e.input === "string" ? e.input : JSON.stringify(e.input)}`);
+  }
+  if (e.output !== undefined) {
+    segments.push(`output=${typeof e.output === "string" ? e.output : JSON.stringify(e.output)}`);
+  }
+  if (e.note && typeof e.note === "string") segments.push(`(${e.note})`);
+  return segments.length ? segments.join(" → ") : null;
 }
 
 // ─── Dispatcher ──────────────────────────────────────────────
@@ -289,6 +373,24 @@ export async function dispatchToolCall(
       };
     }
     if (gate.decision === "REQUIRE_APPROVAL") {
+      // Copilot mode short-circuit: the human agent is already in the
+      // loop, so don't burn an approval page. Hand the proposed call back
+      // to the route as a quick action — the agent fires it from the
+      // suggestions panel if they want it.
+      if (ctx.mode === "copilot") {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({
+            ok: false,
+            proposed_quick_action: true,
+            message:
+              "Action proposed. The human agent will decide whether to run it from the suggestions panel.",
+          }),
+          sideEffect: {
+            proposeQuickAction: { tool: name, args, reason: gate.reason },
+          },
+        };
+      }
       // Only create an approval row if we have enough context to route
       // a human back to it. Without conversationId there's no inbox
       // surface, so we fail closed with a plain error.
@@ -301,6 +403,52 @@ export async function dispatchToolCall(
           }),
         };
       }
+      // Dedupe — if an approval for this same tool is already pending on
+      // this conversation, reuse it. The bot keeps replying to the
+      // customer (handledBy="awaiting_approval" no longer blocks the
+      // worker), and we don't mint duplicate ApprovalRequest rows every
+      // turn the model decides to re-propose the action. The model also
+      // gets a "## Pending Approval" notice in its system prompt
+      // (ai-bot.service.ts) so it shouldn't be calling here in the first
+      // place — this is the belt-and-suspenders.
+      try {
+        const { prisma: dedupePrisma } = await import("./prisma");
+        const existing = await (dedupePrisma as any).approvalRequest.findFirst({
+          where: {
+            tenantId: ctx.tenantId,
+            conversationId: ctx.conversationId,
+            tool: name,
+            status: "PENDING",
+          },
+          orderBy: { createdAt: "desc" },
+          select: { id: true },
+        });
+        if (existing) {
+          return {
+            toolCallId: toolCall.id,
+            content: JSON.stringify({
+              ok: false,
+              awaiting_approval: true,
+              approval_request_id: existing.id,
+              deduped: true,
+              status: "pending_human_approval",
+              instruction:
+                "Approval already pending for this action. Continue the conversation naturally in the customer's language; do not mention approvals, the team, or any internal process.",
+            }),
+            sideEffect: {
+              awaitingApproval: {
+                approvalRequestId: existing.id,
+                tool: name,
+                reason: "duplicate of pending approval",
+              },
+            },
+          };
+        }
+      } catch (err: any) {
+        // Lookup failure must not break the gate — fall through and
+        // create a fresh approval. Worst case: a duplicate row.
+        console.warn("[agent-tools] pending-approval dedupe lookup failed:", err?.message);
+      }
       const approval = await createApprovalRequest({
         tenantId: ctx.tenantId,
         conversationId: ctx.conversationId,
@@ -310,6 +458,9 @@ export async function dispatchToolCall(
         params: args,
         summary: summarizeToolCall(name, args),
         reason: gate.reason,
+        // riskLevel here is a display field on the ApprovalRequest row, not a
+        // gating signal — the gate decision lives in tool-gate.ts. Tag as
+        // "approval_required" so the inbox UI groups it correctly.
         riskLevel: "high",
         riskTags: ["REQUIRES_APPROVAL"],
         requestedBy: "bot",
@@ -321,7 +472,9 @@ export async function dispatchToolCall(
           ok: false,
           awaiting_approval: true,
           approval_request_id: approval.id,
-          message: "This action needs a human to approve it. I've paused and notified the team.",
+          status: "pending_human_approval",
+          instruction:
+            "Action paused for approval. Continue the conversation naturally in the customer's language; do not mention approvals, queues, the team, or any internal process.",
         }),
         sideEffect: {
           awaitingApproval: {

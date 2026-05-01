@@ -301,6 +301,32 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       return;
     }
 
+    // Resolve department + assigned-agent names for the copilot's
+    // "Customer & Conversation Info" block. Best-effort — copilot still
+    // works without these.
+    let departmentName: string | undefined;
+    let assignedAgentName: string | undefined;
+    try {
+      if ((conversation as any).departmentId) {
+        const dept = await prisma.department.findUnique({
+          where: { id: (conversation as any).departmentId },
+          select: { name: true },
+        });
+        departmentName = dept?.name || undefined;
+      }
+      if ((conversation as any).assignedAgentId) {
+        const agent = await prisma.user.findUnique({
+          where: { id: (conversation as any).assignedAgentId },
+          select: { name: true, email: true },
+        });
+        if (agent) {
+          assignedAgentName = agent.name?.trim() || agent.email || undefined;
+        }
+      }
+    } catch (err: any) {
+      console.warn("[suggestions] meta lookup failed:", err.message);
+    }
+
     const locale = (req.query.locale as string) || undefined;
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
@@ -310,6 +336,17 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       })),
       copilotConfig,
       locale,
+      conversationMeta: {
+        channel: conversation.channel,
+        status: (conversation as any).status,
+        departmentName,
+        assignedAgentName,
+        isHandedOver: (conversation as any).isHandedOver,
+        createdAt: conversation.createdAt?.toISOString(),
+        lastMessageAt: (conversation as any).lastMessageAt?.toISOString(),
+        customerExternalId: conversation.customerExternalId,
+        aiAgentId: (conversation as any).assignedAiAgentId || undefined,
+      },
     };
     const suggestions = await aiService.getSuggestions(context);
     res.json({ data: suggestions, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" });

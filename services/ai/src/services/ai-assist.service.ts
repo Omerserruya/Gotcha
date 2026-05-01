@@ -15,6 +15,23 @@ export interface ConversationContext {
   metadata?: Record<string, any>;
   copilotConfig?: CopilotConfigData | null;
   locale?: string;
+  /**
+   * Customer + conversation metadata for the copilot's "Customer &
+   * Conversation Info" block. Sourced from the Conversation row by the
+   * route handler — keep optional so non-inbox callers still work.
+   * The provider treats every field as best-effort.
+   */
+  conversationMeta?: {
+    channel?: string;
+    status?: string;
+    departmentName?: string;
+    assignedAgentName?: string;
+    isHandedOver?: boolean;
+    createdAt?: string;
+    lastMessageAt?: string;
+    customerExternalId?: string;
+    aiAgentId?: string;
+  };
 }
 
 export interface CopilotConfigData {
@@ -33,7 +50,18 @@ export interface AISuggestion {
   id: string;
   text: string;
   confidence: number;
-  type: "reply" | "action" | "info";
+  type: "reply" | "action" | "info" | "quick_action";
+  /**
+   * Populated when type === "quick_action". Carries the tool name + args
+   * the model proposed; the human agent in the inbox decides whether to
+   * fire the action. Mirrors the proposeQuickAction side effect emitted
+   * by the dispatcher in copilot mode.
+   */
+  quickAction?: {
+    tool: string;
+    args: Record<string, unknown>;
+    reason: string;
+  };
 }
 
 export interface IntentClassification {
@@ -174,6 +202,19 @@ You are responding directly to the customer on behalf of the business.
 Send clear, helpful messages. If you are unsure or the issue is complex, escalate to a human agent.
 Always maintain the brand voice and follow escalation rules.`;
 
+function coerceJsonArray(v: unknown): any[] | undefined {
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string" && v.trim().startsWith("[")) {
+    try {
+      const parsed = JSON.parse(v);
+      return Array.isArray(parsed) ? parsed : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+  return undefined;
+}
+
 // ─── Build CopilotConfigData from an AIAgent record ─────────
 
 export function buildConfigFromAIAgent(agent: {
@@ -198,8 +239,11 @@ export function buildConfigFromAIAgent(agent: {
   // Use new prompt assembly if sharedPrompt is available
   if (agent.sharedPrompt) {
     const mode = role === "agent" ? "agent" : "assist";
-    const flow = Array.isArray(agent.conversationFlow) ? agent.conversationFlow : undefined;
-    const guardrails = Array.isArray(agent.customGuardrails) ? agent.customGuardrails : undefined;
+    // Tolerate the wizard saving these as JSON strings — parse on read so
+    // a row like { conversationFlow: "[{...}]" } still drives the prompt
+    // instead of silently falling back to the static strategy.
+    const flow = coerceJsonArray(agent.conversationFlow);
+    const guardrails = coerceJsonArray(agent.customGuardrails);
     systemPrompt = assemblePrompt(mode, agent.sharedPrompt, agent.autonomousPrompt || "", {
       conversationFlow: flow,
       customGuardrails: guardrails,

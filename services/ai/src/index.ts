@@ -14,6 +14,8 @@ import usageRoutes from "./routes/usage";
 import embeddedChatRouter from "./routes/embedded-chat";
 import actionPlannerRoutes from "./routes/action-planner";
 import toolPermissionRoutes from "./routes/tool-permissions";
+import aiDebugRoutes from "./routes/ai-debug";
+import aiBotRoutes from "./routes/ai-bot";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
@@ -59,6 +61,8 @@ app.use("/api/usage", usageRoutes);
 app.use("/api/embedded-chat", embeddedChatRouter);
 app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
+app.use("/api/ai-debug", aiDebugRoutes);
+app.use("/api/ai-bot", aiBotRoutes);
 
 // Hook AI copilot into voice-copilot's transcript pub/sub. Fires the
 // debounced suggestions pipeline on every customer-final utterance.

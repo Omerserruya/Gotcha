@@ -802,9 +802,10 @@ model CatalogTool {
   // Default: both. Examples of AUTO-only: send_message, close_conversation.
   allowedModes  Json         @default("[\"AUTO\",\"ASSIST\"]") @map("allowed_modes")
 
-  // HITL policy — this is the FLOOR. Tenant (via TenantTool.configOverrides)
-  // and agent (via AgentToolPermission.requireApproval) can only tighten,
-  // never loosen. Shape:
+  // HITL policy — this is the SEED for new tenants. The tenant override
+  // (TenantTool.configOverrides.hitlPolicy or TenantToolPermission row) is
+  // AUTHORITATIVE: it can both tighten and loosen this default. Per-agent
+  // permissions only govern access (isAllowed), not HITL. Shape:
   //   { mode: "never" | "always" | "on_condition",
   //     condition?: string,       // CEL-lite predicate over args
   //     approverRole?: string,

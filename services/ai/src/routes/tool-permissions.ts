@@ -52,15 +52,36 @@ router.get("/", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId!;
 
-    const [available, permissions] = await Promise.all([
+    const [available, permissions, tenantTools] = await Promise.all([
       getAvailableTools(tenantId),
       (prisma as any).tenantToolPermission.findMany({
         where: { tenantId },
+      }),
+      // Integration tools (CatalogTool-backed) read their HITL state from
+      // TenantTool.configOverrides.hitlPolicy and seed from CatalogTool.hitlPolicy.
+      (prisma as any).tenantTool.findMany({
+        where: { tenantId },
+        include: { catalogTool: { select: { slug: true, hitlPolicy: true } } },
       }),
     ]);
 
     const permByName = new Map<string, any>();
     for (const p of permissions) permByName.set(p.toolName, p);
+
+    // Build slug → { catalog hitl, tenant override hitl, updatedAt } lookup.
+    const tenantToolBySlug = new Map<string, { catalogMode: string; overrideMode: string | null; updatedAt: Date | null }>();
+    for (const tt of tenantTools as any[]) {
+      const slug = tt.catalogTool?.slug;
+      if (!slug) continue;
+      const catalogMode = (tt.catalogTool?.hitlPolicy as any)?.mode || "never";
+      const overrideMode =
+        (tt.configOverrides as any)?.hitlPolicy?.mode ?? null;
+      tenantToolBySlug.set(slug, {
+        catalogMode,
+        overrideMode,
+        updatedAt: tt.updatedAt ?? null,
+      });
+    }
 
     const defaultHighRisk = new Set(getDefaultHighRiskTools());
 
@@ -72,6 +93,32 @@ router.get("/", async (req: Request, res: Response) => {
       category: string;
       description: string;
     }) => {
+      // Integration tools (`integration.<slug>`) get their HITL state from
+      // TenantTool.configOverrides + CatalogTool seed. Static tools get it
+      // from TenantToolPermission + SYSTEM_TOOL_POLICIES seed.
+      if (spec.kind === "integration") {
+        const slug = spec.name.replace(/^integration\./, "");
+        const tt = tenantToolBySlug.get(slug);
+        const overrideMode = tt?.overrideMode ?? null;
+        const catalogMode = tt?.catalogMode ?? "never";
+        const requiresApproval =
+          overrideMode != null ? overrideMode === "always" : catalogMode === "always";
+        merged.push({
+          toolName: spec.name,
+          kind: spec.kind,
+          category: spec.category,
+          description: spec.description,
+          enabled: true, // integration tool surface follows TenantTool.isEnabled (already filtered by getAvailableTools)
+          requiresApproval,
+          isDefault: overrideMode == null,
+          approverRole: null,
+          expiresAfterMin: 30,
+          allowModification: false,
+          updatedAt: tt?.updatedAt ? tt.updatedAt.toISOString() : null,
+        });
+        return;
+      }
+
       const row = permByName.get(spec.name);
       merged.push({
         toolName: spec.name,
@@ -126,6 +173,40 @@ router.put("/:toolName", async (req: Request, res: Response) => {
 
     const { enabled, requiresApproval, approverRole, expiresAfterMin, allowModification } =
       req.body ?? {};
+
+    // Integration tools store their HITL override on TenantTool.configOverrides.hitlPolicy —
+    // that's where the gate reads it from. Writing to TenantToolPermission for an
+    // integration tool would silently no-op against the gate.
+    if (isIntegration) {
+      const slug = toolName.replace(/^integration\./, "");
+      const tenantTool = await (prisma as any).tenantTool.findFirst({
+        where: { tenantId, catalogTool: { slug } },
+        select: { id: true, configOverrides: true },
+      });
+      if (!tenantTool) {
+        res.status(404).json({ error: `integration tool "${slug}" not configured for tenant` });
+        return;
+      }
+      const existingOverrides =
+        (tenantTool.configOverrides as Record<string, unknown> | null) ?? {};
+      const nextOverrides: Record<string, unknown> = { ...existingOverrides };
+      if (typeof requiresApproval === "boolean") {
+        nextOverrides.hitlPolicy = {
+          mode: requiresApproval ? "always" : "never",
+          ...(typeof approverRole === "string" ? { approverRole } : {}),
+          ...(typeof expiresAfterMin === "number" ? { expiresAfterMin } : {}),
+          ...(typeof allowModification === "boolean" ? { allowModification } : {}),
+        };
+      }
+      const tenantToolPatch: Record<string, unknown> = { configOverrides: nextOverrides };
+      if (typeof enabled === "boolean") tenantToolPatch.isEnabled = enabled;
+      const updated = await (prisma as any).tenantTool.update({
+        where: { id: tenantTool.id },
+        data: tenantToolPatch,
+      });
+      res.json({ data: updated });
+      return;
+    }
 
     const patch: Record<string, unknown> = {};
     if (typeof enabled === "boolean") patch.enabled = enabled;

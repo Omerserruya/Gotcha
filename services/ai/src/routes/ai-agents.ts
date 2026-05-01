@@ -353,6 +353,12 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       }
     }
 
+    // Single-tool toggle path (used by the IntegrationDrawer when opened
+    // from the agent page so flipping a switch persists per-agent without
+    // having to send the whole toolIds array).
+    // Body: { tenantToolId, isAllowed, requireApproval? }
+    // Handled via the dedicated route below.
+
     // Generate and save prompt parts (shared + autonomous)
     try {
       await generateAndSavePrompts(req.tenantId! as string, agent.id);
@@ -366,6 +372,93 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     res.status(500).json({ error: "Failed to update AI agent" });
   }
 });
+
+// ─── Single-tool toggle (per-agent permission) ──────────────
+//
+// Used by the IntegrationDrawer when opened from the agent page so that
+// flipping one tool switch persists immediately (creates/updates a single
+// `AgentToolPermission` row) instead of requiring the caller to send the
+// full toolIds array via the PATCH path. The drawer also continues to
+// hit `PUT /api/integrations/:slug/tools/:slug` to ensure the underlying
+// `TenantTool` is enabled — both must be true for the bot to see the tool.
+//
+// Body: { isAllowed: boolean, requireApproval?: boolean }
+router.put(
+  "/:id/tools/:tenantToolId",
+  authenticate,
+  resolveTenant,
+  requireActiveTenant(),
+  requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    try {
+      const tenantId = req.tenantId! as string;
+      const aiAgentId = req.params.id as string;
+      const tenantToolId = req.params.tenantToolId as string;
+      const { isAllowed, requireApproval } = req.body || {};
+
+      if (typeof isAllowed !== "boolean") {
+        res.status(400).json({ error: "isAllowed (boolean) is required" });
+        return;
+      }
+
+      // Tenant-scope guard: agent + tool must belong to this tenant.
+      const agent = await prisma.aIAgent.findFirst({
+        where: { id: aiAgentId, tenantId },
+        select: { id: true },
+      });
+      if (!agent) {
+        res.status(404).json({ error: "AI agent not found" });
+        return;
+      }
+      const tenantTool = await prisma.tenantTool.findFirst({
+        where: { id: tenantToolId, tenantId },
+        select: { id: true },
+      });
+      if (!tenantTool) {
+        res.status(404).json({ error: "TenantTool not found for this tenant" });
+        return;
+      }
+
+      // findFirst + branch (the compound unique
+      // tenantToolId_departmentId_agentId omits tenantId, so the guard
+      // would block a direct upsert).
+      const existing = await prisma.agentToolPermission.findFirst({
+        where: { tenantId, aiAgentId, tenantToolId },
+        select: { id: true },
+      });
+      const row = existing
+        ? await prisma.agentToolPermission.update({
+            where: { id: existing.id },
+            data: {
+              isAllowed,
+              ...(typeof requireApproval === "boolean" ? { requireApproval } : {}),
+            },
+          })
+        : await prisma.agentToolPermission.create({
+            data: {
+              tenantId,
+              aiAgentId,
+              tenantToolId,
+              isAllowed,
+              requireApproval: typeof requireApproval === "boolean" ? requireApproval : false,
+            },
+          });
+
+      // Regenerate prompt parts so the agent's `## Tools` section reflects
+      // the change on the next bot turn. Best-effort.
+      try {
+        await generateAndSavePrompts(tenantId, aiAgentId);
+      } catch (promptErr) {
+        console.warn("[ai-agents] Prompt regen after tool toggle failed (non-fatal):", promptErr);
+      }
+
+      res.json({ data: row });
+    } catch (err: any) {
+      console.error("Toggle agent tool error:", err);
+      res.status(500).json({ error: "Failed to toggle agent tool" });
+    }
+  },
+);
 
 // ─── Test Chat ───────────────────────────────────────────────
 router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {

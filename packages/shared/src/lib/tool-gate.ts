@@ -1,21 +1,21 @@
 /**
  * Unified tool policy gate — `evaluatePolicies()`.
  *
- * The single entry point every tool invocation flows through. Composes three
- * layers with STRICTEST-WINS semantics:
+ * The single entry point every tool invocation flows through. HITL is a
+ * TENANT-LEVEL concern: the tenant toggle is authoritative.
  *
- *   1. CatalogTool.hitlPolicy            — the floor, set by platform
- *   2. TenantTool.configOverrides.hitlPolicy — tenant may only tighten
- *   3. AgentToolPermission.requireApproval   — agent may only tighten
+ *   1. CatalogTool.hitlPolicy / SYSTEM_TOOL_POLICIES — the SEED for new tenants
+ *   2. TenantTool.configOverrides.hitlPolicy / TenantToolPermission — AUTHORITATIVE
+ *   3. AgentToolPermission.isAllowed — controls *access* to the tool (not HITL)
  *
- * For static tools (send_message, escalate_to_human, etc.) that have no
- * CatalogTool row, the floor comes from SYSTEM_TOOL_POLICIES below.
+ * When a tenant override is set (a row exists or `configOverrides.hitlPolicy`
+ * is populated), that override DECIDES the gate — it can both loosen and
+ * tighten the catalog default. When no override is set, the catalog default
+ * applies.
  *
- * Replaces:
- *   - INTERNAL_HIGH_RISK_DEFAULTS constant in this file (now inlined into SYSTEM_TOOL_POLICIES)
- *   - TenantToolPermission table as a primary source of truth (still read as
- *     a tenant-override fallback for static tools during transition)
- *   - Ad-hoc policy checks in action-executor / bot-engine
+ * Per-agent `requireApproval` is intentionally NOT consulted here — HITL is
+ * not a per-agent decision. The agent-level permission row is read only to
+ * confirm the agent has access (`isAllowed`).
  *
  * `evaluateToolGate()` is kept as a thin back-compat shim. New call sites
  * should use `evaluatePolicies()`.
@@ -130,10 +130,14 @@ export async function evaluatePolicies(opts: {
   }
   snapshot.catalog = catalog;
 
-  // Layer 2: tenant override
+  // Layer 2: tenant override (AUTHORITATIVE)
   //   Integration tools → TenantTool.configOverrides.hitlPolicy
-  //   Static tools → TenantToolPermission (legacy table, still read during
-  //                   transition)
+  //   Static tools → TenantToolPermission row
+  //
+  // The tenant toggle decides the gate in BOTH directions: a row that exists
+  // and is set to requiresApproval=false explicitly opts the tool OUT of
+  // approval, even if the catalog default is "always". Absence of a row means
+  // "no explicit override" — fall through to catalog default.
   let tenant: HitlPolicy | null = null;
   if (tenantToolId) {
     const overrides = await (prisma as any).tenantTool?.findUnique?.({
@@ -144,22 +148,23 @@ export async function evaluatePolicies(opts: {
     const overrideHitl = (overrides?.configOverrides as any)?.hitlPolicy as HitlPolicy | undefined;
     if (overrideHitl) tenant = overrideHitl;
   } else {
-    // Static tool — legacy TenantToolPermission fallback
+    // Static tool — TenantToolPermission row is the explicit override.
     const row = await (prisma as any).tenantToolPermission?.findUnique?.({
       where: { tenantId_toolName: { tenantId: opts.tenantId, toolName: opts.toolName } },
     }).catch(() => null);
 
     if (row) {
       if (!row.enabled) return denyResult(`tool "${opts.toolName}" disabled at tenant level`, { ...snapshot, tenant: { mode: "always" } });
-      if (row.requiresApproval) {
-        tenant = {
-          mode: "always",
-          approverRole: row.approverRole ?? null,
-          notifyChannels: row.notifyChannels ?? ["in_app"],
-          expiresAfterMin: row.expiresAfterMin ?? 30,
-          allowModification: row.allowModification ?? false,
-        };
-      }
+      // Row exists ⇒ tenant has explicitly set a policy. Honour it both ways.
+      tenant = row.requiresApproval
+        ? {
+            mode: "always",
+            approverRole: row.approverRole ?? null,
+            notifyChannels: row.notifyChannels ?? ["in_app"],
+            expiresAfterMin: row.expiresAfterMin ?? 30,
+            allowModification: row.allowModification ?? false,
+          }
+        : { mode: "never" };
     }
   }
   if (tenant) snapshot.tenant = tenant;
@@ -168,10 +173,9 @@ export async function evaluatePolicies(opts: {
     return denyResult(`tool "${opts.toolName}" disabled at tenant level`, snapshot);
   }
 
-  // Layer 3: agent override (only applies to integration tools that have a
-  // TenantTool). Static tools aren't per-agent-granted; they're available to
-  // every agent by the existing TOOL_REGISTRY design.
-  let agent: { requireApproval?: boolean; approverRole?: string | null } | undefined;
+  // Layer 3: agent access (NOT a HITL decision).
+  // Per-agent rows govern WHICH tools an agent may call. They do NOT influence
+  // approval gating — HITL lives at the tenant level only.
   if (opts.aiAgentId && tenantToolId) {
     const grant = await (prisma as any).agentToolPermission?.findFirst?.({
       where: { tenantId: opts.tenantId, aiAgentId: opts.aiAgentId, tenantToolId },
@@ -179,20 +183,16 @@ export async function evaluatePolicies(opts: {
     if (!grant || !grant.isAllowed) {
       return denyResult(`tool not granted to agent "${opts.aiAgentId}"`, snapshot);
     }
-    if (grant.requireApproval) {
-      agent = { requireApproval: true, approverRole: grant.approverRole ?? null };
-      snapshot.agent = agent;
-    }
   }
 
-  // Compose strictest-wins
-  const effective = composeStrictest(catalog, tenant, agent);
+  // Compose: tenant authoritative when set, else catalog default.
+  const effective = composeAuthoritative(catalog, tenant);
 
   // Materialise the decision
   if (effective.mode === "never") {
     return {
       decision: "ALLOW",
-      reason: `policy allows (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""}${agent?.requireApproval ? ", agent=always" : ""})`,
+      reason: `policy allows (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""})`,
       effective,
       snapshot,
     };
@@ -200,7 +200,7 @@ export async function evaluatePolicies(opts: {
   if (effective.mode === "always") {
     return {
       decision: "REQUIRE_APPROVAL",
-      reason: `policy requires approval (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""}${agent?.requireApproval ? ", agent=always" : ""})`,
+      reason: `policy requires approval (catalog=${catalog.mode}${tenant ? `, tenant=${tenant.mode}` : ""})`,
       effective,
       snapshot,
       approvalConfig: {
@@ -230,38 +230,36 @@ export async function evaluatePolicies(opts: {
   return { decision: "ALLOW", reason: "condition not matched", effective, snapshot };
 }
 
-// ─── Composition: strictest wins ────────────────────────────
+// ─── Composition: tenant authoritative when set ─────────────
+//
+// HITL is a tenant-level decision. When the tenant has set an explicit policy
+// (a TenantToolPermission row exists, or TenantTool.configOverrides.hitlPolicy
+// is populated), that policy decides the gate — including loosening a catalog
+// "always" floor down to "never". Without an explicit tenant override, we
+// fall back to the catalog default, which seeds new tenants with safe values.
 
-const MODE_RANK: Record<HitlMode, number> = { never: 0, on_condition: 1, always: 2 };
-
-function composeStrictest(
+function composeAuthoritative(
   catalog: HitlPolicy,
   tenant: HitlPolicy | null,
-  agent?: { requireApproval?: boolean; approverRole?: string | null },
 ): HitlPolicy {
-  let mode: HitlMode = catalog.mode;
-  let condition = catalog.condition;
-  let approverRole = catalog.approverRole ?? null;
-  const notifyChannels = catalog.notifyChannels ?? ["in_app"];
-  const expiresAfterMin = catalog.expiresAfterMin ?? 30;
-  const allowModification = catalog.allowModification ?? false;
-
   if (tenant) {
-    if (MODE_RANK[tenant.mode] > MODE_RANK[mode]) {
-      mode = tenant.mode;
-      condition = tenant.condition ?? condition;
-    }
-    if (tenant.approverRole && !approverRole) approverRole = tenant.approverRole;
+    return {
+      mode: tenant.mode,
+      condition: tenant.condition ?? catalog.condition,
+      approverRole: tenant.approverRole ?? catalog.approverRole ?? null,
+      notifyChannels: tenant.notifyChannels ?? catalog.notifyChannels ?? ["in_app"],
+      expiresAfterMin: tenant.expiresAfterMin ?? catalog.expiresAfterMin ?? 30,
+      allowModification: tenant.allowModification ?? catalog.allowModification ?? false,
+    };
   }
-
-  if (agent?.requireApproval && MODE_RANK.always > MODE_RANK[mode]) {
-    mode = "always";
-  }
-  if (agent?.approverRole && !approverRole) {
-    approverRole = agent.approverRole;
-  }
-
-  return { mode, condition, approverRole, notifyChannels, expiresAfterMin, allowModification };
+  return {
+    mode: catalog.mode,
+    condition: catalog.condition,
+    approverRole: catalog.approverRole ?? null,
+    notifyChannels: catalog.notifyChannels ?? ["in_app"],
+    expiresAfterMin: catalog.expiresAfterMin ?? 30,
+    allowModification: catalog.allowModification ?? false,
+  };
 }
 
 // ─── Simple CEL-lite condition evaluator ────────────────────

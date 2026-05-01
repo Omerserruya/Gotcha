@@ -56,6 +56,23 @@ interface ToolInfo {
   riskLevel: string;
   inputSchema?: any;
   integrationName?: string;
+  whenToUse?: string | null;
+  exampleUsage?: unknown;
+}
+
+function formatExampleUsage(raw: unknown): string | null {
+  if (!Array.isArray(raw) || raw.length === 0) return null;
+  const first = raw[0] as Record<string, unknown> | null;
+  if (!first || typeof first !== "object") return null;
+  const segs: string[] = [];
+  if (first.input !== undefined) {
+    segs.push(`input ${typeof first.input === "string" ? first.input : JSON.stringify(first.input)}`);
+  }
+  if (first.output !== undefined) {
+    segs.push(`output ${typeof first.output === "string" ? first.output : JSON.stringify(first.output)}`);
+  }
+  if (first.note && typeof first.note === "string") segs.push(`(${first.note})`);
+  return segs.length ? segs.join(" → ") : null;
 }
 
 export function buildToolsSection(tools: ToolInfo[]): string {
@@ -70,6 +87,13 @@ export function buildToolsSection(tools: ToolInfo[]): string {
     ];
     if (tool.integrationName) {
       lines.push(`   - Integration: ${tool.integrationName}`);
+    }
+    if (tool.whenToUse && tool.whenToUse.trim()) {
+      lines.push(`   - When to use: ${tool.whenToUse.trim()}`);
+    }
+    const example = formatExampleUsage(tool.exampleUsage);
+    if (example) {
+      lines.push(`   - Example: ${example}`);
     }
     return lines.join("\n");
   }).join("\n\n");
@@ -212,22 +236,38 @@ export function assemblePrompt(
 
 function buildConversationFlowSection(flow: any[]): string {
   const steps = flow.map((step, i) => {
-    const lines = [`${i + 1}. **${step.action}**`];
-    if (step.details) lines.push(`   ${step.details}`);
+    // Tolerate UI shape drift: action / title / name / step / label.
+    const title =
+      step?.action ||
+      step?.title ||
+      step?.name ||
+      step?.step ||
+      step?.label ||
+      `Step ${i + 1}`;
+    const details = step?.details || step?.description || step?.detail || step?.body;
+    const lines = [`${i + 1}. **${title}**`];
+    if (details) lines.push(`   ${details}`);
     return lines.join("\n");
   }).join("\n");
 
-  return `# Conversation Flow
+  return `# Conversation Flow — REQUIRED
 
-Follow this conversation flow when interacting with customers:
+This is the playbook for every conversation. Follow it.
 
 ${steps}
 
-## Flow Guidelines
-- Follow the steps in order, but adapt naturally to the conversation.
-- Skip steps that are not relevant to the customer's situation.
-- Always confirm the customer's needs before proceeding to the next step.
-- If the customer asks something outside the flow, address it first, then return to the flow.`;
+## How to use this flow
+- Treat the steps as a checklist you walk through, in order. Do not skip ahead.
+- A step may take ONE message or several — but you must complete the goal of the
+  current step before moving to the next one.
+- Adapt the WORDING to the customer (their language, tone, and channel) — but
+  not the SEQUENCE. If a step requires data you don't have yet, gather it
+  conversationally; don't fire actions blindly.
+- If the customer asks something off-flow, answer them, then return to the
+  current step. Don't drop the flow.
+- Background actions (CRM lookups, lead creation, tagging) are PART of the
+  flow, not separate from it. Run them silently — the customer should not see
+  or hear about them.`;
 }
 
 // ─── Custom Guardrails builder ─────────────────────────────
@@ -265,6 +305,8 @@ export async function loadToolsForAgent(tenantId: string, aiAgentId?: string): P
     riskLevel: tt.catalogTool.riskLevel,
     inputSchema: tt.catalogTool.inputSchema,
     integrationName: tt.tenantIntegration?.integration?.name || undefined,
+    whenToUse: (tt.catalogTool as any).whenToUse ?? null,
+    exampleUsage: (tt.catalogTool as any).exampleUsage ?? null,
   }));
 }
 
@@ -307,6 +349,32 @@ export async function generateAndSavePrompts(tenantId: string, agentId: string):
   });
 
   return { sharedPrompt, autonomousPrompt, conversationFlow, customGuardrails };
+}
+
+/**
+ * Lazy-backfill: if an agent row hasn't had its prompt parts generated yet,
+ * generate and persist them, then return a copy of the agent with the new
+ * fields filled in. If they're already populated, returns the agent as-is.
+ *
+ * Used so the autonomous-mode path can switch off the legacy buildSystemPrompt
+ * without breaking the moment a production agent (e.g. one created before the
+ * sharedPrompt column existed) flows through.
+ */
+export async function ensureAgentPrompts<
+  T extends {
+    id: string;
+    tenantId: string;
+    sharedPrompt: string | null;
+    autonomousPrompt: string | null;
+  },
+>(agent: T): Promise<T> {
+  if (agent.sharedPrompt && agent.autonomousPrompt) return agent;
+  const generated = await generateAndSavePrompts(agent.tenantId, agent.id);
+  return {
+    ...agent,
+    sharedPrompt: generated.sharedPrompt,
+    autonomousPrompt: generated.autonomousPrompt,
+  };
 }
 
 function parseJsonField(value: any): any {

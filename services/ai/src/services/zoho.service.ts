@@ -167,12 +167,22 @@ export async function maybeRefreshZohoToken(integrationId: string): Promise<stri
 
 /**
  * Default scope bundle for Zoho CRM — read + write on Contacts, Leads,
- * Deals, plus offline_access so Zoho returns a refresh_token. Extend as
- * we add more CatalogTool rows.
+ * Deals, Tasks, Notes (the modules our CatalogTool rows touch) PLUS
+ * `ZohoCRM.users.READ` and `ZohoCRM.bulk.create` for tag operations.
+ *
+ * `offline_access` is REQUIRED — without it Zoho's OAuth callback returns
+ * an access token only (no refresh_token), so after the ~1h access-token
+ * TTL every tool call fails with "Invalid or expired token". Tenants
+ * connected before this scope was added must reconnect to get a refresh
+ * token persisted on their TenantIntegration.credentials.
  */
 export const ZOHO_DEFAULT_SCOPES = [
   "ZohoCRM.modules.contacts.ALL",
   "ZohoCRM.modules.leads.ALL",
   "ZohoCRM.modules.deals.ALL",
+  "ZohoCRM.modules.tasks.ALL",
+  "ZohoCRM.modules.notes.ALL",
   "ZohoCRM.users.READ",
+  "ZohoCRM.settings.tags.ALL",
+  "offline_access",
 ].join(",");
