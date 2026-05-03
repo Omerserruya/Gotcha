@@ -6,7 +6,9 @@ vi.mock("../services/ai-assist.service", () => ({
   getEffectiveCopilotConfig: vi.fn().mockResolvedValue({
     copilotMode: "READY_MESSAGE",
     model: "gpt-4o-mini",
-    systemPrompt: "test",
+    isActive: true,
+    agent: { name: "Test Agent", role: "customer_support", description: null, tone: "professional" },
+    tools: [],
   }),
   getSuggestions: vi.fn().mockResolvedValue([
     { id: "s1", text: "Thanks for reaching out!", confidence: 0.9, type: "reply" },

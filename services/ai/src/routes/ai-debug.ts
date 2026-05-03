@@ -21,8 +21,8 @@ import crypto from "crypto";
 import { prisma, authenticate, requireSystemAdmin, buildAgentToolsForAIAgent } from "@chatcenter/shared";
 import { buildConfigFromAIAgent } from "../services/ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "../services/knowledge.service";
-import { buildAgentSystemPrompt } from "../services/ai-bot.service";
-import { getModeInstruction } from "../services/openai.provider";
+import { buildAgentPrompt, renderOutputContractInstruction } from "../services/prompt-builder.service";
+import { computeBehaviorState, shouldRetrieveKB } from "../services/behavior-engine.service";
 
 const router = Router();
 
@@ -115,8 +115,9 @@ router.post("/jit", authenticate, requireSystemAdmin(), (req: Request, res: Resp
 });
 
 // ─── Mode renderers ─────────────────────────────────────────
-// The agent prompt builder is `buildAgentSystemPrompt` imported from
-// ai-bot.service — same code path the production /api/ai-bot/reply uses.
+// Both modes call `buildAgentPrompt` from prompt-builder.service — the
+// same builder production uses on `/api/ai-bot/reply` and the copilot
+// suggestions / chat paths.
 
 async function renderAgentMode(opts: {
   tenantId: string;
@@ -127,12 +128,10 @@ async function renderAgentMode(opts: {
   const config = await prisma.aIAgent.findFirst({ where: { id: opts.agentId, tenantId: opts.tenantId } });
   if (!config) throw Object.assign(new Error("AI Agent not found"), { status: 404 });
 
-  let systemPrompt = await buildAgentSystemPrompt(config);
-
-  // RAG augmentation — uses the candidate `message` if provided, else the
-  // last inbound from the conversation if a conversation was named.
+  // RAG probe + history
   let kbProbe = (opts.message || "").trim();
   let history: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string; messageType: string | null }> = [];
+  let customerBlock: string | undefined;
   if (opts.conversationId) {
     const conv = await prisma.conversation.findFirst({
       where: { id: opts.conversationId, tenantId: opts.tenantId },
@@ -150,21 +149,63 @@ async function renderAgentMode(opts: {
       const lastIn = [...msgs].reverse().find((m) => m.direction === "INBOUND" && m.body?.trim());
       kbProbe = (lastIn?.body || "").trim();
     }
+
+    // Render the same Customer block production uses.
+    const lines: string[] = ["## Customer & Conversation Info"];
+    if ((conv as any).customerName) lines.push(`- Customer Name: ${(conv as any).customerName}`);
+    if (conv.customerExternalId) lines.push(`- External ID / Phone: ${conv.customerExternalId}`);
+    if (conv.channel) lines.push(`- Channel: ${conv.channel}`);
+    if ((conv as any).status) lines.push(`- Conversation Status: ${(conv as any).status}`);
+    if (conv.createdAt) lines.push(`- Conversation Started: ${conv.createdAt.toISOString()}`);
+    if ((conv as any).lastMessageAt) lines.push(`- Last Message: ${(conv as any).lastMessageAt.toISOString()}`);
+    customerBlock = lines.length > 1 ? lines.join("\n") : undefined;
   }
 
   let kbAppended: any[] = [];
+  let kbBlock: string | undefined;
   if (kbProbe) {
     try {
       const chunks = await retrieveRelevantChunks(opts.tenantId, kbProbe, 5);
-      const ctx = buildKnowledgeContext(chunks);
-      if (ctx) {
-        systemPrompt += "\n\n" + ctx;
-        kbAppended = chunks as any[];
-      }
+      kbBlock = buildKnowledgeContext(chunks) || undefined;
+      if (kbBlock) kbAppended = chunks as any[];
     } catch (err: any) {
       kbAppended = [{ error: err.message }];
     }
   }
+
+  // Compute BehaviorState the same way production does.
+  const behaviorState = computeBehaviorState({
+    mode: "agent",
+    identity: { hasContact: false, contactLifecycle: null, priorConversationCount: 0 },
+    request: {
+      lastMessage: kbProbe,
+      messageCount: history.length || 1,
+      recentDirections: history.slice(-5).map((m) => m.direction),
+    },
+  });
+
+  // Use the unified prompt builder — same path production uses, with full slots.
+  const systemPrompt = buildAgentPrompt({
+    behaviorState,
+    agent: {
+      name: config.name,
+      role: config.role,
+      description: config.description,
+      tone: config.tone,
+      style: config.style,
+      identity: config.identity,
+      goals: config.goals,
+      toneConfig: config.toneConfig,
+      behavioral: config.behavioral,
+      persona: config.persona,
+      conversationFlow: config.conversationFlow,
+      customGuardrails: config.customGuardrails,
+      escalationRules: config.escalationRules,
+      behavioralAnchors: (config as any).behavioralAnchors,
+    },
+    context: { customerBlock },
+    knowledge: { block: kbBlock },
+  });
 
   const messages: any[] = [{ role: "system", content: systemPrompt }];
   for (const m of history) {
@@ -214,16 +255,15 @@ async function renderAssistMode(opts: {
   if (!agent) throw Object.assign(new Error("AI Agent not found"), { status: 404 });
 
   // Build the assist-mode CopilotConfigData using the same code path the
-  // live route uses (assemblePrompt → getEffectiveCopilotConfig).
+  // live route uses (buildConfigFromAIAgent → buildAgentPrompt).
   const config = buildConfigFromAIAgent(agent as any, "copilot");
 
-  let systemPrompt = config.systemPrompt;
   let kbAppended: any[] = [];
 
   let convoMeta: any = null;
   let history: Array<{ direction: "INBOUND" | "OUTBOUND"; body: string | null; senderName: string | null }> = [];
   let customerName: string | null = null;
-  let conversationMetaBlock: string[] | null = null;
+  let customerBlock: string | undefined;
   let metaForRender: any = null;
   if (opts.conversationId) {
     const conv = await prisma.conversation.findFirst({
@@ -266,7 +306,7 @@ async function renderAssistMode(opts: {
       customerExternalId: conv.customerExternalId,
       aiAgentId: (conv as any).assignedAiAgentId || null,
     };
-    const lines: string[] = [];
+    const lines: string[] = ["## Customer & Conversation Info"];
     lines.push(`- Customer: ${customerName || "Unknown"}`);
     if (metaForRender.customerExternalId) lines.push(`- External ID / Phone: ${metaForRender.customerExternalId}`);
     if (metaForRender.channel) lines.push(`- Channel: ${metaForRender.channel}`);
@@ -276,7 +316,7 @@ async function renderAssistMode(opts: {
     if (metaForRender.createdAt) lines.push(`- Conversation Started: ${metaForRender.createdAt}`);
     if (metaForRender.lastMessageAt) lines.push(`- Last Message: ${metaForRender.lastMessageAt}`);
     if (metaForRender.isHandedOver !== undefined) lines.push(`- Handed Over to Human: ${metaForRender.isHandedOver ? "Yes" : "No"}`);
-    conversationMetaBlock = lines;
+    customerBlock = lines.join("\n");
 
     const msgs = await prisma.message.findMany({
       where: { conversationId: opts.conversationId, tenantId: opts.tenantId },
@@ -287,31 +327,46 @@ async function renderAssistMode(opts: {
     history = msgs.reverse() as any;
   }
 
-  // Mirror OpenAIProvider.suggestResponse: append KB to system prompt when
-  // the last inbound message warrants it.
+  // Compute BehaviorState first — KB gate is then BEL-controlled.
   const lastInbound = [...history].reverse().find((m) => m.direction === "INBOUND" && m.body?.trim());
   const kbProbe = (opts.message || lastInbound?.body || "").trim();
-  if (kbProbe) {
+
+  const behaviorState = computeBehaviorState({
+    mode: "copilot",
+    identity: {
+      hasContact: !!metaForRender?.customerExternalId,
+      contactLifecycle: null,
+      priorConversationCount: 0,
+    },
+    request: {
+      lastMessage: kbProbe,
+      messageCount: history.length || 1,
+      recentDirections: history.slice(-5).map((m) => m.direction),
+    },
+    copilotPreferredMode: config.copilotMode,
+  });
+
+  let kbBlock: string | undefined;
+  if (kbProbe && shouldRetrieveKB(behaviorState, kbProbe)) {
     try {
       const chunks = await retrieveRelevantChunks(opts.tenantId, kbProbe, 5);
-      const ctx = buildKnowledgeContext(chunks);
-      if (ctx) {
-        systemPrompt += "\n\n" + ctx;
-        kbAppended = chunks as any[];
-      }
+      kbBlock = buildKnowledgeContext(chunks) || undefined;
+      if (kbBlock) kbAppended = chunks as any[];
     } catch (err: any) {
       kbAppended = [{ error: err.message }];
     }
   }
 
-  // Mirror OpenAIProvider.buildChatMessages — same shape the suggestions
-  // endpoint sends, including the Customer & Conversation Info block and
-  // the new mode instruction (which now tells the model to call
-  // submit_suggestions).
+  // Mirror OpenAIProvider.suggestResponse: build the system prompt via the
+  // unified prompt-builder, with customer info + KB inside the prompt's slots.
+  const systemPrompt = buildAgentPrompt({
+    behaviorState,
+    agent: config.agent,
+    context: { customerBlock },
+    knowledge: { block: kbBlock },
+  });
+
   const messages: any[] = [{ role: "system", content: systemPrompt }];
-  if (conversationMetaBlock && conversationMetaBlock.length > 0) {
-    messages.push({ role: "user", content: `## Customer & Conversation Info\n${conversationMetaBlock.join("\n")}` });
-  }
   const transcript = history
     .filter((m) => m.body?.trim())
     .map((m) => {
@@ -321,8 +376,8 @@ async function renderAssistMode(opts: {
     .join("\n");
   if (transcript) messages.push({ role: "user", content: `## Conversation Transcript\n${transcript}` });
 
-  const copilotMode = (config.copilotMode || "READY_MESSAGE") as "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT";
-  messages.push({ role: "user", content: getModeInstruction(copilotMode) });
+  // Output instruction sourced from BEL (NOT agent.copilotMode at debug time).
+  messages.push({ role: "user", content: renderOutputContractInstruction(behaviorState.outputContract) });
 
   // Tool surface — same construction the provider's suggestResponse uses
   // (submit_suggestions terminator + ASSIST-filtered integration tools +

@@ -1,8 +1,9 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
-import { generateAndSavePrompts } from "../services/prompt-assembler.service";
 import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.service";
 import { generateResponse } from "../services/ai.service";
+import { computeBehaviorState } from "../services/behavior-engine.service";
+import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
 
 const router = Router();
 
@@ -114,21 +115,29 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
         .map(([k, v]) => `${k}: ${v}`)
         .join("\n");
 
+      // Generator path goes through BEL → PB. The system prompt is built by
+      // the platform Generator agent; the wizard answers are the user input.
+      const generatorState = computeBehaviorState({
+        mode: "generator",
+        identity: { hasContact: true, contactLifecycle: null, priorConversationCount: 0 },
+        request: { lastMessage: wizardSummary, messageCount: 1 },
+      });
+      const generatorSystemPrompt = buildAgentPrompt({
+        behaviorState: generatorState,
+        agent: GENERATOR_BUILTIN_AGENT,
+      });
       const aiRes = await generateResponse({
         tenantId: req.tenantId! as string,
         messages: [
-          {
-            role: "system",
-            content: `You are a product copywriter for an AI customer communication platform. Based on the user's wizard answers, generate a concise, professional description (2-4 sentences) for their AI agent. The description should explain what the agent does, how it communicates, and what channels it operates on. Write in the same language the user used in their answers. Do NOT include the agent's name in the description.`,
-          },
+          { role: "system", content: generatorSystemPrompt },
           {
             role: "user",
-            content: `Here are the wizard answers for my new AI agent:\n\n${wizardSummary}\n\nGenerate a rich description for this agent.`,
+            content: `Wizard answers for the new AI agent:\n\n${wizardSummary}\n\nProduce a 2–4 sentence description in the user's language. Do not repeat the agent's name. Output only the description text.`,
           },
         ],
         temperature: 0.7,
         maxTokens: 200,
-        metadata: { type: "agent_description" },
+        metadata: { type: "agent_description", belMode: "generator" },
       });
       if (aiRes.content?.trim()) {
         description = aiRes.content.trim();
@@ -359,13 +368,6 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // Body: { tenantToolId, isAllowed, requireApproval? }
     // Handled via the dedicated route below.
 
-    // Generate and save prompt parts (shared + autonomous)
-    try {
-      await generateAndSavePrompts(req.tenantId! as string, agent.id);
-    } catch (promptErr) {
-      console.warn("[ai-agents] Prompt generation failed (non-fatal):", promptErr);
-    }
-
     res.json({ data: agent });
   } catch (err) {
     console.error("Update AI agent error:", err);
@@ -443,14 +445,6 @@ router.put(
               requireApproval: typeof requireApproval === "boolean" ? requireApproval : false,
             },
           });
-
-      // Regenerate prompt parts so the agent's `## Tools` section reflects
-      // the change on the next bot turn. Best-effort.
-      try {
-        await generateAndSavePrompts(tenantId, aiAgentId);
-      } catch (promptErr) {
-        console.warn("[ai-agents] Prompt regen after tool toggle failed (non-fatal):", promptErr);
-      }
 
       res.json({ data: row });
     } catch (err: any) {

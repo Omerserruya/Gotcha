@@ -10,6 +10,8 @@ import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
 import { getPolicy, setPolicy } from "../services/policy.service";
 import voiceRouter from "./ai-assist-voice";
+import { buildAgentPrompt } from "../services/prompt-builder.service";
+import { computeBehaviorState } from "../services/behavior-engine.service";
 
 const router = Router();
 
@@ -29,7 +31,7 @@ router.post("/generate-configs", authenticate, resolveTenant, requireRole("ADMIN
           name: a.name,
           role: a.role,
           status: a.status,
-          systemPrompt: a.systemPrompt.substring(0, 200) + "...",
+          descriptionPreview: (a.description || "").substring(0, 200),
           hasIdentity: !!a.identity,
           hasGoals: !!a.goals,
           hasTone: !!a.toneConfig,
@@ -462,9 +464,18 @@ router.get("/prompt/:departmentId", requireRole("SYSTEM_ADMIN"), async (req: Req
       res.status(404).json({ error: "No copilot configuration found for this department" });
       return;
     }
+    const behaviorState = computeBehaviorState({
+      mode: "copilot",
+      identity: { hasContact: false, contactLifecycle: null, priorConversationCount: 0 },
+      request: { lastMessage: "", messageCount: 0 },
+    });
+    const systemPrompt = buildAgentPrompt({
+      behaviorState,
+      agent: config.agent,
+    });
     res.json({
       data: {
-        systemPrompt: config.systemPrompt,
+        systemPrompt,
         model: config.model,
         temperature: config.temperature,
         maxTokens: config.maxTokens,
