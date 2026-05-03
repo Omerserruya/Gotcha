@@ -202,6 +202,119 @@ export async function generateEmbedding(params: EmbeddingRequestParams): Promise
   };
 }
 
+// ─── Streaming variant ──────────────────────────────────────
+//
+// Used by the System Copilot (Command Center) so tokens reach the operator's
+// UI as they're generated. Maintains the same audit + usage-tracking
+// contracts as `generateResponse` — the totals just land at the END of the
+// stream, after we've consumed all chunks.
+
+export interface AIStreamEvent {
+  /** Content delta. Empty string is a no-op (skip). */
+  contentDelta?: string;
+  /** Accumulated tool_calls (OpenAI delivers them piecewise across chunks). */
+  toolCallsDelta?: any[];
+  /** Final assistant content (only on `done`). */
+  content?: string;
+  /** Final tool_calls (only on `done`). */
+  toolCalls?: AIResponse["toolCalls"];
+  usage?: AIResponse["usage"];
+  done?: boolean;
+}
+
+export async function* streamResponse(params: AIRequestParams): AsyncGenerator<AIStreamEvent, void, void> {
+  const client = getClient();
+  const model = params.model || defaultModel;
+  const type = params.metadata?.type || "chat";
+
+  const requestParams: OpenAI.ChatCompletionCreateParamsStreaming = {
+    model,
+    messages: params.messages,
+    temperature: params.temperature ?? 0.7,
+    max_tokens: params.maxTokens ?? 1024,
+    stream: true,
+    stream_options: { include_usage: true },
+  };
+  if (params.tools && params.tools.length > 0) {
+    (requestParams as any).tools = params.tools;
+    if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
+  }
+
+  const stream = await client.chat.completions.create(requestParams);
+
+  let accumulatedContent = "";
+  // OpenAI delivers tool_calls in deltas keyed by an `index`. We assemble
+  // them as we go and only emit a finalised list on `done`.
+  const toolCallAcc: Record<number, { id?: string; type: "function"; function: { name?: string; arguments?: string } }> = {};
+  let usage: AIResponse["usage"] = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+
+  for await (const chunk of stream) {
+    const choice = chunk.choices?.[0];
+    const delta: any = choice?.delta;
+    if (delta?.content) {
+      accumulatedContent += delta.content;
+      yield { contentDelta: delta.content };
+    }
+    if (delta?.tool_calls && Array.isArray(delta.tool_calls)) {
+      for (const tcd of delta.tool_calls) {
+        const idx = typeof tcd.index === "number" ? tcd.index : 0;
+        const slot = (toolCallAcc[idx] ||= { type: "function", function: {} });
+        if (tcd.id) slot.id = tcd.id;
+        if (tcd.function?.name) slot.function.name = (slot.function.name || "") + tcd.function.name;
+        if (tcd.function?.arguments)
+          slot.function.arguments = (slot.function.arguments || "") + tcd.function.arguments;
+      }
+      yield { toolCallsDelta: Object.values(toolCallAcc) };
+    }
+    if (chunk.usage) {
+      usage = {
+        input_tokens: chunk.usage.prompt_tokens ?? 0,
+        output_tokens: chunk.usage.completion_tokens ?? 0,
+        total_tokens: chunk.usage.total_tokens ?? 0,
+      };
+    }
+  }
+
+  const finalToolCalls = Object.values(toolCallAcc)
+    .filter((s) => s.id && s.function.name)
+    .map((s) => ({
+      id: s.id!,
+      type: "function" as const,
+      function: { name: s.function.name!, arguments: s.function.arguments || "{}" },
+    }));
+
+  // Same fire-and-forget tracking + audit as the non-streaming path.
+  trackAIUsage({
+    tenantId: params.tenantId,
+    feature: type,
+    model,
+    promptTokens: usage.input_tokens,
+    completionTokens: usage.output_tokens,
+    totalTokens: usage.total_tokens,
+    metadata: {
+      conversationId: params.metadata?.conversationId,
+      aiAgentId: params.metadata?.aiAgentId,
+    },
+  }).catch((err) => console.error("[aiService] Usage tracking (stream) failed:", err.message));
+
+  logAudit({
+    tenantId: params.tenantId,
+    actor: { type: "ai", id: params.metadata?.aiAgentId },
+    action: "ai.responded",
+    target: params.metadata?.conversationId
+      ? { type: "conversation", id: params.metadata.conversationId }
+      : undefined,
+    metadata: { model, type, tokens: usage, streamed: true },
+  }).catch((err) => console.error("[aiService] Audit logging (stream) failed:", err.message));
+
+  yield {
+    done: true,
+    content: accumulatedContent,
+    toolCalls: finalToolCalls.length > 0 ? finalToolCalls : undefined,
+    usage,
+  };
+}
+
 // ─── Convenience: Get default model ─────────────────────────
 
 export function getDefaultModel(): string {

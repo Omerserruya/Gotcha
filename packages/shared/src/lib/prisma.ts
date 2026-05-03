@@ -39,6 +39,7 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "NotificationLog",
   "RouterRule",
   "ScheduledMessage",
+  "SystemAgentMessage",
   "TenantIntegration",
   "TenantTool",
   "ToolExecution",

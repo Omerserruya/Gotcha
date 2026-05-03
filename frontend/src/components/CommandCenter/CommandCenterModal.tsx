@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import {
-  simulateCommand,
   executePlan,
+  runAgentStream,
   ExecutionPlan,
   PlannedAction,
 } from "@/lib/gotcha-api";
@@ -48,6 +48,9 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
+  // Stable per-open session id — groups memory rows server-side. Reset on close.
+  const sessionIdRef = useRef<string>("");
+  const abortRef = useRef<AbortController | null>(null);
 
   // Derive orb state from what's currently happening. If any turn is
   // mid-execute, show that; else thinking if loading; else ready if
@@ -70,15 +73,24 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     if (open) {
       setTimeout(() => inputRef.current?.focus(), 0);
       setError(null);
+      // Mint a fresh session id for this modal-open. The backend memory
+      // stays per (tenant, user) and is keyed by session for grouping.
+      if (!sessionIdRef.current) {
+        sessionIdRef.current = `cc_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 10)}`;
+      }
     }
   }, [open]);
 
   // Reset the session each time the modal closes.
   useEffect(() => {
     if (!open) {
+      // Cancel any in-flight stream before tearing down the UI.
+      abortRef.current?.abort();
+      abortRef.current = null;
       setTurns([]);
       setPrompt("");
       setError(null);
+      sessionIdRef.current = "";
     }
   }, [open]);
 
@@ -119,39 +131,95 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     setPrompt("");
     setLoading(true);
 
-    // Compact history for the planner: last 8 turns as {role, content}.
-    const history = turns.slice(-8).map((t) => ({
-      role: t.kind === "user" ? "user" : "assistant",
-      content:
-        t.kind === "assistant" && t.plan
-          ? `(proposed plan: ${t.plan.summary})`
-          : t.text,
-    }));
+    // Single in-progress assistant turn that we mutate as tokens arrive.
+    const assistantTurnId = addTurn({ kind: "assistant", text: "" });
+
+    const abort = new AbortController();
+    abortRef.current = abort;
+
+    let streamed = "";
+    let earlyError: string | null = null;
+    let proposedPlanSummary: string | null = null;
 
     try {
-      const res = await simulateCommand(token, text, { ...context, locale, history });
-      if (res.mode === "chat") {
-        addTurn({ kind: "assistant", text: res.answer ?? res.clarification ?? "" });
-      } else if (!res.plan || res.plan.steps.length === 0) {
-        // Planner returned an empty plan — use the summary as a clarifying question.
-        addTurn({
-          kind: "assistant",
-          text: res.plan?.summary || t("commandCenter.noPlan") || "I need a bit more to go on. Can you clarify?",
-        });
-      } else {
-        addTurn({
-          kind: "assistant",
-          text: res.plan.summary,
-          plan: res.plan,
-          preview: res.results,
-        });
-      }
+      await runAgentStream(
+        token,
+        {
+          message: text,
+          sessionId: sessionIdRef.current,
+          client: {
+            route: typeof window !== "undefined" ? window.location.pathname : null,
+            conversationId: context.conversationId ?? null,
+            contactId: context.contactId ?? null,
+            extras: { locale },
+          },
+        },
+        (ev) => {
+          switch (ev.type) {
+            case "token":
+              streamed += ev.text;
+              patchTurn(assistantTurnId, { text: streamed });
+              break;
+            case "tool_start":
+              addTurn({
+                kind: "system",
+                text: `… ${ev.name.replace(/^integration_/, "")}`,
+              });
+              break;
+            case "tool_end":
+              if (!ev.ok) {
+                addTurn({
+                  kind: "system",
+                  text: `✗ ${ev.name.replace(/^integration_/, "")} — ${ev.resultSummary}`,
+                });
+              }
+              break;
+            case "plan_proposed":
+              proposedPlanSummary = ev.summary;
+              addTurn({
+                kind: "system",
+                text: `📋 ${t("commandCenter.planProposed") || "Plan ready for approval"}: ${ev.summary}`,
+              });
+              break;
+            case "awaiting_approval":
+              addTurn({
+                kind: "system",
+                text: `⏸ ${t("commandCenter.awaitingApproval") || "Action paused for approval"}: ${ev.tool}`,
+              });
+              break;
+            case "denied":
+              addTurn({
+                kind: "system",
+                text: `🚫 ${ev.tool} — ${ev.reason}`,
+              });
+              break;
+            case "error":
+              earlyError = ev.message;
+              break;
+            case "done":
+              // Final turn already accumulated via tokens; nothing to do.
+              break;
+            default:
+              break;
+          }
+        },
+        abort.signal,
+      );
     } catch (e: any) {
-      setError(e?.message ?? t("commandCenter.errorSimulate"));
+      if (e?.name !== "AbortError") {
+        earlyError = e?.message ?? (t("commandCenter.errorSimulate") || "agent error");
+      }
     } finally {
+      abortRef.current = null;
       setLoading(false);
       setTimeout(() => inputRef.current?.focus(), 0);
     }
+
+    if (earlyError) setError(earlyError);
+    // Suppress unused-variable lint for the captured plan summary — used by
+    // the system turn above; the modal's PlanCard now lives in the approvals
+    // surface, not inline (since propose_plan creates an ApprovalRequest).
+    void proposedPlanSummary;
   }
 
   async function runExecute(turnId: string, plan: ExecutionPlan) {

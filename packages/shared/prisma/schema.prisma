@@ -946,7 +946,10 @@ model TenantToolPermission {
 model ApprovalRequest {
   id             String         @id @default(cuid())
   tenantId       String         @map("tenant_id")
-  conversationId String         @map("conversation_id")
+  // Nullable: System Copilot plans aren't conversation-scoped (e.g.
+  // "build a workflow that fires after 2 days"). Customer-facing approvals
+  // continue to fill this in.
+  conversationId String?        @map("conversation_id")
   messageId      String?        @map("message_id") // the inbound that triggered the action
   contactId      String?        @map("contact_id")
   tool           String // "cancel_order" | "issue_refund" | "integration.hubspot.create_deal"
@@ -1457,4 +1460,27 @@ model BusinessPolicy {
   createdAt DateTime @default(now()) @map("created_at")
 
   @@map("business_policies")
+}
+
+// ─── System Agent Memory ────────────────────────────────────
+// Per-user, per-tenant rolling history for the System Copilot (Command
+// Center). Isolated from customer Conversation/Message tables so operator
+// threads don't leak into customer-facing queries, audit, or realtime
+// publishers. Trimmed to a rolling window by agent-runtime.service.
+model SystemAgentMessage {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  userId      String   @map("user_id")
+  sessionId   String   @map("session_id")
+  role        String   // "user" | "assistant" | "tool"
+  content     String   @db.Text
+  toolCalls   Json?    @map("tool_calls")
+  toolCallId  String?  @map("tool_call_id")
+  toolName    String?  @map("tool_name")
+  metadata    Json?
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, userId, createdAt(sort: Desc)])
+  @@index([sessionId, createdAt])
+  @@map("system_agent_messages")
 }

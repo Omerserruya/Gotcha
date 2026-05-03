@@ -83,6 +83,99 @@ export function getApprovalQueue(token: string) {
   return req("GET", "/api/action-planner/approvals", token);
 }
 
+// ─── System Copilot agent runtime (Command Center) ─────────
+//
+// Streams an `AgentRuntimeEvent` sequence from POST /api/agent/run via
+// `text/event-stream`. We use fetch + ReadableStream (not the native
+// EventSource) so we can attach an Authorization header and POST a body.
+//
+// The caller passes a stable `sessionId` (one per modal-open) so the
+// backend can group memory rows and (later) summarise per session.
+
+export type AgentSSEEvent =
+  | { type: "ready"; sessionId: string }
+  | { type: "context_attached"; resolved: { conversationId: string | null; contactId: string | null; route: string | null } }
+  | { type: "token"; text: string }
+  | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
+  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string }
+  | { type: "plan_proposed"; approvalRequestId: string; summary: string }
+  | { type: "awaiting_approval"; approvalRequestId: string; tool: string }
+  | { type: "denied"; tool: string; reason: string }
+  | { type: "round_end"; round: number; hadToolCalls: boolean }
+  | { type: "done"; usage: { input_tokens: number; output_tokens: number; total_tokens: number }; rounds: number }
+  | { type: "error"; message: string }
+  | { type: "close" };
+
+export interface AgentRunInput {
+  message: string;
+  sessionId: string;
+  client?: {
+    route?: string | null;
+    conversationId?: string | null;
+    contactId?: string | null;
+    extras?: Record<string, unknown> | null;
+  };
+  model?: string;
+  ephemeral?: boolean;
+  aiAgentId?: string | null;
+}
+
+export async function runAgentStream(
+  token: string,
+  input: AgentRunInput,
+  onEvent: (ev: AgentSSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch("/api/agent/run", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    onEvent({ type: "error", message: text || `agent run failed (${res.status})` });
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  // SSE framing: events separated by "\n\n", each event has lines like
+  // "event: <type>\n", "data: <json>\n". Comment lines (": …") are heartbeats.
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) >= 0) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      if (!frame.trim() || frame.startsWith(":")) continue;
+      const dataLines = frame
+        .split("\n")
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).trim());
+      if (dataLines.length === 0) continue;
+      const json = dataLines.join("\n");
+      try {
+        const ev = JSON.parse(json) as AgentSSEEvent;
+        onEvent(ev);
+      } catch {
+        // Malformed event — skip rather than blow up the loop.
+      }
+    }
+  }
+}
+
+export function clearAgentMemory(token: string) {
+  return req<{ removed: number }>("POST", "/api/agent/clear", token);
+}
+
 // ─── F4 bot-surface approvals (new) ────────────────────────
 // These target the NEW conversation-service /api/approvals route
 // (not the legacy action-planner one) and power the in-inbox

@@ -14,7 +14,9 @@ import type { ToolGateResult } from "./tool-gate";
 
 export interface CreateApprovalRequestInput {
   tenantId: string;
-  conversationId: string;
+  /** Optional: System Copilot plans aren't always conversation-scoped
+   * (e.g. "build a workflow"). Customer-facing approvals always set this. */
+  conversationId?: string;
   contactId?: string;
   messageId?: string;
   tool: string;
@@ -36,7 +38,7 @@ export async function createApprovalRequest(
   const created = await (prisma as any).approvalRequest.create({
     data: {
       tenantId: input.tenantId,
-      conversationId: input.conversationId,
+      conversationId: input.conversationId ?? null,
       contactId: input.contactId ?? null,
       messageId: input.messageId ?? null,
       tool: input.tool,

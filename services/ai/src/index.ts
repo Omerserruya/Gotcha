@@ -16,6 +16,7 @@ import actionPlannerRoutes from "./routes/action-planner";
 import toolPermissionRoutes from "./routes/tool-permissions";
 import aiDebugRoutes from "./routes/ai-debug";
 import aiBotRoutes from "./routes/ai-bot";
+import agentRoutes from "./routes/agent";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
@@ -63,6 +64,7 @@ app.use("/api/action-planner", actionPlannerRoutes);
 app.use("/api/tool-permissions", toolPermissionRoutes);
 app.use("/api/ai-debug", aiDebugRoutes);
 app.use("/api/ai-bot", aiBotRoutes);
+app.use("/api/agent", agentRoutes);
 
 // Hook AI copilot into voice-copilot's transcript pub/sub. Fires the
 // debounced suggestions pipeline on every customer-final utterance.
