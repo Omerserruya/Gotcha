@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import { computeBehaviorState, shouldRetrieveKB } from "../services/behavior-engine.service";
+import { SAAS_DEFAULT_FUNNEL } from "../services/funnel-config.service";
 
 const baseIdentity = {
   unknown: { hasContact: false, contactLifecycle: null, priorConversationCount: 0 } as const,
@@ -553,6 +554,224 @@ describe("BehaviorEngine — KB gating (BEL-controlled)", () => {
     });
     expect(s.strategy).toBe("CONVERT");
     expect(shouldRetrieveKB(s, "hi")).toBe(false);
+  });
+});
+
+describe("BehaviorEngine — ownership signal (Task 1)", () => {
+  it("no identifier in message → ownership none, confidence 0", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "hello there", messageCount: 1 },
+    });
+    expect(s.ownershipSignal.ownerIsCustomer).toBe(false);
+    expect(s.ownershipSignal.evidence).toBe("none");
+    expect(s.requiredActions).not.toContain("identity_link");
+  });
+
+  it("direct response to assistant question → confidence 0.9 + identity_link required", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "omerts58@gmail.com",
+        messageCount: 3,
+        identifierMessage: { kind: "email", value: "omerts58@gmail.com" },
+        assistantPreviouslyAskedFor: "email",
+      },
+    });
+    expect(s.ownershipSignal.ownerIsCustomer).toBe(true);
+    expect(s.ownershipSignal.evidence).toBe("direct_response_to_assistant_question");
+    expect(s.ownershipSignal.confidence).toBe(0.9);
+    expect(s.requiredActions).toContain("identity_link");
+  });
+
+  it("self-referential phrase → confidence 0.85 + identity_link required", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "האימייל שלי omerts58@gmail.com",
+        messageCount: 3,
+        identifierMessage: { kind: "email", value: "omerts58@gmail.com" },
+      },
+    });
+    expect(s.ownershipSignal.ownerIsCustomer).toBe(true);
+    expect(s.ownershipSignal.evidence).toBe("self_referential_phrase");
+    expect(s.requiredActions).toContain("identity_link");
+  });
+
+  it("third-party marker → ownership false, identity_link NOT required", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "תשלחו ל support@company.com",
+        messageCount: 3,
+        identifierMessage: { kind: "email", value: "support@company.com" },
+      },
+    });
+    expect(s.ownershipSignal.ownerIsCustomer).toBe(false);
+    expect(s.ownershipSignal.evidence).toBe("third_party");
+    expect(s.requiredActions).not.toContain("identity_link");
+  });
+
+  it("bare identifier without question → implicit context, confidence 0.7", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "omerts58@gmail.com",
+        messageCount: 3,
+        identifierMessage: { kind: "email", value: "omerts58@gmail.com" },
+      },
+    });
+    expect(s.ownershipSignal.ownerIsCustomer).toBe(true);
+    expect(s.ownershipSignal.evidence).toBe("implicit_context");
+    expect(s.ownershipSignal.confidence).toBe(0.7);
+    expect(s.requiredActions).toContain("identity_link");
+  });
+
+  it("ambiguous mid-sentence identifier → confidence 0.3, no identity_link", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "i was talking to john@friend.com last week",
+        messageCount: 5,
+        identifierMessage: { kind: "email", value: "john@friend.com" },
+      },
+    });
+    expect(s.ownershipSignal.ownerIsCustomer).toBe(false);
+    expect(s.ownershipSignal.evidence).toBe("ambiguous");
+    expect(s.requiredActions).not.toContain("identity_link");
+  });
+});
+
+describe("BehaviorEngine — funnel integration (Task 2)", () => {
+  it("funnel-less call leaves strategy + playbooks alone", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "tell me about pricing", messageCount: 3 },
+    });
+    expect(s.provenance.strategy).not.toContain("funnel-overridden");
+    expect(s.provenance.playbookIds).not.toContain("funnel-overridden");
+  });
+
+  it("SaaS funnel demo+informational → strategy override CONVERT applied via BEL", () => {
+    // 'tell me' = informational marker; 'demo' = funnel stage marker.
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "tell me about your demo", messageCount: 3 },
+      funnel: SAAS_DEFAULT_FUNNEL,
+    });
+    expect(s.strategy).toBe("CONVERT");
+    expect(s.provenance.strategy).toContain("funnel-overridden");
+    expect(s.provenance.overrides.some((o) => o.includes("funnel.strategy_override"))).toBe(true);
+  });
+
+  it("SaaS funnel qualified stage → playbook override fires", () => {
+    // Informational message without 'demo' marker → demo stage skipped,
+    // qualified stage entered.
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "what features do you offer", messageCount: 3 },
+      funnel: SAAS_DEFAULT_FUNNEL,
+    });
+    expect(s.provenance.overrides.some((o) => o.includes("funnel.stage=qualified"))).toBe(true);
+  });
+});
+
+describe("BehaviorEngine — closure posture (Task 4)", () => {
+  it("default mid-flight → posture=open, no closure required", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "tell me more about pricing", messageCount: 3 },
+    });
+    expect(s.closurePosture).toBe("open");
+    expect(s.requiredActions).not.toContain("close_conversation");
+    expect(s.requiredActions).not.toContain("schedule_followup");
+  });
+
+  it("customer defers ('let me think') → posture=needs_followup + schedule_followup", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "let me think about it and i'll get back to you", messageCount: 5 },
+    });
+    expect(s.closurePosture).toBe("needs_followup");
+    expect(s.requiredActions).toContain("schedule_followup");
+    expect(s.requiredActions).not.toContain("close_conversation");
+  });
+
+  it("Hebrew defer ('אחזור אליך') → needs_followup", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "אחשוב על זה ואחזור אליך", messageCount: 5 },
+    });
+    expect(s.closurePosture).toBe("needs_followup");
+    expect(s.requiredActions).toContain("schedule_followup");
+  });
+
+  it("customer thanks after closing assistant move → ready_to_close + close_conversation", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "perfect, thanks!",
+        messageCount: 7,
+        lastAssistantMove: "close",
+      },
+    });
+    expect(s.closurePosture).toBe("ready_to_close");
+    expect(s.requiredActions).toContain("close_conversation");
+  });
+
+  it("hard decline ('not interested') → ready_to_close (no follow-up)", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "not interested, thanks", messageCount: 4 },
+    });
+    expect(s.closurePosture).toBe("ready_to_close");
+    expect(s.requiredActions).toContain("close_conversation");
+    expect(s.requiredActions).not.toContain("schedule_followup");
+  });
+
+  it("pending approvals block closure (HOLD overrides)", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "perfect, thanks!", messageCount: 7, lastAssistantMove: "close" },
+      flags: { pendingApprovalsCount: 1 },
+    });
+    expect(s.closurePosture).toBe("open");
+    expect(s.requiredActions).not.toContain("close_conversation");
+  });
+
+  it("escalate_now beats closure — escalate_to_human wins", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "thanks but I want a human, this is urgent", messageCount: 4, lastAssistantMove: "close" },
+      flags: { humanHandoffRequested: true },
+    });
+    expect(s.requiredActions).toContain("escalate_to_human");
+    expect(s.requiredActions).not.toContain("close_conversation");
+  });
+
+  it("provenance includes closure-posture rule when fired", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "let me think about it", messageCount: 5 },
+    });
+    expect(s.provenance.requiredActions).toContain("needs_followup");
   });
 });
 

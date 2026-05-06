@@ -29,7 +29,74 @@ export interface AgentToolContext {
    * fire the action from the suggestions panel.
    */
   mode?: "agent" | "copilot";
+  /**
+   * Optional handler for `schedule_meeting` (Task 3). The ai service wires
+   * this with its scheduling.service + calendar adapter. Lives on the
+   * context so shared/agent-tools.ts stays decoupled from per-service
+   * dependencies (Prisma calendar models, Google/Calendly fetch logic).
+   * Return shape mirrors what the model needs to relay to the customer.
+   */
+  scheduleMeeting?: (args: ScheduleMeetingArgs) => Promise<ScheduleMeetingResult>;
+  /**
+   * Custom API tool runner. Set by ai-bot.service from
+   * connectors/custom-api.service. The dispatcher routes any tool whose
+   * name matches `custom.<slug>` here. Returns a JSON-stringifiable result.
+   */
+  runCustomApiTool?: (opts: {
+    slug: string;
+    args: Record<string, unknown>;
+  }) => Promise<{ ok: true; result: unknown; meta?: any } | { ok: false; reason: string; meta?: any }>;
+  /**
+   * Adapter framework runner. Set by ai-bot.service from
+   * connectors/integration-framework. Routes any tool whose name matches
+   * `<provider>.<toolName>` (e.g. "stripe.refund_payment") to the registered
+   * provider adapter.
+   */
+  runAdapterTool?: (opts: {
+    toolFunctionName: string;
+    args: Record<string, unknown>;
+  }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
+  /**
+   * Custom DB query tool runner. Set by ai-bot.service from
+   * connectors/custom-db.service. Routes any tool whose name starts with
+   * `custom_db.` to the tenant-defined query template (parameterized SQL or
+   * Mongo op). Safer than generic CRUD because the template is fixed.
+   */
+  runCustomDbTool?: (opts: {
+    slug: string;
+    args: Record<string, unknown>;
+  }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
 }
+
+export interface ScheduleMeetingArgs {
+  duration_minutes: number;
+  meeting_type: string;
+  requested_at_iso?: string;
+  customer_timezone?: string;
+  customer_email?: string;
+  additional_guests?: string[];
+  notes?: string;
+}
+
+export type ScheduleMeetingResult =
+  | { ok: true; verdict: "VALID"; eventId: string; joinUrl?: string; startMs: number; endMs: number }
+  | {
+      ok: false;
+      verdict: "INVALID";
+      reason: string;
+      proposedSlotsIso: string[];
+      /**
+       * Pre-localized customer-facing copy. Set when the failure mode warrants
+       * a specific user-visible message (e.g. `slot_taken` race after the
+       * slot was validated). The model is instructed to relay verbatim in
+       * the customer's language.
+       */
+      userMessage?: { he: string; en: string };
+      /** The slot the model originally tried to book — for audit. */
+      requestedSlotIso?: string;
+    }
+  | { ok: false; verdict: "PROPOSE"; proposedSlotsIso: string[] }
+  | { ok: false; reason: string };
 
 export interface AgentToolSideEffect {
   /** escalate_to_human was requested — caller must hand off to human. */
@@ -85,11 +152,13 @@ export const LINK_IDENTIFIER_TOOL = {
   function: {
     name: "link_customer_identifier",
     description:
-      "Link an email or phone number that the customer has explicitly stated as their own to their contact record. " +
-      "This enables cross-channel history unification (e.g. the same person messaging on Instagram and WhatsApp). " +
-      "Call ONLY when the customer clearly states ownership ('my email is...', 'my number is...', 'send it to me at...'). " +
-      "DO NOT call for third-party emails/phones (e.g. 'contact support@x.com' — that's not the customer's own address). " +
-      "The server decides whether to attach the identifier or create a pending merge suggestion.",
+      "Link an email or phone number that belongs to THIS CUSTOMER (not a third party) to their contact record. " +
+      "Enables cross-channel history unification. Call when:\n" +
+      "  1. The user provides the identifier in direct response to YOUR question (you asked for it).\n" +
+      "  2. The user uses a self-referential phrase ('my email is...', 'האימייל שלי...', 'send to me at...').\n" +
+      "  3. The user volunteers a bare identifier as a clear self-reference.\n" +
+      "DO NOT call when the identifier clearly belongs to a third party " +
+      "('contact support@...', 'שלח למנהל שלי...', 'forward this to john@...').",
     parameters: {
       type: "object",
       properties: {
@@ -103,13 +172,173 @@ export const LINK_IDENTIFIER_TOOL = {
           description:
             "The literal identifier the customer wrote. Copy it verbatim — do not normalize, format, or guess.",
         },
+        ownership_evidence: {
+          type: "string",
+          enum: ["direct_response_to_assistant_question", "self_referential_phrase", "implicit_context", "other"],
+          description:
+            "Why you believe this identifier belongs to the customer. " +
+            "'direct_response_to_assistant_question' when you asked for it and they answered. " +
+            "'self_referential_phrase' for 'my X is...'. " +
+            "'implicit_context' for a bare identifier with no third-party markers.",
+        },
         confidence: {
           type: "number",
           description:
-            "Your confidence that the customer owns this identifier. 0.9+ for clear statements of ownership, 0.6–0.8 for implied ownership, below 0.5 — do not call this tool.",
+            "0.9 = direct answer to your question. 0.85 = self-referential phrase. 0.7 = implicit. Below 0.7 — do not call.",
         },
       },
-      required: ["type", "value", "confidence"],
+      required: ["type", "value", "ownership_evidence", "confidence"],
+    },
+  },
+};
+
+export const CLOSE_CONVERSATION_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "close_conversation",
+    description:
+      "Mark THIS conversation as resolved. Call ONLY when the goal is achieved AND no follow-up is needed " +
+      "(meeting confirmed + customer thanked, issue resolved + customer confirmed, customer explicitly declined). " +
+      "Do NOT call mid-conversation or while a follow-up should be scheduled.",
+    parameters: {
+      type: "object",
+      properties: {
+        resolution: {
+          type: "string",
+          enum: ["sale_closed", "info_provided", "issue_resolved", "not_a_fit", "spam", "other"],
+        },
+        summary: {
+          type: "string",
+          description: "1–2 sentence outcome for the CRM record. Customer-language not required.",
+        },
+      },
+      required: ["resolution", "summary"],
+    },
+  },
+};
+
+export const SCHEDULE_FOLLOWUP_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "schedule_followup",
+    description:
+      "Schedule a future outbound message to the customer (WhatsApp). Use when the customer needs more time to think, " +
+      "asked for info to be sent later, or you want to re-engage after a deferral. The message body MUST be in the " +
+      "customer's language and ready to send as-is.",
+    parameters: {
+      type: "object",
+      properties: {
+        delay_iso8601: {
+          type: "string",
+          description:
+            "ISO8601 duration like 'PT2H' (2 hours), 'P1D' (1 day), 'P2D' (2 days). Use this OR send_at_iso, not both.",
+        },
+        send_at_iso: {
+          type: "string",
+          description: "Absolute ISO8601 timestamp. Use this OR delay_iso8601, not both.",
+        },
+        message: {
+          type: "string",
+          description: "The text to send. Must be ready-to-send, in the customer's language.",
+        },
+        reason: {
+          type: "string",
+          description:
+            "Why this follow-up exists. For audit + dedupe. Examples: 'post-deferral_2d', 'pre-demo_reminder'.",
+        },
+      },
+      required: ["message", "reason"],
+    },
+  },
+};
+
+export const SCHEDULE_MEETING_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "schedule_meeting",
+    description:
+      "Book a meeting on the assigned agent's calendar. The system enforces working hours, " +
+      "buffers, minimum-notice, max-horizon, and existing busy slots — DO NOT assume the time " +
+      "you propose is free, the server validates and may reject.\n" +
+      "BEFORE calling this tool you MUST do TWO things in order:\n\n" +
+      "STEP A — CRM identity reconciliation (silent, no narration):\n" +
+      "  • Look up the customer in CRM by their phone first (the conversation's `senderId` / phone is the " +
+      "primary channel identifier). Use whatever CRM lookup tool is available (e.g. `integration.zoho_crm.search_lead`, " +
+      "`integration.hubspot.get_contact`, etc.).\n" +
+      "  • If the customer is FOUND and the on-file email differs from one they just stated this turn → confirm " +
+      "with the customer in their language: \"I have you on file as old@x.com — should I send the invite there, " +
+      "or use new@x.com?\". Do not proceed until they choose.\n" +
+      "  • If the customer is FOUND with no conflict → call `link_customer_identifier` for any new identifier " +
+      "they stated (high confidence), then `update_record` to keep the lead fresh.\n" +
+      "  • If the customer is NOT FOUND → after gathering essentials below, call `create_lead` (silent) " +
+      "with their phone + email + name. The booking happens RIGHT AFTER the lead exists.\n\n" +
+      "STEP B — gather meeting essentials in conversation (unless the customer already volunteered them):\n" +
+      "  1. Time the customer prefers (date + hour + their timezone if non-obvious).\n" +
+      "  2. Whether anyone else should be invited (additional guest emails) — explicitly ask if not stated.\n" +
+      "  3. Topic / agenda — one short line, so the calendar event title + notes are useful.\n" +
+      "  4. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n" +
+      "Ask one question per turn until you have these.\n\n" +
+      "🚫 HARD RULES — break these and the booking will be wrong:\n" +
+      "  • If the customer's last inbound did NOT include an explicit time (e.g. \"Tuesday at 11\"), " +
+      "you MUST reply with a question (e.g. \"Sure — what day/time works for you?\") and NOT call " +
+      "schedule_meeting this turn.\n" +
+      "  • If the customer has not been asked about additional guests in THIS conversation, you MUST " +
+      "ask before calling schedule_meeting.\n" +
+      "  • Even if you can guess from CRM history, never assume guests = none. Confirm with the customer.\n" +
+      "  • Never call schedule_meeting on the customer's first booking-intent message. Reconcile + qualify first.\n\n" +
+      "Behavior of the tool itself:\n" +
+      "  - If the customer suggested a time → pass it via `requested_at_iso` and the server validates.\n" +
+      "  - If the customer did NOT suggest a time → omit `requested_at_iso` and the server " +
+      "returns 2–3 valid slots in `proposed_slots`; relay them and ask the customer to pick one.\n" +
+      "Never invent times. Never claim a slot is available without a successful tool result.\n" +
+      "Failure modes:\n" +
+      "  - verdict='INVALID' with reason='slot_taken' means another booking landed in the same " +
+      "window between validation and creation. DO NOT confirm the meeting. The result includes " +
+      "`userMessage.he` / `userMessage.en` — relay that line verbatim in the customer's language, " +
+      "then offer the slots in `proposedSlotsIso`.",
+    parameters: {
+      type: "object",
+      properties: {
+        duration_minutes: {
+          type: "number",
+          enum: [15, 30, 45, 60],
+          description: "Meeting length. Must match a tenant-allowed meeting type.",
+        },
+        meeting_type: {
+          type: "string",
+          description:
+            "Tenant-defined meeting type slug (e.g. 'discovery_call', 'demo', 'consultation'). " +
+            "Each type has its own working hours / buffer policy.",
+        },
+        requested_at_iso: {
+          type: "string",
+          description:
+            "Optional ISO8601 timestamp the customer explicitly asked for. Must include timezone offset. " +
+            "Omit when proposing slots.",
+        },
+        customer_timezone: {
+          type: "string",
+          description:
+            "IANA timezone (e.g. 'Asia/Jerusalem', 'America/New_York'). Required if you have it; falls back to tenant default.",
+        },
+        customer_email: {
+          type: "string",
+          description:
+            "Customer email for the calendar invite. Use the identifier just linked via link_customer_identifier; the server rejects bare unverified emails.",
+        },
+        additional_guests: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Extra attendee emails the customer asked you to invite (their teammates, manager, etc.). " +
+            "Empty array if none — but you MUST have asked the customer first; do not assume.",
+        },
+        notes: {
+          type: "string",
+          description: "Short note to attach to the calendar event (one sentence) — typically the topic / agenda the customer stated.",
+        },
+      },
+      required: ["duration_minutes", "meeting_type"],
     },
   },
 };
@@ -145,6 +374,17 @@ export const ESCALATE_TOOL = {
 export interface BuildAgentToolsOptions {
   identityLinking?: boolean;
   escalation?: boolean;
+  /** Conversation closure tool (Task 4). Default on for autonomous mode. */
+  closure?: boolean;
+  /** Schedule-followup tool (Task 4). Default on for autonomous mode. */
+  followup?: boolean;
+  /**
+   * schedule_meeting tool (Task 3). Default OFF — only enable when the
+   * tenant has at least one calendar integration connected and a
+   * `MeetingType` configured. Surfacing the tool with no backend wired
+   * causes the model to confidently propose times it can't actually book.
+   */
+  scheduleMeeting?: boolean;
   /** Extra tenant-defined function schemas to append. */
   extra?: Array<Record<string, unknown>>;
   /**
@@ -160,6 +400,9 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   const tools: Array<Record<string, unknown>> = [];
   if (opts.identityLinking !== false) tools.push(LINK_IDENTIFIER_TOOL as any);
   if (opts.escalation !== false) tools.push(ESCALATE_TOOL as any);
+  if (opts.closure !== false) tools.push(CLOSE_CONVERSATION_TOOL as any);
+  if (opts.followup !== false) tools.push(SCHEDULE_FOLLOWUP_TOOL as any);
+  if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
 }
@@ -535,6 +778,144 @@ export async function dispatchToolCall(
     };
   }
 
+  if (name === "schedule_meeting") {
+    console.log(`[ai-bot] tool_call schedule_meeting args=${JSON.stringify(args)}`);
+    if (!ctx.scheduleMeeting) {
+      console.warn(`[ai-bot] schedule_meeting called but ctx.scheduleMeeting handler is not wired`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: false,
+          reason: "scheduling_not_configured",
+        }),
+      };
+    }
+    try {
+      const result = await ctx.scheduleMeeting(args as unknown as ScheduleMeetingArgs);
+      console.log(`[ai-bot] schedule_meeting → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] schedule_meeting threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "schedule_meeting failed" }),
+      };
+    }
+  }
+
+  if (name === "close_conversation") {
+    if (!ctx.conversationId) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: "no conversation context for close_conversation" }),
+      };
+    }
+    try {
+      const { prisma } = await import("./prisma");
+      await prisma.conversation.update({
+        where: { id: ctx.conversationId },
+        data: { status: "CLOSED", closedAt: new Date() } as any,
+      });
+      // Side-effect free; the dispatcher's caller checks toolCallLog and
+      // can publish a `conversation.closed` event downstream.
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: true,
+          closed: true,
+          resolution: String(args.resolution || "other"),
+          summary: String(args.summary || ""),
+        }),
+      };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: err?.message || "close failed" }),
+      };
+    }
+  }
+
+  if (name === "schedule_followup") {
+    if (!ctx.conversationId) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: "no conversation context for schedule_followup" }),
+      };
+    }
+    try {
+      const { prisma } = await import("./prisma");
+      const conv = await prisma.conversation.findUnique({
+        where: { id: ctx.conversationId },
+        select: { channel: true, channelAccountId: true, customerExternalId: true },
+      });
+      if (!conv?.channelAccountId) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: false, error: "conversation has no channelAccountId" }),
+        };
+      }
+
+      // Compute scheduledAt from delay_iso8601 OR send_at_iso. Default 24h.
+      let scheduledAt: Date | null = null;
+      if (typeof args.send_at_iso === "string") {
+        const d = new Date(args.send_at_iso);
+        if (!isNaN(d.getTime())) scheduledAt = d;
+      } else if (typeof args.delay_iso8601 === "string") {
+        const ms = parseISO8601Duration(args.delay_iso8601);
+        if (ms !== null) scheduledAt = new Date(Date.now() + ms);
+      }
+      if (!scheduledAt) scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      // Dedupe on (conversationId, reason) — don't double-schedule.
+      const reason = String(args.reason || "ai_followup");
+      const existing = await (prisma as any).scheduledMessage.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          conversationId: ctx.conversationId,
+          status: "PENDING",
+          variables: { path: ["reason"], equals: reason } as any,
+        },
+        select: { id: true },
+      }).catch(() => null);
+      if (existing) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: true, scheduled: true, deduped: true, scheduled_message_id: existing.id }),
+        };
+      }
+
+      const sm = await (prisma as any).scheduledMessage.create({
+        data: {
+          tenantId: ctx.tenantId,
+          conversationId: ctx.conversationId,
+          channel: conv.channel,
+          channelAccountId: conv.channelAccountId,
+          recipientExternalId: conv.customerExternalId,
+          body: String(args.message || ""),
+          messageType: "text",
+          sendType: "conversation",
+          scheduledAt,
+          createdBy: "ai_agent",
+          variables: { reason, source: "ai_bot" },
+        },
+      });
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: true,
+          scheduled: true,
+          scheduled_message_id: sm.id,
+          scheduled_at: scheduledAt.toISOString(),
+        }),
+      };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: err?.message || "schedule failed" }),
+      };
+    }
+  }
+
   // ── Integration tools — dispatched via the AI service's execute endpoint ──
   // Tool name shape: `integration.<catalogToolSlug>`. We resolve the slug
   // back to a TenantTool row for this tenant, then POST to ai's
@@ -544,6 +925,47 @@ export async function dispatchToolCall(
   // OpenAI function names must match ^[a-zA-Z0-9_-]+$ — dots are rejected —
   // so we use underscore as the prefix separator. The catalog slug itself
   // (after the first underscore) is already in snake_case per our seed.
+  // Custom API tools — `custom.<slug>` resolves to a tenant-defined HTTP call.
+  if (name?.startsWith("custom.") && ctx.runCustomApiTool) {
+    const slug = name.slice("custom.".length);
+    try {
+      const result = await ctx.runCustomApiTool({ slug, args });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "custom_api_failed" }),
+      };
+    }
+  }
+
+  // Custom DB query tool — `custom_db.<slug>` (must come before the generic
+  // adapter routing because both patterns have a single dot).
+  if (name?.startsWith("custom_db.") && ctx.runCustomDbTool) {
+    try {
+      const result = await ctx.runCustomDbTool({ slug: name.slice("custom_db.".length), args });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "custom_db_failed" }),
+      };
+    }
+  }
+
+  // Adapter framework — `<provider>.<tool>` (e.g. "stripe.refund_payment").
+  if (name && /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(name) && ctx.runAdapterTool) {
+    try {
+      const result = await ctx.runAdapterTool({ toolFunctionName: name, args });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "adapter_failed" }),
+      };
+    }
+  }
+
   if (name?.startsWith("integration_")) {
     const slug = name.slice("integration_".length);
     if (!ctx.conversationId) {
@@ -612,6 +1034,20 @@ export async function dispatchToolCall(
     toolCallId: toolCall.id,
     content: JSON.stringify({ ok: false, error: `unknown tool: ${name}` }),
   };
+}
+
+/**
+ * Parse a subset of ISO 8601 durations: P[nD]T[nH][nM]. Returns ms or null
+ * on parse failure. Sufficient for follow-up windows ("PT2H", "P1D", "P2D").
+ */
+function parseISO8601Duration(input: string): number | null {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(input.trim());
+  if (!m) return null;
+  const days = Number(m[1] || 0);
+  const hours = Number(m[2] || 0);
+  const minutes = Number(m[3] || 0);
+  const ms = ((days * 24 + hours) * 60 + minutes) * 60 * 1000;
+  return ms > 0 ? ms : null;
 }
 
 /**

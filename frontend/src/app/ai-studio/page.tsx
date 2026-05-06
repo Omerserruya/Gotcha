@@ -508,31 +508,26 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
 }
 
 // ─── Skills & Integrations Tab (Tools + Marketplace) ──────────
+// Only categories that actually have a published catalog row are listed.
+// Re-add Helpdesk/Communication/Analytics/Shipping/Calendar here when an
+// adapter ships under that category.
 const MARKETPLACE_CATEGORIES = [
   { label: "All", value: "All" },
   { label: "E-Commerce", value: "ECOMMERCE" },
   { label: "CRM", value: "CRM" },
   { label: "Payments", value: "PAYMENTS" },
-  { label: "Helpdesk", value: "HELPDESK" },
-  { label: "Communication", value: "COMMUNICATION" },
-  { label: "Analytics", value: "ANALYTICS" },
-  { label: "Shipping", value: "SHIPPING" },
   { label: "Project Management", value: "PROJECT_MANAGEMENT" },
-  { label: "Calendar", value: "CALENDAR" },
   { label: "Database", value: "DATABASE" },
+  { label: "Custom", value: "CUSTOM" },
 ];
 
 const MARKETPLACE_CATEGORY_COLORS: Record<string, string> = {
   ECOMMERCE: "bg-blue-100 text-blue-700",
   CRM: "bg-purple-100 text-purple-700",
   PAYMENTS: "bg-green-100 text-green-700",
-  HELPDESK: "bg-orange-100 text-orange-700",
-  COMMUNICATION: "bg-pink-100 text-pink-700",
-  ANALYTICS: "bg-yellow-100 text-yellow-700",
-  SHIPPING: "bg-cyan-100 text-cyan-700",
   PROJECT_MANAGEMENT: "bg-indigo-100 text-indigo-700",
-  CALENDAR: "bg-emerald-100 text-emerald-700",
   DATABASE: "bg-slate-100 text-slate-700",
+  CUSTOM: "bg-violet-100 text-violet-700",
 };
 
 const MARKETPLACE_LOGOS: Record<string, string> = {
@@ -597,7 +592,21 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
     if (!token) return;
     setLoading(true);
     getMarketplaceIntegrations(token)
-      .then((res) => setIntegrations(res.data || []))
+      .then((res) => {
+        const list = res.data || [];
+        if (!list.some((i: any) => i.slug === "custom_api")) {
+          list.push({
+            id: "virtual_custom_api",
+            slug: "custom_api",
+            name: "Custom API",
+            description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+            category: "CUSTOM",
+            authType: "CUSTOM",
+            isPublished: true,
+          });
+        }
+        setIntegrations(list);
+      })
       .catch(() => setIntegrations([]))
       .finally(() => setLoading(false));
   }, [token]);
@@ -791,7 +800,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
                   <div
                     key={intg.id || intg.slug}
                     className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
-                    onClick={() => router.push(`/ai-studio/marketplace/${intg.slug}`)}
+                    onClick={() => router.push(`/integrations/${intg.slug}`)}
                   >
                     <div className="flex items-start justify-between">
                       <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", logoSrc ? "bg-white border border-gray-100 p-1.5" : `${logoColor} text-white font-bold text-lg`)}>
@@ -838,7 +847,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
                           ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
                           : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
                       )}
-                      onClick={(e) => { e.stopPropagation(); router.push(`/ai-studio/marketplace/${intg.slug}`); }}
+                      onClick={(e) => { e.stopPropagation(); router.push(`/integrations/${intg.slug}`); }}
                     >
                       {isConnected ? t("marketplace.manage") : t("marketplace.connect")}
                     </button>

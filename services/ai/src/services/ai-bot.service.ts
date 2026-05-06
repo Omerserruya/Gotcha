@@ -31,6 +31,21 @@ import {
   type LastAssistantMove,
 } from "./behavior-engine.service";
 import type { ActionCategory } from "./behavior-strategies";
+import {
+  buildConversationMemory,
+  renderMemoryBlock,
+} from "./conversation-memory.service";
+import { loadFunnelForTenant } from "./funnel-config.repo";
+import { makeScheduleMeetingHandler } from "./schedule-handler.service";
+import { listCustomApiTools, executeCustomApiTool } from "./connectors/custom-api.service";
+import { executeAdapterTool, listAdapters } from "./connectors/integration-framework";
+import {
+  loadActionContracts,
+  loadContractProgress,
+  markContractToolCompleted,
+  markContractPaused,
+  type ActionContract,
+} from "./action-contracts.repo";
 
 export interface AIBotReplyResult {
   reply: string | null;
@@ -166,7 +181,7 @@ function computeUnmetRequiredActions(
 function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] {
   const allowed = new Set<ActionCategory>(state.allowedActions);
 
-  return tools.filter((t: any) => {
+  const baseFiltered = tools.filter((t: any) => {
     const name: string | undefined = t?.function?.name;
     if (!name) return true;
 
@@ -186,6 +201,67 @@ function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] 
 
     return allowed.has("update_record");
   });
+
+  // ── Action Contract gate ─────────────────────────────────────
+  // When a blocking contract is active, the LLM MUST only see the pending
+  // tools (plus essentials). For SEQUENCE contracts, only the next-step
+  // tool is exposed — we can't even let the model TRY out-of-order calls
+  // because some providers will silently bias toward emitting whatever's
+  // in the schema. Stripping the rest is the deterministic fix.
+  const cs = state.actionContractState;
+  if (!cs?.active || !cs.blocking || cs.pendingTools.length === 0) {
+    return baseFiltered;
+  }
+  const pendingSet = new Set(cs.pendingTools);
+  return baseFiltered.filter((t: any) => {
+    const name: string | undefined = t?.function?.name;
+    if (!name) return true;
+    if (name === "escalate_to_human") return true;       // always available
+    if (name === "link_customer_identifier") return true; // identity bookkeeping
+    if (name.startsWith("submit_")) return true;          // copilot submission
+    if (/(_search|_get|_lookup|_read)$/.test(name)) return true; // pure reads
+    return pendingSet.has(name);
+  });
+}
+
+/**
+ * Extract an email or phone identifier from THIS turn's inbound message.
+ * Returns undefined if neither is present. The BEL uses this to drive the
+ * ownership signal + identity_link required action (Task 1).
+ */
+function extractIdentifierFromMessage(text: string): { kind: "email" | "phone"; value: string } | undefined {
+  const trimmed = (text || "").trim();
+  if (!trimmed) return undefined;
+  const emailRe = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
+  const m = trimmed.match(emailRe);
+  if (m) return { kind: "email", value: m[0].toLowerCase() };
+  // E.164-ish phone — international format only to avoid false positives.
+  const phoneRe = /(\+\d[\d\s().-]{7,}\d)/;
+  const p = trimmed.match(phoneRe);
+  if (p) return { kind: "phone", value: p[1].replace(/[\s()-]/g, "") };
+  return undefined;
+}
+
+/**
+ * Did the assistant's previous turn ask the customer for an email or phone?
+ * Cheap text scan over the last assistant message in the history slice.
+ */
+function detectAssistantAskedFor(
+  messages: Array<{ direction: string; body: string | null }>,
+): "email" | "phone" | null {
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const m = messages[i];
+    if (m.direction !== "OUTBOUND" || !m.body) continue;
+    const lower = m.body.toLowerCase();
+    if (/(email|אימייל|מייל|דואר אלקטרוני)/.test(lower) && /\?|\bיכול\b|\bתוכל\b|\bcan you\b/i.test(lower)) {
+      return "email";
+    }
+    if (/(phone|number|טלפון|מספר)/.test(lower) && /\?|\bיכול\b|\bתוכל\b|\bcan you\b/i.test(lower)) {
+      return "phone";
+    }
+    return null; // only check the most recent OUTBOUND turn
+  }
+  return null;
 }
 
 function extractRecentEmail(messages: Array<{ direction: string; body: string | null }>): string | undefined {
@@ -197,6 +273,44 @@ function extractRecentEmail(messages: Array<{ direction: string; body: string | 
     if (match) return match[0].toLowerCase();
   }
   return undefined;
+}
+
+/**
+ * Best-known email/phone for the conversation, used to seed memory facts.
+ *
+ *   - email: pulled from the customer's transcript (most-recent first).
+ *   - phone: WhatsApp conversations carry the phone in `customerExternalId`.
+ *
+ * The memory module also de-dupes against the linked-identifier CRM record,
+ * but having a transcript-anchored fallback means the bot doesn't re-ask
+ * for the phone when it's already in the channel metadata.
+ */
+/**
+ * True iff the AI agent has at least one CONNECTED calendar (Google or
+ * Calendly). Drives whether `schedule_meeting` is exposed in the tool
+ * surface — surfacing it without a backend would let the model promise
+ * meeting times it cannot actually book.
+ */
+async function hasConnectedCalendarFor(tenantId: string, aiAgentId: string): Promise<boolean> {
+  try {
+    const count = await (prisma as any).calendarAccount.count({
+      where: { tenantId, aiAgentId, status: "CONNECTED" },
+    });
+    return count > 0;
+  } catch {
+    return false;
+  }
+}
+
+function pickKnownIdentifier(conv: any, kind: "email" | "phone"): string | undefined {
+  if (kind === "phone") {
+    const id = conv?.customerExternalId;
+    if (!id) return undefined;
+    const isPhone = /^\+?\d{6,}$/.test(String(id).replace(/[\s-]/g, ""));
+    if (!isPhone) return undefined;
+    return String(id).startsWith("+") ? String(id) : `+${id}`;
+  }
+  return undefined; // email lives in messages, not on the conversation row
 }
 
 function renderCustomerInfoBlock(conv: any): string | undefined {
@@ -343,6 +457,22 @@ export async function generateAIBotReply(opts: {
   // Last bot turn (for cross-turn coherence).
   const lastAssistantMove = await lookupLastAssistantMove(opts.tenantId, opts.conversationId);
 
+  // Tenant funnel (optional — Task 2). Pre-loaded so BEL stays pure.
+  // departmentId is resolved from the conversation's assigned department when
+  // available; falls back to null (tenant default funnel).
+  const funnelDepartmentId = conversation.departmentId ?? null;
+  const funnel = await loadFunnelForTenant({ tenantId: opts.tenantId, departmentId: funnelDepartmentId });
+
+  // Tenant Action Contracts + per-conversation progress. Both loaded
+  // up-front so the BEL stays pure. Contracts cache for 60s; progress
+  // is per-(conversation, contract) and small.
+  const actionContracts = await loadActionContracts(opts.tenantId);
+  const actionContractProgress = await loadContractProgress({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+    contractIds: actionContracts.map((c) => c.id),
+  });
+
   // ── Behavior Engine — single decision point ─────────────
   const behaviorState = computeBehaviorState({
     mode: "agent",
@@ -357,11 +487,16 @@ export async function generateAIBotReply(opts: {
       messageCount: messages.length,
       recentDirections: messages.slice(-5).map((m) => m.direction as "INBOUND" | "OUTBOUND"),
       lastAssistantMove,
+      identifierMessage: extractIdentifierFromMessage(opts.incomingMessage),
+      assistantPreviouslyAskedFor: detectAssistantAskedFor(messages.map((m) => ({ direction: m.direction, body: m.body }))),
     },
     flags: {
       pendingApprovalsCount: pendingApprovals.length,
       humanHandoffRequested: detectHumanHandoff(opts.incomingMessage),
     },
+    funnel,
+    actionContracts,
+    actionContractProgress,
   });
 
   // ── KB retrieval — strategy-controlled, NOT regex ──────
@@ -375,27 +510,174 @@ export async function generateAIBotReply(opts: {
     }
   }
 
+  // ── Conversation memory (Task 5) — fact snapshot injected as ground truth ─
+  const memory = buildConversationMemory({
+    messages: messages.map((m) => ({
+      direction: m.direction as "INBOUND" | "OUTBOUND",
+      body: m.body,
+      // Future: enrich with intent/outcome from ai.bot_turn audit log.
+    })),
+    knownEmail: extractRecentEmail(messages.map((m) => ({ direction: m.direction, body: m.body }))),
+    knownPhone: pickKnownIdentifier(conversation, "phone"),
+  });
+  const memoryBlock = renderMemoryBlock(memory);
+
   // ── Build system prompt ────────────────────────────────
   const ctxSlot: ContextSlot = {
     customerBlock: renderCustomerInfoBlock(conversation),
     crmBlock,
+    memoryBlock,
     pendingApprovalsBlock: renderPendingApprovalsBlock(pendingApprovals),
   };
 
   // ── Tool surface — single source of truth: state.allowedActions ──
   // Build it BEFORE the prompt so we can pass the actual function names
   // into the Execution Contract's capability whitelist.
+  const hasConnectedCalendar = await hasConnectedCalendarFor(opts.tenantId, config.id);
   const agentToolCtx: AgentToolContext = {
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     contactId: contactRow?.id,
     authToken: process.env.INTERNAL_SERVICE_TOKEN,
+    scheduleMeeting: hasConnectedCalendar
+      ? makeScheduleMeetingHandler({ tenantId: opts.tenantId, aiAgentId: config.id })
+      : undefined,
+    runCustomApiTool: ({ slug, args }) =>
+      executeCustomApiTool({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        slug,
+        args,
+      }),
+    runCustomDbTool: async ({ slug, args }: { slug: string; args: Record<string, unknown> }) => {
+      const { executeCustomDbQueryTool } = await import("./connectors/custom-db.service");
+      return await executeCustomDbQueryTool({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        slug,
+        args,
+      });
+    },
+    runAdapterTool: ({ toolFunctionName, args }) =>
+      executeAdapterTool({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        contactId: contactRow?.id,
+        toolFunctionName,
+        args,
+      }),
   };
 
   let tools = await buildAgentToolsForAIAgent(opts.tenantId, config.id, {
     identityLinking: !!contactRow?.id,
     escalation: true,
+    scheduleMeeting: hasConnectedCalendar,
   });
+
+  // ── Custom API tools ── (tenant-defined HTTP calls as bot tools)
+  try {
+    const customTools = await listCustomApiTools(opts.tenantId);
+    for (const t of customTools) {
+      tools.push({
+        type: "function",
+        function: {
+          name: `custom.${t.slug}`,
+          description:
+            `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
+            (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
+          parameters: t.parameters,
+        },
+      });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] custom-api tool surface failed:", err?.message);
+  }
+
+  // ── Custom DB query tools ── (tenant-defined SQL/Mongo as bot tools)
+  try {
+    const { listCustomDbQueryTools } = await import("./connectors/custom-db.service");
+    const customDbTools = await listCustomDbQueryTools(opts.tenantId);
+    for (const t of customDbTools) {
+      tools.push({
+        type: "function",
+        function: {
+          name: `custom_db.${t.slug}`,
+          description:
+            `${t.description}\n\nWHEN TO USE: ${t.whenToUse}` +
+            (t.whenNotToUse ? `\n\nDO NOT USE: ${t.whenNotToUse}` : ""),
+          parameters: t.parameters,
+        },
+      });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] custom-db tool surface failed:", err?.message);
+  }
+
+  // ── Adapter framework tools ── (only for tenants with the integration CONNECTED)
+  try {
+    const connectedSlugs = new Set<string>();
+    const configBySlug = new Map<string, any>();
+    const tiRows: any[] = await prisma.tenantIntegration.findMany({
+      where: { tenantId: opts.tenantId, status: "CONNECTED" },
+      include: { integration: true },
+    });
+    for (const ti of tiRows) {
+      const s = ti.integration?.slug;
+      if (!s) continue;
+      connectedSlugs.add(s);
+      configBySlug.set(s, ti.config || {});
+    }
+    // Slugs whose adapter tools accept a `table`/`collection` arg and benefit
+    // from a tenant-curated table list with per-table notes appended to the
+    // tool description (so the AI knows what each table is and when to use it).
+    const DB_SLUGS = new Set(["postgres", "mongodb", "aws_rds"]);
+    const ADAPTER_TO_CATALOG: Record<string, string> = {
+      postgres: "postgresql",
+      mongodb: "mongodb",
+      aws_rds: "aws_rds",
+    };
+    for (const adapter of listAdapters()) {
+      const catalogSlug = ADAPTER_TO_CATALOG[adapter.slug] || adapter.slug;
+      if (!connectedSlugs.has(catalogSlug)) continue;
+      const cfg = configBySlug.get(catalogSlug) || {};
+      const reads: string[] = Array.isArray(cfg.allowReads) ? cfg.allowReads : [];
+      const writes: string[] = Array.isArray(cfg.allowWrites) ? cfg.allowWrites : [];
+      const enabled = Array.from(new Set([...reads, ...writes]));
+      const tableNotes: Record<string, { description?: string; whenToUse?: string }> =
+        (cfg.tableNotes && typeof cfg.tableNotes === "object") ? cfg.tableNotes : {};
+      const tablesBlock =
+        DB_SLUGS.has(adapter.slug) && enabled.length > 0
+          ? "\n\nTABLES AVAILABLE:\n" +
+            enabled.map((q) => {
+              const n = tableNotes[q] || {};
+              const parts: string[] = [`- ${q}`];
+              if (reads.includes(q) && writes.includes(q)) parts.push("(read+write)");
+              else if (writes.includes(q)) parts.push("(write)");
+              else parts.push("(read-only)");
+              if (n.description) parts.push(`— ${n.description}`);
+              if (n.whenToUse) parts.push(`[USE WHEN: ${n.whenToUse}]`);
+              return parts.join(" ");
+            }).join("\n")
+          : "";
+      for (const def of adapter.tools()) {
+        tools.push({
+          type: "function",
+          function: {
+            name: def.name,
+            description:
+              `${def.description}\n\nWHEN TO USE: ${def.whenToUse}` +
+              (def.whenNotToUse ? `\n\nDO NOT USE: ${def.whenNotToUse}` : "") +
+              (def.sideEffects ? `\n\nSIDE EFFECTS: ${def.sideEffects}` : "") +
+              (def.idempotencyNotes ? `\n\nIDEMPOTENCY: ${def.idempotencyNotes}` : "") +
+              tablesBlock,
+            parameters: def.parameters,
+          },
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] adapter tool surface failed:", err?.message);
+  }
 
   // SINGLE filter — replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
   tools = filterToolsByAllowedActions(tools, behaviorState);
@@ -499,6 +781,42 @@ export async function generateAIBotReply(opts: {
         if (result.sideEffect?.awaitingApproval && !pausedForApproval) {
           pausedForApproval = result.sideEffect.awaitingApproval;
         }
+
+        // Action Contract progress — record this tool execution against
+        // any active contract that lists it. Idempotent: a re-dispatch
+        // never double-counts. SEQUENCE contracts pause if the result
+        // came back as awaiting_approval (no further steps until cleared).
+        try {
+          const matchingContracts = behaviorState.actionContractState.contracts
+            .filter((c) => c.pending.includes(toolName))
+            .map((c) => actionContracts.find((x) => x.id === c.id))
+            .filter((c): c is ActionContract => !!c);
+
+          for (const contract of matchingContracts) {
+            if (sideEffectType === "awaiting_approval") {
+              await markContractPaused({
+                conversationId: opts.conversationId,
+                contractId: contract.id,
+                reason: "tool_awaiting_approval",
+              });
+              console.log(`[ai-bot] contract.paused trigger=${contract.trigger} tool=${toolName}`);
+              continue;
+            }
+            if (sideEffectType === "denied") {
+              continue; // tool was rejected; don't credit progress
+            }
+            await markContractToolCompleted({
+              tenantId: opts.tenantId,
+              conversationId: opts.conversationId,
+              contract,
+              toolName,
+            });
+            console.log(`[ai-bot] contract.tool_done trigger=${contract.trigger} tool=${toolName}`);
+          }
+        } catch (err: any) {
+          console.warn("[ai-bot] contract progress write failed:", err?.message);
+        }
+
         chatMessages.push({
           role: "tool",
           tool_call_id: result.toolCallId,
@@ -524,14 +842,55 @@ export async function generateAIBotReply(opts: {
   // satisfied or we've burned our retry. After the retry, we accept
   // whatever the model returns and log the violation for later analysis.
   const unmetRequired = computeUnmetRequiredActions(behaviorState.requiredActions, toolFunctionNames, toolCallLog);
-  if (unmetRequired.length > 0 && !awaitingApproval && !pendingEscalation) {
-    console.warn(`[ai-bot] Contract violation — required actions not called: ${unmetRequired.join(", ")}. Forcing retry.`);
+
+  // ── Action Contract violations (tool-name level) ──────────────
+  // After the dispatch loop, recompute pending tools per contract using
+  // the actual completed list. Any blocking, non-paused contract with
+  // pending tools → force a retry that names the missing tools verbatim.
+  const completedToolNamesThisTurn = new Set<string>(
+    toolCallLog.filter((c) => c.decision === "executed").map((c) => c.tool),
+  );
+  const contractViolations: Array<{ trigger: string; missing: string[]; mode: string }> = [];
+  for (const summary of behaviorState.actionContractState.contracts) {
+    if (!summary.blocking) continue;
+    if (summary.completed.length + completedToolNamesThisTurn.size === 0) continue;
+    // Derive what's still pending after this turn's executions.
+    const stillPending = summary.requiredTools.filter((name) => {
+      if (summary.completed.includes(name)) return false;
+      if (completedToolNamesThisTurn.has(name)) return false;
+      return true;
+    });
+    if (summary.executionMode === "AT_LEAST_ONE") {
+      const anyDone = summary.requiredTools.some(
+        (n) => summary.completed.includes(n) || completedToolNamesThisTurn.has(n),
+      );
+      if (anyDone) continue;
+    }
+    if (stillPending.length > 0) {
+      contractViolations.push({ trigger: summary.trigger, missing: stillPending, mode: summary.executionMode });
+    }
+  }
+
+  if ((unmetRequired.length > 0 || contractViolations.length > 0) && !awaitingApproval && !pendingEscalation) {
+    const reasonParts: string[] = [];
+    if (unmetRequired.length) {
+      reasonParts.push(
+        `Missing required tools: ${unmetRequired.map((u) => `\`${u.toolName}\` (for \`${u.action}\`)`).join(", ")}.`,
+      );
+    }
+    if (contractViolations.length) {
+      reasonParts.push(
+        contractViolations
+          .map((v) => `Action Contract \`${v.trigger}\` (${v.mode}) requires: ${v.missing.map((m) => `\`${m}\``).join(", ")}.`)
+          .join(" "),
+      );
+    }
+    console.warn(`[ai-bot] Contract violation — ${reasonParts.join(" | ")}. Forcing retry.`);
     chatMessages.push({
       role: "user",
       content:
-        `**CONTRACT VIOLATION DETECTED.** Your previous response did not call the following required tool(s): ` +
-        `${unmetRequired.map((u) => `\`${u.toolName}\` (for action \`${u.action}\`)`).join(", ")}. ` +
-        `You MUST call ${unmetRequired.length === 1 ? "this tool" : "these tools"} NOW before producing any reply text. ` +
+        `**CONTRACT VIOLATION DETECTED.** ${reasonParts.join(" ")} ` +
+        `You MUST call the missing tool(s) NOW before producing any reply text. ` +
         `This is the regeneration the original prompt warned about. Do not skip again.`,
     });
 
@@ -568,6 +927,23 @@ export async function generateAIBotReply(opts: {
           decision: "executed_on_retry",
           sideEffect: undefined,
         });
+
+        // Same contract-progress tracking as the main loop.
+        try {
+          const matchingContracts = behaviorState.actionContractState.contracts
+            .map((c) => actionContracts.find((x) => x.id === c.id))
+            .filter((c): c is ActionContract => !!c)
+            .filter((c) => c.requiredTools.some((t) => t.name === toolName));
+          for (const contract of matchingContracts) {
+            await markContractToolCompleted({
+              tenantId: opts.tenantId,
+              conversationId: opts.conversationId,
+              contract,
+              toolName,
+            });
+          }
+        } catch {/* non-fatal */}
+
         chatMessages.push({
           role: "tool",
           tool_call_id: result.toolCallId,

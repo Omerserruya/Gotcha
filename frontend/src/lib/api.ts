@@ -1018,9 +1018,9 @@ export function disconnectIntegration(token: string, slug: string) {
   return apiFetch<{ data: any }>(`/api/integrations/${slug}/disconnect`, { token, method: "POST" });
 }
 
-export function updateIntegrationCredentials(token: string, slug: string, credentials: Record<string, any>) {
+export function updateIntegrationCredentials(token: string, slug: string, credentials: Record<string, any>, config?: Record<string, any>) {
   return apiFetch<{ data: any }>(`/api/integrations/${slug}/credentials`, {
-    token, method: "PUT", body: JSON.stringify({ credentials }),
+    token, method: "PUT", body: JSON.stringify({ credentials, ...(config ? { config } : {}) }),
   });
 }
 
@@ -1055,12 +1055,180 @@ export function toggleAgentTool(
 }
 
 /**
- * Kick off the OAuth flow for an integration. Currently only `zoho_crm` has a
- * server-side init endpoint; other OAuth providers will 404 until wired.
+ * Kick off the OAuth flow for an integration. Routes by slug:
+ *   - zoho_crm / google_calendar / calendly → legacy /api/integrations/oauth/:slug/init
+ *     (handlers in services/ai/src/routes/calendar-oauth.ts + crm-oauth.ts)
+ *   - everything else                       → unified /api/connectors/:slug/oauth/init
+ *     (stripe, hubspot, shopify, square, salesforce, monday, …)
+ *
+ * Some providers expect extra query params on init (e.g. shopify needs `shop`,
+ * salesforce needs `loginHost`, square needs `environment`). Pass them via
+ * `extraParams` and they'll be forwarded as a query string. Empty values are
+ * filtered so the backend can apply its own defaults.
+ *
  * Returns the provider's authorize URL — caller should window.location = url.
  */
-export function initIntegrationOAuth(token: string, slug: string) {
-  return apiFetch<{ url: string }>(`/api/integrations/oauth/${slug}/init`, { token });
+// ─── Custom API tools ────────────────────────────────────────────
+//
+// Tenant-defined HTTP tools the AI can invoke as `custom.<slug>`. The bot
+// surfaces them automatically (see ai-bot.service.ts).
+
+export interface CustomApiTool {
+  id: string;
+  slug: string;
+  name: string;
+  description: string;
+  whenToUse: string;
+  whenNotToUse?: string | null;
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+  urlTemplate: string;
+  headers: Record<string, string>;
+  auth: { kind: "none" | "bearer" | "api_key" | "basic"; in?: "header" | "query"; name?: string };
+  parameters: any;
+  bodyTemplate?: string | null;
+  responseFields?: string[] | null;
+  allowedHosts: string[];
+  category: "READ" | "WRITE" | "DELETE" | "ACTION";
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  isActive: boolean;
+  timeoutMs: number;
+  hasSecrets: boolean;
+}
+
+export type CustomApiToolInput = Omit<CustomApiTool, "id" | "hasSecrets"> & {
+  secrets?: Record<string, string>;
+};
+
+export function listCustomApiTools(token: string) {
+  return apiFetch<{ data: CustomApiTool[] }>(`/api/custom-api-tools`, { token });
+}
+
+export function createCustomApiTool(token: string, body: Partial<CustomApiToolInput>) {
+  return apiFetch<{ data: CustomApiTool }>(`/api/custom-api-tools`, {
+    token, method: "POST", body: JSON.stringify(body),
+  });
+}
+
+export function updateCustomApiTool(token: string, id: string, body: Partial<CustomApiToolInput>) {
+  return apiFetch<{ data: CustomApiTool }>(`/api/custom-api-tools/${id}`, {
+    token, method: "PATCH", body: JSON.stringify(body),
+  });
+}
+
+export function deleteCustomApiTool(token: string, id: string) {
+  return apiFetch<{ ok: true }>(`/api/custom-api-tools/${id}`, { token, method: "DELETE" });
+}
+
+export function testCustomApiTool(token: string, id: string, args: Record<string, any>) {
+  return apiFetch<{ ok: boolean; result?: any; reason?: string; meta?: { status?: number; durationMs?: number } }>(
+    `/api/custom-api-tools/${id}/test`,
+    { token, method: "POST", body: JSON.stringify({ args }) },
+  );
+}
+
+// ─── Custom DB query tools ──────────────────────────────────────
+//
+// Per-tenant pre-canned SQL/Mongo queries the AI invokes as `custom_db.<slug>`.
+// Safer than generic CRUD because the admin defines the exact query shape.
+
+export interface CustomDbQueryTool {
+  id: string;
+  providerSlug: "postgresql" | "mongodb" | "aws_rds";
+  slug: string;
+  name: string;
+  description: string;
+  whenToUse: string;
+  whenNotToUse?: string | null;
+  queryTemplate: string;
+  parameterSchema: any;
+  parameterOrder: string[];
+  category: "READ" | "WRITE" | "DELETE" | "ACTION";
+  riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  isActive: boolean;
+  maxRows: number;
+  timeoutMs: number;
+}
+
+export type CustomDbQueryToolInput = Omit<CustomDbQueryTool, "id">;
+
+export function listCustomDbTools(token: string, opts?: { provider?: string }) {
+  const qs = opts?.provider ? `?provider=${encodeURIComponent(opts.provider)}` : "";
+  return apiFetch<{ data: CustomDbQueryTool[] }>(`/api/custom-db-tools${qs}`, { token });
+}
+
+export function createCustomDbTool(token: string, body: Partial<CustomDbQueryToolInput>) {
+  return apiFetch<{ data: CustomDbQueryTool }>(`/api/custom-db-tools`, {
+    token, method: "POST", body: JSON.stringify(body),
+  });
+}
+
+export function updateCustomDbTool(token: string, id: string, body: Partial<CustomDbQueryToolInput>) {
+  return apiFetch<{ data: CustomDbQueryTool }>(`/api/custom-db-tools/${id}`, {
+    token, method: "PATCH", body: JSON.stringify(body),
+  });
+}
+
+export function deleteCustomDbTool(token: string, id: string) {
+  return apiFetch<{ ok: true }>(`/api/custom-db-tools/${id}`, { token, method: "DELETE" });
+}
+
+export function testCustomDbTool(token: string, id: string, args: Record<string, any>) {
+  return apiFetch<{ ok: boolean; result?: any; reason?: string }>(
+    `/api/custom-db-tools/${id}/test`,
+    { token, method: "POST", body: JSON.stringify({ args }) },
+  );
+}
+
+// ─── DB schema introspection (Postgres / MongoDB / AWS RDS) ─────────
+//
+// `connectionString` is sent in the BODY (not query) so it stays out of
+// access logs. If omitted, the backend reuses the credentials already saved
+// on the tenant's CONNECTED integration row.
+
+export type DbTable = { name: string; schema?: string; qualified: string };
+export type DbCollection = { name: string };
+export type DbDatabase = { name: string };
+
+export function listPostgresTables(token: string, opts?: { connectionString?: string }) {
+  return apiFetch<{ data: DbTable[] }>(`/api/connectors/postgres/meta/tables`, {
+    token, method: "POST",
+    body: JSON.stringify({ connectionString: opts?.connectionString }),
+  });
+}
+
+export function listMongoDatabases(token: string, opts?: { connectionString?: string }) {
+  return apiFetch<{ data: DbDatabase[] }>(`/api/connectors/mongodb/meta/databases`, {
+    token, method: "POST",
+    body: JSON.stringify({ connectionString: opts?.connectionString }),
+  });
+}
+
+export function listMongoCollections(token: string, opts: { dbName: string; connectionString?: string }) {
+  return apiFetch<{ data: DbCollection[] }>(`/api/connectors/mongodb/meta/collections`, {
+    token, method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export function listRdsTables(token: string, opts: { engine: "postgres" | "mysql" | "mariadb"; connectionString?: string }) {
+  return apiFetch<{ data: DbTable[] }>(`/api/connectors/aws_rds/meta/tables`, {
+    token, method: "POST",
+    body: JSON.stringify(opts),
+  });
+}
+
+export function initIntegrationOAuth(token: string, slug: string, extraParams?: Record<string, string>) {
+  const LEGACY_SLUGS = new Set(["zoho_crm", "google_calendar", "calendly"]);
+  const path = LEGACY_SLUGS.has(slug)
+    ? `/api/integrations/oauth/${slug}/init`
+    : `/api/connectors/${slug}/oauth/init`;
+  const filtered = Object.fromEntries(
+    Object.entries(extraParams || {}).filter(([, v]) => v != null && v !== ""),
+  );
+  const qs = Object.keys(filtered).length
+    ? `?${new URLSearchParams(filtered as Record<string, string>).toString()}`
+    : "";
+  return apiFetch<{ url: string }>(`${path}${qs}`, { token });
 }
 
 // ─── Tools (Active tenant tools) ────────────────────────────

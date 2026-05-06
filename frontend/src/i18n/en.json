@@ -612,6 +612,7 @@
       "general": "General",
       "policy": "Business Policy",
       "tools": "Tools",
+      "scheduler": "Scheduler",
       "voiceCopilot": "Voice Copilot"
     },
     "voiceCopilot": {

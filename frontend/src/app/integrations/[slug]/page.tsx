@@ -14,7 +14,12 @@ import {
   getIntegrationTools,
   toggleIntegrationTool,
   initIntegrationOAuth,
+  listPostgresTables,
+  listMongoCollections,
+  listRdsTables,
 } from "@/lib/api";
+import CustomApiToolsSection from "@/components/CustomApiToolsSection";
+import CustomDbToolsSection from "@/components/CustomDbToolsSection";
 import clsx from "clsx";
 
 const RISK_BADGE: Record<string, string> = {
@@ -96,7 +101,16 @@ export default function IntegrationDetailPage() {
 
   // Credential form state
   const [credentials, setCredentials] = useState<Record<string, string>>({});
+  const [config, setConfig] = useState<Record<string, any>>({});
   const [credError, setCredError] = useState<string | null>(null);
+
+  // DB schema introspection (postgres / mongodb / aws_rds)
+  const [dbObjects, setDbObjects] = useState<Array<{ name: string; qualified: string }>>([]);
+  const [dbObjectsLoading, setDbObjectsLoading] = useState(false);
+  const [dbObjectsError, setDbObjectsError] = useState<string | null>(null);
+
+  const DB_SLUGS = new Set(["postgresql", "mongodb", "aws_rds"]);
+  const isDbProvider = DB_SLUGS.has(slug);
 
   async function load() {
     if (!token) return;
@@ -106,7 +120,24 @@ export default function IntegrationDetailPage() {
         getMarketplaceIntegration(token, slug),
         getIntegrationTools(token, slug),
       ]);
-      setIntegration(intgRes.data);
+      // Defensive fallback for `custom_api`: if the catalog row is missing
+      // from the user's DB (e.g. marketplace migration not yet applied),
+      // synthesize a virtual integration so the Custom API tool builder
+      // is still reachable. The builder is fully tenant-defined and has
+      // no catalog dependencies at runtime.
+      let intg = intgRes.data;
+      if (!intg && slug === "custom_api") {
+        intg = {
+          slug: "custom_api",
+          name: "Custom API",
+          description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+          category: "CUSTOM",
+          authType: "CUSTOM",
+          authSchema: {},
+          configSchema: {},
+        };
+      }
+      setIntegration(intg);
       setTools(toolsRes.data || []);
     } catch {
       // ignore
@@ -123,25 +154,48 @@ export default function IntegrationDetailPage() {
   const isConnected = ti?.status === "CONNECTED";
   const status = ti?.status || "DISCONNECTED";
 
-  // Build credential fields from authSchema
+  // Build credential fields from authSchema. Per-provider fallbacks below
+  // protect against stale catalog rows (e.g. an old marketplace migration
+  // where Shopify is still API_KEY without the `shop` field) — without
+  // them the OAuth init endpoint would 400 with shop_required.
   const authSchema = integration?.authSchema || {};
-  const credFields: Array<{ key: string; label: string; type: string; required: boolean }> =
+  let credFields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; helpText?: string }> =
     authSchema.fields || (integration?.authType === "API_KEY" ? [{ key: "apiKey", label: t("marketplace.apiKey"), type: "password", required: true }] : []);
+  if (slug === "shopify" && !credFields.some((f) => f.key === "shop")) {
+    credFields = [
+      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain — e.g. my-store or my-store.myshopify.com." },
+      ...credFields.filter((f) => f.key !== "apiKey"),
+    ];
+  }
+  // Shopify is OAuth-only — force the OAuth branch even if the catalog
+  // still has the legacy API_KEY auth_type (older base migration).
+  const effectiveAuthType: string = slug === "shopify" ? "OAUTH2" : (integration?.authType || "API_KEY");
+  // Config fields (table allowlists, db name, default board, etc.) for providers that need post-connect setup.
+  const configSchema = integration?.configSchema || {};
+  const configFields: Array<{ key: string; label: string; type: string; required?: boolean; helpText?: string; options?: string[]; default?: any }> =
+    configSchema.fields || [];
 
   async function handleConnect() {
     if (!token) return;
     setCredError(null);
-    // Validate required fields
+    // Validate required fields (credentials + config)
     for (const f of credFields) {
       if (f.required && !credentials[f.key]) {
         setCredError(`${f.label} is required`);
         return;
       }
     }
+    for (const f of configFields) {
+      if (f.required && (config[f.key] === undefined || config[f.key] === "" || (Array.isArray(config[f.key]) && !config[f.key].length))) {
+        setCredError(`${f.label} is required`);
+        return;
+      }
+    }
     setConnecting(true);
     try {
-      await connectIntegration(token, slug, credentials);
+      await connectIntegration(token, slug, credentials, config);
       setCredentials({});
+      setConfig({});
       await load();
     } catch (e: any) {
       setCredError(e.message || "Connection failed");
@@ -150,14 +204,57 @@ export default function IntegrationDetailPage() {
     }
   }
 
+  async function loadDbSchema() {
+    if (!token || !isDbProvider) return;
+    setDbObjectsError(null);
+    setDbObjectsLoading(true);
+    try {
+      const connStr = credentials.connectionString || credentials.connection_string;
+      if (slug === "postgresql") {
+        const r = await listPostgresTables(token, { connectionString: connStr });
+        setDbObjects((r.data || []).map((t) => ({ name: t.qualified, qualified: t.qualified })));
+      } else if (slug === "mongodb") {
+        const dbName = config.dbName || credentials.dbName;
+        if (!dbName) { setDbObjectsError("Set Database Name first"); return; }
+        const r = await listMongoCollections(token, { connectionString: connStr, dbName: String(dbName) });
+        setDbObjects((r.data || []).map((c) => ({ name: c.name, qualified: c.name })));
+      } else if (slug === "aws_rds") {
+        const engine = (config.engine || "postgres") as "postgres" | "mysql" | "mariadb";
+        const r = await listRdsTables(token, { connectionString: connStr, engine });
+        setDbObjects((r.data || []).map((t) => ({ name: t.qualified, qualified: t.qualified })));
+      }
+    } catch (e: any) {
+      setDbObjectsError(e?.message || "Failed to load schema");
+      setDbObjects([]);
+    } finally {
+      setDbObjectsLoading(false);
+    }
+  }
+
+  function toggleDbSelection(fieldKey: "allowReads" | "allowWrites", name: string) {
+    setConfig((prev) => {
+      const cur: string[] = Array.isArray(prev[fieldKey]) ? prev[fieldKey] : [];
+      const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name];
+      // Writes must be a subset of Reads — auto-add to reads when writing.
+      if (fieldKey === "allowWrites" && !cur.includes(name)) {
+        const reads: string[] = Array.isArray(prev.allowReads) ? prev.allowReads : [];
+        if (!reads.includes(name)) {
+          return { ...prev, allowWrites: next, allowReads: [...reads, name] };
+        }
+      }
+      return { ...prev, [fieldKey]: next };
+    });
+  }
+
   async function handleUpdateCredentials() {
     if (!token) return;
     setCredError(null);
     setConnecting(true);
     try {
-      await updateIntegrationCredentials(token, slug, credentials);
+      await updateIntegrationCredentials(token, slug, credentials, Object.keys(config).length ? config : undefined);
       setEditingCreds(false);
       setCredentials({});
+      setConfig({});
       await load();
     } catch (e: any) {
       setCredError(e.message || "Failed to update credentials");
@@ -279,9 +376,13 @@ export default function IntegrationDetailPage() {
                       <span className={clsx("px-2.5 py-1 rounded-full text-xs font-medium border",
                         integration.authType === "OAUTH2" ? "bg-blue-50 text-blue-600 border-blue-200" :
                         integration.authType === "BASIC_AUTH" ? "bg-gray-50 text-gray-600 border-gray-200" :
+                        integration.authType === "CUSTOM" ? "bg-violet-50 text-violet-600 border-violet-200" :
                         "bg-amber-50 text-amber-600 border-amber-200"
                       )}>
-                        {integration.authType === "OAUTH2" ? "OAuth" : integration.authType === "BASIC_AUTH" ? "Basic Auth" : "API Key"}
+                        {integration.authType === "OAUTH2" ? "OAuth" :
+                          integration.authType === "BASIC_AUTH" ? "Basic Auth" :
+                          integration.authType === "CUSTOM" ? "Per-tool" :
+                          "API Key"}
                       </span>
                     )}
                     <span className={clsx("px-3 py-1 rounded-full text-xs font-semibold", STATUS_BADGE[status] || STATUS_BADGE.DISCONNECTED)}>
@@ -344,27 +445,80 @@ export default function IntegrationDetailPage() {
             )}
           </div>
 
-          {/* Connect / Edit Credentials */}
-          {(!isConnected || editingCreds) && (
+          {/* Connect / Edit Credentials — skipped for custom_api since each
+              tenant-defined Custom API tool carries its own credentials,
+              there is no central token to authorize against. */}
+          {slug !== "custom_api" && (!isConnected || editingCreds) && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-4">
                 {editingCreds ? `${t("common.edit")} ${t("marketplace.credentials")}` : t("marketplace.connect")}
               </h2>
 
-              {/* OAUTH2 branch */}
-              {integration.authType === "OAUTH2" && !editingCreds ? (
+              {/* OAUTH2 branch — render for both first-time connect and
+                  re-auth, otherwise providers like Shopify lose the
+                  required `shop` field on the re-auth path and the
+                  /oauth/init endpoint rejects the request as shop_required.
+                  Uses effectiveAuthType so providers we KNOW are OAuth
+                  (e.g. Shopify) still take this branch even when the
+                  catalog row is stale. */}
+              {effectiveAuthType === "OAUTH2" ? (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-500">
-                    This integration uses OAuth 2.0. Click below to authorize access.
+                    {editingCreds
+                      ? "Re-authorize this integration via OAuth. Required fields below are sent to the provider's authorize URL."
+                      : "This integration uses OAuth 2.0. Click below to authorize access."}
                   </p>
+                  {/* Pre-OAuth fields — e.g. Shopify shop domain, Salesforce loginHost, Square environment */}
+                  {credFields.length > 0 && (
+                    <div className="space-y-3 pb-2">
+                      {credFields.map((field) => (
+                        <div key={field.key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {field.label}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          {(field as any).type === "select" && Array.isArray((field as any).options) ? (
+                            <select
+                              value={credentials[field.key] || (field as any).default || ""}
+                              onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                            >
+                              <option value="">Select…</option>
+                              {(field as any).options.map((opt: string) => (
+                                <option key={opt} value={opt}>{opt}</option>
+                              ))}
+                            </select>
+                          ) : (
+                            <input
+                              type={field.type === "password" ? "password" : (field as any).type === "url" ? "url" : "text"}
+                              value={credentials[field.key] || ""}
+                              onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                              placeholder={(field as any).placeholder || `Enter ${field.label}`}
+                              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                            />
+                          )}
+                          {(field as any).helpText && (
+                            <p className="text-xs text-gray-400 mt-1">{(field as any).helpText}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <button
                     onClick={async () => {
                       if (!token) return;
+                      // Validate required pre-OAuth fields
+                      for (const f of credFields) {
+                        if (f.required && !credentials[f.key]) {
+                          setTestResult({ ok: false, msg: `${f.label} is required` });
+                          return;
+                        }
+                      }
                       try {
-                        const { url } = await initIntegrationOAuth(token, slug);
+                        const { url } = await initIntegrationOAuth(token, slug, credentials);
                         window.location.href = url;
                       } catch (err: any) {
-                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check ZOHO_CLIENT_ID/SECRET/REDIRECT_URI on the server." });
+                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check provider client ID/secret/redirect on the server." });
                       }
                     }}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
@@ -372,7 +526,7 @@ export default function IntegrationDetailPage() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                     </svg>
-                    Connect with OAuth
+                    {editingCreds ? "Re-authorize with OAuth" : "Connect with OAuth"}
                   </button>
                   {testResult && (
                     <p className={clsx("text-xs font-medium", testResult.ok ? "text-green-600" : "text-amber-600")}>
@@ -390,13 +544,29 @@ export default function IntegrationDetailPage() {
                           {field.label}
                           {field.required && <span className="text-red-500 ml-1">*</span>}
                         </label>
-                        <input
-                          type={field.type === "password" ? "password" : field.type || "text"}
-                          value={credentials[field.key] || ""}
-                          onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
-                          placeholder={field.type === "password" ? "••••••••••••" : `Enter ${field.label}`}
-                          className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
-                        />
+                        {(field as any).type === "select" && Array.isArray((field as any).options) ? (
+                          <select
+                            value={credentials[field.key] || (field as any).default || ""}
+                            onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                          >
+                            <option value="">Select…</option>
+                            {(field as any).options.map((opt: string) => (
+                              <option key={opt} value={opt}>{opt}</option>
+                            ))}
+                          </select>
+                        ) : (
+                          <input
+                            type={field.type === "password" ? "password" : field.type === "url" ? "url" : "text"}
+                            value={credentials[field.key] || ""}
+                            onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            placeholder={(field as any).placeholder || (field.type === "password" ? "••••••••••••" : `Enter ${field.label}`)}
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                          />
+                        )}
+                        {(field as any).helpText && (
+                          <p className="text-xs text-gray-400 mt-1">{(field as any).helpText}</p>
+                        )}
                       </div>
                     ))
                   ) : (
@@ -411,6 +581,164 @@ export default function IntegrationDetailPage() {
                         placeholder="••••••••••••"
                         className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
                       />
+                    </div>
+                  )}
+
+                  {/* Config fields (table allowlists, db name, board, engine, etc.) */}
+                  {configFields.length > 0 && (
+                    <div className="pt-3 mt-3 border-t border-gray-100 space-y-3">
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Configuration</h4>
+
+                      {/* DB schema picker — for postgres / mongodb / aws_rds */}
+                      {isDbProvider && (
+                        <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2">
+                          <div className="flex items-center justify-between gap-2">
+                            <div>
+                              <p className="text-sm font-medium text-violet-900">Schema</p>
+                              <p className="text-xs text-violet-700/80">Load tables from your database, then tick which ones the AI may read or write.</p>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={loadDbSchema}
+                              disabled={dbObjectsLoading || !(credentials.connectionString || credentials.connection_string)}
+                              className="px-3 py-1.5 rounded-lg bg-violet-600 hover:bg-violet-700 text-white text-xs font-medium transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              {dbObjectsLoading ? "Loading…" : dbObjects.length ? "Reload" : "Load tables"}
+                            </button>
+                          </div>
+                          {dbObjectsError && <p className="text-xs text-red-600">{dbObjectsError}</p>}
+                          {!dbObjects.length && !dbObjectsError && !dbObjectsLoading && (
+                            <p className="text-xs text-violet-700/60">Paste a connection string above, then click <strong>Load tables</strong>.</p>
+                          )}
+                          {dbObjects.length > 0 && (() => {
+                            const reads: string[] = Array.isArray(config.allowReads) ? config.allowReads : [];
+                            const writes: string[] = Array.isArray(config.allowWrites) ? config.allowWrites : [];
+                            const enabled = Array.from(new Set([...reads, ...writes]));
+                            const tableNotes: Record<string, { description?: string; whenToUse?: string }> =
+                              (config.tableNotes && typeof config.tableNotes === "object") ? config.tableNotes : {};
+                            const setTableNote = (qualified: string, field: "description" | "whenToUse", v: string) => {
+                              setConfig((prev) => ({
+                                ...prev,
+                                tableNotes: {
+                                  ...((prev.tableNotes && typeof prev.tableNotes === "object") ? prev.tableNotes : {}),
+                                  [qualified]: {
+                                    ...(((prev.tableNotes || {}) as any)[qualified] || {}),
+                                    [field]: v,
+                                  },
+                                },
+                              }));
+                            };
+                            return (
+                            <div className="space-y-3 pt-1">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                              {(["allowReads", "allowWrites"] as const).map((kind) => {
+                                const selected: string[] = Array.isArray(config[kind]) ? config[kind] : [];
+                                return (
+                                  <div key={kind} className="rounded-lg border border-gray-200 bg-white p-2">
+                                    <p className="text-xs font-semibold text-gray-700 mb-1.5 px-1">
+                                      {kind === "allowReads" ? "AI may READ" : "AI may WRITE"}
+                                      <span className="ml-2 text-gray-400 font-normal">{selected.length}/{dbObjects.length}</span>
+                                    </p>
+                                    <div className="max-h-48 overflow-y-auto space-y-0.5 pr-1">
+                                      {dbObjects.map((obj) => (
+                                        <label key={obj.qualified} className="flex items-center gap-2 px-1.5 py-1 rounded hover:bg-gray-50 cursor-pointer text-xs">
+                                          <input
+                                            type="checkbox"
+                                            checked={selected.includes(obj.qualified)}
+                                            onChange={() => toggleDbSelection(kind, obj.qualified)}
+                                            className="w-3.5 h-3.5 rounded text-violet-600 focus:ring-violet-200"
+                                          />
+                                          <span className="font-mono text-gray-700">{obj.qualified}</span>
+                                        </label>
+                                      ))}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                            {enabled.length > 0 && (
+                              <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-3">
+                                <p className="text-xs font-semibold text-gray-700">Per-table notes <span className="text-gray-400 font-normal">— help the AI pick the right table</span></p>
+                                {enabled.map((qualified) => {
+                                  const note = tableNotes[qualified] || {};
+                                  return (
+                                    <div key={qualified} className="space-y-1.5 pb-2 border-b border-gray-50 last:border-b-0 last:pb-0">
+                                      <p className="text-xs font-mono text-violet-700">{qualified}</p>
+                                      <input
+                                        className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none"
+                                        value={note.description || ""}
+                                        onChange={(e) => setTableNote(qualified, "description", e.target.value)}
+                                        placeholder="Description — what this table holds (e.g. customer orders)"
+                                      />
+                                      <input
+                                        className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none"
+                                        value={note.whenToUse || ""}
+                                        onChange={(e) => setTableNote(qualified, "whenToUse", e.target.value)}
+                                        placeholder="When to use — e.g. when the customer asks about an order"
+                                      />
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            )}
+                            </div>
+                            );
+                          })()}
+                        </div>
+                      )}
+
+                      {configFields.map((field) => {
+                        const ftype = (field as any).type || "text";
+                        const value = config[field.key] ?? (field as any).default ?? (ftype === "text-list" ? [] : ftype === "number" ? "" : "");
+                        // Suppress legacy text-list inputs for table allowlists when the DB picker is in use —
+                        // those keys are already controlled by the checkbox grid above.
+                        if (isDbProvider && (field.key === "allowReads" || field.key === "allowWrites") && dbObjects.length > 0) {
+                          return null;
+                        }
+                        return (
+                          <div key={field.key}>
+                            <label className="block text-sm font-medium text-gray-700 mb-1">
+                              {field.label}
+                              {field.required && <span className="text-red-500 ml-1">*</span>}
+                            </label>
+                            {ftype === "select" && Array.isArray(field.options) ? (
+                              <select
+                                value={value}
+                                onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                              >
+                                <option value="">Select…</option>
+                                {field.options.map((opt: string) => (<option key={opt} value={opt}>{opt}</option>))}
+                              </select>
+                            ) : ftype === "text-list" ? (
+                              <input
+                                type="text"
+                                value={Array.isArray(value) ? value.join(", ") : String(value || "")}
+                                onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) }))}
+                                placeholder="comma-separated names"
+                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                              />
+                            ) : ftype === "number" ? (
+                              <input
+                                type="number"
+                                value={value}
+                                onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value === "" ? "" : Number(e.target.value) }))}
+                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                              />
+                            ) : (
+                              <input
+                                type="text"
+                                value={value}
+                                onChange={(e) => setConfig((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                              />
+                            )}
+                            {(field as any).helpText && (
+                              <p className="text-xs text-gray-400 mt-1">{(field as any).helpText}</p>
+                            )}
+                          </div>
+                        );
+                      })}
                     </div>
                   )}
 
@@ -456,6 +784,18 @@ export default function IntegrationDetailPage() {
                 </div>
               )}
             </div>
+          )}
+
+          {/* Custom API tool builder — always visible for the custom_api integration,
+              regardless of connection state, since each tool is tenant-defined and
+              self-contained (no central token to authorize). */}
+          {slug === "custom_api" && <CustomApiToolsSection />}
+
+          {/* Custom DB query tool builder — visible on Postgres / MongoDB / RDS
+              integration pages (only after the underlying integration is CONNECTED,
+              since the query runs through that integration's connection string). */}
+          {isConnected && (slug === "postgresql" || slug === "mongodb" || slug === "aws_rds") && (
+            <CustomDbToolsSection providerSlug={slug as "postgresql" | "mongodb" | "aws_rds"} />
           )}
 
           {/* Tools section */}

@@ -75,6 +75,13 @@ export interface ContextSlot {
   customerBlock?: string;
   crmBlock?: string;
   pendingApprovalsBlock?: string;
+  /**
+   * Conversation memory snapshot (Task 5). Pre-rendered block from
+   * `renderMemoryBlock(buildConversationMemory(...))`. Injected under
+   * # Context so the model treats it as ground truth and avoids re-asking
+   * known facts.
+   */
+  memoryBlock?: string;
   locale?: string;
 }
 
@@ -332,6 +339,7 @@ function buildContext(opts: BuildPromptOpts): string | null {
 
   if (ctx?.customerBlock?.trim()) blocks.push(ctx.customerBlock.trim());
   if (ctx?.crmBlock?.trim()) blocks.push(ctx.crmBlock.trim());
+  if (ctx?.memoryBlock?.trim()) blocks.push(ctx.memoryBlock.trim());
   if (ctx?.pendingApprovalsBlock?.trim()) blocks.push(ctx.pendingApprovalsBlock.trim());
 
   return ["# Context", ...blocks].join("\n\n");
@@ -682,6 +690,54 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
     lines.push("- If a required action has a tool listed above, you MUST call that tool. Skipping it = your response will be rejected and regenerated.");
     lines.push("- There is no valid scenario where you skip a required action silently when a tool is listed for it.");
     lines.push("- For required actions with NO tool listed, you must still acknowledge the gap inline as instructed above.");
+  }
+
+  // ── Action Contracts — STRICT (deterministic tool-chain enforcement) ──
+  const cs = opts.behaviorState.actionContractState;
+  if (cs?.active && cs.contracts.length > 0) {
+    lines.push("");
+    lines.push("## Action Contracts — STRICT");
+    lines.push("");
+    lines.push(
+      "A business action has been triggered that REQUIRES specific tool executions before you may finalize this turn. " +
+      "These contracts are tenant-defined business rules — you cannot skip, reorder, or substitute.",
+    );
+    lines.push("");
+    lines.push("**Rules:**");
+    lines.push("- You are NOT allowed to skip any required tool listed below.");
+    lines.push("- You are NOT allowed to reorder a SEQUENCE — call tools strictly in the listed order.");
+    lines.push("- You MUST complete all required tools before producing a customer-facing reply.");
+    lines.push("- If you cannot execute a required tool (e.g. credentials are missing, the customer hasn't given you required input), explain plainly to the customer and call `escalate_to_human`.");
+    lines.push("- Failure to follow these rules = your response will be rejected and you will be re-invoked. Do not waste the turn.");
+    lines.push("");
+    for (const ctr of cs.contracts) {
+      lines.push(`### Contract \`${ctr.trigger}\` (${ctr.executionMode}${ctr.blocking ? ", blocking" : ""})`);
+      if (ctr.completed.length > 0) {
+        lines.push(`- Already executed this conversation: ${ctr.completed.map((t) => `\`${t}\``).join(", ")}.`);
+      }
+      if (ctr.executionMode === "SEQUENCE") {
+        lines.push(`- **Next step:** \`${ctr.nextStep || "(complete)"}\`. You may NOT call any later step until this one returns success.`);
+      } else if (ctr.executionMode === "ALL_REQUIRED") {
+        lines.push(`- Pending (any order): ${ctr.pending.map((t) => `\`${t}\``).join(", ")}.`);
+      } else {
+        // AT_LEAST_ONE
+        lines.push(`- Pick at least one of: ${ctr.requiredTools.map((t) => `\`${t}\``).join(", ")}.`);
+      }
+    }
+    if (cs.violatedThisTurn) {
+      lines.push("");
+      lines.push(
+        `**LAST TURN VIOLATION:** Contract \`${cs.violatedThisTurn.contractTrigger}\` failed because of \`${cs.violatedThisTurn.reason}\`. ` +
+        `Re-attempt now with the correct tool/order.`,
+      );
+    }
+    if (cs.blocking) {
+      lines.push("");
+      lines.push(
+        "**This contract is blocking.** Your tool surface this turn has been restricted to ONLY the pending tools above " +
+        "(plus `escalate_to_human` and pure read tools). Anything else has been removed from your toolbox — don't try.",
+      );
+    }
   }
 
   // ── Capability boundary — what the model is actually able to do. ──

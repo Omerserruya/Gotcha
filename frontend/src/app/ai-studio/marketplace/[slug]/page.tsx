@@ -16,6 +16,8 @@ import {
   initIntegrationOAuth,
 } from "@/lib/api";
 import clsx from "clsx";
+import MeetingTypesSection from "@/components/MeetingTypesSection";
+import CustomApiToolsSection from "@/components/CustomApiToolsSection";
 
 const RISK_BADGE: Record<string, string> = {
   LOW: "bg-green-100 text-green-700",
@@ -123,10 +125,22 @@ export default function IntegrationDetailPage() {
   const isConnected = ti?.status === "CONNECTED";
   const status = ti?.status || "DISCONNECTED";
 
-  // Build credential fields from authSchema
+  // Build credential fields from authSchema. Per-provider fallbacks below
+  // protect against stale catalog rows (e.g. an old marketplace migration
+  // where Shopify is still API_KEY without the `shop` field) — without
+  // them the OAuth init endpoint would 400 with shop_required.
   const authSchema = integration?.authSchema || {};
-  const credFields: Array<{ key: string; label: string; type: string; required: boolean }> =
+  let credFields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; helpText?: string }> =
     authSchema.fields || (integration?.authType === "API_KEY" ? [{ key: "apiKey", label: t("marketplace.apiKey"), type: "password", required: true }] : []);
+  if (slug === "shopify" && !credFields.some((f) => f.key === "shop")) {
+    credFields = [
+      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain — e.g. my-store or my-store.myshopify.com." },
+      ...credFields.filter((f) => f.key !== "apiKey"),
+    ];
+  }
+  // Force OAuth branch for providers we know are OAuth-only, even when
+  // the catalog row is stale (older base migration left Shopify on API_KEY).
+  const effectiveAuthType: string = slug === "shopify" ? "OAUTH2" : (integration?.authType || "API_KEY");
 
   async function handleConnect() {
     if (!token) return;
@@ -344,27 +358,61 @@ export default function IntegrationDetailPage() {
             )}
           </div>
 
-          {/* Connect / Edit Credentials */}
-          {(!isConnected || editingCreds) && (
+          {/* Connect / Edit Credentials — skipped for custom_api since each
+              tenant-defined Custom API tool carries its own credentials. */}
+          {slug !== "custom_api" && (!isConnected || editingCreds) && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-4">
                 {editingCreds ? `${t("common.edit")} ${t("marketplace.credentials")}` : t("marketplace.connect")}
               </h2>
 
-              {/* OAUTH2 branch */}
-              {integration.authType === "OAUTH2" && !editingCreds ? (
+              {/* OAUTH2 branch — renders pre-OAuth fields (e.g. Shopify
+                  shop domain, Square environment) and passes them to the
+                  OAuth init endpoint. Without this, providers like Shopify
+                  reject the init with shop_required. */}
+              {effectiveAuthType === "OAUTH2" ? (
                 <div className="space-y-3">
                   <p className="text-sm text-gray-500">
-                    This integration uses OAuth 2.0. Click below to authorize access.
+                    {editingCreds
+                      ? "Re-authorize this integration via OAuth. Required fields below are sent to the provider's authorize URL."
+                      : "This integration uses OAuth 2.0. Click below to authorize access."}
                   </p>
+                  {credFields.length > 0 && (
+                    <div className="space-y-3 pb-2">
+                      {credFields.map((field) => (
+                        <div key={field.key}>
+                          <label className="block text-sm font-medium text-gray-700 mb-1">
+                            {field.label}
+                            {field.required && <span className="text-red-500 ml-1">*</span>}
+                          </label>
+                          <input
+                            type={field.type === "password" ? "password" : (field as any).type === "url" ? "url" : "text"}
+                            value={credentials[field.key] || ""}
+                            onChange={(e) => setCredentials((prev) => ({ ...prev, [field.key]: e.target.value }))}
+                            placeholder={(field as any).placeholder || `Enter ${field.label}`}
+                            className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+                          />
+                          {(field as any).helpText && (
+                            <p className="text-xs text-gray-400 mt-1">{(field as any).helpText}</p>
+                          )}
+                        </div>
+                      ))}
+                    </div>
+                  )}
                   <button
                     onClick={async () => {
                       if (!token) return;
+                      for (const f of credFields) {
+                        if (f.required && !credentials[f.key]) {
+                          setTestResult({ ok: false, msg: `${f.label} is required` });
+                          return;
+                        }
+                      }
                       try {
-                        const { url } = await initIntegrationOAuth(token, slug);
+                        const { url } = await initIntegrationOAuth(token, slug, credentials);
                         window.location.href = url;
                       } catch (err: any) {
-                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check ZOHO_CLIENT_ID/SECRET/REDIRECT_URI on the server." });
+                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check provider client ID/secret/redirect on the server." });
                       }
                     }}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
@@ -372,7 +420,7 @@ export default function IntegrationDetailPage() {
                     <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" />
                     </svg>
-                    Connect with OAuth
+                    {editingCreds ? "Re-authorize with OAuth" : "Connect with OAuth"}
                   </button>
                   {testResult && (
                     <p className={clsx("text-xs font-medium", testResult.ok ? "text-green-600" : "text-amber-600")}>
@@ -458,6 +506,12 @@ export default function IntegrationDetailPage() {
             </div>
           )}
 
+          {/* Custom API tool builder — always visible for the custom_api
+              integration, regardless of connection state, since each tool
+              is tenant-defined and self-contained (no central token to
+              authorize). */}
+          {slug === "custom_api" && <CustomApiToolsSection />}
+
           {/* Tools section */}
           {isConnected && tools.length > 0 && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
@@ -503,6 +557,11 @@ export default function IntegrationDetailPage() {
                 })}
               </div>
             </div>
+          )}
+
+          {/* Meeting types — calendar integrations only, after connection */}
+          {isConnected && (slug === "google_calendar" || slug === "calendly") && (
+            <MeetingTypesSection />
           )}
 
           {/* Footer */}

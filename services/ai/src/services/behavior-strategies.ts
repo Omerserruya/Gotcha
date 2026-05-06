@@ -41,6 +41,8 @@ export type ActionCategory =
   | "schedule_followup"
   | "schedule_booking"
   | "send_proposal"
+  // closure
+  | "close_conversation"
   // copilot-only
   | "suggest_reply"
   | "surface_insight"
@@ -130,6 +132,7 @@ const CONVERT: StrategyContract = {
     "schedule_followup",
     "schedule_booking",
     "send_proposal",
+    "close_conversation",
   ],
   forbiddenBehaviors: [
     "Generic non-answers like \"depends on the plan\" or \"depends on your needs\" WITHOUT either a packaging anchor or a concrete next step.",
@@ -168,6 +171,7 @@ const RESOLVE: StrategyContract = {
     "add_note",
     "tag",
     "escalate_to_human",
+    "close_conversation",
   ],
   forbiddenBehaviors: [
     "Upselling, cross-selling, or qualifying for new offers.",

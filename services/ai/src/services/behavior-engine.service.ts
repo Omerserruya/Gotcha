@@ -31,6 +31,13 @@ import {
   PLAYBOOK_RENDER_ORDER,
   type PlaybookId,
 } from "./conversation-playbooks";
+import { resolveFunnel, type FunnelConfig } from "./funnel-config.service";
+import {
+  pendingToolsFor,
+  isFulfilled,
+  type ActionContract,
+  type ActionContractProgress,
+} from "./action-contracts.repo";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -72,12 +79,68 @@ export type OutputContract =
 
 export type DecisionIntent = "PROGRESS" | "HOLD" | "ESCALATE";
 
+export type ClosurePosture = "open" | "ready_to_close" | "needs_followup";
+
+/**
+ * Contract enforcement state injected into BehaviorState (Action Contracts).
+ * - active: at least one matching contract has unfulfilled tools.
+ * - pendingTools: tool names the LLM MUST call this turn (or next valid turn).
+ *                 For SEQUENCE contracts this is exactly one — the next step.
+ *                 For ALL_REQUIRED / AT_LEAST_ONE it's the full unfulfilled set.
+ * - completedTools: tool names already executed across THIS conversation
+ *                   (carried over via ActionContractProgress).
+ * - blocking: when true, allowedActions is restricted to pendingTools only.
+ * - currentStep: for SEQUENCE — the next required tool name.
+ * - violatedThisTurn: set when the LLM tries to call a tool the contract
+ *                     forbids (e.g. step 2 before step 1). Triggers retry.
+ * - contracts: lightweight summary surfaced to the prompt builder.
+ */
+export interface ActionContractStateView {
+  active: boolean;
+  pendingTools: string[];
+  completedTools: string[];
+  blocking: boolean;
+  currentStep?: string;
+  violatedThisTurn?: { contractTrigger: string; reason: string };
+  contracts: Array<{
+    id: string;
+    trigger: string;
+    executionMode: "ALL_REQUIRED" | "SEQUENCE" | "AT_LEAST_ONE";
+    requiredTools: string[];
+    blocking: boolean;
+    completed: string[];
+    pending: string[];
+    nextStep?: string;
+  }>;
+}
+
 export type LastAssistantMove =
   | "qualify"
   | "guide"
   | "convert"
   | "resolve"
   | "close";
+
+export type OwnershipEvidence =
+  | "direct_response_to_assistant_question"
+  | "self_referential_phrase"
+  | "implicit_context"
+  | "third_party"
+  | "ambiguous"
+  | "none";
+
+export interface OwnershipSignal {
+  /** True when we believe the identifier belongs to THIS customer. */
+  ownerIsCustomer: boolean;
+  evidence: OwnershipEvidence;
+  /** 0..1 — direct answer 0.9, self-ref 0.85, implicit 0.7, ambiguous <0.5. */
+  confidence: number;
+}
+
+export interface IdentifierMessage {
+  kind: "email" | "phone";
+  value: string;
+}
 
 /**
  * BehaviorState — the only object the prompt builder consumes from the BEL.
@@ -123,6 +186,25 @@ export interface BehaviorState {
    *   ESCALATE — pivot to escalate_to_human; do not attempt resolution.
    */
   decisionIntent: DecisionIntent;
+  /**
+   * Identifier-ownership signal — drives whether `identity_link` is required
+   * this turn. Computed from the customer's message + whether the assistant
+   * had previously asked for an identifier.
+   */
+  ownershipSignal: OwnershipSignal;
+  /**
+   * Closure posture (Task 4):
+   *   open            — conversation is mid-flight; do not close.
+   *   ready_to_close  — goal achieved + customer acknowledged; close + summarize.
+   *   needs_followup  — customer deferred; schedule a follow-up.
+   */
+  closurePosture: ClosurePosture;
+  /**
+   * Action Contract enforcement state. Empty/inert when no contracts match
+   * this turn. When `active && blocking`, allowedActions is restricted to
+   * `pendingTools` so the model physically cannot call anything else.
+   */
+  actionContractState: ActionContractStateView;
   /**
    * Provenance — which rule or input drove each axis.
    * Required so audit logs can answer "why did the AI do that?".
@@ -174,6 +256,17 @@ export interface RequestInput {
    * `ai.bot_turn` audit log row.
    */
   lastAssistantMove?: LastAssistantMove;
+  /**
+   * Pre-extracted email/phone from the customer's last message, if present.
+   * Caller is responsible for the regex extraction (deterministic).
+   */
+  identifierMessage?: IdentifierMessage;
+  /**
+   * If the assistant's previous turn asked the customer for an email or
+   * phone, this captures which kind. Used to elevate ownership confidence
+   * when the customer's reply contains a matching identifier.
+   */
+  assistantPreviouslyAskedFor?: "email" | "phone" | null;
 }
 
 export interface FlagsInput {
@@ -193,6 +286,33 @@ export interface ComputeBehaviorStateInput {
    * BEL — not the provider — owns the output contract.
    */
   copilotPreferredMode?: "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT";
+  /**
+   * Tenant-configured funnel (Task 2). Optional. When provided, BEL applies:
+   *   - Stage-label resolution (FunnelResolution.stageId added to provenance.overrides)
+   *   - Strategy override (recomputes allowedActions/requiredActions with the
+   *     overridden strategy)
+   *   - Playbook override (replaces the platform-default playbook selection)
+   * BEL stays the only decision layer — funnel is just a tenant-shaped
+   * overlay on the same closed primitives (ConversationStage, Intent, etc.).
+   */
+  funnel?: FunnelConfig | null;
+  /**
+   * Tenant-defined Action Contracts. Caller pre-loads them via
+   * loadActionContracts(tenantId). Empty/undefined → no contracts apply.
+   */
+  actionContracts?: ActionContract[];
+  /**
+   * Per-conversation contract progress. Caller pre-loads via
+   * loadContractProgress({ conversationId }). Map keyed by contractId.
+   */
+  actionContractProgress?: Map<string, ActionContractProgress>;
+  /**
+   * The tool the LLM is about to call this turn — passed in by the caller
+   * AFTER the model emits its tool_calls but BEFORE actual dispatch. Used
+   * by SEQUENCE contracts to detect out-of-order calls. Optional: when
+   * omitted (the prompt-build pass), no violation is flagged.
+   */
+  proposedToolCalls?: string[];
 }
 
 // ─── Public entry point ─────────────────────────────────────
@@ -214,6 +334,21 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   // Engagement.
   const { engagement, engagementSource } = deriveEngagement(input.identity, input.request);
 
+  // Ownership signal — feeds requiredActions for identity_link.
+  const ownershipSignal = deriveOwnership(input.request);
+  // Closure posture — feeds requiredActions for close_conversation / schedule_followup.
+  const closurePosture = deriveClosurePosture(input.request, input.flags);
+
+  // Action Contracts — detect business triggers + enforce required tools.
+  // Triggers are matched against tenant contracts; matching contracts
+  // restrict allowedActions and add requiredActions.
+  const triggeredActions = deriveTriggeredActions({
+    lastMessage: input.request.lastMessage,
+    intent,
+    conversationStage,
+    closurePosture,
+  });
+
   // Step 4 — Strategy from the decision matrix + overrides.
   const strategyResult = selectStrategy({
     mode: input.mode,
@@ -226,40 +361,73 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   });
   overrides.push(...strategyResult.overrides);
 
-  // Step 5 — Derived auxiliaries.
+  // Step 4a — Funnel overlay (Task 2). Resolves tenant stage label, may
+  // override strategy + playbookIds. Pure: no I/O. Caller hydrates the
+  // funnel from DB before calling.
+  const funnelRes = resolveFunnel({
+    funnel: input.funnel ?? null,
+    baseStage: conversationStage,
+    intent,
+    userType,
+    strategy: strategyResult.strategy,
+    lastMessage: input.request.lastMessage,
+  });
+  const finalStrategy: StrategyName = funnelRes.strategy;
+  if (funnelRes.appliedReasons.length) overrides.push(...funnelRes.appliedReasons);
+
+  // Step 5 — Derived auxiliaries (use finalStrategy so overrides cascade).
   const confidence = deriveConfidence({ conversationStage, intent });
   const autonomy = deriveAutonomy({ mode: input.mode, confidence, flags: input.flags });
   const escalationPressure = deriveEscalationPressure(input.flags, urgency);
   if (escalationPressure !== "none") overrides.push(`escalation_pressure=${escalationPressure}`);
-  const toneIntensity = deriveTone({ strategy: strategyResult.strategy, urgency, conversationStage });
+  const toneIntensity = deriveTone({ strategy: finalStrategy, urgency, conversationStage });
   const outputContract = deriveOutputContract(input);
   const allowedActions = deriveAllowedActions({
-    strategy: strategyResult.strategy,
+    strategy: finalStrategy,
     autonomy,
     flags: input.flags,
     crmRecord: input.identity.crmRecord,
   });
   const requiredActions = deriveRequiredActions({
-    strategy: strategyResult.strategy,
+    strategy: finalStrategy,
     intent,
     conversationStage,
     escalationPressure,
     lastAssistantMove: input.request.lastAssistantMove,
     lastMessage: input.request.lastMessage,
     crmRecord: input.identity.crmRecord,
+    ownershipSignal,
+    closurePosture,
   });
   const decisionIntent = deriveDecisionIntent({
     escalationPressure,
     autonomy,
-    strategy: strategyResult.strategy,
+    strategy: finalStrategy,
     flags: input.flags,
   });
-  const playbookIds = selectPlaybooks({
-    strategy: strategyResult.strategy,
+  // Platform default playbook selection — funnel may replace it wholesale.
+  const platformPlaybooks = selectPlaybooks({
+    strategy: finalStrategy,
     conversationStage,
     intent,
     lastMessage: input.request.lastMessage,
   });
+  const playbookIds: PlaybookId[] = funnelRes.playbookIds ?? platformPlaybooks;
+
+  // Action Contract enforcement — runs LAST so it can clamp allowed/
+  // required actions on top of strategy + funnel decisions.
+  const actionContractState = deriveActionContractState({
+    triggeredActions,
+    contracts: input.actionContracts || [],
+    progressByContract: input.actionContractProgress || new Map(),
+    proposedToolCalls: input.proposedToolCalls,
+  });
+  if (actionContractState.violatedThisTurn) {
+    overrides.push(`contract_violation:${actionContractState.violatedThisTurn.contractTrigger}=${actionContractState.violatedThisTurn.reason}`);
+  }
+  if (actionContractState.active) {
+    overrides.push(`action_contract.active triggers=[${triggeredActions.join(",")}] pending=[${actionContractState.pendingTools.join(",")}]`);
+  }
 
   return {
     schemaVersion: 2,
@@ -269,7 +437,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     intent,
     urgency,
     engagementLevel: engagement,
-    strategy: strategyResult.strategy,
+    strategy: finalStrategy,
     autonomy,
     toneIntensity,
     escalationPressure,
@@ -279,19 +447,26 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     allowedActions,
     requiredActions,
     decisionIntent,
+    ownershipSignal,
+    closurePosture,
+    actionContractState,
     provenance: {
       userType: userTypeSource,
       conversationStage: stageSource,
       intent: intentSource,
       urgency: urgencySource,
       engagementLevel: engagementSource,
-      strategy: strategyResult.source,
+      strategy: finalStrategy === strategyResult.strategy
+        ? strategyResult.source
+        : `${strategyResult.source} → funnel-overridden to ${finalStrategy}`,
       autonomy: `mode=${input.mode} confidence=${confidence} flags=${JSON.stringify(input.flags ?? {})}`,
       outputContract: outputContractProvenance(input),
-      decisionIntent: decisionIntentProvenance({ escalationPressure, autonomy, strategy: strategyResult.strategy, flags: input.flags }),
-      allowedActions: `derived from strategy=${strategyResult.strategy} autonomy=${autonomy} crm=${JSON.stringify(input.identity.crmRecord ?? {})} flags=${JSON.stringify(input.flags ?? {})}`,
-      requiredActions: requiredActionsProvenance({ strategy: strategyResult.strategy, intent, escalationPressure, conversationStage }),
-      playbookIds: `selected ${playbookIds.length} from catalog`,
+      decisionIntent: decisionIntentProvenance({ escalationPressure, autonomy, strategy: finalStrategy, flags: input.flags }),
+      allowedActions: `derived from strategy=${finalStrategy} autonomy=${autonomy} crm=${JSON.stringify(input.identity.crmRecord ?? {})} flags=${JSON.stringify(input.flags ?? {})}`,
+      requiredActions: requiredActionsProvenance({ strategy: finalStrategy, intent, escalationPressure, conversationStage, closurePosture }),
+      playbookIds: funnelRes.playbookIds
+        ? `funnel-overridden to [${playbookIds.join(",")}]`
+        : `selected ${playbookIds.length} from catalog`,
       overrides,
     },
   };
@@ -567,6 +742,52 @@ function deriveAllowedActions(opts: {
   return allowed;
 }
 
+// ─── Ownership signal helpers (Task 1) ──────────────────────
+
+const SELF_OWNERSHIP_MARKERS = [
+  "my email", "my phone", "my number", "send to me", "reach me at",
+  "האימייל שלי", "המייל שלי", "הטלפון שלי", "המספר שלי", "שלחו לי", "שלח לי",
+];
+const THIRD_PARTY_OWNERSHIP_MARKERS = [
+  "support@", "info@", "contact@", "sales@",
+  "send to my", "forward to", "tell my", "send it to ",
+  // Hebrew — verb-led only. (Bare "X של" overlaps with "שלי" = "my-X" so
+  // we cannot use "המייל של" / "האימייל של" as third-party markers.)
+  "שלח ל", "שלחו ל", "תשלחו ל", "תשלח ל",
+  // "X שלי" patterns where X is a person, not an identifier.
+  "המנהל שלי", "העוזר שלי", "השותף שלי", "השותפה שלי", "האסיסטנט שלי",
+];
+
+function deriveOwnership(req: RequestInput): OwnershipSignal {
+  if (!req.identifierMessage) {
+    return { ownerIsCustomer: false, evidence: "none", confidence: 0 };
+  }
+  const text = (req.lastMessage || "").toLowerCase();
+
+  // Third-party override has highest priority.
+  if (containsAny(text, THIRD_PARTY_OWNERSHIP_MARKERS)) {
+    return { ownerIsCustomer: false, evidence: "third_party", confidence: 0.95 };
+  }
+
+  // Direct answer to a prior assistant question of the matching kind.
+  if (req.assistantPreviouslyAskedFor === req.identifierMessage.kind) {
+    return { ownerIsCustomer: true, evidence: "direct_response_to_assistant_question", confidence: 0.9 };
+  }
+
+  // Self-referential phrase.
+  if (containsAny(text, SELF_OWNERSHIP_MARKERS)) {
+    return { ownerIsCustomer: true, evidence: "self_referential_phrase", confidence: 0.85 };
+  }
+
+  // Bare identifier with no third-party markers — implicit ownership.
+  const trimmed = (req.lastMessage || "").trim().toLowerCase();
+  if (trimmed === req.identifierMessage.value.toLowerCase()) {
+    return { ownerIsCustomer: true, evidence: "implicit_context", confidence: 0.7 };
+  }
+
+  return { ownerIsCustomer: false, evidence: "ambiguous", confidence: 0.3 };
+}
+
 function deriveRequiredActions(opts: {
   strategy: StrategyName;
   intent: Intent;
@@ -575,12 +796,30 @@ function deriveRequiredActions(opts: {
   lastAssistantMove?: LastAssistantMove;
   lastMessage: string;
   crmRecord?: { hasLead: boolean; hasContact: boolean };
+  ownershipSignal?: OwnershipSignal;
+  closurePosture?: ClosurePosture;
 }): ActionCategory[] {
   const out: ActionCategory[] = [];
 
   if (opts.escalationPressure === "escalate_now") {
     out.push("escalate_to_human");
     return out;
+  }
+
+  // Closure posture takes precedence over strategy-driven required actions:
+  // once a conversation is over (or deferred), strategy moves are pointless.
+  if (opts.closurePosture === "ready_to_close") {
+    out.push("close_conversation");
+    return out;
+  }
+  if (opts.closurePosture === "needs_followup") {
+    out.push("schedule_followup");
+    return out;
+  }
+
+  // Ownership-confirmed identifier → MUST link.
+  if (opts.ownershipSignal && opts.ownershipSignal.ownerIsCustomer && opts.ownershipSignal.confidence >= 0.7) {
+    out.push("identity_link");
   }
 
   if (opts.strategy === "CONVERT") {
@@ -620,14 +859,207 @@ function requiredActionsProvenance(opts: {
   intent: Intent;
   escalationPressure: EscalationPressure;
   conversationStage: ConversationStage;
+  closurePosture?: ClosurePosture;
 }): string {
   const parts: string[] = [];
   if (opts.escalationPressure === "escalate_now") parts.push("escalate_now → escalate_to_human");
+  if (opts.closurePosture === "ready_to_close") parts.push("ready_to_close → close_conversation");
+  if (opts.closurePosture === "needs_followup") parts.push("needs_followup → schedule_followup");
   if (opts.strategy === "CONVERT" && opts.intent === "transactional") parts.push("CONVERT+transactional → create/update + schedule_booking");
   if (opts.strategy === "CONVERT" && opts.conversationStage === "objection") parts.push("CONVERT+objection → schedule_booking");
   if (opts.strategy === "RESOLVE") parts.push("RESOLVE → crm_read");
   if (opts.strategy === "QUALIFY" && opts.conversationStage !== "initial") parts.push("QUALIFY phase 2 → ask_question");
   return parts.join("; ") || "(no required actions)";
+}
+
+// ─── Action Contracts — trigger detection + state derivation ─
+
+const REFUND_MARKERS = [
+  "refund", "money back", "return my money", "chargeback", "give me back",
+  "החזר", "החזר כספי", "תחזירו לי",
+];
+const BOOKING_MARKERS = [
+  "book", "schedule", "set up a meeting", "set up a call", "demo",
+  "discovery call", "consultation",
+  "לקבוע", "להזמין פגישה", "תיאום פגישה", "הדגמה",
+];
+const FOLLOWUP_MARKERS = [
+  "follow up", "get back to me", "call me later", "next week",
+  "let me think", "i'll think about it", "i need to think",
+  "תזכרו אותי", "תחזרו אליי", "בעוד כמה ימים",
+  "תן לי לחשוב", "אחשוב על זה",
+];
+
+/**
+ * Map the customer turn + BEL outputs to coarse business triggers. The
+ * trigger names are tenant-meaningful labels matched verbatim against
+ * `ActionContract.trigger`. Standard set:
+ *   - "refund"            — customer asking for money back
+ *   - "booking"           — customer asking to schedule
+ *   - "follow_up"         — customer deferred / asked to be re-contacted
+ *   - "close_conversation"— ready to close (BEL closurePosture)
+ *
+ * Tenants can also write contracts on custom triggers — those will only
+ * fire if the caller passes them via `proposedToolCalls` / `triggeredActions`
+ * derived elsewhere (e.g. from a flow node). The base set covers the
+ * inline-message case deterministically.
+ */
+export function deriveTriggeredActions(opts: {
+  lastMessage: string;
+  intent?: Intent;
+  conversationStage?: ConversationStage;
+  closurePosture?: ClosurePosture;
+}): string[] {
+  const text = (opts.lastMessage || "").toLowerCase();
+  const out = new Set<string>();
+
+  if (containsAny(text, REFUND_MARKERS)) out.add("refund");
+  if (containsAny(text, BOOKING_MARKERS) || opts.intent === "transactional") out.add("booking");
+  if (opts.closurePosture === "needs_followup" || containsAny(text, FOLLOWUP_MARKERS)) {
+    out.add("follow_up");
+  }
+  if (opts.closurePosture === "ready_to_close") out.add("close_conversation");
+
+  return [...out];
+}
+
+/**
+ * Compute the per-turn ActionContractStateView the BEL surfaces. Pure —
+ * the caller pre-loads contracts + per-conversation progress.
+ *
+ * Logic per matching contract:
+ *   1. Filter active contracts by triggeredActions.
+ *   2. For each: derive completedTools (from progress) + pendingTools.
+ *   3. Aggregate into a single state. blocking = any matching contract is blocking.
+ *   4. If `proposedToolCalls` is set + a SEQUENCE contract is in flight,
+ *      flag a violation when the LLM tries to call something other than
+ *      the next-step tool. This drives the dispatcher's reject-and-retry.
+ */
+export function deriveActionContractState(opts: {
+  triggeredActions: string[];
+  contracts: ActionContract[];
+  progressByContract: Map<string, ActionContractProgress>;
+  proposedToolCalls?: string[];
+}): ActionContractStateView {
+  const matched = opts.contracts.filter(
+    (c) => c.isActive && opts.triggeredActions.includes(c.trigger),
+  );
+  if (matched.length === 0) {
+    return { active: false, pendingTools: [], completedTools: [], blocking: false, contracts: [] };
+  }
+
+  const allPending = new Set<string>();
+  const allCompleted = new Set<string>();
+  let blocking = false;
+  let violation: ActionContractStateView["violatedThisTurn"];
+  const summaries: ActionContractStateView["contracts"] = [];
+  let firstSequenceNext: string | undefined;
+
+  for (const c of matched) {
+    const prog = opts.progressByContract.get(c.id);
+    const completed = prog?.completedTools ?? [];
+    if (prog?.fulfilledAt) continue; // already done — keep summary but no pending
+    const pending = pendingToolsFor(c, completed);
+    pending.forEach((p) => allPending.add(p));
+    completed.forEach((c0) => allCompleted.add(c0));
+    if (c.blocking) blocking = true;
+    const orderArr = c.order && c.order.length ? c.order : c.requiredTools.map((t) => t.name);
+    const nextStep = c.executionMode === "SEQUENCE" ? pending[0] : undefined;
+    if (nextStep && !firstSequenceNext) firstSequenceNext = nextStep;
+
+    summaries.push({
+      id: c.id,
+      trigger: c.trigger,
+      executionMode: c.executionMode,
+      requiredTools: c.requiredTools.map((t) => t.name),
+      blocking: c.blocking,
+      completed,
+      pending,
+      nextStep,
+    });
+
+    // Sequence violation detection.
+    if (
+      c.executionMode === "SEQUENCE" &&
+      Array.isArray(opts.proposedToolCalls) &&
+      opts.proposedToolCalls.length &&
+      pending.length > 0
+    ) {
+      const expected = pending[0];
+      const earlyContractTool = opts.proposedToolCalls.find(
+        (t) => orderArr.includes(t) && t !== expected,
+      );
+      if (earlyContractTool) {
+        violation = {
+          contractTrigger: c.trigger,
+          reason: `expected_${expected}_got_${earlyContractTool}`,
+        };
+      }
+    }
+  }
+
+  return {
+    active: allPending.size > 0,
+    pendingTools: [...allPending],
+    completedTools: [...allCompleted],
+    blocking,
+    currentStep: firstSequenceNext,
+    violatedThisTurn: violation,
+    contracts: summaries,
+  };
+}
+
+// ─── Closure posture (Task 4) ───────────────────────────────
+
+const CUSTOMER_DEFER_MARKERS = [
+  "i'll think about it", "let me think", "get back to you", "i'll let you know",
+  "later", "next week", "in a few days", "not right now", "not now", "another time",
+  "אחשוב על זה", "תן לי לחשוב", "אחזור אליך", "אני אחזור", "אעדכן אותך",
+  "בהמשך", "בעוד כמה ימים", "לא עכשיו", "פעם אחרת", "אדבר איתך",
+];
+
+const CUSTOMER_CLOSE_ACK_MARKERS = [
+  "thanks", "thank you", "perfect", "great, thanks", "got it, thanks", "all good",
+  "no thanks", "not interested", "no, thanks", "i'm good", "all set",
+  "תודה", "תודה רבה", "מעולה תודה", "הכול טוב", "אני בסדר",
+  "לא תודה", "לא מעוניין", "לא מעוניינת", "לא צריך",
+];
+
+/**
+ * deriveClosurePosture (Task 4)
+ *
+ * Three states the BEL exposes to gate close_conversation / schedule_followup:
+ *   - open:           default; mid-flight
+ *   - ready_to_close: customer acknowledged after a closing assistant move
+ *                     (booking confirmation / resolution), OR explicit decline.
+ *                     This is the only posture where close_conversation fires.
+ *   - needs_followup: customer explicitly deferred. Schedule outbound message.
+ *
+ * Notes:
+ * - Pending approvals block closure (HOLD); BEL sets posture=open in that case.
+ * - Escalation also blocks closure — handled by the earlier escalate_now branch
+ *   in deriveRequiredActions (returns before closure check).
+ */
+function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePosture {
+  if ((flags?.pendingApprovalsCount ?? 0) > 0) return "open";
+
+  const text = (req.lastMessage || "").toLowerCase();
+
+  // Customer explicitly defers → follow-up.
+  if (containsAny(text, CUSTOMER_DEFER_MARKERS)) return "needs_followup";
+
+  // Customer's terminal acknowledgement after a closing assistant move.
+  const lastMove = req.lastAssistantMove;
+  const isClosingMove = lastMove === "close" || lastMove === "resolve";
+  if (isClosingMove && containsAny(text, CUSTOMER_CLOSE_ACK_MARKERS)) {
+    return "ready_to_close";
+  }
+
+  // Hard decline → close (no point following up).
+  const HARD_DECLINE = ["not interested", "לא מעוניין", "לא מעוניינת", "no thanks", "לא תודה"];
+  if (containsAny(text, HARD_DECLINE)) return "ready_to_close";
+
+  return "open";
 }
 
 function deriveDecisionIntent(opts: {
@@ -696,6 +1128,15 @@ function buildGeneratorState(input: ComputeBehaviorStateInput): BehaviorState {
     allowedActions: [],
     requiredActions: [],
     decisionIntent: "PROGRESS",
+    ownershipSignal: { ownerIsCustomer: false, evidence: "none", confidence: 0 },
+    closurePosture: "open",
+    actionContractState: {
+      active: false,
+      pendingTools: [],
+      completedTools: [],
+      blocking: false,
+      contracts: [],
+    },
     provenance: {
       userType: "generator-mode shortcut",
       conversationStage: "generator-mode shortcut",

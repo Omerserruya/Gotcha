@@ -8,31 +8,26 @@ import { useI18n } from "@/context/I18nContext";
 import { getMarketplaceIntegrations } from "@/lib/api";
 import clsx from "clsx";
 
+// Only categories that actually have a published catalog row are listed.
+// Re-add Helpdesk/Communication/Analytics/Shipping/Calendar here when an
+// adapter ships under that category.
 const CATEGORIES = [
   { label: "All", value: "All" },
   { label: "E-Commerce", value: "ECOMMERCE" },
   { label: "CRM", value: "CRM" },
   { label: "Payments", value: "PAYMENTS" },
-  { label: "Helpdesk", value: "HELPDESK" },
-  { label: "Communication", value: "COMMUNICATION" },
-  { label: "Analytics", value: "ANALYTICS" },
-  { label: "Shipping", value: "SHIPPING" },
   { label: "Project Management", value: "PROJECT_MANAGEMENT" },
-  { label: "Calendar", value: "CALENDAR" },
   { label: "Database", value: "DATABASE" },
+  { label: "Custom", value: "CUSTOM" },
 ];
 
 const CATEGORY_COLORS: Record<string, string> = {
   ECOMMERCE: "bg-blue-100 text-blue-700",
   CRM: "bg-purple-100 text-purple-700",
   PAYMENTS: "bg-green-100 text-green-700",
-  HELPDESK: "bg-orange-100 text-orange-700",
-  COMMUNICATION: "bg-pink-100 text-pink-700",
-  ANALYTICS: "bg-yellow-100 text-yellow-700",
-  SHIPPING: "bg-cyan-100 text-cyan-700",
   PROJECT_MANAGEMENT: "bg-indigo-100 text-indigo-700",
-  CALENDAR: "bg-emerald-100 text-emerald-700",
   DATABASE: "bg-slate-100 text-slate-700",
+  CUSTOM: "bg-violet-100 text-violet-700",
 };
 
 const INTEGRATION_LOGOS: Record<string, string> = {
@@ -96,7 +91,26 @@ export default function IntegrationsMarketplacePage() {
     if (!token) return;
     setLoading(true);
     getMarketplaceIntegrations(token)
-      .then((res) => setIntegrations(res.data || []))
+      .then((res) => {
+        const list = res.data || [];
+        // Defensive: ensure the Custom API tile is always reachable from the
+        // marketplace, even if the catalog migration that publishes it
+        // hasn't run on this DB yet. The /integrations/custom_api page
+        // also synthesizes a virtual integration when the catalog row is
+        // missing, so the tool builder still works.
+        if (!list.some((i: any) => i.slug === "custom_api")) {
+          list.push({
+            id: "virtual_custom_api",
+            slug: "custom_api",
+            name: "Custom API",
+            description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+            category: "CUSTOM",
+            authType: "CUSTOM",
+            isPublished: true,
+          });
+        }
+        setIntegrations(list);
+      })
       .catch(() => setIntegrations([]))
       .finally(() => setLoading(false));
   }, [token]);

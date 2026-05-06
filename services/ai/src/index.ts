@@ -6,6 +6,13 @@ import systemChatRoutes from "./routes/system-chat";
 import toolRoutes from "./routes/tools";
 import integrationRoutes from "./routes/integrations";
 import crmOauthRoutes from "./routes/crm-oauth";
+import calendarOauthRoutes from "./routes/calendar-oauth";
+import schedulerAdminRoutes from "./routes/scheduler-admin";
+import funnelAdminRoutes from "./routes/funnel-admin";
+import actionContractsAdminRoutes from "./routes/action-contracts-admin";
+import customApiAdminRoutes from "./routes/custom-api-admin";
+import customDbAdminRoutes from "./routes/custom-db-admin";
+import connectorsAdminRoutes from "./routes/connectors-admin";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
 import routerRuleRoutes from "./routes/router-rules";
@@ -21,6 +28,9 @@ import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
 import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
+// Register all provider adapters at startup. Imports trigger
+// registerAdapter() side-effects in each connector file.
+import "./services/connectors";
 
 // Initialize central AI service (MUST be done before provider)
 if (process.env.OPENAI_API_KEY) {
@@ -53,7 +63,16 @@ app.use("/api/tools", toolRoutes);
 // `authenticate` to its entire router, which would reject Zoho's unauthenticated
 // /callback redirect. Public routes here validate a JWT state param instead.
 app.use("/api/integrations", crmOauthRoutes);
+// Calendar OAuth — same rationale as crmOauthRoutes: callback runs without
+// the dashboard's bearer token, so it must mount before integrationRoutes.
+app.use("/api/integrations", calendarOauthRoutes);
 app.use("/api/integrations", integrationRoutes);
+app.use("/api/scheduler", schedulerAdminRoutes);
+app.use("/api", funnelAdminRoutes);
+app.use("/api", actionContractsAdminRoutes);
+app.use("/api", customApiAdminRoutes);
+app.use("/api", customDbAdminRoutes);
+app.use("/api", connectorsAdminRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
 app.use("/api/router-rules", routerRuleRoutes);

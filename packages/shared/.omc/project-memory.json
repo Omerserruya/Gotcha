@@ -122,8 +122,14 @@
   "hotPaths": [
     {
       "path": "prisma/schema.prisma",
-      "accessCount": 1,
-      "lastAccessed": 1774092474412,
+      "accessCount": 4,
+      "lastAccessed": 1777879794859,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent-tools.ts",
+      "accessCount": 2,
+      "lastAccessed": 1777918626142,
       "type": "file"
     },
     {

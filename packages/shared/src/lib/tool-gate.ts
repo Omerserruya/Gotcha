@@ -107,18 +107,42 @@ export async function evaluatePolicies(opts: {
   let tenantToolEnabled = true;
 
   if (opts.toolName.startsWith("integration_") || opts.toolName.includes(".")) {
-    // Dynamic integration tool. Look it up via CatalogTool.
-    const slug = opts.toolName.replace(/^integration[_.]/, "");
+    // Dynamic integration tool. Resolve via CatalogTool.
+    //
+    // Two name shapes flow through here:
+    //   - "integration_<slug>"  / "integration.<slug>"  (legacy catalog-tool dispatch)
+    //   - "<provider>.<tool>"                            (adapter-framework dispatch,
+    //                                                     e.g. "stripe.refund_payment")
+    //
+    // Adapter names MUST be disambiguated by integration.slug — multiple
+    // integrations expose the same tool slug (refund_payment, get_order,
+    // search_customers, …). A slug-only lookup picks the first match and
+    // applies the wrong HITL policy → unsafe gate decisions.
+    let toolSlugLookup: string;
+    let integrationSlugLookup: string | undefined;
+    if (/^integration[_.]/.test(opts.toolName)) {
+      toolSlugLookup = opts.toolName.replace(/^integration[_.]/, "");
+    } else {
+      const dot = opts.toolName.indexOf(".");
+      integrationSlugLookup = opts.toolName.slice(0, dot);
+      toolSlugLookup = opts.toolName.slice(dot + 1);
+    }
+
     const tenantTool = await (prisma as any).tenantTool?.findFirst?.({
       where: {
         tenantId: opts.tenantId,
-        catalogTool: { slug },
+        catalogTool: integrationSlugLookup
+          ? { slug: toolSlugLookup, integration: { slug: integrationSlugLookup } }
+          : { slug: toolSlugLookup },
       },
       include: { catalogTool: true },
     });
 
     if (!tenantTool) {
-      return denyResult(`no tenant tool for slug "${slug}"`, {});
+      const ref = integrationSlugLookup
+        ? `${integrationSlugLookup}.${toolSlugLookup}`
+        : toolSlugLookup;
+      return denyResult(`no tenant tool for "${ref}"`, {});
     }
     tenantToolId = tenantTool.id;
     tenantToolEnabled = tenantTool.isEnabled;

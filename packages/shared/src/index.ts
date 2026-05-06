@@ -106,6 +106,8 @@ export type {
   AgentToolDispatchResult,
   BuildAgentToolsOptions,
   ToolCallLike,
+  ScheduleMeetingArgs,
+  ScheduleMeetingResult,
 } from "./lib/agent-tools";
 
 // Secrets

@@ -10,6 +10,8 @@ import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
 import TestChatModal from "@/components/TestChatModal";
+import FunnelSection from "@/components/FunnelSection";
+import ActionContractsSection from "@/components/ActionContractsSection";
 
 // ─── Types ────────────────────────────────────────────────────
 type Tone = "professional" | "friendly" | "casual" | "formal";
@@ -1003,7 +1005,23 @@ export default function AgentEditorPage() {
             </button>
           </SectionCard>
 
-          {/* ── Section 5: Escalation Rules ── */}
+          {/* ── Section 5: Funnel (BEL overlay) ── */}
+          <SectionCard
+            title="Funnel"
+            subtitle="Stages, strategy & playbook overrides applied on top of the BEL for this employee's mode."
+          >
+            <FunnelSection />
+          </SectionCard>
+
+          {/* ── Section 6: Action Contracts (deterministic tool chains) ── */}
+          <SectionCard
+            title="Action Contracts"
+            subtitle="When a business action fires, the bot is forced to call specific tools — no skipping, no reordering."
+          >
+            <ActionContractsSection />
+          </SectionCard>
+
+          {/* ── Section 7: Escalation Rules ── */}
           <SectionCard
             title={t("aiStudio.agents.editor.escalation.title")}
             subtitle={t("aiStudio.agents.editor.escalation.subtitle")}

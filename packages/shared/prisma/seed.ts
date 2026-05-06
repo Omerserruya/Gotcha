@@ -721,6 +721,55 @@ async function main() {
   });
   console.log("Chatbot flow: Welcome Flow");
 
+  // ─── Action Contracts (deterministic tool chains) ──────────
+  // Seeds the demo tenant with the spec's three canonical examples so the
+  // bot enforces them out of the box.
+  const ACTION_CONTRACTS = [
+    {
+      trigger: "booking",
+      requiredTools: [{ name: "schedule_meeting" }, { name: "integration_update_lead" }],
+      executionMode: "ALL_REQUIRED",
+      order: null as string[] | null,
+      blocking: true,
+    },
+    {
+      trigger: "refund",
+      requiredTools: [{ name: "refund_payment" }, { name: "create_ticket" }],
+      executionMode: "SEQUENCE",
+      order: ["refund_payment", "create_ticket"],
+      blocking: true,
+    },
+    {
+      trigger: "close_conversation",
+      requiredTools: [{ name: "close_conversation" }],
+      executionMode: "ALL_REQUIRED",
+      order: null as string[] | null,
+      blocking: false,
+    },
+  ];
+  for (const c of ACTION_CONTRACTS) {
+    await (prisma as any).actionContract.upsert({
+      where: { tenantId_trigger: { tenantId: tenant.id, trigger: c.trigger } },
+      update: {
+        requiredTools: c.requiredTools,
+        executionMode: c.executionMode,
+        order: c.order ?? undefined,
+        blocking: c.blocking,
+        isActive: true,
+      },
+      create: {
+        tenantId: tenant.id,
+        trigger: c.trigger,
+        requiredTools: c.requiredTools,
+        executionMode: c.executionMode,
+        order: c.order ?? undefined,
+        blocking: c.blocking,
+        isActive: true,
+      },
+    });
+  }
+  console.log(`Action contracts: ${ACTION_CONTRACTS.map((c) => c.trigger).join(", ")}`);
+
   // ─── Done ───────────────────────────────────────────────────
   console.log("\n✅ Seed complete!\n");
   console.log("Login credentials:");

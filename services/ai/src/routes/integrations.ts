@@ -1,5 +1,6 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
+import { executeAdapterTool, getAdapter } from "../services/connectors/integration-framework";
 
 const router = Router();
 
@@ -91,11 +92,17 @@ router.get("/:slug", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:slug/connect — Connect tenant to integration
+// POST /:slug/connect — Connect tenant to integration (API_KEY/BASIC_AUTH path)
+//
+// OAuth providers should hit /api/connectors/:slug/oauth/init instead — this
+// endpoint stores credentials directly. Credentials are ENCRYPTED before
+// persistence (the adapter framework decrypts on load). Existing connections
+// are updated in-place rather than rejected, so the marketplace can re-bind
+// credentials without forcing a disconnect first.
 router.post("/:slug/connect", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
-    const { credentials } = req.body;
+    const { credentials, config } = req.body;
 
     const entry = await prisma.integrationCatalog.findUnique({
       where: { slug },
@@ -107,50 +114,50 @@ router.post("/:slug/connect", async (req: Request, res: Response) => {
       return;
     }
 
-    // Check for existing connection
-    const existing = await prisma.tenantIntegration.findFirst({
-      where: { tenantId: req.tenantId!, integrationId: entry.id },
-    });
-
-    if (existing) {
-      res.status(409).json({ error: "Already connected to this integration" });
+    if (!credentials || typeof credentials !== "object" || Object.keys(credentials).length === 0) {
+      res.status(400).json({ error: "credentials required" });
       return;
     }
 
-    // Determine initial status and stored credentials based on auth type
-    let storedCredentials: Record<string, unknown> = {};
-    let initialStatus = "PENDING";
+    const encrypted = encryptCredentials(credentials);
+    const cfg = (config && typeof config === "object") ? config : {};
 
-    if (entry.authType === "OAUTH2") {
-      // For OAuth2, accept oauth_code if provided, otherwise stay PENDING
-      if (credentials?.oauth_code) {
-        storedCredentials = { oauth_code: credentials.oauth_code };
-      }
-      initialStatus = "PENDING";
-    } else if (entry.authType === "API_KEY" || entry.authType === "BASIC_AUTH") {
-      // Store provided credential fields as-is
-      storedCredentials = credentials && typeof credentials === "object" ? credentials : {};
-      initialStatus = "PENDING";
-    } else {
-      storedCredentials = credentials && typeof credentials === "object" ? credentials : {};
-    }
-
-    // Create TenantIntegration and auto-create TenantTool rows for all default catalog tools
-    const tenantIntegration = await prisma.tenantIntegration.create({
-      data: {
-        tenantId: req.tenantId!,
-        integrationId: entry.id,
-        status: initialStatus as any,
-        credentials: storedCredentials as any,
-        tenantTools: {
-          create: entry.catalogTools.map((tool) => ({
-            tenantId: req.tenantId!,
-            catalogToolId: tool.id,
-            isEnabled: true,
-          })),
-        },
-      },
+    // Upsert: if a connection already exists, update credentials in place.
+    const existing = await prisma.tenantIntegration.findFirst({
+      where: { tenantId: req.tenantId!, integrationId: entry.id },
+      select: { id: true },
     });
+    let tenantIntegration: any;
+    if (existing) {
+      tenantIntegration = await prisma.tenantIntegration.update({
+        where: { id: existing.id },
+        data: {
+          status: "CONNECTED" as any,
+          credentials: encrypted as any,
+          config: cfg as any,
+          connectedAt: new Date(),
+          lastError: null,
+        },
+      });
+    } else {
+      tenantIntegration = await prisma.tenantIntegration.create({
+        data: {
+          tenantId: req.tenantId!,
+          integrationId: entry.id,
+          status: "CONNECTED" as any,
+          credentials: encrypted as any,
+          config: cfg as any,
+          connectedAt: new Date(),
+          tenantTools: {
+            create: entry.catalogTools.map((tool) => ({
+              tenantId: req.tenantId!,
+              catalogToolId: tool.id,
+              isEnabled: true,
+            })),
+          },
+        },
+      });
+    }
 
     res.status(201).json({ data: tenantIntegration });
   } catch (err) {
@@ -159,7 +166,17 @@ router.post("/:slug/connect", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:slug/test — Test connection by validating required credential fields from authSchema
+// POST /:slug/test — Live connection test.
+//
+// Routes by adapter slug:
+//   - If a registered adapter exposes a READ-only tool, we invoke its first
+//     READ tool with empty args — a real network roundtrip that validates
+//     credentials end-to-end.
+//   - If no adapter is registered (e.g. zoho via the legacy path), we fall
+//     back to validating required credential fields from authSchema.
+//
+// Marks the integration CONNECTED on success and ERROR (with lastError) on
+// failure, so the marketplace UI reflects reality.
 router.post("/:slug/test", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -179,7 +196,58 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
       return;
     }
 
-    // Validate required credential fields from authSchema
+    const adapter = getAdapter(slug);
+    if (adapter) {
+      // Live ping: pick the first READ tool. We need credentials in CONNECTED
+      // state for executeAdapterTool to load them, so flip status temporarily.
+      await prisma.tenantIntegration.update({
+        where: { id: tenantIntegration.id },
+        data: { status: "CONNECTED" as any },
+      });
+      const readTool = adapter.tools().find((t) => t.category === "READ");
+      if (!readTool) {
+        const updated = await prisma.tenantIntegration.update({
+          where: { id: tenantIntegration.id },
+          data: { lastTestedAt: new Date(), lastTestResult: true, status: "CONNECTED" as any, lastError: null },
+        });
+        res.json({ data: updated, note: "no_read_tool_available_for_live_ping" });
+        return;
+      }
+      const r = await executeAdapterTool({
+        tenantId: req.tenantId!,
+        toolFunctionName: readTool.name,
+        args: {},
+      });
+      if (r.ok) {
+        const updated = await prisma.tenantIntegration.update({
+          where: { id: tenantIntegration.id },
+          data: { status: "CONNECTED" as any, lastTestedAt: new Date(), lastTestResult: true, lastError: null },
+        });
+        res.json({ data: updated });
+        return;
+      }
+      // Some READ tools require args (e.g. shopify.get_order needs an order id)
+      // — that's fine: an HTTP-level auth failure is what we're testing.
+      const reason = String(r.reason || "");
+      const looksLikeAuth = /401|403|invalid_token|unauthor/i.test(reason);
+      if (!looksLikeAuth) {
+        // Treat as success — the request reached the provider, just needed args
+        const updated = await prisma.tenantIntegration.update({
+          where: { id: tenantIntegration.id },
+          data: { status: "CONNECTED" as any, lastTestedAt: new Date(), lastTestResult: true, lastError: null },
+        });
+        res.json({ data: updated, note: `read_tool_responded:${reason.slice(0, 80)}` });
+        return;
+      }
+      const updated = await prisma.tenantIntegration.update({
+        where: { id: tenantIntegration.id },
+        data: { status: "ERROR" as any, lastTestedAt: new Date(), lastTestResult: false, lastError: reason.slice(0, 200) },
+      });
+      res.status(400).json({ error: reason, data: updated });
+      return;
+    }
+
+    // Fallback: validate required credential fields from authSchema (legacy).
     const authSchema = (entry.authSchema as Record<string, unknown>) || {};
     const requiredFields: string[] = Array.isArray(authSchema.required)
       ? (authSchema.required as string[])
@@ -191,35 +259,22 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
     );
 
     if (missingFields.length > 0) {
-      // Update lastTestedAt and lastTestResult as failed
       await prisma.tenantIntegration.update({
         where: { id: tenantIntegration.id },
-        data: {
-          lastTestedAt: new Date(),
-          lastTestResult: false,
-        },
+        data: { lastTestedAt: new Date(), lastTestResult: false },
       });
-      res.status(400).json({
-        error: "Missing required credential fields",
-        missingFields,
-      });
+      res.status(400).json({ error: "Missing required credential fields", missingFields });
       return;
     }
 
-    // All required fields present — mark as CONNECTED
     const updated = await prisma.tenantIntegration.update({
       where: { id: tenantIntegration.id },
-      data: {
-        status: "CONNECTED",
-        lastTestedAt: new Date(),
-        lastTestResult: true,
-      },
+      data: { status: "CONNECTED", lastTestedAt: new Date(), lastTestResult: true },
     });
-
     res.json({ data: updated });
-  } catch (err) {
+  } catch (err: any) {
     console.error("Test integration error:", err);
-    res.status(500).json({ error: "Failed to test integration" });
+    res.status(500).json({ error: err?.message || "Failed to test integration" });
   }
 });
 
@@ -261,13 +316,13 @@ router.post("/:slug/disconnect", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /:slug/credentials — Update credentials
+// PUT /:slug/credentials — Update credentials (encrypted, in place)
 router.put("/:slug/credentials", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
-    const { credentials } = req.body;
+    const { credentials, config } = req.body;
 
-    if (!credentials) {
+    if (!credentials || typeof credentials !== "object") {
       res.status(400).json({ error: "credentials are required" });
       return;
     }
@@ -289,7 +344,11 @@ router.put("/:slug/credentials", async (req: Request, res: Response) => {
 
     const updated = await prisma.tenantIntegration.update({
       where: { id: tenantIntegration.id },
-      data: { credentials },
+      data: {
+        credentials: encryptCredentials(credentials) as any,
+        ...(config && typeof config === "object" ? { config: config as any } : {}),
+        lastError: null,
+      },
     });
 
     res.json({ data: updated });

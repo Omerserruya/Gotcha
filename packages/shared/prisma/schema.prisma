@@ -510,6 +510,7 @@ model Department {
   members              DepartmentMember[]
   conversations        Conversation[]
   agentToolPermissions AgentToolPermission[]
+  funnels              TenantFunnel[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1483,4 +1484,318 @@ model SystemAgentMessage {
   @@index([tenantId, userId, createdAt(sort: Desc)])
   @@index([sessionId, createdAt])
   @@map("system_agent_messages")
+}
+
+// ─── Calendar Accounts (Task 3 — schedule_meeting) ───────────
+//
+// One row per (tenant × AI agent × calendar provider) connection. Stores
+// OAuth credentials encrypted at rest using `encryptCredentials` from
+// @chatcenter/shared. Token refresh on 401 is the adapter's responsibility;
+// when refresh fails permanently, status flips to BROKEN and the schedule
+// tool surface drops `schedule_meeting` until a human reconnects.
+//
+// Provider semantics:
+//   - "google_calendar": full OAuth, freebusy + events.insert
+//   - "calendly":         OAuth or PAT; can return scheduling links OR
+//                         use the Calendly API for slot listings
+enum CalendarProvider {
+  GOOGLE_CALENDAR
+  CALENDLY
+}
+
+enum CalendarAccountStatus {
+  CONNECTED
+  BROKEN
+  DISCONNECTED
+}
+
+model CalendarAccount {
+  id                  String                @id @default(cuid())
+  tenantId            String                @map("tenant_id")
+  /// The AIAgent that owns this calendar binding.
+  aiAgentId           String                @map("ai_agent_id")
+  provider            CalendarProvider
+  /// Encrypted JSON: { accessToken, refreshToken, scope, idToken? }
+  credentials         String                @db.Text
+  /// Provider's primary calendar id (Google) or user URI (Calendly).
+  externalAccountId   String                @map("external_account_id")
+  /// Optional explicit calendar to write to (Google secondary calendars).
+  defaultCalendarId   String?               @map("default_calendar_id")
+  /// Provider account email — for display + audit.
+  accountEmail        String?               @map("account_email")
+  /// When access token expires; adapter refreshes 60s before.
+  tokenExpiresAt      DateTime?             @map("token_expires_at")
+  status              CalendarAccountStatus @default(CONNECTED)
+  lastError           String?               @map("last_error")
+  lastSyncedAt        DateTime?             @map("last_synced_at")
+  createdAt           DateTime              @default(now()) @map("created_at")
+  updatedAt           DateTime              @updatedAt @map("updated_at")
+
+  @@unique([aiAgentId, provider])
+  @@index([tenantId])
+  @@index([tenantId, status])
+  @@map("calendar_accounts")
+}
+
+// ─── Meeting Types (Task 3 — scheduling policy per meeting kind) ─
+//
+// One row per tenant-defined meeting kind ("discovery_call", "demo",
+// "consultation", ...). Hydrates `SchedulingPolicy` for the constraints
+// resolver. Working-hours / windows are stored as JSON arrays of
+// `{ weekday, start, end }` matching the resolver's `DayWindow` shape.
+model MeetingType {
+  id                       String   @id @default(cuid())
+  tenantId                 String   @map("tenant_id")
+  /// Used by the schedule_meeting tool's meeting_type arg. Unique per tenant.
+  slug                     String
+  name                     String
+  description              String?
+  durationMinutes          Int      @map("duration_minutes")
+  /// IANA timezone for working hours (e.g. "Asia/Jerusalem").
+  agentTimezone            String   @map("agent_timezone")
+  /// [{ weekday: 0..6, start: "HH:MM", end: "HH:MM" }]
+  workingHours             Json     @map("working_hours")
+  /// Optional stricter window override for this meeting type. Same shape.
+  meetingTypeWindows       Json?    @map("meeting_type_windows")
+  bufferBeforeMinutes      Int      @default(15) @map("buffer_before_minutes")
+  bufferAfterMinutes       Int      @default(15) @map("buffer_after_minutes")
+  minNoticeHours           Int      @default(4)  @map("min_notice_hours")
+  maxHorizonDays           Int      @default(30) @map("max_horizon_days")
+  slotResolutionMinutes    Int      @default(30) @map("slot_resolution_minutes")
+  /// Emails that should ALWAYS be added as attendees (account manager, SE,
+  /// internal ops). Merged with the customer's email + additional_guests
+  /// the bot collected. Stored as a JSON array of strings.
+  autoGuests               Json     @default("[]") @map("auto_guests")
+  /// When false, schedule_meeting will reject this slug.
+  isActive                 Boolean  @default(true) @map("is_active")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+  @@map("meeting_types")
+}
+
+// ─── Tenant Funnel (Task 2 — configurable funnel + playbooks) ─
+//
+// Tenant-shaped overlay on top of the platform's closed BEL primitives.
+// One row per (tenantId × departmentId × funnelId). NULL departmentId means
+// "tenant default" — applies to all departments that have no explicit funnel.
+// The BEL loads ONE active funnel per (tenantId × departmentId), preferring
+// a department-scoped row and falling back to the tenant-default (NULL) row.
+model TenantFunnel {
+  id                 String      @id @default(cuid())
+  tenantId           String      @map("tenant_id")
+  funnelId           String      @map("funnel_id")
+  /// NULL = tenant default (applies when no department-specific funnel exists).
+  departmentId       String?     @map("department_id")
+  isActive           Boolean     @default(true) @map("is_active")
+  /// FunnelStage[] — see funnel-config.service.ts.
+  stages             Json
+  /// FunnelTransition[]
+  transitions        Json        @default("[]")
+  /// StrategyOverride[] — optional.
+  strategyOverrides  Json?       @map("strategy_overrides")
+  /// PlaybookOverride[] — optional.
+  playbookOverrides  Json?       @map("playbook_overrides")
+  createdAt          DateTime    @default(now()) @map("created_at")
+  updatedAt          DateTime    @updatedAt @map("updated_at")
+
+  department         Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  @@unique([tenantId, departmentId, funnelId])
+  @@index([tenantId, departmentId, isActive])
+  @@map("tenant_funnels")
+}
+
+// ─── Action Contracts (deterministic tool-chain enforcement) ───
+//
+// Tenant-defined business rules of the form: "when trigger X fires, call
+// these tools — no skipping, optionally in this order, optionally blocking
+// the entire conversation until completion."
+//
+// Enforcement happens at the BEL: matching contracts inject their tool
+// requirements into BehaviorState.requiredActions and (when blocking=true)
+// strip everything else from allowedActions. The dispatcher tracks
+// completion across turns so partial progress survives multi-turn flows.
+//
+// executionMode:
+//   "ALL_REQUIRED" — all tools must execute this conversation, any order
+//   "SEQUENCE"     — tools must execute in the listed order; out-of-order
+//                    calls fail validation
+//   "AT_LEAST_ONE" — any single tool from requiredTools satisfies the contract
+model ActionContract {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  /// Business trigger label — matched against deriveTriggeredActions()
+  /// output. Standard values: "refund", "booking", "close_conversation",
+  /// "follow_up". Custom strings allowed for tenant-specific events.
+  trigger       String
+  /// JSON array of { name: string } — the tool function names that must
+  /// execute. The dispatcher matches by name against the actual tool calls.
+  requiredTools Json     @map("required_tools")
+  /// "ALL_REQUIRED" | "SEQUENCE" | "AT_LEAST_ONE"
+  executionMode String   @map("execution_mode")
+  /// Optional ordered tool-name array used when executionMode = SEQUENCE.
+  /// When omitted, falls back to the order of `requiredTools`.
+  order         Json?
+  /// When true, the bot CANNOT reply until the contract is fulfilled.
+  /// allowedActions is restricted to only the contract's tools.
+  blocking      Boolean  @default(true)
+  /// When false, the contract is dormant — kept for audit but not enforced.
+  isActive      Boolean  @default(true) @map("is_active")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, trigger])
+  @@index([tenantId, isActive])
+  @@map("action_contracts")
+}
+
+// ─── Action Contract Progress (partial completion across turns) ────
+//
+// One row per (conversationId × contractId). Tracks which required tools
+// have already been called so the contract can complete across multiple
+// turns. Cleared when the contract is fully satisfied (or the conversation
+// is closed without completion — either way, audit trail lives in
+// ai.bot_turn logs).
+model ActionContractProgress {
+  id              String    @id @default(cuid())
+  tenantId        String    @map("tenant_id")
+  conversationId  String    @map("conversation_id")
+  contractId      String    @map("contract_id")
+  /// JSON array of tool names already executed (in execution order).
+  completedTools  Json      @default("[]") @map("completed_tools")
+  /// Index of the next required tool when executionMode = SEQUENCE.
+  nextStepIndex   Int       @default(0) @map("next_step_index")
+  /// Set when a tool returned awaiting_approval — contract is paused.
+  pausedReason    String?   @map("paused_reason")
+  /// Set on completion. When non-null, the row is essentially historical.
+  fulfilledAt     DateTime? @map("fulfilled_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+
+  @@unique([conversationId, contractId])
+  @@index([tenantId, conversationId])
+  @@map("action_contract_progress")
+}
+
+// ─── Custom API Tools (tenant-defined HTTP calls as bot tools) ───
+//
+// The escape hatch: anything we don't ship a first-class adapter for, the
+// tenant can wire as a tool by defining a single HTTP request. The
+// dispatcher renders the request, calls fetch, parses the response, and
+// returns a result the LLM can read.
+//
+// Auth modes (auth.kind):
+//   "none"
+//   "bearer"   — Authorization: Bearer <token>   (token in encrypted creds)
+//   "api_key"  — header or query param with the configured key name
+//   "basic"    — Basic auth user:pass
+//
+// `parameters` is the OpenAI function-calling schema the LLM sees.
+// `urlTemplate` and `bodyTemplate` may contain `{{name}}` placeholders
+// resolved from args + a small helper namespace (e.g. {{tenantId}}).
+//
+// Domain whitelist enforcement happens at dispatch time — the request URL
+// must resolve to a host in `allowedHosts` for the tool to fire. This is
+// the OWASP-style guardrail against SSRF + accidental exfiltration.
+model CustomApiTool {
+  id                  String   @id @default(cuid())
+  tenantId            String   @map("tenant_id")
+  /// Tool slug surfaced as `custom.<slug>`. Unique per tenant.
+  slug                String
+  name                String
+  description         String
+  /// "Use this tool when …"
+  whenToUse           String   @map("when_to_use")
+  /// "Do NOT call this tool when …"
+  whenNotToUse        String?  @map("when_not_to_use")
+  /// "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
+  method              String
+  /// e.g. "https://api.example.com/v1/orders/{{order_id}}"
+  urlTemplate         String   @map("url_template")
+  /// Static headers (in addition to auth).
+  headers             Json     @default("{}")
+  /// Auth descriptor (encrypted via the integration credential helper).
+  /// Shape:
+  ///   { kind: "none" } |
+  ///   { kind: "bearer", tokenEnv?: string }   ← token stored in `secrets.bearer`
+  ///   { kind: "api_key", in: "header"|"query", name: "X-API-Key" } ← key in `secrets.apiKey`
+  ///   { kind: "basic" } ← user/pass in secrets.basicUser/basicPass
+  auth                Json     @default("{\"kind\":\"none\"}")
+  /// Encrypted credential blob (bearer token, api key, basic user/pass).
+  secrets             String?  @db.Text
+  /// Parameter schema in OpenAI function-calling shape.
+  /// { type:"object", properties:{...}, required:[...] }
+  parameters          Json     @default("{\"type\":\"object\",\"properties\":{},\"required\":[]}")
+  /// Body template — string with {{placeholders}} or null for no body.
+  bodyTemplate        String?  @map("body_template") @db.Text
+  /// Optional response mapping — JSONPath-like dotted paths summarized for the LLM.
+  /// e.g. ["data.id", "data.amount"] — adapter returns just these fields when set.
+  responseFields      Json?    @map("response_fields")
+  /// Domain whitelist — exact host match enforced at dispatch.
+  allowedHosts        Json     @default("[]") @map("allowed_hosts")
+  /// "READ" | "WRITE" | "DELETE" | "ACTION" — drives permission filtering.
+  category            String   @default("READ")
+  /// "LOW" | "MEDIUM" | "HIGH" — HIGH-risk auto-requires approval.
+  riskLevel           String   @default("MEDIUM") @map("risk_level")
+  /// Soft-disable without deleting.
+  isActive            Boolean  @default(true) @map("is_active")
+  /// Timeout in ms (default 10s).
+  timeoutMs           Int      @default(10000) @map("timeout_ms")
+  createdAt           DateTime @default(now()) @map("created_at")
+  updatedAt           DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+  @@map("custom_api_tools")
+}
+
+// ─── Custom DB Query Tools ──────────────────────────────────
+//
+// Per-tenant pre-canned SQL/Mongo queries the AI can call as
+// `custom_db.<slug>`. Safer than generic `postgres.query_table` because the
+// admin defines the exact shape — the AI only fills in named params that match
+// `parameterSchema`. No raw SQL is ever assembled at runtime: the template is
+// passed verbatim to the driver with `$1, $2…` (Postgres) / positional `?`
+// (MySQL) / typed Mongo filter (MongoDB).
+model CustomDbQueryTool {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  /// One of: "postgresql" | "aws_rds" | "mongodb" — must match a CONNECTED
+  /// integration on this tenant.
+  providerSlug    String   @map("provider_slug")
+  /// Tool slug surfaced as `custom_db.<slug>`. Unique per tenant.
+  slug            String
+  name            String
+  description     String
+  whenToUse       String   @map("when_to_use")
+  whenNotToUse    String?  @map("when_not_to_use") @db.Text
+  /// The query body. For Postgres/MySQL: SQL with `$1, $2…` (or `?` MySQL)
+  /// placeholders. For MongoDB: a JSON object — `collection`, `op`
+  /// ("find"|"findOne"|"insertOne"|"updateOne"|"deleteOne"), `filter`,
+  /// `update`, `doc` — fields can be `{{paramName}}` for substitution.
+  queryTemplate   String   @map("query_template") @db.Text
+  /// Parameter schema in OpenAI function-calling shape — describes the
+  /// args the AI must fill. Order matters for SQL `$1, $2…`.
+  parameterSchema Json     @default("{\"type\":\"object\",\"properties\":{},\"required\":[]}") @map("parameter_schema")
+  /// Param order — array of property names matching the SQL placeholders'
+  /// numeric order. e.g. ["customer_email", "since"] → $1=email, $2=since.
+  parameterOrder  Json     @default("[]") @map("parameter_order")
+  /// "READ" | "WRITE" | "DELETE" | "ACTION".
+  category        String   @default("READ")
+  riskLevel       String   @default("LOW") @map("risk_level")
+  isActive        Boolean  @default(true) @map("is_active")
+  /// Hard cap on rows returned (Postgres/RDS) or docs returned (Mongo).
+  maxRows         Int      @default(100) @map("max_rows")
+  /// Statement timeout in ms (default 5s).
+  timeoutMs       Int      @default(5000) @map("timeout_ms")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([tenantId, isActive])
+  @@index([tenantId, providerSlug])
+  @@map("custom_db_query_tools")
 }
