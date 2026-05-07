@@ -1,5 +1,5 @@
 {
-  "name": "@chatcenter/ai-service",
+  "name": "@chatcenter/notifications-service",
   "version": "1.0.0",
   "private": true,
   "scripts": {
@@ -10,24 +10,14 @@
   },
   "dependencies": {
     "@chatcenter/shared": "*",
-    "@qdrant/js-client-rest": "^1.17.0",
-    "@types/pg": "^8.20.0",
     "bullmq": "^5.12.0",
-    "ioredis": "^5.4.0",
-    "mammoth": "^1.11.0",
-    "mongodb": "^7.2.0",
-    "multer": "^2.0.2",
     "nodemailer": "^8.0.1",
-    "openai": "^6.22.0",
-    "pdf-parse": "^1.1.4",
-    "pg": "^8.20.0",
-    "zod": "^3.25.76"
+    "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@types/multer": "^2.0.0",
     "@types/nodemailer": "^7.0.11",
-    "@types/pdf-parse": "^1.1.5",
     "@types/supertest": "^6.0.3",
+    "@types/ws": "^8.5.13",
     "supertest": "^7.2.2",
     "tsx": "^4.19.0",
     "typescript": "^5.6.0",

@@ -7,6 +7,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Locale, localeConfig } from "@/i18n";
 import clsx from "clsx";
+import { NotificationBell } from "./NotificationBell";
 
 const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
@@ -153,13 +154,16 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
                 <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
                 <p className="text-xs text-gray-400 truncate">{user?.role}</p>
               </div>
-              <button
-                onClick={logout}
-                className="text-red-400 hover:text-red-600 transition p-1.5 rounded-lg hover:bg-red-50"
-                title={t("nav.logout")}
-              >
-                <LogoutIcon className="w-5 h-5" />
-              </button>
+              <div className="flex items-center gap-1">
+                <NotificationBell />
+                <button
+                  onClick={logout}
+                  className="text-red-400 hover:text-red-600 transition p-1.5 rounded-lg hover:bg-red-50"
+                  title={t("nav.logout")}
+                >
+                  <LogoutIcon className="w-5 h-5" />
+                </button>
+              </div>
             </>
           )}
         </div>

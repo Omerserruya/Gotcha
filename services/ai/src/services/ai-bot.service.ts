@@ -46,6 +46,19 @@ import {
   markContractPaused,
   type ActionContract,
 } from "./action-contracts.repo";
+import { tryEmit } from "./notifications-emit";
+import type { SystemEventType } from "./notifications-emit";
+
+// Map a tool function name to a SystemEvent type (when applicable).
+// Names are matched as `slug.tool` — the slug part is preserved for context
+// in the event data. We only emit on success; failed/denied calls are noisy.
+function classifyToolForNotification(toolFunctionName: string): SystemEventType | null {
+  const lower = toolFunctionName.toLowerCase();
+  if (lower.includes("refund")) return "refund.issued";
+  if (lower.includes("discount")) return "discount.applied";
+  if (lower.includes("schedule_meeting") || lower.includes("book_meeting") || lower.startsWith("book_")) return "meeting.scheduled";
+  return null;
+}
 
 export interface AIBotReplyResult {
   reply: string | null;
@@ -558,14 +571,38 @@ export async function generateAIBotReply(opts: {
         args,
       });
     },
-    runAdapterTool: ({ toolFunctionName, args }) =>
-      executeAdapterTool({
+    runAdapterTool: async ({ toolFunctionName, args }) => {
+      const result = await executeAdapterTool({
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         contactId: contactRow?.id,
         toolFunctionName,
         args,
-      }),
+      });
+      // Fire-and-forget notification emit on success only. The classify
+      // helper maps refund/discount/meeting tool names to SystemEvents;
+      // anything else returns null and skips. Wrapped in tryEmit() so a
+      // notification path failure can never throw into the bot turn.
+      try {
+        if (result.ok) {
+          const evt = classifyToolForNotification(toolFunctionName);
+          if (evt) {
+            tryEmit({
+              type: evt,
+              tenantId: opts.tenantId,
+              data: { tool: toolFunctionName, args, result: result.result },
+              metadata: {
+                conversationId: opts.conversationId,
+                agentId: config.id,
+              },
+            });
+          }
+        }
+      } catch (err: any) {
+        console.warn("[ai-bot] notification emit failed:", err?.message);
+      }
+      return result;
+    },
   };
 
   let tools = await buildAgentToolsForAIAgent(opts.tenantId, config.id, {
@@ -1004,6 +1041,29 @@ export async function generateAIBotReply(opts: {
       },
     },
   }).catch((err: any) => console.error("[ai-bot] Audit log failed:", err.message));
+
+  // Notification emit: conversation escalated. Fire when BEL signals
+  // escalate_now or when a tool side-effect set pendingEscalation. Wrapped
+  // in tryEmit + try/catch — never throws into the hot path.
+  try {
+    if (behaviorState.escalationPressure === "escalate_now" || pendingEscalation) {
+      tryEmit({
+        type: "conversation.escalated",
+        tenantId: opts.tenantId,
+        data: {
+          reason: pendingEscalation?.reason ?? "escalation_pressure=escalate_now",
+          priority: pendingEscalation?.priority,
+          summary: pendingEscalation?.summary,
+        },
+        metadata: {
+          conversationId: opts.conversationId,
+          agentId: config.id,
+        },
+      });
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] escalation emit failed:", err?.message);
+  }
 
   return {
     reply: awaitingApproval ? null : replyText,

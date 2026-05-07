@@ -2106,5 +2106,77 @@
     "tryAgain": "נסה שוב",
     "apply": "השתמש בזה",
     "error": "יצירת הטיוטה נכשלה"
+  },
+  "notifications": {
+    "title": "התראות",
+    "markAllRead": "סמן הכל כנקרא",
+    "empty": "אין התראות חדשות",
+    "conditionsJsonError": "JSON לא תקין בשדה התנאים. אנא בדוק ונסה שנית.",
+    "settings": {
+      "title": "העדפות התראות",
+      "subtitle": "שליטה על אילו אירועים מפעילים התראות וכיצד אתה מקבל אותן.",
+      "soundSection": "צליל",
+      "soundToggle": "הפעל צליל עבור התראות חדשות",
+      "soundHint": "צליל קצר ישמע כאשר מגיעה התראה חדשה והכרטיסייה פעילה.",
+      "prefsSection": "העדפות לפי אירוע",
+      "departmentPicker": "היקף",
+      "tenantDefault": "ברירת מחדל של הארגון",
+      "channels": "ערוצים",
+      "priority": "עדיפות",
+      "recipients": "נמענים",
+      "recipientTenantOwner": "בעל הארגון",
+      "recipientDeptManager": "מנהל מחלקה",
+      "recipientSpecificUsers": "משתמשים ספציפיים",
+      "selectUsers": "בחר משתמשים לקבלת התראות",
+      "noAgents": "לא נמצאו נציגים",
+      "advancedConditions": "תנאים מתקדמים",
+      "conditionsHint": "מערך JSON של תנאים: [{\"field\": \"priority\", \"op\": \"eq\", \"value\": \"HIGH\"}]",
+      "conditionsLabel": "תנאים JSON",
+      "enabledToggle": "הפעל התראה זו",
+      "rule": "כלל",
+      "ruleN": "כלל {n}",
+      "addRule": "הוסף כלל נוסף",
+      "deleteRule": "מחק",
+      "save": "שמור",
+      "saving": "שומר…"
+    },
+    "events": {
+      "toolApproval": {
+        "title": "נדרש אישור כלי",
+        "desc": "מופעל כאשר סוכן AI מבקש אישור אנושי לפני הפעלת כלי רגיש."
+      },
+      "leadCreated": {
+        "title": "ליד חדש נוצר",
+        "desc": "ליד חדש נתפס ונוסף למערכת ה-CRM."
+      },
+      "meetingScheduled": {
+        "title": "פגישה תוזמנה",
+        "desc": "פגישה נקבעה דרך מערכת התזמון."
+      },
+      "discountApplied": {
+        "title": "הנחה הוחלה",
+        "desc": "סוכן AI או חבר צוות החיל הנחה על הזמנה או הצעת מחיר."
+      },
+      "refundIssued": {
+        "title": "החזר כספי הונפק",
+        "desc": "החזר כספי הונפק ומצריך מודעות או אישור."
+      },
+      "conversationEscalated": {
+        "title": "שיחה הוסלמה",
+        "desc": "שיחה הועברה לנציג בכיר או מנהל."
+      },
+      "highValueLead": {
+        "title": "ליד בעל ערך גבוה זוהה",
+        "desc": "ה-AI זיהה ליד עם פוטנציאל המרה גבוה."
+      },
+      "paymentFailed": {
+        "title": "תשלום נכשל",
+        "desc": "ניסיון תשלום נכשל ועשוי לדרוש מעקב."
+      },
+      "systemError": {
+        "title": "שגיאת מערכת קריטית",
+        "desc": "אירעה שגיאת מערכת ברמה קריטית הדורשת תשומת לב מיידית."
+      }
+    }
   }
 }

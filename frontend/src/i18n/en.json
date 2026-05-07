@@ -2069,5 +2069,77 @@
     "tryAgain": "Try again",
     "apply": "Use this",
     "error": "Failed to generate"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "markAllRead": "Mark all read",
+    "empty": "You're all caught up",
+    "conditionsJsonError": "Invalid JSON in conditions field. Please check and try again.",
+    "settings": {
+      "title": "Notification Preferences",
+      "subtitle": "Control which events trigger notifications and how you receive them.",
+      "soundSection": "Sound",
+      "soundToggle": "Play sound on new notifications",
+      "soundHint": "A short ping plays when a new notification arrives and the tab is visible.",
+      "prefsSection": "Event Preferences",
+      "departmentPicker": "Scope",
+      "tenantDefault": "Tenant default",
+      "channels": "Channels",
+      "priority": "Priority",
+      "recipients": "Recipients",
+      "recipientTenantOwner": "Tenant owner",
+      "recipientDeptManager": "Department manager",
+      "recipientSpecificUsers": "Specific users",
+      "selectUsers": "Select users to notify",
+      "noAgents": "No agents found",
+      "advancedConditions": "Advanced conditions",
+      "conditionsHint": "JSON array of conditions: [{\"field\": \"priority\", \"op\": \"eq\", \"value\": \"HIGH\"}]",
+      "conditionsLabel": "Conditions JSON",
+      "enabledToggle": "Enable this notification",
+      "rule": "Rule",
+      "ruleN": "Rule {n}",
+      "addRule": "Add another rule",
+      "deleteRule": "Delete",
+      "save": "Save",
+      "saving": "Saving…"
+    },
+    "events": {
+      "toolApproval": {
+        "title": "Tool Approval Required",
+        "desc": "Triggered when an AI agent requests human approval before executing a sensitive tool."
+      },
+      "leadCreated": {
+        "title": "New Lead Created",
+        "desc": "A new lead has been captured and added to the CRM."
+      },
+      "meetingScheduled": {
+        "title": "Meeting Scheduled",
+        "desc": "A meeting has been booked via the scheduling system."
+      },
+      "discountApplied": {
+        "title": "Discount Applied",
+        "desc": "An AI agent or team member applied a discount to an order or quote."
+      },
+      "refundIssued": {
+        "title": "Refund Issued",
+        "desc": "A refund has been issued and requires awareness or approval."
+      },
+      "conversationEscalated": {
+        "title": "Conversation Escalated",
+        "desc": "A conversation has been escalated to a senior agent or manager."
+      },
+      "highValueLead": {
+        "title": "High-Value Lead Detected",
+        "desc": "The AI identified a lead with high conversion potential."
+      },
+      "paymentFailed": {
+        "title": "Payment Failed",
+        "desc": "A payment attempt failed and may require follow-up."
+      },
+      "systemError": {
+        "title": "Critical System Error",
+        "desc": "A critical-level system error occurred that needs immediate attention."
+      }
+    }
   }
 }

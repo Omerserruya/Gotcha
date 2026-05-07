@@ -8,6 +8,7 @@ import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { Locale, localeConfig } from "@/i18n";
 import clsx from "clsx";
+import { NotificationBell } from "./NotificationBell";
 
 // ─── Mobile Header (all users) ─────────────────────────────
 
@@ -37,48 +38,53 @@ export function MobileHeader() {
         <Image src="/logo.png" alt="GOTCHA" width={80} height={22} className="h-5 w-auto" />
       </div>
 
-      {/* Avatar + dropdown */}
-      <div className="relative" ref={menuRef}>
-        <button
-          onClick={() => setShowMenu(!showMenu)}
-          className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm"
-        >
-          {user?.name?.charAt(0).toUpperCase() || "?"}
-        </button>
+      {/* Right controls: bell + avatar */}
+      <div className="flex items-center gap-1" ref={menuRef}>
+        <NotificationBell />
 
-        {showMenu && (
-          <div className="absolute end-0 top-12 bg-white rounded-2xl shadow-float py-2 w-56 z-50">
-            {/* User info */}
-            <div className="px-4 py-2 border-b border-gray-100">
-              <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
-              <p className="text-xs text-gray-400 truncate">{user?.email}</p>
-            </div>
+        {/* Avatar + dropdown */}
+        <div className="relative">
+          <button
+            onClick={() => setShowMenu(!showMenu)}
+            className="w-9 h-9 bg-gradient-to-br from-primary-400 to-primary-600 rounded-full flex items-center justify-center text-xs font-bold text-white shadow-sm"
+          >
+            {user?.name?.charAt(0).toUpperCase() || "?"}
+          </button>
 
-            {/* Language */}
-            <div className="px-4 py-2 border-b border-gray-100">
-              <select
-                value={locale}
-                onChange={(e) => { setLocale(e.target.value as Locale); setShowMenu(false); }}
-                className="w-full bg-gray-50 text-gray-600 text-xs rounded-lg px-3 py-2 border-0 ring-1 ring-gray-200/60 focus:outline-none focus:ring-2 focus:ring-primary-200"
+          {showMenu && (
+            <div className="absolute end-0 top-12 bg-white rounded-2xl shadow-float py-2 w-56 z-50">
+              {/* User info */}
+              <div className="px-4 py-2 border-b border-gray-100">
+                <p className="text-sm font-medium text-gray-900 truncate">{user?.name}</p>
+                <p className="text-xs text-gray-400 truncate">{user?.email}</p>
+              </div>
+
+              {/* Language */}
+              <div className="px-4 py-2 border-b border-gray-100">
+                <select
+                  value={locale}
+                  onChange={(e) => { setLocale(e.target.value as Locale); setShowMenu(false); }}
+                  className="w-full bg-gray-50 text-gray-600 text-xs rounded-lg px-3 py-2 border-0 ring-1 ring-gray-200/60 focus:outline-none focus:ring-2 focus:ring-primary-200"
+                >
+                  {Object.entries(localeConfig).map(([key, config]) => (
+                    <option key={key} value={key}>{config.label}</option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Logout */}
+              <button
+                onClick={() => { setShowMenu(false); logout(); }}
+                className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition"
               >
-                {Object.entries(localeConfig).map(([key, config]) => (
-                  <option key={key} value={key}>{config.label}</option>
-                ))}
-              </select>
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+                </svg>
+                {t("nav.logout")}
+              </button>
             </div>
-
-            {/* Logout */}
-            <button
-              onClick={() => { setShowMenu(false); logout(); }}
-              className="w-full flex items-center gap-3 px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 transition"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
-              </svg>
-              {t("nav.logout")}
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </header>
   );

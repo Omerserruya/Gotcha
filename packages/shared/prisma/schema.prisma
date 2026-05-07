@@ -111,6 +111,8 @@ model Tenant {
   broadcasts        Broadcast[]
   scheduledMessages ScheduledMessage[]
   flowCanvas        FlowCanvas?
+  notificationPreferences NotificationPreference[]
+  inAppNotifications      InAppNotification[]
 
   @@index([status])
   @@map("tenants")
@@ -200,12 +202,14 @@ model User {
   name      String
   role      Role     @default(AGENT)
   isActive  Boolean  @default(true) @map("is_active")
+  notificationSoundEnabled Boolean @default(true) @map("notification_sound_enabled")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant           Tenant            @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations    Conversation[]    @relation("AssignedAgent")
-  departmentMember DepartmentMember?
+  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations      Conversation[]      @relation("AssignedAgent")
+  departmentMember   DepartmentMember?
+  inAppNotifications InAppNotification[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -511,6 +515,7 @@ model Department {
   conversations        Conversation[]
   agentToolPermissions AgentToolPermission[]
   funnels              TenantFunnel[]
+  notificationPreferences NotificationPreference[]
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1120,6 +1125,72 @@ model NotificationLog {
   @@index([tenantId])
   @@index([type, status])
   @@map("notification_logs")
+}
+
+// ─── Event-driven Notification System ───────────────────────
+//
+// NotificationPreference defines per-tenant (and optionally per-department)
+// rules for which SystemEvents trigger notifications, who receives them,
+// and through which channels. Postgres NULLS-DISTINCT semantics on the
+// (tenantId, departmentId, eventType) tuple are enforced via two partial
+// indexes — one for the NULL departmentId case (tenant default) and one
+// for explicit department scope. Mirrors the trick used in the
+// `tenant_funnels` table (see 20260507200000_funnel_per_department).
+
+model NotificationPreference {
+  id           String   @id @default(cuid())
+  tenantId     String   @map("tenant_id")
+  /// NULL = tenant-default rule (applies when no department-scoped row exists).
+  departmentId String?  @map("department_id")
+  eventType    String   @map("event_type")
+  enabled      Boolean  @default(true)
+  /// CEL-lite — array of { field, op, value } objects.
+  conditions   Json?
+  /// { type: "tenant_owner" | "department_manager" | "users", userIds?: string[] }
+  recipients   Json
+  /// string[] — ["email", "in_app", ...]. Adding new channels (slack, sms) is purely
+  /// a dispatcher switch; no schema migration needed.
+  channels     Json     @default("[\"email\",\"in_app\"]")
+  /// CRITICAL | HIGH | MEDIUM | LOW
+  priority     String   @default("MEDIUM")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+
+  // NOTE: The (tenantId, departmentId, eventType) uniqueness — including the
+  // NULL-departmentId case — is enforced via two partial unique indexes
+  // declared in the migration SQL (Postgres-14 safe). Prisma's schema-level
+  // @@unique can't express the partial-index condition, so it's omitted here
+  // intentionally — the DB still rejects duplicates at write-time.
+  @@index([tenantId, eventType])
+  @@map("notification_preferences")
+}
+
+// In-app notification record. One row per user-bound notification surfaced
+// in the dashboard's bell/inbox. Created by the dispatcher when "in_app"
+// is on the preference's channels. Real-time delivery happens via the
+// shared event-bus (publishEvent → frontend SSE/poll). The frontend can
+// also fall back to polling the GET /notifications endpoint.
+model InAppNotification {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  userId    String   @map("user_id")
+  eventType String   @map("event_type")
+  priority  String   @default("MEDIUM")
+  title     String
+  body      String
+  link      String?
+  read      Boolean  @default(false)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, read, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("in_app_notifications")
 }
 
 // ─── Contacts (Customer Directory) ─────────────────────────

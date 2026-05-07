@@ -53,8 +53,9 @@ services:
       AI_PORT: ${AI_PORT:-4006}
       FRONTEND_PORT: ${FRONTEND_PORT:-3000}
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
+      NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
     command: >
-      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT'
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT'
       < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     depends_on:
@@ -66,6 +67,7 @@ services:
       - ai
       - frontend
       - voice-copilot
+      - notifications
 
   # ─── Microservices ───────────────────────────────────────
   auth:
@@ -269,6 +271,31 @@ services:
       redis:
         condition: service_healthy
       qdrant:
+        condition: service_healthy
+
+  # ─── Notifications Service (event-driven engine + WS gateway) ────
+  notifications:
+    build:
+      context: .
+      dockerfile: services/notifications/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${NOTIFICATIONS_PORT:-4008}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
         condition: service_healthy
 
   voice-copilot:
