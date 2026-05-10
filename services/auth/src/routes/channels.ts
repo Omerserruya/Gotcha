@@ -47,7 +47,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     // Check if a router rule with a channel condition for this email type already exists
     const existingRules = await prisma.routerRule.findMany({
       where: { tenantId },
-      orderBy: { priority: "asc" },
+      orderBy: { position: "asc" },
     });
     const hasChannelRule = existingRules.some((r) => {
       const conditions = (r.conditions as any[]) || [];
@@ -60,7 +60,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
       existingRules.map((r) =>
         prisma.routerRule.update({
           where: { id: r.id },
-          data: { priority: r.priority + 1 },
+          data: { position: r.position + 1 },
         })
       )
     );
@@ -69,7 +69,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
       data: {
         tenantId,
         name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} — ${displayName}`,
-        priority: 1,
+        position: 1,
         conditions: [{ type: "channel", operator: "equals", value: channel.toLowerCase() }],
         logic: "AND",
         routeType: "HUMAN",
@@ -85,7 +85,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
         data: {
           tenantId,
           name: "Default Fallback",
-          priority: existingRules.length + 2,
+          position: existingRules.length + 2,
           conditions: [],
           logic: "AND",
           routeType: "HUMAN",

@@ -6,7 +6,7 @@
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams, CopilotConfigData } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
-import { prisma, buildAgentTools, buildAgentToolsForAIAgent, dispatchToolCall } from "@chatcenter/shared";
+import { prisma, buildAgentTools, buildAgentToolsForAIAgent, dispatchToolCall, publishEvent } from "@chatcenter/shared";
 import type { AgentToolContext } from "@chatcenter/shared";
 import {
   buildAgentPrompt,
@@ -21,13 +21,32 @@ import {
 } from "./behavior-engine.service";
 
 // Terminator tool — copilot uses this to "finish" with structured output.
+//
+// `signals` is OPTIONAL and DELIBERATELY NOISE-INTOLERANT. The default outcome
+// for any inbound is **no signal**. Only emit a signal when the customer's
+// LATEST inbound message contains a clear, quotable phrase that proves the
+// signal — never on tone alone, never on the bot's interpretation, never on
+// trivial messages (one-word replies, emoji-only, < 5 words).
+const SIGNAL_KINDS = [
+  "buy_intent",        // Strong purchase intent: "I want to buy", "let's go ahead", "send me the contract"
+  "strong_objection",  // Hard pushback: "this is not for us", "not interested"
+  "price_objection",   // Cost-specific concern: "too expensive", "out of budget"
+  "hesitation",        // Visible doubt with reason cited: "I'm not sure because…"
+  "rejection",         // Customer is closing the door: "stop messaging me", "no thanks"
+  "urgency",           // Time pressure: "I need this by Friday", "ASAP"
+  "confusion",         // Customer can't follow: "what do you mean?", "I don't understand"
+  "churn_risk",        // Existing-customer dissatisfaction: "I'm cancelling", "this is the last straw"
+] as const;
+
 const SUBMIT_SUGGESTIONS_TOOL = {
   type: "function" as const,
   function: {
     name: "submit_suggestions",
     description:
       "Call this to FINISH and return your final suggestions to the human agent. " +
-      "Call it exactly once, after you've used any read-only tools you need.",
+      "Call it exactly once, after you've used any read-only tools you need. " +
+      "OPTIONAL: include `signals` ONLY when the customer's latest message contains a clearly " +
+      "quotable phrase proving the signal. Default is empty. Never invent signals from tone.",
     parameters: {
       type: "object",
       properties: {
@@ -44,11 +63,130 @@ const SUBMIT_SUGGESTIONS_TOOL = {
             required: ["text", "confidence", "type"],
           },
         },
+        signals: {
+          type: "array",
+          description:
+            "Up to 2 distinct signals from the LATEST customer inbound message. " +
+            "Each MUST quote the exact substring proving it (`evidence`). " +
+            "Set confidence ≥ 0.85 or omit. Empty array (or omitted) is the correct default.",
+          maxItems: 2,
+          items: {
+            type: "object",
+            properties: {
+              kind: { type: "string", enum: [...SIGNAL_KINDS] },
+              severity: { type: "string", enum: ["soft", "strong"] },
+              evidence: {
+                type: "string",
+                description:
+                  "Exact verbatim substring (1–80 chars) from the customer's latest inbound message.",
+              },
+              confidence: { type: "number", description: "0–1 (only ≥ 0.85 will be persisted)" },
+            },
+            required: ["kind", "severity", "evidence", "confidence"],
+          },
+        },
       },
       required: ["suggestions"],
     },
   },
 };
+
+interface MessageSignal {
+  kind: typeof SIGNAL_KINDS[number];
+  severity: "soft" | "strong";
+  evidence: string;
+  confidence: number;
+}
+
+/**
+ * Validate, dedupe and persist signals on the latest inbound message of a conversation.
+ *
+ * Filters applied (defense in depth — the prompt already says these things, but
+ * the model has been known to ignore prompts):
+ *   - confidence < 0.85         → drop
+ *   - evidence not actually present in the message body → drop
+ *   - duplicate kind already on this conversation       → drop
+ *   - inbound body shorter than 5 words                 → all signals dropped
+ *   - more than 2 signals                               → keep top 2 by confidence
+ *
+ * Emits `message:updated` (which the conversation-service relays to the
+ * tenant socket room) so the chat panel renders chips without a refetch.
+ */
+async function persistMessageSignals(
+  tenantId: string,
+  conversationId: string,
+  rawSignals: unknown,
+): Promise<void> {
+  if (!Array.isArray(rawSignals) || rawSignals.length === 0) return;
+  if (!tenantId || !conversationId) return;
+
+  // Find the latest INBOUND text message in the conversation. That's the one
+  // the copilot just analysed.
+  const latestInbound = await prisma.message.findFirst({
+    where: { tenantId, conversationId, direction: "INBOUND", messageType: { not: "system" as any } },
+    orderBy: { createdAt: "desc" },
+    select: { id: true, body: true, metadata: true },
+  });
+  if (!latestInbound?.id || !latestInbound.body) return;
+
+  const wordCount = latestInbound.body.trim().split(/\s+/).filter(Boolean).length;
+  if (wordCount < 5) return;
+
+  const bodyLower = latestInbound.body.toLowerCase();
+
+  const validKinds = new Set<string>(SIGNAL_KINDS as readonly string[]);
+  const seenKinds = new Set<string>();
+  const cleaned: MessageSignal[] = [];
+
+  // Collect kinds already present on EARLIER inbounds in this conversation —
+  // we don't re-flag the same signal across turns.
+  const earlierMessages = await prisma.message.findMany({
+    where: { tenantId, conversationId, direction: "INBOUND", id: { not: latestInbound.id } },
+    select: { metadata: true },
+  });
+  for (const m of earlierMessages) {
+    const sigs = ((m.metadata as any)?.signals ?? []) as Array<{ kind?: string }>;
+    for (const s of sigs) if (s?.kind) seenKinds.add(s.kind);
+  }
+
+  for (const raw of rawSignals as Array<Partial<MessageSignal>>) {
+    if (!raw || typeof raw !== "object") continue;
+    const { kind, severity, evidence } = raw;
+    const confidence = Number(raw.confidence);
+    if (!kind || !validKinds.has(kind)) continue;
+    if (severity !== "soft" && severity !== "strong") continue;
+    if (!evidence || typeof evidence !== "string" || evidence.length < 1 || evidence.length > 80) continue;
+    if (!Number.isFinite(confidence) || confidence < 0.85) continue;
+    if (!bodyLower.includes(evidence.toLowerCase())) continue;
+    if (seenKinds.has(kind)) continue;
+    seenKinds.add(kind);
+    cleaned.push({ kind: kind as MessageSignal["kind"], severity, evidence, confidence });
+  }
+
+  if (cleaned.length === 0) return;
+  cleaned.sort((a, b) => b.confidence - a.confidence);
+  const finalSignals = cleaned.slice(0, 2);
+
+  const mergedMetadata = {
+    ...((latestInbound.metadata as any) ?? {}),
+    signals: finalSignals,
+  };
+
+  await prisma.message.update({
+    where: { id: latestInbound.id },
+    data: { metadata: mergedMetadata as any },
+  });
+
+  publishEvent({
+    event: "message:updated",
+    tenantId,
+    data: {
+      conversationId,
+      messageId: latestInbound.id,
+      patch: { metadata: mergedMetadata },
+    },
+  }).catch(() => { /* fire-and-forget */ });
+}
 
 // Minimal stub agent used when no copilotConfig is present (tests / dev).
 const STUB_COPILOT_AGENT: AgentRecord = {
@@ -219,6 +357,15 @@ export class OpenAIProvider implements AIProvider {
                 confidence: typeof s === "object" ? (s.confidence ?? 0.8) : 0.8,
                 type: (typeof s === "object" ? s.type : "reply") as AISuggestion["type"],
               })).filter((s: AISuggestion) => s.text);
+
+              // Persist intent-signal annotations on the latest inbound message
+              // (best-effort; never blocks the suggestion response).
+              if (parsed.signals !== undefined && context.tenantId && context.conversationId) {
+                persistMessageSignals(context.tenantId, context.conversationId, parsed.signals)
+                  .catch((err: any) =>
+                    console.warn("[copilot] persistMessageSignals failed:", err?.message),
+                  );
+              }
             } catch (err: any) {
               console.warn("[copilot] submit_suggestions JSON parse failed:", err.message);
             }

@@ -585,6 +585,25 @@ export function updateBusinessHours(token: string, data: any) {
   });
 }
 
+// ─── Tenant Settings (default phone country, etc.) ──────────
+
+export function getTenantSettings(token: string) {
+  return apiFetch<{
+    data: {
+      defaultCountryCode: string;
+      supportedCountries: Array<{ code: string; callingCode: string }>;
+    };
+  }>("/api/tenant-settings", { token });
+}
+
+export function updateTenantSettings(token: string, data: { defaultCountryCode: string }) {
+  return apiFetch<{ data: { defaultCountryCode: string } }>("/api/tenant-settings", {
+    token,
+    method: "PATCH",
+    body: JSON.stringify(data),
+  });
+}
+
 // ─── Workload ───────────────────────────────────────────────
 
 export function getAgentWorkload(token: string) {
@@ -1384,6 +1403,35 @@ export function validateBroadcast(token: string, id: string) {
 
 export function cancelBroadcast(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/broadcasts/${id}/cancel`, { token, method: "POST" });
+}
+
+// ─── Audiences ──────────────────────────────────────────────
+
+export function previewAudience(token: string, audience: any) {
+  return apiFetch<{
+    data: {
+      recipients: Array<{ id: string; source: "local" | "crm"; displayName?: string; phone?: string; email?: string; channel?: string }>;
+      total: number;
+      truncated: boolean;
+      reasoning: string[];
+    };
+  }>("/api/audiences/preview", { token, method: "POST", body: JSON.stringify({ audience }) });
+}
+
+export function getAudienceSchema(token: string, module: "leads" | "contacts" | "accounts" | "deals" = "leads") {
+  return apiFetch<{
+    data: {
+      module: string;
+      local: { fields: Array<{ name: string; label: string; type: string; picklist?: string[] }>; scope: string };
+      crm:
+        | { connected: false }
+        | {
+            connected: true;
+            provider: { slug: string; name: string };
+            schema: { module: string; providerModule: string; fields: Array<{ name: string; label: string; type: string; picklist?: string[] }> } | null;
+          };
+    };
+  }>(`/api/audiences/schema?module=${encodeURIComponent(module)}`, { token });
 }
 
 // ─── Scheduled Messages ─────────────────────────────────────

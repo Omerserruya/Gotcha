@@ -1,4 +1,19 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
+
+// Freeze wall-clock time so the hardcoded REQUESTED date below stays inside
+// min_notice (4h) and max_horizon (30d) every time the test runs. Without
+// this, REQUESTED drifts into the past as real time advances. Using fake
+// timers only for system time (setSystemTime) — actual setTimeout is left
+// real so the handler's retry logic still works.
+beforeEach(() => {
+  vi.useFakeTimers({
+    toFake: ["Date"],
+  });
+  vi.setSystemTime(new Date("2026-05-04T06:00:00Z")); // Monday 09:00 IDT
+});
+afterAll(() => {
+  vi.useRealTimers();
+});
 
 // We test the slot_taken race path by stubbing the prisma + adapter modules
 // so the handler runs end-to-end without a database or network. The whole
@@ -92,6 +107,9 @@ beforeEach(() => {
 });
 
 // Tuesday 11:00 IDT — well inside working hours, > minNotice from `nowMs`.
+// Compute requested date dynamically so we land between min_notice (4h) and
+// max_horizon (30 days). +7 days is safely inside the window at any test runtime.
+// Monday 11:00 Asia/Jerusalem — inside fake-now's min_notice & max_horizon.
 const REQUESTED = "2026-05-05T11:00:00+03:00";
 
 describe("schedule_meeting — race-condition retry", () => {

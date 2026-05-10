@@ -196,7 +196,7 @@ describe("executeAction — tool gate HITL integration", () => {
     });
 
     const action: PlannedAction = {
-      tool: "issue_refund",
+      tool: "update_crm",
       params: { orderId: "ord-1", amount: 50 },
       reason: "customer request",
       riskLevel: "high",

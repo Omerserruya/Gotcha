@@ -15,8 +15,7 @@
 
 import { Response } from "express";
 import { IncomingHttpHeaders } from "http";
-import { prisma, publishEvent, getRedis } from "@chatcenter/shared";
-import { getEffectiveCopilotConfig, getSuggestions, ConversationContext } from "./ai-assist.service";
+import { prisma, getRedis } from "@chatcenter/shared";
 import type { VoiceStreamBody } from "../routes/ai-assist-voice";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -30,99 +29,10 @@ interface TranscriptMsg {
   seq: number;
 }
 
-// ─── Debounce state ───────────────────────────────────────────
-
-// Map of `${tenantId}:${conversationId}` → version (Date.now())
-// Kept in-process; works correctly within a single service instance.
-// For multi-instance deployments the Redis key is the authoritative source.
-const debounceVersions = new Map<string, number>();
-
-// ─── scheduleAssistTrigger ────────────────────────────────────
-// Debounces copilot trigger: if another customer final arrives within
-// 1500 ms, the previous timer is voided (version mismatch) and a new
-// one is set.  The Redis key `voice:assist:debounce:{t}:{c}` stores
-// the latest version so timers that fire late detect the staleness.
-
-export async function scheduleAssistTrigger(tenantId: string, conversationId: string, delayMs = 1500): Promise<void> {
-  const redis = getRedis();
-  const debounceKey = `voice:assist:debounce:${tenantId}:${conversationId}`;
-  const ver = Date.now();
-  debounceVersions.set(`${tenantId}:${conversationId}`, ver);
-
-  // Overwrite (no NX) to extend the debounce window on rapid finals.
-  await redis.set(debounceKey, ver.toString(), "EX", 2);
-
-  setTimeout(async () => {
-    try {
-      const cur = await redis.get(debounceKey);
-      if (cur !== String(ver)) return; // superseded by a newer trigger
-      await redis.del(debounceKey);
-      debounceVersions.delete(`${tenantId}:${conversationId}`);
-      await triggerAssist(tenantId, conversationId);
-    } catch (err) {
-      console.error("[voice-assist] debounced trigger error:", err);
-    }
-  }, delayMs);
-}
-
-// ─── triggerAssist ────────────────────────────────────────────
-// Calls the existing ai-assist getSuggestions flow so the copilot
-// panel refreshes after a customer final utterance.
-//
-// Path taken:
-//   1. Load conversation + recent messages from DB
-//   2. getEffectiveCopilotConfig (same call as the suggestions route)
-//   3. getSuggestions — fires the AI provider
-//   4. publishEvent("voice.copilot.suggestions") so the WS layer
-//      can push results to the agent UI without a poll.
-//
-// If no copilot config is found we still publish the event (with
-// empty suggestions) so the frontend knows the request was processed.
-
-async function triggerAssist(tenantId: string, conversationId: string): Promise<void> {
-  try {
-    const conversation = await prisma.conversation.findFirst({
-      where: { id: conversationId, tenantId },
-    });
-    if (!conversation) return;
-
-    const messages = await prisma.message.findMany({
-      where: { conversationId, tenantId },
-      orderBy: { createdAt: "desc" },
-      take: 20,
-      select: { direction: true, body: true, senderName: true, createdAt: true },
-    });
-
-    const copilotConfig = await getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
-
-    let suggestions: any[] = [];
-    if (copilotConfig) {
-      const context: ConversationContext = {
-        tenantId,
-        conversationId,
-        customerName: conversation.customerName || undefined,
-        messages: messages
-          .reverse()
-          .map((m: any) => ({
-            direction: m.direction,
-            body: m.body,
-            senderName: m.senderName || undefined,
-            createdAt: m.createdAt.toISOString(),
-          })),
-        copilotConfig,
-      };
-      suggestions = await getSuggestions(context);
-    }
-
-    await publishEvent({
-      event: "voice.copilot.suggestions",
-      tenantId,
-      data: { conversationId, suggestions },
-    } as any);
-  } catch (err) {
-    console.error("[voice-assist] triggerAssist error:", err);
-  }
-}
+// Phase 4: scheduleAssistTrigger + triggerAssist removed. The Conversation
+// Intelligence Engine (services/ai/src/services/intelligence/) is now the
+// only AI consumer of voice transcripts. The HTTP path below remains for
+// message persistence; AI assist runs from the supervisor on the bus.
 
 // ─── handleVoiceStream ────────────────────────────────────────
 

@@ -147,7 +147,7 @@ router.post("/message", async (req: Request, res: Response) => {
 // GET /api/embedded-chat/messages/:sessionId — Get messages for a session (public)
 router.get("/messages/:sessionId", async (req: Request, res: Response) => {
   try {
-    const { sessionId } = req.params;
+    const sessionId = String(req.params.sessionId ?? "");
     const after = req.query.after as string | undefined;
 
     const conversation = await prisma.conversation.findUnique({

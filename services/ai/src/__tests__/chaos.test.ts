@@ -10,6 +10,7 @@ vi.mock("@chatcenter/shared", () => ({
       update: vi.fn().mockResolvedValue({ id: "c1", tags: ["x"] }),
     },
   },
+  evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
 }));
 
 vi.mock("../services/connectors/types", async () => {

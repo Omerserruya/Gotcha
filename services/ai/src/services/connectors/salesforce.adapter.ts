@@ -135,6 +135,36 @@ const TOOLS: ToolDefinition[] = [
       required: ["Subject"],
     },
   },
+  {
+    name: "salesforce.describe_fields",
+    description: "Return the field schema for a Salesforce sObject (Lead, Contact).",
+    whenToUse: "Audience builder discovery — populates the filter-field picker with real fields, picklist values, and types.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        sobject: { type: "string", description: "Lead | Contact | Account | Opportunity" },
+      },
+      required: ["sobject"],
+    },
+  },
+  {
+    name: "salesforce.search_with_criteria",
+    description: "Search Salesforce records using a SOQL WHERE clause (audience targeting).",
+    whenToUse: "Resolving a broadcast audience by attribute (e.g. LeadSource = 'Web' AND CreatedDate > LAST_N_DAYS:30). The audience resolver in `crm.ts` builds the WHERE clause from generic rules.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        sobject: { type: "string", description: "Lead | Contact" },
+        where: { type: "string", description: "SOQL WHERE clause (without the WHERE keyword)." },
+        limit: { type: "number", description: "Default 200, max 2000." },
+      },
+      required: ["sobject"],
+    },
+  },
 ];
 
 const SalesforceAdapter: ProviderAdapter = {
@@ -202,6 +232,24 @@ const SalesforceAdapter: ProviderAdapter = {
           ...args,
           Status: args.Status || "Completed",
         }));
+      case "describe_fields": {
+        const sobject = String(args.sobject || "Lead");
+        // /sobjects/Lead/describe → { fields: [{name, label, type, picklistValues, ...}] }
+        return await sfRequest(token, "GET", `${base}/sobjects/${encodeURIComponent(sobject)}/describe`);
+      }
+      case "search_with_criteria": {
+        // SOQL via /query?q=... — returns { totalSize, records: [...] }
+        const sobject = String(args.sobject || "Lead");
+        const limit = Math.min(2000, Number(args.limit ?? 200));
+        const fields =
+          sobject === "Lead"
+            ? "Id, FirstName, LastName, Email, Phone, MobilePhone, Company, CreatedDate, LastModifiedDate"
+            : "Id, FirstName, LastName, Email, Phone, MobilePhone, AccountId, CreatedDate, LastModifiedDate";
+        const where = typeof args.where === "string" && args.where.trim() ? `WHERE ${args.where}` : "";
+        const soql = `SELECT ${fields} FROM ${sobject} ${where} LIMIT ${limit}`.replace(/\s+/g, " ").trim();
+        const r: any = await sfRequest(token, "GET", `${base}/query/?q=${encodeURIComponent(soql)}`);
+        return r.records || [];
+      }
       default:
         throw new Error(`unknown_salesforce_tool:${toolName}`);
     }

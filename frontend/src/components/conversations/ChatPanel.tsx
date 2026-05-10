@@ -24,6 +24,7 @@ import { ChannelBadge } from "./ChannelBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
 import { CoPilotPanel } from "./CoPilotPanel";
 import { HistoryPanel } from "./HistoryPanel";
+import { MessageSignals } from "./MessageSignals";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 import { VoiceCallButton } from "@/components/voice/VoiceCallButton";
 
@@ -139,13 +140,26 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       }
     };
 
+    // Copilot annotation event — used to drop intent-signal chips under a
+    // customer message after the suggestion call finishes analysing it.
+    const handleMessageUpdate = (data: any) => {
+      if (data.conversationId !== conversationId) return;
+      setMessages((prev) =>
+        prev.map((m) =>
+          m.id === data.messageId ? { ...m, ...data.patch, metadata: { ...(m.metadata ?? {}), ...(data.patch?.metadata ?? {}) } } : m,
+        ),
+      );
+    };
+
     socket.on("message:new", handleNewMessage);
     socket.on("message:status", handleStatusUpdate);
+    socket.on("message:updated", handleMessageUpdate);
     socket.on("conversation:updated", handleConversationUpdate);
 
     return () => {
       socket.off("message:new", handleNewMessage);
       socket.off("message:status", handleStatusUpdate);
+      socket.off("message:updated", handleMessageUpdate);
       socket.off("conversation:updated", handleConversationUpdate);
     };
   }, [conversationId]);
@@ -429,8 +443,8 @@ export function ChatPanel({ conversationId, onBack }: Props) {
             <div
               key={msg.id}
               className={clsx(
-                "flex",
-                msg.direction === "OUTBOUND" ? "justify-end" : "justify-start"
+                "flex flex-col",
+                msg.direction === "OUTBOUND" ? "items-end" : "items-start"
               )}
             >
               <div
@@ -469,6 +483,9 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                   )}
                 </div>
               </div>
+              {msg.direction === "INBOUND" && (
+                <MessageSignals signals={msg.metadata?.signals} />
+              )}
             </div>
             )
           )}

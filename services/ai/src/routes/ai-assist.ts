@@ -5,6 +5,7 @@ import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
+import { executeAdapterTool } from "../services/connectors/integration-framework";
 import { scoreAgent, getAgentScore } from "../services/agent-performance.service";
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
@@ -541,6 +542,42 @@ router.post("/:conversationId/tools/execute", async (req: Request, res: Response
     console.error("Tool execute error:", err);
     if (err.message === "Tool not found") { res.status(404).json({ error: err.message }); return; }
     res.status(500).json({ error: "Failed to execute tool" });
+  }
+});
+
+/**
+ * Bridge endpoint for adapter-framework providers (HubSpot, Salesforce,
+ * Monday, etc.) — they aren't HTTP-catalog tools, so the shared CRM client
+ * in `packages/shared/lib/crm.ts` reaches them through this endpoint.
+ *
+ * Body: { toolFunctionName: "hubspot.search_with_criteria", args: {...} }
+ *
+ * Returns the adapter result (whatever shape the provider's execute()
+ * function returns) on `data.output`, mirroring the catalog-tool execute
+ * envelope so callers can treat both paths uniformly.
+ */
+router.post("/:conversationId/adapter-tools/execute", async (req: Request, res: Response) => {
+  try {
+    const convId = req.params.conversationId as string;
+    const { toolFunctionName, args } = req.body;
+    if (typeof toolFunctionName !== "string" || !toolFunctionName.includes(".")) {
+      res.status(400).json({ error: "toolFunctionName must be 'provider.tool'" });
+      return;
+    }
+    const result = await executeAdapterTool({
+      tenantId: req.tenantId!,
+      conversationId: convId === "system" ? undefined : convId,
+      toolFunctionName,
+      args: args || {},
+    });
+    if (!result.ok) {
+      res.json({ data: { ok: false, error: result.reason } });
+      return;
+    }
+    res.json({ data: { ok: true, output: result.result } });
+  } catch (err: any) {
+    console.error("Adapter tool execute error:", err);
+    res.status(500).json({ error: "Failed to execute adapter tool" });
   }
 });
 

@@ -80,7 +80,7 @@ export default function OutboundCallPage() {
     }
     searchTimer.current = setTimeout(async () => {
       try {
-        const { data } = await getContacts(token, { q: query.trim(), limit: "8" });
+        const { data } = await getContacts(token, { q: query.trim(), limit: "8", includeCrm: "1" });
         setResults(data || []);
       } catch {
         setResults([]);
@@ -314,7 +314,9 @@ function PhoneCallUI(props: {
   return (
     <div
       className={clsx(
-        "relative h-full w-full flex flex-col text-gray-100 overflow-hidden md:rounded-2xl shadow-subtle transition-opacity duration-500 ease-out",
+        // Lock to viewport so a long transcript scrolls inside the
+        // teleprompter pane instead of pushing the controls off-screen.
+        "relative h-[100dvh] max-h-[100dvh] w-full flex flex-col text-gray-100 overflow-hidden md:rounded-2xl shadow-subtle transition-opacity duration-500 ease-out",
         mounted ? "opacity-100" : "opacity-0"
       )}
       style={{ background: "linear-gradient(135deg, #05070d 0%, #0f172a 50%, #05070d 100%)" }}

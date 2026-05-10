@@ -27,7 +27,13 @@ import agentRoutes from "./routes/agent";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
-import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
+import { startLiveRunnerSupervisor } from "./services/intelligence";
+import {
+  startPostCallQAWorker,
+  startPostCallQATrigger,
+  startPostCallAnalyzeWorker,
+} from "./workers/post-call";
+import postCallRoutes from "./routes/post-call";
 // Register all provider adapters at startup. Imports trigger
 // registerAdapter() side-effects in each connector file.
 import "./services/connectors";
@@ -84,10 +90,26 @@ app.use("/api/tool-permissions", toolPermissionRoutes);
 app.use("/api/ai-debug", aiDebugRoutes);
 app.use("/api/ai-bot", aiBotRoutes);
 app.use("/api/agent", agentRoutes);
+app.use("/api", postCallRoutes);
 
-// Hook AI copilot into voice-copilot's transcript pub/sub. Fires the
-// debounced suggestions pipeline on every customer-final utterance.
-startVoiceCopilotSubscriber();
+// Phase 4: legacy voice-copilot-subscriber removed. The Conversation
+// Intelligence Engine supervisor is now the only AI consumer of voice
+// session events — it maps voice.session.* to per-call LiveAnalysisRunner
+// instances that emit structured ConversationStateFrames.
+startLiveRunnerSupervisor();
+
+// Phase 5: Post-Call Mode A QA. Trigger enqueues a QA job on every
+// voice.session.ended; worker scores against persisted CallAnalysis.frames,
+// writes a QAScore row, emits qa.scored. Independent of the live path —
+// can fail without affecting active calls.
+startPostCallQAWorker();
+startPostCallQATrigger();
+
+// Phase 6: Post-Call Mode B (async analysis). Worker drives the analyze
+// queue: drained from POST /api/post-call/analyze submissions. V1 supports
+// pasted transcripts via UploadedTranscriptSource; recording-URL ingest
+// requires a WhisperClient implementation (Phase 6.x).
+startPostCallAnalyzeWorker();
 
 startService(app, config);
 export { app };

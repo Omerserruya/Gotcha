@@ -10,18 +10,20 @@
 
 import { describe, it, expect, vi } from "vitest";
 
-vi.mock("../../../../packages/shared/src/lib/prisma", () => {
-  return {
-    prisma: {
-      tenantTool: { findFirst: vi.fn(), findUnique: vi.fn() },
-      tenantToolPermission: { findUnique: vi.fn().mockResolvedValue(null) },
-      agentToolPermission: { findFirst: vi.fn().mockResolvedValue(null) },
-    },
-  };
-});
+// Mock the prisma module that tool-gate.ts internally imports via its
+// relative `./prisma` path. The string here is the resolved absolute module
+// id; vitest catches both this deep reference AND the package re-export so
+// the test's `import { prisma } from "@chatcenter/shared"` below sees the
+// same mocked object. String-literal — no TS path resolution constraint.
+vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
+  prisma: {
+    tenantTool: { findFirst: vi.fn(), findUnique: vi.fn() },
+    tenantToolPermission: { findUnique: vi.fn().mockResolvedValue(null) },
+    agentToolPermission: { findFirst: vi.fn().mockResolvedValue(null) },
+  },
+}));
 
-const { evaluatePolicies } = await import("../../../../packages/shared/src/lib/tool-gate");
-const { prisma } = await import("../../../../packages/shared/src/lib/prisma");
+import { evaluatePolicies, prisma } from "@chatcenter/shared";
 
 describe("tool-gate adapter-tool routing", () => {
   it("RESOLVES `stripe.refund_payment` against catalog by integration+slug", async () => {

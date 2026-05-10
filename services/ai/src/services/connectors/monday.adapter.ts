@@ -120,6 +120,41 @@ const TOOLS: ToolDefinition[] = [
       required: ["item_id", "body"],
     },
   },
+  {
+    name: "monday.describe_fields",
+    description: "Return the column schema for the leads or contacts board.",
+    whenToUse: "Powering the audience builder's filter-field picker for Monday tenants. Reads `config.leadsBoardId` / `config.contactsBoardId` to know which board's columns are the schema.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        object: { type: "string", enum: ["leads", "contacts"], description: "Whose board to describe." },
+        board_id: { type: "string", description: "Override — defaults to leadsBoardId/contactsBoardId from config." },
+      },
+      required: ["object"],
+    },
+  },
+  {
+    name: "monday.search_with_criteria",
+    description: "Search items on the leads/contacts board by structured column rules.",
+    whenToUse: "Resolving a broadcast audience by board column values. The audience resolver builds the column_rules array from generic rules in `crm.ts`.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        object: { type: "string", enum: ["leads", "contacts"] },
+        board_id: { type: "string", description: "Override — defaults to config.leadsBoardId/contactsBoardId." },
+        column_rules: {
+          type: "array",
+          description: "Array of {column_id, compare_value, operator?} matching Monday's items_page_by_column_values input.",
+        },
+        limit: { type: "number", description: "Default 200, max 500." },
+      },
+      required: ["object"],
+    },
+  },
 ];
 
 const MondayAdapter: ProviderAdapter = {
@@ -223,6 +258,68 @@ const MondayAdapter: ProviderAdapter = {
         }`;
         const r: any = await mondayGql(token, q, { itemId: String(args.item_id), body: String(args.body) });
         return r.data?.create_update;
+      }
+      case "describe_fields": {
+        // Pick the operator-configured board for the requested object,
+        // otherwise fall back to defaultBoardId. The audience builder
+        // surfaces this as "Lead schema (board: <name>)" so the operator
+        // knows where the fields come from.
+        const obj = String(args.object || "leads").toLowerCase();
+        const cfgBoard = obj === "contacts"
+          ? (config.contactsBoardId || config.leadsBoardId)
+          : (config.leadsBoardId || config.contactsBoardId);
+        const target = args.board_id || cfgBoard || defaultBoardId;
+        if (!target) throw new Error("no_board_configured: set config.leadsBoardId / config.contactsBoardId on the integration");
+        const q = `query($id: [ID!]!) {
+          boards(ids: $id) {
+            id name
+            columns { id title type settings_str }
+          }
+        }`;
+        const r: any = await mondayGql(token, q, { id: [String(target)] });
+        const board = r.data?.boards?.[0];
+        if (!board) return { board: null, columns: [] };
+        return {
+          board: { id: board.id, name: board.name },
+          columns: board.columns || [],
+        };
+      }
+      case "search_with_criteria": {
+        const obj = String(args.object || "leads").toLowerCase();
+        const cfgBoard = obj === "contacts"
+          ? (config.contactsBoardId || config.leadsBoardId)
+          : (config.leadsBoardId || config.contactsBoardId);
+        const target = args.board_id || cfgBoard || defaultBoardId;
+        if (!target) throw new Error("no_board_configured: set config.leadsBoardId / config.contactsBoardId on the integration");
+        const limit = Math.min(500, Number(args.limit ?? 200));
+        const rules = Array.isArray(args.column_rules) ? args.column_rules : [];
+        if (rules.length === 0) {
+          // No column rules — fall back to listing the board's items.
+          const q = `query($id: [ID!]!, $limit: Int!) {
+            boards(ids: $id) {
+              items_page(limit: $limit) {
+                items { id name column_values { id text value } }
+              }
+            }
+          }`;
+          const r: any = await mondayGql(token, q, { id: [String(target)], limit });
+          return r.data?.boards?.[0]?.items_page?.items || [];
+        }
+        // Use items_page_by_column_values for filtered queries.
+        const q = `query($boardId: ID!, $columns: [ItemsPageByColumnValuesQuery!]!, $limit: Int!) {
+          items_page_by_column_values(board_id: $boardId, columns: $columns, limit: $limit) {
+            items { id name column_values { id text value } }
+          }
+        }`;
+        const r: any = await mondayGql(token, q, {
+          boardId: String(target),
+          columns: rules.map((cr: any) => ({
+            column_id: String(cr.column_id),
+            column_values: Array.isArray(cr.values) ? cr.values.map(String) : [String(cr.compare_value ?? "")],
+          })),
+          limit,
+        });
+        return r.data?.items_page_by_column_values?.items || [];
       }
       default:
         throw new Error(`unknown_monday_tool:${toolName}`);

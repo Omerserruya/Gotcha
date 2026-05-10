@@ -9,6 +9,7 @@ vi.mock("@chatcenter/shared", () => ({
       update: vi.fn().mockResolvedValue({ id: "c1", tags: ["vip", "churn"] }),
     },
   },
+  evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
 }));
 
 import { validateAction, executeAction, PlannedAction } from "../services/action-executor.service";

@@ -184,5 +184,12 @@ export const ZOHO_DEFAULT_SCOPES = [
   "ZohoCRM.modules.notes.ALL",
   "ZohoCRM.users.READ",
   "ZohoCRM.settings.tags.ALL",
+  // Required for the audience builder's "load CRM schema" picker — lets
+  // the server enumerate fields per module (Leads/Contacts/etc.) so the
+  // operator can pick a field to filter on. Tenants connected before
+  // this scope was added must reconnect once to receive a token with
+  // it (Zoho doesn't grant new scopes on refresh — only on a fresh
+  // OAuth grant).
+  "ZohoCRM.settings.fields.READ",
   "offline_access",
 ].join(",");

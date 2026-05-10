@@ -80,7 +80,7 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
         userId: input.metadata?.userId,
       },
     };
-    await getQ().add(input.type, event, { ...DEFAULT_OPTS, jobId: `evt:${event.id}` });
+    await getQ().add(input.type, event, { ...DEFAULT_OPTS, jobId: `evt-${event.id}` });
   } catch (err: any) {
     console.warn("[notifications.emit] failed:", err?.message);
   }

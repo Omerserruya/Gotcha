@@ -34,7 +34,10 @@ const { prismaMock } = vi.hoisted(() => ({
   },
 }));
 
-vi.mock("@chatcenter/shared", () => ({ prisma: prismaMock }));
+vi.mock("@chatcenter/shared", () => ({
+  prisma: prismaMock,
+  evaluateToolGate: vi.fn().mockResolvedValue({ decision: "ALLOW", reason: "test default" }),
+}));
 
 import { executeAction, PlannedAction } from "../services/action-executor.service";
 

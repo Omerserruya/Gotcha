@@ -11,6 +11,7 @@ const settingsNav = [
   { href: "/settings/agents", labelKey: "nav.agents", icon: AgentsIcon },
   { href: "/settings/departments", labelKey: "nav.departments", icon: DepartmentsIcon },
   { href: "/settings/channels", labelKey: "nav.channels", icon: ChannelsIcon },
+  { href: "/settings/integrations", labelKey: "settings.nav.integrations", icon: IntegrationsIcon },
   { href: "/settings/usage", labelKey: "nav.usage", icon: UsageIcon },
   { href: "/settings/policy", labelKey: "settings.nav.policy", icon: PolicyIcon },
   { href: "/settings/tools", labelKey: "settings.nav.tools", icon: ToolsIcon },
@@ -156,6 +157,14 @@ function NotificationsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+    </svg>
+  );
+}
+
+function IntegrationsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14 6.34A4 4 0 1117.66 10M9.66 14A4 4 0 1113 17.66M3 10h2m14 0h2M10 3v2m4 14v2M5.5 5.5l1.42 1.42m10.16 10.16l1.42 1.42m0-13l-1.42 1.42M5.5 18.5l1.42-1.42" />
     </svg>
   );
 }

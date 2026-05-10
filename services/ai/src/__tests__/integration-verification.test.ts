@@ -10,6 +10,7 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { prisma } from "@chatcenter/shared";
 import {
   executeAdapterTool,
   idempotencyKey,
@@ -40,8 +41,6 @@ vi.mock("@chatcenter/shared", async () => {
     decryptCredentials: (x: any) => (typeof x === "string" ? JSON.parse(x) : x),
   };
 });
-
-const { prisma } = await import("@chatcenter/shared");
 
 function mockConnected(slug: string, credentials: any, config: any = {}) {
   (prisma as any).tenantIntegration.findFirst.mockResolvedValue({

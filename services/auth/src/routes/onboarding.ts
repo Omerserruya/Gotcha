@@ -718,7 +718,7 @@ router.get("/agent-config/:departmentId", requireRole("ADMIN"), async (req: Requ
     // Find AI agent assigned to this department via router rules
     const rule = await prisma.routerRule.findFirst({
       where: { tenantId: req.tenantId!, routeType: "AI_AGENT", aiAgentId: { not: null }, enabled: true, routeTarget: departmentId },
-      orderBy: { priority: "asc" },
+      orderBy: { position: "asc" },
     });
     if (!rule?.aiAgentId) {
       res.status(404).json({ error: "No AI Employee assigned to this department" });

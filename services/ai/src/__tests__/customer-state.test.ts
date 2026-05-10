@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from "vitest";
 
 vi.mock("@chatcenter/shared", () => ({
+  findSiblingContacts: vi.fn().mockResolvedValue([]),
   prisma: {
     contact: {
       findFirst: vi.fn().mockResolvedValue({

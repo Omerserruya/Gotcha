@@ -199,6 +199,40 @@ const TOOLS: ToolDefinition[] = [
       required: ["query"],
     },
   },
+  {
+    name: "hubspot.describe_fields",
+    description: "Return the property schema for a HubSpot object (leads or contacts).",
+    whenToUse: "Powering the audience builder's filter-field dropdown so operators can build segments using real CRM properties (Lead Source, Lifecycle Stage, custom fields).",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        object: { type: "string", enum: ["leads", "contacts"], description: "Which object's schema to fetch." },
+      },
+      required: ["object"],
+    },
+  },
+  {
+    name: "hubspot.search_with_criteria",
+    description: "Search HubSpot leads/contacts using HubSpot's structured filterGroups syntax.",
+    whenToUse: "Resolving a broadcast audience by attribute (e.g. lifecyclestage='lead' AND lastmodifieddate within 30d). Pass either `query` (free-text), `filterGroups` (HubSpot's array of {filters:[{propertyName,operator,value,values?}]}), or both.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        object: { type: "string", enum: ["leads", "contacts"], description: "Which object to search." },
+        query: { type: "string" },
+        filterGroups: {
+          type: "array",
+          description: "HubSpot filterGroups — each group's filters are AND'd; groups themselves are OR'd.",
+        },
+        limit: { type: "number", description: "Default 100, max 200." },
+      },
+      required: ["object"],
+    },
+  },
 ];
 
 const HubSpotAdapter: ProviderAdapter = {
@@ -339,6 +373,37 @@ const HubSpotAdapter: ProviderAdapter = {
           query: args.query,
           limit,
         });
+        return (r as any).results || [];
+      }
+      case "describe_fields": {
+        // HubSpot Properties API — returns { results: [{ name, label, type, fieldType, options[], ... }] }.
+        // Object must be lowercase per HubSpot's REST conventions.
+        const obj = String(args.object || "contacts").toLowerCase();
+        if (obj !== "contacts" && obj !== "leads") {
+          throw new Error(`hubspot.describe_fields: unsupported object "${obj}"`);
+        }
+        return await hsRequest(token, "GET", `/crm/v3/properties/${obj}`, null);
+      }
+      case "search_with_criteria": {
+        // POST /crm/v3/objects/{object}/search with HubSpot's structured
+        // filterGroups + limit. The audience resolver builds filterGroups
+        // from generic rules in `crm.ts`.
+        const obj = String(args.object || "contacts").toLowerCase();
+        if (obj !== "contacts" && obj !== "leads") {
+          throw new Error(`hubspot.search_with_criteria: unsupported object "${obj}"`);
+        }
+        const limit = Math.min(200, Number(args.limit ?? 100));
+        const body: Record<string, unknown> = { limit };
+        if (Array.isArray(args.filterGroups) && args.filterGroups.length > 0) {
+          body.filterGroups = args.filterGroups;
+        }
+        if (typeof args.query === "string" && args.query.trim()) {
+          body.query = args.query.trim();
+        }
+        // Project the standard identity properties so callers always get
+        // name/email/phone back without a follow-up GET.
+        body.properties = ["firstname", "lastname", "email", "phone", "mobilephone", "company", "createdate", "lastmodifieddate"];
+        const r = await hsRequest(token, "POST", `/crm/v3/objects/${obj}/search`, body);
         return (r as any).results || [];
       }
       default:

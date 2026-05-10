@@ -1,43 +1,81 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, outgoingMessageQueue } from "@chatcenter/shared";
+import {
+  prisma,
+  authenticate,
+  resolveTenant,
+  requireActiveTenant,
+  requireRole,
+  outgoingMessageQueue,
+  searchLeads as crmSearchLeads,
+  searchContacts as crmSearchContacts,
+  getConnectedCrm,
+  type CrmRecord,
+} from "@chatcenter/shared";
 
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
-// GET / - Search/list contacts
+// GET / - Search contacts in the connected CRM only.
+//
+// Query params:
+//   q       search across name / phone / email
+//   limit   max rows (default 20)
+//
+// CRM is the source of truth for people-data. The platform's local Contact
+// table is a write-side cache populated by inbound conversations; it is
+// not surfaced through this endpoint anymore. When no CRM is connected
+// the endpoint returns an empty list.
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const { q, channel, page, limit } = req.query;
-    const pageNum = page ? parseInt(page as string, 10) : 1;
+    const { q, limit } = req.query;
     const limitNum = limit ? parseInt(limit as string, 10) : 20;
-    const skip = (pageNum - 1) * limitNum;
+    const queryStr = typeof q === "string" ? q.trim() : "";
 
-    const where: any = { tenantId: req.tenantId! };
-
-    if (channel) {
-      where.channel = channel as string;
+    const crm = await getConnectedCrm(req.tenantId!);
+    if (!crm || !queryStr) {
+      res.json({
+        data: [],
+        meta: { total: 0, page: 1, limit: limitNum, crmIncluded: !!crm },
+      });
+      return;
     }
 
-    if (q) {
-      where.OR = [
-        { displayName: { contains: q as string, mode: "insensitive" } },
-        { phone: { contains: q as string, mode: "insensitive" } },
-        { email: { contains: q as string, mode: "insensitive" } },
-        { externalId: { contains: q as string, mode: "insensitive" } },
-      ];
-    }
+    const looksLikeEmail = /@/.test(queryStr);
+    const looksLikePhone = /^[+\d\s\-()]+$/.test(queryStr);
+    const args = looksLikeEmail
+      ? { email: queryStr }
+      : looksLikePhone
+        ? { phone: queryStr }
+        : { name: queryStr };
 
-    const [contacts, total] = await Promise.all([
-      prisma.contact.findMany({
-        where,
-        orderBy: { lastSeenAt: "desc" },
-        skip,
-        take: limitNum,
-      }),
-      prisma.contact.count({ where }),
+    const [leads, contactsCrm] = await Promise.all([
+      crmSearchLeads(req.tenantId!, args).catch(() => [] as CrmRecord[]),
+      crmSearchContacts(req.tenantId!, args).catch(() => [] as CrmRecord[]),
     ]);
 
-    res.json({ data: contacts, meta: { total, page: pageNum, limit: limitNum } });
+    // Dedupe across leads + contacts by phone/email (a person can be
+    // filed in both modules in some CRMs).
+    const seen = new Set<string>();
+    const rows: any[] = [];
+    for (const r of [...leads, ...contactsCrm]) {
+      const key = (r.email || r.phone || r.id || "").toLowerCase();
+      if (key && seen.has(key)) continue;
+      if (key) seen.add(key);
+      rows.push({
+        id: r.id,
+        source: "crm",
+        displayName: r.name,
+        phone: r.phone,
+        email: r.email,
+        company: r.company,
+      });
+      if (rows.length >= limitNum) break;
+    }
+
+    res.json({
+      data: rows,
+      meta: { total: rows.length, page: 1, limit: limitNum, crmIncluded: true },
+    });
   } catch (err) {
     console.error("List contacts error:", err);
     res.status(500).json({ error: "Failed to list contacts" });

@@ -78,6 +78,12 @@ model Tenant {
   createdAt DateTime     @default(now()) @map("created_at")
   updatedAt DateTime     @updatedAt @map("updated_at")
 
+  // ISO-3166-1 alpha-2 country code used to normalize bare phone numbers
+  // (e.g. "0501234567" without a leading "+") into E.164 before they're
+  // stored as a broadcast recipient externalId or sent through the
+  // outbound pipeline. Default "IL" matches the launch market.
+  defaultCountryCode String @default("IL") @map("default_country_code")
+
   // Feature flags (set by SYSTEM_ADMIN)
   botEnabled           Boolean  @default(false) @map("bot_enabled")
   botType              BotType? @map("bot_type")
@@ -113,6 +119,11 @@ model Tenant {
   flowCanvas        FlowCanvas?
   notificationPreferences NotificationPreference[]
   inAppNotifications      InAppNotification[]
+  voiceCallSessions       VoiceCallSession[]
+  callAnalyses            CallAnalysis[]
+  callPlaybooks           CallPlaybook[]
+  missingFieldDefinitions MissingFieldDefinition[]
+  toolExecutionRequests   ToolExecutionRequest[]
 
   @@index([status])
   @@map("tenants")
@@ -269,8 +280,10 @@ model Conversation {
   assignedAgent  User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
   department     Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
   chatbotFlow    ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
-  messages       Message[]
-  intelligence   ConversationIntelligence?
+  messages          Message[]
+  intelligence      ConversationIntelligence?
+  voiceCallSession  VoiceCallSession?
+  callAnalysis      CallAnalysis?
 
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])
@@ -1345,6 +1358,8 @@ model Broadcast {
   body             String? // for non-template messages
   variables        Json            @default("{}") // template variable values
   flowId           String?         @map("flow_id") // trigger flow for each recipient
+  // Audience definition (manual chips / filter rules / everyone) — resolved at send time.
+  audience         Json?
   status           BroadcastStatus @default(DRAFT)
   scheduledAt      DateTime?       @map("scheduled_at")
   startedAt        DateTime?       @map("started_at")
@@ -1380,6 +1395,12 @@ model BroadcastRecipient {
   broadcastId String    @map("broadcast_id")
   contactId   String?   @map("contact_id")
   externalId  String    @map("external_id") // phone/PSID/email
+  // Per-recipient resolved template variable values, snapshotted at
+  // materialize time. Resolved from Broadcast.variables (a mapping spec
+  // like {"1": {source:"crm", field:"First_Name"}}) against the
+  // recipient's CRM record. Worker reads this verbatim — no CRM call
+  // at send time.
+  variables   Json?
   messageId   String?   @map("message_id") // outgoing message ID after send
   status      String    @default("pending") // pending, sent, delivered, read, replied, failed
   error       String?
@@ -1869,4 +1890,201 @@ model CustomDbQueryTool {
   @@index([tenantId, isActive])
   @@index([tenantId, providerSlug])
   @@map("custom_db_query_tools")
+}
+
+// ─── Voice Call Session (Phase 2) ──────────────────────────────
+//
+// Durable per-call lifecycle distinct from Conversation. A Conversation can
+// have multiple call attempts (transfer, callback) and we need per-call
+// durable state that survives WS drops. The runtime layer
+// (services/voice-copilot) will write these rows in Phase 3.
+
+model VoiceCallSession {
+  id              String    @id @default(cuid())
+  callSid         String    @unique @map("call_sid")
+  conversationId  String    @unique @map("conversation_id")
+  tenantId        String    @map("tenant_id")
+  agentId         String?   @map("agent_id")
+  customerId      String?   @map("customer_id")
+  customerNumber  String    @map("customer_number")
+  agentNumber     String?   @map("agent_number")
+  direction       String // "inbound" | "outbound"
+  status          String // "ringing" | "in-progress" | "completed" | "failed" | "no-answer"
+  startedAt       DateTime  @default(now()) @map("started_at")
+  answeredAt      DateTime? @map("answered_at")
+  endedAt         DateTime? @map("ended_at")
+  durationMs      Int?      @map("duration_ms")
+  recordingUrl    String?   @map("recording_url")
+  recordingStatus String?   @map("recording_status") // "pending" | "available" | "failed"
+  endReason       String?   @map("end_reason")
+  meta            Json?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, startedAt])
+  @@index([agentId, startedAt])
+  @@map("voice_call_sessions")
+}
+
+// ─── Call Analysis (Phase 2) ───────────────────────────────────
+//
+// Stores the stream of ConversationStateFrames emitted by the intelligence
+// engine. One row per conversation. Live mode appends frames during the
+// call; QA / Async modes write at completion. The frames JSONB is the
+// source of truth for both the live UI replay and the post-call analyzers.
+
+model CallAnalysis {
+  id             String    @id @default(cuid())
+  conversationId String    @unique @map("conversation_id")
+  callSid        String?   @unique @map("call_sid")
+  tenantId       String    @map("tenant_id")
+  mode           String // "live" | "qa" | "async"
+  status         String // "running" | "completed" | "failed"
+  frames         Json      @default("[]") // ConversationStateFrame[]
+  rollingSummary String?   @map("rolling_summary")
+  finalSummary   String?   @map("final_summary")
+  startedAt      DateTime  @default(now()) @map("started_at")
+  completedAt    DateTime? @map("completed_at")
+  meta           Json?
+
+  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  qaScores     QAScore[]
+
+  @@index([tenantId, startedAt])
+  @@index([conversationId])
+  @@map("call_analyses")
+}
+
+// ─── Call Playbook (Phase 2) ───────────────────────────────────
+//
+// Tenant-configurable conversation guidance. Each playbook contains ordered
+// stages (greeting → discovery → ... → close). The StageClassifier in the
+// intelligence engine maps live transcript to a current stage; the prompt
+// assembler injects the active stage's hints into the LLM call.
+
+model CallPlaybook {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  active      Boolean  @default(true)
+  version     Int      @default(1)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  stages CallPlaybookStage[]
+
+  @@unique([tenantId, name, version])
+  @@index([tenantId, active])
+  @@map("call_playbooks")
+}
+
+model CallPlaybookStage {
+  id             String   @id @default(cuid())
+  playbookId     String   @map("playbook_id")
+  ordinal        Int
+  name           String
+  description    String
+  /// Natural-language description; the StageClassifier reads it.
+  exitCriteria   String   @map("exit_criteria")
+  /// Field names from MissingFieldDefinition required to leave this stage.
+  requiredFields String[] @map("required_fields")
+  /// Tenant-authored stage hints injected into prompt when this stage is active.
+  prompts        Json?
+
+  playbook CallPlaybook @relation(fields: [playbookId], references: [id], onDelete: Cascade)
+
+  @@unique([playbookId, ordinal])
+  @@map("call_playbook_stages")
+}
+
+// ─── Missing Field Definition (Phase 2) ────────────────────────
+//
+// Per-tenant required slots the MissingFieldExtractor checks against. Field
+// path is dotted (e.g. "customer.budget", "deal.timeframe") so analyzers can
+// resolve into structured CRM data without a model migration per slot.
+
+model MissingFieldDefinition {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  /// Dotted path: "customer.budget", "deal.timeframe".
+  field           String
+  label           String
+  description     String?
+  required        Boolean  @default(true)
+  /// Empty array = applies to every stage. CallPlaybookStage IDs otherwise.
+  appliesToStages String[] @map("applies_to_stages")
+  /// Suggested phrasing for the rep when prompting for this field.
+  hintQuestion    String?  @map("hint_question")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, field])
+  @@map("missing_field_definitions")
+}
+
+// ─── Tool Execution Request (Phase 2) ──────────────────────────
+//
+// Renamed from doc's "ToolExecution" to avoid collision with the existing
+// ToolExecution model (which is a successful-execution log, not a lifecycle
+// record). The ActionOrchestrator (Phase 4) writes these rows for the full
+// proposed → approved → running → completed/failed/denied lifecycle.
+
+model ToolExecutionRequest {
+  id             String    @id @default(cuid())
+  conversationId String    @map("conversation_id")
+  tenantId       String    @map("tenant_id")
+  /// {mode: "chat"|"live"|"post-call", system: string}
+  proposedBy     Json      @map("proposed_by")
+  /// {agentId: string}
+  actor          Json
+  tool           String
+  args           Json      @default("{}")
+  rationale      String
+  /// "proposed" | "approved" | "running" | "completed" | "denied" | "failed"
+  status         String
+  result         Json?
+  error          String?
+  attempts       Int       @default(0)
+  proposedAt     DateTime  @default(now()) @map("proposed_at")
+  decidedAt      DateTime? @map("decided_at")
+  startedAt      DateTime? @map("started_at")
+  completedAt   DateTime?  @map("completed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId, proposedAt])
+  @@index([tenantId, status])
+  @@map("tool_execution_requests")
+}
+
+// ─── QA Score (Phase 2 — Mode A output) ────────────────────────
+//
+// Mode A walks persisted CallAnalysis.frames and scores them against
+// playbook compliance, coaching opportunities, and risk. refLiveFrameVersions
+// makes every score auditable back to specific live frames.
+
+model QAScore {
+  id                      String   @id @default(cuid())
+  callAnalysisId          String   @map("call_analysis_id")
+  conversationId          String   @map("conversation_id")
+  rubricVersion           String   @map("rubric_version")
+  playbookComplianceScore Float    @map("playbook_compliance_score")
+  coachingScore           Float    @map("coaching_score")
+  riskScore               Float    @map("risk_score")
+  /// Finding[] — {kind, refUtteranceIds, note}
+  findings                Json     @default("[]")
+  refLiveFrameVersions    Int[]    @map("ref_live_frame_versions")
+  scoredAt                DateTime @default(now()) @map("scored_at")
+
+  callAnalysis CallAnalysis @relation(fields: [callAnalysisId], references: [id], onDelete: Cascade)
+
+  @@index([conversationId])
+  @@index([scoredAt])
+  @@map("qa_scores")
 }

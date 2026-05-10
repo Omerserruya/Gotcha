@@ -121,5 +121,47 @@ export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 
+// Shared CRM client — used by AI tools, outbound, broadcast, and any
+// caller that needs CRM lookup/segmentation. Provider-agnostic.
+export {
+  getConnectedCrm,
+  searchLeads,
+  searchContacts,
+  getContactByPhone,
+  getContactByEmail,
+  getCrmSchema,
+} from "./lib/crm";
+export type {
+  CrmRecord,
+  CrmConnection,
+  CrmLookupArgs,
+  CrmFieldDef,
+  CrmFieldType,
+  CrmModuleSchema,
+} from "./lib/crm";
+
+// Audience resolver — explicit targeting for outbound/broadcast.
+export { resolveAudience, previewAudience } from "./lib/audience";
+export type {
+  AudienceDefinition,
+  AudienceFilter,
+  AudienceFilterGroup,
+  AudienceResolveResult,
+  FilterOp,
+  ResolvedRecipient,
+} from "./lib/audience";
+
+// Conversation intelligence schemas (canonical shapes shared across services + frontend)
+export {
+  TranscriptUtteranceSchema,
+  type TranscriptUtterance,
+} from "./schemas/transcript";
+export {
+  ConversationStateFrameSchema,
+  type ConversationStateFrame,
+} from "./schemas/conversation-frame";
+
+export { normalizePhone, isValidPhone, listSupportedCountries } from "./lib/phone";
+
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

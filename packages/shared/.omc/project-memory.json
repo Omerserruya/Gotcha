@@ -143,6 +143,12 @@
       "accessCount": 1,
       "lastAccessed": 1777579858065,
       "type": "file"
+    },
+    {
+      "path": "prisma/migrations/20260507500000_intelligence_phase2_models/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1778167925029,
+      "type": "file"
     }
   ],
   "userDirectives": []

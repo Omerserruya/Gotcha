@@ -1,6 +1,18 @@
 "use client";
 
-import { useState, useEffect, useRef, useCallback } from "react";
+/**
+ * Broadcasts page — newsletter / mass-message composer.
+ *
+ * 3-step wizard (Compose → Audience → Schedule & send) with the audience
+ * step doing the heavy lifting: chips + schema-aware rules + live count
+ * + preview drawer all in one pane. Validation has been folded into the
+ * audience step's live count (the previous separate "validate" page was
+ * a friction point and could only ever say what the audience step
+ * already shows).
+ */
+
+import { useState, useEffect, useCallback, useMemo } from "react";
+import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
@@ -8,17 +20,25 @@ import {
   createBroadcast,
   updateBroadcast,
   sendBroadcast,
-  validateBroadcast,
   cancelBroadcast,
   deleteBroadcast,
   getTemplates,
   getChannelAccounts,
   addBroadcastRecipients,
+  getAudienceSchema,
 } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 import { getSocket } from "@/lib/socket";
-import clsx from "clsx";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
+import { CrmVarPicker } from "@/components/broadcasts/CrmVarPicker";
+import {
+  AudienceBuilder,
+  buildAudienceDefinition,
+  emptyAudience,
+  type AudienceState,
+  type PickedContact,
+} from "@/components/broadcasts/AudienceBuilder";
+import { SchedulePicker } from "@/components/broadcasts/SchedulePicker";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -40,6 +60,7 @@ interface Broadcast {
   failedCount: number;
   lastError?: string | null;
   createdAt: string;
+  audience?: any;
 }
 
 interface ChannelAccount {
@@ -50,30 +71,25 @@ interface ChannelAccount {
   externalId?: string;
 }
 
-type SegmentField = "channel" | "tag" | "phone" | "email" | "lastSeenAfter";
-type SegmentOperator = "equals" | "contains" | "startsWith";
-
-interface SegmentRule {
-  id: string;
-  field: SegmentField;
-  operator: SegmentOperator;
-  value: string;
-}
-
-type RecipientTab = "segment" | "import" | "all";
+/** Per-template-variable mapping. Backend resolves at materialize time:
+ *  - {source:"crm",field:"First_Name"} → recipient.raw["First_Name"]
+ *  - {source:"static",value:"Hi"}      → same value for everyone */
+type VariableMapping =
+  | { source: "static"; value: string }
+  | { source: "crm"; field: string };
 
 interface WizardState {
-  // Step 1
+  // Compose
   name: string;
   channel: string;
   channelAccountId: string;
   templateId: string;
   body: string;
-  // Step 2
-  recipientTab: RecipientTab;
-  segmentRules: SegmentRule[];
-  importText: string;
-  // Step 3
+  /** Mapping spec keyed by template variable id ("1", "2", … or named). */
+  variables: Record<string, VariableMapping>;
+  // Audience
+  audience: AudienceState;
+  // Schedule
   sendNow: boolean;
   scheduledAt: string;
 }
@@ -92,27 +108,16 @@ const STATUS_BADGES: Record<string, string> = {
 const inputCls =
   "w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition";
 
-const selectCls = inputCls;
-
-const SEGMENT_FIELDS: { value: SegmentField; label: string }[] = [
-  { value: "channel", label: "outbound.broadcasts.segmentFieldChannel" },
-  { value: "tag", label: "outbound.broadcasts.segmentFieldTag" },
-  { value: "phone", label: "outbound.broadcasts.segmentFieldPhone" },
-  { value: "email", label: "outbound.broadcasts.segmentFieldEmail" },
-  { value: "lastSeenAfter", label: "outbound.broadcasts.segmentFieldLastSeen" },
-];
-
-const SEGMENT_OPERATORS: { value: SegmentOperator; label: string }[] = [
-  { value: "equals", label: "outbound.broadcasts.operatorEquals" },
-  { value: "contains", label: "outbound.broadcasts.operatorContains" },
-  { value: "startsWith", label: "outbound.broadcasts.operatorStartsWith" },
-];
-
 const STEPS = [
-  "outbound.broadcasts.step1",
-  "outbound.broadcasts.step2",
-  "outbound.broadcasts.step3",
-  "outbound.broadcasts.step4",
+  "outbound.broadcasts.wizardCompose",
+  "outbound.broadcasts.wizardAudience",
+  "outbound.broadcasts.wizardSchedule",
+];
+
+const STEP_SUBS = [
+  "outbound.broadcasts.composeSubtitle",
+  "outbound.broadcasts.audienceSubtitle",
+  "outbound.broadcasts.scheduleSubtitle",
 ];
 
 function emptyWizard(): WizardState {
@@ -122,16 +127,11 @@ function emptyWizard(): WizardState {
     channelAccountId: "",
     templateId: "",
     body: "",
-    recipientTab: "segment",
-    segmentRules: [],
-    importText: "",
+    variables: {},
+    audience: emptyAudience(),
     sendNow: true,
     scheduledAt: "",
   };
-}
-
-function newRule(): SegmentRule {
-  return { id: Math.random().toString(36).slice(2), field: "tag", operator: "contains", value: "" };
 }
 
 // ─── Sub-components ───────────────────────────────────────────────────────────
@@ -163,7 +163,6 @@ function ProgressBar({
   );
 }
 
-// Step indicator
 function StepIndicator({ current, total }: { current: number; total: number }) {
   return (
     <div className="flex items-center gap-0">
@@ -207,7 +206,7 @@ export default function BroadcastsPage() {
   const [templates, setTemplates] = useState<any[]>([]);
   const [channelAccounts, setChannelAccounts] = useState<ChannelAccount[]>([]);
 
-  // Panel state
+  // Panel
   const [showPanel, setShowPanel] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [step, setStep] = useState(0);
@@ -216,20 +215,17 @@ export default function BroadcastsPage() {
   const [error, setError] = useState("");
   const [createdBroadcastId, setCreatedBroadcastId] = useState<string | null>(null);
 
-  // Validation state
-  const [validation, setValidation] = useState<any>(null);
-  const [validating, setValidating] = useState(false);
-
-  // Import drag state
-  const [dragOver, setDragOver] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
+  // Audience live count surfaced from AudienceBuilder, used by the Schedule step + footer.
+  const [audienceCount, setAudienceCount] = useState<number | null>(null);
+  const [audienceLoading, setAudienceLoading] = useState(false);
 
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // Only show connected channels
-  const connectedAccounts = channelAccounts.filter(
-    (a) => a.connectionStatus === "CONNECTED"
-  );
+  const connectedAccounts = channelAccounts.filter((a) => a.connectionStatus === "CONNECTED");
+
+  const channelDisplayName = useMemo(() => {
+    return connectedAccounts.find((a) => a.id === wizard.channelAccountId)?.displayName ?? wizard.channel;
+  }, [connectedAccounts, wizard.channelAccountId, wizard.channel]);
 
   useEffect(() => {
     if (!token) return;
@@ -238,11 +234,9 @@ export default function BroadcastsPage() {
     fetchChannelAccounts();
   }, [token]);
 
-  // Realtime updates — listen for broadcast:updated / broadcast:deleted.
   useEffect(() => {
     const socket = getSocket();
     if (!socket) return;
-
     const handleUpdate = (data: any) => {
       if (!data?.id) return;
       setBroadcasts((prev) => {
@@ -253,12 +247,10 @@ export default function BroadcastsPage() {
         return next;
       });
     };
-
     const handleDelete = (data: any) => {
       if (!data?.id) return;
       setBroadcasts((prev) => prev.filter((b) => b.id !== data.id));
     };
-
     socket.on("broadcast:updated", handleUpdate);
     socket.on("broadcast:deleted", handleDelete);
     return () => {
@@ -294,9 +286,6 @@ export default function BroadcastsPage() {
     if (!token) return;
     try {
       const res = await getChannelAccounts(token);
-      // Hide Meta channels — Facebook / Instagram / Messenger DMs cannot be
-      // initiated by the business; outbound is restricted to user-initiated
-      // 24h messaging windows, so they don't belong in a broadcast picker.
       const blocked = new Set(["INSTAGRAM", "MESSENGER", "FACEBOOK"]);
       setChannelAccounts(
         (res.data ?? []).filter(
@@ -314,11 +303,14 @@ export default function BroadcastsPage() {
     setStep(0);
     setError("");
     setCreatedBroadcastId(null);
+    setAudienceCount(null);
     setShowPanel(true);
   }
 
   function openEdit(bc: Broadcast) {
     setEditingId(bc.id);
+    // Restore audience state from persisted definition if possible.
+    const restoredAudience = audienceFromDefinition(bc.audience) ?? emptyAudience();
     setWizard({
       ...emptyWizard(),
       name: bc.name,
@@ -326,12 +318,15 @@ export default function BroadcastsPage() {
       channelAccountId: bc.channelAccountId ?? "",
       templateId: bc.templateId ?? "",
       body: bc.body ?? "",
-      scheduledAt: bc.scheduledAt ?? "",
+      variables: variablesFromBroadcast((bc as any).variables),
+      audience: restoredAudience,
+      scheduledAt: bc.scheduledAt ? toLocalInput(new Date(bc.scheduledAt)) : "",
       sendNow: !bc.scheduledAt,
     });
     setStep(0);
     setError("");
     setCreatedBroadcastId(bc.id);
+    setAudienceCount(null);
     setShowPanel(true);
   }
 
@@ -343,17 +338,16 @@ export default function BroadcastsPage() {
     setError("");
   }
 
-  // ── Wizard navigation ────────────────────────────────────────────────────
-
   function setW<K extends keyof WizardState>(key: K, val: WizardState[K]) {
     setWizard((prev) => ({ ...prev, [key]: val }));
   }
+
+  // ─── Step transitions ─────────────────────────────────────────────────────
 
   async function handleNext() {
     setError("");
 
     if (step === 0) {
-      // Validate step 1
       if (!wizard.name.trim()) {
         setError("outbound.broadcasts.errorName");
         return;
@@ -362,7 +356,6 @@ export default function BroadcastsPage() {
         setError("outbound.broadcasts.errorChannel");
         return;
       }
-      // Create/update broadcast on step 1 completion
       if (!token) return;
       setSaving(true);
       try {
@@ -372,6 +365,7 @@ export default function BroadcastsPage() {
           channelAccountId: wizard.channelAccountId,
           templateId: wizard.templateId || undefined,
           body: wizard.body || undefined,
+          variables: wizard.variables ?? {},
         };
         if (editingId || createdBroadcastId) {
           const id = editingId ?? createdBroadcastId!;
@@ -391,40 +385,39 @@ export default function BroadcastsPage() {
     }
 
     if (step === 1) {
-      // Add recipients if we have a broadcast id
+      // Persist the audience definition (or, for Import mode, materialize
+      // recipients directly).
       if (token && createdBroadcastId) {
-        const recipients = parseRecipients();
-        if (recipients.length > 0) {
-          setSaving(true);
-          try {
-            await addBroadcastRecipients(token, createdBroadcastId, recipients);
-          } catch (err: any) {
-            // Non-fatal: log but continue
-            console.warn("addBroadcastRecipients:", err.message);
-          } finally {
-            setSaving(false);
-          }
-        }
-      }
-      // Trigger validation when entering step 2
-      setStep(2);
-      if (token && createdBroadcastId) {
-        setValidation(null);
-        setValidating(true);
+        setSaving(true);
         try {
-          const res = await validateBroadcast(token, createdBroadcastId);
-          setValidation(res.data ?? null);
+          if (wizard.audience.mode === "import") {
+            const lines = wizard.audience.importText
+              .split("\n")
+              .map((l) => l.trim())
+              .filter(Boolean);
+            if (lines.length > 0) {
+              await addBroadcastRecipients(
+                token,
+                createdBroadcastId,
+                lines.map((externalId) => ({ externalId })),
+              );
+            }
+            // Clear any audience definition so send doesn't try to
+            // re-resolve on top of materialized rows.
+            await updateBroadcast(token, createdBroadcastId, { audience: null });
+          } else {
+            const audience = buildAudienceDefinition(wizard.audience, wizard.channel);
+            await updateBroadcast(token, createdBroadcastId, { audience: audience ?? null });
+          }
         } catch (err: any) {
-          console.warn("validateBroadcast:", err.message);
+          setError(err.message || "common.error");
+          setSaving(false);
+          return;
         } finally {
-          setValidating(false);
+          setSaving(false);
         }
       }
-      return;
-    }
-
-    if (step === 2) {
-      setStep(3);
+      setStep(2);
       return;
     }
   }
@@ -433,22 +426,20 @@ export default function BroadcastsPage() {
     if (step > 0) setStep((s) => s - 1);
   }
 
-  // ── Final submit (step 3) ────────────────────────────────────────────────
-
   async function handleFinish() {
     if (!token || !createdBroadcastId) return;
     setSaving(true);
     setError("");
     try {
-      // Update scheduled time if not sending now
       if (!wizard.sendNow && wizard.scheduledAt) {
         await updateBroadcast(token, createdBroadcastId, {
           scheduledAt: new Date(wizard.scheduledAt).toISOString(),
         });
+      } else if (wizard.sendNow) {
+        // Clear any prior schedule so the worker treats it as immediate.
+        await updateBroadcast(token, createdBroadcastId, { scheduledAt: null });
       }
-      if (wizard.sendNow) {
-        await sendBroadcast(token, createdBroadcastId);
-      }
+      await sendBroadcast(token, createdBroadcastId);
       closePanel();
       fetchBroadcasts();
     } catch (err: any) {
@@ -458,39 +449,7 @@ export default function BroadcastsPage() {
     }
   }
 
-  // ── Recipients parsing ───────────────────────────────────────────────────
-
-  function parseRecipients(): { externalId: string }[] {
-    if (wizard.recipientTab === "import") {
-      return wizard.importText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean)
-        .map((externalId) => ({ externalId }));
-    }
-    // segment / all: server-side resolution; return empty for now
-    return [];
-  }
-
-  function parsedCount(): number {
-    return parseRecipients().length;
-  }
-
-  // ── CSV file import ──────────────────────────────────────────────────────
-
-  function handleFileUpload(file: File) {
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      const text = e.target?.result as string;
-      // Extract first column from CSV
-      const lines = text.split("\n").map((l) => l.split(",")[0].trim()).filter(Boolean);
-      setW("importText", lines.join("\n"));
-    };
-    reader.readAsText(file);
-  }
-
-  // ── Send/Cancel actions on cards ─────────────────────────────────────────
-
+  // ─── Send/Cancel/Delete on cards ─────────────────────────────────────────
   async function handleSend(id: string) {
     if (!token) return;
     try {
@@ -500,17 +459,14 @@ export default function BroadcastsPage() {
       alert(err.message || t("common.error"));
     }
   }
-
   async function handleCancel(id: string) {
     if (!token) return;
     try {
       await cancelBroadcast(token, id);
-      // Realtime socket will refresh; no manual fetch needed.
     } catch (err: any) {
       alert(err.message || t("common.error"));
     }
   }
-
   async function handleDelete(id: string) {
     if (!token) return;
     if (!confirm(t("outbound.broadcasts.deleteConfirm"))) return;
@@ -522,8 +478,21 @@ export default function BroadcastsPage() {
     }
   }
 
-  // ─── Render ───────────────────────────────────────────────────────────────
+  const onAudienceCountChange = useCallback((count: number | null, loading: boolean) => {
+    setAudienceCount(count);
+    setAudienceLoading(loading);
+  }, []);
 
+  const audienceReadyToAdvance = useMemo(() => {
+    if (wizard.audience.mode === "import") {
+      return wizard.audience.importText.trim().length > 0;
+    }
+    if (wizard.audience.mode === "everyone") return true;
+    if (audienceCount === null) return wizard.audience.picked.length > 0 || wizard.audience.rules.length > 0;
+    return audienceCount > 0;
+  }, [wizard.audience, audienceCount]);
+
+  // ─── Render ───────────────────────────────────────────────────────────────
   return (
     <div>
       {/* Toolbar */}
@@ -571,7 +540,11 @@ export default function BroadcastsPage() {
             const canSend = bc.status === "DRAFT";
             const canCancel = bc.status === "SCHEDULED" || bc.status === "SENDING";
             const canDelete = bc.status !== "SENDING";
-            const isTerminal = bc.status === "COMPLETED" || bc.status === "FAILED" || bc.status === "CANCELLED" || bc.status === "SENDING";
+            const isTerminal =
+              bc.status === "COMPLETED" ||
+              bc.status === "FAILED" ||
+              bc.status === "CANCELLED" ||
+              bc.status === "SENDING";
 
             return (
               <div key={bc.id} className="bg-white rounded-2xl border border-gray-100 shadow-sm overflow-hidden">
@@ -645,7 +618,6 @@ export default function BroadcastsPage() {
                     </div>
                   </div>
 
-                  {/* Error banner — show any captured broadcast-level error */}
                   {bc.lastError && (
                     <div className="mt-3 px-3 py-2 rounded-lg bg-red-50 border border-red-100 text-xs text-red-700 flex items-start gap-2">
                       <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -658,43 +630,17 @@ export default function BroadcastsPage() {
                     </div>
                   )}
 
-                  {/* Analytics */}
                   {isExpanded && isTerminal && (
                     <div className="mt-4 pt-4 border-t border-gray-50">
                       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
                         {t("outbound.broadcasts.analytics")}
                       </p>
-                      <ProgressBar
-                        label={t("outbound.broadcasts.statSent")}
-                        value={bc.sentCount}
-                        total={bc.totalRecipients}
-                        color="bg-blue-400"
-                      />
-                      <ProgressBar
-                        label={t("outbound.broadcasts.statDelivered")}
-                        value={bc.deliveredCount}
-                        total={bc.totalRecipients}
-                        color="bg-green-400"
-                      />
-                      <ProgressBar
-                        label={t("outbound.broadcasts.statRead")}
-                        value={bc.readCount}
-                        total={bc.totalRecipients}
-                        color="bg-purple-400"
-                      />
-                      <ProgressBar
-                        label={t("outbound.broadcasts.statReplied")}
-                        value={bc.repliedCount}
-                        total={bc.totalRecipients}
-                        color="bg-primary-400"
-                      />
+                      <ProgressBar label={t("outbound.broadcasts.statSent")} value={bc.sentCount} total={bc.totalRecipients} color="bg-blue-400" />
+                      <ProgressBar label={t("outbound.broadcasts.statDelivered")} value={bc.deliveredCount} total={bc.totalRecipients} color="bg-green-400" />
+                      <ProgressBar label={t("outbound.broadcasts.statRead")} value={bc.readCount} total={bc.totalRecipients} color="bg-purple-400" />
+                      <ProgressBar label={t("outbound.broadcasts.statReplied")} value={bc.repliedCount} total={bc.totalRecipients} color="bg-primary-400" />
                       {bc.failedCount > 0 && (
-                        <ProgressBar
-                          label={t("outbound.broadcasts.statFailed")}
-                          value={bc.failedCount}
-                          total={bc.totalRecipients}
-                          color="bg-red-400"
-                        />
+                        <ProgressBar label={t("outbound.broadcasts.statFailed")} value={bc.failedCount} total={bc.totalRecipients} color="bg-red-400" />
                       )}
                     </div>
                   )}
@@ -708,28 +654,18 @@ export default function BroadcastsPage() {
       {/* ── Slide-over Panel ── */}
       {showPanel && (
         <>
-          {/* Backdrop */}
-          <div
-            className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40"
-            onClick={closePanel}
-          />
-
-          {/* Panel */}
-          <div className="fixed inset-y-0 right-0 w-full md:w-[65%] bg-white shadow-2xl z-50 flex flex-col">
-            {/* Panel Header */}
+          <div className="fixed inset-0 bg-black/40 backdrop-blur-sm z-40" onClick={closePanel} />
+          <div className="fixed inset-y-0 right-0 w-full md:w-[68%] bg-white shadow-2xl z-50 flex flex-col">
+            {/* Header */}
             <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 shrink-0">
               <div>
                 <h2 className="text-base font-bold text-gray-900">
-                  {editingId
-                    ? t("outbound.broadcasts.editTitle")
-                    : t("outbound.broadcasts.createTitle")}
+                  {editingId ? t("outbound.broadcasts.editTitle") : t("outbound.broadcasts.createTitle")}
                 </h2>
-                <p className="text-xs text-gray-400 mt-0.5">
-                  {t(STEPS[step])}
-                </p>
+                <p className="text-xs text-gray-400 mt-0.5">{t(STEP_SUBS[step])}</p>
               </div>
               <div className="flex items-center gap-4">
-                <StepIndicator current={step} total={4} />
+                <StepIndicator current={step} total={3} />
                 <button
                   onClick={closePanel}
                   className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
@@ -741,16 +677,15 @@ export default function BroadcastsPage() {
               </div>
             </div>
 
-            {/* Error bar */}
             {error && (
               <div className="px-6 py-2 bg-red-50 border-b border-red-100">
                 <p className="text-sm text-red-600">{t(error) !== error ? t(error) : error}</p>
               </div>
             )}
 
-            {/* Panel Body */}
+            {/* Body */}
             <div className="flex-1 overflow-y-auto px-6 py-6">
-              {/* ── Step 1: Basic Info ── */}
+              {/* ── Step 1: Compose ── */}
               {step === 0 && (
                 <div className="space-y-5 max-w-xl">
                   <div>
@@ -787,18 +722,47 @@ export default function BroadcastsPage() {
                     <select
                       value={wizard.templateId}
                       onChange={(e) => setW("templateId", e.target.value)}
-                      className={selectCls}
+                      className={inputCls}
                     >
-                      <option value="">{t("outbound.broadcasts.noTemplate")}</option>
+                      <option value="">
+                        {wizard.channel === "WHATSAPP"
+                          ? "Select a template…"
+                          : t("outbound.broadcasts.noTemplate")}
+                      </option>
                       {templates.map((tpl) => (
                         <option key={tpl.id} value={tpl.id}>
                           {tpl.name}
                         </option>
                       ))}
                     </select>
+                    {wizard.channel === "WHATSAPP" && (
+                      <p className="text-xs text-gray-500 mt-1">
+                        WhatsApp requires a pre-approved template for outbound broadcasts.
+                        Free-text isn't allowed by Meta outside the 24-hour customer-service window.
+                      </p>
+                    )}
                   </div>
 
-                  {!wizard.templateId && (
+                  {wizard.templateId && (
+                    <>
+                      <VariableMappingForm
+                        templateId={wizard.templateId}
+                        templates={templates as any}
+                        module={wizard.audience.module}
+                        value={wizard.variables}
+                        onChange={(v) => setW("variables", v)}
+                        t={t}
+                      />
+                      <CrmVarPicker
+                        module={wizard.audience.module}
+                        onInsert={(token) => {
+                          setW("body", (wizard.body || "") + token);
+                        }}
+                      />
+                    </>
+                  )}
+
+                  {wizard.channel !== "WHATSAPP" && !wizard.templateId && (
                     <AIComposeScope
                       surface="scheduled"
                       channel={wizard.channel}
@@ -824,358 +788,55 @@ export default function BroadcastsPage() {
                 </div>
               )}
 
-              {/* ── Step 2: Recipients ── */}
+              {/* ── Step 2: Audience ── */}
               {step === 1 && (
-                <div className="max-w-2xl space-y-4">
-                  {/* Tab switcher */}
-                  <div className="flex gap-1 bg-gray-100 p-1 rounded-xl w-fit">
-                    {(["segment", "import", "all"] as RecipientTab[]).map((tab) => (
-                      <button
-                        key={tab}
-                        type="button"
-                        onClick={() => setW("recipientTab", tab)}
-                        className={clsx(
-                          "px-4 py-1.5 rounded-lg text-sm font-medium transition",
-                          wizard.recipientTab === tab
-                            ? "bg-white text-gray-900 shadow-sm"
-                            : "text-gray-500 hover:text-gray-700"
-                        )}
-                      >
-                        {t(`outbound.broadcasts.tab${tab.charAt(0).toUpperCase() + tab.slice(1)}`)}
-                      </button>
-                    ))}
-                  </div>
-
-                  {/* CRM Segment builder */}
-                  {wizard.recipientTab === "segment" && (
-                    <div className="space-y-3">
-                      <p className="text-sm text-gray-500">
-                        {t("outbound.broadcasts.segmentDesc")}
-                      </p>
-
-                      {wizard.segmentRules.length === 0 && (
-                        <div className="border border-dashed border-gray-200 rounded-xl p-6 text-center text-sm text-gray-400">
-                          {t("outbound.broadcasts.segmentEmpty")}
-                        </div>
-                      )}
-
-                      <div className="space-y-2">
-                        {wizard.segmentRules.map((rule, idx) => (
-                          <div key={rule.id} className="flex items-center gap-2">
-                            {idx > 0 && (
-                              <span className="text-xs font-medium text-gray-400 w-8 text-center shrink-0">
-                                AND
-                              </span>
-                            )}
-                            {idx === 0 && <div className="w-8 shrink-0" />}
-
-                            <select
-                              value={rule.field}
-                              onChange={(e) => {
-                                const rules = [...wizard.segmentRules];
-                                rules[idx] = { ...rule, field: e.target.value as SegmentField };
-                                setW("segmentRules", rules);
-                              }}
-                              className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none transition"
-                            >
-                              {SEGMENT_FIELDS.map((f) => (
-                                <option key={f.value} value={f.value}>
-                                  {t(f.label)}
-                                </option>
-                              ))}
-                            </select>
-
-                            <select
-                              value={rule.operator}
-                              onChange={(e) => {
-                                const rules = [...wizard.segmentRules];
-                                rules[idx] = { ...rule, operator: e.target.value as SegmentOperator };
-                                setW("segmentRules", rules);
-                              }}
-                              className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none transition"
-                            >
-                              {SEGMENT_OPERATORS.map((o) => (
-                                <option key={o.value} value={o.value}>
-                                  {t(o.label)}
-                                </option>
-                              ))}
-                            </select>
-
-                            <input
-                              type={rule.field === "lastSeenAfter" ? "date" : "text"}
-                              value={rule.value}
-                              onChange={(e) => {
-                                const rules = [...wizard.segmentRules];
-                                rules[idx] = { ...rule, value: e.target.value };
-                                setW("segmentRules", rules);
-                              }}
-                              placeholder={t("outbound.broadcasts.segmentValue")}
-                              className="flex-[2] px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none transition"
-                            />
-
-                            <button
-                              type="button"
-                              onClick={() =>
-                                setW(
-                                  "segmentRules",
-                                  wizard.segmentRules.filter((_, i) => i !== idx)
-                                )
-                              }
-                              className="w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition shrink-0"
-                            >
-                              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                                <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                              </svg>
-                            </button>
-                          </div>
-                        ))}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={() => setW("segmentRules", [...wizard.segmentRules, newRule()])}
-                        className="flex items-center gap-1.5 text-sm text-primary-600 hover:text-primary-700 font-medium transition"
-                      >
-                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-                        </svg>
-                        {t("outbound.broadcasts.addRule")}
-                      </button>
-
-                      <div className="mt-4 p-3 bg-blue-50 rounded-xl text-sm text-blue-600">
-                        {t("outbound.broadcasts.segmentEstimate")}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Import tab */}
-                  {wizard.recipientTab === "import" && (
-                    <div className="space-y-4">
-                      <p className="text-sm text-gray-500">{t("outbound.broadcasts.importDesc")}</p>
-
-                      <textarea
-                        value={wizard.importText}
-                        onChange={(e) => setW("importText", e.target.value)}
-                        rows={8}
-                        className={inputCls}
-                        placeholder={t("outbound.broadcasts.importPlaceholder")}
-                      />
-
-                      {/* Drag-drop CSV */}
-                      <div
-                        onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
-                        onDragLeave={() => setDragOver(false)}
-                        onDrop={(e) => {
-                          e.preventDefault();
-                          setDragOver(false);
-                          const file = e.dataTransfer.files[0];
-                          if (file) handleFileUpload(file);
-                        }}
-                        onClick={() => fileInputRef.current?.click()}
-                        className={clsx(
-                          "border-2 border-dashed rounded-xl p-6 text-center cursor-pointer transition",
-                          dragOver
-                            ? "border-primary-400 bg-primary-50"
-                            : "border-gray-200 hover:border-primary-300 hover:bg-gray-50"
-                        )}
-                      >
-                        <svg
-                          className="w-8 h-8 text-gray-300 mx-auto mb-2"
-                          fill="none"
-                          viewBox="0 0 24 24"
-                          stroke="currentColor"
-                          strokeWidth={1.5}
-                        >
-                          <path
-                            strokeLinecap="round"
-                            strokeLinejoin="round"
-                            d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5"
-                          />
-                        </svg>
-                        <p className="text-sm text-gray-400">{t("outbound.broadcasts.importDrop")}</p>
-                        <p className="text-xs text-gray-300 mt-1">.csv</p>
-                        <input
-                          ref={fileInputRef}
-                          type="file"
-                          accept=".csv"
-                          className="hidden"
-                          onChange={(e) => {
-                            const file = e.target.files?.[0];
-                            if (file) handleFileUpload(file);
-                          }}
-                        />
-                      </div>
-
-                      {parsedCount() > 0 && (
-                        <p className="text-sm text-green-600 font-medium">
-                          {parsedCount()} {t("outbound.broadcasts.importCount")}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* All contacts tab */}
-                  {wizard.recipientTab === "all" && (
-                    <div className="space-y-3">
-                      <div className="p-4 bg-amber-50 rounded-xl border border-amber-100">
-                        <p className="text-sm text-amber-700 font-medium">
-                          {t("outbound.broadcasts.allContactsWarning")}
-                        </p>
-                        <p className="text-xs text-amber-500 mt-1">
-                          {t("outbound.broadcasts.allContactsDesc")}
-                        </p>
-                      </div>
-                      <div className="p-3 bg-blue-50 rounded-xl text-sm text-blue-600">
-                        {t("outbound.broadcasts.segmentEstimate")}
-                      </div>
-                    </div>
-                  )}
+                <div className="max-w-3xl">
+                  <AudienceBuilder
+                    channel={wizard.channel}
+                    channelDisplayName={channelDisplayName}
+                    state={wizard.audience}
+                    onChange={(s) => setW("audience", s)}
+                    onCountChange={onAudienceCountChange}
+                  />
                 </div>
               )}
 
-              {/* ── Step 3: Validate ── */}
+              {/* ── Step 3: Schedule & send ── */}
               {step === 2 && (
-                <div className="max-w-xl space-y-4">
-                  <h3 className="text-sm font-semibold text-gray-800 mb-3">
-                    {t("outbound.broadcasts.validateTitle")}
-                  </h3>
-                  {validating && (
-                    <div className="flex items-center justify-center py-12">
-                      <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
-                    </div>
-                  )}
-                  {!validating && validation && (
-                    <div className="space-y-4">
-                      {/* Summary stats */}
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="bg-green-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-green-600">{validation.reachableCount}</p>
-                          <p className="text-xs text-green-500">{t("outbound.broadcasts.validateReachable")}</p>
-                        </div>
-                        <div className="bg-red-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-red-600">{validation.invalidCount}</p>
-                          <p className="text-xs text-red-500">{t("outbound.broadcasts.validateInvalid")}</p>
-                        </div>
-                        <div className="bg-yellow-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-yellow-600">{validation.optedOutCount}</p>
-                          <p className="text-xs text-yellow-500">{t("outbound.broadcasts.validateOptedOut")}</p>
-                        </div>
-                        <div className="bg-blue-50 rounded-xl p-4 text-center">
-                          <p className="text-2xl font-bold text-blue-600">${validation.estimatedCost}</p>
-                          <p className="text-xs text-blue-500">{t("outbound.broadcasts.validateEstCost")}</p>
-                        </div>
-                      </div>
-                      {/* Warnings */}
-                      {validation.warnings?.length > 0 && (
-                        <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
-                          <p className="text-sm font-medium text-amber-700 mb-2">{t("outbound.broadcasts.validateWarnings")}</p>
-                          {validation.warnings.map((w: string, i: number) => (
-                            <p key={i} className="text-xs text-amber-600">• {w}</p>
-                          ))}
-                        </div>
-                      )}
-                      {/* Invalid reasons */}
-                      {validation.invalidReasons?.length > 0 && (
-                        <div className="bg-red-50 border border-red-100 rounded-xl p-4">
-                          <p className="text-sm font-medium text-red-700 mb-2">{t("outbound.broadcasts.validateInvalidReasons")}</p>
-                          {validation.invalidReasons.map((r: string, i: number) => (
-                            <p key={i} className="text-xs text-red-500">• {r}</p>
-                          ))}
-                        </div>
-                      )}
-                      {!validation.canSend && (
-                        <div className="bg-red-50 border border-red-200 rounded-xl p-3 text-sm text-red-600 font-medium">
-                          {t("outbound.broadcasts.validateCannotSend")}
-                        </div>
-                      )}
-                    </div>
-                  )}
-                  {!validating && !validation && (
-                    <div className="text-sm text-gray-400 text-center py-8">
-                      {t("outbound.broadcasts.validateNoData")}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* ── Step 4: Schedule & Send ── */}
-              {step === 3 && (
                 <div className="max-w-xl space-y-6">
-                  {/* Scheduling */}
                   <div>
                     <h3 className="text-sm font-semibold text-gray-800 mb-3">
                       {t("outbound.broadcasts.scheduleTitle")}
                     </h3>
-
-                    <label className="flex items-center gap-3 cursor-pointer mb-4">
-                      <div
-                        onClick={() => setW("sendNow", !wizard.sendNow)}
-                        className={clsx(
-                          "relative w-10 h-5.5 rounded-full transition-colors",
-                          wizard.sendNow ? "bg-primary-500" : "bg-gray-200"
-                        )}
-                        style={{ height: "22px", width: "40px" }}
-                      >
-                        <span
-                          className={clsx(
-                            "absolute top-0.5 w-4.5 h-4.5 bg-white rounded-full shadow transition-transform",
-                            wizard.sendNow ? "translate-x-[18px]" : "translate-x-0.5"
-                          )}
-                          style={{ width: "18px", height: "18px" }}
-                        />
-                      </div>
-                      <span className="text-sm font-medium text-gray-700">
-                        {t("outbound.broadcasts.sendNow")}
-                      </span>
-                    </label>
-
-                    {!wizard.sendNow && (
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1.5">
-                          {t("outbound.broadcasts.scheduleAt")}
-                        </label>
-                        <input
-                          type="datetime-local"
-                          value={wizard.scheduledAt}
-                          onChange={(e) => setW("scheduledAt", e.target.value)}
-                          className={inputCls}
-                          min={new Date().toISOString().slice(0, 16)}
-                        />
-                      </div>
-                    )}
+                    <SchedulePicker
+                      sendNow={wizard.sendNow}
+                      scheduledAt={wizard.scheduledAt}
+                      onChangeSendNow={(v) => setW("sendNow", v)}
+                      onChangeScheduledAt={(v) => setW("scheduledAt", v)}
+                    />
                   </div>
 
-                  {/* Review summary */}
                   <div>
                     <h3 className="text-sm font-semibold text-gray-800 mb-3">
                       {t("outbound.broadcasts.reviewTitle")}
                     </h3>
                     <div className="bg-gray-50 rounded-2xl border border-gray-100 divide-y divide-gray-100">
                       <ReviewRow label={t("outbound.broadcasts.fieldName")} value={wizard.name} />
-                      <ReviewRow
-                        label={t("outbound.broadcasts.fieldChannel")}
-                        value={
-                          connectedAccounts.find((a) => a.id === wizard.channelAccountId)
-                            ?.displayName ?? wizard.channel
-                        }
-                      />
+                      <ReviewRow label={t("outbound.broadcasts.fieldChannel")} value={channelDisplayName} />
                       {wizard.templateId && (
                         <ReviewRow
                           label={t("outbound.broadcasts.fieldTemplate")}
-                          value={
-                            templates.find((t) => t.id === wizard.templateId)?.name ??
-                            wizard.templateId
-                          }
+                          value={templates.find((tt) => tt.id === wizard.templateId)?.name ?? wizard.templateId}
                         />
                       )}
                       <ReviewRow
                         label={t("outbound.broadcasts.reviewRecipients")}
                         value={
-                          wizard.recipientTab === "import"
-                            ? `${parsedCount()} ${t("outbound.broadcasts.importCount")}`
-                            : wizard.recipientTab === "all"
-                            ? t("outbound.broadcasts.allContactsLabel")
-                            : `${wizard.segmentRules.length} ${t("outbound.broadcasts.segmentRules")}`
+                          audienceLoading
+                            ? t("outbound.broadcasts.liveCountLoading")
+                            : audienceCount === null
+                              ? "—"
+                              : String(audienceCount)
                         }
                       />
                       <ReviewRow
@@ -1194,7 +855,7 @@ export default function BroadcastsPage() {
               )}
             </div>
 
-            {/* Panel Footer */}
+            {/* Footer */}
             <div className="shrink-0 px-6 py-4 border-t border-gray-100 flex items-center justify-between gap-3 bg-white">
               <button
                 type="button"
@@ -1204,14 +865,28 @@ export default function BroadcastsPage() {
                 {step === 0 ? t("common.cancel") : t("common.back")}
               </button>
 
-              {step < 3 ? (
+              {/* Inline count summary in footer for steps after Compose */}
+              {step >= 1 && audienceCount !== null && (
+                <div className="hidden md:flex items-center gap-2 text-xs text-gray-500">
+                  <span className={clsx(
+                    "inline-block w-2 h-2 rounded-full",
+                    audienceCount > 0 ? "bg-emerald-400" : "bg-amber-400"
+                  )} />
+                  <span>{audienceCount} {t("outbound.broadcasts.recipients").toLowerCase()}</span>
+                </div>
+              )}
+
+              {step < 2 ? (
                 <button
                   type="button"
                   onClick={handleNext}
-                  disabled={saving || validating || (step === 2 && validation != null && !validation.canSend)}
+                  disabled={
+                    saving ||
+                    (step === 1 && !audienceReadyToAdvance && !saving)
+                  }
                   className="px-6 py-2.5 rounded-xl text-sm font-medium text-white bg-primary-500 hover:bg-primary-600 transition shadow-sm disabled:opacity-50 flex items-center gap-2"
                 >
-                  {(saving || validating) && (
+                  {saving && (
                     <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   )}
                   {t("common.next")}
@@ -1226,9 +901,7 @@ export default function BroadcastsPage() {
                   {saving && (
                     <span className="w-3.5 h-3.5 border-2 border-white/40 border-t-white rounded-full animate-spin" />
                   )}
-                  {wizard.sendNow
-                    ? t("outbound.broadcasts.send")
-                    : t("outbound.broadcasts.schedule")}
+                  {wizard.sendNow ? t("outbound.broadcasts.send") : t("outbound.broadcasts.schedule")}
                 </button>
               )}
             </div>
@@ -1239,12 +912,235 @@ export default function BroadcastsPage() {
   );
 }
 
-// Small helper component for review rows
+// ─── Helpers ──────────────────────────────────────────────────────────────────
+
 function ReviewRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between px-4 py-3 gap-4">
       <span className="text-xs font-medium text-gray-500 shrink-0">{label}</span>
       <span className="text-sm text-gray-800 text-right truncate">{value}</span>
+    </div>
+  );
+}
+
+function pad(n: number): string {
+  return n.toString().padStart(2, "0");
+}
+
+function toLocalInput(d: Date): string {
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/**
+ * Best-effort restore of an AudienceState from a persisted audience
+ * definition. Filter rules come back without their human labels (the
+ * schema endpoint owns those) — the rule editor will repopulate
+ * label/type when the operator clicks the field.
+ */
+function audienceFromDefinition(def: any): AudienceState | null {
+  if (!def || typeof def !== "object") return null;
+  const out: AudienceState = emptyAudience();
+  if (def.module === "leads" || def.module === "contacts") {
+    out.module = def.module;
+  }
+
+  const restoreCrmPicks = (raw: any): PickedContact[] => {
+    if (!Array.isArray(raw)) return [];
+    return raw
+      .filter((c) => c && typeof c.id === "string")
+      .map((c: any) => ({
+        id: c.id,
+        source: "crm" as const,
+        displayName: typeof c.displayName === "string" ? c.displayName : undefined,
+        phone: typeof c.phone === "string" ? c.phone : undefined,
+        email: typeof c.email === "string" ? c.email : undefined,
+      }));
+  };
+
+  // Legacy "manual" and "pick" definitions both surface as Smart mode in
+  // the new UI — the unified Find&Filter screen handles chips-only just
+  // fine, so there's no reason to expose two near-identical tabs.
+  if (def.type === "manual" && Array.isArray(def.contactIds)) {
+    out.mode = "smart";
+    out.picked = [
+      ...def.contactIds.map((id: string) => ({ id, source: "local" as const })),
+      ...restoreCrmPicks(def.crmContacts),
+    ];
+    return out;
+  }
+  if (def.type === "filter" && def.rules?.all) {
+    out.mode = "smart";
+    out.rules = def.rules.all.map((r: any) => ({
+      id: Math.random().toString(36).slice(2),
+      field: r.field,
+      op: r.op,
+      value: r.value,
+    }));
+    return out;
+  }
+  if (def.type === "composite") {
+    if (def.everyone) out.mode = "everyone";
+    else out.mode = "smart"; // chips-only OR rules-only OR both ⇒ Smart
+    out.picked = [
+      ...(def.contactIds ?? []).map((id: string) => ({ id, source: "local" as const })),
+      ...restoreCrmPicks(def.crmContacts),
+    ];
+    out.rules = (def.rules?.all ?? []).map((r: any) => ({
+      id: Math.random().toString(36).slice(2),
+      field: r.field,
+      op: r.op,
+      value: r.value,
+    }));
+    return out;
+  }
+  return null;
+}
+
+/** Restore wizard.variables from a persisted Broadcast.variables JSON.
+ *  Accepts the new mapping shape and the legacy flat shape ({1: "Hi"}). */
+function variablesFromBroadcast(raw: unknown): Record<string, VariableMapping> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, VariableMapping> = {};
+  for (const [key, val] of Object.entries(raw as Record<string, unknown>)) {
+    if (val && typeof val === "object" && !Array.isArray(val)) {
+      const m = val as { source?: string; field?: string; value?: unknown };
+      if (m.source === "crm" && typeof m.field === "string") {
+        out[key] = { source: "crm", field: m.field };
+      } else if (m.source === "static") {
+        out[key] = { source: "static", value: m.value == null ? "" : String(m.value) };
+      } else {
+        out[key] = { source: "static", value: "" };
+      }
+    } else {
+      out[key] = { source: "static", value: val == null ? "" : String(val) };
+    }
+  }
+  return out;
+}
+
+// ─── Template variable → CRM field mapping form ───────────────────────────────
+
+interface CrmFieldDef {
+  name: string;
+  label: string;
+  type: string;
+}
+
+function VariableMappingForm({
+  templateId,
+  templates,
+  module,
+  value,
+  onChange,
+  t,
+}: {
+  templateId: string;
+  templates: Array<{ id: string; variables?: Array<{ key: string; sample?: string }>; body?: string }>;
+  module: "leads" | "contacts";
+  value: Record<string, VariableMapping>;
+  onChange: (v: Record<string, VariableMapping>) => void;
+  t: (k: string, vars?: Record<string, string>) => string;
+}) {
+  const { token } = useAuth();
+  const [crmFields, setCrmFields] = useState<CrmFieldDef[]>([]);
+
+  // Derive the variable list from the template's declared variables, with
+  // a fallback to scanning {{n}} placeholders in the body. This keeps the
+  // form working for templates that pre-date the explicit variables array.
+  const tpl = templates.find((tt) => tt.id === templateId);
+  const declaredVars = Array.isArray(tpl?.variables) ? tpl!.variables : [];
+  const bodyKeys = useMemo(() => {
+    const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+    const set = new Set<string>();
+    const body = tpl?.body ?? "";
+    let m: RegExpExecArray | null;
+    while ((m = re.exec(body))) set.add(m[1]);
+    return Array.from(set);
+  }, [tpl?.body]);
+  const varKeys: string[] = declaredVars.length
+    ? declaredVars.map((v) => v.key)
+    : bodyKeys;
+
+  useEffect(() => {
+    if (!token || varKeys.length === 0) return;
+    let cancelled = false;
+    getAudienceSchema(token, module)
+      .then((res) => {
+        if (cancelled) return;
+        const fields = ((res.data.crm as any)?.schema?.fields ?? []) as CrmFieldDef[];
+        setCrmFields(fields);
+      })
+      .catch(() => {
+        if (!cancelled) setCrmFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, module, varKeys.length]);
+
+  if (varKeys.length === 0) return null;
+
+  function setKey(key: string, mapping: VariableMapping) {
+    onChange({ ...value, [key]: mapping });
+  }
+
+  return (
+    <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2">
+      <div className="text-xs font-semibold text-violet-900">
+        {t("outbound.broadcasts.varsTitle")}
+      </div>
+      <div className="text-[11px] text-violet-700/80">
+        {t("outbound.broadcasts.varsHelp")}
+      </div>
+      <div className="space-y-2">
+        {varKeys.map((key) => {
+          const sample = declaredVars.find((v) => v.key === key)?.sample;
+          const current = value[key] ?? { source: "static" as const, value: "" };
+          return (
+            <div key={key} className="flex items-center gap-2 bg-white rounded-lg border border-gray-200 p-2">
+              <code className="px-2 py-1 text-xs font-mono bg-gray-100 rounded">{`{{${key}}}`}</code>
+              {sample && (
+                <span className="text-[11px] text-gray-400 truncate">
+                  {t("outbound.broadcasts.varsSample", { sample })}
+                </span>
+              )}
+              <select
+                value={current.source}
+                onChange={(e) => {
+                  if (e.target.value === "crm") setKey(key, { source: "crm", field: "" });
+                  else setKey(key, { source: "static", value: "" });
+                }}
+                className="text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50"
+              >
+                <option value="static">{t("outbound.broadcasts.varsStatic")}</option>
+                <option value="crm">{t("outbound.broadcasts.varsCrm")}</option>
+              </select>
+              {current.source === "static" ? (
+                <input
+                  type="text"
+                  value={current.value}
+                  onChange={(e) => setKey(key, { source: "static", value: e.target.value })}
+                  placeholder={sample || ""}
+                  className="flex-1 text-xs px-2 py-1 rounded border border-gray-200"
+                />
+              ) : (
+                <select
+                  value={current.field}
+                  onChange={(e) => setKey(key, { source: "crm", field: e.target.value })}
+                  className="flex-1 text-xs px-2 py-1 rounded border border-gray-200 bg-white"
+                >
+                  <option value="">{t("outbound.broadcasts.varsPickField")}</option>
+                  {crmFields.map((f) => (
+                    <option key={f.name} value={f.name}>
+                      {f.label} ({f.name})
+                    </option>
+                  ))}
+                </select>
+              )}
+            </div>
+          );
+        })}
+      </div>
     </div>
   );
 }

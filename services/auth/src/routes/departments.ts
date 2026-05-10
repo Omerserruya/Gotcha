@@ -274,7 +274,7 @@ async function resolveDepartmentAIAgent(tenantId: string, departmentId: string) 
       aiAgentId: { not: null },
       routeTarget: departmentId,
     },
-    orderBy: { priority: "asc" },
+    orderBy: { position: "asc" },
   });
   if (!rule?.aiAgentId) return null;
   return prisma.aIAgent.findFirst({
@@ -366,7 +366,7 @@ router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Req
         enabled: true,
         routeTarget: String(req.params.id),
       },
-      orderBy: { priority: "asc" },
+      orderBy: { position: "asc" },
     });
 
     if (rule?.aiAgentId) {
@@ -430,14 +430,14 @@ router.put("/:id/ai-employee", requireRole("ADMIN"), validate(assignAIEmployeeSc
       // Create new router rule
       const maxPriority = await prisma.routerRule.aggregate({
         where: { tenantId: req.tenantId! },
-        _max: { priority: true },
+        _max: { position: true },
       });
 
       const rule = await prisma.routerRule.create({
         data: {
           tenantId: req.tenantId!,
           name: `${dept.name} AI Employee`,
-          priority: (maxPriority._max.priority || 0) + 1,
+          position: (maxPriority._max?.position ?? 0) + 1,
           conditions: [{ field: "department", operator: "equals", value: String(req.params.id) }],
           logic: "AND",
           routeType: "AI_AGENT",

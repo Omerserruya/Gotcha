@@ -500,4 +500,77 @@ router.put("/:slug/tools/:toolSlug", async (req: Request, res: Response) => {
   }
 });
 
+// ─── Monday: audience board picker ─────────────────────────────
+//
+// Monday's "schema" lives on a board (columns), not on a global Lead/Contact
+// object. The audience builder needs the operator to pick which board acts
+// as Leads and which acts as Contacts; without these, the schema fetcher
+// has nothing to describe and CRM-side filter rules can't run.
+
+// GET /:slug/monday-boards — list the operator's boards for the picker UI.
+router.get("/:slug/monday-boards", async (req: Request, res: Response) => {
+  try {
+    const slug = req.params.slug as string;
+    if (slug !== "monday") {
+      res.status(404).json({ error: "monday-boards is monday-only" });
+      return;
+    }
+    const r = await executeAdapterTool({
+      tenantId: req.tenantId!,
+      toolFunctionName: "monday.list_boards",
+      args: { limit: 200 },
+    });
+    if (!r.ok) {
+      res.status(502).json({ error: r.reason || "failed_to_list_boards" });
+      return;
+    }
+    res.json({ data: r.result });
+  } catch (err: any) {
+    console.error("monday-boards error:", err);
+    res.status(500).json({ error: "Failed to list Monday boards" });
+  }
+});
+
+// PUT /:slug/audience-config — persist leadsBoardId / contactsBoardId.
+//
+// For Monday tenants, this maps the abstract "Leads"/"Contacts" modules
+// the audience builder uses onto concrete boards. The shared CRM client
+// reads these from `tenant_integrations.config` when it dispatches
+// describe/search calls.
+router.put("/:slug/audience-config", async (req: Request, res: Response) => {
+  try {
+    const slug = req.params.slug as string;
+    const { leadsBoardId, contactsBoardId } = req.body || {};
+    if (slug !== "monday") {
+      res.status(400).json({ error: "audience-config currently only applies to Monday" });
+      return;
+    }
+    const entry = await prisma.integrationCatalog.findUnique({ where: { slug } });
+    if (!entry) {
+      res.status(404).json({ error: "Integration not found" });
+      return;
+    }
+    const ti = await prisma.tenantIntegration.findFirst({
+      where: { tenantId: req.tenantId!, integrationId: entry.id },
+      select: { id: true, config: true },
+    });
+    if (!ti) {
+      res.status(404).json({ error: "No connection found for this integration" });
+      return;
+    }
+    const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>;
+    if (typeof leadsBoardId === "string" && leadsBoardId) cfg.leadsBoardId = leadsBoardId;
+    if (typeof contactsBoardId === "string" && contactsBoardId) cfg.contactsBoardId = contactsBoardId;
+    const updated = await prisma.tenantIntegration.update({
+      where: { id: ti.id },
+      data: { config: cfg as any },
+      select: { id: true, config: true },
+    });
+    res.json({ data: updated });
+  } catch (err: any) {
+    console.error("audience-config error:", err);
+    res.status(500).json({ error: "Failed to update audience config" });
+  }
+});
+
 export default router;

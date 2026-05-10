@@ -9,6 +9,7 @@ import {
   getSlaSettings, updateSlaSettings,
   getIdleAutomation, updateIdleAutomation,
   getDepartments, getDepartmentSla, updateDepartmentSla,
+  getTenantSettings, updateTenantSettings,
   changePassword as changePasswordApi,
 } from "@/lib/api";
 import clsx from "clsx";
@@ -102,6 +103,8 @@ export default function SettingsPage() {
   const [departments, setDepartments] = useState<any[]>([]);
   const [deptSlaMap, setDeptSlaMap] = useState<Record<string, SlaConfig>>({});
   const [showDeptSla, setShowDeptSla] = useState(false);
+  const [defaultCountryCode, setDefaultCountryCode] = useState<string>("IL");
+  const [supportedCountries, setSupportedCountries] = useState<Array<{ code: string; callingCode: string }>>([]);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -112,17 +115,20 @@ export default function SettingsPage() {
   const fetchData = useCallback(async () => {
     if (!token) return;
     try {
-      const [data, greetingData, slaData, idleData, deptData] = await Promise.all([
+      const [data, greetingData, slaData, idleData, deptData, tenantSettings] = await Promise.all([
         getBusinessHours(token),
         getAutoGreeting(token).catch(() => ({ template: "" })),
         getSlaSettings(token).catch(() => DEFAULT_SLA),
         getIdleAutomation(token).catch(() => DEFAULT_IDLE),
         getDepartments(token).catch(() => []),
+        getTenantSettings(token).catch(() => ({ data: { defaultCountryCode: "IL", supportedCountries: [] } })),
       ]);
       setConfig(data);
       setGreetingTemplate(greetingData.template || "");
       setSlaConfig(slaData);
       setIdleConfig(idleData);
+      setDefaultCountryCode(tenantSettings.data?.defaultCountryCode ?? "IL");
+      setSupportedCountries(tenantSettings.data?.supportedCountries ?? []);
       const deptList = Array.isArray(deptData) ? deptData : (deptData as any)?.data || [];
       setDepartments(deptList);
 
@@ -155,6 +161,7 @@ export default function SettingsPage() {
         updateAutoGreeting(token, greetingTemplate),
         updateSlaSettings(token, slaConfig),
         updateIdleAutomation(token, idleConfig),
+        updateTenantSettings(token, { defaultCountryCode }),
       ];
 
       // Save department SLA overrides
@@ -277,6 +284,30 @@ export default function SettingsPage() {
           {message}
         </div>
       )}
+
+      {/* Default phone country — used to E.164-normalize bare phone
+          numbers ("0501234567" → "+972501234567") when materializing
+          broadcast recipients. */}
+      <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
+        <h2 className="font-semibold text-gray-900">{t("settings.phoneCountry")}</h2>
+        <p className="text-xs text-gray-500 mt-1">{t("settings.phoneCountryHelp")}</p>
+        <div className="mt-3 max-w-xs">
+          <select
+            value={defaultCountryCode}
+            onChange={(e) => setDefaultCountryCode(e.target.value)}
+            className="w-full px-3 py-2 text-sm rounded-lg border border-gray-200 bg-white"
+          >
+            {supportedCountries.length === 0 && (
+              <option value={defaultCountryCode}>{defaultCountryCode}</option>
+            )}
+            {supportedCountries.map((c) => (
+              <option key={c.code} value={c.code}>
+                {c.code} (+{c.callingCode})
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
       {loading ? (
         <div className="flex items-center justify-center py-16">

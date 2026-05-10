@@ -79,7 +79,9 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
     };
     const opts: JobsOptions = {
       ...DEFAULT_NOTIF_JOB_OPTS,
-      jobId: `evt:${event.id}`,
+      // BullMQ rejects ':' in custom job IDs (it's the namespace separator on the
+      // underlying Redis keys). Use a hyphen so the prefix still aids debugging.
+      jobId: `evt-${event.id}`,
     };
     await getNotificationsQueue().add(input.type, event, opts);
   } catch (err: any) {

@@ -94,13 +94,13 @@ export async function processAIBot(
   // (escalate vs. continue) tied to the conversation's channel pipeline.
   const shouldEscalate = await checkEscalationThresholds(conversationId, tenantId, agentLite);
   if (shouldEscalate) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
     return true;
   }
 
   // Pre-check: explicit human request — short-circuits the LLM call.
   if (isHumanRequest(incomingMessage)) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
     return true;
   }
 
@@ -241,7 +241,7 @@ export async function processAIBot(
 
   // Side-effect: model decided to escalate (via the escalate_to_human tool).
   if (result.escalation) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
     return true;
   }
 
@@ -388,10 +388,23 @@ async function escalateToHuman(
   tenantId: string,
   conversationId: string,
   sendContext: SendContext,
-  escalationMessage: string,
+  fallbackMessage: string,
+  aiAgentId?: string,
 ): Promise<void> {
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
+
+  // Generate the customer-facing handoff message via AI so it lands in
+  // the conversation's language (Hebrew/English/Arabic/…) and stays in
+  // the agent's voice. Falls back to the agent's configured static
+  // `escalationMessage` if the oneshot fails — never block the actual
+  // escalation just because copywriting hiccupped.
+  const escalationMessage = await generateEscalationHandoff(
+    tenantId,
+    conversationId,
+    aiAgentId,
+    fallbackMessage,
+  );
 
   const extId = await adapter.sendTextMessage(
     sendContext.credentials,
@@ -410,7 +423,7 @@ async function escalateToHuman(
       senderName: "AI Bot",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
-      metadata: { source: "ai_bot", escalation: true },
+      metadata: { source: "ai_bot", escalation: true, aiGenerated: escalationMessage !== fallbackMessage },
     },
   });
 
@@ -441,6 +454,66 @@ async function escalateToHuman(
     tenantId,
     data: { id: conversationId, isHandedOver: true, status: "WAITING" },
   });
+}
+
+/**
+ * Produce a natural-language escalation handoff message in the customer's
+ * language by calling the AI service's oneshot endpoint. Mirrors the
+ * approval-bridge-ack pattern: pulls the recent inbound messages so the
+ * model can detect language even when the latest message is language-
+ * less (an emoji, "ok", a number).
+ *
+ * Falls back to the agent's configured static `escalationMessage` when
+ * the oneshot fails — never block the actual handoff because copywriting
+ * hiccupped. The agent-level static remains the safety net that ships in
+ * a known language and tone.
+ */
+async function generateEscalationHandoff(
+  tenantId: string,
+  conversationId: string,
+  aiAgentId: string | undefined,
+  fallback: string,
+): Promise<string> {
+  if (!aiAgentId) return fallback;
+  try {
+    const recentInbound = await prisma.message.findMany({
+      where: { tenantId, conversationId, direction: "INBOUND" },
+      orderBy: { createdAt: "desc" },
+      take: 5,
+      select: { body: true },
+    });
+    const inboundSample = recentInbound
+      .map((m) => m.body?.trim())
+      .filter((s): s is string => !!s)
+      .reverse()
+      .join("\n");
+    if (!inboundSample) return fallback;
+
+    const userInput =
+      `[INTERNAL CONTEXT — do not echo to the customer]\n` +
+      `Customer's recent messages (oldest → newest):\n${inboundSample}\n\n` +
+      `TASK: Send ONE short reply (max one sentence) telling the customer that you're connecting them with a human team member who will continue from here.\n` +
+      `Rules:\n` +
+      `- Detect the language from the FIRST customer message above (or any earlier non-trivial message). Reply in THAT language. If any message contains Hebrew characters, the language is Hebrew. If Arabic characters, the language is Arabic. Do not default to English.\n` +
+      `- Tone: warm, brief, like a human typing a quick handoff note.\n` +
+      `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
+      `- Do NOT promise a specific response time unless it is implicit in the conversation.\n` +
+      `- Do NOT add greetings like "Hi" or sign-offs.\n`;
+
+    const res = await axios.post(
+      `${AI_SERVICE_URL}/api/ai-bot/oneshot`,
+      { tenantId, aiAgentId, userInput, feature: "escalation_handoff", maxTokens: 80 },
+      {
+        headers: { "X-Internal-Key": INTERNAL_SERVICE_KEY, "Content-Type": "application/json" },
+        timeout: 15_000,
+      },
+    );
+    const reply = (res.data as { reply?: string | null } | undefined)?.reply;
+    if (reply && reply.trim()) return reply.trim();
+  } catch (err: any) {
+    console.warn("[AI-Bot] escalation oneshot failed; falling back to static:", err?.message);
+  }
+  return fallback;
 }
 
 // ─── One-shot reply (delegated to AI service) ──────────────

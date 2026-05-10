@@ -14,6 +14,9 @@
  */
 
 import { prisma, buildAgentToolsForAIAgent, dispatchToolCall } from "@chatcenter/shared";
+import type { AgentToolDispatchResult } from "@chatcenter/shared";
+import { randomUUID } from "crypto";
+import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
@@ -48,6 +51,56 @@ import {
 } from "./action-contracts.repo";
 import { tryEmit } from "./notifications-emit";
 import type { SystemEventType } from "./notifications-emit";
+
+/**
+ * Phase 4: every chat tool call funnels through the ActionOrchestrator
+ * for policy + audit + retry/CB/DLQ. This helper maps the orchestrator's
+ * ExecutionResult back to the AgentToolDispatchResult shape the existing
+ * chat loop reads (`result.content`, `result.sideEffect.{awaitingApproval,denied,escalate}`).
+ *
+ * Auto-executed completions return the underlying dispatch result verbatim,
+ * preserving the dispatcher's own approval-gate side effects. Orchestrator-
+ * level deny/propose decisions synthesize a side-effect shape that triggers
+ * the existing chat loop's pause/handoff branches without new branches.
+ */
+function unwrapToolExec(
+  toolCallId: string,
+  toolName: string,
+  exec: ExecutionResult,
+): AgentToolDispatchResult {
+  if (exec.status === "completed") {
+    const inner = exec.result as AgentToolDispatchResult | undefined;
+    if (inner && typeof inner === "object" && "content" in inner) return inner;
+    // Defensive default if executor returned a non-AgentToolDispatchResult.
+    return { toolCallId, content: typeof inner === "string" ? inner : "" };
+  }
+  if (exec.status === "proposed") {
+    return {
+      toolCallId,
+      content: `Action "${toolName}" requires human approval and has been queued.`,
+      sideEffect: {
+        awaitingApproval: {
+          approvalRequestId: toolCallId,
+          tool: toolName,
+        } as any,
+      },
+    };
+  }
+  if (exec.status === "denied") {
+    return {
+      toolCallId,
+      content: `Action "${toolName}" denied: ${exec.error ?? "policy"}`,
+      sideEffect: { denied: { reason: exec.error ?? "policy" } as any },
+    };
+  }
+  if (exec.status === "failed") {
+    return {
+      toolCallId,
+      content: `Action "${toolName}" failed: ${exec.error ?? "unknown error"}`,
+    };
+  }
+  return { toolCallId, content: "" };
+}
 
 // Map a tool function name to a SystemEvent type (when applicable).
 // Names are matched as `slug.tool` — the slug part is preserved for context
@@ -780,10 +833,25 @@ export async function generateAIBotReply(opts: {
         let toolArgs: Record<string, unknown> = {};
         try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
 
-        const result = await dispatchToolCall(
-          { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
-          agentToolCtx,
+        const exec = await getActionOrchestrator().submit(
+          {
+            id: randomUUID(),
+            conversationId: agentToolCtx.conversationId ?? "",
+            tenantId: agentToolCtx.tenantId,
+            proposedBy: { mode: "chat", system: "ai-bot" },
+            actor: { agentId: "" },
+            tool: toolName,
+            args: toolArgs,
+            rationale: "ai-bot inbox tool call",
+            urgency: "low",
+          },
+          () =>
+            dispatchToolCall(
+              { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+              agentToolCtx,
+            ),
         );
+        const result = unwrapToolExec(tc.id, toolName, exec);
 
         const sideEffectType = result.sideEffect?.awaitingApproval ? "awaiting_approval"
           : result.sideEffect?.denied ? "denied"
@@ -953,10 +1021,25 @@ export async function generateAIBotReply(opts: {
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
         try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
-        const result = await dispatchToolCall(
-          { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
-          agentToolCtx,
+        const exec = await getActionOrchestrator().submit(
+          {
+            id: randomUUID(),
+            conversationId: agentToolCtx.conversationId ?? "",
+            tenantId: agentToolCtx.tenantId,
+            proposedBy: { mode: "chat", system: "ai-bot:retry" },
+            actor: { agentId: "" },
+            tool: toolName,
+            args: toolArgs,
+            rationale: "ai-bot retry-loop tool call",
+            urgency: "low",
+          },
+          () =>
+            dispatchToolCall(
+              { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+              agentToolCtx,
+            ),
         );
+        const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({
           tool: toolName,
           args: toolArgs,

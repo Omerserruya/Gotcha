@@ -40,6 +40,40 @@ export interface CopilotSuggestion {
   confidence?: number;
 }
 
+/**
+ * Local mirror of the canonical `ConversationStateFrame` schema in
+ * `packages/shared/src/schemas/conversation-frame.ts`. Phase 3 keeps the
+ * frontend off the shared workspace import to avoid a Next.js transpile
+ * change. Phase 4 should promote this to a direct shared import — keep
+ * shapes in sync until then.
+ */
+export interface ConversationStateFrame {
+  conversationId: string;
+  mode: "live" | "qa" | "async";
+  /** Monotonic per conversation. Reducer: replace iff version > current. */
+  version: number;
+  ts: string;
+  intent: { primary: string; secondary: string[]; confidence: number } | null;
+  stage: { id: string; name: string; enteredAt: string } | null;
+  summary: { text: string; kind: "rolling" | "final" } | null;
+  sentiment: { customer: number; escalationRisk: number } | null;
+  missingFields: Array<{ field: string; required: boolean; suggestedQuestion?: string }>;
+  suggestedActions: Array<{ text: string; rationale: string; urgency: "low" | "medium" | "high" }>;
+  proposedTools: Array<{
+    tool: string;
+    args: Record<string, unknown>;
+    rationale: string;
+    requiresApproval: boolean;
+  }>;
+  risks: Array<{
+    kind: string;
+    severity: "low" | "medium" | "high";
+    evidenceUtteranceIds: string[];
+  }>;
+  urgency: "low" | "medium" | "high";
+  confidence: number;
+}
+
 interface VoiceCallContextType {
   state: CallState;
   call: CallInfo | null;
@@ -53,6 +87,12 @@ interface VoiceCallContextType {
   currentUtterance: { agent: string; customer: string };
   /** Latest AI copilot suggestions fired after each customer final. */
   copilotSuggestions: CopilotSuggestion[];
+  /**
+   * Latest structured ConversationStateFrame from the Phase 3 intelligence
+   * engine. Reduced by monotonic `version` so out-of-order arrivals can't
+   * regress UI state. `null` until the first frame for the active call.
+   */
+  latestFrame: ConversationStateFrame | null;
   placeCall: (to: string, opts?: { contactName?: string; conversationId?: string; notes?: string }) => Promise<void>;
   hangup: () => void;
   toggleMute: () => void;
@@ -73,6 +113,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const [committed, setCommitted] = useState<CommittedUtterance[]>([]);
   const [currentUtterance, setCurrentUtterance] = useState<{ agent: string; customer: string }>({ agent: "", customer: "" });
   const [copilotSuggestions, setCopilotSuggestions] = useState<CopilotSuggestion[]>([]);
+  const [latestFrame, setLatestFrame] = useState<ConversationStateFrame | null>(null);
   const [isMuted, setIsMuted] = useState(false);
 
   const deviceRef = useRef<Device | null>(null);
@@ -94,6 +135,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setCommitted([]);
       setCurrentUtterance({ agent: "", customer: "" });
       setCopilotSuggestions([]);
+      setLatestFrame(null);
     }, 2000);
   }, []);
 
@@ -142,6 +184,39 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setCopilotSuggestions(data.suggestions.slice(0, 5));
     };
 
+    // Phase 3: structured ConversationStateFrame from the intelligence engine.
+    // Replaces the chat-shaped suggestions array on the new path. Reduced by
+    // monotonic `version` — late frames are dropped. Coexists with the
+    // legacy suggestionsHandler during Phase 3.
+    const frameHandler = (data: any) => {
+      if (!data || !data.frame || typeof data.frame !== "object") return;
+      const frame = data.frame as ConversationStateFrame;
+      if (!frame.conversationId || frame.conversationId !== activeConversationIdRef.current) return;
+      if (typeof frame.version !== "number") return;
+      setLatestFrame((prev) => (prev && prev.version >= frame.version ? prev : frame));
+
+      // Bridge: populate the copilot suggestion list from the frame's
+      // `suggestedActions[]`. The legacy `voice.copilot.suggestions` event
+      // is no longer published by the live runner, so without this bridge
+      // the live-call UI shows "Listening — hints appear after the customer speaks."
+      // forever even though the backend is producing perfectly good frames.
+      if (Array.isArray(frame.suggestedActions) && frame.suggestedActions.length > 0) {
+        const mapped: CopilotSuggestion[] = frame.suggestedActions.slice(0, 5).map((a, i) => ({
+          id: `frame:v${frame.version}:${i}`,
+          title:
+            a.urgency === "high" ? "Act now" :
+            a.urgency === "medium" ? "Consider" : "Hint",
+          body: a.text,
+          text: a.rationale || a.text,
+          kind: a.urgency,
+          confidence: 1,
+        }));
+        setCopilotSuggestions(mapped);
+      } else {
+        setCopilotSuggestions([]);
+      }
+    };
+
     const attach = () => {
       const s = getSocket();
       if (!s) return false;
@@ -149,6 +224,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       s.on("voice.transcript", handler);
       s.on("voice.session.ended", endedHandler);
       s.on("voice.copilot.suggestions", suggestionsHandler);
+      s.on("voice.frame.updated", frameHandler);
       return true;
     };
 
@@ -167,6 +243,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
         socket.off("voice.transcript", handler);
         socket.off("voice.session.ended", endedHandler);
         socket.off("voice.copilot.suggestions", suggestionsHandler);
+        socket.off("voice.frame.updated", frameHandler);
       }
     };
   }, [token]);
@@ -384,6 +461,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     committedTranscripts: committed,
     currentUtterance,
     copilotSuggestions,
+    latestFrame,
     placeCall,
     hangup,
     toggleMute,
