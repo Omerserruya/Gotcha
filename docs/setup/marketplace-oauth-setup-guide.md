@@ -222,8 +222,8 @@ These are also configurable on the OAuth tab — make sure they're enabled in th
 ### .env
 
 ```bash
-SQUARE_APPLICATION_ID=CHANGE_ME
-SQUARE_APPLICATION_SECRET=CHANGE_ME
+SQUARE_APPLICATION_ID=REPLACE_ME
+SQUARE_APPLICATION_SECRET=REPLACE_ME
 SQUARE_REDIRECT_URI=https://gotcha.co.il/api/connectors/square/oauth/callback
 ```
 
