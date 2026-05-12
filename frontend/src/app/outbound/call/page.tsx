@@ -4,6 +4,7 @@ import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
 import { useVoiceCall, type CommittedUtterance, type CopilotSuggestion } from "@/context/VoiceCallContext";
 import { getContacts, getTenantSettings } from "@/lib/api";
 import { normalizeE164 } from "@/lib/phone";
@@ -34,6 +35,7 @@ interface Contact {
 
 export default function OutboundCallPage() {
   const { token, user } = useAuth();
+  const { t } = useI18n();
   const router = useRouter();
   const { placeCall, hangup, toggleMute, isMuted, state, call, elapsedMs, isReady, committedTranscripts, currentUtterance, copilotSuggestions } = useVoiceCall();
 
@@ -103,15 +105,15 @@ export default function OutboundCallPage() {
   async function handleCall() {
     setError(null);
     if (!normalized) {
-      setError("Enter a valid phone number.");
+      setError(t("outbound.call.errInvalidPhone"));
       return;
     }
     if (!isReady) {
-      setError("Voice is not ready yet. Check Twilio configuration.");
+      setError(t("outbound.call.errNotReady"));
       return;
     }
     if (isActive) {
-      setError("Already on a call.");
+      setError(t("outbound.call.errAlreadyOn"));
       return;
     }
     setPlacing(true);
@@ -140,7 +142,7 @@ export default function OutboundCallPage() {
         });
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to place call");
+      setError(err instanceof Error ? err.message : t("outbound.call.errFailed"));
     } finally {
       setPlacing(false);
     }
@@ -155,7 +157,7 @@ export default function OutboundCallPage() {
         committedTranscripts={committedTranscripts}
         currentUtterance={currentUtterance}
         copilotSuggestions={copilotSuggestions}
-        agentName={user?.name || "You"}
+        agentName={user?.name || t("outbound.call.you")}
         onHangup={hangup}
         onToggleMute={toggleMute}
         isMuted={isMuted}
@@ -166,17 +168,17 @@ export default function OutboundCallPage() {
   return (
     <div className="max-w-xl">
       <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6 shadow-subtle">
-        <h2 className="text-lg font-semibold text-gray-900 mb-1">New outbound call</h2>
-        <p className="text-sm text-gray-500 mb-5">Dial a number directly or pick an existing contact.</p>
+        <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("outbound.call.title")}</h2>
+        <p className="text-sm text-gray-500 mb-5">{t("outbound.call.subtitle")}</p>
 
         {/* Contact search */}
         <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Search contacts (optional)</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t("outbound.call.searchLabel")}</label>
           <input
             type="text"
             value={query}
             onChange={(e) => { setQuery(e.target.value); setSelected(null); }}
-            placeholder="Name, phone, or email"
+            placeholder={t("outbound.call.searchPlaceholder")}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400"
             disabled={isBusy}
           />
@@ -189,7 +191,7 @@ export default function OutboundCallPage() {
                   onClick={() => pickContact(c)}
                   className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50"
                 >
-                  <div className="font-medium text-gray-900">{c.displayName || c.externalId || "(no name)"}</div>
+                  <div className="font-medium text-gray-900">{c.displayName || c.externalId || t("outbound.call.noName")}</div>
                   <div className="text-xs text-gray-500">{c.phone || c.externalId}</div>
                 </button>
               ))}
@@ -199,7 +201,7 @@ export default function OutboundCallPage() {
 
         {/* Phone number */}
         <div className="mb-4">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Phone number</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t("outbound.call.phone")}</label>
           <div className="flex items-center gap-2">
             <input
               type="tel"
@@ -218,23 +220,23 @@ export default function OutboundCallPage() {
             )}
           </div>
           {phoneInput && !normalized && (
-            <p className="text-xs text-red-500 mt-1">Enter a valid phone number with country code.</p>
+            <p className="text-xs text-red-500 mt-1">{t("outbound.call.errInvalidPhoneHint")}</p>
           )}
           {selected && (
             <p className="text-xs text-gray-500 mt-1">
-              Selected: <span className="font-medium text-gray-700">{selected.displayName || selected.externalId}</span>
+              {t("outbound.call.selected")}: <span className="font-medium text-gray-700">{selected.displayName || selected.externalId}</span>
             </p>
           )}
         </div>
 
         {/* Notes */}
         <div className="mb-5">
-          <label className="block text-xs font-medium text-gray-600 mb-1">Notes (optional)</label>
+          <label className="block text-xs font-medium text-gray-600 mb-1">{t("outbound.call.notes")}</label>
           <textarea
             rows={3}
             value={notes}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Why you're calling — visible to the AI co-pilot during the call."
+            placeholder={t("outbound.call.notesPlaceholder")}
             className="w-full rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 focus:border-primary-400 resize-none"
             disabled={isBusy}
           />
@@ -242,7 +244,7 @@ export default function OutboundCallPage() {
 
         {!isReady && (
           <div className="mb-3 text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg px-3 py-2">
-            Voice is initializing. If this stays, your Twilio credentials may not be configured yet.
+            {t("outbound.call.initializing")}
           </div>
         )}
         {error && (
@@ -265,7 +267,7 @@ export default function OutboundCallPage() {
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
           </svg>
-          {isBusy ? "Call in progress…" : "Call"}
+          {isBusy ? t("outbound.call.inProgress") : t("outbound.call.call")}
         </button>
       </div>
     </div>
@@ -285,6 +287,7 @@ function PhoneCallUI(props: {
   isMuted: boolean;
 }) {
   const { call, state, elapsedMs, committedTranscripts, currentUtterance, copilotSuggestions, agentName, onHangup, onToggleMute, isMuted } = props;
+  const { t } = useI18n();
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -294,15 +297,15 @@ function PhoneCallUI(props: {
   }, []);
 
   const stateLabel = {
-    connecting: "Connecting…",
-    ringing: "Ringing…",
+    connecting: t("outbound.call.connecting"),
+    ringing: t("outbound.call.ringing"),
     active: formatDuration(elapsedMs),
-    ended: "Call ended",
-    error: "Call failed",
+    ended: t("outbound.call.ended"),
+    error: t("outbound.call.failed"),
   }[state as "connecting" | "ringing" | "active" | "ended" | "error"] || "";
 
   const isLive = state === "active" || state === "ringing" || state === "connecting";
-  const customerName = call.contactName || "Customer";
+  const customerName = call.contactName || t("outbound.call.customer");
 
   return (
     <div
@@ -346,13 +349,13 @@ function PhoneCallUI(props: {
           (debounced 1500ms). Rendered as a stack of hint cards in the upper
           right. Fades in/out per refresh. */}
       <div className="pointer-events-none absolute top-20 right-6 md:right-10 max-w-xs w-72">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">Co-pilot</div>
+        <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">{t("outbound.call.copilot")}</div>
         {copilotSuggestions.length === 0 ? (
-          <div className="text-xs text-gray-600 italic">Listening — hints appear after the customer speaks.</div>
+          <div className="text-xs text-gray-600 italic">{t("outbound.call.copilotListening")}</div>
         ) : (
           <div className="flex flex-col gap-2">
             {copilotSuggestions.map((s, i) => {
-              const title = s.title || s.kind || "Suggestion";
+              const title = s.title || s.kind || t("outbound.call.suggestion");
               const body = s.body || s.text || "";
               return (
                 <div
@@ -380,8 +383,8 @@ function PhoneCallUI(props: {
             isLive && isMuted && "bg-white text-gray-900 hover:scale-105",
             isLive && !isMuted && "bg-white/10 text-gray-100 hover:bg-white/20 hover:scale-105"
           )}
-          aria-label={isMuted ? "Unmute" : "Mute"}
-          title={isMuted ? "Unmute microphone" : "Mute microphone"}
+          aria-label={isMuted ? t("outbound.call.unmute") : t("outbound.call.mute")}
+          title={isMuted ? t("outbound.call.unmuteMic") : t("outbound.call.muteMic")}
         >
           {isMuted ? (
             <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -403,7 +406,7 @@ function PhoneCallUI(props: {
               ? "bg-red-600 hover:bg-red-700 text-white hover:scale-105"
               : "bg-gray-700 text-gray-400 cursor-not-allowed"
           )}
-          aria-label="Hang up"
+          aria-label={t("outbound.call.hangup")}
           style={{ boxShadow: isLive ? "0 0 0 8px rgba(239, 68, 68, 0.15)" : undefined }}
         >
           <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
@@ -415,7 +418,7 @@ function PhoneCallUI(props: {
       {/* Muted pill */}
       {isMuted && (
         <div className="absolute top-5 left-1/2 -translate-x-1/2 text-[11px] uppercase tracking-[0.2em] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
-          Microphone muted
+          {t("outbound.call.micMuted")}
         </div>
       )}
     </div>

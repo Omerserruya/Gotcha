@@ -141,7 +141,8 @@
       "sending": "Sending...",
       "success": "Conversation started",
       "error": "Failed to start conversation"
-    }
+    },
+    "attach": "Attach"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -493,7 +494,11 @@
     "imapHost": "IMAP Host",
     "imapPort": "IMAP Port",
     "imapUser": "IMAP Username",
-    "imapPass": "IMAP Password"
+    "imapPass": "IMAP Password",
+    "embeddedChat": "Embedded Chat",
+    "embeddedChatDesc": "Add a chat widget to your website",
+    "createWidget": "Create Widget",
+    "embedTitle": "Embed Chat Widget"
   },
   "departments": {
     "title": "Departments",
@@ -606,74 +611,266 @@
     "oauthNotConfigured": "This integration is not configured. Contact your administrator."
   },
   "settings": {
-    "title": "Settings",
-    "subtitle": "Manage business hours and auto-response settings",
     "nav": {
+      "voiceChannels": "Voice channels",
       "general": "General",
-      "policy": "Business Policy",
-      "tools": "Tools",
       "integrations": "Integrations",
-      "scheduler": "Scheduler",
+      "policy": "Policy",
+      "tools": "Tools",
       "voiceCopilot": "Voice Copilot"
     },
+    "voiceChannels": {
+      "title": "Voice channels",
+      "subtitle": "Manage your organization's Twilio accounts and active numbers.",
+      "newButton": "Connect new",
+      "loading": "Loading…",
+      "pageNotAvailable": "This page is not available for your tenant.",
+      "adminRequired": "Admin access required",
+      "connectedSuccess": "Channel connected successfully",
+      "emptyTitle": "No voice channel connected yet",
+      "emptyDescription": "To receive and make calls through GOTCHA, paste your Twilio Account SID and Auth Token to connect your account.",
+      "startConnect": "Start connecting",
+      "activeNumbers": "active numbers",
+      "statusActive": "Active",
+      "statusPending": "Pending",
+      "statusDisabled": "Disabled",
+      "statusError": "Error",
+      "authBYO": "BYO",
+      "detail": {
+        "backLink": "Back to voice channels",
+        "notFound": "Channel not found",
+        "phoneNumbersTitle": "Phone numbers",
+        "phoneNumbersSubtitle": "Activate a number to receive and make calls. Activation updates the Voice URL in Twilio.",
+        "refreshButton": "Sync from Twilio",
+        "refreshing": "Syncing…",
+        "syncSuccess": "Number list synced from Twilio",
+        "noNumbers": "No numbers found in the Twilio account. Click \"Sync from Twilio\" to refresh.",
+        "colE164": "E.164",
+        "colFriendlyName": "Friendly name",
+        "colTwilioSid": "Twilio SID",
+        "colWebhook": "Webhook",
+        "colActive": "Active",
+        "webhookLabel": "Webhook",
+        "webhookInactive": "Inactive",
+        "toggleActivate": "Activate number",
+        "toggleDeactivate": "Deactivate number",
+        "dangerZone": "Disable channel",
+        "dangerZoneDesc": "Disabling will remove the Twilio link and stop receiving calls from all numbers in this channel. This action cannot be undone.",
+        "deleteButton": "Disable channel",
+        "deleting": "Disabling…",
+        "deleteConfirm": "This will disable the channel and completely stop receiving calls. Continue?",
+        "outboundProvisioningFailed": "Outbound dialing isn't fully configured — inbound calls still work.",
+        "retryProvisioning": "Retry provisioning"
+      },
+      "wizard": {
+        "backLink": "Back to voice channels",
+        "step1Title": "Connect a new voice channel",
+        "step1Subtitle": "Connect your Twilio account to receive and make calls through GOTCHA.",
+        "step1BYOTitle": "Twilio account details",
+        "step1BYOSubtitle": "Paste your Twilio Account SID and Auth Token — we'll set up the rest automatically.",
+        "step1BYOAutoSetup": "We'll create the API Key and TwiML App for you.",
+        "step1BYOWhereToFind": "Where to find these in the Twilio console →",
+        "step1BYOSubmit": "Continue to number discovery",
+        "step1BYOSubmitting": "Connecting to Twilio…",
+        "step1BYOFriendlyName": "Display name",
+        "step1BYOFriendlyNameHelp": "For internal identification only — e.g. 'GOTCHA Israel'.",
+        "step1BYOAccountSid": "Account SID",
+        "step1BYOAccountSidHelp": "Console → Account → API keys & tokens. Starts with AC followed by 32 hex characters.",
+        "step1BYOAccountSidError": "Account SID must start with AC and contain 32 hex characters",
+        "step1BYOAuthToken": "Auth Token",
+        "step1BYOAuthTokenHelp": "Console → Account → API keys & tokens. Never shown again — encrypted and stored server-side.",
+        "step1BYOSecretShow": "Show",
+        "step1BYOSecretHide": "Hide",
+        "step2Title": "Select numbers to activate",
+        "step2Subtitle": "We discovered {count} numbers in the account. Select those that will receive inbound calls through GOTCHA. You can always update later.",
+        "step2NoNumbers": "No active numbers found in the Twilio account. Purchase a number in Twilio then come back to refresh.",
+        "step2SelectAll": "Select all",
+        "step2DeselectAll": "Clear all",
+        "step2SkipButton": "Skip to channel settings",
+        "step2ActivateButton": "Activate {count} numbers",
+        "step3TitleDone": "Setup complete",
+        "step3TitleRunning": "Activating numbers…",
+        "step3PartialFailTitle": "Some numbers failed to activate:",
+        "step3OpenButton": "Open channel settings",
+        "stepperDetails": "Details",
+        "stepperNumbers": "Numbers",
+        "stepperActivation": "Activation"
+      }
+    },
+    "title": "Settings",
+    "subtitle": "Configure your workspace",
+    "save": "Save",
+    "saved": "Saved",
+    "enabled": "Enabled",
+    "minutes": "minutes",
+    "timezone": "Timezone",
+    "schedule": "Schedule",
+    "businessHours": "Business hours",
+    "businessHoursDesc": "Set the hours your team is available.",
+    "autoGreeting": "Auto-greeting",
+    "autoGreetingDesc": "Greeting message sent to new conversations.",
+    "autoGreetingPlaceholder": "Hi! Thanks for reaching out…",
+    "autoResponse": "Out-of-hours auto-response",
+    "autoResponseDesc": "Send this message when a conversation arrives outside business hours.",
+    "autoResponsePlaceholder": "We're currently offline…",
+    "autoCloseDelay": "Auto-close after (minutes)",
+    "autoCloseDelayDesc": "Close idle conversations automatically after this many minutes.",
+    "autoCloseEnabled": "Auto-close idle conversations",
+    "autoCloseMessage": "Auto-close message",
+    "autoCloseMessagePlaceholder": "This conversation has been closed due to inactivity.",
+    "idleAutomation": "Idle conversation automation",
+    "idleAutomationDesc": "Send reminders and close inactive chats automatically.",
+    "phoneCountry": "Default country",
+    "phoneCountryHelp": "Used to format bare phone numbers into international form.",
+    "reminderDelay": "Reminder delay (minutes)",
+    "reminderDelayDesc": "Send a reminder after this many minutes of silence.",
+    "reminderEnabled": "Send idle reminders",
+    "reminderMessage": "Reminder message",
+    "reminderMessagePlaceholder": "Are you still there? We'd love to help.",
+    "sla": "Service-level agreement (SLA)",
+    "slaDesc": "Notify agents when conversations exceed the SLA target.",
+    "slaEnabled": "SLA tracking",
+    "slaMinutes": "SLA target (minutes)",
+    "slaWarning": "Warning threshold (minutes)",
+    "slaWarningDesc": "Warn agents when a conversation crosses this threshold.",
+    "slaDepartmentOverride": "Per-department SLA overrides",
+    "slaDepartmentOverrideDesc": "Override the tenant-wide SLA for specific departments.",
     "voiceCopilot": {
       "title": "Voice Copilot",
-      "tabs": { "stt": "Speech-to-Text", "twilio": "Twilio", "live": "Live Monitoring" },
+      "tabs": {
+        "live": "Live calls",
+        "stt": "Transcription",
+        "twilio": "Twilio"
+      },
+      "live": {
+        "title": "Live calls",
+        "empty": "No live calls",
+        "refreshingEvery": "Refreshing every {seconds}s",
+        "columns": {
+          "agent": "Agent",
+          "callSid": "Call SID",
+          "conversationId": "Conversation",
+          "duration": "Duration",
+          "health": "Health",
+          "latency": "Latency"
+        }
+      },
+      "errors": {
+        "invalidPhone": "Invalid phone number",
+        "loadFailed": "Failed to load settings",
+        "saveFailed": "Failed to save settings"
+      },
       "stt": {
-        "provider": "Provider",
-        "providerStub": "Stub (dev)",
-        "providerGoogle": "Google Cloud STT (coming soon)",
-        "apiKey": "API Key",
-        "apiKeyPlaceholder": "Paste your key",
-        "apiKeySaved": "Saved (ends with {last4})",
+        "provider": "Transcription provider",
+        "providerGoogle": "Google",
+        "providerStub": "Stub (offline)",
+        "apiKey": "API key",
+        "apiKeyPlaceholder": "sk-…",
+        "apiKeySaved": "API key saved",
         "language": "Language",
-        "languageHe": "Hebrew (he-IL)",
-        "languageEn": "English (en-US)",
-        "interimResults": "Show interim (partial) transcripts",
-        "speakerSeparation": "Speaker separation (agent/customer)",
-        "speakerSeparationTooltip": "Required for agent/customer split. Always on.",
+        "languageEn": "English",
+        "languageHe": "Hebrew",
+        "interimResults": "Show interim results",
+        "speakerSeparation": "Speaker separation",
+        "speakerSeparationTooltip": "Identify each speaker in the transcript.",
         "save": "Save",
-        "saving": "Saving\u2026",
-        "saved": "Saved"
+        "saved": "Saved",
+        "saving": "Saving…"
       },
       "twilio": {
         "accountSid": "Account SID",
-        "authToken": "Auth Token",
-        "phoneNumber": "Phone Number",
-        "phoneNumberPlaceholder": "+12025550123",
+        "authToken": "Auth token",
+        "phoneNumber": "Phone number",
+        "phoneNumberPlaceholder": "+972xxxxxxxxx",
         "webhookUrl": "Webhook URL",
         "copy": "Copy",
-        "copied": "Copied",
+        "copied": "Copied!",
+        "save": "Save",
         "test": "Test connection",
-        "testing": "Testing\u2026",
-        "testOk": "Connected to {name}",
-        "testErr": "Connection failed: {reason}",
-        "save": "Save"
-      },
-      "live": {
-        "title": "Active calls",
-        "columns": {
-          "callSid": "Call",
-          "conversationId": "Conversation",
-          "agent": "Agent",
-          "duration": "Duration",
-          "latency": "Latency",
-          "health": "Health"
-        },
-        "empty": "No active calls",
-        "refreshingEvery": "Refreshing every 5s"
-      },
-      "errors": {
-        "loadFailed": "Failed to load configuration",
-        "saveFailed": "Failed to save",
-        "invalidPhone": "Phone must be E.164 (e.g. +12025550123)"
+        "testing": "Testing…",
+        "testOk": "Connection OK",
+        "testErr": "Connection failed"
       }
     },
-    "businessHours": "Business Hours",
-    "businessHoursDesc": "Configure when your team is available to handle conversations",
-    "enabled": "Enable Business Hours",
-    "timezone": "Timezone",
-    "schedule": "Weekly Schedule",
+    "slaBreached": "SLA breached",
+    "policy": {
+      "title": "Business Policy",
+      "subtitle": "Guardrails the AI must respect on every action. Applies to bot, planner and copilot.",
+      "saving": "Saving…",
+      "saveChanges": "Save changes",
+      "saved": "Saved",
+      "loading": "Loading policy…",
+      "errorLoad": "Failed to load policy",
+      "errorSave": "Failed to save policy",
+      "financial": "Financial",
+      "maxDiscountLabel": "Max discount the AI can offer without approval",
+      "maxDiscountHint": "Percentage — e.g. 10 means any discount over 10% pauses for human approval.",
+      "refundsApprovalLabel": "Refunds require human approval",
+      "refundsApprovalHint": "When enabled, any AI-proposed refund pauses and routes to the approval queue.",
+      "escalationTitle": "Escalation triggers",
+      "escalationHint": "Keywords that, if detected in a customer message, automatically flag the conversation for human handoff.",
+      "escalationPlaceholder": "Add keyword (press Enter)…",
+      "blockedTitle": "Blocked topics",
+      "blockedHint": "Topics the AI must refuse to discuss. The planner will decline and suggest human handoff.",
+      "blockedPlaceholder": "Add blocked topic…",
+      "quietTitle": "Outbound quiet hours",
+      "quietHint": "The bot won't send proactive messages (follow-ups, campaigns) inside this window.",
+      "quietStart": "Start hour (0-23)",
+      "quietEnd": "End hour (0-23)",
+      "timezone": "Timezone",
+      "noneYet": "None yet.",
+      "add": "Add",
+      "cardHint": "Discount caps, refund rules, escalation keywords, quiet hours."
+    },
+    "tools": {
+      "title": "Tool Permissions",
+      "subtitle": "Per-tenant control over which tools the AI can use, and which ones pause for human approval. Applies to bot-initiated actions, planner executions, and copilot suggestions.",
+      "filter": {
+        "action": "Action",
+        "integration": "Integration",
+        "system": "Read-only",
+        "all": "All"
+      },
+      "kindAction": "Action",
+      "kindIntegration": "Integration",
+      "kindSystem": "Read-only",
+      "catMessaging": "Messaging",
+      "catCrm": "CRM",
+      "catCampaign": "Campaigns",
+      "catWorkflow": "Workflow",
+      "catIdentity": "Identity",
+      "catMemory": "Memory",
+      "catKnowledge": "Knowledge",
+      "catMeta": "Integration",
+      "loading": "Loading tools…",
+      "default": "(default)",
+      "enabled": "Enabled",
+      "hitl": "HITL",
+      "hitlHint": "Pause for human approval",
+      "empty": "No tools in this category.",
+      "errorLoad": "Failed to load tools",
+      "errorSave": "Failed to save",
+      "cardHint": "Enable / disable individual AI tools and gate them behind human approval."
+    },
+    "adminRequired": "Admin access required",
+    "closed": "Closed",
+    "defaultLabel": "default",
+    "password": {
+      "title": "Change Password",
+      "subtitle": "Update your account password",
+      "current": "Current password",
+      "currentPlaceholder": "Enter current password",
+      "new": "New password",
+      "newPlaceholder": "Enter new password (min 8 characters)",
+      "confirm": "Confirm new password",
+      "confirmPlaceholder": "Confirm new password",
+      "action": "Change password",
+      "changing": "Changing…",
+      "changed": "Password changed successfully",
+      "errMismatch": "Passwords do not match",
+      "errTooShort": "Password must be at least 8 characters",
+      "errFail": "Failed to change password"
+    },
     "days": {
       "sunday": "Sunday",
       "monday": "Monday",
@@ -682,44 +879,7 @@
       "thursday": "Thursday",
       "friday": "Friday",
       "saturday": "Saturday"
-    },
-    "open": "Open",
-    "close": "Close",
-    "dayEnabled": "Active",
-    "autoResponse": "Closed Auto-Response",
-    "autoResponseDesc": "This message is automatically sent to customers when the chatbot hands over to an agent outside business hours.",
-    "autoResponsePlaceholder": "We're currently closed. We'll get back to you during our business hours.",
-    "autoGreeting": "Auto-Greeting",
-    "autoGreetingDesc": "This message is sent automatically when an agent claims or is assigned a conversation. Use {agentName} as a placeholder for the agent's name.",
-    "autoGreetingPlaceholder": "Hi! I'm {agentName} and I'll be helping you today.",
-    "save": "Save Settings",
-    "saved": "Settings saved successfully",
-    "phoneCountry": "Default phone country",
-    "phoneCountryHelp": "Used to format bare phone numbers (e.g. \"0501234567\") into international form before campaigns are sent.",
-    "sla": "SLA (Service Level Agreement)",
-    "slaDesc": "Set maximum response time for queued conversations. SLA status will be shown on conversations in the queue.",
-    "slaEnabled": "Enable SLA Tracking",
-    "slaMinutes": "SLA Time (minutes)",
-    "slaWarning": "Warning Threshold (%)",
-    "slaWarningDesc": "Show warning when this percentage of SLA time has elapsed",
-    "slaDepartmentOverride": "Department Overrides",
-    "slaDepartmentOverrideDesc": "Set custom SLA times per department (overrides tenant default)",
-    "slaBreached": "SLA Breached",
-    "slaWarningLabel": "SLA Warning",
-    "slaOk": "Within SLA",
-    "idleAutomation": "Idle Conversation Automation",
-    "idleAutomationDesc": "Automatically send reminders or close conversations when waiting for customer response",
-    "reminderEnabled": "Enable Auto-Reminder",
-    "reminderDelay": "Reminder Delay (minutes)",
-    "reminderDelayDesc": "Time to wait after the agent's last message before sending a reminder",
-    "reminderMessage": "Reminder Message",
-    "reminderMessagePlaceholder": "Hi! We're still here and waiting for your response. Is there anything else we can help you with?",
-    "autoCloseEnabled": "Enable Auto-Close",
-    "autoCloseDelay": "Auto-Close Delay (minutes)",
-    "autoCloseDelayDesc": "Time to wait after the agent's last message before closing the conversation",
-    "autoCloseMessage": "Auto-Close Message",
-    "autoCloseMessagePlaceholder": "Due to the lack of response, this conversation has been closed. Feel free to reach out again anytime!",
-    "minutes": "min"
+    }
   },
   "outbound": {
     "title": "Outbound Hub",
@@ -768,7 +928,15 @@
       "statusApproved": "Approved",
       "statusRejected": "Rejected",
       "connectedChannelsOnly": "Only connected channels are shown",
-      "noConnectedChannels": "No connected channels"
+      "noConnectedChannels": "No connected channels",
+      "metaStatus": "Meta status",
+      "metaDraftHint": "This template hasn't been submitted to Meta yet.",
+      "metaPendingHint": "Submitted to Meta — awaiting approval.",
+      "metaRejectedHint": "Rejected by Meta. Adjust the content and resubmit.",
+      "resubmitToMeta": "Resubmit to Meta",
+      "submitMetaSuccess": "Submitted to Meta",
+      "variableHint": "Use {{1}}, {{2}} or {{name}} for variables",
+      "variableExamples": "Variable examples"
     },
     "broadcasts": {
       "title": "Campaigns",
@@ -1060,6 +1228,40 @@
       "errorRecipientRequired": "Recipient is required",
       "errorBodyRequired": "Message body is required",
       "triggerFlow": "Trigger Flow"
+    },
+    "call": {
+      "title": "New outbound call",
+      "subtitle": "Dial a number directly or pick an existing contact.",
+      "searchLabel": "Search contacts (optional)",
+      "searchPlaceholder": "Name, phone, or email",
+      "phone": "Phone number",
+      "notes": "Notes (optional)",
+      "notesPlaceholder": "Why you're calling — visible to the AI co-pilot during the call.",
+      "noName": "(no name)",
+      "selected": "Selected",
+      "initializing": "Voice is initializing. If this stays, your Twilio credentials may not be configured yet.",
+      "inProgress": "Call in progress…",
+      "call": "Call",
+      "errInvalidPhone": "Enter a valid phone number.",
+      "errInvalidPhoneHint": "Enter a valid phone number with country code.",
+      "errNotReady": "Voice is not ready yet. Check Twilio configuration.",
+      "errAlreadyOn": "Already on a call.",
+      "errFailed": "Failed to place call",
+      "you": "You",
+      "customer": "Customer",
+      "connecting": "Connecting…",
+      "ringing": "Ringing…",
+      "ended": "Call ended",
+      "failed": "Call failed",
+      "copilot": "Co-pilot",
+      "copilotListening": "Listening — hints appear after the customer speaks.",
+      "suggestion": "Suggestion",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "muteMic": "Mute microphone",
+      "unmuteMic": "Unmute microphone",
+      "hangup": "Hang up",
+      "micMuted": "Microphone muted"
     }
   },
   "newConversation": {
@@ -1430,25 +1632,42 @@
           "title": "AI Copilot",
           "hint": "Your AI partner across every conversation and call",
           "desc": "AI Copilot sits beside your team everywhere — live chats, email threads, voice calls, and social comments. It suggests replies, auto-responds to comments, opens conversations with leads, and coaches agents during live calls in real-time.",
-          "bullets": ["Real-time coaching during live voice calls", "Auto-reply to social comments and DMs", "Proactively opens chats with new leads", "Context-aware suggestions across every channel"]
+          "bullets": [
+            "Real-time coaching during live voice calls",
+            "Auto-reply to social comments and DMs",
+            "Proactively opens chats with new leads",
+            "Context-aware suggestions across every channel"
+          ]
         },
         "inbox": {
           "title": "Omnichannel Inbox",
           "hint": "Every channel, every message — one screen",
           "desc": "WhatsApp, Instagram, Messenger, Gmail, Outlook, Slack — all flowing into a single unified inbox. Smart routing sends each conversation to the right agent, and full history follows every customer across channels.",
-          "bullets": ["6+ channels unified in one view", "Smart routing by skill, load, and priority", "Full cross-channel conversation history"]
+          "bullets": [
+            "6+ channels unified in one view",
+            "Smart routing by skill, load, and priority",
+            "Full cross-channel conversation history"
+          ]
         },
         "insights": {
           "title": "Customer Intelligence",
           "hint": "AI that learns your customers and knows how to treat them",
           "desc": "Every interaction teaches the system more about each customer — their preferences, sentiment patterns, purchase history, and communication style. Your team gets live context cards that show exactly how to approach every conversation.",
-          "bullets": ["AI builds a profile from every interaction", "Sentiment and intent detection in real-time", "Personalized handling recommendations per customer"]
+          "bullets": [
+            "AI builds a profile from every interaction",
+            "Sentiment and intent detection in real-time",
+            "Personalized handling recommendations per customer"
+          ]
         },
         "knowledge": {
           "title": "Connected Knowledge Base",
           "hint": "Your company's brain, available in every conversation",
           "desc": "Upload docs, FAQs, and product info — AI instantly uses them to draft replies, answer questions, and train your bots. The knowledge base learns from every resolved conversation and gets smarter over time.",
-          "bullets": ["Auto-suggests relevant articles in chat", "Powers bot answers and copilot suggestions", "Learns and improves from resolved tickets"]
+          "bullets": [
+            "Auto-suggests relevant articles in chat",
+            "Powers bot answers and copilot suggestions",
+            "Learns and improves from resolved tickets"
+          ]
         }
       }
     },
@@ -1459,22 +1678,38 @@
       "ops": {
         "title": "Customer Operations",
         "desc": "Manage all customer conversations from one unified inbox. Route messages to the right agents, automate repetitive tasks, and keep SLAs on track — all with AI that gets smarter with every interaction.",
-        "features": ["Omnichannel inbox", "Smart routing & SLA tracking", "AI-powered automation"]
+        "features": [
+          "Omnichannel inbox",
+          "Smart routing & SLA tracking",
+          "AI-powered automation"
+        ]
       },
       "sales": {
         "title": "Sales",
         "desc": "Engage leads the moment they reach out — on any channel. AI qualifies prospects, suggests follow-ups, and gives your sales team the context they need to close faster.",
-        "features": ["Instant lead engagement", "AI qualification & scoring", "Full conversation history"]
+        "features": [
+          "Instant lead engagement",
+          "AI qualification & scoring",
+          "Full conversation history"
+        ]
       },
       "support": {
         "title": "Support",
         "desc": "Resolve issues faster with AI that understands your product. Copilot drafts replies from your knowledge base, bots handle FAQs, and agents focus on what matters most.",
-        "features": ["AI Copilot for agents", "Self-service bots", "Conversation intelligence"]
+        "features": [
+          "AI Copilot for agents",
+          "Self-service bots",
+          "Conversation intelligence"
+        ]
       },
       "social": {
         "title": "Social Engagement",
         "desc": "Instagram DMs, Facebook comments, WhatsApp — every social touchpoint becomes a managed conversation with real-time sentiment analysis and AI-powered responses.",
-        "features": ["All social channels in one inbox", "Real-time sentiment detection", "Auto-responses for common questions"]
+        "features": [
+          "All social channels in one inbox",
+          "Real-time sentiment detection",
+          "Auto-responses for common questions"
+        ]
       }
     },
     "faq": {
@@ -2111,7 +2346,11 @@
       "usedBy": "Used by",
       "notAssigned": "Not assigned",
       "connectNew": "Connect New Integration",
-      "connectNewSub": "Browse the Marketplace to add more capabilities"
+      "connectNewSub": "Browse the Marketplace to add more capabilities",
+      "disabled": "Disabled",
+      "enabled": "Enabled",
+      "noneConnected": "No tools connected",
+      "noTools": "No tools available"
     }
   },
   "confirm": {
@@ -2156,7 +2395,12 @@
     "errorSimulate": "Simulation failed",
     "errorExecute": "Execution failed",
     "aiComposeExampleConversation": "✨ Draft a reply: apologize for the delay and offer a 10% discount",
-    "aiComposeExampleGlobal": "✨ Draft a message: friendly renewal reminder with the customer's name"
+    "aiComposeExampleGlobal": "✨ Draft a message: friendly renewal reminder with the customer's name",
+    "awaitingApproval": "Awaiting approval",
+    "dismissed": "Dismissed",
+    "executed": "Executed",
+    "placeholderFollowUp": "Ask a follow-up…",
+    "planProposed": "Plan proposed"
   },
   "aiCompose": {
     "button": "Write with AI",
@@ -2246,89 +2490,6 @@
       }
     }
   },
-  "settings": {
-    "nav": {
-      "voiceChannels": "Voice channels"
-    },
-    "voiceChannels": {
-      "title": "Voice channels",
-      "subtitle": "Manage your organization's Twilio accounts and active numbers.",
-      "newButton": "Connect new",
-      "loading": "Loading…",
-      "pageNotAvailable": "This page is not available for your tenant.",
-      "adminRequired": "Admin access required",
-      "connectedSuccess": "Channel connected successfully",
-      "emptyTitle": "No voice channel connected yet",
-      "emptyDescription": "To receive and make calls through GOTCHA, paste your Twilio Account SID and Auth Token to connect your account.",
-      "startConnect": "Start connecting",
-      "activeNumbers": "active numbers",
-      "statusActive": "Active",
-      "statusPending": "Pending",
-      "statusDisabled": "Disabled",
-      "statusError": "Error",
-      "authBYO": "BYO",
-      "detail": {
-        "backLink": "Back to voice channels",
-        "notFound": "Channel not found",
-        "phoneNumbersTitle": "Phone numbers",
-        "phoneNumbersSubtitle": "Activate a number to receive and make calls. Activation updates the Voice URL in Twilio.",
-        "refreshButton": "Sync from Twilio",
-        "refreshing": "Syncing…",
-        "syncSuccess": "Number list synced from Twilio",
-        "noNumbers": "No numbers found in the Twilio account. Click \"Sync from Twilio\" to refresh.",
-        "colE164": "E.164",
-        "colFriendlyName": "Friendly name",
-        "colTwilioSid": "Twilio SID",
-        "colWebhook": "Webhook",
-        "colActive": "Active",
-        "webhookLabel": "Webhook",
-        "webhookInactive": "Inactive",
-        "toggleActivate": "Activate number",
-        "toggleDeactivate": "Deactivate number",
-        "dangerZone": "Disable channel",
-        "dangerZoneDesc": "Disabling will remove the Twilio link and stop receiving calls from all numbers in this channel. This action cannot be undone.",
-        "deleteButton": "Disable channel",
-        "deleting": "Disabling…",
-        "deleteConfirm": "This will disable the channel and completely stop receiving calls. Continue?",
-        "outboundProvisioningFailed": "Outbound dialing isn't fully configured — inbound calls still work.",
-        "retryProvisioning": "Retry provisioning"
-      },
-      "wizard": {
-        "backLink": "Back to voice channels",
-        "step1Title": "Connect a new voice channel",
-        "step1Subtitle": "Connect your Twilio account to receive and make calls through GOTCHA.",
-        "step1BYOTitle": "Twilio account details",
-        "step1BYOSubtitle": "Paste your Twilio Account SID and Auth Token — we'll set up the rest automatically.",
-        "step1BYOAutoSetup": "We'll create the API Key and TwiML App for you.",
-        "step1BYOWhereToFind": "Where to find these in the Twilio console →",
-        "step1BYOSubmit": "Continue to number discovery",
-        "step1BYOSubmitting": "Connecting to Twilio…",
-        "step1BYOFriendlyName": "Display name",
-        "step1BYOFriendlyNameHelp": "For internal identification only — e.g. 'GOTCHA Israel'.",
-        "step1BYOAccountSid": "Account SID",
-        "step1BYOAccountSidHelp": "Console → Account → API keys & tokens. Starts with AC followed by 32 hex characters.",
-        "step1BYOAccountSidError": "Account SID must start with AC and contain 32 hex characters",
-        "step1BYOAuthToken": "Auth Token",
-        "step1BYOAuthTokenHelp": "Console → Account → API keys & tokens. Never shown again — encrypted and stored server-side.",
-        "step1BYOSecretShow": "Show",
-        "step1BYOSecretHide": "Hide",
-        "step2Title": "Select numbers to activate",
-        "step2Subtitle": "We discovered {count} numbers in the account. Select those that will receive inbound calls through GOTCHA. You can always update later.",
-        "step2NoNumbers": "No active numbers found in the Twilio account. Purchase a number in Twilio then come back to refresh.",
-        "step2SelectAll": "Select all",
-        "step2DeselectAll": "Clear all",
-        "step2SkipButton": "Skip to channel settings",
-        "step2ActivateButton": "Activate {count} numbers",
-        "step3TitleDone": "Setup complete",
-        "step3TitleRunning": "Activating numbers…",
-        "step3PartialFailTitle": "Some numbers failed to activate:",
-        "step3OpenButton": "Open channel settings",
-        "stepperDetails": "Details",
-        "stepperNumbers": "Numbers",
-        "stepperActivation": "Activation"
-      }
-    }
-  },
   "voice": {
     "banner": {
       "incomingCall": "Incoming call",
@@ -2406,5 +2567,73 @@
       "claimFailed": "Failed to answer",
       "agentBusy": "Agent is busy"
     }
+  },
+  "bot": {
+    "pageTitle": "AI Bot",
+    "title": "AI Bot Settings",
+    "subtitle": "Configure the autonomous AI agent that handles customer conversations",
+    "notConfiguredTitle": "AI Bot Not Configured",
+    "notConfiguredBody": "The autonomous AI bot needs to be enabled by your system administrator.",
+    "notEnabledHint": "Bot is not enabled for your organization. You can still design flows below. Contact your system administrator to activate the bot.",
+    "active": "Active",
+    "activeDesc": "Enable or disable the AI bot",
+    "systemPrompt": "System Prompt",
+    "systemPromptDesc": "Define the base instructions and persona for the AI bot",
+    "systemPromptPlaceholder": "You are a helpful customer support agent…",
+    "autonomousBehavior": "Autonomous Behavior",
+    "autonomousBehaviorDesc": "Configure escalation thresholds",
+    "maxMessages": "Max Autonomous Messages",
+    "maxMessagesHint": "Max messages before escalating (1-50)",
+    "maxMinutes": "Max Autonomous Minutes",
+    "maxMinutesHint": "Max minutes before escalating (1-60)",
+    "confidenceThreshold": "Confidence Threshold",
+    "confidenceHint": "Minimum confidence before responding",
+    "escalationMessage": "Escalation Message",
+    "escalationPlaceholder": "I'm connecting you with a human agent…",
+    "rules": "Rules",
+    "rulesDesc": "Behavioral constraints and guidelines",
+    "addRule": "Add Rule",
+    "noRules": "No rules defined",
+    "rulePlaceholder": "e.g. Always greet the customer by name",
+    "modelSettings": "Model Settings",
+    "provider": "Provider",
+    "model": "Model",
+    "temperature": "Temperature",
+    "maxTokens": "Max Tokens",
+    "save": "Save Settings",
+    "saved": "Settings saved"
+  },
+  "approvals": {
+    "title": "Approvals",
+    "subtitle": "Bot-initiated actions paused for human review. Approving resumes the conversation and runs the action; rejecting hands the thread off to an agent.",
+    "tab": {
+      "pending": "Pending",
+      "approved": "Approved",
+      "rejected": "Rejected",
+      "expired": "Expired"
+    },
+    "refresh": "Refresh",
+    "emptyPending": "Nothing awaiting approval right now.",
+    "empty": "No approvals to show.",
+    "policy": "Policy",
+    "parameters": "Parameters",
+    "whyHeld": "Why held",
+    "created": "Created",
+    "requestedBy": "Requested by",
+    "decidedBy": "Decided by",
+    "expires": "Expires",
+    "expiredLabel": "Expired",
+    "openConversation": "Open conversation",
+    "reject": "Reject",
+    "rejecting": "Rejecting…",
+    "running": "Running…",
+    "approveAndRun": "Approve & run",
+    "confirmReject": "Confirm reject",
+    "rejectReasonPlaceholder": "Why are you rejecting? (required — used to craft the bot's fallback reply)",
+    "note": "Note",
+    "errLoad": "Failed to load approvals",
+    "errApprove": "Approve failed",
+    "errReject": "Reject failed",
+    "errReasonRequired": "A rejection reason is required"
   }
 }

@@ -122,12 +122,13 @@ function WhatsAppPreview({
   footer: string;
   examples: Record<string, string>;
 }) {
+  const { t } = useI18n();
   const rendered = renderPreview(body, examples);
 
   return (
     <div className="flex flex-col items-center">
       <p className="text-xs font-medium text-gray-500 uppercase tracking-wide mb-3">
-        {"outbound.templates.preview"}
+        {t("outbound.templates.preview")}
       </p>
       {/* Phone shell */}
       <div className="w-64 bg-gray-900 rounded-3xl p-2 shadow-2xl">
@@ -156,7 +157,7 @@ function WhatsAppPreview({
                 </div>
               )}
               <p className="text-xs text-gray-800 whitespace-pre-wrap break-words">
-                {rendered || <span className="text-gray-300 italic">{"outbound.templates.bodyPlaceholder"}</span>}
+                {rendered || <span className="text-gray-300 italic">{t("outbound.templates.bodyPlaceholder")}</span>}
               </p>
               {footer && (
                 <p className="text-[10px] text-gray-400 mt-1 break-words">{footer}</p>
@@ -627,16 +628,16 @@ export default function TemplatesPage() {
                     )}
                     <div>
                       <p className="text-sm font-semibold text-gray-800">
-                        {"outbound.templates.metaStatus"}: {editingTemplate.status}
+                        {t("outbound.templates.metaStatus")}: {editingTemplate.status}
                       </p>
                       {editingTemplate.status === "DRAFT" && (
-                        <p className="text-xs text-gray-500">{"outbound.templates.metaDraftHint"}</p>
+                        <p className="text-xs text-gray-500">{t("outbound.templates.metaDraftHint")}</p>
                       )}
                       {editingTemplate.status === "PENDING_APPROVAL" && (
-                        <p className="text-xs text-gray-500">{"outbound.templates.metaPendingHint"}</p>
+                        <p className="text-xs text-gray-500">{t("outbound.templates.metaPendingHint")}</p>
                       )}
                       {editingTemplate.status === "REJECTED" && (
-                        <p className="text-xs text-red-500">{"outbound.templates.metaRejectedHint"}</p>
+                        <p className="text-xs text-red-500">{t("outbound.templates.metaRejectedHint")}</p>
                       )}
                     </div>
                   </div>
@@ -654,13 +655,13 @@ export default function TemplatesPage() {
                         </svg>
                       )}
                       {editingTemplate.status === "REJECTED"
-                        ? "outbound.templates.resubmitToMeta"
-                        : "outbound.templates.submitToMeta"}
+                        ? t("outbound.templates.resubmitToMeta")
+                        : t("outbound.templates.submitToMeta")}
                     </button>
                   )}
                   {submitSuccess && (
                     <span className="shrink-0 px-3 py-1.5 bg-green-100 text-green-700 text-xs font-semibold rounded-lg">
-                      {"outbound.templates.submitMetaSuccess"}
+                      {t("outbound.templates.submitMetaSuccess")}
                     </span>
                   )}
                 </div>
@@ -710,7 +711,7 @@ export default function TemplatesPage() {
                       ))}
                     </select>
                     {connectedAccounts.length === 0 && (
-                      <p className="text-xs text-amber-500 mt-1">{"outbound.templates.noConnectedChannels"}</p>
+                      <p className="text-xs text-amber-500 mt-1">{t("outbound.templates.noConnectedChannels")}</p>
                     )}
                   </div>
                   <div>
@@ -807,7 +808,7 @@ export default function TemplatesPage() {
                           {t("outbound.templates.fieldBody")}
                           {isWhatsApp && (
                             <span className="ms-2 text-xs text-gray-400 font-normal">
-                              {"outbound.templates.variableHint"}
+                              {t("outbound.templates.variableHint")}
                             </span>
                           )}
                         </label>
@@ -828,7 +829,7 @@ export default function TemplatesPage() {
                     {isWhatsApp && bodyVars.length > 0 && (
                       <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
                         <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
-                          {"outbound.templates.variableExamples"}
+                          {t("outbound.templates.variableExamples")}
                         </p>
                         {bodyVars.map((varKey) => (
                           <div key={varKey} className="flex items-center gap-3">

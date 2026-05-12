@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import clsx from "clsx";
+import { useI18n } from "@/context/I18nContext";
 import { getPolicy as fetchPolicy, updatePolicy, type BusinessPolicy } from "@/lib/gotcha-api";
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
  * PUT /api/ai-assist/policy. The backend enforces the admin role.
  */
 export default function PolicyAdmin({ token }: Props) {
+  const { t } = useI18n();
   const [policy, setPolicy] = useState<BusinessPolicy | null>(null);
   const [saving, setSaving] = useState(false);
   const [dirty, setDirty] = useState(false);
@@ -28,10 +30,10 @@ export default function PolicyAdmin({ token }: Props) {
         const res = await fetchPolicy(token);
         setPolicy(res.data);
       } catch (e: any) {
-        setError(e?.message ?? "failed to load policy");
+        setError(e?.message ?? t("settings.policy.errorLoad"));
       }
     })();
-  }, [token]);
+  }, [token, t]);
 
   function patch<K extends keyof BusinessPolicy>(key: K, value: BusinessPolicy[K]) {
     if (!policy) return;
@@ -47,10 +49,10 @@ export default function PolicyAdmin({ token }: Props) {
       const res = await updatePolicy(token, policy);
       setPolicy(res.data);
       setDirty(false);
-      setToast("Saved");
+      setToast(t("settings.policy.saved"));
       setTimeout(() => setToast(null), 2000);
     } catch (e: any) {
-      setError(e?.message ?? "failed to save policy");
+      setError(e?.message ?? t("settings.policy.errorSave"));
     } finally {
       setSaving(false);
     }
@@ -59,7 +61,7 @@ export default function PolicyAdmin({ token }: Props) {
   if (!policy) {
     return (
       <div className="bg-white rounded-xl shadow-subtle p-6 text-sm text-gray-500">
-        {error ? <span className="text-red-600">{error}</span> : "Loading policy…"}
+        {error ? <span className="text-red-600">{error}</span> : t("settings.policy.loading")}
       </div>
     );
   }
@@ -69,10 +71,8 @@ export default function PolicyAdmin({ token }: Props) {
       {/* Header */}
       <div className="flex items-center justify-between bg-gradient-to-r from-violet-50 to-purple-50 border border-violet-100 rounded-xl px-5 py-4">
         <div>
-          <h2 className="text-base font-semibold text-gray-900">Business Policy</h2>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Guardrails the AI must respect on every action. Applies to bot + planner + copilot.
-          </p>
+          <h2 className="text-base font-semibold text-gray-900">{t("settings.policy.title")}</h2>
+          <p className="text-xs text-gray-500 mt-0.5">{t("settings.policy.subtitle")}</p>
         </div>
         <button
           onClick={save}
@@ -84,7 +84,7 @@ export default function PolicyAdmin({ token }: Props) {
               : "bg-gray-100 text-gray-400 cursor-not-allowed",
           )}
         >
-          {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          {saving ? t("settings.policy.saving") : dirty ? t("settings.policy.saveChanges") : t("settings.policy.saved")}
         </button>
       </div>
 
@@ -101,9 +101,12 @@ export default function PolicyAdmin({ token }: Props) {
 
       {/* Discount + Refund */}
       <section className="bg-white rounded-xl shadow-subtle p-5 space-y-5">
-        <h3 className="text-sm font-semibold text-gray-800">Financial</h3>
+        <h3 className="text-sm font-semibold text-gray-800">{t("settings.policy.financial")}</h3>
 
-        <Field label="Max discount the AI can offer without approval" hint="Percentage — e.g. 10 means any discount over 10% pauses for human approval.">
+        <Field
+          label={t("settings.policy.maxDiscountLabel")}
+          hint={t("settings.policy.maxDiscountHint")}
+        >
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -118,8 +121,8 @@ export default function PolicyAdmin({ token }: Props) {
         </Field>
 
         <Toggle
-          label="Refunds require human approval"
-          hint="When enabled, any AI-proposed refund pauses and routes to the approval queue."
+          label={t("settings.policy.refundsApprovalLabel")}
+          hint={t("settings.policy.refundsApprovalHint")}
           checked={policy.refundRequiresApproval}
           onChange={(v) => patch("refundRequiresApproval", v)}
         />
@@ -127,28 +130,27 @@ export default function PolicyAdmin({ token }: Props) {
 
       {/* Escalation */}
       <section className="bg-white rounded-xl shadow-subtle p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-800">Escalation triggers</h3>
-        <p className="text-xs text-gray-500 -mt-2">
-          Keywords that, if detected in a customer message, automatically flag the conversation
-          for human handoff. Case-insensitive substring match.
-        </p>
+        <h3 className="text-sm font-semibold text-gray-800">{t("settings.policy.escalationTitle")}</h3>
+        <p className="text-xs text-gray-500 -mt-2">{t("settings.policy.escalationHint")}</p>
         <ChipEditor
           items={policy.escalationKeywords}
           onChange={(v) => patch("escalationKeywords", v)}
-          placeholder="Add keyword (press Enter)…"
+          placeholder={t("settings.policy.escalationPlaceholder")}
+          addLabel={t("settings.policy.add")}
+          emptyLabel={t("settings.policy.noneYet")}
         />
       </section>
 
       {/* Blocked topics */}
       <section className="bg-white rounded-xl shadow-subtle p-5 space-y-4">
-        <h3 className="text-sm font-semibold text-gray-800">Blocked topics</h3>
-        <p className="text-xs text-gray-500 -mt-2">
-          Topics the AI must refuse to discuss. The planner will decline + suggest human handoff.
-        </p>
+        <h3 className="text-sm font-semibold text-gray-800">{t("settings.policy.blockedTitle")}</h3>
+        <p className="text-xs text-gray-500 -mt-2">{t("settings.policy.blockedHint")}</p>
         <ChipEditor
           items={policy.blockedTopics}
           onChange={(v) => patch("blockedTopics", v)}
-          placeholder="Add blocked topic…"
+          placeholder={t("settings.policy.blockedPlaceholder")}
+          addLabel={t("settings.policy.add")}
+          emptyLabel={t("settings.policy.noneYet")}
         />
       </section>
 
@@ -156,10 +158,8 @@ export default function PolicyAdmin({ token }: Props) {
       <section className="bg-white rounded-xl shadow-subtle p-5 space-y-4">
         <div className="flex items-center justify-between">
           <div>
-            <h3 className="text-sm font-semibold text-gray-800">Outbound quiet hours</h3>
-            <p className="text-xs text-gray-500 mt-0.5">
-              The bot won&apos;t send proactive messages (follow-ups, broadcasts) inside this window.
-            </p>
+            <h3 className="text-sm font-semibold text-gray-800">{t("settings.policy.quietTitle")}</h3>
+            <p className="text-xs text-gray-500 mt-0.5">{t("settings.policy.quietHint")}</p>
           </div>
           <Toggle
             label=""
@@ -175,7 +175,7 @@ export default function PolicyAdmin({ token }: Props) {
         {policy.outboundQuietHours && (
           <div className="grid grid-cols-3 gap-3 pt-2 border-t border-gray-100">
             <NumField
-              label="Start hour (0-23)"
+              label={t("settings.policy.quietStart")}
               value={policy.outboundQuietHours.startHour}
               onChange={(v) =>
                 patch("outboundQuietHours", {
@@ -185,7 +185,7 @@ export default function PolicyAdmin({ token }: Props) {
               }
             />
             <NumField
-              label="End hour (0-23)"
+              label={t("settings.policy.quietEnd")}
               value={policy.outboundQuietHours.endHour}
               onChange={(v) =>
                 patch("outboundQuietHours", {
@@ -195,7 +195,7 @@ export default function PolicyAdmin({ token }: Props) {
               }
             />
             <div>
-              <label className="text-xs font-medium text-gray-600 block mb-1">Timezone</label>
+              <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.policy.timezone")}</label>
               <input
                 type="text"
                 value={policy.outboundQuietHours.tz ?? "UTC"}
@@ -299,10 +299,14 @@ function ChipEditor({
   items,
   onChange,
   placeholder,
+  addLabel,
+  emptyLabel,
 }: {
   items: string[];
   onChange: (v: string[]) => void;
   placeholder: string;
+  addLabel?: string;
+  emptyLabel?: string;
 }) {
   const [draft, setDraft] = useState("");
 
@@ -321,7 +325,7 @@ function ChipEditor({
     <div>
       <div className="flex flex-wrap gap-1.5 mb-2">
         {items.length === 0 && (
-          <span className="text-xs text-gray-400 italic">None yet.</span>
+          <span className="text-xs text-gray-400 italic">{emptyLabel ?? "None yet."}</span>
         )}
         {items.map((item) => (
           <span
@@ -360,7 +364,7 @@ function ChipEditor({
           disabled={!draft.trim()}
           className="px-3 py-2 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg disabled:opacity-50"
         >
-          Add
+          {addLabel ?? "Add"}
         </button>
       </div>
     </div>

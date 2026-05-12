@@ -221,6 +221,12 @@
       "type": "file"
     },
     {
+      "path": "src/app/bot/page.tsx",
+      "accessCount": 17,
+      "lastAccessed": 1778596631692,
+      "type": "file"
+    },
+    {
       "path": "src",
       "accessCount": 16,
       "lastAccessed": 1776615533412,
@@ -417,12 +423,6 @@
       "accessCount": 1,
       "lastAccessed": 1775559614021,
       "type": "directory"
-    },
-    {
-      "path": "src/app/bot/page.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1775724033322,
-      "type": "file"
     }
   ],
   "userDirectives": []

@@ -202,11 +202,11 @@ export default function SettingsPage() {
   async function handleChangePassword() {
     if (!token) return;
     if (newPassword !== confirmPassword) {
-      setPasswordError("Passwords do not match");
+      setPasswordError(t("settings.password.errMismatch"));
       return;
     }
     if (newPassword.length < 8) {
-      setPasswordError("Password must be at least 8 characters");
+      setPasswordError(t("settings.password.errTooShort"));
       return;
     }
     setChangingPassword(true);
@@ -214,12 +214,12 @@ export default function SettingsPage() {
     setPasswordMessage("");
     try {
       await changePasswordApi(token, currentPassword, newPassword);
-      setPasswordMessage("Password changed successfully");
+      setPasswordMessage(t("settings.password.changed"));
       setCurrentPassword("");
       setNewPassword("");
       setConfirmPassword("");
     } catch (err: any) {
-      setPasswordError(err.message || "Failed to change password");
+      setPasswordError(err.message || t("settings.password.errFail"));
     } finally {
       setChangingPassword(false);
       setTimeout(() => { setPasswordMessage(""); setPasswordError(""); }, 5000);
@@ -229,7 +229,7 @@ export default function SettingsPage() {
   if (user?.role !== "ADMIN") {
     return (
       <div className="flex items-center justify-center h-full">
-        <p className="text-gray-400">Admin access required</p>
+        <p className="text-gray-400">{t("settings.adminRequired")}</p>
       </div>
     );
   }
@@ -255,8 +255,8 @@ export default function SettingsPage() {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">Business Policy</div>
-              <div className="text-xs text-gray-500">Discount caps, refund rules, escalation keywords, quiet hours.</div>
+              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{t("settings.policy.title")}</div>
+              <div className="text-xs text-gray-500">{t("settings.policy.cardHint")}</div>
             </div>
           </div>
         </a>
@@ -271,8 +271,8 @@ export default function SettingsPage() {
               </svg>
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">Tool Permissions</div>
-              <div className="text-xs text-gray-500">Enable / disable individual AI tools and gate them behind human approval.</div>
+              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{t("settings.tools.title")}</div>
+              <div className="text-xs text-gray-500">{t("settings.tools.cardHint")}</div>
             </div>
           </div>
         </a>
@@ -419,7 +419,7 @@ export default function SettingsPage() {
                                 </div>
                               ) : (
                                 <span className="text-xs text-gray-400 italic">
-                                  {slaConfig.slaMinutes} {t("settings.minutes")} (default)
+                                  {slaConfig.slaMinutes} {t("settings.minutes")} ({t("settings.defaultLabel")})
                                 </span>
                               )}
                             </div>
@@ -625,7 +625,7 @@ export default function SettingsPage() {
                               />
                             </div>
                           ) : (
-                            <span className="text-xs text-gray-400 italic">Closed</span>
+                            <span className="text-xs text-gray-400 italic">{t("settings.closed")}</span>
                           )}
                         </div>
                       );
@@ -664,8 +664,8 @@ export default function SettingsPage() {
 
           {/* Change Password */}
           <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
-            <h2 className="font-semibold text-gray-900 mb-1">Change Password</h2>
-            <p className="text-xs text-gray-500 mb-5">Update your account password</p>
+            <h2 className="font-semibold text-gray-900 mb-1">{t("settings.password.title")}</h2>
+            <p className="text-xs text-gray-500 mb-5">{t("settings.password.subtitle")}</p>
 
             {passwordMessage && (
               <div className="bg-green-50 text-green-700 text-sm px-4 py-2.5 rounded-xl border border-green-200 mb-4">
@@ -680,33 +680,33 @@ export default function SettingsPage() {
 
             <div className="space-y-4 max-w-md">
               <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">Current Password</label>
+                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.current")}</label>
                 <input
                   type="password"
                   value={currentPassword}
                   onChange={(e) => setCurrentPassword(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder="Enter current password"
+                  placeholder={t("settings.password.currentPlaceholder")}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">New Password</label>
+                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.new")}</label>
                 <input
                   type="password"
                   value={newPassword}
                   onChange={(e) => setNewPassword(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder="Enter new password (min 8 characters)"
+                  placeholder={t("settings.password.newPlaceholder")}
                 />
               </div>
               <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">Confirm New Password</label>
+                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.confirm")}</label>
                 <input
                   type="password"
                   value={confirmPassword}
                   onChange={(e) => setConfirmPassword(e.target.value)}
                   className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder="Confirm new password"
+                  placeholder={t("settings.password.confirmPlaceholder")}
                 />
               </div>
               <button
@@ -714,7 +714,7 @@ export default function SettingsPage() {
                 disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
                 className="px-5 py-2.5 min-h-[44px] bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition font-medium text-sm disabled:opacity-40"
               >
-                {changingPassword ? "Changing..." : "Change Password"}
+                {changingPassword ? t("settings.password.changing") : t("settings.password.action")}
               </button>
             </div>
           </div>

@@ -309,6 +309,21 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
           : {}),
       },
     });
+    // Mirror onto ScheduledMessage so its UI reflects the real outcome
+    // instead of the optimistic SENT the scheduled worker set earlier.
+    if (mappedStatus === "FAILED" && (message as any).scheduledMessageId) {
+      try {
+        await prisma.scheduledMessage.update({
+          where: { id: (message as any).scheduledMessageId },
+          data: {
+            status: "FAILED",
+            error: status.errorMessage ?? "Delivery failed",
+          },
+        });
+      } catch (err: any) {
+        console.warn("[webhook] scheduled-message status mirror failed:", err?.message);
+      }
+    }
     await publishEvent({
       event: "message:status",
       tenantId,
@@ -317,6 +332,7 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
         conversationId: message.conversationId,
         status: mappedStatus,
         error: mappedStatus === "FAILED" ? status.errorMessage ?? null : null,
+        scheduledMessageId: (message as any).scheduledMessageId ?? null,
       },
     });
   }

@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
 import {
   listToolPermissions,
   updateToolPermission,
@@ -11,25 +12,27 @@ import {
 
 type KindFilter = "action" | "integration" | "system" | "all";
 
-const KIND_LABEL: Record<ToolPermissionRow["kind"], string> = {
-  action: "Action",
-  integration: "Integration",
-  system: "Read-only",
-};
-
-const CATEGORY_LABEL: Record<string, string> = {
-  messaging: "Messaging",
-  crm: "CRM",
-  broadcast: "Broadcast",
-  workflow: "Workflow",
-  identity: "Identity",
-  memory: "Memory",
-  knowledge: "Knowledge",
-  meta: "Integration",
-};
-
 export default function ToolPermissionsPage() {
   const { token } = useAuth();
+  const { t } = useI18n();
+
+  const KIND_LABEL: Record<ToolPermissionRow["kind"], string> = {
+    action: t("settings.tools.kindAction"),
+    integration: t("settings.tools.kindIntegration"),
+    system: t("settings.tools.kindSystem"),
+  };
+
+  const CATEGORY_LABEL: Record<string, string> = {
+    messaging: t("settings.tools.catMessaging"),
+    crm: t("settings.tools.catCrm"),
+    broadcast: t("settings.tools.catCampaign"),
+    workflow: t("settings.tools.catWorkflow"),
+    identity: t("settings.tools.catIdentity"),
+    memory: t("settings.tools.catMemory"),
+    knowledge: t("settings.tools.catKnowledge"),
+    meta: t("settings.tools.catMeta"),
+  };
+
   const [rows, setRows] = useState<ToolPermissionRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,7 +47,7 @@ export default function ToolPermissionsPage() {
       const res = await listToolPermissions(token);
       setRows(res.data ?? []);
     } catch (e: any) {
-      setError(e?.message ?? "failed to load");
+      setError(e?.message ?? t("settings.tools.errorLoad"));
     } finally {
       setLoading(false);
     }
@@ -86,7 +89,7 @@ export default function ToolPermissionsPage() {
       await updateToolPermission(token, row.toolName, patch);
     } catch (e: any) {
       setRows(previous);
-      setError(e?.message ?? "save failed");
+      setError(e?.message ?? t("settings.tools.errorSave"));
     } finally {
       setSavingTool(null);
     }
@@ -104,12 +107,8 @@ export default function ToolPermissionsPage() {
   return (
       <div className="p-6 max-w-5xl">
         <header className="mb-5">
-          <h1 className="text-xl font-semibold text-gray-900">Tool Permissions</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Per-tenant control over which tools the AI can use, and which ones pause for human
-            approval. Applies to bot-initiated actions, planner executions, and copilot
-            suggestions.
-          </p>
+          <h1 className="text-xl font-semibold text-gray-900">{t("settings.tools.title")}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{t("settings.tools.subtitle")}</p>
         </header>
 
         <div className="flex items-center gap-1 border-b border-gray-200 mb-4">
@@ -118,13 +117,13 @@ export default function ToolPermissionsPage() {
               key={k}
               onClick={() => setKindFilter(k)}
               className={clsx(
-                "px-4 py-2 text-sm font-medium -mb-px border-b-2 transition capitalize",
+                "px-4 py-2 text-sm font-medium -mb-px border-b-2 transition",
                 kindFilter === k
                   ? "text-violet-700 border-violet-600"
                   : "text-gray-500 border-transparent hover:text-gray-700",
               )}
             >
-              {k === "system" ? "Read-only" : k} ({counts[k]})
+              {t(`settings.tools.filter.${k}`)} ({counts[k]})
             </button>
           ))}
         </div>
@@ -136,7 +135,7 @@ export default function ToolPermissionsPage() {
         )}
 
         {loading && rows.length === 0 && (
-          <div className="text-sm text-gray-500 py-8 text-center">Loading tools…</div>
+          <div className="text-sm text-gray-500 py-8 text-center">{t("settings.tools.loading")}</div>
         )}
 
         <div className="space-y-5">
@@ -157,23 +156,23 @@ export default function ToolPermissionsPage() {
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
                         <code className="text-sm font-mono text-gray-900">{row.toolName}</code>
-                        <KindChip kind={row.kind} />
+                        <KindChip kind={row.kind} label={KIND_LABEL[row.kind]} />
                         {row.isDefault && (
-                          <span className="text-[10px] text-gray-400 italic">(default)</span>
+                          <span className="text-[10px] text-gray-400 italic">{t("settings.tools.default")}</span>
                         )}
                       </div>
                       <p className="text-xs text-gray-500">{row.description}</p>
                     </div>
                     <div className="flex items-center gap-6 shrink-0 pt-0.5">
                       <ToggleLabel
-                        label="Enabled"
+                        label={t("settings.tools.enabled")}
                         checked={row.enabled}
                         disabled={savingTool === row.toolName}
                         onChange={(v) => patchTool(row, { enabled: v })}
                       />
                       <ToggleLabel
-                        label="HITL"
-                        hint="Pause for human approval"
+                        label={t("settings.tools.hitl")}
+                        hint={t("settings.tools.hitlHint")}
                         checked={row.requiresApproval}
                         disabled={!row.enabled || savingTool === row.toolName}
                         onChange={(v) => patchTool(row, { requiresApproval: v })}
@@ -186,7 +185,7 @@ export default function ToolPermissionsPage() {
           ))}
           {!loading && filtered.length === 0 && (
             <div className="bg-white rounded-xl shadow-subtle p-10 text-center text-sm text-gray-500">
-              No tools in this category.
+              {t("settings.tools.empty")}
             </div>
           )}
         </div>
@@ -194,7 +193,7 @@ export default function ToolPermissionsPage() {
   );
 }
 
-function KindChip({ kind }: { kind: ToolPermissionRow["kind"] }) {
+function KindChip({ kind, label }: { kind: ToolPermissionRow["kind"]; label: string }) {
   const style =
     kind === "action"
       ? "bg-violet-50 text-violet-700 border-violet-100"
@@ -203,7 +202,7 @@ function KindChip({ kind }: { kind: ToolPermissionRow["kind"] }) {
       : "bg-gray-50 text-gray-600 border-gray-200";
   return (
     <span className={`text-[10px] font-medium px-1.5 py-0.5 border rounded ${style}`}>
-      {KIND_LABEL[kind]}
+      {label}
     </span>
   );
 }

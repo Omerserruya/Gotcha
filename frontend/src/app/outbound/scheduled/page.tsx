@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, FormEvent } from "react";
+import { useState, useEffect, Fragment, FormEvent } from "react";
+import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
@@ -25,10 +26,13 @@ interface ScheduledMessage {
   channel: string;
   channelAccountId?: string;
   recipientId: string;
+  recipientExternalId?: string;
   body: string;
   status: string;
   scheduledAt: string;
   sentAt?: string;
+  /** Meta delivery-failure reason (mirrored from the linked Message). */
+  error?: string | null;
   createdAt: string;
 }
 
@@ -191,6 +195,26 @@ export default function ScheduledPage() {
     loadChannelAccounts();
     loadTemplates();
     loadDepartments();
+  }, [token]);
+
+  // Refresh when the linked Message changes status (the worker / webhook
+  // mirror SENT/FAILED back onto the ScheduledMessage row).
+  useEffect(() => {
+    if (!token) return;
+    const socket = getSocket();
+    if (!socket) return;
+    const onStatus = (data: any) => {
+      // Only refetch when this status change actually touched a scheduled
+      // message — keeps the polling quiet for unrelated chat traffic.
+      if (data?.scheduledMessageId || data?.status === "FAILED") {
+        fetchMessages();
+      }
+    };
+    socket.on("message:status", onStatus);
+    return () => {
+      socket.off("message:status", onStatus);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [token]);
 
   async function fetchMessages() {
@@ -548,12 +572,10 @@ export default function ScheduledPage() {
               </tr>
             ) : (
               messages.map((msg) => (
-                <tr
-                  key={msg.id}
-                  className="border-t border-gray-50 hover:bg-gray-50/50 transition"
-                >
+                <Fragment key={msg.id}>
+                <tr className="border-t border-gray-50 hover:bg-gray-50/50 transition">
                   <td className="py-3.5 px-5 font-medium text-gray-900 font-mono text-xs">
-                    {msg.recipientId}
+                    {msg.recipientExternalId || msg.recipientId}
                   </td>
                   <td className="py-3.5 px-5 text-gray-500">{msg.channel}</td>
                   <td className="py-3.5 px-5 text-gray-500 max-w-xs truncate">
@@ -583,6 +605,15 @@ export default function ScheduledPage() {
                     )}
                   </td>
                 </tr>
+                {msg.status === "FAILED" && msg.error && (
+                  <tr className="bg-red-50/40">
+                    <td colSpan={6} className="px-5 py-2 text-xs text-red-700">
+                      <span className="font-semibold">Error: </span>
+                      {msg.error}
+                    </td>
+                  </tr>
+                )}
+                </Fragment>
               ))
             )}
           </tbody>
@@ -626,6 +657,12 @@ export default function ScheduledPage() {
               <p className="text-xs text-gray-500 mb-2 line-clamp-2">
                 {msg.body}
               </p>
+              {msg.status === "FAILED" && msg.error && (
+                <div className="mb-2 text-xs text-red-700 bg-red-50 border border-red-100 rounded-lg px-2 py-1.5">
+                  <span className="font-semibold">Error: </span>
+                  {msg.error}
+                </div>
+              )}
               <div className="flex items-center justify-between">
                 <p className="text-xs text-gray-400">
                   {new Date(msg.scheduledAt).toLocaleString()}

@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import clsx from "clsx";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
 import { getSocket } from "@/lib/socket";
 import {
   listApprovals,
@@ -20,15 +21,15 @@ import {
 
 type StatusTab = "PENDING" | "APPROVED" | "REJECTED" | "EXPIRED";
 
-const TABS: Array<{ key: StatusTab; label: string }> = [
-  { key: "PENDING", label: "Pending" },
-  { key: "APPROVED", label: "Approved" },
-  { key: "REJECTED", label: "Rejected" },
-  { key: "EXPIRED", label: "Expired" },
-];
-
 export default function ApprovalsPage() {
   const { token } = useAuth();
+  const { t } = useI18n();
+  const TABS: Array<{ key: StatusTab; label: string }> = [
+    { key: "PENDING",  label: t("approvals.tab.pending") },
+    { key: "APPROVED", label: t("approvals.tab.approved") },
+    { key: "REJECTED", label: t("approvals.tab.rejected") },
+    { key: "EXPIRED",  label: t("approvals.tab.expired") },
+  ];
   const [tab, setTab] = useState<StatusTab>("PENDING");
   const [items, setItems] = useState<ApprovalRequestRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -48,7 +49,7 @@ export default function ApprovalsPage() {
       setItems(next);
       knownIds.current = new Set(next.map((a) => a.id));
     } catch (e: any) {
-      setError(e?.message ?? "failed to load approvals");
+      setError(e?.message ?? t("approvals.errLoad"));
     } finally {
       setLoading(false);
     }
@@ -96,7 +97,7 @@ export default function ApprovalsPage() {
       await approveApproval(token, id);
       await load();
     } catch (e: any) {
-      setError(e?.message ?? "approve failed");
+      setError(e?.message ?? t("approvals.errApprove"));
     } finally {
       setActingId(null);
     }
@@ -105,7 +106,7 @@ export default function ApprovalsPage() {
   async function onReject(id: string) {
     if (!token) return;
     if (!rejectReason.trim()) {
-      setError("rejection reason is required");
+      setError(t("approvals.errReasonRequired"));
       return;
     }
     setActingId(id);
@@ -115,7 +116,7 @@ export default function ApprovalsPage() {
       setRejectReason("");
       await load();
     } catch (e: any) {
-      setError(e?.message ?? "reject failed");
+      setError(e?.message ?? t("approvals.errReject"));
     } finally {
       setActingId(null);
     }
@@ -127,33 +128,30 @@ export default function ApprovalsPage() {
     <AppLayout>
       <div className="p-6 max-w-4xl">
         <header className="mb-5">
-          <h1 className="text-xl font-semibold text-gray-900">Approvals</h1>
-          <p className="text-xs text-gray-500 mt-0.5">
-            Bot-initiated actions paused for human review. Approving resumes the
-            conversation and runs the action; rejecting hands the thread off to an agent.
-          </p>
+          <h1 className="text-xl font-semibold text-gray-900">{t("approvals.title")}</h1>
+          <p className="text-xs text-gray-500 mt-0.5">{t("approvals.subtitle")}</p>
         </header>
 
         <div className="flex items-center gap-1 border-b border-gray-200 mb-4">
-          {TABS.map((t) => (
+          {TABS.map((tabItem) => (
             <button
-              key={t.key}
-              onClick={() => setTab(t.key)}
+              key={tabItem.key}
+              onClick={() => setTab(tabItem.key)}
               className={clsx(
                 "px-4 py-2 text-sm font-medium -mb-px border-b-2 transition",
-                tab === t.key
+                tab === tabItem.key
                   ? "text-violet-700 border-violet-600"
                   : "text-gray-500 border-transparent hover:text-gray-700",
               )}
             >
-              {t.label}
+              {tabItem.label}
             </button>
           ))}
           <button
             onClick={load}
             className="ml-auto mb-2 text-xs text-gray-500 hover:text-gray-700"
           >
-            Refresh
+            {t("approvals.refresh")}
           </button>
         </div>
 
@@ -164,15 +162,13 @@ export default function ApprovalsPage() {
         )}
 
         {loading && items.length === 0 && (
-          <div className="text-sm text-gray-500 py-8 text-center">Loading…</div>
+          <div className="text-sm text-gray-500 py-8 text-center">{t("common.loading")}</div>
         )}
 
         {!loading && items.length === 0 && (
           <div className="bg-white rounded-xl shadow-sm border border-gray-100 p-10 text-center">
             <p className="text-sm text-gray-500">
-              {tab === "PENDING"
-                ? "Nothing awaiting approval right now."
-                : `No ${tab.toLowerCase()} approvals.`}
+              {tab === "PENDING" ? t("approvals.emptyPending") : t("approvals.empty")}
             </p>
           </div>
         )}
@@ -225,6 +221,7 @@ function ApprovalListCard({
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
 }) {
+  const { t } = useI18n();
   const tool = humanizeTool(row.tool);
   const isRejecting = rejectingId === row.id;
   const busy = actingId === row.id;
@@ -260,7 +257,7 @@ function ApprovalListCard({
             </div>
             {row.policyRuleName && (
               <div className="text-[11px] text-gray-400 mt-0.5">
-                Policy: <span className="text-gray-600">{row.policyRuleName}</span>
+                {t("approvals.policy")}: <span className="text-gray-600">{row.policyRuleName}</span>
               </div>
             )}
           </div>
@@ -280,23 +277,23 @@ function ApprovalListCard({
       {/* Parameter preview */}
       <div className="px-5 py-4">
         <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">
-          Parameters
+          {t("approvals.parameters")}
         </div>
         <ToolPreview tool={row.tool} params={row.params} />
         {row.reason && (
           <div className="mt-3 text-[12px] text-gray-600 leading-relaxed">
-            <span className="text-gray-400">Why held:</span> {row.reason}
+            <span className="text-gray-400">{t("approvals.whyHeld")}:</span> {row.reason}
           </div>
         )}
       </div>
 
       {/* Meta: requested / decided / time */}
       <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/40 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-gray-500">
-        <Meta label="Created" value={new Date(row.createdAt).toLocaleString()} />
-        <Meta label="Requested by" value={formatRequestedBy(row.requestedBy, row.requestedByName)} />
+        <Meta label={t("approvals.created")} value={new Date(row.createdAt).toLocaleString()} />
+        <Meta label={t("approvals.requestedBy")} value={formatRequestedBy(row.requestedBy, row.requestedByName)} />
         {row.status !== "PENDING" ? (
           <Meta
-            label={row.status === "EXPIRED" ? "Expired" : "Decided by"}
+            label={row.status === "EXPIRED" ? t("approvals.expiredLabel") : t("approvals.decidedBy")}
             value={
               row.status === "EXPIRED"
                 ? row.decidedAt
@@ -308,7 +305,7 @@ function ApprovalListCard({
           />
         ) : (
           <Meta
-            label="Expires"
+            label={t("approvals.expires")}
             value={row.expiresAt ? new Date(row.expiresAt).toLocaleTimeString() : "—"}
           />
         )}
@@ -321,7 +318,7 @@ function ApprovalListCard({
             href={`/conversations?c=${row.conversationId}`}
             className="text-xs text-violet-600 hover:underline"
           >
-            Open conversation →
+            {t("approvals.openConversation")} →
           </a>
           <div className="ml-auto flex gap-2">
             <button
@@ -329,14 +326,14 @@ function ApprovalListCard({
               disabled={busy}
               className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md disabled:opacity-50"
             >
-              Reject
+              {t("approvals.reject")}
             </button>
             <button
               onClick={() => onApprove(row.id)}
               disabled={busy}
               className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md disabled:opacity-50"
             >
-              {busy ? "Running…" : "Approve & run"}
+              {busy ? t("approvals.running") : t("approvals.approveAndRun")}
             </button>
           </div>
         </div>
@@ -347,7 +344,7 @@ function ApprovalListCard({
           <textarea
             value={rejectReason}
             onChange={(e) => onChangeReason(e.target.value)}
-            placeholder="Why are you rejecting? (required — used to craft the bot's fallback reply)"
+            placeholder={t("approvals.rejectReasonPlaceholder")}
             rows={2}
             className="w-full text-xs px-2 py-1.5 border border-gray-200 rounded-md focus:outline-none focus:ring-2 focus:ring-rose-200"
           />
@@ -357,14 +354,14 @@ function ApprovalListCard({
               disabled={busy}
               className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md"
             >
-              Cancel
+              {t("common.cancel")}
             </button>
             <button
               onClick={() => onReject(row.id)}
               disabled={busy || !rejectReason.trim()}
               className="px-3 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-md disabled:opacity-50"
             >
-              {busy ? "Rejecting…" : "Confirm reject"}
+              {busy ? t("approvals.rejecting") : t("approvals.confirmReject")}
             </button>
           </div>
         </div>
@@ -372,7 +369,7 @@ function ApprovalListCard({
 
       {row.status !== "PENDING" && row.decisionReason && (
         <div className="px-5 py-2 border-t border-gray-100 text-[11px] text-gray-500 bg-gray-50/40">
-          <span className="text-gray-400">Note:</span> {row.decisionReason}
+          <span className="text-gray-400">{t("approvals.note")}:</span> {row.decisionReason}
         </div>
       )}
     </li>

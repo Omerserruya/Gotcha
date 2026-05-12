@@ -67,10 +67,29 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
 
   const status = externalMessageId ? "SENT" : "FAILED";
 
-  await prisma.message.update({
+  const updatedMessage = await prisma.message.update({
     where: { id: messageId },
     data: { status, externalMessageId, errorMessage: sendError || undefined },
   });
+
+  // If this Message was produced by a scheduled-message job, mirror the
+  // final outcome onto the ScheduledMessage row so the Scheduled tab
+  // doesn't keep showing SENT for a delivery that actually failed. The
+  // scheduled worker pre-marks the row SENT optimistically to stop the
+  // 30s poll from re-picking it; here we correct that if the send blew up.
+  if (updatedMessage?.scheduledMessageId) {
+    try {
+      await prisma.scheduledMessage.update({
+        where: { id: updatedMessage.scheduledMessageId },
+        data: {
+          status: status === "SENT" ? "SENT" : "FAILED",
+          ...(status === "FAILED" ? { error: sendError ?? `${channel} send failed` } : {}),
+        },
+      });
+    } catch (err: any) {
+      console.warn("[outgoing] scheduled-message status mirror failed:", err?.message);
+    }
+  }
 
   if (job.data.conversationId) {
     await publishEvent({

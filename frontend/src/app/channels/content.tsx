@@ -351,7 +351,7 @@ function ChannelsPageContent() {
   if (user?.role !== "ADMIN") {
     return (
         <div className="flex items-center justify-center h-full">
-          <p className="text-gray-400">Admin access required</p>
+          <p className="text-gray-400">{t("settings.adminRequired")}</p>
         </div>
     );
   }
@@ -458,9 +458,9 @@ function ChannelsPageContent() {
               <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
             </svg>
           }
-          title="Embedded Chat"
-          description="Add a chat widget to your website"
-          buttonLabel="Create Widget"
+          title={t("channels.embeddedChat")}
+          description={t("channels.embeddedChatDesc")}
+          buttonLabel={t("channels.createWidget")}
           onClick={handleCreateWebchat}
           disabled={connecting}
         />
@@ -602,7 +602,7 @@ function ChannelsPageContent() {
         <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => setEmbedModal({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" })} />
         <div className="relative bg-white rounded-2xl shadow-2xl w-full max-w-2xl p-6 space-y-4 max-h-[90vh] overflow-y-auto">
           <div className="flex items-center justify-between">
-            <h3 className="text-lg font-bold text-gray-900">Embed Chat Widget</h3>
+            <h3 className="text-lg font-bold text-gray-900">{t("channels.embedTitle")}</h3>
             <button onClick={() => setEmbedModal({ open: false, widgetId: "", code: "", apiUrl: "", accountId: "" })} className="text-gray-400 hover:text-gray-600">
               <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
