@@ -84,17 +84,27 @@ function statusBadge(status: string) {
   return map[status] ?? "bg-gray-100 text-gray-500";
 }
 
-function parseVariables(body: string): number[] {
-  const matches = body.match(/\{\{(\d+)\}\}/g);
-  if (!matches) return [];
-  const nums = matches.map((m) => parseInt(m.replace(/[^0-9]/g, ""), 10));
-  return Array.from(new Set(nums)).sort((a, b) => a - b);
+/** Extract every {{key}} placeholder from the template body in order of
+ *  appearance. Supports both numeric ({{1}}) and named ({{first_name}})
+ *  keys — Meta's Cloud API accepts either form. */
+function parseVariables(body: string): string[] {
+  const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) {
+    if (!seen.has(m[1])) {
+      seen.add(m[1]);
+      order.push(m[1]);
+    }
+  }
+  return order;
 }
 
-function renderPreview(body: string, examples: Record<number, string>): string {
-  return body.replace(/\{\{(\d+)\}\}/g, (_, n) => {
-    const val = examples[parseInt(n, 10)];
-    return val ? val : `{{${n}}}`;
+function renderPreview(body: string, examples: Record<string, string>): string {
+  return body.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_, key: string) => {
+    const val = examples[key];
+    return val ? val : `{{${key}}}`;
   });
 }
 
@@ -110,7 +120,7 @@ function WhatsAppPreview({
   headerText: string;
   body: string;
   footer: string;
-  examples: Record<number, string>;
+  examples: Record<string, string>;
 }) {
   const rendered = renderPreview(body, examples);
 
@@ -183,7 +193,7 @@ export default function TemplatesPage() {
   const [error, setError] = useState("");
 
   // WhatsApp variable examples
-  const [varExamples, setVarExamples] = useState<Record<number, string>>({});
+  const [varExamples, setVarExamples] = useState<Record<string, string>>({});
 
   // Submit to Meta
   const [submitting, setSubmitting] = useState(false);
@@ -212,7 +222,7 @@ export default function TemplatesPage() {
     if (form.channel === "WHATSAPP") {
       const vars = parseVariables(form.body);
       setVarExamples((prev) => {
-        const next: Record<number, string> = {};
+        const next: Record<string, string> = {};
         vars.forEach((v) => { next[v] = prev[v] ?? ""; });
         return next;
       });
@@ -275,11 +285,21 @@ export default function TemplatesPage() {
       category: tpl.category,
       language: tpl.language,
       headerType: tpl.headerType ?? "NONE",
-      headerText: tpl.headerText ?? "",
+      // DB stores text headers AND media-header example URLs in headerContent.
+      // The form's `headerText` field is the editor input for both.
+      headerText: (tpl as any).headerContent ?? tpl.headerText ?? "",
       body: tpl.body,
       footer: tpl.footer ?? "",
     });
-    setVarExamples({});
+    // Hydrate the per-variable sample inputs from the persisted variables array.
+    const declared = Array.isArray((tpl as any).variables) ? (tpl as any).variables : [];
+    const examples: Record<string, string> = {};
+    for (const v of declared) {
+      if (v && typeof v.key === "string") {
+        examples[v.key] = typeof v.sample === "string" ? v.sample : "";
+      }
+    }
+    setVarExamples(examples);
     setError("");
     setSubmitSuccess(false);
     setShowPanel(true);
@@ -296,11 +316,34 @@ export default function TemplatesPage() {
     setSaving(true);
     setError("");
     try {
+      // Backend stores both TEXT and media (IMAGE/VIDEO/DOCUMENT) header
+      // payloads on the single `headerContent` column. Send the right value
+      // for each header type and drop the old `headerText` field that the
+      // form used previously (it was never read by the API).
+      const { headerText: _headerText, ...rest } = form as typeof form & { headerText?: string };
+      const headerContent =
+        form.headerType === "TEXT"
+          ? form.headerText
+          : form.headerType === "IMAGE" ||
+            form.headerType === "VIDEO" ||
+            form.headerType === "DOCUMENT"
+          ? form.headerText // reused as the example media URL
+          : undefined;
+      // Persist the variable list with samples so the backend's
+      // submit-to-meta path can build a valid `example` block (Meta auto-
+      // rejects templates containing placeholders without examples).
+      const detectedVars = parseVariables(form.body);
+      const variablesPayload = detectedVars.map((k) => ({
+        key: k,
+        sample: varExamples[k] || "",
+      }));
+
       const payload = {
-        ...form,
+        ...rest,
         headerType: form.headerType === "NONE" ? undefined : form.headerType,
-        headerText: form.headerType === "TEXT" ? form.headerText : undefined,
+        headerContent: headerContent || undefined,
         footer: form.footer || undefined,
+        variables: variablesPayload,
       };
       if (editingId) {
         await updateTemplate(token, editingId, payload);
@@ -719,6 +762,36 @@ export default function TemplatesPage() {
                   </div>
                 )}
 
+                {/* Example media URL — Meta requires an example asset to
+                    submit IMAGE/VIDEO/DOCUMENT templates. The same URL is
+                    used as the live header at send time, so it must be
+                    publicly reachable. */}
+                {(form.headerType === "IMAGE" ||
+                  form.headerType === "VIDEO" ||
+                  form.headerType === "DOCUMENT") && (
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                      Example {form.headerType.toLowerCase()} URL
+                    </label>
+                    <input
+                      type="url"
+                      value={form.headerText}
+                      onChange={(e) => setForm({ ...form, headerText: e.target.value })}
+                      className={inputCls}
+                      placeholder={
+                        form.headerType === "IMAGE"
+                          ? "https://example.com/sample.jpg"
+                          : form.headerType === "VIDEO"
+                          ? "https://example.com/sample.mp4"
+                          : "https://example.com/sample.pdf"
+                      }
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Public URL of a sample {form.headerType.toLowerCase()}. Meta uses it to review the template; it&apos;s also sent as the header to each recipient at campaign time.
+                    </p>
+                  </div>
+                )}
+
                 {/* Body + WhatsApp Preview */}
                 <div className={clsx(isWhatsApp && "flex flex-col lg:flex-row gap-5")}>
                   <div className={clsx("flex-1 min-w-0 space-y-4")}>
@@ -757,18 +830,18 @@ export default function TemplatesPage() {
                         <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
                           {"outbound.templates.variableExamples"}
                         </p>
-                        {bodyVars.map((varNum) => (
-                          <div key={varNum} className="flex items-center gap-3">
-                            <span className="shrink-0 w-8 h-8 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                              {`{{${varNum}}}`}
+                        {bodyVars.map((varKey) => (
+                          <div key={varKey} className="flex items-center gap-3">
+                            <span className="shrink-0 px-2 h-8 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
+                              {`{{${varKey}}}`}
                             </span>
                             <input
                               type="text"
-                              value={varExamples[varNum] ?? ""}
+                              value={varExamples[varKey] ?? ""}
                               onChange={(e) =>
-                                setVarExamples((prev) => ({ ...prev, [varNum]: e.target.value }))
+                                setVarExamples((prev) => ({ ...prev, [varKey]: e.target.value }))
                               }
-                              placeholder={`Example for {{${varNum}}}`}
+                              placeholder={`Example for {{${varKey}}}`}
                               className={inputCls}
                             />
                           </div>

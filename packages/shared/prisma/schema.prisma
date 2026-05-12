@@ -1368,6 +1368,10 @@ model Broadcast {
   templateId       String?         @map("template_id")
   body             String? // for non-template messages
   variables        Json            @default("{}") // template variable values
+  // Per-campaign override for IMAGE/VIDEO/DOCUMENT WhatsApp template
+  // headers. When set, this URL is sent as the live header for every
+  // recipient instead of the template's example URL.
+  headerMediaUrl   String?         @map("header_media_url")
   flowId           String?         @map("flow_id") // trigger flow for each recipient
   // Audience definition (manual chips / filter rules / everyone) — resolved at send time.
   audience         Json?

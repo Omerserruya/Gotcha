@@ -114,6 +114,10 @@ export interface BroadcastJob {
   messageType: string;
   templateId?: string;
   variables?: Record<string, string>;
+  // Per-campaign override for IMAGE/VIDEO/DOCUMENT WhatsApp template
+  // headers. When set, worker uses this URL as the live header instead
+  // of the template's example URL.
+  headerMediaUrl?: string;
 }
 
 export interface ScheduledMessageJob {

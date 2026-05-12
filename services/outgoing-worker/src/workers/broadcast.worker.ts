@@ -1,9 +1,105 @@
 import { prisma, createWorker, outgoingMessageQueue, publishEvent, broadcastQueue } from "@chatcenter/shared";
 import type { BroadcastJob } from "@chatcenter/shared";
 
+/** Extract `{{var}}` placeholder keys from a string, preserving order of
+ *  appearance. Used to know which variable values to send to Meta. */
+function extractPlaceholders(text: string): string[] {
+  const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const key = m[1];
+    if (!seen.has(key)) {
+      seen.add(key);
+      order.push(key);
+    }
+  }
+  return order;
+}
+
+/** Build Meta `template.components` for a recipient.
+ *
+ * The previous implementation iterated `Object.values(variables)`, which:
+ *   - lost placeholder order for named ({{first_name}}) keys
+ *   - sent `text: ""` for any unmapped/missing variable, which Meta rejects
+ *     with error 131008 ("Parameter of type text is missing text value")
+ *   - never emitted `parameter_name` for named-params templates
+ *
+ * Walk the template body in placeholder order, look up each value, and fall
+ * back to the template's declared sample (or a non-empty placeholder) when
+ * blank so Meta accepts the message. */
+function buildTemplateComponents(
+  tmpl: { body?: string | null; headerType?: string | null; headerContent?: string | null; variables?: any },
+  values: Record<string, unknown> | undefined,
+  headerMediaOverride?: string | null,
+): any[] {
+  const components: any[] = [];
+  const declared = Array.isArray(tmpl.variables) ? tmpl.variables : [];
+  const sampleByKey = new Map<string, string>();
+  for (const v of declared) {
+    if (v && typeof v.key === "string" && typeof v.sample === "string" && v.sample.trim()) {
+      sampleByKey.set(v.key, v.sample);
+    }
+  }
+
+  const valueFor = (key: string): string => {
+    const raw = values && (values as Record<string, unknown>)[key];
+    if (raw != null && String(raw).length > 0) return String(raw);
+    const sample = sampleByKey.get(key);
+    if (sample) return sample;
+    // Meta rejects empty parameter text — substitute a single dash so the
+    // message ships rather than the whole broadcast halting.
+    return "-";
+  };
+
+  function buildComponent(scope: "header" | "body", text: string) {
+    const keys = extractPlaceholders(text);
+    if (keys.length === 0) return null;
+    const allNumeric = keys.every((k) => /^\d+$/.test(k));
+    const componentType = scope === "header" ? "header" : "body";
+    if (allNumeric) {
+      // Positional ({{1}}, {{2}}) — order parameters by numeric key.
+      const sorted = [...keys].sort((a, b) => Number(a) - Number(b));
+      return {
+        type: componentType,
+        parameters: sorted.map((k) => ({ type: "text", text: valueFor(k) })),
+      };
+    }
+    // Named params (newer Meta format) — every parameter MUST carry parameter_name.
+    return {
+      type: componentType,
+      parameters: keys.map((k) => ({ type: "text", parameter_name: k, text: valueFor(k) })),
+    };
+  }
+
+  if (tmpl.headerType === "TEXT" && tmpl.headerContent) {
+    const header = buildComponent("header", tmpl.headerContent);
+    if (header) components.push(header);
+  } else if (
+    tmpl.headerType === "IMAGE" || tmpl.headerType === "VIDEO" || tmpl.headerType === "DOCUMENT"
+  ) {
+    // Per-campaign override (`headerMediaOverride`) wins over the template
+    // example URL — that's the value the operator entered in the wizard.
+    const liveUrl = (headerMediaOverride && headerMediaOverride.trim()) || tmpl.headerContent;
+    if (liveUrl) {
+      const mediaType = tmpl.headerType.toLowerCase() as "image" | "video" | "document";
+      components.push({
+        type: "header",
+        parameters: [{ type: mediaType, [mediaType]: { link: liveUrl } }],
+      });
+    }
+  }
+  if (tmpl.body) {
+    const body = buildComponent("body", tmpl.body);
+    if (body) components.push(body);
+  }
+  return components;
+}
+
 async function processBroadcastMessage(job: any) {
   const data = job.data as BroadcastJob;
-  const { broadcastId, tenantId, channel, channelAccountId, recipientId, recipientExternalId, body, messageType, templateId, variables } = data;
+  const { broadcastId, tenantId, channel, channelAccountId, recipientId, recipientExternalId, body, messageType, templateId, variables, headerMediaUrl } = data;
 
   const recipient = await prisma.broadcastRecipient.findUnique({ where: { id: recipientId } });
   if (!recipient || (recipient.status !== "pending" && recipient.status !== "queued")) return;
@@ -57,9 +153,7 @@ async function processBroadcastMessage(job: any) {
         messageType: "template",
         templateName: tmpl.name,
         templateLanguage: tmpl.language || "en",
-        templateComponents: variables && Object.keys(variables).length
-          ? [{ type: "body", parameters: Object.values(variables).map((v) => ({ type: "text", text: String(v) })) }]
-          : [],
+        templateComponents: buildTemplateComponents(tmpl, variables, headerMediaUrl),
       };
     }
   }

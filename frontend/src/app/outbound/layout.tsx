@@ -10,7 +10,7 @@ import clsx from "clsx";
 const tabs = [
   { href: "/outbound/call", labelKey: "outbound.nav.call" },
   { href: "/outbound/templates", labelKey: "outbound.nav.templates" },
-  { href: "/outbound/broadcasts", labelKey: "outbound.nav.broadcasts" },
+  { href: "/outbound/campaigns", labelKey: "outbound.nav.broadcasts" },
   { href: "/outbound/scheduled", labelKey: "outbound.nav.scheduled" },
 ];
 

@@ -21,15 +21,49 @@ async function publishBroadcastUpdate(broadcastId: string, tenantId: string) {
   } catch {}
 }
 
+/** Snapshot of a hand-picked CRM contact (id + identity fields). Keeps the
+ *  shape narrow so we don't accidentally persist arbitrary client payloads. */
+function sanitizeCrmContacts(raw: unknown): Array<{
+  id: string;
+  displayName?: string;
+  phone?: string;
+  email?: string;
+}> | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  const out: Array<{ id: string; displayName?: string; phone?: string; email?: string }> = [];
+  for (const r of raw) {
+    if (!r || typeof r !== "object") continue;
+    const c = r as Record<string, unknown>;
+    if (typeof c.id !== "string" || !c.id) continue;
+    out.push({
+      id: c.id,
+      displayName: typeof c.displayName === "string" ? c.displayName : undefined,
+      phone: typeof c.phone === "string" ? c.phone : undefined,
+      email: typeof c.email === "string" ? c.email : undefined,
+    });
+  }
+  return out.length > 0 ? out : undefined;
+}
+
 /** Parse the `audience` body field into a typed AudienceDefinition. */
 function parseAudience(raw: unknown): AudienceDefinition | null {
   if (!raw || typeof raw !== "object") return null;
   const a = raw as any;
-  if (a.type === "manual" && Array.isArray(a.contactIds)) {
-    return { type: "manual", contactIds: a.contactIds.map(String) };
+  if (a.type === "manual" && (Array.isArray(a.contactIds) || Array.isArray(a.crmContacts))) {
+    return {
+      type: "manual",
+      contactIds: Array.isArray(a.contactIds) ? a.contactIds.map(String) : [],
+      crmContacts: sanitizeCrmContacts(a.crmContacts),
+    };
   }
   if (a.type === "filter" && a.rules && (Array.isArray(a.rules.all) || Array.isArray(a.rules.any))) {
-    return { type: "filter", rules: { all: a.rules.all, any: a.rules.any } };
+    return {
+      type: "filter",
+      rules: { all: a.rules.all, any: a.rules.any },
+      module: a.module === "leads" || a.module === "contacts" || a.module === "accounts" || a.module === "deals"
+        ? a.module
+        : undefined,
+    };
   }
   if (a.type === "saved" && typeof a.audienceId === "string") {
     return { type: "saved", audienceId: a.audienceId };
@@ -38,11 +72,15 @@ function parseAudience(raw: unknown): AudienceDefinition | null {
     return {
       type: "composite",
       contactIds: Array.isArray(a.contactIds) ? a.contactIds.map(String) : undefined,
+      crmContacts: sanitizeCrmContacts(a.crmContacts),
       rules: a.rules && (Array.isArray(a.rules.all) || Array.isArray(a.rules.any))
         ? { all: a.rules.all, any: a.rules.any }
         : undefined,
       everyone: a.everyone === true,
       channel: typeof a.channel === "string" ? a.channel : undefined,
+      module: a.module === "leads" || a.module === "contacts" || a.module === "accounts" || a.module === "deals"
+        ? a.module
+        : undefined,
     };
   }
   return null;
@@ -149,14 +187,54 @@ function resolveRecipientVariables(
   r: { displayName?: string; phone?: string; email?: string; raw?: Record<string, unknown> },
 ): Record<string, string> {
   const out: Record<string, string> = {};
+
+  // Picked CRM chips only carry snapshot fields (displayName/phone/email),
+  // so any mapping that names a real CRM field (e.g. "First_Name") would
+  // resolve to "" without an alias layer. Recognize common naming variants
+  // and route them to the snapshot data we do have.
+  const aliasFromSnapshot = (field: string): string | null => {
+    const key = field.toLowerCase().replace(/[\s_-]/g, "");
+    if (!key) return null;
+    if (
+      key === "firstname" || key === "first" || key === "givenname"
+    ) {
+      return (r.displayName ?? "").trim().split(/\s+/)[0] || "";
+    }
+    if (
+      key === "lastname" || key === "last" || key === "familyname" || key === "surname"
+    ) {
+      const parts = (r.displayName ?? "").trim().split(/\s+/);
+      return parts.length > 1 ? parts.slice(1).join(" ") : "";
+    }
+    if (
+      key === "name" || key === "fullname" || key === "displayname" ||
+      key === "contactname" || key === "leadname" || key === "accountname"
+    ) {
+      return r.displayName ?? "";
+    }
+    if (
+      key === "phone" || key === "mobile" || key === "phonenumber" ||
+      key === "mobilenumber" || key === "tel" || key === "telephone" ||
+      key === "cellphone" || key === "cell"
+    ) {
+      return r.phone ?? "";
+    }
+    if (
+      key === "email" || key === "mail" || key === "emailaddress" ||
+      key === "primaryemail"
+    ) {
+      return r.email ?? "";
+    }
+    return null;
+  };
+
   const lookup = (field: string): string => {
     if (r.raw && Object.prototype.hasOwnProperty.call(r.raw, field)) {
       const v = r.raw[field];
-      return v == null ? "" : String(v);
+      if (v != null && String(v).length > 0) return String(v);
     }
-    if (field === "displayName") return r.displayName ?? "";
-    if (field === "phone") return r.phone ?? "";
-    if (field === "email") return r.email ?? "";
+    const aliased = aliasFromSnapshot(field);
+    if (aliased !== null) return aliased;
     return "";
   };
   for (const [key, raw] of Object.entries(spec)) {
@@ -298,7 +376,7 @@ router.get("/:id/recipients", async (req: Request, res: Response) => {
 // ─── Create Broadcast ────────────────────────────────────────
 router.post("/", async (req: Request, res: Response) => {
   try {
-    const { name, channel, channelAccountId, templateId, body, variables, scheduledAt, flowId, audience } = req.body;
+    const { name, channel, channelAccountId, templateId, body, variables, scheduledAt, flowId, audience, headerMediaUrl } = req.body;
 
     if (!name || !channel || !channelAccountId) {
       res.status(400).json({ error: "name, channel, and channelAccountId are required" });
@@ -318,6 +396,7 @@ router.post("/", async (req: Request, res: Response) => {
         variables: variables || {},
         scheduledAt: scheduledAt ? new Date(scheduledAt) : null,
         flowId: flowId || null,
+        headerMediaUrl: typeof headerMediaUrl === "string" && headerMediaUrl.trim() ? headerMediaUrl.trim() : null,
         createdBy: req.user!.userId,
         status: "DRAFT",
         ...(audienceParsed !== undefined && { audience: audienceParsed as any }),
@@ -349,7 +428,7 @@ router.patch("/:id", async (req: Request, res: Response) => {
       return;
     }
 
-    const { name, channel, channelAccountId, templateId, body, variables, scheduledAt, flowId, audience } = req.body;
+    const { name, channel, channelAccountId, templateId, body, variables, scheduledAt, flowId, audience, headerMediaUrl } = req.body;
 
     // audience: pass `null` to clear, an object to set, or omit to leave alone.
     let audienceField: any = undefined;
@@ -370,6 +449,12 @@ router.patch("/:id", async (req: Request, res: Response) => {
         ...(variables !== undefined && { variables }),
         ...(scheduledAt !== undefined && { scheduledAt: scheduledAt ? new Date(scheduledAt) : null }),
         ...(flowId !== undefined && { flowId: flowId || null }),
+        ...(headerMediaUrl !== undefined && {
+          headerMediaUrl:
+            typeof headerMediaUrl === "string" && headerMediaUrl.trim()
+              ? headerMediaUrl.trim()
+              : null,
+        }),
         ...(audienceField !== undefined && { audience: audienceField }),
       },
     });
@@ -486,9 +571,10 @@ router.post("/:id/send", async (req: Request, res: Response) => {
     const existingRecipientCount = await prisma.broadcastRecipient.count({
       where: { broadcastId: broadcast.id },
     });
+    let materializeStats: { inserted: number; total: number } | null = null;
     if (existingRecipientCount === 0 && (broadcast as any).audience) {
       try {
-        await materializeRecipientsFromAudience(
+        materializeStats = await materializeRecipientsFromAudience(
           broadcast.id,
           broadcast.tenantId,
           broadcast.channel,
@@ -496,9 +582,35 @@ router.post("/:id/send", async (req: Request, res: Response) => {
         );
       } catch (err: any) {
         console.error("materializeRecipientsFromAudience error:", err);
+        await prisma.broadcast.update({
+          where: { id: broadcast.id },
+          data: { status: "FAILED", lastError: "Failed to resolve audience: " + (err?.message ?? err) },
+        });
+        await publishBroadcastUpdate(broadcast.id, broadcast.tenantId);
         res.status(500).json({ error: "Failed to resolve audience: " + (err?.message ?? err) });
         return;
       }
+    }
+
+    // Defensive guard: if there's still no one to send to, refuse instead of
+    // flipping the broadcast to SENDING with zero queued jobs (the previous
+    // behavior left the row stuck "in flight" forever with sent=0/total=0).
+    const recipientCount = await prisma.broadcastRecipient.count({
+      where: { broadcastId: broadcast.id },
+    });
+    if (recipientCount === 0) {
+      const dropped =
+        materializeStats && materializeStats.total > 0
+          ? ` (${materializeStats.total} matched the audience, but none had a usable ${broadcast.channel === "WHATSAPP" || broadcast.channel === "MESSENGER" || broadcast.channel === "INSTAGRAM" ? "phone number" : broadcast.channel.toLowerCase() + " address"})`
+          : "";
+      const reason = "No recipients to send to" + dropped + ".";
+      await prisma.broadcast.update({
+        where: { id: broadcast.id },
+        data: { status: "FAILED", lastError: reason },
+      });
+      await publishBroadcastUpdate(broadcast.id, broadcast.tenantId);
+      res.status(400).json({ error: reason });
+      return;
     }
 
     const now = new Date();
@@ -543,6 +655,7 @@ router.post("/:id/send", async (req: Request, res: Response) => {
           recipientId: recipient.id,
           recipientExternalId: recipient.externalId,
           variables: recipientVars,
+          headerMediaUrl: (broadcast as any).headerMediaUrl ?? undefined,
         }, { attempts: 3, backoff: { type: "exponential", delay: 1000 } });
       }
     }
@@ -730,6 +843,53 @@ router.post("/:id/cancel", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Cancel broadcast error:", err);
     res.status(500).json({ error: "Failed to cancel broadcast" });
+  }
+});
+
+// ─── Resend (clone into a new DRAFT) ──────────────────────────
+router.post("/:id/resend", async (req: Request, res: Response) => {
+  try {
+    const id = req.params["id"] as string;
+    const source = await prisma.broadcast.findFirst({
+      where: { id, tenantId: req.tenantId! },
+    });
+    if (!source) {
+      res.status(404).json({ error: "Broadcast not found" });
+      return;
+    }
+
+    // The wizard expects the new row to start fresh — DRAFT, no scheduledAt,
+    // no counts, no error. Keep the same template/audience/variables so the
+    // operator can review and hit Send without rebuilding everything.
+    const clone = await prisma.broadcast.create({
+      data: {
+        tenantId: source.tenantId,
+        createdBy: req.user!.userId,
+        name: `${source.name} (resend)`.slice(0, 200),
+        channel: source.channel,
+        channelAccountId: source.channelAccountId ?? undefined,
+        templateId: source.templateId ?? undefined,
+        body: source.body ?? undefined,
+        variables: (source as any).variables ?? undefined,
+        audience: (source as any).audience ?? undefined,
+        headerMediaUrl: (source as any).headerMediaUrl ?? undefined,
+        status: "DRAFT",
+        sentCount: 0,
+        deliveredCount: 0,
+        readCount: 0,
+        repliedCount: 0,
+        failedCount: 0,
+        totalRecipients: 0,
+        lastError: null,
+        scheduledAt: null,
+      },
+    });
+
+    await publishBroadcastUpdate(clone.id, clone.tenantId);
+    res.status(201).json({ data: clone });
+  } catch (err) {
+    console.error("Resend broadcast error:", err);
+    res.status(500).json({ error: "Failed to resend broadcast" });
   }
 });
 

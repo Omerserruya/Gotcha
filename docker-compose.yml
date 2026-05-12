@@ -137,6 +137,9 @@ services:
       # Public HTTPS base for outbound Twilio webhook URLs (used by /api/voice-channels)
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      # Required for the Meta Resumable Upload API path that mints media
+      # handles for IMAGE/VIDEO/DOCUMENT WhatsApp template examples.
+      META_APP_ID: ${META_APP_ID:-}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads

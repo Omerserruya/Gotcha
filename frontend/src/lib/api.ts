@@ -1410,6 +1410,10 @@ export function cancelBroadcast(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/broadcasts/${id}/cancel`, { token, method: "POST" });
 }
 
+export function resendBroadcast(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/broadcasts/${id}/resend`, { token, method: "POST" });
+}
+
 // ─── Audiences ──────────────────────────────────────────────
 
 export function previewAudience(token: string, audience: any) {

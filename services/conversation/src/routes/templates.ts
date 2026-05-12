@@ -4,6 +4,98 @@ import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, 
 const router = Router();
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const META_APP_ID = process.env.META_APP_ID || process.env.FACEBOOK_APP_ID || "";
+
+/**
+ * Upload a media file to Meta via the Resumable Upload API and return the
+ * `h` handle suitable for `example.header_handle` on template submission.
+ *
+ * Two-step protocol:
+ *   1. POST /{APP_ID}/uploads?file_name=…&file_length=…&file_type=…   → upload session id
+ *   2. POST /{upload-session-id}  with body = file bytes              → handle
+ *
+ * Returns null (with a console.warn) on any failure so the caller can fall
+ * back to submitting without the example — Meta will still reject media
+ * templates without it, but the failure is at the Meta layer and surfaced
+ * by the existing 400 path rather than throwing here.
+ */
+async function uploadMediaForTemplateExample(
+  url: string,
+  accessToken: string,
+): Promise<string | null> {
+  if (!META_APP_ID) {
+    console.warn("[meta-template-upload] META_APP_ID not configured");
+    return null;
+  }
+  try {
+    // 1. Download the example file.
+    const fileRes = await fetch(url);
+    if (!fileRes.ok) {
+      console.warn("[meta-template-upload] download failed", url, fileRes.status);
+      return null;
+    }
+    const ab = await fileRes.arrayBuffer();
+    const buf = Buffer.from(ab);
+    const guessedType = fileRes.headers.get("content-type") || guessMimeFromUrl(url);
+    const fileName = (() => {
+      try {
+        const u = new URL(url);
+        const n = u.pathname.split("/").filter(Boolean).pop();
+        return n || "example";
+      } catch {
+        return "example";
+      }
+    })();
+
+    // 2. Open the upload session.
+    const sessionQs = new URLSearchParams({
+      file_name: fileName,
+      file_length: String(buf.length),
+      file_type: guessedType,
+      access_token: accessToken,
+    });
+    const sessRes = await fetch(`${FB_API_URL}/${META_APP_ID}/uploads?${sessionQs.toString()}`, {
+      method: "POST",
+    });
+    const sessJson = (await sessRes.json()) as any;
+    if (!sessRes.ok || !sessJson?.id) {
+      console.warn("[meta-template-upload] open session failed", sessJson);
+      return null;
+    }
+    const sessionId = String(sessJson.id);
+
+    // 3. Stream the bytes (single chunk — example files are small).
+    const upRes = await fetch(`${FB_API_URL}/${sessionId}`, {
+      method: "POST",
+      headers: {
+        Authorization: `OAuth ${accessToken}`,
+        file_offset: "0",
+      },
+      body: buf,
+    });
+    const upJson = (await upRes.json()) as any;
+    if (!upRes.ok || !upJson?.h) {
+      console.warn("[meta-template-upload] upload failed", upJson);
+      return null;
+    }
+    return String(upJson.h);
+  } catch (err) {
+    console.warn("[meta-template-upload] threw:", (err as { message?: string })?.message);
+    return null;
+  }
+}
+
+function guessMimeFromUrl(url: string): string {
+  const ext = (url.split("?")[0]?.split(".").pop() || "").toLowerCase();
+  if (ext === "jpg" || ext === "jpeg") return "image/jpeg";
+  if (ext === "png") return "image/png";
+  if (ext === "webp") return "image/webp";
+  if (ext === "gif") return "image/gif";
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "mov") return "video/quicktime";
+  if (ext === "pdf") return "application/pdf";
+  return "application/octet-stream";
+}
 
 async function resolveWabaCreds(tenantId: string, template: { channelAccountId: string | null }) {
   const channelAccount = template.channelAccountId
@@ -44,16 +136,97 @@ function normalizeMetaName(raw: string): string {
     .slice(0, 512);
 }
 
-function buildMetaComponents(template: any) {
-  const components: any[] = [];
-  if (template.headerType && template.headerType !== "NONE") {
-    components.push({
-      type: "HEADER",
-      format: template.headerType,
-      ...(template.headerType === "TEXT" ? { text: template.headerContent || "" } : {}),
-    });
+/** Extract `{{var}}` placeholder keys from a Meta template text in order
+ *  of appearance. Duplicates are collapsed (Meta wants one example per
+ *  unique placeholder). */
+function extractPlaceholders(text: string): string[] {
+  const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    const key = m[1];
+    if (!seen.has(key)) {
+      seen.add(key);
+      order.push(key);
+    }
   }
-  components.push({ type: "BODY", text: template.body });
+  return order;
+}
+
+/** Build the Meta `example` object for a component that contains placeholders.
+ *  Picks positional format when the placeholders are all numeric ({{1}}),
+ *  named-params format otherwise ({{first_name}}). */
+function buildExample(
+  text: string,
+  declaredVariables: Array<{ key?: string; sample?: string }> | undefined,
+  scope: "header" | "body",
+): Record<string, unknown> | null {
+  const keys = extractPlaceholders(text);
+  if (keys.length === 0) return null;
+
+  const sampleByKey = new Map<string, string>();
+  if (Array.isArray(declaredVariables)) {
+    for (const v of declaredVariables) {
+      if (v && typeof v.key === "string") {
+        sampleByKey.set(v.key, v.sample && String(v.sample).trim() ? String(v.sample) : `sample_${v.key}`);
+      }
+    }
+  }
+  const sampleFor = (key: string): string =>
+    sampleByKey.get(key) || (/^\d+$/.test(key) ? `sample_${key}` : `sample_${key}`);
+
+  const allNumeric = keys.every((k) => /^\d+$/.test(k));
+
+  if (allNumeric) {
+    // Positional: {{1}}, {{2}} → example.body_text = [[v1, v2]] (or header_text = [v1, ...]).
+    const sortedKeys = [...keys].sort((a, b) => Number(a) - Number(b));
+    const values = sortedKeys.map((k) => sampleFor(k));
+    if (scope === "header") return { header_text: values };
+    return { body_text: [values] };
+  }
+
+  // Named params (newer Meta format).
+  const namedParams = keys.map((k) => ({ param_name: k, example: sampleFor(k) }));
+  if (scope === "header") return { header_text_named_params: namedParams };
+  return { body_text_named_params: namedParams };
+}
+
+function buildMetaComponents(template: any, mediaHeaderHandle?: string | null) {
+  const components: any[] = [];
+  const declaredVars = Array.isArray(template.variables) ? template.variables : [];
+
+  if (template.headerType && template.headerType !== "NONE") {
+    if (template.headerType === "TEXT") {
+      const headerText = template.headerContent || "";
+      const headerExample = buildExample(headerText, declaredVars, "header");
+      components.push({
+        type: "HEADER",
+        format: "TEXT",
+        text: headerText,
+        ...(headerExample ? { example: headerExample } : {}),
+      });
+    } else {
+      // MEDIA headers — Meta requires example.header_handle with a handle
+      // from the Resumable Upload API. The caller uploads the example URL
+      // (stored on the template's headerContent) before calling us and
+      // passes the resulting handle here.
+      components.push({
+        type: "HEADER",
+        format: template.headerType,
+        ...(mediaHeaderHandle ? { example: { header_handle: [mediaHeaderHandle] } } : {}),
+      });
+    }
+  }
+
+  const bodyText = template.body || "";
+  const bodyExample = buildExample(bodyText, declaredVars, "body");
+  components.push({
+    type: "BODY",
+    text: bodyText,
+    ...(bodyExample ? { example: bodyExample } : {}),
+  });
+
   if (template.footer) components.push({ type: "FOOTER", text: template.footer });
   return components;
 }
@@ -168,7 +341,17 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     if (!existing) { res.status(404).json({ error: "Template not found" }); return; }
 
     const data: any = { ...req.body };
-    if (data.channelAccountId) {
+    // The UI sends "" when the picker is cleared; only null is valid as
+    // "unset" for the FK column. Treat both as detach.
+    if (data.channelAccountId === "" || data.channelAccountId === undefined) {
+      // Leave the field alone if the caller didn't touch it; explicitly clear
+      // when they sent "".
+      if (Object.prototype.hasOwnProperty.call(req.body, "channelAccountId") && data.channelAccountId === "") {
+        data.channelAccountId = null;
+      } else {
+        delete data.channelAccountId;
+      }
+    } else if (data.channelAccountId) {
       const account = await prisma.channelAccount.findFirst({
         where: { id: data.channelAccountId, tenantId: req.tenantId! as string },
       });
@@ -177,8 +360,6 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
         return;
       }
       data.channel = account.channel;
-    } else if (data.channelAccountId === null) {
-      data.channelAccountId = null;
     }
 
     const template = await prisma.messageTemplate.update({
@@ -201,7 +382,7 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
     if (!existing) { res.status(404).json({ error: "Template not found" }); return; }
 
     const broadcastCount = await prisma.broadcast.count({
-      where: { templateId: existing.id },
+      where: { tenantId: req.tenantId! as string, templateId: existing.id },
     });
     if (broadcastCount > 0 && req.query.force !== "true") {
       res.status(409).json({ error: "Template is used by one or more broadcasts and cannot be deleted. Add ?force=true to force delete." });
@@ -211,7 +392,7 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
     // Unlink broadcasts before deleting
     if (broadcastCount > 0) {
       await prisma.broadcast.updateMany({
-        where: { templateId: existing.id },
+        where: { tenantId: req.tenantId! as string, templateId: existing.id },
         data: { templateId: null },
       });
     }
@@ -310,11 +491,37 @@ router.post("/:id/submit-to-meta", authenticate, resolveTenant, requireActiveTen
       }
     }
 
+    // Media-header templates need an example handle. Upload the example
+    // file (stored on headerContent for IMAGE/VIDEO/DOCUMENT) to Meta's
+    // Resumable Upload API before assembling the components.
+    let mediaHeaderHandle: string | null = null;
+    if (
+      template.headerType &&
+      template.headerType !== "NONE" &&
+      template.headerType !== "TEXT"
+    ) {
+      const exampleUrl = (template.headerContent || "").trim();
+      if (!exampleUrl) {
+        res.status(400).json({
+          error: `An example media URL is required for ${template.headerType} header templates`,
+        });
+        return;
+      }
+      mediaHeaderHandle = await uploadMediaForTemplateExample(exampleUrl, accessToken);
+      if (!mediaHeaderHandle) {
+        res.status(400).json({
+          error:
+            "Failed to upload example media to Meta. Verify the URL is publicly reachable and the file format is supported.",
+        });
+        return;
+      }
+    }
+
     const metaPayload = {
       name: metaName,
       category: (template.category || "UTILITY").toUpperCase(),
       language: template.language || "en",
-      components: buildMetaComponents(template),
+      components: buildMetaComponents(template, mediaHeaderHandle),
     };
 
     const metaRes = await fetch(`${FB_API_URL}/${wabaId}/message_templates`, {
