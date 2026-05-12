@@ -298,9 +298,16 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
   });
 
   if (message) {
+    // Persist Meta's failure reason when present so the operator can see
+    // *why* — empty error_message after a FAILED webhook is unhelpful.
     await prisma.message.update({
       where: { id: message.id },
-      data: { status: mappedStatus as any },
+      data: {
+        status: mappedStatus as any,
+        ...(mappedStatus === "FAILED" && status.errorMessage
+          ? { errorMessage: status.errorMessage }
+          : {}),
+      },
     });
     await publishEvent({
       event: "message:status",
@@ -309,6 +316,7 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
         messageId: message.id,
         conversationId: message.conversationId,
         status: mappedStatus,
+        error: mappedStatus === "FAILED" ? status.errorMessage ?? null : null,
       },
     });
   }

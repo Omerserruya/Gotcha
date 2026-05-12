@@ -68,6 +68,10 @@ router.get("/", async (req: Request, res: Response) => {
         phone: r.phone,
         email: r.email,
         company: r.company,
+        // Provider-native fields so per-recipient surfaces (scheduled,
+        // conversation-initiate) can map template variables to any CRM
+        // field without a second round-trip.
+        raw: r.raw ?? null,
       });
       if (rows.length >= limitNum) break;
     }

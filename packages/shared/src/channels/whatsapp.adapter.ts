@@ -66,10 +66,23 @@ export const whatsAppInboundAdapter: InboundAdapter = {
           };
           const mapped = statusMap[status.status];
           if (mapped) {
+            // Meta attaches a structured errors[] array on failed deliveries.
+            // Surface the first entry as a single human-readable string so
+            // the rest of the pipeline can persist it on Message.errorMessage
+            // (otherwise the operator sees "FAILED" with no reason).
+            let errorMessage: string | undefined;
+            const errs = Array.isArray(status.errors) ? status.errors : [];
+            if (errs.length > 0) {
+              const e = errs[0] as any;
+              const code = e?.code != null ? `[${e.code}] ` : "";
+              const msg = e?.title || e?.message || e?.error_data?.details || "Delivery failed";
+              errorMessage = `${code}${msg}`.trim();
+            }
             updates.push({
               externalMessageId: status.id,
               status: mapped,
               timestamp: status.timestamp ? new Date(parseInt(status.timestamp) * 1000) : undefined,
+              errorMessage,
             });
           }
         }

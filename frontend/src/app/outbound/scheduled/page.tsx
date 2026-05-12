@@ -9,6 +9,8 @@ import {
   cancelScheduledMessage,
   getChannelAccounts,
   getTemplates,
+  getContacts,
+  getAudienceSchema,
 } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
@@ -48,12 +50,31 @@ interface Template {
   name: string;
   body?: string;
   content?: string;
+  headerType?: string | null;
+  headerContent?: string | null;
+  variables?: Array<{ key: string; sample?: string }>;
 }
 
-interface SegmentRule {
-  field: "channel" | "tag" | "lastSeen";
-  operator: "eq" | "neq" | "lt" | "gt";
-  value: string;
+/** A unified contact candidate — local Contact row OR CRM record. The
+ *  search endpoint returns both shapes; we normalize them so the picker
+ *  only cares about the four display fields. `source: "manual"` is what
+ *  we use when the operator typed a phone with no match. */
+interface ContactCandidate {
+  id: string;
+  source: "local" | "crm" | "manual";
+  displayName?: string;
+  phone?: string;
+  email?: string;
+  /** Provider-native fields when this is a CRM hit. Lets variable mapping
+   *  point at any CRM field (city, age, lead_source, …), not just the
+   *  snapshot quartet. */
+  raw?: Record<string, any> | null;
+}
+
+interface CrmField {
+  name: string;
+  label: string;
+  type: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -70,21 +91,7 @@ const STATUS_BADGES: Record<string, string> = {
 const inputCls =
   "w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition";
 
-type RecipientTab = "single" | "segment" | "import";
 type SendType = "regular" | "conversation" | "flow";
-
-const SEGMENT_FIELDS: { value: SegmentRule["field"]; label: string }[] = [
-  { value: "channel", label: "Channel" },
-  { value: "tag", label: "Tag" },
-  { value: "lastSeen", label: "Last Seen" },
-];
-
-const SEGMENT_OPERATORS: { value: SegmentRule["operator"]; label: string }[] = [
-  { value: "eq", label: "=" },
-  { value: "neq", label: "≠" },
-  { value: "lt", label: "<" },
-  { value: "gt", label: ">" },
-];
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -145,22 +152,26 @@ export default function ScheduledPage() {
   // ---- Form fields ----
   const [channelAccountId, setChannelAccountId] = useState("");
   const [channelValue, setChannelValue] = useState("WHATSAPP");
-  const [recipientTab, setRecipientTab] = useState<RecipientTab>("single");
 
-  // Single
-  const [singleRecipient, setSingleRecipient] = useState("");
-
-  // Segment
-  const [segmentRules, setSegmentRules] = useState<SegmentRule[]>([
-    { field: "channel", operator: "eq", value: "" },
-  ]);
-
-  // Import
-  const [importText, setImportText] = useState("");
+  // Unified recipient picker: free-text input that lights up CRM matches as
+  // the operator types. If they pick a match, `selectedContact` is set and
+  // its snapshot fields are available for variable mapping. If nothing
+  // matches, the raw query becomes the recipient (manual phone).
+  const [recipientQuery, setRecipientQuery] = useState("");
+  const [selectedContact, setSelectedContact] = useState<ContactCandidate | null>(null);
+  const [contactResults, setContactResults] = useState<ContactCandidate[]>([]);
+  const [contactSearching, setContactSearching] = useState(false);
+  // Full CRM field list (leads + contacts schemas merged) for the var
+  // mapping dropdown when a CRM contact is selected.
+  const [crmFields, setCrmFields] = useState<CrmField[]>([]);
 
   // Message
   const [body, setBody] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
+  // Per-template variable values (one specific recipient — concrete values).
+  const [varValues, setVarValues] = useState<Record<string, string>>({});
+  // Live media URL for IMAGE/VIDEO/DOCUMENT template headers.
+  const [headerMediaUrl, setHeaderMediaUrl] = useState("");
 
   // Advanced options
   const [advancedOpen, setAdvancedOpen] = useState(false);
@@ -248,12 +259,13 @@ export default function ScheduledPage() {
   function openCreate() {
     setChannelAccountId("");
     setChannelValue("WHATSAPP");
-    setRecipientTab("single");
-    setSingleRecipient("");
-    setSegmentRules([{ field: "channel", operator: "eq", value: "" }]);
-    setImportText("");
+    setRecipientQuery("");
+    setSelectedContact(null);
+    setContactResults([]);
     setBody("");
     setSelectedTemplateId("");
+    setVarValues({});
+    setHeaderMediaUrl("");
     setAdvancedOpen(false);
     setSendType("regular");
     setDepartmentId("");
@@ -272,33 +284,108 @@ export default function ScheduledPage() {
 
   function handleTemplateSelect(id: string) {
     setSelectedTemplateId(id);
-    if (!id) return;
+    if (!id) {
+      setVarValues({});
+      setHeaderMediaUrl("");
+      return;
+    }
     const tpl = templates.find((t) => t.id === id);
     if (tpl) {
       setBody(tpl.body ?? tpl.content ?? "");
+      // Seed variable inputs with the template's declared samples (operator
+      // can still override per-recipient).
+      const initial: Record<string, string> = {};
+      const declared = Array.isArray(tpl.variables) ? tpl.variables : [];
+      for (const v of declared) {
+        if (v && typeof v.key === "string") initial[v.key] = v.sample ?? "";
+      }
+      // Also pick up any {{key}} that the body uses but the template's
+      // variables array doesn't declare (legacy templates).
+      const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+      let m: RegExpExecArray | null;
+      while ((m = re.exec(tpl.body ?? ""))) {
+        if (!(m[1] in initial)) initial[m[1]] = "";
+      }
+      setVarValues(initial);
+      // Pre-fill media URL with the template's example for media headers.
+      const ht = (tpl.headerType ?? "").toUpperCase();
+      setHeaderMediaUrl(
+        ht === "IMAGE" || ht === "VIDEO" || ht === "DOCUMENT"
+          ? tpl.headerContent ?? ""
+          : "",
+      );
     }
   }
 
+  // Fetch the CRM schema when a CRM contact is selected so the variable
+  // mapping dropdown can offer every field (city, age, lead_source, …),
+  // not just the displayName/phone/email snapshot.
+  useEffect(() => {
+    if (!token) return;
+    if (!selectedContact || selectedContact.source !== "crm") {
+      setCrmFields([]);
+      return;
+    }
+    let cancelled = false;
+    Promise.all([
+      getAudienceSchema(token, "leads").catch(() => null),
+      getAudienceSchema(token, "contacts").catch(() => null),
+    ]).then((results) => {
+      if (cancelled) return;
+      const seen = new Set<string>();
+      const merged: CrmField[] = [];
+      for (const res of results) {
+        const fields = ((res?.data as any)?.crm?.schema?.fields ?? []) as CrmField[];
+        for (const f of fields) {
+          if (!f?.name || seen.has(f.name)) continue;
+          seen.add(f.name);
+          merged.push(f);
+        }
+      }
+      setCrmFields(merged);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [token, selectedContact]);
+
   // ---------------------------------------------------------------------------
-  // Segment rules
+  // Live CRM contact search
   // ---------------------------------------------------------------------------
 
-  function updateRule(index: number, patch: Partial<SegmentRule>) {
-    setSegmentRules((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, ...patch } : r))
-    );
-  }
-
-  function addRule() {
-    setSegmentRules((prev) => [
-      ...prev,
-      { field: "channel", operator: "eq", value: "" },
-    ]);
-  }
-
-  function removeRule(index: number) {
-    setSegmentRules((prev) => prev.filter((_, i) => i !== index));
-  }
+  // Debounced fetch — fires when the operator types in the recipient field
+  // and clears results when they pick a match or empty the box. Picks up
+  // both local Contacts and CRM records via `includeCrm=1`.
+  useEffect(() => {
+    if (!token) return;
+    // Don't search while a match is selected — the input shows the chip,
+    // not free text.
+    if (selectedContact) return;
+    const q = recipientQuery.trim();
+    if (q.length < 2) {
+      setContactResults([]);
+      setContactSearching(false);
+      return;
+    }
+    setContactSearching(true);
+    let cancelled = false;
+    const timer = setTimeout(async () => {
+      try {
+        const res = await getContacts(token, { q, limit: "8", includeCrm: "1" });
+        if (cancelled) return;
+        const rows = ((res?.data ?? []) as any[]).map((c) => normalizeContactCandidate(c));
+        setContactResults(rows);
+      } catch (err) {
+        if (!cancelled) console.warn("[scheduled] contact search failed:", err);
+      } finally {
+        if (!cancelled) setContactSearching(false);
+      }
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [token, recipientQuery, selectedContact]);
 
   // ---------------------------------------------------------------------------
   // Submit
@@ -309,27 +396,14 @@ export default function ScheduledPage() {
     if (!token) return;
     setError("");
 
-    // Build recipientId string
-    let recipientId = "";
-    if (recipientTab === "single") {
-      recipientId = singleRecipient.trim();
-      if (!recipientId) {
-        setError(t("outbound.scheduled.errorRecipientRequired"));
-        return;
-      }
-    } else if (recipientTab === "import") {
-      const ids = importText
-        .split("\n")
-        .map((l) => l.trim())
-        .filter(Boolean);
-      if (ids.length === 0) {
-        setError(t("outbound.scheduled.errorRecipientRequired"));
-        return;
-      }
-      recipientId = ids.join(",");
-    } else {
-      // segment: serialize rules as JSON string
-      recipientId = JSON.stringify({ type: "segment", rules: segmentRules });
+    // Recipient: either the selected match's phone, or what the operator
+    // typed if nothing matched (treated as a manual phone number).
+    const recipientId = selectedContact?.phone?.trim()
+      ? selectedContact.phone.trim()
+      : recipientQuery.trim();
+    if (!recipientId) {
+      setError(t("outbound.scheduled.errorRecipientRequired"));
+      return;
     }
 
     if (!body.trim()) {
@@ -347,6 +421,29 @@ export default function ScheduledPage() {
         scheduledAt: new Date(scheduledAt).toISOString(),
         sendType,
       };
+      if (selectedTemplateId) {
+        payload.templateId = selectedTemplateId;
+        payload.messageType = "template";
+        if (Object.keys(varValues).length > 0) {
+          // Each entry is either a literal value or a `crm:<field>` token.
+          // Tokens are resolved here against the picked contact's snapshot
+          // so the worker only ever sees flat string values (Meta-ready).
+          const resolved: Record<string, string> = {};
+          for (const [k, raw] of Object.entries(varValues)) {
+            const v = (raw ?? "").trim();
+            if (!v) continue;
+            if (v.startsWith("crm:") && selectedContact) {
+              const field = v.slice(4);
+              const resolvedVal = resolveCrmFieldFromContact(field, selectedContact);
+              if (resolvedVal) resolved[k] = resolvedVal;
+            } else if (!v.startsWith("crm:")) {
+              resolved[k] = v;
+            }
+          }
+          if (Object.keys(resolved).length > 0) payload.variables = resolved;
+        }
+        if (headerMediaUrl.trim()) payload.mediaUrl = headerMediaUrl.trim();
+      }
       if (sendType === "conversation" && departmentId) {
         payload.departmentId = departmentId;
       }
@@ -378,14 +475,6 @@ export default function ScheduledPage() {
     }
   }
 
-  // ---------------------------------------------------------------------------
-  // Import line count
-  // ---------------------------------------------------------------------------
-
-  const importCount = importText
-    .split("\n")
-    .map((l) => l.trim())
-    .filter(Boolean).length;
 
   // ---------------------------------------------------------------------------
   // Render
@@ -636,157 +725,14 @@ export default function ScheduledPage() {
                 <label className="block text-sm font-semibold text-gray-800 mb-3">
                   {t("outbound.scheduled.fieldRecipients")}
                 </label>
-
-                {/* Tab pills */}
-                <div className="flex gap-1.5 mb-4">
-                  {(
-                    [
-                      { key: "single", label: t("outbound.scheduled.tabSingle") },
-                      { key: "segment", label: t("outbound.scheduled.tabSegment") },
-                      { key: "import", label: t("outbound.scheduled.tabImport") },
-                    ] as { key: RecipientTab; label: string }[]
-                  ).map(({ key, label }) => (
-                    <button
-                      key={key}
-                      type="button"
-                      onClick={() => setRecipientTab(key)}
-                      className={clsx(
-                        "px-4 py-1.5 rounded-full text-sm font-medium transition",
-                        recipientTab === key
-                          ? "bg-primary-500 text-white shadow-sm"
-                          : "bg-gray-100 text-gray-600 hover:bg-gray-200"
-                      )}
-                    >
-                      {label}
-                    </button>
-                  ))}
-                </div>
-
-                {/* Tab: Single */}
-                {recipientTab === "single" && (
-                  <input
-                    type="text"
-                    value={singleRecipient}
-                    onChange={(e) => setSingleRecipient(e.target.value)}
-                    className={inputCls}
-                    placeholder="+1234567890"
-                  />
-                )}
-
-                {/* Tab: CRM Segment */}
-                {recipientTab === "segment" && (
-                  <div className="space-y-2">
-                    {segmentRules.map((rule, idx) => (
-                      <div key={idx} className="flex items-center gap-2">
-                        {idx > 0 && (
-                          <span className="text-xs text-gray-400 w-8 text-center shrink-0">
-                            AND
-                          </span>
-                        )}
-                        {idx === 0 && <span className="w-8 shrink-0" />}
-
-                        <select
-                          value={rule.field}
-                          onChange={(e) =>
-                            updateRule(idx, {
-                              field: e.target.value as SegmentRule["field"],
-                            })
-                          }
-                          className={clsx(inputCls, "flex-1")}
-                        >
-                          {SEGMENT_FIELDS.map((f) => (
-                            <option key={f.value} value={f.value}>
-                              {f.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        <select
-                          value={rule.operator}
-                          onChange={(e) =>
-                            updateRule(idx, {
-                              operator: e.target.value as SegmentRule["operator"],
-                            })
-                          }
-                          className={clsx(inputCls, "w-20")}
-                        >
-                          {SEGMENT_OPERATORS.map((op) => (
-                            <option key={op.value} value={op.value}>
-                              {op.label}
-                            </option>
-                          ))}
-                        </select>
-
-                        <input
-                          type="text"
-                          value={rule.value}
-                          onChange={(e) =>
-                            updateRule(idx, { value: e.target.value })
-                          }
-                          className={clsx(inputCls, "flex-1")}
-                          placeholder={t("outbound.scheduled.segmentValuePlaceholder")}
-                        />
-
-                        <button
-                          type="button"
-                          onClick={() => removeRule(idx)}
-                          className="p-1.5 rounded-lg text-gray-400 hover:text-red-500 hover:bg-red-50 transition shrink-0"
-                        >
-                          <svg
-                            className="w-4 h-4"
-                            fill="none"
-                            viewBox="0 0 24 24"
-                            stroke="currentColor"
-                            strokeWidth={2}
-                          >
-                            <path
-                              strokeLinecap="round"
-                              strokeLinejoin="round"
-                              d="M6 18L18 6M6 6l12 12"
-                            />
-                          </svg>
-                        </button>
-                      </div>
-                    ))}
-
-                    <button
-                      type="button"
-                      onClick={addRule}
-                      className="mt-1 flex items-center gap-1.5 text-sm text-primary-500 hover:text-primary-700 transition"
-                    >
-                      <svg
-                        className="w-4 h-4"
-                        fill="none"
-                        viewBox="0 0 24 24"
-                        stroke="currentColor"
-                        strokeWidth={2}
-                      >
-                        <path
-                          strokeLinecap="round"
-                          strokeLinejoin="round"
-                          d="M12 4.5v15m7.5-7.5h-15"
-                        />
-                      </svg>
-                      {t("outbound.scheduled.addRule")}
-                    </button>
-                  </div>
-                )}
-
-                {/* Tab: Import */}
-                {recipientTab === "import" && (
-                  <div>
-                    <textarea
-                      value={importText}
-                      onChange={(e) => setImportText(e.target.value)}
-                      rows={6}
-                      className={inputCls}
-                      placeholder={t("outbound.scheduled.importPlaceholder")}
-                    />
-                    <p className="mt-1.5 text-xs text-gray-400">
-                      {importCount} {t("outbound.scheduled.importCount")}
-                    </p>
-                  </div>
-                )}
+                <RecipientSearch
+                  query={recipientQuery}
+                  onQueryChange={setRecipientQuery}
+                  selected={selectedContact}
+                  onSelect={setSelectedContact}
+                  results={contactResults}
+                  searching={contactSearching}
+                />
               </section>
 
               {/* ---------------------------------------------------------- */}
@@ -829,12 +775,142 @@ export default function ScheduledPage() {
                     value={body}
                     onChange={(e) => setBody(e.target.value)}
                     rows={5}
-                    className={inputCls}
+                    readOnly={!!(selectedTemplateId && channelValue === "WHATSAPP")}
+                    className={clsx(
+                      inputCls,
+                      selectedTemplateId && channelValue === "WHATSAPP" && "bg-gray-50 cursor-not-allowed text-gray-500",
+                    )}
                     placeholder={t("outbound.scheduled.bodyPlaceholder")}
                   />
+                  {selectedTemplateId && channelValue === "WHATSAPP" && (
+                    <p className="text-[11px] text-gray-400 mt-1">
+                      WhatsApp template body is locked. Fill in the variables below — Meta requires the exact approved text.
+                    </p>
+                  )}
                   <AIComposePanel />
                 </AIComposeScope>
               </section>
+
+              {/* ---------------------------------------------------------- */}
+              {/* Template variables + media URL                              */}
+              {/* ---------------------------------------------------------- */}
+              {selectedTemplateId && (() => {
+                const tpl = templates.find((tt) => tt.id === selectedTemplateId);
+                const headerType = (tpl?.headerType ?? "").toUpperCase();
+                const isMedia =
+                  headerType === "IMAGE" ||
+                  headerType === "VIDEO" ||
+                  headerType === "DOCUMENT";
+                const varKeys = Object.keys(varValues);
+                if (!isMedia && varKeys.length === 0) return null;
+                return (
+                  <section className="space-y-4">
+                    {isMedia && (
+                      <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-2">
+                        <div className="text-xs font-semibold text-amber-900">
+                          Header {headerType.toLowerCase()}
+                        </div>
+                        <div className="text-[11px] text-amber-700/80">
+                          Public URL of the {headerType.toLowerCase()} to send to this recipient.
+                        </div>
+                        <input
+                          type="url"
+                          value={headerMediaUrl}
+                          onChange={(e) => setHeaderMediaUrl(e.target.value)}
+                          className="w-full text-xs px-2 py-1.5 rounded border border-gray-200 bg-white"
+                          placeholder={
+                            headerType === "IMAGE"
+                              ? "https://example.com/image.jpg"
+                              : headerType === "VIDEO"
+                              ? "https://example.com/video.mp4"
+                              : "https://example.com/file.pdf"
+                          }
+                        />
+                      </div>
+                    )}
+
+                    {varKeys.length > 0 && (
+                      <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2">
+                        <div className="text-xs font-semibold text-violet-900">
+                          Template variables
+                        </div>
+                        <div className="text-[11px] text-violet-700/80">
+                          Concrete values for this recipient. Empty values fall back to the template&apos;s sample.
+                        </div>
+                        <div className="space-y-2">
+                          {varKeys.map((key) => {
+                            const raw = varValues[key] ?? "";
+                            const isCrm = raw.startsWith("crm:");
+                            const crmField = isCrm ? raw.slice(4) : "";
+                            return (
+                              <div
+                                key={key}
+                                className="flex flex-wrap items-center gap-2 bg-white rounded-lg border border-gray-200 p-2 min-w-0"
+                              >
+                                <code className="px-2 py-1 text-xs font-mono bg-gray-100 rounded shrink-0">{`{{${key}}}`}</code>
+                                {selectedContact && (
+                                  <select
+                                    value={isCrm ? "crm" : "static"}
+                                    onChange={(e) => {
+                                      if (e.target.value === "crm") {
+                                        setVarValues((prev) => ({ ...prev, [key]: "crm:" }));
+                                      } else {
+                                        setVarValues((prev) => ({ ...prev, [key]: "" }));
+                                      }
+                                    }}
+                                    className="text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 shrink-0"
+                                  >
+                                    <option value="static">Static</option>
+                                    <option value="crm">From contact</option>
+                                  </select>
+                                )}
+                                {isCrm ? (
+                                  <select
+                                    value={crmField}
+                                    onChange={(e) =>
+                                      setVarValues((prev) => ({ ...prev, [key]: `crm:${e.target.value}` }))
+                                    }
+                                    className="flex-1 min-w-[140px] max-w-full text-xs px-2 py-1 rounded border border-gray-200 bg-white truncate"
+                                  >
+                                    <option value="">Pick CRM field…</option>
+                                    {/* Snapshot aliases first so common ones stay at the top. */}
+                                    <optgroup label="Common">
+                                      <option value="displayName">Full name</option>
+                                      <option value="firstName">First name</option>
+                                      <option value="lastName">Last name</option>
+                                      <option value="phone">Phone</option>
+                                      <option value="email">Email</option>
+                                    </optgroup>
+                                    {crmFields.length > 0 && (
+                                      <optgroup label="All CRM fields">
+                                        {crmFields.map((f) => (
+                                          <option key={f.name} value={f.name}>
+                                            {f.label} ({f.name})
+                                          </option>
+                                        ))}
+                                      </optgroup>
+                                    )}
+                                  </select>
+                                ) : (
+                                  <input
+                                    type="text"
+                                    value={raw}
+                                    onChange={(e) =>
+                                      setVarValues((prev) => ({ ...prev, [key]: e.target.value }))
+                                    }
+                                    className="flex-1 min-w-[140px] text-xs px-2 py-1 rounded border border-gray-200"
+                                    placeholder={`Value for {{${key}}}`}
+                                  />
+                                )}
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                );
+              })()}
 
               {/* ---------------------------------------------------------- */}
               {/* 4. Advanced Options (collapsible)                           */}
@@ -1004,6 +1080,145 @@ export default function ScheduledPage() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Helpers ─────────────────────────────────────────────────────────────────
+
+/** Normalize a row from /api/contacts (which returns local Contact rows
+ *  and CRM records in the same response shape) into our compact candidate. */
+function normalizeContactCandidate(c: any): ContactCandidate {
+  const isCrm = c?.source === "crm" || c?.isCrm === true || typeof c?.id === "string" && c.id.length >= 18 && !/^c[a-z0-9]{24}$/.test(c.id);
+  return {
+    id: String(c?.id ?? ""),
+    source: isCrm ? "crm" : "local",
+    displayName: c?.displayName || c?.name || [c?.firstName, c?.lastName].filter(Boolean).join(" ") || undefined,
+    phone: c?.phone || c?.mobile || c?.phoneNumber || undefined,
+    email: c?.email || undefined,
+  };
+}
+
+/** Resolve `crm:<field>` tokens to concrete values using the picked
+ *  contact's snapshot. Mirrors the alias logic from the campaign worker
+ *  so the same field names work in both surfaces. */
+function resolveCrmFieldFromContact(field: string, contact: ContactCandidate): string {
+  // 1. Exact match against the provider-native raw row (any CRM field).
+  if (contact.raw && Object.prototype.hasOwnProperty.call(contact.raw, field)) {
+    const v = contact.raw[field];
+    if (v != null && String(v).length > 0) return String(v);
+  }
+  // 2. Fall back to the snapshot quartet via alias matching.
+  const key = field.toLowerCase().replace(/[\s_-]/g, "");
+  if (key === "displayname" || key === "name" || key === "fullname") return contact.displayName || "";
+  if (key === "firstname" || key === "first" || key === "givenname") {
+    return (contact.displayName || "").trim().split(/\s+/)[0] || "";
+  }
+  if (key === "lastname" || key === "last" || key === "familyname" || key === "surname") {
+    const parts = (contact.displayName || "").trim().split(/\s+/);
+    return parts.length > 1 ? parts.slice(1).join(" ") : "";
+  }
+  if (
+    key === "phone" || key === "mobile" || key === "phonenumber" ||
+    key === "tel" || key === "telephone" || key === "cell"
+  ) return contact.phone || "";
+  if (key === "email" || key === "mail" || key === "emailaddress") return contact.email || "";
+  return "";
+}
+
+// ─── RecipientSearch ─────────────────────────────────────────────────────────
+
+/** Live CRM contact search input. While typing, shows a dropdown of
+ *  matching contacts (local + CRM via includeCrm=1). Picking a match sets
+ *  `selected` and stops the live search. Typing again with no pick = the
+ *  raw query is later used as a manual phone number. */
+function RecipientSearch({
+  query,
+  onQueryChange,
+  selected,
+  onSelect,
+  results,
+  searching,
+}: {
+  query: string;
+  onQueryChange: (v: string) => void;
+  selected: ContactCandidate | null;
+  onSelect: (c: ContactCandidate | null) => void;
+  results: ContactCandidate[];
+  searching: boolean;
+}) {
+  if (selected) {
+    return (
+      <div className="flex items-center justify-between gap-2 bg-primary-50 border border-primary-100 rounded-xl px-3 py-2.5">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-gray-900 truncate">
+            {selected.displayName || selected.phone || selected.email || selected.id}
+            <span className="ms-2 text-[10px] uppercase tracking-wide text-primary-600">
+              {selected.source === "crm" ? "CRM" : selected.source === "local" ? "Contact" : "Manual"}
+            </span>
+          </div>
+          <div className="text-xs text-gray-500 truncate">
+            {[selected.phone, selected.email].filter(Boolean).join(" · ")}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            onSelect(null);
+            onQueryChange("");
+          }}
+          className="text-xs px-2 py-1 rounded-lg bg-white text-gray-500 hover:text-red-500 border border-gray-200"
+        >
+          Change
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="relative">
+      <input
+        type="text"
+        value={query}
+        onChange={(e) => onQueryChange(e.target.value)}
+        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+        placeholder="Search by name / phone / email, or type a phone number…"
+      />
+      {query.trim().length >= 2 && (results.length > 0 || searching) && (
+        <div className="absolute z-10 mt-1 w-full bg-white border border-gray-200 rounded-xl shadow-lg max-h-72 overflow-y-auto">
+          {searching && (
+            <div className="px-3 py-2 text-xs text-gray-400">Searching…</div>
+          )}
+          {results.map((c) => (
+            <button
+              key={`${c.source}:${c.id}`}
+              type="button"
+              onClick={() => {
+                onSelect(c);
+                onQueryChange("");
+              }}
+              className="w-full text-left px-3 py-2 hover:bg-gray-50 transition flex items-center gap-3"
+            >
+              <div className="flex-1 min-w-0">
+                <div className="text-sm text-gray-900 truncate">
+                  {c.displayName || c.phone || c.email || c.id}
+                </div>
+                <div className="text-xs text-gray-500 truncate">
+                  {[c.phone, c.email].filter(Boolean).join(" · ") || "—"}
+                </div>
+              </div>
+              <span className="text-[10px] uppercase tracking-wide text-gray-400 shrink-0">
+                {c.source === "crm" ? "CRM" : "Local"}
+              </span>
+            </button>
+          ))}
+          {!searching && results.length === 0 && (
+            <div className="px-3 py-2 text-xs text-gray-400">
+              No matches — the value will be used as a manual phone number.
+            </div>
+          )}
         </div>
       )}
     </div>
