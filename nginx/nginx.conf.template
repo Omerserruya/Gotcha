@@ -727,6 +727,39 @@ http {
             proxy_send_timeout 86400;
         }
 
+        # ─── Voice Channels — BYO / Twilio Connect onboarding (conversation) ─
+        location /api/voice-channels {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Voice Sessions — agent claim / transcript / context (conversation) ─
+        location /api/voice-sessions {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Voice Inbound — single Twilio webhook entrypoint (voice-copilot) ─
+        # Twilio posts `voice`, `status`, `recording` to this prefix; channel
+        # resolution happens server-side via the `To` form field.
+        location /api/voice/incoming {
+            proxy_pass http://voice_copilot_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Twilio-Signature $http_x_twilio_signature;
+            client_max_body_size 1m;
+        }
+
         # ─── Voice Copilot REST (live, twilio-test when mounted here) ───
         location /api/voice-copilot {
             limit_req zone=api burst=20 nodelay;

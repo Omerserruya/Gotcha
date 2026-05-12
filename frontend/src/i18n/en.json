@@ -2244,5 +2244,166 @@
         "desc": "A critical-level system error occurred that needs immediate attention."
       }
     }
+  },
+  "settings": {
+    "nav": {
+      "voiceChannels": "Voice channels"
+    },
+    "voiceChannels": {
+      "title": "Voice channels",
+      "subtitle": "Manage your organization's Twilio accounts and active numbers.",
+      "newButton": "Connect new",
+      "loading": "Loading…",
+      "pageNotAvailable": "This page is not available for your tenant.",
+      "adminRequired": "Admin access required",
+      "connectedSuccess": "Channel connected successfully",
+      "emptyTitle": "No voice channel connected yet",
+      "emptyDescription": "To receive and make calls through GOTCHA, paste your Twilio Account SID and Auth Token to connect your account.",
+      "startConnect": "Start connecting",
+      "activeNumbers": "active numbers",
+      "statusActive": "Active",
+      "statusPending": "Pending",
+      "statusDisabled": "Disabled",
+      "statusError": "Error",
+      "authBYO": "BYO",
+      "detail": {
+        "backLink": "Back to voice channels",
+        "notFound": "Channel not found",
+        "phoneNumbersTitle": "Phone numbers",
+        "phoneNumbersSubtitle": "Activate a number to receive and make calls. Activation updates the Voice URL in Twilio.",
+        "refreshButton": "Sync from Twilio",
+        "refreshing": "Syncing…",
+        "syncSuccess": "Number list synced from Twilio",
+        "noNumbers": "No numbers found in the Twilio account. Click \"Sync from Twilio\" to refresh.",
+        "colE164": "E.164",
+        "colFriendlyName": "Friendly name",
+        "colTwilioSid": "Twilio SID",
+        "colWebhook": "Webhook",
+        "colActive": "Active",
+        "webhookLabel": "Webhook",
+        "webhookInactive": "Inactive",
+        "toggleActivate": "Activate number",
+        "toggleDeactivate": "Deactivate number",
+        "dangerZone": "Disable channel",
+        "dangerZoneDesc": "Disabling will remove the Twilio link and stop receiving calls from all numbers in this channel. This action cannot be undone.",
+        "deleteButton": "Disable channel",
+        "deleting": "Disabling…",
+        "deleteConfirm": "This will disable the channel and completely stop receiving calls. Continue?",
+        "outboundProvisioningFailed": "Outbound dialing isn't fully configured — inbound calls still work.",
+        "retryProvisioning": "Retry provisioning"
+      },
+      "wizard": {
+        "backLink": "Back to voice channels",
+        "step1Title": "Connect a new voice channel",
+        "step1Subtitle": "Connect your Twilio account to receive and make calls through GOTCHA.",
+        "step1BYOTitle": "Twilio account details",
+        "step1BYOSubtitle": "Paste your Twilio Account SID and Auth Token — we'll set up the rest automatically.",
+        "step1BYOAutoSetup": "We'll create the API Key and TwiML App for you.",
+        "step1BYOWhereToFind": "Where to find these in the Twilio console →",
+        "step1BYOSubmit": "Continue to number discovery",
+        "step1BYOSubmitting": "Connecting to Twilio…",
+        "step1BYOFriendlyName": "Display name",
+        "step1BYOFriendlyNameHelp": "For internal identification only — e.g. 'GOTCHA Israel'.",
+        "step1BYOAccountSid": "Account SID",
+        "step1BYOAccountSidHelp": "Console → Account → API keys & tokens. Starts with AC followed by 32 hex characters.",
+        "step1BYOAccountSidError": "Account SID must start with AC and contain 32 hex characters",
+        "step1BYOAuthToken": "Auth Token",
+        "step1BYOAuthTokenHelp": "Console → Account → API keys & tokens. Never shown again — encrypted and stored server-side.",
+        "step1BYOSecretShow": "Show",
+        "step1BYOSecretHide": "Hide",
+        "step2Title": "Select numbers to activate",
+        "step2Subtitle": "We discovered {count} numbers in the account. Select those that will receive inbound calls through GOTCHA. You can always update later.",
+        "step2NoNumbers": "No active numbers found in the Twilio account. Purchase a number in Twilio then come back to refresh.",
+        "step2SelectAll": "Select all",
+        "step2DeselectAll": "Clear all",
+        "step2SkipButton": "Skip to channel settings",
+        "step2ActivateButton": "Activate {count} numbers",
+        "step3TitleDone": "Setup complete",
+        "step3TitleRunning": "Activating numbers…",
+        "step3PartialFailTitle": "Some numbers failed to activate:",
+        "step3OpenButton": "Open channel settings",
+        "stepperDetails": "Details",
+        "stepperNumbers": "Numbers",
+        "stepperActivation": "Activation"
+      }
+    }
+  },
+  "voice": {
+    "banner": {
+      "incomingCall": "Incoming call",
+      "voiceChannel": "Voice channel",
+      "answerButton": "Answer",
+      "answeringButton": "Answering…",
+      "declineButton": "Decline",
+      "moreRinging": "+{count} more ringing",
+      "soundToggle": "Ring sound on incoming calls",
+      "testSound": "Test sound"
+    },
+    "activeBar": {
+      "onCall": "On a call",
+      "mute": "Mute",
+      "unmute": "Unmute",
+      "muteUnavailable": "Mute is only available on the originating device",
+      "openWorkspace": "Open",
+      "hangup": "Hang up"
+    },
+    "inbox": {
+      "liveCalls": "Live calls",
+      "inbound": "Inbound",
+      "outbound": "Outbound",
+      "stateRinging": "Ringing",
+      "stateConnecting": "Connecting",
+      "stateActive": "Active",
+      "stateOnHold": "On hold",
+      "stateVoice": "Voice"
+    },
+    "workspace": {
+      "loadingWorkspace": "Loading workspace…",
+      "loadingCall": "Loading call…",
+      "pageNotAvailable": "This page is not available for your tenant.",
+      "backToInbox": "Back to inbox",
+      "header": {
+        "muteButton": "Mute",
+        "unmuteButton": "Unmute",
+        "hangupButton": "Hang up"
+      },
+      "transcript": {
+        "listening": "Listening…",
+        "noTranscript": "No transcript captured."
+      },
+      "cards": {
+        "copilot": {
+          "title": "Co-pilot suggestions",
+          "listening": "Listening — hints appear after the customer speaks."
+        },
+        "customer": {
+          "title": "Customer",
+          "noContact": "No matching contact for this number yet.",
+          "unnamed": "Unnamed contact"
+        },
+        "previousCalls": {
+          "title": "Previous calls",
+          "noCalls": "No prior calls with this number."
+        },
+        "notes": {
+          "title": "Notes",
+          "placeholder": "Customer notes will appear here once your CRM integration is connected."
+        },
+        "tickets": {
+          "title": "Open tickets",
+          "placeholder": "No connected ticketing system. Open tickets will surface here once configured."
+        },
+        "crmHistory": {
+          "title": "CRM history",
+          "noHistory": "No cross-channel history for this contact."
+        }
+      }
+    },
+    "errors": {
+      "noActiveChannel": "No active voice channel",
+      "loadFailed": "Failed to load",
+      "claimFailed": "Failed to answer",
+      "agentBusy": "Agent is busy"
+    }
   }
 }

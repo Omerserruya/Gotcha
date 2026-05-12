@@ -8,6 +8,7 @@ import { useI18n } from "@/context/I18nContext";
 import { Locale, localeConfig } from "@/i18n";
 import clsx from "clsx";
 import { NotificationBell } from "./NotificationBell";
+import { IncomingCallBannerSidebar } from "./voice/IncomingCallBanner";
 
 const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
@@ -111,6 +112,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
             );
           })}
       </nav>
+
+      {/* Incoming call banner — desktop sidebar slot */}
+      <IncomingCallBannerSidebar />
 
       {/* Language switcher */}
       {!collapsed && (

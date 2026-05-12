@@ -163,5 +163,35 @@ export {
 
 export { normalizePhone, isValidPhone, listSupportedCountries } from "./lib/phone";
 
+// Voice call state machine + persistence helpers (Phase 1)
+export {
+  canTransition,
+  assertTransition,
+  toLegacyStatus,
+  fromLegacyStatus,
+  appendHistory,
+  makeHistoryEntry,
+  InvalidTransitionError,
+  TERMINAL_STATES,
+  LIVE_STATES,
+  type CallState,
+  type LegacyCallStatus,
+  type StateHistoryEntry,
+} from "./lib/call-state-machine";
+export {
+  transitionVoiceCallSessionState,
+  claimIncomingCall,
+  agentBusyOnLiveCall,
+  type TransitionFailure,
+  type ClaimFailure,
+} from "./lib/voice-session-store";
+export {
+  setPresence,
+  markBusy,
+  markOnline,
+  heartbeat,
+  type AgentPresenceStatus,
+} from "./lib/agent-presence";
+
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

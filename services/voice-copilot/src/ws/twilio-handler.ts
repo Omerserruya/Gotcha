@@ -7,6 +7,7 @@ import type { Session, SessionFactory } from "../session/session";
 import type { Clock } from "../lib/clock";
 import type { Logger } from "../lib/logger";
 import type { Metrics } from "../metrics/metrics";
+import type { VoiceProviderResolver } from "../providers/voice-provider";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -23,8 +24,15 @@ export interface TwilioHandlerDeps {
   metrics: Metrics;
   maxConcurrent: number;
   reconnectGraceMs?: number;
+  /**
+   * Preferred: resolve the VoiceProvider for the tenant and let it validate
+   * the signature itself. If both this and the legacy `getTwilioAuthToken`/
+   * `secureHmac` injections are provided, the resolver wins.
+   */
+  resolveProvider?: VoiceProviderResolver;
+  /** Legacy injection point (kept for test compat). */
   getTwilioAuthToken?: (tenantId: string) => Promise<string>;
-  /** Override HMAC check for testing */
+  /** Legacy injection point (kept for test compat). */
   secureHmac?: (sig: string | undefined, url: string, token: string) => boolean;
 }
 
@@ -72,18 +80,47 @@ export function attachTwilioHandler(
   // Track active connections independently of wss.clients (testability)
   let activeConnections = 0;
 
-  // Resolve auth token getter — caller can inject mock or use real secret
+  // Legacy injection points (kept for test compat — see TwilioHandlerDeps).
   const getToken: (tenantId: string) => Promise<string> =
     deps.getTwilioAuthToken ??
     (async (tenantId: string) => {
       const { getTwilioAuthToken } = await import("../config/secrets");
       return getTwilioAuthToken(tenantId);
     });
-
-  // Resolve HMAC validator
   const hmacCheck: (sig: string | undefined, url: string, token: string) => boolean =
     deps.secureHmac ??
     ((sig, url, token) => validateTwilioSignature(sig, url, token));
+
+  // Validate the upgrade's signature, preferring the provider seam when
+  // wired in. Two distinct failure shapes preserved from the pre-seam code:
+  //   - "resolve_failed": credential/auth resolution exploded → silent destroy
+  //   - "signature_mismatch": HMAC didn't verify → HTTP 401 then destroy
+  type ValidateOutcome =
+    | { kind: "ok" }
+    | { kind: "resolve_failed"; err: unknown }
+    | { kind: "signature_mismatch" };
+  async function validateUpgrade(tenantId: string, sig: string | undefined, urls: string[]): Promise<ValidateOutcome> {
+    if (deps.resolveProvider) {
+      let valid: boolean;
+      try {
+        const provider = await deps.resolveProvider(tenantId);
+        valid = provider.validateInboundSignature({ signature: sig, candidateUrls: urls });
+      } catch (err) {
+        return { kind: "resolve_failed", err };
+      }
+      return valid ? { kind: "ok" } : { kind: "signature_mismatch" };
+    }
+    // Legacy path — identical to the pre-seam implementation.
+    let authToken: string;
+    try {
+      authToken = await getToken(tenantId);
+    } catch (err) {
+      return { kind: "resolve_failed", err };
+    }
+    return urls.some((u) => hmacCheck(sig, u, authToken))
+      ? { kind: "ok" }
+      : { kind: "signature_mismatch" };
+  }
 
   // ------------------------------------------------------------------
   // HTTP upgrade listener
@@ -100,17 +137,6 @@ export function attachTwilioHandler(
 
     const tenantId = match[1];
 
-    // Resolve auth token
-    let authToken: string;
-    try {
-      authToken = await getToken(tenantId);
-    } catch (err) {
-      logger.warn({ err, tenantId }, "twilio-handler: failed to resolve auth token");
-      metrics.twilioAuthRejected.inc();
-      socket.destroy();
-      return;
-    }
-
     // Validate Twilio signature. For Media Streams, Twilio signs the URL
     // exactly as given in <Stream url="..."> — typically wss:// — but TLS
     // terminates upstream of nginx so we don't know the original scheme for
@@ -123,8 +149,14 @@ export function attachTwilioHandler(
       `https://${host}${req.url}`,
       `http://${host}${req.url}`,
     ];
-    const valid = urls.some((u) => hmacCheck(sig, u, authToken));
-    if (!valid) {
+    const outcome = await validateUpgrade(tenantId, sig, urls);
+    if (outcome.kind === "resolve_failed") {
+      logger.warn({ err: outcome.err, tenantId }, "twilio-handler: failed to resolve auth token");
+      metrics.twilioAuthRejected.inc();
+      socket.destroy();
+      return;
+    }
+    if (outcome.kind === "signature_mismatch") {
       logger.warn({ tenantId, urls, sig }, "twilio-handler: signature mismatch");
       metrics.twilioAuthRejected.inc();
       socket.write("HTTP/1.1 401 Unauthorized\r\n\r\n");

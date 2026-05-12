@@ -89,34 +89,43 @@ model Tenant {
   botType              BotType? @map("bot_type")
   firstTakeCareEnabled Boolean  @default(false) @map("first_take_care_enabled")
 
+  // Live Call CoPilot — Phase 1 feature flags (all default off; existing
+  // tenants behave byte-identical to today until SYSTEM_ADMIN flips these).
+  //   voiceCopilotEnabled  — master kill switch for every new Phase-1 path
+  //   voiceInboxUiEnabled  — renders LiveCallsSection + banner + active-call bar
+  //   voiceIncomingEnabled — accepts inbound webhooks for tenant's BYO channels
+  voiceCopilotEnabled  Boolean @default(false) @map("voice_copilot_enabled")
+  voiceInboxUiEnabled  Boolean @default(false) @map("voice_inbox_ui_enabled")
+  voiceIncomingEnabled Boolean @default(false) @map("voice_incoming_enabled")
+
   // Routing fallback ladder — used when no RouterRule matches an inbound.
   // Resolution order: defaultAgentId → defaultRoutineId → defaultDepartmentId → unassigned.
-  defaultAgentId                String? @map("default_agent_id")
-  defaultRoutineId              String? @map("default_routine_id")
-  defaultDepartmentId           String? @map("default_department_id")
+  defaultAgentId      String? @map("default_agent_id")
+  defaultRoutineId    String? @map("default_routine_id")
+  defaultDepartmentId String? @map("default_department_id")
 
   // Human-handoff behaviour. null = never resume bot after a human unclaims.
   // Integer N = resume AUTO mode after N idle minutes since last human touch.
-  autoResumeAfterUnclaimMinutes Int?    @map("auto_resume_after_unclaim_minutes")
+  autoResumeAfterUnclaimMinutes Int? @map("auto_resume_after_unclaim_minutes")
 
-  users             User[]
-  conversations     Conversation[]
-  messages          Message[]
-  chatbotFlows      ChatbotFlow[]
-  channelAccounts   ChannelAccount[]
-  channelConfig     TenantChannelConfig?
-  departments       Department[]
-  departmentMembers DepartmentMember[]
-  businessProfile   BusinessProfile?
-  onboarding        TenantOnboarding?
-  knowledgeBases    KnowledgeBase[]
-  aiAgents          AIAgent[]
-  routerRules       RouterRule[]
-  contacts          Contact[]
-  messageTemplates  MessageTemplate[]
-  broadcasts        Broadcast[]
-  scheduledMessages ScheduledMessage[]
-  flowCanvas        FlowCanvas?
+  users                   User[]
+  conversations           Conversation[]
+  messages                Message[]
+  chatbotFlows            ChatbotFlow[]
+  channelAccounts         ChannelAccount[]
+  channelConfig           TenantChannelConfig?
+  departments             Department[]
+  departmentMembers       DepartmentMember[]
+  businessProfile         BusinessProfile?
+  onboarding              TenantOnboarding?
+  knowledgeBases          KnowledgeBase[]
+  aiAgents                AIAgent[]
+  routerRules             RouterRule[]
+  contacts                Contact[]
+  messageTemplates        MessageTemplate[]
+  broadcasts              Broadcast[]
+  scheduledMessages       ScheduledMessage[]
+  flowCanvas              FlowCanvas?
   notificationPreferences NotificationPreference[]
   inAppNotifications      InAppNotification[]
   voiceCallSessions       VoiceCallSession[]
@@ -124,6 +133,8 @@ model Tenant {
   callPlaybooks           CallPlaybook[]
   missingFieldDefinitions MissingFieldDefinition[]
   toolExecutionRequests   ToolExecutionRequest[]
+  communicationChannels   CommunicationChannel[]
+  agentPresences          AgentPresence[]
 
   @@index([status])
   @@map("tenants")
@@ -206,16 +217,16 @@ enum Role {
 }
 
 model User {
-  id        String   @id @default(cuid())
-  tenantId  String   @map("tenant_id")
-  email     String
-  password  String
-  name      String
-  role      Role     @default(AGENT)
-  isActive  Boolean  @default(true) @map("is_active")
-  notificationSoundEnabled Boolean @default(true) @map("notification_sound_enabled")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  id                       String   @id @default(cuid())
+  tenantId                 String   @map("tenant_id")
+  email                    String
+  password                 String
+  name                     String
+  role                     Role     @default(AGENT)
+  isActive                 Boolean  @default(true) @map("is_active")
+  notificationSoundEnabled Boolean  @default(true) @map("notification_sound_enabled")
+  createdAt                DateTime @default(now()) @map("created_at")
+  updatedAt                DateTime @updatedAt @map("updated_at")
 
   tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations      Conversation[]      @relation("AssignedAgent")
@@ -275,15 +286,15 @@ model Conversation {
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
-  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  channelAccount ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
-  assignedAgent  User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
-  department     Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
-  chatbotFlow    ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
-  messages          Message[]
-  intelligence      ConversationIntelligence?
-  voiceCallSession  VoiceCallSession?
-  callAnalysis      CallAnalysis?
+  tenant           Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  channelAccount   ChannelAccount?           @relation(fields: [channelAccountId], references: [id], onDelete: Cascade)
+  assignedAgent    User?                     @relation("AssignedAgent", fields: [assignedAgentId], references: [id], onDelete: SetNull)
+  department       Department?               @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  chatbotFlow      ChatbotFlow?              @relation(fields: [chatbotFlowId], references: [id], onDelete: SetNull)
+  messages         Message[]
+  intelligence     ConversationIntelligence?
+  voiceCallSession VoiceCallSession?
+  callAnalysis     CallAnalysis?
 
   @@index([tenantId, status])
   @@index([tenantId, assignedAgentId])
@@ -394,17 +405,17 @@ model AIAgent {
 
   // Mode capabilities — which runtime modes this agent may run in.
   // { auto: bool, assist: bool }. Both default true.
-  capabilities          Json   @default("{\"auto\":true,\"assist\":true}") @map("capabilities")
+  capabilities Json @default("{\"auto\":true,\"assist\":true}") @map("capabilities")
 
   // Behavioral anchors — guidance, NOT executable logic.
   // [{ id, condition, intent, guidance }] — rendered into the system prompt.
-  behavioralAnchors     Json   @default("[]") @map("behavioral_anchors")
+  behavioralAnchors Json @default("[]") @map("behavioral_anchors")
 
   // Deterministic escalation gates (LLM-independent triggers).
   // [{ type: "max_messages"|"keyword"|"max_minutes", value, enabled }]
   // Differs from escalationRules (LLM-judged). Checked in evaluatePolicies()
   // pre-flight so the bot can't bypass them.
-  escalationGates       Json   @default("[]") @map("escalation_gates")
+  escalationGates Json @default("[]") @map("escalation_gates")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -521,13 +532,13 @@ model Department {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  tenant               Tenant                @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  parent               Department?           @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
-  children             Department[]          @relation("DepartmentHierarchy")
-  members              DepartmentMember[]
-  conversations        Conversation[]
-  agentToolPermissions AgentToolPermission[]
-  funnels              TenantFunnel[]
+  tenant                  Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  parent                  Department?              @relation("DepartmentHierarchy", fields: [parentId], references: [id], onDelete: SetNull)
+  children                Department[]             @relation("DepartmentHierarchy")
+  members                 DepartmentMember[]
+  conversations           Conversation[]
+  agentToolPermissions    AgentToolPermission[]
+  funnels                 TenantFunnel[]
   notificationPreferences NotificationPreference[]
 
   @@unique([tenantId, name])
@@ -804,8 +815,8 @@ enum RiskLevel {
 }
 
 model CatalogTool {
-  id            String       @id @default(cuid())
-  integrationId String       @map("integration_id")
+  id            String @id @default(cuid())
+  integrationId String @map("integration_id")
   slug          String
   name          String
   description   String
@@ -814,12 +825,12 @@ model CatalogTool {
   // `whenToUse` is human-written guidance that the prompt renders alongside
   // `description`. `exampleUsage` gives the LLM a worked example so it can
   // infer call shapes without relying only on description heuristics.
-  whenToUse     String?      @map("when_to_use") @db.Text
-  exampleUsage  Json?        @map("example_usage") // [{ input, output, note }]
+  whenToUse    String? @map("when_to_use") @db.Text
+  exampleUsage Json?   @map("example_usage") // [{ input, output, note }]
 
   // Which execution modes this tool is valid in. Filtered at buildToolSurface time.
   // Default: both. Examples of AUTO-only: send_message, close_conversation.
-  allowedModes  Json         @default("[\"AUTO\",\"ASSIST\"]") @map("allowed_modes")
+  allowedModes Json @default("[\"AUTO\",\"ASSIST\"]") @map("allowed_modes")
 
   // HITL policy — this is the SEED for new tenants. The tenant override
   // (TenantTool.configOverrides.hitlPolicy or TenantToolPermission row) is
@@ -829,27 +840,27 @@ model CatalogTool {
   //     condition?: string,       // CEL-lite predicate over args
   //     approverRole?: string,
   //     notifyChannels?: string[] }
-  hitlPolicy    Json         @default("{\"mode\":\"never\"}") @map("hitl_policy")
+  hitlPolicy Json @default("{\"mode\":\"never\"}") @map("hitl_policy")
 
   // Runtime limits honored by the tool executor.
-  timeoutMs                Int  @default(10000) @map("timeout_ms")
-  maxRetries               Int  @default(0)     @map("max_retries")
-  retryBackoffMs           Int  @default(1000)  @map("retry_backoff_ms")
-  circuitBreakerThreshold  Int? @map("circuit_breaker_threshold")
+  timeoutMs               Int  @default(10000) @map("timeout_ms")
+  maxRetries              Int  @default(0) @map("max_retries")
+  retryBackoffMs          Int  @default(1000) @map("retry_backoff_ms")
+  circuitBreakerThreshold Int? @map("circuit_breaker_threshold")
 
   // Schema version for the inputSchema — bumped when args shape changes;
   // forces prompt regeneration on agents referencing this tool.
-  schemaVersion Int          @default(1) @map("schema_version")
+  schemaVersion Int @default(1) @map("schema_version")
 
-  category      ToolCategory @default(READ)
-  inputSchema   Json         @default("{}") @map("input_schema")
-  outputSchema  Json         @default("{}") @map("output_schema")
-  endpoint      String?
-  method        String       @default("GET")
-  isDefault     Boolean      @default(true) @map("is_default")
-  riskLevel     RiskLevel    @default(LOW) @map("risk_level")
-  sortOrder     Int          @default(0) @map("sort_order")
-  createdAt     DateTime     @default(now()) @map("created_at")
+  category     ToolCategory @default(READ)
+  inputSchema  Json         @default("{}") @map("input_schema")
+  outputSchema Json         @default("{}") @map("output_schema")
+  endpoint     String?
+  method       String       @default("GET")
+  isDefault    Boolean      @default(true) @map("is_default")
+  riskLevel    RiskLevel    @default(LOW) @map("risk_level")
+  sortOrder    Int          @default(0) @map("sort_order")
+  createdAt    DateTime     @default(now()) @map("created_at")
 
   integration IntegrationCatalog @relation(fields: [integrationId], references: [id], onDelete: Cascade)
   tenantTools TenantTool[]
@@ -1561,17 +1572,17 @@ model BusinessPolicy {
 // threads don't leak into customer-facing queries, audit, or realtime
 // publishers. Trimmed to a rolling window by agent-runtime.service.
 model SystemAgentMessage {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
-  userId      String   @map("user_id")
-  sessionId   String   @map("session_id")
-  role        String   // "user" | "assistant" | "tool"
-  content     String   @db.Text
-  toolCalls   Json?    @map("tool_calls")
-  toolCallId  String?  @map("tool_call_id")
-  toolName    String?  @map("tool_name")
-  metadata    Json?
-  createdAt   DateTime @default(now()) @map("created_at")
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  userId     String   @map("user_id")
+  sessionId  String   @map("session_id")
+  role       String // "user" | "assistant" | "tool"
+  content    String   @db.Text
+  toolCalls  Json?    @map("tool_calls")
+  toolCallId String?  @map("tool_call_id")
+  toolName   String?  @map("tool_name")
+  metadata   Json?
+  createdAt  DateTime @default(now()) @map("created_at")
 
   @@index([tenantId, userId, createdAt(sort: Desc)])
   @@index([sessionId, createdAt])
@@ -1602,26 +1613,26 @@ enum CalendarAccountStatus {
 }
 
 model CalendarAccount {
-  id                  String                @id @default(cuid())
-  tenantId            String                @map("tenant_id")
+  id                String                @id @default(cuid())
+  tenantId          String                @map("tenant_id")
   /// The AIAgent that owns this calendar binding.
-  aiAgentId           String                @map("ai_agent_id")
-  provider            CalendarProvider
+  aiAgentId         String                @map("ai_agent_id")
+  provider          CalendarProvider
   /// Encrypted JSON: { accessToken, refreshToken, scope, idToken? }
-  credentials         String                @db.Text
+  credentials       String                @db.Text
   /// Provider's primary calendar id (Google) or user URI (Calendly).
-  externalAccountId   String                @map("external_account_id")
+  externalAccountId String                @map("external_account_id")
   /// Optional explicit calendar to write to (Google secondary calendars).
-  defaultCalendarId   String?               @map("default_calendar_id")
+  defaultCalendarId String?               @map("default_calendar_id")
   /// Provider account email — for display + audit.
-  accountEmail        String?               @map("account_email")
+  accountEmail      String?               @map("account_email")
   /// When access token expires; adapter refreshes 60s before.
-  tokenExpiresAt      DateTime?             @map("token_expires_at")
-  status              CalendarAccountStatus @default(CONNECTED)
-  lastError           String?               @map("last_error")
-  lastSyncedAt        DateTime?             @map("last_synced_at")
-  createdAt           DateTime              @default(now()) @map("created_at")
-  updatedAt           DateTime              @updatedAt @map("updated_at")
+  tokenExpiresAt    DateTime?             @map("token_expires_at")
+  status            CalendarAccountStatus @default(CONNECTED)
+  lastError         String?               @map("last_error")
+  lastSyncedAt      DateTime?             @map("last_synced_at")
+  createdAt         DateTime              @default(now()) @map("created_at")
+  updatedAt         DateTime              @updatedAt @map("updated_at")
 
   @@unique([aiAgentId, provider])
   @@index([tenantId])
@@ -1636,32 +1647,32 @@ model CalendarAccount {
 // resolver. Working-hours / windows are stored as JSON arrays of
 // `{ weekday, start, end }` matching the resolver's `DayWindow` shape.
 model MeetingType {
-  id                       String   @id @default(cuid())
-  tenantId                 String   @map("tenant_id")
+  id                    String   @id @default(cuid())
+  tenantId              String   @map("tenant_id")
   /// Used by the schedule_meeting tool's meeting_type arg. Unique per tenant.
-  slug                     String
-  name                     String
-  description              String?
-  durationMinutes          Int      @map("duration_minutes")
+  slug                  String
+  name                  String
+  description           String?
+  durationMinutes       Int      @map("duration_minutes")
   /// IANA timezone for working hours (e.g. "Asia/Jerusalem").
-  agentTimezone            String   @map("agent_timezone")
+  agentTimezone         String   @map("agent_timezone")
   /// [{ weekday: 0..6, start: "HH:MM", end: "HH:MM" }]
-  workingHours             Json     @map("working_hours")
+  workingHours          Json     @map("working_hours")
   /// Optional stricter window override for this meeting type. Same shape.
-  meetingTypeWindows       Json?    @map("meeting_type_windows")
-  bufferBeforeMinutes      Int      @default(15) @map("buffer_before_minutes")
-  bufferAfterMinutes       Int      @default(15) @map("buffer_after_minutes")
-  minNoticeHours           Int      @default(4)  @map("min_notice_hours")
-  maxHorizonDays           Int      @default(30) @map("max_horizon_days")
-  slotResolutionMinutes    Int      @default(30) @map("slot_resolution_minutes")
+  meetingTypeWindows    Json?    @map("meeting_type_windows")
+  bufferBeforeMinutes   Int      @default(15) @map("buffer_before_minutes")
+  bufferAfterMinutes    Int      @default(15) @map("buffer_after_minutes")
+  minNoticeHours        Int      @default(4) @map("min_notice_hours")
+  maxHorizonDays        Int      @default(30) @map("max_horizon_days")
+  slotResolutionMinutes Int      @default(30) @map("slot_resolution_minutes")
   /// Emails that should ALWAYS be added as attendees (account manager, SE,
   /// internal ops). Merged with the customer's email + additional_guests
   /// the bot collected. Stored as a JSON array of strings.
-  autoGuests               Json     @default("[]") @map("auto_guests")
+  autoGuests            Json     @default("[]") @map("auto_guests")
   /// When false, schedule_meeting will reject this slug.
-  isActive                 Boolean  @default(true) @map("is_active")
-  createdAt                DateTime @default(now()) @map("created_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  isActive              Boolean  @default(true) @map("is_active")
+  createdAt             DateTime @default(now()) @map("created_at")
+  updatedAt             DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, slug])
   @@index([tenantId, isActive])
@@ -1676,24 +1687,24 @@ model MeetingType {
 // The BEL loads ONE active funnel per (tenantId × departmentId), preferring
 // a department-scoped row and falling back to the tenant-default (NULL) row.
 model TenantFunnel {
-  id                 String      @id @default(cuid())
-  tenantId           String      @map("tenant_id")
-  funnelId           String      @map("funnel_id")
+  id                String   @id @default(cuid())
+  tenantId          String   @map("tenant_id")
+  funnelId          String   @map("funnel_id")
   /// NULL = tenant default (applies when no department-specific funnel exists).
-  departmentId       String?     @map("department_id")
-  isActive           Boolean     @default(true) @map("is_active")
+  departmentId      String?  @map("department_id")
+  isActive          Boolean  @default(true) @map("is_active")
   /// FunnelStage[] — see funnel-config.service.ts.
-  stages             Json
+  stages            Json
   /// FunnelTransition[]
-  transitions        Json        @default("[]")
+  transitions       Json     @default("[]")
   /// StrategyOverride[] — optional.
-  strategyOverrides  Json?       @map("strategy_overrides")
+  strategyOverrides Json?    @map("strategy_overrides")
   /// PlaybookOverride[] — optional.
-  playbookOverrides  Json?       @map("playbook_overrides")
-  createdAt          DateTime    @default(now()) @map("created_at")
-  updatedAt          DateTime    @updatedAt @map("updated_at")
+  playbookOverrides Json?    @map("playbook_overrides")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
-  department         Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
   @@unique([tenantId, departmentId, funnelId])
   @@index([tenantId, departmentId, isActive])
@@ -1752,20 +1763,20 @@ model ActionContract {
 // is closed without completion — either way, audit trail lives in
 // ai.bot_turn logs).
 model ActionContractProgress {
-  id              String    @id @default(cuid())
-  tenantId        String    @map("tenant_id")
-  conversationId  String    @map("conversation_id")
-  contractId      String    @map("contract_id")
+  id             String    @id @default(cuid())
+  tenantId       String    @map("tenant_id")
+  conversationId String    @map("conversation_id")
+  contractId     String    @map("contract_id")
   /// JSON array of tool names already executed (in execution order).
-  completedTools  Json      @default("[]") @map("completed_tools")
+  completedTools Json      @default("[]") @map("completed_tools")
   /// Index of the next required tool when executionMode = SEQUENCE.
-  nextStepIndex   Int       @default(0) @map("next_step_index")
+  nextStepIndex  Int       @default(0) @map("next_step_index")
   /// Set when a tool returned awaiting_approval — contract is paused.
-  pausedReason    String?   @map("paused_reason")
+  pausedReason   String?   @map("paused_reason")
   /// Set on completion. When non-null, the row is essentially historical.
-  fulfilledAt     DateTime? @map("fulfilled_at")
-  createdAt       DateTime  @default(now()) @map("created_at")
-  updatedAt       DateTime  @updatedAt @map("updated_at")
+  fulfilledAt    DateTime? @map("fulfilled_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
 
   @@unique([conversationId, contractId])
   @@index([tenantId, conversationId])
@@ -1793,51 +1804,51 @@ model ActionContractProgress {
 // must resolve to a host in `allowedHosts` for the tool to fire. This is
 // the OWASP-style guardrail against SSRF + accidental exfiltration.
 model CustomApiTool {
-  id                  String   @id @default(cuid())
-  tenantId            String   @map("tenant_id")
+  id             String   @id @default(cuid())
+  tenantId       String   @map("tenant_id")
   /// Tool slug surfaced as `custom.<slug>`. Unique per tenant.
-  slug                String
-  name                String
-  description         String
+  slug           String
+  name           String
+  description    String
   /// "Use this tool when …"
-  whenToUse           String   @map("when_to_use")
+  whenToUse      String   @map("when_to_use")
   /// "Do NOT call this tool when …"
-  whenNotToUse        String?  @map("when_not_to_use")
+  whenNotToUse   String?  @map("when_not_to_use")
   /// "GET" | "POST" | "PUT" | "PATCH" | "DELETE"
-  method              String
+  method         String
   /// e.g. "https://api.example.com/v1/orders/{{order_id}}"
-  urlTemplate         String   @map("url_template")
+  urlTemplate    String   @map("url_template")
   /// Static headers (in addition to auth).
-  headers             Json     @default("{}")
+  headers        Json     @default("{}")
   /// Auth descriptor (encrypted via the integration credential helper).
   /// Shape:
   ///   { kind: "none" } |
   ///   { kind: "bearer", tokenEnv?: string }   ← token stored in `secrets.bearer`
   ///   { kind: "api_key", in: "header"|"query", name: "X-API-Key" } ← key in `secrets.apiKey`
   ///   { kind: "basic" } ← user/pass in secrets.basicUser/basicPass
-  auth                Json     @default("{\"kind\":\"none\"}")
+  auth           Json     @default("{\"kind\":\"none\"}")
   /// Encrypted credential blob (bearer token, api key, basic user/pass).
-  secrets             String?  @db.Text
+  secrets        String?  @db.Text
   /// Parameter schema in OpenAI function-calling shape.
   /// { type:"object", properties:{...}, required:[...] }
-  parameters          Json     @default("{\"type\":\"object\",\"properties\":{},\"required\":[]}")
+  parameters     Json     @default("{\"type\":\"object\",\"properties\":{},\"required\":[]}")
   /// Body template — string with {{placeholders}} or null for no body.
-  bodyTemplate        String?  @map("body_template") @db.Text
+  bodyTemplate   String?  @map("body_template") @db.Text
   /// Optional response mapping — JSONPath-like dotted paths summarized for the LLM.
   /// e.g. ["data.id", "data.amount"] — adapter returns just these fields when set.
-  responseFields      Json?    @map("response_fields")
+  responseFields Json?    @map("response_fields")
   /// Domain whitelist — exact host match enforced at dispatch.
-  allowedHosts        Json     @default("[]") @map("allowed_hosts")
+  allowedHosts   Json     @default("[]") @map("allowed_hosts")
   /// "READ" | "WRITE" | "DELETE" | "ACTION" — drives permission filtering.
-  category            String   @default("READ")
+  category       String   @default("READ")
   /// "LOW" | "MEDIUM" | "HIGH" — HIGH-risk auto-requires approval.
-  riskLevel           String   @default("MEDIUM") @map("risk_level")
+  riskLevel      String   @default("MEDIUM") @map("risk_level")
   /// Soft-disable without deleting.
-  isActive            Boolean  @default(true) @map("is_active")
+  isActive       Boolean  @default(true) @map("is_active")
   /// Timeout in ms (default 10s).
-  timeoutMs           Int      @default(10000) @map("timeout_ms")
-  createdAt           DateTime @default(now()) @map("created_at")
-  updatedAt           DateTime @updatedAt @map("updated_at")
+  timeoutMs      Int      @default(10000) @map("timeout_ms")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, slug])
   @@index([tenantId, isActive])
@@ -1919,11 +1930,27 @@ model VoiceCallSession {
   endReason       String?   @map("end_reason")
   meta            Json?
 
-  tenant       Tenant       @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // ─── Phase 1 (Live Call CoPilot) additions ───
+  // All nullable / default-safe so existing rows keep their legacy `status`
+  // string semantics. New writers populate BOTH columns during the 2-week
+  // dual-write window; readers may rely on whichever is preferred.
+  channelId       String?    @map("channel_id")
+  state           CallState? // typed FSM state — see translator in voice-copilot/state
+  stateHistory    Json       @default("[]") @map("state_history") // [{state, at, reason}]
+  assignedAgentId String?    @map("assigned_agent_id")
+  claimedAt       DateTime?  @map("claimed_at")
+
+  tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation   Conversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  channel        CommunicationChannel?    @relation(fields: [channelId], references: [id])
+  postProcessing VoiceCallPostProcessing?
+  actionItems    VoiceCallActionItem[]
 
   @@index([tenantId, startedAt])
   @@index([agentId, startedAt])
+  @@index([tenantId, state])
+  @@index([assignedAgentId, state])
+  @@index([channelId])
   @@map("voice_call_sessions")
 }
 
@@ -2054,7 +2081,7 @@ model ToolExecutionRequest {
   proposedAt     DateTime  @default(now()) @map("proposed_at")
   decidedAt      DateTime? @map("decided_at")
   startedAt      DateTime? @map("started_at")
-  completedAt   DateTime?  @map("completed_at")
+  completedAt    DateTime? @map("completed_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -2087,4 +2114,180 @@ model QAScore {
   @@index([conversationId])
   @@index([scoredAt])
   @@map("qa_scores")
+}
+
+// ─── Live Call CoPilot — Phase 1 ────────────────────────────────
+//
+// All models below are net-new and additive. No existing reader/writer is
+// required to consult them. Existing voice (shared-Twilio) tenants ignore
+// these tables entirely; opt-in tenants get a row populated only when they
+// turn on `voiceCopilotEnabled` and either onboard a BYO channel or have
+// an inbound call land on the shared channel.
+
+enum VoiceAuthType {
+  BYO // tenant supplied their own Twilio credentials, decrypted from `CommunicationChannel.encryptedSecrets`
+}
+
+enum CommunicationChannelStatus {
+  PENDING
+  ACTIVE
+  DISABLED
+  ERROR
+}
+
+enum CallState {
+  RINGING
+  CONNECTING
+  ACTIVE
+  HOLD
+  ENDED
+  FAILED
+  MISSED
+}
+
+enum PresenceStatus {
+  ONLINE
+  BUSY
+  OFFLINE
+}
+
+enum PostCallStage {
+  PENDING
+  TRANSCRIPT_FINALIZED
+  SUMMARIZED
+  ACTION_ITEMS_EXTRACTED
+  CRM_WRITTEN
+  FOLLOWUP_GENERATED
+  FINALIZED
+  FAILED
+}
+
+enum ActionItemStatus {
+  PROPOSED
+  ACCEPTED
+  DISMISSED
+  DONE
+}
+
+// Polymorphic parent for any communication-channel integration. Phase 1
+// only spawns VoiceChannel children, but the structure is shaped so
+// WhatsApp / SMS / Email can later join the same parent without another
+// schema rev (their tenant integrations stay where they are today; the
+// shared parent merely lets us reason uniformly over channel rows).
+model CommunicationChannel {
+  id               String                     @id @default(cuid())
+  tenantId         String                     @map("tenant_id")
+  channelType      ChannelType                @map("channel_type")
+  provider         String // "twilio" | future: "sip" | "aircall" | …
+  authType         VoiceAuthType              @default(BYO) @map("auth_type")
+  friendlyName     String                     @map("friendly_name")
+  status           CommunicationChannelStatus @default(PENDING)
+  capabilities     Json                       @default("{}") // {inbound, outbound, mediaStream}
+  config           Json                       @default("{}") // non-secret config (region, phoneNumber, …)
+  encryptedSecrets Bytes?                     @map("encrypted_secrets") // aes-256-gcm via existing util
+  webhookSecret    String?                    @map("webhook_secret") // per-channel HMAC, URL-path auth
+  healthCheckedAt  DateTime?                  @map("health_checked_at")
+  healthStatus     String?                    @map("health_status")
+  createdAt        DateTime                   @default(now()) @map("created_at")
+  updatedAt        DateTime                   @updatedAt @map("updated_at")
+
+  tenant            Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  voiceChannel      VoiceChannel?
+  voiceCallSessions VoiceCallSession[]
+
+  @@index([tenantId, channelType, status])
+  @@map("communication_channels")
+}
+
+// Voice-specific specialization. Encrypted Twilio tokens live in the
+// parent's `encryptedSecrets`; non-secret config (account SID, phone, …)
+// lives here for indexability.
+model VoiceChannel {
+  id                     String  @id @default(cuid())
+  communicationChannelId String  @unique @map("communication_channel_id")
+  accountSid             String? @map("account_sid") // Twilio-specific
+  twimlAppSid            String? @map("twiml_app_sid") // Twilio-specific
+  apiKeySid              String? @map("api_key_sid") // Twilio-specific
+
+  parent       CommunicationChannel      @relation(fields: [communicationChannelId], references: [id], onDelete: Cascade)
+  phoneNumbers VoiceChannelPhoneNumber[]
+
+  @@map("voice_channels")
+}
+
+// Phone numbers discovered from Twilio per voice channel. One channel
+// (i.e. one Twilio sub-account) can own many numbers; admins flip
+// `isActive` to wire a number to the inbound webhook.
+model VoiceChannelPhoneNumber {
+  id             String   @id @default(cuid())
+  voiceChannelId String   @map("voice_channel_id")
+  e164           String   @unique
+  twilioSid      String?  @map("twilio_sid")
+  friendlyName   String?  @map("friendly_name")
+  isActive       Boolean  @default(false) @map("is_active")
+  createdAt      DateTime @default(now()) @map("created_at")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  voiceChannel VoiceChannel @relation(fields: [voiceChannelId], references: [id], onDelete: Cascade)
+
+  @@unique([voiceChannelId, e164])
+  @@index([voiceChannelId])
+  @@index([isActive])
+  @@map("voice_channel_phone_numbers")
+}
+
+// Per-agent presence. MVP: tenant-wide broadcast. Schema admits future
+// per-skill / per-department routing without another migration.
+model AgentPresence {
+  agentId              String         @id @map("agent_id")
+  tenantId             String         @map("tenant_id")
+  status               PresenceStatus @default(OFFLINE)
+  activeVoiceSessionId String?        @map("active_voice_session_id")
+  lastSeenAt           DateTime       @default(now()) @map("last_seen_at")
+  updatedAt            DateTime       @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@index([lastSeenAt])
+  @@map("agent_presences")
+}
+
+// Post-call pipeline tracker. One row per VoiceCallSession; rows are
+// inserted when the session ends and progress through `stage`. Each stage
+// is idempotent + individually retryable.
+model VoiceCallPostProcessing {
+  id         String        @id @default(cuid())
+  sessionId  String        @unique @map("session_id")
+  stage      PostCallStage @default(PENDING)
+  attempts   Int           @default(0)
+  lastError  String?       @map("last_error")
+  startedAt  DateTime      @default(now()) @map("started_at")
+  finishedAt DateTime?     @map("finished_at")
+  meta       Json?
+
+  session VoiceCallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([stage])
+  @@map("voice_call_post_processing")
+}
+
+// Structured action items extracted from a completed call. Surfaced in
+// the workspace's right panel ("Follow-up" card) for agent triage.
+model VoiceCallActionItem {
+  id         String           @id @default(cuid())
+  sessionId  String           @map("session_id")
+  title      String
+  details    String?
+  status     ActionItemStatus @default(PROPOSED)
+  assignedTo String?          @map("assigned_to")
+  dueAt      DateTime?        @map("due_at")
+  createdAt  DateTime         @default(now()) @map("created_at")
+  updatedAt  DateTime         @updatedAt @map("updated_at")
+
+  session VoiceCallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([status])
+  @@map("voice_call_action_items")
 }

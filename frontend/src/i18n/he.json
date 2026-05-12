@@ -2282,5 +2282,166 @@
         "desc": "אירעה שגיאת מערכת ברמה קריטית הדורשת תשומת לב מיידית."
       }
     }
+  },
+  "settings": {
+    "nav": {
+      "voiceChannels": "ערוצי קול"
+    },
+    "voiceChannels": {
+      "title": "ערוצי קול",
+      "subtitle": "נהל את חשבונות ה-Twilio של הארגון ואת המספרים הפעילים.",
+      "newButton": "חבר חדש",
+      "loading": "טוען…",
+      "pageNotAvailable": "דף זה אינו זמין עבור הטנאנט שלך.",
+      "adminRequired": "נדרשת גישת מנהל",
+      "connectedSuccess": "הערוץ חובר בהצלחה",
+      "emptyTitle": "עוד לא חיברת ערוץ קול",
+      "emptyDescription": "כדי לקבל ולחייג שיחות דרך GOTCHA, הדבק את ה-Account SID וה-Auth Token של Twilio כדי לחבר את החשבון.",
+      "startConnect": "התחל חיבור",
+      "activeNumbers": "מספרים פעילים",
+      "statusActive": "פעיל",
+      "statusPending": "ממתין",
+      "statusDisabled": "מושבת",
+      "statusError": "שגיאה",
+      "authBYO": "BYO",
+      "detail": {
+        "backLink": "חזרה לערוצי קול",
+        "notFound": "הערוץ לא נמצא",
+        "phoneNumbersTitle": "מספרי טלפון",
+        "phoneNumbersSubtitle": "הפעל מספר כדי לקבל ולחייג שיחות. ההפעלה מעדכנת את ה-Voice URL ב-Twilio.",
+        "refreshButton": "סנכרון מ-Twilio",
+        "refreshing": "מסנכרן…",
+        "syncSuccess": "רשימת המספרים סונכרנה מ-Twilio",
+        "noNumbers": "לא נמצאו מספרים בחשבון Twilio. לחץ על \"סנכרון מ-Twilio\" כדי לרענן.",
+        "colE164": "E.164",
+        "colFriendlyName": "שם ידידותי",
+        "colTwilioSid": "Twilio SID",
+        "colWebhook": "Webhook",
+        "colActive": "פעיל",
+        "webhookLabel": "Webhook",
+        "webhookInactive": "לא פעיל",
+        "toggleActivate": "הפעל מספר",
+        "toggleDeactivate": "השבת מספר",
+        "dangerZone": "השבתת הערוץ",
+        "dangerZoneDesc": "ההשבתה תמחק את הקישור ל-Twilio ותפסיק את קליטת השיחות מכל המספרים בערוץ זה. לא ניתן לשחזר את הפעולה.",
+        "deleteButton": "השבת ערוץ",
+        "deleting": "משבית…",
+        "deleteConfirm": "פעולה זו תשבית את הערוץ ותפסיק לחלוטין את קליטת השיחות. להמשיך?",
+        "outboundProvisioningFailed": "חיוג יוצא אינו מוגדר במלואו — שיחות נכנסות עדיין עובדות.",
+        "retryProvisioning": "נסה שוב"
+      },
+      "wizard": {
+        "backLink": "חזרה לערוצי קול",
+        "step1Title": "חיבור ערוץ קול חדש",
+        "step1Subtitle": "חבר את חשבון Twilio שלך כדי לקבל ולחייג שיחות דרך GOTCHA.",
+        "step1BYOTitle": "פרטי חשבון Twilio",
+        "step1BYOSubtitle": "הדבק את ה-Account SID וה-Auth Token של Twilio — אנחנו נגדיר את השאר אוטומטית.",
+        "step1BYOAutoSetup": "ניצור עבורך את ה-API Key ואת ה-TwiML App.",
+        "step1BYOWhereToFind": "איפה מוצאים את הפרטים בקונסולת Twilio ←",
+        "step1BYOSubmit": "המשך לגילוי מספרים",
+        "step1BYOSubmitting": "מתחבר ל-Twilio…",
+        "step1BYOFriendlyName": "שם תצוגה",
+        "step1BYOFriendlyNameHelp": "לזיהוי פנימי בלבד — לדוגמה: ׳GOTCHA Israel׳.",
+        "step1BYOAccountSid": "Account SID",
+        "step1BYOAccountSidHelp": "Console ← Account ← API keys & tokens. מתחיל ב-AC ואחריו 32 תווי hex.",
+        "step1BYOAccountSidError": "Account SID חייב להתחיל ב-AC ולהכיל 32 תווים hex",
+        "step1BYOAuthToken": "Auth Token",
+        "step1BYOAuthTokenHelp": "Console ← Account ← API keys & tokens. לעולם לא יוצג חזרה — מוצפן ונשמר בצד השרת.",
+        "step1BYOSecretShow": "הצג",
+        "step1BYOSecretHide": "הסתר",
+        "step2Title": "בחר מספרים להפעלה",
+        "step2Subtitle": "גילינו {count} מספרים בחשבון. סמן את אלו שיקבלו שיחות נכנסות דרך GOTCHA. תוכל תמיד לעדכן בהמשך.",
+        "step2NoNumbers": "לא נמצאו מספרים פעילים בחשבון Twilio. רכוש מספר ב-Twilio ואז חזור לרענן.",
+        "step2SelectAll": "בחר הכל",
+        "step2DeselectAll": "נקה הכל",
+        "step2SkipButton": "דלג להגדרות הערוץ",
+        "step2ActivateButton": "הפעל {count} מספרים",
+        "step3TitleDone": "סיום ההגדרה",
+        "step3TitleRunning": "מפעיל מספרים…",
+        "step3PartialFailTitle": "חלק מהמספרים לא הופעלו:",
+        "step3OpenButton": "פתח את הגדרות הערוץ",
+        "stepperDetails": "פרטים",
+        "stepperNumbers": "מספרים",
+        "stepperActivation": "הפעלה"
+      }
+    }
+  },
+  "voice": {
+    "banner": {
+      "incomingCall": "שיחה נכנסת",
+      "voiceChannel": "ערוץ קול",
+      "answerButton": "ענה",
+      "answeringButton": "מחבר…",
+      "declineButton": "דחה",
+      "moreRinging": "+{count} שיחות נוספות מצלצלות",
+      "soundToggle": "צלצול בשיחה נכנסת",
+      "testSound": "בדוק צליל"
+    },
+    "activeBar": {
+      "onCall": "בשיחה",
+      "mute": "השתק",
+      "unmute": "בטל השתקה",
+      "muteUnavailable": "השתקה זמינה רק במכשיר שממנו בוצעה השיחה",
+      "openWorkspace": "פתח",
+      "hangup": "נתק"
+    },
+    "inbox": {
+      "liveCalls": "שיחות פעילות",
+      "inbound": "נכנסת",
+      "outbound": "יוצאת",
+      "stateRinging": "מצלצל",
+      "stateConnecting": "מתחבר",
+      "stateActive": "פעיל",
+      "stateOnHold": "בהמתנה",
+      "stateVoice": "קול"
+    },
+    "workspace": {
+      "loadingWorkspace": "טוען סביבת עבודה…",
+      "loadingCall": "טוען שיחה…",
+      "pageNotAvailable": "דף זה אינו זמין עבור הטנאנט שלך.",
+      "backToInbox": "חזרה לתיבת הדואר",
+      "header": {
+        "muteButton": "השתק",
+        "unmuteButton": "בטל השתקה",
+        "hangupButton": "נתק"
+      },
+      "transcript": {
+        "listening": "מאזין…",
+        "noTranscript": "לא נקלט תמלול."
+      },
+      "cards": {
+        "copilot": {
+          "title": "הצעות ה-Co-pilot",
+          "listening": "מאזין — רמזים יופיעו לאחר שהלקוח ידבר."
+        },
+        "customer": {
+          "title": "לקוח",
+          "noContact": "לא נמצא איש קשר תואם למספר זה.",
+          "unnamed": "איש קשר ללא שם"
+        },
+        "previousCalls": {
+          "title": "שיחות קודמות",
+          "noCalls": "אין שיחות קודמות עם מספר זה."
+        },
+        "notes": {
+          "title": "הערות",
+          "placeholder": "הערות לקוח יופיעו כאן לאחר חיבור אינטגרציית ה-CRM."
+        },
+        "tickets": {
+          "title": "פניות פתוחות",
+          "placeholder": "אין מערכת כרטיסים מחוברת. פניות פתוחות יופיעו כאן לאחר הגדרה."
+        },
+        "crmHistory": {
+          "title": "היסטוריית CRM",
+          "noHistory": "אין היסטוריה חוצה-ערוצים עבור איש קשר זה."
+        }
+      }
+    },
+    "errors": {
+      "noActiveChannel": "אין ערוץ קול פעיל",
+      "loadFailed": "טעינה נכשלה",
+      "claimFailed": "מענה נכשל",
+      "agentBusy": "הנציג עסוק"
+    }
   }
 }

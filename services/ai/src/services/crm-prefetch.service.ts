@@ -20,7 +20,7 @@
  * duplicate) — we never want a transient CRM hiccup to break the chat.
  */
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, normalizePhone as sharedNormalizePhone } from "@chatcenter/shared";
 import { executeTool } from "./tool-execution.service";
 
 export interface CrmRecord {
@@ -54,7 +54,11 @@ export async function prefetchCrmContext(
   conversationId: string,
   customer: { externalId?: string | null; email?: string | null },
 ): Promise<CrmPrefetchResult | null> {
-  const phone = normalizePhone(customer.externalId ?? undefined);
+  const tenant = await prisma.tenant
+    .findUnique({ where: { id: tenantId }, select: { defaultCountryCode: true } })
+    .catch(() => null);
+  const defaultCountry = tenant?.defaultCountryCode || "IL";
+  const phone = normalizePhone(customer.externalId ?? undefined, defaultCountry);
   const email = (customer.email || "").trim() || undefined;
   if (!phone && !email) return null;
 
@@ -266,14 +270,16 @@ async function findTenantToolBySlug(tenantId: string, slug: string) {
   }
 }
 
-function normalizePhone(externalId: string | undefined): string | undefined {
+function normalizePhone(externalId: string | undefined, defaultCountry: string = "IL"): string | undefined {
   if (!externalId) return undefined;
   const trimmed = String(externalId).trim();
   if (!trimmed) return undefined;
-  if (trimmed.startsWith("+")) return trimmed;
-  // WhatsApp wa_id is digits-only without "+", e.g. "972525401686".
-  if (/^\d{6,}$/.test(trimmed)) return "+" + trimmed;
-  return trimmed;
+  // WhatsApp wa_id is digits-only international form ("972525401686"). Add
+  // the "+" so libphonenumber parses it as E.164 rather than treating it as
+  // a local-country number.
+  const candidate = !trimmed.startsWith("+") && /^\d{8,15}$/.test(trimmed) ? "+" + trimmed : trimmed;
+  const normalized = sharedNormalizePhone(candidate, defaultCountry);
+  return normalized || undefined;
 }
 
 function parseZohoSearchRows(output: unknown): any[] {

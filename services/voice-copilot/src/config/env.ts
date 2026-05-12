@@ -17,12 +17,6 @@ export const envSchema = z.object({
   MAX_CONCURRENT_SESSIONS: z.coerce.number().default(50),
   DISPATCHER_BATCH_WINDOW_MS: z.coerce.number().default(100),
   DISPATCHER_BATCH_MAX: z.coerce.number().default(5),
-  TWILIO_ACCOUNT_SID: z.string().default(""),
-  TWILIO_AUTH_TOKEN: z.string().default(""),
-  TWILIO_API_KEY_SID: z.string().default(""),
-  TWILIO_API_KEY_SECRET: z.string().default(""),
-  TWILIO_TWIML_APP_SID: z.string().default(""),
-  TWILIO_CALLER_ID: z.string().default(""),
   PUBLIC_BASE_URL: z.string().default("http://localhost"),
 });
 

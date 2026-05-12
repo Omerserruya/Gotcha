@@ -92,10 +92,20 @@ app.use("/api/ai-bot", aiBotRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api", postCallRoutes);
 
-// Phase 4: legacy voice-copilot-subscriber removed. The Conversation
-// Intelligence Engine supervisor is now the only AI consumer of voice
-// session events — it maps voice.session.* to per-call LiveAnalysisRunner
-// instances that emit structured ConversationStateFrames.
+// Two voice-copilot pipelines run in parallel:
+//   - Phase 3 (legacy): voice-copilot-subscriber → scheduleAssistTrigger
+//     → publishEvent("voice.copilot.suggestions"). The chat-shaped
+//     suggestions the frontend's "copilot" panel has shown for months.
+//   - Phase 4 (new): LiveAnalysisRunner supervisor → publishConvEvent
+//     "voice.frame.updated" with structured ConversationStateFrames.
+//     Frontend bridges frame.suggestedActions[] into the same panel.
+// Both are loaded so the panel keeps working even if Phase 4 has a
+// silent failure (LLM error, prompt issue, missing field). Once Phase 4
+// is fully verified end-to-end the subscriber can be removed cleanly.
+import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
+import { startVoicePostCallWorker } from "./workers/voice-postcall";
+startVoiceCopilotSubscriber();
+startVoicePostCallWorker();
 startLiveRunnerSupervisor();
 
 // Phase 5: Post-Call Mode A QA. Trigger enqueues a QA job on every

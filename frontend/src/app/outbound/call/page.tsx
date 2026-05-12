@@ -5,16 +5,9 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { useVoiceCall, type CommittedUtterance, type CopilotSuggestion } from "@/context/VoiceCallContext";
-import { getContacts } from "@/lib/api";
-
-function normalizeE164(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  if (/^\+[1-9]\d{6,14}$/.test(trimmed)) return trimmed;
-  const digits = trimmed.replace(/[^\d]/g, "");
-  if (digits.length >= 7 && digits.length <= 15) return `+${digits}`;
-  return null;
-}
+import { getContacts, getTenantSettings } from "@/lib/api";
+import { normalizeE164 } from "@/lib/phone";
+import { TranscriptStage } from "@/components/voice/workspace/TranscriptStage";
 
 function formatForDisplay(input: string): string {
   if (!input) return "";
@@ -65,9 +58,17 @@ export default function OutboundCallPage() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
+  const [defaultCountry, setDefaultCountry] = useState<string>("IL");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const normalized = normalizeE164(phoneInput);
+  useEffect(() => {
+    if (!token) return;
+    getTenantSettings(token)
+      .then((res) => setDefaultCountry(res.data?.defaultCountryCode || "IL"))
+      .catch(() => {});
+  }, [token]);
+
+  const normalized = normalizeE164(phoneInput, defaultCountry);
   const isActive = state !== "idle";
   const isBusy = isActive || placing;
   const canCall = !!normalized && isReady && !isBusy;
@@ -284,7 +285,6 @@ function PhoneCallUI(props: {
   isMuted: boolean;
 }) {
   const { call, state, elapsedMs, committedTranscripts, currentUtterance, copilotSuggestions, agentName, onHangup, onToggleMute, isMuted } = props;
-  const feedRef = useRef<HTMLDivElement>(null);
   const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
@@ -292,13 +292,6 @@ function PhoneCallUI(props: {
     const id = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(id);
   }, []);
-
-  const liveCount = (currentUtterance.agent ? 1 : 0) + (currentUtterance.customer ? 1 : 0);
-  useEffect(() => {
-    const el = feedRef.current;
-    if (!el) return;
-    el.scrollTop = el.scrollHeight;
-  }, [committedTranscripts.length, liveCount, currentUtterance.agent, currentUtterance.customer]);
 
   const stateLabel = {
     connecting: "Connecting…",
@@ -338,50 +331,16 @@ function PhoneCallUI(props: {
         <div className="text-sm font-mono tabular-nums text-gray-300">{stateLabel}</div>
       </div>
 
-      {/* Transcript flow (teleprompter) */}
-      <div
-        ref={feedRef}
-        className="flex-1 overflow-y-auto px-6 md:px-16 lg:px-32 pb-32 scroll-smooth"
-      >
-        {committedTranscripts.length === 0 && !currentUtterance.agent && !currentUtterance.customer ? (
-          <div className="h-full flex items-center justify-center text-gray-500 text-lg italic">
-            {isLive ? "Listening…" : "No transcript captured."}
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6 pt-6">
-            {committedTranscripts.map((t) => (
-              <StageLine
-                key={`committed:${t.speaker}:${t.seq}`}
-                speaker={t.speaker}
-                text={t.text}
-                isLive={false}
-                agentName={agentName}
-                customerName={customerName}
-              />
-            ))}
-            {currentUtterance.customer && (
-              <StageLine
-                key="live:customer"
-                speaker="customer"
-                text={currentUtterance.customer}
-                isLive={true}
-                agentName={agentName}
-                customerName={customerName}
-              />
-            )}
-            {currentUtterance.agent && (
-              <StageLine
-                key="live:agent"
-                speaker="agent"
-                text={currentUtterance.agent}
-                isLive={true}
-                agentName={agentName}
-                customerName={customerName}
-              />
-            )}
-          </div>
-        )}
-      </div>
+      {/* Transcript flow (teleprompter) — extracted to TranscriptStage so
+          the workspace /voice/[sessionId] page renders the same visual. */}
+      <TranscriptStage
+        committedTranscripts={committedTranscripts}
+        currentUtterance={currentUtterance}
+        agentName={agentName}
+        customerName={customerName}
+        isLive={isLive}
+        className="px-6 md:px-16 lg:px-32 pb-32"
+      />
 
       {/* AI Copilot suggestions — fired by ai-service after each customer final
           (debounced 1500ms). Rendered as a stack of hint cards in the upper
@@ -463,37 +422,4 @@ function PhoneCallUI(props: {
   );
 }
 
-function StageLine({
-  speaker,
-  text,
-  isLive,
-  agentName,
-  customerName,
-}: {
-  speaker: "agent" | "customer";
-  text: string;
-  isLive: boolean;
-  agentName: string;
-  customerName: string;
-}) {
-  const isAgent = speaker === "agent";
-  const name = isAgent ? agentName : customerName;
-  return (
-    <div className="flex flex-col items-start text-left">
-      <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-gray-500 mb-1">
-        {name}
-      </span>
-      <p
-        className={clsx(
-          "max-w-[90%] md:max-w-[75%] text-xl md:text-2xl leading-relaxed font-light",
-          isAgent ? "text-sky-200" : "text-gray-100",
-          isLive && "opacity-70"
-        )}
-      >
-        {text}
-        {isLive && <span className="inline-block ml-1 w-2 h-5 align-middle bg-current opacity-80 animate-pulse" />}
-      </p>
-    </div>
-  );
-}
 

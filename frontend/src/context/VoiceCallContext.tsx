@@ -4,6 +4,7 @@ import React, { createContext, useContext, useState, useRef, useEffect, useCallb
 import { Device, Call } from "@twilio/voice-sdk";
 import { useAuth } from "@/context/AuthContext";
 import { getSocket } from "@/lib/socket";
+import { useVoiceFlags } from "@/lib/use-voice-flags";
 
 export type CallState = "idle" | "connecting" | "ringing" | "active" | "ended" | "error";
 
@@ -94,6 +95,8 @@ interface VoiceCallContextType {
    */
   latestFrame: ConversationStateFrame | null;
   placeCall: (to: string, opts?: { contactName?: string; conversationId?: string; notes?: string }) => Promise<void>;
+  /** Dial the agent's browser into an already-running conference (inbound answer flow). */
+  joinConference: (conferenceName: string) => Promise<void>;
   hangup: () => void;
   toggleMute: () => void;
 }
@@ -104,6 +107,7 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const { token, user } = useAuth();
+  const voiceFlags = useVoiceFlags();
 
   const [state, setState] = useState<CallState>("idle");
   const [call, setCall] = useState<CallInfo | null>(null);
@@ -115,11 +119,15 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const [copilotSuggestions, setCopilotSuggestions] = useState<CopilotSuggestion[]>([]);
   const [latestFrame, setLatestFrame] = useState<ConversationStateFrame | null>(null);
   const [isMuted, setIsMuted] = useState(false);
+  /** True after a 503/no_active_voice_channel response — halts retry until re-armed. */
+  const [noActiveChannel, setNoActiveChannel] = useState(false);
 
   const deviceRef = useRef<Device | null>(null);
   const twilioTokenRef = useRef<string | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  /** Timestamp (ms) of the last failed token attempt — used for the focus re-arm heuristic. */
+  const lastTokenAttemptRef = useRef<number>(0);
   // Kept in sync with call?.conversationId so the socket handler (which closes
   // over a single `call` snapshot) can filter tenant-wide broadcasts down to
   // the current agent's call. Without this, every agent in the tenant sees
@@ -272,18 +280,45 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   // Fetch the Twilio AccessToken up-front — but DO NOT construct the Device
   // until the user clicks Call. Chrome blocks AudioContext.start() outside
   // a user gesture, which silently produces one-way audio.
+  //
+  // Guards:
+  //  1. Skip entirely if voiceCopilotEnabled is false (or still loading).
+  //  2. Skip entirely if hasActiveVoiceChannel is false — the tenant hasn't
+  //     onboarded any Twilio channel yet, so the token endpoint will 503
+  //     `no_active_voice_channel`. Save the round-trip. The flag flips back
+  //     to true via the wizard's "voice-channel:activated" event, which
+  //     invalidates the flags cache and re-runs this effect.
+  //  3. Skip if noActiveChannel is true — a previous attempt got a
+  //     503/no_active_voice_channel response. Re-arm via the
+  //     "voice-channel:activated" event or window.focus (>30 s heuristic).
   useEffect(() => {
-    if (!token) {
-      if (deviceRef.current) {
-        try { deviceRef.current.destroy(); } catch { /* ignore */ }
-        deviceRef.current = null;
+    if (!token || voiceFlags.loading || !voiceFlags.voiceCopilotEnabled || !voiceFlags.hasActiveVoiceChannel) {
+      // Clean up any existing device when the feature turns off OR the
+      // tenant has no active channel anymore.
+      if (!voiceFlags.loading && (!voiceFlags.voiceCopilotEnabled || !voiceFlags.hasActiveVoiceChannel)) {
+        if (deviceRef.current) {
+          try { deviceRef.current.destroy(); } catch { /* ignore */ }
+          deviceRef.current = null;
+        }
+        twilioTokenRef.current = null;
+        setIsReady(false);
+        setNoActiveChannel(false);
       }
-      twilioTokenRef.current = null;
-      setIsReady(false);
+      if (!token) {
+        if (deviceRef.current) {
+          try { deviceRef.current.destroy(); } catch { /* ignore */ }
+          deviceRef.current = null;
+        }
+        twilioTokenRef.current = null;
+        setIsReady(false);
+      }
       return;
     }
 
+    if (noActiveChannel) return;
+
     let cancelled = false;
+    lastTokenAttemptRef.current = Date.now();
     (async () => {
       try {
         const res = await fetch(`${API_URL}/api/voice-copilot/token`, {
@@ -292,7 +327,17 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
         });
         if (!res.ok) {
           const body = await res.json().catch(() => ({}));
-          throw new Error(body.error || `token_fetch_failed:${res.status}`);
+          const errCode = body.error || `token_fetch_failed:${res.status}`;
+          if (res.status === 503 && body.error === "no_active_voice_channel") {
+            if (!cancelled) {
+              // eslint-disable-next-line no-console
+              console.warn("[voice] no active voice channel configured — token fetch suppressed until channel is activated.");
+              setNoActiveChannel(true);
+              setIsReady(false);
+            }
+            return;
+          }
+          throw new Error(errCode);
         }
         const data = await res.json() as { token: string };
         if (cancelled) return;
@@ -317,7 +362,28 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       twilioTokenRef.current = null;
       setIsReady(false);
     };
-  }, [token, stopTimer]);
+  }, [token, voiceFlags.loading, voiceFlags.voiceCopilotEnabled, voiceFlags.hasActiveVoiceChannel, noActiveChannel, stopTimer]);
+
+  // Re-arm the token fetch when a voice channel comes online.
+  // Dispatched externally via: window.dispatchEvent(new Event("voice-channel:activated"))
+  useEffect(() => {
+    const onActivated = () => {
+      setNoActiveChannel(false);
+    };
+    window.addEventListener("voice-channel:activated", onActivated);
+    return () => window.removeEventListener("voice-channel:activated", onActivated);
+  }, []);
+
+  // Re-arm on window focus if noActiveChannel is true and last attempt was >30 s ago.
+  useEffect(() => {
+    const onFocus = () => {
+      if (noActiveChannel && Date.now() - lastTokenAttemptRef.current > 30_000) {
+        setNoActiveChannel(false);
+      }
+    };
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [noActiveChannel]);
 
   // Lazily create + register the Twilio Device on first call. Must run inside
   // a user-gesture handler so Chrome lets the AudioContext start.
@@ -353,6 +419,9 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const placeCall = useCallback<VoiceCallContextType["placeCall"]>(async (to, opts) => {
     if (state !== "idle" && state !== "ended" && state !== "error") {
       throw new Error("already_on_call");
+    }
+    if (noActiveChannel) {
+      throw new Error("no_active_voice_channel");
     }
 
     setError(null);
@@ -425,7 +494,78 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       resetToIdleSoon();
       throw err;
     }
-  }, [state, startTimer, stopTimer, resetToIdleSoon, ensureDevice, user?.tenantId]);
+  }, [state, noActiveChannel, startTimer, stopTimer, resetToIdleSoon, ensureDevice, user?.tenantId]);
+
+  const joinConference = useCallback(async (conferenceName: string): Promise<void> => {
+    if (state !== "idle" && state !== "ended" && state !== "error") {
+      throw new Error("already_on_call");
+    }
+    if (noActiveChannel) {
+      throw new Error("no_active_voice_channel");
+    }
+
+    setError(null);
+    setState("connecting");
+
+    try {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream.getTracks().forEach((t) => t.stop());
+      } catch (micErr) {
+        // eslint-disable-next-line no-console
+        console.error("[voice] getUserMedia failed:", micErr);
+        throw new Error("microphone_access_denied");
+      }
+
+      const device = await ensureDevice();
+
+      const params: Record<string, string> = { joinConference: conferenceName };
+      if (user?.tenantId) params.tenantId = user.tenantId;
+
+      const connection = await device.connect({ params });
+      activeCallRef.current = connection;
+
+      connection.on("ringing", () => setState("ringing"));
+      connection.on("accept", () => {
+        const startedAt = Date.now();
+        setCall((c) => (c ? { ...c, startedAt } : c));
+        setState("active");
+        startTimer(startedAt);
+      });
+      connection.on("disconnect", () => {
+        stopTimer();
+        activeCallRef.current = null;
+        setState("ended");
+        resetToIdleSoon();
+      });
+      connection.on("cancel", () => {
+        stopTimer();
+        activeCallRef.current = null;
+        setState("ended");
+        resetToIdleSoon();
+      });
+      connection.on("reject", () => {
+        stopTimer();
+        activeCallRef.current = null;
+        setState("ended");
+        resetToIdleSoon();
+      });
+      connection.on("error", (err: Error) => {
+        // eslint-disable-next-line no-console
+        console.error("[voice] joinConference error:", err);
+        setError(err?.message || "call_error");
+        setState("error");
+        stopTimer();
+        activeCallRef.current = null;
+        resetToIdleSoon();
+      });
+    } catch (err) {
+      setState("error");
+      setError(err instanceof Error ? err.message : "connect_failed");
+      resetToIdleSoon();
+      throw err;
+    }
+  }, [state, noActiveChannel, startTimer, stopTimer, resetToIdleSoon, ensureDevice, user?.tenantId]);
 
   const hangup = useCallback(() => {
     const active = activeCallRef.current;
@@ -463,6 +603,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     copilotSuggestions,
     latestFrame,
     placeCall,
+    joinConference,
     hangup,
     toggleMute,
   };

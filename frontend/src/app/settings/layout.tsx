@@ -4,9 +4,19 @@ import { usePathname } from "next/navigation";
 import Link from "next/link";
 import { useI18n } from "@/context/I18nContext";
 import { AppLayout } from "@/components/AppLayout";
+import { useVoiceFlags } from "@/lib/use-voice-flags";
 import clsx from "clsx";
 
-const settingsNav = [
+interface SettingsNavItem {
+  href: string;
+  labelKey?: string;
+  label?: string;
+  icon: (props: { className?: string }) => React.ReactElement;
+  exact?: boolean;
+  voiceOnly?: boolean;
+}
+
+const settingsNav: SettingsNavItem[] = [
   { href: "/settings", labelKey: "settings.nav.general", icon: GeneralIcon, exact: true },
   { href: "/settings/agents", labelKey: "nav.agents", icon: AgentsIcon },
   { href: "/settings/departments", labelKey: "nav.departments", icon: DepartmentsIcon },
@@ -16,12 +26,23 @@ const settingsNav = [
   { href: "/settings/policy", labelKey: "settings.nav.policy", icon: PolicyIcon },
   { href: "/settings/tools", labelKey: "settings.nav.tools", icon: ToolsIcon },
   { href: "/settings/voice-copilot", labelKey: "settings.nav.voiceCopilot", icon: VoiceIcon },
+  { href: "/settings/voice-channels", labelKey: "settings.nav.voiceChannels", icon: VoiceChannelsIcon, voiceOnly: true },
   { href: "/settings/notifications", labelKey: "notifications.title", icon: NotificationsIcon },
 ];
 
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const flags = useVoiceFlags();
+
+  const visibleNav = settingsNav.filter((item) => {
+    if (item.voiceOnly) return flags.voiceCopilotEnabled;
+    return true;
+  });
+
+  function labelFor(item: SettingsNavItem): string {
+    return item.labelKey ? t(item.labelKey) : item.label ?? "";
+  }
 
   return (
     <AppLayout>
@@ -32,7 +53,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
             <h2 className="text-sm font-semibold text-gray-900">{t("nav.settings")}</h2>
           </div>
           <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
-            {settingsNav.map((item) => {
+            {visibleNav.map((item) => {
               const isActive = item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
@@ -48,7 +69,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                   )}
                 >
                   <item.icon className="w-4 h-4 shrink-0" />
-                  {t(item.labelKey)}
+                  {labelFor(item)}
                 </Link>
               );
             })}
@@ -59,7 +80,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         <div className="flex-1 overflow-y-auto md:rounded-2xl md:bg-white md:shadow-subtle">
           {/* Mobile settings tabs */}
           <div className="md:hidden flex overflow-x-auto bg-white shadow-subtle px-2 py-2 gap-1 sticky top-0 z-10">
-            {settingsNav.map((item) => {
+            {visibleNav.map((item) => {
               const isActive = item.exact
                 ? pathname === item.href
                 : pathname.startsWith(item.href);
@@ -74,7 +95,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                       : "text-gray-400 hover:text-gray-600 hover:bg-gray-50"
                   )}
                 >
-                  {t(item.labelKey)}
+                  {labelFor(item)}
                 </Link>
               );
             })}
@@ -165,6 +186,14 @@ function IntegrationsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M14 6.34A4 4 0 1117.66 10M9.66 14A4 4 0 1113 17.66M3 10h2m14 0h2M10 3v2m4 14v2M5.5 5.5l1.42 1.42m10.16 10.16l1.42 1.42m0-13l-1.42 1.42M5.5 18.5l1.42-1.42" />
+    </svg>
+  );
+}
+
+function VoiceChannelsIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
     </svg>
   );
 }

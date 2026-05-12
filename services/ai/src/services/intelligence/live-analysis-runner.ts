@@ -64,6 +64,9 @@ export class LiveAnalysisRunner {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
+    console.log(
+      `[live-runner] start conv=${this.opts.conversationId} tenant=${this.opts.tenantId} callSid=${this.opts.callSid ?? "-"}`,
+    );
 
     await CallAnalysisStore.ensure({
       tenantId: this.opts.tenantId,
@@ -79,7 +82,7 @@ export class LiveAnalysisRunner {
     // Run in the background; the caller does not await stream consumption.
     this.consume().catch((err: any) => {
       console.warn(
-        "[intelligence.liveRunner] consume() crashed:",
+        "[live-runner] consume() crashed:",
         err?.message,
       );
     });
@@ -138,8 +141,12 @@ export class LiveAnalysisRunner {
       recentUtterances: this.memory.tierAWindow(),
     });
 
+    const t0 = Date.now();
     let raw: string | null = null;
     try {
+      console.log(
+        `[live-runner] LLM call begin conv=${this.opts.conversationId} v${this.version + 1} msgs=${messages.length}`,
+      );
       const res = await generateResponse({
         tenantId: this.opts.tenantId,
         messages,
@@ -151,8 +158,14 @@ export class LiveAnalysisRunner {
         },
       });
       raw = res.content;
+      console.log(
+        `[live-runner] LLM call ok conv=${this.opts.conversationId} ms=${Date.now() - t0} chars=${raw?.length ?? 0}`,
+      );
     } catch (err: any) {
-      console.warn("[intelligence.liveRunner] generateResponse failed:", err?.message);
+      console.warn(
+        `[live-runner] generateResponse failed conv=${this.opts.conversationId} ms=${Date.now() - t0}:`,
+        err?.message,
+      );
       return;
     }
 
@@ -160,7 +173,12 @@ export class LiveAnalysisRunner {
       conversationId: this.opts.conversationId,
       version: ++this.version,
     });
-    if (!frame) return;
+    if (!frame) {
+      console.warn(
+        `[live-runner] parseFrame returned null conv=${this.opts.conversationId} rawHead=${(raw ?? "").slice(0, 120)}`,
+      );
+      return;
+    }
 
     // Persist to durable mirror (frames JSONB), then fan out events.
     await CallAnalysisStore.appendFrame(this.opts.conversationId, frame);

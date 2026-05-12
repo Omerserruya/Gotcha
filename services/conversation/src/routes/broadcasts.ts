@@ -12,6 +12,7 @@ import {
   previewAudience,
 } from "@chatcenter/shared";
 import type { BroadcastJob, AudienceDefinition } from "@chatcenter/shared";
+import { Prisma } from "@prisma/client";
 
 async function publishBroadcastUpdate(broadcastId: string, tenantId: string) {
   try {
@@ -95,12 +96,7 @@ async function materializeRecipientsFromAudience(
   const variableSpec = (broadcast?.variables ?? {}) as Record<string, unknown>;
   const hasMapping = Object.keys(variableSpec).length > 0;
 
-  const rows: {
-    broadcastId: string;
-    contactId: string | null;
-    externalId: string;
-    variables: Record<string, string> | null;
-  }[] = [];
+  const rows: Prisma.BroadcastRecipientCreateManyInput[] = [];
   for (const r of result.recipients) {
     let externalId: string | undefined;
     if (isPhoneChannel) {
@@ -115,7 +111,7 @@ async function materializeRecipientsFromAudience(
       broadcastId,
       contactId: r.source === "local" ? r.id : null,
       externalId,
-      variables: hasMapping ? resolveRecipientVariables(variableSpec, r) : null,
+      variables: hasMapping ? resolveRecipientVariables(variableSpec, r) : Prisma.JsonNull,
     });
   }
   if (rows.length === 0) {

@@ -149,6 +149,12 @@
       "accessCount": 1,
       "lastAccessed": 1778167925029,
       "type": "file"
+    },
+    {
+      "path": "prisma/migrations/20260511120000_live_call_copilot_phase1/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1778503058809,
+      "type": "file"
     }
   ],
   "userDirectives": []

@@ -26,6 +26,7 @@ import { ChannelBadge } from "./ChannelBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
 import { NewConversationPanel } from "./NewConversationPanel";
 import ConfirmModal from "@/components/ConfirmModal";
+import { LiveCallsSection } from "@/components/voice/LiveCallsSection";
 
 interface Props {
   selectedId: string | null;
@@ -449,6 +450,10 @@ export function ConversationList({ selectedId, onSelect }: Props) {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pt-2 space-y-2" ref={listRef}>
+        {/* Phase 1 — Live voice calls. Renders null unless tenant has
+            `voiceInboxUiEnabled = true` AND there is at least one RINGING
+            or live session, so non-voice tenants see today's inbox. */}
+        <LiveCallsSection />
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />

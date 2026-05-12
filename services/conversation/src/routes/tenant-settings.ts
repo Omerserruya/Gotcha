@@ -22,14 +22,32 @@ router.use(authenticate, resolveTenant, requireActiveTenant());
 
 router.get("/", async (req: Request, res: Response) => {
   try {
-    const tenant = await prisma.tenant.findUnique({
-      where: { id: req.tenantId! },
-      select: { defaultCountryCode: true },
-    });
+    const [tenant, activeChannelCount] = await Promise.all([
+      prisma.tenant.findUnique({
+        where: { id: req.tenantId! },
+        select: {
+          defaultCountryCode: true,
+          voiceCopilotEnabled: true,
+          voiceInboxUiEnabled: true,
+          voiceIncomingEnabled: true,
+        },
+      }),
+      // Cheap precondition for the frontend: skip /api/voice-copilot/token
+      // entirely when the tenant has no active voice channel yet.
+      prisma.communicationChannel.count({
+        where: { tenantId: req.tenantId!, channelType: "VOICE", status: "ACTIVE" },
+      }),
+    ]);
     res.json({
       data: {
         defaultCountryCode: tenant?.defaultCountryCode ?? "IL",
         supportedCountries: listSupportedCountries(),
+        // Phase 1 — Live Call CoPilot feature flags. All default-false so
+        // tenants without the rollout see byte-identical UI to today.
+        voiceCopilotEnabled: !!tenant?.voiceCopilotEnabled,
+        voiceInboxUiEnabled: !!tenant?.voiceInboxUiEnabled,
+        voiceIncomingEnabled: !!tenant?.voiceIncomingEnabled,
+        hasActiveVoiceChannel: activeChannelCount > 0,
       },
     });
   } catch (err) {

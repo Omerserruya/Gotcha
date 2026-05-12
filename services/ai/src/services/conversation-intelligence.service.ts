@@ -97,39 +97,53 @@ export async function analyzeConversation(tenantId: string, conversationId: stri
   else if (msgCount <= 15) customerEffort = 4;
   else customerEffort = 5;
 
-  const intelligence = await prisma.conversationIntelligence.upsert({
-    where: { conversationId },
-    create: {
-      tenantId,
-      conversationId,
-      summary,
-      detectedIntent,
-      intentConfidence,
-      sentiment,
-      sentimentScore,
-      topics: [],
-      toolsUsed,
-      resolutionOutcome,
-      customerEffort,
-      aiConfidence: intentConfidence,
-      analyzedAt: new Date(),
-    },
-    update: {
-      summary,
-      detectedIntent,
-      intentConfidence,
-      sentiment,
-      sentimentScore,
-      topics: [],
-      toolsUsed,
-      resolutionOutcome,
-      customerEffort,
-      aiConfidence: intentConfidence,
-      analyzedAt: new Date(),
-    },
-  });
-
-  return intelligence;
+  // The conversation existed when we started, but LLM work above takes
+  // seconds — the user may have deleted it in the meantime, dropping the FK
+  // target. Catch P2003 and return null instead of a 500.
+  try {
+    const intelligence = await prisma.conversationIntelligence.upsert({
+      where: { conversationId },
+      create: {
+        tenantId,
+        conversationId,
+        summary,
+        detectedIntent,
+        intentConfidence,
+        sentiment,
+        sentimentScore,
+        topics: [],
+        toolsUsed,
+        resolutionOutcome,
+        customerEffort,
+        aiConfidence: intentConfidence,
+        analyzedAt: new Date(),
+      },
+      update: {
+        summary,
+        detectedIntent,
+        intentConfidence,
+        sentiment,
+        sentimentScore,
+        topics: [],
+        toolsUsed,
+        resolutionOutcome,
+        customerEffort,
+        aiConfidence: intentConfidence,
+        analyzedAt: new Date(),
+      },
+    });
+    return intelligence;
+  } catch (err) {
+    const code = (err as { code?: string })?.code;
+    if (code === "P2003" || code === "P2025") {
+      console.warn(
+        "[conversation-intelligence] conversation gone before upsert — skipping",
+        conversationId,
+      );
+      return null;
+    }
+    throw err;
+  }
 }
 
 export async function getConversationIntelligence(tenantId: string, conversationId: string) {

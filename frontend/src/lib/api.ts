@@ -592,6 +592,11 @@ export function getTenantSettings(token: string) {
     data: {
       defaultCountryCode: string;
       supportedCountries: Array<{ code: string; callingCode: string }>;
+      // Phase 1 — Live Call CoPilot feature flags. Optional for back-compat
+      // with older API revisions that don't ship them yet.
+      voiceCopilotEnabled?: boolean;
+      voiceInboxUiEnabled?: boolean;
+      voiceIncomingEnabled?: boolean;
     };
   }>("/api/tenant-settings", { token });
 }
@@ -1540,6 +1545,113 @@ export function getUsageLogs(token: string, params?: { limit?: number; offset?: 
   return apiFetch<{ data: any[]; total: number }>(`/api/usage/logs${qs}`, { token });
 }
 
+// ─── Voice Sessions (Phase 1 — Live Call CoPilot) ───────────
+//
+// Tenant-wide RINGING + live VoiceCallSession snapshot. All endpoints
+// 404 unless tenant.voiceCopilotEnabled is true (per backend gate in
+// services/conversation/src/routes/voice-sessions.ts).
+
+export interface VoiceCallSession {
+  id: string;
+  callSid: string;
+  conversationId: string;
+  direction: "inbound" | "outbound";
+  state:
+    | "RINGING"
+    | "CONNECTING"
+    | "ACTIVE"
+    | "HOLD"
+    | "ENDED"
+    | "FAILED"
+    | "MISSED"
+    | null;
+  status: string;
+  customerNumber: string;
+  agentId: string | null;
+  assignedAgentId: string | null;
+  claimedAt: string | null;
+  startedAt: string;
+  answeredAt: string | null;
+  channelId: string | null;
+  meta?: Record<string, unknown> | null;
+}
+
+export interface VoiceSessionContext {
+  contact: {
+    id: string;
+    displayName?: string | null;
+    externalId?: string | null;
+    phone?: string | null;
+    email?: string | null;
+    tags?: string[] | null;
+    metadata?: Record<string, unknown> | null;
+  } | null;
+  priorConversations: Array<{
+    id: string;
+    channel: string;
+    status: string;
+    customerName?: string | null;
+    lastMessageAt?: string | null;
+    aiSummary?: string | null;
+  }>;
+  callAnalysis: {
+    rollingSummary?: string | null;
+    finalSummary?: string | null;
+    status?: string | null;
+  } | null;
+}
+
+export interface VoiceTranscriptMessage {
+  id: string;
+  direction: "INBOUND" | "OUTBOUND";
+  body: string;
+  messageType: string;
+  senderName?: string | null;
+  createdAt: string;
+  metadata?: Record<string, unknown> | null;
+}
+
+export function getActiveVoiceSessions(token: string) {
+  return apiFetch<{ data: VoiceCallSession[] }>("/api/voice-sessions/active", { token });
+}
+
+export function getVoiceSession(token: string, id: string) {
+  return apiFetch<{ data: VoiceCallSession }>(`/api/voice-sessions/${id}`, { token });
+}
+
+export function getVoiceSessionTranscript(token: string, id: string, cursor?: string, limit?: number) {
+  const params = new URLSearchParams();
+  if (cursor) params.set("cursor", cursor);
+  if (limit) params.set("limit", String(limit));
+  const qs = params.toString() ? `?${params.toString()}` : "";
+  return apiFetch<{ data: VoiceTranscriptMessage[]; nextCursor: string | null }>(
+    `/api/voice-sessions/${id}/transcript${qs}`,
+    { token },
+  );
+}
+
+export function getVoiceSessionContext(token: string, id: string) {
+  return apiFetch<{ data: VoiceSessionContext }>(`/api/voice-sessions/${id}/context`, { token });
+}
+
+export function answerVoiceSession(token: string, id: string) {
+  return apiFetch<{ data: VoiceCallSession }>(`/api/voice-sessions/${id}/answer`, {
+    token, method: "POST",
+  });
+}
+
+export function declineVoiceSession(token: string, id: string) {
+  return apiFetch<{ data: VoiceCallSession }>(`/api/voice-sessions/${id}/decline`, {
+    token, method: "POST",
+  });
+}
+
+export function hangupVoiceSession(token: string, id: string) {
+  return apiFetch<{ data: VoiceCallSession }>(`/api/voice-sessions/${id}/hangup`, {
+    token, method: "POST",
+  });
+}
+
 // ─── System Admin: All Tenants Usage ────────────────────────
 
 export function getSystemUsageStats(token: string, days?: number) {
@@ -1550,4 +1662,88 @@ export function getSystemUsageStats(token: string, days?: number) {
 export function getSystemUsageByTenant(token: string, days?: number) {
   const qs = days ? `?days=${days}` : "";
   return apiFetch<{ data: any[] }>(`/api/system/usage/by-tenant${qs}`, { token });
+}
+
+// ─── Voice Channels (Phase 2 — Twilio onboarding) ───────────
+//
+// Tenant-owned Twilio accounts (BYO). `authToken` is write-only — the
+// backend never echoes it back; `accountSidFingerprint` is the truncated
+// SID for display.
+
+export type VoiceChannelAuthType = "BYO";
+export type VoiceChannelStatus = "PENDING" | "ACTIVE" | "DISABLED" | "ERROR";
+
+export interface VoiceChannelPhoneNumber {
+  id: string;
+  e164: string;
+  twilioSid?: string;
+  friendlyName?: string;
+  isActive: boolean;
+  createdAt: string;
+}
+
+export interface VoiceChannel {
+  id: string;
+  friendlyName: string;
+  status: VoiceChannelStatus;
+  authType: VoiceChannelAuthType;
+  accountSidFingerprint: string;
+  hasAuthToken: boolean;
+  createdAt: string;
+  numbers: VoiceChannelPhoneNumber[];
+  config?: Record<string, unknown>;
+}
+
+export interface CreateVoiceChannelInput {
+  friendlyName: string;
+  accountSid: string;
+  authToken: string;
+}
+
+export function listVoiceChannels(token: string) {
+  return apiFetch<{ data: VoiceChannel[] }>("/api/voice-channels", { token });
+}
+
+export function getVoiceChannel(token: string, id: string) {
+  return apiFetch<{ data: VoiceChannel }>(`/api/voice-channels/${id}`, { token });
+}
+
+export function createVoiceChannelBYO(token: string, input: CreateVoiceChannelInput) {
+  return apiFetch<{ data: VoiceChannel }>("/api/voice-channels", {
+    token,
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getVoiceChannelNumbers(token: string, id: string) {
+  return apiFetch<{ data: VoiceChannelPhoneNumber[] }>(`/api/voice-channels/${id}/numbers`, { token });
+}
+
+export function refreshVoiceChannelNumbers(token: string, id: string) {
+  return apiFetch<{ data: VoiceChannelPhoneNumber[] }>(`/api/voice-channels/${id}/numbers/refresh`, {
+    token,
+    method: "POST",
+  });
+}
+
+export function activateVoiceChannelNumber(token: string, id: string, numberId: string) {
+  return apiFetch<{ data: VoiceChannelPhoneNumber }>(
+    `/api/voice-channels/${id}/numbers/${numberId}/activate`,
+    { token, method: "POST" },
+  );
+}
+
+export function deactivateVoiceChannelNumber(token: string, id: string, numberId: string) {
+  return apiFetch<{ data: VoiceChannelPhoneNumber }>(
+    `/api/voice-channels/${id}/numbers/${numberId}/deactivate`,
+    { token, method: "POST" },
+  );
+}
+
+export function deleteVoiceChannel(token: string, id: string) {
+  return apiFetch<{ success: boolean }>(`/api/voice-channels/${id}`, {
+    token,
+    method: "DELETE",
+  });
 }

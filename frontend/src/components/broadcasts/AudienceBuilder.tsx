@@ -221,12 +221,13 @@ export function AudienceBuilder({
       .then((res) => {
         if (cancelled) return;
         const local = (res.data.local?.fields ?? []) as SchemaField[];
-        const connected = res.data.crm.connected;
-        const hasFields = connected && (res.data.crm.schema?.fields?.length ?? 0) > 0;
+        const crmData = res.data.crm as any;
+        const connected = crmData.connected;
+        const hasFields = connected && (crmData.schema?.fields?.length ?? 0) > 0;
         const crm = hasFields
           ? {
-              providerName: (res.data.crm as any).provider.name,
-              fields: res.data.crm.schema!.fields as SchemaField[],
+              providerName: crmData.provider.name,
+              fields: crmData.schema!.fields as SchemaField[],
             }
           : null;
         // Connected but schema empty/null → OAuth scope or describe_fields

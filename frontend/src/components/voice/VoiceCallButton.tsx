@@ -1,7 +1,10 @@
 "use client";
 
+import { useEffect } from "react";
 import clsx from "clsx";
 import { useVoiceCall } from "@/context/VoiceCallContext";
+import { useAuth } from "@/context/AuthContext";
+import { normalizeE164, ensureDefaultCountry } from "@/lib/phone";
 
 interface Props {
   to?: string | null;
@@ -12,6 +15,10 @@ interface Props {
 
 export function VoiceCallButton({ to, contactName, conversationId, label }: Props) {
   const { placeCall, state, isReady } = useVoiceCall();
+  const { token } = useAuth();
+  useEffect(() => {
+    ensureDefaultCountry(token);
+  }, [token]);
   const isBusy = state !== "idle";
   const normalized = normalizeE164(to || "");
   const canCall = !!normalized && isReady && !isBusy;
@@ -58,13 +65,3 @@ export function VoiceCallButton({ to, contactName, conversationId, label }: Prop
   );
 }
 
-function normalizeE164(input: string): string | null {
-  const trimmed = input.trim();
-  if (!trimmed) return null;
-  // Already E.164
-  if (/^\+[1-9]\d{6,14}$/.test(trimmed)) return trimmed;
-  // Strip non-digits; if it looks like a plausible phone, assume leading country code
-  const digits = trimmed.replace(/[^\d]/g, "");
-  if (digits.length >= 7 && digits.length <= 15) return `+${digits}`;
-  return null;
-}

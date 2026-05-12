@@ -34,6 +34,12 @@ import { createMetricsRouter } from "./routes/metrics";
 import { createLiveRouter } from "./routes/live";
 import { createTwilioTokenRouter } from "./routes/twilio-token";
 import { createTwilioTwimlRouter } from "./routes/twilio-twiml";
+import { createVoiceIncomingRouter } from "./routes/voice-incoming";
+import {
+  createVoiceProviderResolver,
+  createResolveProviderByChannelId,
+} from "./providers/resolve-provider";
+import type { VoiceProvider, VoiceProviderResolver } from "./providers/voice-provider";
 
 import { createSessionStore, type SessionStore } from "./session/session-store";
 import { Reaper } from "./session/reaper";
@@ -68,6 +74,10 @@ export interface AppDeps {
   /** W6 supplies; W2 default throws NotImplementedError on use */
   aiAssistClient: AiAssistClient;
   publishEvent: (e: ServiceEvent) => Promise<void>;
+  /** Resolves the voice provider for a given tenant from DB. */
+  resolveVoiceProvider: VoiceProviderResolver;
+  /** Resolves the voice provider for a specific channel id (preferred for inbound webhooks). */
+  resolveVoiceProviderByChannelId: (channelId: string) => Promise<VoiceProvider>;
 }
 
 export interface BuiltApp {
@@ -172,6 +182,9 @@ export function buildDefaultDeps(env: Env): AppDeps {
     retryScheduleMs: [250, 500, 1000, 2000, 4000],
   });
 
+  const resolveVoiceProvider = createVoiceProviderResolver(rootLogger);
+  const resolveVoiceProviderByChannelId = createResolveProviderByChannelId(rootLogger);
+
   return {
     redis,
     clock,
@@ -185,6 +198,8 @@ export function buildDefaultDeps(env: Env): AppDeps {
     sessionFactory,
     aiAssistClient: postVoiceStream,
     publishEvent: sharedPublishEvent,
+    resolveVoiceProvider,
+    resolveVoiceProviderByChannelId,
   };
 }
 
@@ -225,8 +240,18 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
   app.use("/", createMetricsRouter(deps.metrics.registry));
 
   app.use("/api/voice-copilot/live", createLiveRouter({ redis: deps.redis, logger: deps.logger }));
-  app.use("/api/voice-copilot/token", createTwilioTokenRouter({ env, logger: deps.logger }));
-  app.use("/api/voice-copilot/twiml", createTwilioTwimlRouter({ env, logger: deps.logger }));
+  app.use("/api/voice-copilot/token", createTwilioTokenRouter({ resolveProvider: deps.resolveVoiceProvider, logger: deps.logger }));
+  app.use("/api/voice-copilot/twiml", createTwilioTwimlRouter({
+    resolveProvider: deps.resolveVoiceProvider,
+    publicBaseUrl: env.PUBLIC_BASE_URL,
+    logger: deps.logger,
+  }));
+  app.use("/api/voice/incoming", createVoiceIncomingRouter({
+    resolveProviderByChannelId: deps.resolveVoiceProviderByChannelId,
+    publicBaseUrl: env.PUBLIC_BASE_URL,
+    logger: deps.logger,
+    redis: deps.redis,
+  }));
 
   // 3. HTTP server
   const httpServer = http.createServer(app);
@@ -244,6 +269,7 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
     metrics: deps.metrics,
     maxConcurrent: env.MAX_CONCURRENT_SESSIONS,
     reconnectGraceMs: env.RECONNECT_GRACE_MS,
+    resolveProvider: deps.resolveVoiceProvider,
   });
 
   // 6. Start reaper (safe: Reaper.start() is a no-op stub until W4 lands)
