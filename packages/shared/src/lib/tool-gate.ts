@@ -63,26 +63,25 @@ export interface PolicyResult {
 
 const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   // Low-risk / context tools — always allowed.
-  link_customer_identifier: { mode: "never" },
-  escalate_to_human:        { mode: "never" },
-  close_conversation:       { mode: "never" },
-  interactive_reply:        { mode: "never" },
-  tag_contact:              { mode: "never" },
-  generate_followup:        { mode: "never" },
+  link_customer_identifier:    { mode: "never" },
+  escalate_to_human:           { mode: "never" },
+  close_conversation:          { mode: "never" },
+  tag_contact:                 { mode: "never" },
+  generate_followup:           { mode: "never" },
 
   // Write-side / external-facing — require approval by default.
-  send_message:             { mode: "always" },
-  create_broadcast:         { mode: "always" },
-  schedule_broadcast:       { mode: "always" },
-  schedule_followup:        { mode: "always" },
-  merge_contacts:           { mode: "always" },
-  update_contact:           { mode: "always" },
-  update_crm:               { mode: "always" },
-  create_ticket:            { mode: "always" },
-  create_task:              { mode: "always" },
-  cancel_order:             { mode: "always" },
-  issue_refund:             { mode: "always" },
-  create_workflow:          { mode: "always" },
+  send_message:                { mode: "always" },
+  create_broadcast:            { mode: "always" },
+  schedule_broadcast:          { mode: "always" },
+  schedule_followup:           { mode: "always" },
+  schedule_followup_template:  { mode: "always" },
+  schedule_meeting:            { mode: "always" },
+  merge_contacts:              { mode: "always" },
+  update_contact:              { mode: "always" },
+  update_crm:                  { mode: "always" },
+  create_ticket:               { mode: "always" },
+  create_task:                 { mode: "always" },
+  create_workflow:             { mode: "always" },
 };
 
 // ─── Core evaluator ─────────────────────────────────────────

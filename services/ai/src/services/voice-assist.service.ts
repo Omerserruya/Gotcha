@@ -17,6 +17,8 @@ import { Response } from "express";
 import { IncomingHttpHeaders } from "http";
 import { prisma, publishEvent, getRedis } from "@chatcenter/shared";
 import { getEffectiveCopilotConfig, getSuggestions, type ConversationContext } from "./ai-assist.service";
+import { loadCustomerContext } from "./memory/customer-context.service";
+import { beginTurn, isAbortError } from "./turn-cancellation.service";
 import type { VoiceStreamBody } from "../routes/ai-assist-voice";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -85,6 +87,11 @@ export async function scheduleAssistTrigger(
  */
 async function triggerAssist(tenantId: string, conversationId: string): Promise<void> {
   const t0 = Date.now();
+  // The debounce above collapses rapid finals into ONE scheduled trigger,
+  // but a slow LLM round can still be in-flight when the next debounced
+  // trigger fires. beginTurn() aborts the prior trigger's fetch so we
+  // don't end up publishing stale suggestions over fresh ones.
+  const turn = beginTurn(tenantId, conversationId, "copilot");
   try {
     const conversation = await prisma.conversation.findFirst({
       where: { id: conversationId, tenantId },
@@ -105,6 +112,35 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
 
     let suggestions: any[] = [];
     if (copilotConfig) {
+      // Load the cross-channel customer-memory bundle (open issues, recent
+      // summaries across channels, CRM notes, sentiment trend). Fail-soft —
+      // a missing CRM link / vendor hiccup must NOT block copilot suggestions.
+      const memoryBundle = await loadCustomerContext({ tenantId, conversationId }).catch(() => null);
+      const customerMemory = memoryBundle
+        ? {
+            openIssues: memoryBundle.open_issues.map((i) => ({
+              subject: i.subject,
+              status: i.status,
+              priority: i.priority,
+              due_at: i.due_at,
+            })),
+            recentSummaries: memoryBundle.recent_summaries
+              .filter((s) => !s.isCurrentConversation)
+              .map((s) => ({
+                channel: s.channel,
+                summary: s.summary,
+                sentiment: s.sentiment,
+                qualification: s.qualification,
+                occurredAt: s.occurredAt,
+              })),
+            recentCrmNotes: memoryBundle.recent_crm_notes.map((n) => ({
+              body: n.body,
+              occurred_at: n.occurred_at,
+            })),
+            sentimentTrend: memoryBundle.sentiment_trend,
+          }
+        : undefined;
+
       const context: ConversationContext = {
         tenantId,
         conversationId,
@@ -116,6 +152,8 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
           createdAt: m.createdAt.toISOString(),
         })),
         copilotConfig,
+        customerMemory,
+        signal: turn.signal,
       };
       suggestions = await getSuggestions(context);
     } else {
@@ -131,7 +169,13 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
       `[voice-assist] triggerAssist ok conv=${conversationId} suggestions=${suggestions.length} ms=${Date.now() - t0}`,
     );
   } catch (err) {
-    console.error("[voice-assist] triggerAssist error:", err);
+    if (isAbortError(err)) {
+      console.log(`[voice-assist] triggerAssist aborted conv=${conversationId} (superseded by newer turn)`);
+    } else {
+      console.error("[voice-assist] triggerAssist error:", err);
+    }
+  } finally {
+    turn.end();
   }
 }
 

@@ -304,6 +304,26 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     },
   });
 
+  // Universal identity-link hook — fires on every persisted INBOUND so the
+  // same email/phone bridging works for AI bot, FlowCanvas, AND human-handled
+  // chats (co-pilot mode). The conversation service owns idempotency, so a
+  // duplicate fire from the flow-executor's Collect-Input call is a no-op.
+  console.log(`[incoming] identity-link hook firing for msg=${message.id} body=${(body || "").slice(0, 60)}`);
+  void (async () => {
+    try {
+      const { tryLinkIdentifierFromInbound } = await import("../services/identity-link.service");
+      await tryLinkIdentifierFromInbound({
+        tenantId,
+        conversationId: conversation.id,
+        text: body || "",
+        messageId: message.id,
+        reason: "inbound message",
+      });
+    } catch (err: any) {
+      console.warn("[incoming] identity-link hook failed:", err?.message);
+    }
+  })();
+
   // Update conversation timestamp
   await prisma.conversation.update({
     where: { id: conversation.id },

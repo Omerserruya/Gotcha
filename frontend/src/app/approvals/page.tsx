@@ -126,19 +126,29 @@ export default function ApprovalsPage() {
 
   return (
     <AppLayout>
-      <div className="p-6 max-w-4xl">
-        <header className="mb-5">
-          <h1 className="text-xl font-semibold text-gray-900">{t("approvals.title")}</h1>
-          <p className="text-xs text-gray-500 mt-0.5">{t("approvals.subtitle")}</p>
+      <div className="p-3 md:p-6 max-w-4xl">
+        <header className="mb-4 md:mb-5 flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <h1 className="text-lg md:text-xl font-semibold text-gray-900">{t("approvals.title")}</h1>
+            <p className="text-xs text-gray-500 mt-0.5">{t("approvals.subtitle")}</p>
+          </div>
+          <button
+            onClick={load}
+            className="shrink-0 mt-1 text-xs text-gray-500 hover:text-gray-700 px-2.5 py-1 rounded-lg bg-gray-50 hover:bg-gray-100 transition"
+            aria-label={t("approvals.refresh")}
+          >
+            {t("approvals.refresh")}
+          </button>
         </header>
 
-        <div className="flex items-center gap-1 border-b border-gray-200 mb-4">
+        {/* Tabs: horizontally scrollable on small screens so labels never wrap */}
+        <div className="flex items-center gap-1 border-b border-gray-200 mb-4 overflow-x-auto -mx-3 px-3 md:mx-0 md:px-0 scrollbar-none">
           {TABS.map((tabItem) => (
             <button
               key={tabItem.key}
               onClick={() => setTab(tabItem.key)}
               className={clsx(
-                "px-4 py-2 text-sm font-medium -mb-px border-b-2 transition",
+                "shrink-0 px-3 md:px-4 py-2 text-sm font-medium -mb-px border-b-2 transition whitespace-nowrap",
                 tab === tabItem.key
                   ? "text-violet-700 border-violet-600"
                   : "text-gray-500 border-transparent hover:text-gray-700",
@@ -147,12 +157,6 @@ export default function ApprovalsPage() {
               {tabItem.label}
             </button>
           ))}
-          <button
-            onClick={load}
-            className="ml-auto mb-2 text-xs text-gray-500 hover:text-gray-700"
-          >
-            {t("approvals.refresh")}
-          </button>
         </div>
 
         {error && (
@@ -238,25 +242,25 @@ function ApprovalListCard({
   return (
     <li className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
       {/* Header: tool identity + risk + status */}
-      <div className="flex items-start justify-between gap-3 px-5 pt-4 pb-3 border-b border-gray-100">
-        <div className="flex items-start gap-3 min-w-0">
-          <span className="text-2xl leading-none mt-0.5" aria-hidden>
+      <div className="flex items-start justify-between gap-2 md:gap-3 px-4 md:px-5 pt-3.5 md:pt-4 pb-3 border-b border-gray-100">
+        <div className="flex items-start gap-2.5 md:gap-3 min-w-0">
+          <span className="text-xl md:text-2xl leading-none mt-0.5" aria-hidden>
             {tool.icon}
           </span>
           <div className="min-w-0">
-            <div className="text-[15px] font-semibold text-gray-900 leading-tight truncate">
+            <div className="text-sm md:text-[15px] font-semibold text-gray-900 leading-tight">
               {tool.label}
               {tool.system && (
-                <span className="ml-1.5 text-[12px] font-medium text-gray-500">
+                <span className="ml-1.5 text-[11px] md:text-[12px] font-medium text-gray-500">
                   · {tool.system}
                 </span>
               )}
             </div>
-            <div className="text-[12px] text-gray-600 mt-0.5 leading-snug">
+            <div className="text-[12px] text-gray-600 mt-0.5 leading-snug line-clamp-2">
               {row.summary}
             </div>
             {row.policyRuleName && (
-              <div className="text-[11px] text-gray-400 mt-0.5">
+              <div className="text-[11px] text-gray-400 mt-0.5 truncate">
                 {t("approvals.policy")}: <span className="text-gray-600">{row.policyRuleName}</span>
               </div>
             )}
@@ -275,7 +279,7 @@ function ApprovalListCard({
       </div>
 
       {/* Parameter preview */}
-      <div className="px-5 py-4">
+      <div className="px-4 md:px-5 py-3.5 md:py-4">
         <div className="text-[10px] uppercase tracking-wider text-gray-400 font-semibold mb-2">
           {t("approvals.parameters")}
         </div>
@@ -288,7 +292,7 @@ function ApprovalListCard({
       </div>
 
       {/* Meta: requested / decided / time */}
-      <div className="px-5 py-2.5 border-t border-gray-100 bg-gray-50/40 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-gray-500">
+      <div className="px-4 md:px-5 py-2.5 border-t border-gray-100 bg-gray-50/40 grid grid-cols-1 sm:grid-cols-3 gap-2 text-[11px] text-gray-500">
         <Meta label={t("approvals.created")} value={new Date(row.createdAt).toLocaleString()} />
         <Meta label={t("approvals.requestedBy")} value={formatRequestedBy(row.requestedBy, row.requestedByName)} />
         {row.status !== "PENDING" ? (
@@ -313,25 +317,25 @@ function ApprovalListCard({
 
       {/* Actions / decision footer */}
       {row.status === "PENDING" && !isRejecting && (
-        <div className="px-5 py-3 border-t border-gray-100 flex items-center gap-2">
+        <div className="px-4 md:px-5 py-3 border-t border-gray-100 flex flex-col sm:flex-row sm:items-center gap-2.5">
           <a
             href={`/conversations?c=${row.conversationId}`}
-            className="text-xs text-violet-600 hover:underline"
+            className="text-xs text-violet-600 hover:underline order-2 sm:order-1"
           >
             {t("approvals.openConversation")} →
           </a>
-          <div className="ml-auto flex gap-2">
+          <div className="sm:ml-auto flex gap-2 order-1 sm:order-2">
             <button
               onClick={() => onStartReject(row.id)}
               disabled={busy}
-              className="px-3 py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md disabled:opacity-50"
+              className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs bg-white border border-gray-300 hover:bg-gray-50 text-gray-700 rounded-md disabled:opacity-50 min-h-[40px] sm:min-h-0"
             >
               {t("approvals.reject")}
             </button>
             <button
               onClick={() => onApprove(row.id)}
               disabled={busy}
-              className="px-3 py-1.5 text-xs bg-emerald-600 hover:bg-emerald-700 text-white rounded-md disabled:opacity-50"
+              className="flex-1 sm:flex-none px-3 py-2 sm:py-1.5 text-xs font-medium bg-emerald-600 hover:bg-emerald-700 text-white rounded-md disabled:opacity-50 min-h-[40px] sm:min-h-0"
             >
               {busy ? t("approvals.running") : t("approvals.approveAndRun")}
             </button>
@@ -340,7 +344,7 @@ function ApprovalListCard({
       )}
 
       {row.status === "PENDING" && isRejecting && (
-        <div className="px-5 py-3 border-t border-gray-100 space-y-2 bg-rose-50/30">
+        <div className="px-4 md:px-5 py-3 border-t border-gray-100 space-y-2 bg-rose-50/30">
           <textarea
             value={rejectReason}
             onChange={(e) => onChangeReason(e.target.value)}

@@ -51,6 +51,11 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
   const [session, setSession] = useState<VoiceCallSession | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [tick, setTick] = useState(0);
+  // Mobile-only slide-over for the call context panel. On desktop the panel
+  // is always rendered as the right column; on phones it would push the
+  // call stage off-screen, so we hide it under `md` and open it on demand
+  // from the header toggle.
+  const [mobileContextOpen, setMobileContextOpen] = useState(false);
 
   useEffect(() => {
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -192,17 +197,20 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
   const agentName = user?.name || "You";
 
   return (
-    <div className="flex flex-col md:flex-row h-[calc(100vh-16px)] md:gap-3 md:p-2">
-      {/* Left half — stage */}
+    <div className="flex flex-col md:flex-row h-[100dvh] md:h-[calc(100vh-16px)] md:gap-3 md:p-2">
+      {/* Stage — full-height on mobile so the call UI is the primary surface
+          and isn't pushed off-screen by the context panel stacked below.
+          The context panel is hidden under md and opened via the header
+          toggle as a slide-over sheet. */}
       <div
         className={clsx(
-          "flex-1 flex flex-col text-gray-100 overflow-hidden md:rounded-2xl shadow-subtle",
+          "flex-1 min-h-0 flex flex-col text-gray-100 overflow-hidden md:rounded-2xl shadow-subtle",
         )}
         style={{ background: "linear-gradient(135deg, #05070d 0%, #0f172a 50%, #05070d 100%)" }}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 md:px-10 py-4">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="flex items-center justify-between px-4 md:px-10 py-3 md:py-4 gap-2">
+          <div className="flex items-center gap-2.5 min-w-0 flex-1">
             <span
               className={clsx(
                 "inline-block w-2 h-2 rounded-full shrink-0",
@@ -211,18 +219,29 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
             />
             <div className="flex flex-col leading-tight min-w-0">
               <span className="text-sm font-medium text-gray-100 truncate">{customerName}</span>
-              <span className="text-xs text-gray-500 tabular-nums">
+              <span className="text-[11px] md:text-xs text-gray-500 tabular-nums">
                 {stateLabel} {isLive ? `· ${formatDuration(elapsedMs)}` : ""}
               </span>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 shrink-0">
+            {/* Mobile-only toggle for the context panel slide-over. */}
+            <button
+              type="button"
+              onClick={() => setMobileContextOpen((v) => !v)}
+              className="md:hidden px-2.5 py-1.5 rounded-lg text-xs font-medium bg-white/10 text-gray-100 ring-1 ring-white/10 hover:bg-white/20"
+              aria-label="toggle context panel"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5M3.75 17.25h16.5" />
+              </svg>
+            </button>
             <button
               type="button"
               onClick={handleMute}
               disabled={!isLocalDevice}
               className={clsx(
-                "px-3 py-1.5 rounded-lg text-xs font-medium transition ring-1",
+                "px-2.5 md:px-3 py-1.5 rounded-lg text-xs font-medium transition ring-1",
                 !isLocalDevice && "bg-white/5 text-gray-500 ring-white/10 cursor-not-allowed",
                 isLocalDevice && voice.isMuted && "bg-amber-400/20 text-amber-200 ring-amber-300/40",
                 isLocalDevice && !voice.isMuted && "bg-white/10 text-gray-100 ring-white/10 hover:bg-white/20",
@@ -233,7 +252,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
             <button
               type="button"
               onClick={handleHangup}
-              className="px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition"
+              className="px-2.5 md:px-3 py-1.5 rounded-lg text-xs font-semibold bg-red-600 text-white hover:bg-red-700 transition"
             >
               {t("voice.workspace.header.hangupButton")}
             </button>
@@ -249,10 +268,42 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
         />
       </div>
 
-      {/* Right half — context */}
-      <div className="w-full md:w-[380px] flex-shrink-0 flex flex-col md:rounded-2xl md:overflow-hidden">
+      {/* Right panel — desktop sidebar AND mobile slide-over.
+          The mobile slide-over is rendered as a fixed full-screen overlay
+          so it doesn't compete with the call stage for vertical space. */}
+      <div className="hidden md:flex md:w-[380px] flex-shrink-0 flex-col md:rounded-2xl md:overflow-hidden">
         <CallRightPanel sessionId={session.id} conversationId={conversationId} />
       </div>
+      {mobileContextOpen && (
+        <div className="md:hidden fixed inset-0 z-50 flex">
+          <button
+            type="button"
+            aria-label="close context"
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setMobileContextOpen(false)}
+          />
+          <div className="relative ml-auto h-full w-[88vw] max-w-sm bg-white shadow-2xl flex flex-col">
+            <div className="flex items-center justify-between px-3 py-2 border-b border-gray-100">
+              <span className="text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                {t("voice.workspace.header.contextTitle") || "Context"}
+              </span>
+              <button
+                type="button"
+                onClick={() => setMobileContextOpen(false)}
+                className="text-gray-500 hover:text-gray-900 p-1"
+                aria-label="close"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                </svg>
+              </button>
+            </div>
+            <div className="flex-1 overflow-y-auto">
+              <CallRightPanel sessionId={session.id} conversationId={conversationId} />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

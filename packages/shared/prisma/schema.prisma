@@ -1570,6 +1570,39 @@ model BusinessPolicy {
   @@map("business_policies")
 }
 
+// ─── Post-Conversation Config ──────────────────────────────────
+//
+// Per-tenant schema for the post-conversation summarizer + rule engine.
+// Read by services/ai/src/services/post-conversation-config.service.ts at
+// the end of every voice call / closed chat. JSON `data` shape:
+//
+//   {
+//     "summaryFields": [
+//       { "key": "budget", "label": "Budget", "description": "...", "type": "text" }
+//     ],
+//     "taskRules": [
+//       { "id": "...", "when": { "intent": "pricing_objection" },
+//         "task": { "subject": "Send pricing deck", "priority": "normal" } }
+//     ],
+//     "crmRules": [
+//       { "id": "...", "when": { "intent": "ready_to_buy" },
+//         "patch": { "status": "qualified" } }
+//     ]
+//   }
+//
+// The summarizer feeds `summaryFields[].key` into the LLM prompt as the
+// list of allowed sparse-patch keys. taskRules/crmRules are applied by the
+// rule engine after summarization. Designed as a single JSONB doc rather
+// than three tables so tenants can edit it transactionally from one form.
+model PostConversationConfig {
+  tenantId  String   @id @map("tenant_id")
+  data      Json     @default("{}")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("post_conversation_configs")
+}
+
 // ─── System Agent Memory ────────────────────────────────────
 // Per-user, per-tenant rolling history for the System Copilot (Command
 // Center). Isolated from customer Conversation/Message tables so operator
@@ -2294,4 +2327,66 @@ model VoiceCallActionItem {
   @@index([sessionId])
   @@index([status])
   @@map("voice_call_action_items")
+}
+
+// ─── Customer Brief ────────────────────────────────────────
+//
+// Persistent, customer-level behavioral brief that lives BEYOND any single
+// conversation. Updated whenever a chat closes or a call hangs up so the
+// next agent (or AI) has the latest read on:
+//   • mood arc across channels
+//   • disappointment / churn-risk signals
+//   • tone preferences (formal/casual, short/long-winded, language)
+//   • what makes this customer feel good
+//   • engagement style
+//
+// One row per (tenantId, identityKey, locale). identityKey is a derived
+// stable key: "person:<id>" | "crm:<vendor>:<id>" | "contact:<id>". Multiple
+// keys can exist for the same human until the identity layers converge — the
+// writer always picks the strongest available (person > crm > contact).
+//
+// Locale stored explicitly so a tenant with Hebrew + English agents gets one
+// brief per language without re-asking the LLM each time.
+model CustomerBrief {
+  id                String   @id @default(cuid())
+  tenantId          String   @map("tenant_id")
+
+  identityKey       String   @map("identity_key")
+  personId          String?  @map("person_id")
+  crmContactId     String?  @map("crm_contact_id")
+  crmObjectKind     String?  @map("crm_object_kind")
+  contactId         String?  @map("contact_id")
+
+  locale            String   @default("en")
+
+  // Headline behavioral briefing (3-5 sentences). Plain prose, agent-facing.
+  brief             String
+
+  // Short "things to keep in mind RIGHT NOW" phrases (≤5 items).
+  signals           Json     @default("[]")
+
+  // Behavioral tags — nullable so the LLM can omit when it lacks signal.
+  tone              String?
+  mood              String?
+  // Free-form list of recommended behaviors for THIS customer (e.g.
+  // "lead with empathy", "skip small talk", "confirm next step in writing").
+  recommendedBehaviors Json  @default("[]") @map("recommended_behaviors")
+
+  // Provenance — what the brief is summarizing.
+  channels          Json     @default("[]")
+  conversationCount Int      @default(0) @map("conversation_count")
+  lastSourceChannel String?  @map("last_source_channel")
+  lastSourceConvId  String?  @map("last_source_conv_id")
+  lastSourceEvent   String?  @map("last_source_event")
+
+  generatedAt       DateTime @default(now()) @map("generated_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, identityKey, locale])
+  @@index([tenantId])
+  @@index([tenantId, personId])
+  @@index([tenantId, crmContactId])
+  @@index([tenantId, contactId])
+  @@map("customer_briefs")
 }

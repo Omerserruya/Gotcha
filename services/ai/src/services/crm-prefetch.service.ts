@@ -23,6 +23,49 @@
 import { prisma, normalizePhone as sharedNormalizePhone } from "@chatcenter/shared";
 import { executeTool } from "./tool-execution.service";
 
+// ─── Per-conversation cache ─────────────────────────────────
+//
+// The bot called prefetchCrmContext on EVERY turn — 2–4 Zoho calls every
+// time even though the customer hadn't done anything CRM-relevant. Cache
+// the resolved bundle for `CACHE_TTL_MS` keyed by tenant+conversation.
+//
+// Bypass rules:
+//   1. TTL expired.
+//   2. Hints changed since last call (e.g. customer just sent an email
+//      address that wasn't part of the previous prefetch). The hintsKey
+//      collapses the (phone,email) pair into a stable string.
+//
+// Invalidation:
+//   - invalidateCrmPrefetch(tenant, conversation) — called by the
+//     tool-execution layer after any mutating Zoho call so the next bot
+//     turn sees fresh data instead of stale lead/contact rows.
+const CACHE_TTL_MS = 5 * 60 * 1000;
+
+interface CacheEntry {
+  result: CrmPrefetchResult | null;
+  hintsKey: string;
+  expiresAt: number;
+}
+
+const cache = new Map<string, CacheEntry>();
+
+function cacheKey(tenantId: string, conversationId: string): string {
+  return `${tenantId}:${conversationId}`;
+}
+
+function hintsKey(phone: string | undefined, email: string | undefined): string {
+  return `${phone || ""}|${email || ""}`;
+}
+
+export function invalidateCrmPrefetch(tenantId: string, conversationId: string): void {
+  cache.delete(cacheKey(tenantId, conversationId));
+}
+
+/** Test/ops helper — clear the entire cache (e.g. on tenant CRM disconnect). */
+export function clearCrmPrefetchCache(): void {
+  cache.clear();
+}
+
 export interface CrmRecord {
   id: string;
   name?: string;
@@ -61,6 +104,21 @@ export async function prefetchCrmContext(
   const phone = normalizePhone(customer.externalId ?? undefined, defaultCountry);
   const email = (customer.email || "").trim() || undefined;
   if (!phone && !email) return null;
+
+  // Cache hit when the hints (phone + email) match what we resolved last
+  // time AND the entry hasn't expired. Mutations invalidate via
+  // invalidateCrmPrefetch (wired in tool-execution.service after each
+  // CRM-mutating tool), so we don't need a longer TTL than ~5 min.
+  const key = cacheKey(tenantId, conversationId);
+  const hk = hintsKey(phone, email);
+  const cached = cache.get(key);
+  if (cached && cached.expiresAt > Date.now() && cached.hintsKey === hk) {
+    console.log(
+      `[crm-prefetch] cache hit tenant=${tenantId} conv=${conversationId} ` +
+      `ttl_remaining_ms=${cached.expiresAt - Date.now()}`,
+    );
+    return cached.result;
+  }
 
   const result: CrmPrefetchResult = {
     leadMatches: [],
@@ -171,6 +229,8 @@ export async function prefetchCrmContext(
   // "use this id" pick are deterministic.
   result.leadMatches.sort(byCreatedDesc);
   result.contactMatches.sort(byCreatedDesc);
+
+  cache.set(key, { result, hintsKey: hk, expiresAt: Date.now() + CACHE_TTL_MS });
   return result;
 }
 

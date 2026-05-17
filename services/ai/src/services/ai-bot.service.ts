@@ -15,10 +15,13 @@
 
 import { prisma, buildAgentToolsForAIAgent, dispatchToolCall } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
+import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
+import { executeAction, type PlannedAction } from "./action-executor.service";
+import { beginTurn, isAbortError } from "./turn-cancellation.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.service";
 import {
@@ -253,6 +256,10 @@ function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] 
 
     if (name === "escalate_to_human") return true;
     if (name === "link_customer_identifier") return allowed.has("identity_link");
+    if (name === "close_conversation") return allowed.has("close_conversation");
+    // create_task isn't its own ActionCategory — it rides on schedule_followup
+    // (the bot pairs them) and on add_note (CRM-side write semantics).
+    if (name === "create_task") return allowed.has("schedule_followup") || allowed.has("add_note");
     if (name.startsWith("submit_")) return true;
     if (/(_search|_get|_lookup|_read)$/.test(name)) return true;
 
@@ -261,6 +268,9 @@ function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] 
     if (/(update_|patch_)/.test(name)) return allowed.has("update_record");
     if (/(_note$|add_note)/.test(name)) return allowed.has("add_note");
     if (/(tag_|_tag$)/.test(name)) return allowed.has("tag");
+    // Both schedule_followup and schedule_followup_template share the
+    // same allowed-action gate; the prompt decides which one to call
+    // based on the WhatsApp 24h window status.
     if (/(schedule_followup|set_followup)/.test(name)) return allowed.has("schedule_followup");
     if (/(book_|schedule_meeting|schedule_demo)/.test(name)) return allowed.has("schedule_booking");
     if (/(send_proposal|send_quote|create_proposal)/.test(name)) return allowed.has("send_proposal");
@@ -295,16 +305,40 @@ function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] 
  * Returns undefined if neither is present. The BEL uses this to drive the
  * ownership signal + identity_link required action (Task 1).
  */
-function extractIdentifierFromMessage(text: string): { kind: "email" | "phone"; value: string } | undefined {
+function extractIdentifierFromMessage(
+  text: string,
+  defaultCountry: string = "IL",
+): { kind: "email" | "phone"; value: string } | undefined {
   const trimmed = (text || "").trim();
   if (!trimmed) return undefined;
   const emailRe = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
   const m = trimmed.match(emailRe);
   if (m) return { kind: "email", value: m[0].toLowerCase() };
-  // E.164-ish phone — international format only to avoid false positives.
-  const phoneRe = /(\+\d[\d\s().-]{7,}\d)/;
-  const p = trimmed.match(phoneRe);
-  if (p) return { kind: "phone", value: p[1].replace(/[\s()-]/g, "") };
+
+  // Phone extraction — loose candidate match, then libphonenumber-js validates
+  // against the tenant's default country. This way local formats sent in
+  // Instagram/Messenger ("054-1234567", "(555) 123-4567", "0541234567")
+  // resolve correctly, not just strict E.164 with a leading `+`.
+  //
+  // Candidate criteria: 7+ digits in a row (with optional separators) AND
+  // either a leading `+` OR at least one separator/grouping or a leading
+  // zero — that filters out random IDs/order numbers like "1234567890" in
+  // body prose. We also reject overly-long digit runs (16+) which are
+  // typically card / order numbers, not phones.
+  const phoneCandidateRe = /(\+?\d[\d\s().-]{6,}\d)/g;
+  for (const match of trimmed.matchAll(phoneCandidateRe)) {
+    const raw = match[1];
+    const digits = raw.replace(/\D/g, "");
+    if (digits.length < 7 || digits.length > 15) continue;
+    // Cheap year/price guard: bare 4-digit runs without context aren't phones.
+    if (digits.length < 8 && !raw.includes("+") && !raw.includes("-") && !raw.includes(" ") && !raw.includes("(")) continue;
+    try {
+      const parsed = parsePhoneNumberFromString(raw, (defaultCountry || "IL").toUpperCase() as CountryCode);
+      if (parsed && parsed.isValid()) {
+        return { kind: "phone", value: parsed.number };
+      }
+    } catch { /* try next candidate */ }
+  }
   return undefined;
 }
 
@@ -448,10 +482,45 @@ export async function generateAIBotReply(opts: {
   aiAgentId: string;
   incomingMessage: string;
 }): Promise<AIBotReplyResult> {
+  // Per-conversation cancellation: if a newer inbound for this conversation
+  // hits the AI service mid-turn, it calls beginTurn() again which aborts
+  // this controller. Every generateResponse() below threads `signal` so the
+  // underlying OpenAI fetch is cancelled — no tokens burned, no stale reply
+  // emitted. The route layer converts the resulting AbortError into HTTP 499.
+  const turn = beginTurn(opts.tenantId, opts.conversationId, "bot");
+  try {
+    return await generateAIBotReplyInner(opts, turn.signal);
+  } catch (err) {
+    if (isAbortError(err)) {
+      throw Object.assign(new Error("aborted-by-newer-turn"), { status: 499, aborted: true });
+    }
+    throw err;
+  } finally {
+    turn.end();
+  }
+}
+
+async function generateAIBotReplyInner(
+  opts: {
+    tenantId: string;
+    conversationId: string;
+    aiAgentId: string;
+    incomingMessage: string;
+  },
+  signal: AbortSignal,
+): Promise<AIBotReplyResult> {
   const config = await prisma.aIAgent.findUnique({ where: { id: opts.aiAgentId } });
   if (!config || config.tenantId !== opts.tenantId) {
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
   }
+
+  // Tenant default country — passed to extractIdentifierFromMessage so phone
+  // candidates without a `+` prefix (e.g. Israeli "054-1234567" sent over IG)
+  // still parse to E.164 and trigger identity_link against the existing CRM.
+  const tenantRow = await prisma.tenant
+    .findUnique({ where: { id: opts.tenantId }, select: { defaultCountryCode: true } })
+    .catch(() => null);
+  const tenantDefaultCountry = tenantRow?.defaultCountryCode || "IL";
 
   const conversation = await prisma.conversation.findFirst({
     where: { id: opts.conversationId, tenantId: opts.tenantId },
@@ -553,8 +622,9 @@ export async function generateAIBotReply(opts: {
       messageCount: messages.length,
       recentDirections: messages.slice(-5).map((m) => m.direction as "INBOUND" | "OUTBOUND"),
       lastAssistantMove,
-      identifierMessage: extractIdentifierFromMessage(opts.incomingMessage),
+      identifierMessage: extractIdentifierFromMessage(opts.incomingMessage, tenantDefaultCountry),
       assistantPreviouslyAskedFor: detectAssistantAskedFor(messages.map((m) => ({ direction: m.direction, body: m.body }))),
+      previousAssistantText: [...messages].reverse().find((m) => m.direction === "OUTBOUND")?.body ?? undefined,
     },
     flags: {
       pendingApprovalsCount: pendingApprovals.length,
@@ -588,12 +658,24 @@ export async function generateAIBotReply(opts: {
   });
   const memoryBlock = renderMemoryBlock(memory);
 
+  // ── Follow-up flow facts: WhatsApp 24h window + approved templates ──
+  // The bot's follow-up decision tree (prompt-builder STRICT block) needs
+  // these as ground truth so it can pick free-text vs template path
+  // deterministically instead of guessing.
+  const followupFacts = await loadFollowupFlowFacts({
+    tenantId: opts.tenantId,
+    conversation,
+    locale: detectLocale(messages.map((m) => m.body || "")),
+  });
+
   // ── Build system prompt ────────────────────────────────
   const ctxSlot: ContextSlot = {
     customerBlock: renderCustomerInfoBlock(conversation),
     crmBlock,
     memoryBlock,
     pendingApprovalsBlock: renderPendingApprovalsBlock(pendingApprovals),
+    whatsappWindowBlock: followupFacts.whatsappWindowBlock,
+    templatesBlock: followupFacts.templatesBlock,
   };
 
   // ── Tool surface — single source of truth: state.allowedActions ──
@@ -623,6 +705,27 @@ export async function generateAIBotReply(opts: {
         slug,
         args,
       });
+    },
+    runCreateTask: async ({ subject, body, priority }) => {
+      // Route create_task through the existing action-executor path so it
+      // hits the same CRM connector (Zoho/HubSpot/…) and audit log as the
+      // post-chat pipeline. contactId is required by the executor — fall
+      // back to a per-tenant policy result when the local contact row
+      // isn't resolved yet (rare; identity-link normally runs first).
+      if (!contactRow?.id) {
+        return { ok: false, reason: "no_contact_for_task" };
+      }
+      const action: PlannedAction = {
+        tool: "create_task",
+        params: { contactId: contactRow.id, subject, body, priority: priority || "normal" },
+        reason: "ai_bot:create_task",
+        riskLevel: "low",
+      };
+      const r = await executeAction(opts.tenantId, action, {
+        actorId: `ai_bot:${opts.conversationId}`,
+      });
+      if (r.ok) return { ok: true, result: r.output ?? r };
+      return { ok: false, reason: r.skipReason || r.error || "create_task_failed" };
     },
     runAdapterTool: async ({ toolFunctionName, args }) => {
       const result = await executeAdapterTool({
@@ -815,6 +918,7 @@ export async function generateAIBotReply(opts: {
       maxTokens: config.maxTokens ?? 1024,
       tools: tools as any[],
       metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
     });
 
     totalTokens += response.usage.total_tokens || 0;
@@ -1007,6 +1111,7 @@ export async function generateAIBotReply(opts: {
       maxTokens: config.maxTokens ?? 1024,
       tools: tools as any[],
       metadata: { type: "ai_bot_retry", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
     });
     totalTokens += retryResponse.usage.total_tokens || 0;
 
@@ -1079,6 +1184,7 @@ export async function generateAIBotReply(opts: {
         maxTokens: config.maxTokens ?? 1024,
         tools: tools as any[],
         metadata: { type: "ai_bot_retry_final", conversationId: opts.conversationId, aiAgentId: config.id },
+        signal,
       });
       totalTokens += finalResp.usage.total_tokens || 0;
       if (finalResp.content?.trim()) replyText = finalResp.content.trim();
@@ -1206,4 +1312,152 @@ export async function generateAIBotOneshot(opts: {
     modelUsed: model,
     totalTokens: result.usage.total_tokens || 0,
   };
+}
+
+// ─── Follow-up flow facts (WhatsApp window + templates) ──────
+
+const HEBREW_RE = /[֐-׿]/;
+
+function detectLocale(samples: string[]): "he" | "en" {
+  // Lightweight detector — any Hebrew chars in recent customer messages
+  // flips locale to Hebrew. This is what the prompt-builder reads when
+  // deciding which language to render its "STRICT" blocks in.
+  for (const s of samples) {
+    if (s && HEBREW_RE.test(s)) return "he";
+  }
+  return "en";
+}
+
+interface FollowupFlowFacts {
+  whatsappWindowBlock?: string;
+  templatesBlock?: string;
+}
+
+/**
+ * Loads two facts the bot needs to drive the follow-up decision tree:
+ *
+ *   1. WhatsApp 24h customer-service window — when did the customer last
+ *      send an INBOUND message? If > 24h, free-text follow-ups are silently
+ *      dropped by Meta and the bot must use a template path instead.
+ *
+ *   2. The tenant's approved WhatsApp templates (per channel + language)
+ *      so the bot can pick a valid template_name when scheduling outside
+ *      the 24h window.
+ *
+ * Best-effort: any DB error returns an empty block so the prompt just
+ * lacks the fact, rather than blowing up the bot turn.
+ */
+async function loadFollowupFlowFacts(args: {
+  tenantId: string;
+  conversation: any;
+  locale: "he" | "en";
+}): Promise<FollowupFlowFacts> {
+  const out: FollowupFlowFacts = {};
+
+  try {
+    // Latest inbound message timestamp for the 24h-window calculation.
+    const lastInbound = await prisma.message.findFirst({
+      where: {
+        tenantId: args.tenantId,
+        conversationId: args.conversation.id,
+        direction: "INBOUND" as any,
+      },
+      orderBy: { createdAt: "desc" },
+      select: { createdAt: true },
+    });
+    const now = new Date();
+    const channel = String(args.conversation.channel || "").toUpperCase();
+    const isWhatsApp = channel === "WHATSAPP";
+
+    let secondsSinceLastInbound: number | null = null;
+    let windowOpen = false;
+    let windowExpiresAt: Date | null = null;
+    if (lastInbound) {
+      secondsSinceLastInbound = Math.floor((now.getTime() - lastInbound.createdAt.getTime()) / 1000);
+      windowOpen = secondsSinceLastInbound < 24 * 3600;
+      windowExpiresAt = new Date(lastInbound.createdAt.getTime() + 24 * 3600 * 1000);
+    }
+
+    const lines: string[] = ["## WhatsApp customer-service window"];
+    lines.push(`- conversation_channel: ${channel || "unknown"}`);
+    if (isWhatsApp) {
+      if (secondsSinceLastInbound === null) {
+        lines.push("- no inbound messages yet — window is CLOSED by default; template path required to first-contact");
+      } else {
+        const hh = Math.floor(secondsSinceLastInbound / 3600);
+        const mm = Math.floor((secondsSinceLastInbound % 3600) / 60);
+        lines.push(`- seconds_since_last_inbound: ${secondsSinceLastInbound} (≈ ${hh}h ${mm}m ago)`);
+        lines.push(`- 24h_window_open: ${windowOpen}`);
+        if (windowExpiresAt) lines.push(`- 24h_window_expires_at: ${windowExpiresAt.toISOString()}`);
+        lines.push(
+          windowOpen
+            ? "- DECISION: if your scheduled send_at_iso is BEFORE 24h_window_expires_at → free-text `schedule_followup` is fine. Otherwise use `schedule_followup_template`."
+            : "- DECISION: window is CLOSED. Any follow-up MUST use `schedule_followup_template` (a free-text send will be silently dropped by Meta).",
+        );
+      }
+    } else {
+      lines.push(
+        "- DECISION: conversation is NOT on WhatsApp. To follow up reliably, ask for a WhatsApp number, call `link_customer_identifier` to attach it, then schedule via `schedule_followup_template`.",
+      );
+    }
+    out.whatsappWindowBlock = lines.join("\n");
+  } catch (err: any) {
+    console.warn("[ai-bot] loadFollowupFlowFacts window:", err?.message);
+  }
+
+  try {
+    // Tenant's approved WhatsApp templates. Filter to active + approved
+    // (or pending) so the bot only suggests templates that will actually
+    // send. Cap to 20 entries to keep the prompt small.
+    const channel = String(args.conversation.channel || "").toUpperCase();
+    const templates = await (prisma as any).messageTemplate.findMany({
+      where: {
+        tenantId: args.tenantId,
+        isActive: true,
+        status: "APPROVED",
+        OR: [{ channel: "WHATSAPP" }, { channel: null }],
+      },
+      select: { name: true, language: true, body: true, variables: true, buttons: true },
+      orderBy: { updatedAt: "desc" },
+      take: 20,
+    }).catch(() => []);
+    if (Array.isArray(templates) && templates.length > 0) {
+      const lines: string[] = [
+        "## Approved WhatsApp templates (use template_name verbatim with schedule_followup_template)",
+        "Meta only substitutes POSITIONAL placeholders ({{1}}, {{2}}, …). The `variables` arg you pass to schedule_followup_template MUST be a map keyed by those numbers (e.g. {\"1\": \"עומר\", \"2\": \"17.05.2026\"}). Use the per-placeholder description below to decide what value goes in each slot.",
+      ];
+      for (const t of templates) {
+        const preview = String(t.body || "").replace(/\s+/g, " ").slice(0, 140);
+        lines.push("");
+        lines.push(`- name="${t.name}" lang=${t.language || "?"}`);
+        lines.push(`  body: ${JSON.stringify(preview)}`);
+        const vars = Array.isArray(t.variables) ? t.variables : [];
+        if (vars.length > 0) {
+          lines.push("  variables:");
+          for (const v of vars) {
+            if (!v || typeof v.key !== "string") continue;
+            const key = v.key;
+            const desc = typeof v.description === "string" && v.description.trim() ? v.description.trim() : "(no description)";
+            const sample = typeof v.sample === "string" && v.sample.trim() ? ` — sample: ${JSON.stringify(v.sample.trim())}` : "";
+            lines.push(`    {{${key}}}: ${desc}${sample}`);
+          }
+        }
+        const buttons = Array.isArray(t.buttons) ? t.buttons : [];
+        if (buttons.length > 0) {
+          const btnLabels = buttons
+            .filter((b: any) => b && typeof b.text === "string" && b.text.trim())
+            .map((b: any) => `${b.type || "QUICK_REPLY"}:"${b.text.trim()}"`)
+            .join(", ");
+          if (btnLabels) lines.push(`  buttons: ${btnLabels}`);
+        }
+      }
+      out.templatesBlock = lines.join("\n");
+    } else if (channel === "WHATSAPP" || channel === "") {
+      out.templatesBlock = "## Approved WhatsApp templates\n- (none configured) — if the 24h window is closed, ask the team to register a callback template before scheduling.";
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] loadFollowupFlowFacts templates:", err?.message);
+  }
+
+  return out;
 }

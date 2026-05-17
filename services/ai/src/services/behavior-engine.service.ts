@@ -267,6 +267,14 @@ export interface RequestInput {
    * when the customer's reply contains a matching identifier.
    */
   assistantPreviouslyAskedFor?: "email" | "phone" | null;
+  /**
+   * Raw text of the assistant's previous outbound message in this
+   * conversation. BEL uses this to detect cross-turn state that a
+   * single-token enum can't carry — e.g. "the bot just asked the customer
+   * for a follow-up time, so a timing-signal reply this turn means we
+   * should now schedule the follow-up."
+   */
+  previousAssistantText?: string;
 }
 
 export interface FlagsInput {
@@ -387,6 +395,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     autonomy,
     flags: input.flags,
     crmRecord: input.identity.crmRecord,
+    closurePosture,
   });
   const requiredActions = deriveRequiredActions({
     strategy: finalStrategy,
@@ -463,7 +472,14 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
       outputContract: outputContractProvenance(input),
       decisionIntent: decisionIntentProvenance({ escalationPressure, autonomy, strategy: finalStrategy, flags: input.flags }),
       allowedActions: `derived from strategy=${finalStrategy} autonomy=${autonomy} crm=${JSON.stringify(input.identity.crmRecord ?? {})} flags=${JSON.stringify(input.flags ?? {})}`,
-      requiredActions: requiredActionsProvenance({ strategy: finalStrategy, intent, escalationPressure, conversationStage, closurePosture }),
+      requiredActions: requiredActionsProvenance({
+        strategy: finalStrategy,
+        intent,
+        escalationPressure,
+        conversationStage,
+        closurePosture,
+        hasTimingSignal: hasFollowupTimingSignal(input.request.lastMessage),
+      }),
       playbookIds: funnelRes.playbookIds
         ? `funnel-overridden to [${playbookIds.join(",")}]`
         : `selected ${playbookIds.length} from catalog`,
@@ -722,8 +738,23 @@ function deriveAllowedActions(opts: {
   autonomy: Autonomy;
   flags?: FlagsInput;
   crmRecord?: { hasLead: boolean; hasContact: boolean };
+  closurePosture?: ClosurePosture;
 }): ActionCategory[] {
   let allowed = [...STRATEGY_CONTRACTS[opts.strategy].allowedActions];
+
+  // Closure posture takes precedence over strategy gating — once the
+  // conversation has reached its terminal state (ready_to_close /
+  // needs_followup) the corresponding tool MUST be in the surface even if
+  // the current strategy contract doesn't normally allow it. Mirrors the
+  // requiredActions short-circuit in deriveRequiredActions. Without this,
+  // QUALIFY/GUIDE strategies kept the bot from ever firing close_conversation
+  // on a customer's "תודה" → chat stayed OPEN forever.
+  if (opts.closurePosture === "ready_to_close" && !allowed.includes("close_conversation")) {
+    allowed.push("close_conversation");
+  }
+  if (opts.closurePosture === "needs_followup" && !allowed.includes("schedule_followup")) {
+    allowed.push("schedule_followup");
+  }
 
   // CRM existence: if a lead/contact already exists, drop create_*.
   if (opts.crmRecord?.hasLead) allowed = allowed.filter((a) => a !== "create_lead");
@@ -813,7 +844,15 @@ function deriveRequiredActions(opts: {
     return out;
   }
   if (opts.closurePosture === "needs_followup") {
-    out.push("schedule_followup");
+    // Only force schedule_followup when the customer actually gave us a time.
+    // A vague "get back to me" / "תחזור אלי" with no when MUST trigger a
+    // clarifying question first — otherwise the contract checker force-
+    // retries the bot into scheduling at an arbitrary delay it invented.
+    if (hasFollowupTimingSignal(opts.lastMessage)) {
+      out.push("schedule_followup");
+    } else {
+      out.push("ask_question");
+    }
     return out;
   }
 
@@ -860,11 +899,18 @@ function requiredActionsProvenance(opts: {
   escalationPressure: EscalationPressure;
   conversationStage: ConversationStage;
   closurePosture?: ClosurePosture;
+  hasTimingSignal?: boolean;
 }): string {
   const parts: string[] = [];
   if (opts.escalationPressure === "escalate_now") parts.push("escalate_now → escalate_to_human");
   if (opts.closurePosture === "ready_to_close") parts.push("ready_to_close → close_conversation");
-  if (opts.closurePosture === "needs_followup") parts.push("needs_followup → schedule_followup");
+  if (opts.closurePosture === "needs_followup") {
+    parts.push(
+      opts.hasTimingSignal
+        ? "needs_followup+timing → schedule_followup"
+        : "needs_followup−timing → ask_question (must clarify when)",
+    );
+  }
   if (opts.strategy === "CONVERT" && opts.intent === "transactional") parts.push("CONVERT+transactional → create/update + schedule_booking");
   if (opts.strategy === "CONVERT" && opts.conversationStage === "objection") parts.push("CONVERT+objection → schedule_booking");
   if (opts.strategy === "RESOLVE") parts.push("RESOLVE → crm_read");
@@ -1014,15 +1060,89 @@ export function deriveActionContractState(opts: {
 const CUSTOMER_DEFER_MARKERS = [
   "i'll think about it", "let me think", "get back to you", "i'll let you know",
   "later", "next week", "in a few days", "not right now", "not now", "another time",
+  // Callback-intent phrases — "ai agrees verbally but never fires the
+  // schedule tool" was rooted in these missing. Without a defer match the
+  // BEL kept closurePosture=open, so requiredActions never pushed
+  // schedule_followup and the bot had no reason to dispatch it.
+  "call me back", "call back", "callback", "call me later", "call me tomorrow",
+  "call me at", "ring me", "ring back", "talk to me later",
+  "to call me back", "to call back", "to get back to me", "to ring me",
+  "תחזרו אליי", "תחזור אליי", "תחזרו אלי", "תחזור אלי",
+  "תתקשרו אלי", "תתקשר אלי", "תתקשר אליי", "תתקשרו אליי",
+  // Infinitive forms — "תוכל לחזור אלי מחר?" / "אפשר להתקשר אליי" appear
+  // very naturally in Hebrew callback requests and were missed by the
+  // imperative-only markers above. Live test exposed this gap.
+  "לחזור אלי", "לחזור אליי", "להתקשר אלי", "להתקשר אליי",
   "אחשוב על זה", "תן לי לחשוב", "אחזור אליך", "אני אחזור", "אעדכן אותך",
   "בהמשך", "בעוד כמה ימים", "לא עכשיו", "פעם אחרת", "אדבר איתך",
 ];
+
+/**
+ * Heuristic check: does the customer's message contain an explicit
+ * follow-up timing signal STRONG ENOUGH to schedule on? This must
+ * include an HOUR — a date alone ("tomorrow", "מחר") is NOT enough,
+ * because the bot has no way to pick a sensible time of day and would
+ * end up messaging the customer at an arbitrary hour.
+ *
+ * Returns true only when we can read BOTH:
+ *   • a date/relative-day signal (today/tomorrow/specific day OR short
+ *     duration like "in 2 hours"), AND
+ *   • an actual hour ("at 7", "ב-7", "15:30", "3pm", "8 בערב" + digit).
+ *
+ * False negative is cheap (bot asks one extra clarifying question).
+ * False positive is the bug we're fixing: bot picks its own time and
+ * follows up when the customer didn't ask for that moment.
+ */
+function hasFollowupTimingSignal(rawText: string): boolean {
+  const text = (rawText || "").toLowerCase();
+  if (!text) return false;
+
+  // ── Hour patterns (the load-bearing requirement) ──
+  // 15:30 / 9.00 — clock format
+  if (/\b\d{1,2}\s*[:.]\s*\d{2}\b/.test(text)) return true;
+  // 3pm / 11 am
+  if (/\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)\b/.test(text)) return true;
+  // "at 3" / "at 10" — English "at <hour>"
+  if (/\bat\s+\d{1,2}(\s|$|\.|,|!|\?)/.test(text)) return true;
+  // Hebrew "ב-7" / "ב7" / "בשעה 7" — preposition + digit hour.
+  // JS \b doesn't recognise Hebrew letters as word chars, so we anchor
+  // with a negative lookbehind on Hebrew letters instead — this matches
+  // the "ב" prefix when it stands alone, not as the last char of another
+  // word.
+  if (/(?<![א-ת])ב-?\s?\d{1,2}(?!\d)/.test(text)) return true;
+  if (/בשעה\s*\d{1,2}/.test(text)) return true;
+  // Compact Hebrew: "ב7 בבוקר" / "ב-15 אחה\"צ"
+  if (/\d{1,2}\s*(בבוקר|בערב|בצהריים|בלילה|אחה"?צ|אחרי הצהריים)/.test(text)) return true;
+
+  // ── Short durations (self-anchoring — "in 2 hours" is enough) ──
+  if (/\bin\s+\d+\s*(hour|hours|min|mins|minutes)\b/.test(text)) return true;
+  if (/\bבעוד\s*\d+\s*(שעה|שעות|דקות|דקה)\b/.test(text)) return true;
+  if (/\bבעוד שעה\b|\bבעוד שעתיים\b/.test(text)) return true;
+  if (/\bin an hour\b|\bin a couple of hours\b|\bin a few hours\b/.test(text)) return true;
+
+  // Anything else (bare "מחר", "tomorrow", "next week", "ביום ראשון")
+  // is a DATE without an hour. Not enough to schedule on. The bot must
+  // ask a follow-up question per STEP 1 of the prompt.
+  return false;
+}
 
 const CUSTOMER_CLOSE_ACK_MARKERS = [
   "thanks", "thank you", "perfect", "great, thanks", "got it, thanks", "all good",
   "no thanks", "not interested", "no, thanks", "i'm good", "all set",
   "תודה", "תודה רבה", "מעולה תודה", "הכול טוב", "אני בסדר",
   "לא תודה", "לא מעוניין", "לא מעוניינת", "לא צריך",
+];
+
+// Unambiguous customer-side sign-offs. Unlike CLOSE_ACK_MARKERS ("תודה"),
+// these only appear when the customer is actually ending the conversation
+// — so they don't need the prior-assistant-closing-move gate. A bare
+// "תודה" stays open and relies on the existing isClosingMove + CLOSE_ACK
+// path (or the idle worker's auto-close).
+const CUSTOMER_FAREWELL_MARKERS = [
+  "bye", "goodbye", "see you", "see ya", "take care", "have a good day",
+  "have a great day", "talk soon", "ciao",
+  "להתראות", "ביי", "להתראות בקרוב", "ביי ביי",
+  "כל טוב", "שיהיה לך יום טוב", "שיהיה לכם יום טוב", "יום טוב",
 ];
 
 /**
@@ -1040,6 +1160,26 @@ const CUSTOMER_CLOSE_ACK_MARKERS = [
  * - Escalation also blocks closure — handled by the earlier escalate_now branch
  *   in deriveRequiredActions (returns before closure check).
  */
+// Markers that indicate the bot's previous turn was asking the customer
+// for a follow-up time (HE+EN). Used cross-turn — when the customer replies
+// to one of these with a timing signal, the conversation is still in the
+// "schedule a follow-up" sub-flow even though their answer alone wouldn't
+// match the defer markers.
+const ASSISTANT_ASKED_FOLLOWUP_TIME_MARKERS = [
+  // English
+  "what time works", "when works for you", "when would be a good time",
+  "when should i follow up", "when should i reach out", "when should i get back",
+  "when would you like me to follow up", "what time should i",
+  "follow up tomorrow", "follow up later", "good time to reach",
+  "what time tomorrow", "what time would",
+  // Hebrew
+  "מתי נוח", "מתי יהיה לך נוח", "באיזו שעה", "באיזה שעה",
+  "מתי כדאי", "מתי לחזור אליך", "מתי תרצה שאחזור",
+  "מתי לחזור", "מתי לפנות אליך", "מתי בערך",
+  "מחר בבוקר מתאים", "אחר הצהריים", "מתי שיהיה לך זמן",
+  "מתי נוח לך שאחזור", "באיזה שעה תעדיף",
+];
+
 function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePosture {
   if ((flags?.pendingApprovalsCount ?? 0) > 0) return "open";
 
@@ -1048,6 +1188,30 @@ function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePos
   // Customer explicitly defers → follow-up.
   if (containsAny(text, CUSTOMER_DEFER_MARKERS)) return "needs_followup";
 
+  // Cross-turn: bot just asked WHEN to follow up, and the customer's reply
+  // contains a timing signal → still in the schedule-a-follow-up flow.
+  // Without this, BEL would re-classify the conversation as "open" the
+  // moment the customer answers the bot's clarifying question, which drops
+  // schedule_followup from requiredActions and the tool never fires.
+  const prevAssistant = (req.previousAssistantText || "").toLowerCase();
+  const assistantAskedFollowupTime =
+    !!prevAssistant && containsAny(prevAssistant, ASSISTANT_ASKED_FOLLOWUP_TIME_MARKERS);
+  if (assistantAskedFollowupTime && hasFollowupTimingSignal(text)) {
+    return "needs_followup";
+  }
+  // Bare-agreement to a follow-up-time proposal ("yes", "sure", "כן", "סבבה").
+  // We're not done — still need to pin the exact hour — so STAY in
+  // needs_followup posture so the prompt's STEP 1 "BARE AGREEMENT" branch
+  // fires and the bot keeps pushing for a specific hour instead of letting
+  // the conversation drift into a close.
+  const BARE_AGREEMENT_MARKERS = [
+    "yes", "sure", "ok", "okay", "sounds good", "works", "alright", "fine",
+    "כן", "סבבה", "בסדר", "אוקי", "אוקיי", "מעולה", "אחלה", "טוב",
+  ];
+  if (assistantAskedFollowupTime && containsAny(text.trim(), BARE_AGREEMENT_MARKERS)) {
+    return "needs_followup";
+  }
+
   // Customer's terminal acknowledgement after a closing assistant move.
   const lastMove = req.lastAssistantMove;
   const isClosingMove = lastMove === "close" || lastMove === "resolve";
@@ -1055,12 +1219,19 @@ function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePos
     return "ready_to_close";
   }
 
+  // Explicit farewell — customer signed off with "bye"/"להתראות". This is
+  // an UNAMBIGUOUS terminal signal so we don't need the prior-assistant-move
+  // gate the CLOSE_ACK branch uses. A bare "תודה" is NOT enough (customers
+  // drop it as politeness mid-conversation); only direct goodbyes fire here.
+  if (containsAny(text, CUSTOMER_FAREWELL_MARKERS)) return "ready_to_close";
+
   // Hard decline → close (no point following up).
   const HARD_DECLINE = ["not interested", "לא מעוניין", "לא מעוניינת", "no thanks", "לא תודה"];
   if (containsAny(text, HARD_DECLINE)) return "ready_to_close";
 
   return "open";
 }
+
 
 function deriveDecisionIntent(opts: {
   escalationPressure: EscalationPressure;

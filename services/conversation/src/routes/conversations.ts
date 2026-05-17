@@ -70,7 +70,16 @@ router.get("/", async (req: Request, res: Response) => {
 router.get("/history/:customerExternalId", async (req: Request, res: Response) => {
   try {
     const customerExternalId = req.params.customerExternalId as string;
-    const data = await conversationService.getHistoryByCustomerExternalId(req.tenantId!, customerExternalId);
+    // Optional anchor conversation — when provided, the walk also queries
+    // the linked CRM record for cross-platform identifiers (phone, email,
+    // gotcha_psid_*). The frontend's History panel already passes this; the
+    // legacy single-key behavior still works when conversationId is omitted.
+    const conversationId = typeof req.query.conversationId === "string" ? req.query.conversationId : undefined;
+    const data = await conversationService.getHistoryByCustomerExternalId(
+      req.tenantId!,
+      customerExternalId,
+      conversationId,
+    );
     res.json({ data });
   } catch (err) {
     console.error("Conversation history error:", err);

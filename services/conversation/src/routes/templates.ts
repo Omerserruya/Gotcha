@@ -228,6 +228,30 @@ function buildMetaComponents(template: any, mediaHeaderHandle?: string | null) {
   });
 
   if (template.footer) components.push({ type: "FOOTER", text: template.footer });
+
+  // BUTTONS — Meta accepts up to 3 buttons in a template. QUICK_REPLY is
+  // the common case for "tap to re-open the 24h window" flows; URL and
+  // PHONE_NUMBER are also supported. Mixed types are NOT allowed: all
+  // QUICK_REPLY OR all URL/PHONE_NUMBER (Meta enforces this and will
+  // reject mixed sets at registration time).
+  const rawButtons = Array.isArray(template.buttons) ? template.buttons : [];
+  const buttons = rawButtons
+    .filter((b: any) => b && typeof b === "object" && typeof b.text === "string" && b.text.trim())
+    .slice(0, 3)
+    .map((b: any) => {
+      const text = String(b.text).trim();
+      const type = String(b.type || "QUICK_REPLY").toUpperCase();
+      if (type === "URL") {
+        return { type: "URL", text, url: String(b.url || "").trim() };
+      }
+      if (type === "PHONE_NUMBER" || type === "PHONE") {
+        return { type: "PHONE_NUMBER", text, phone_number: String(b.phoneNumber || b.phone_number || "").trim() };
+      }
+      return { type: "QUICK_REPLY", text };
+    });
+  if (buttons.length > 0) {
+    components.push({ type: "BUTTONS", buttons });
+  }
   return components;
 }
 

@@ -6,6 +6,7 @@
 import type { AIProvider, ConversationContext, AISuggestion, IntentClassification, AgentChatParams, CopilotConfigData } from "./ai-assist.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
+import { isAbortError } from "./turn-cancellation.service";
 import { prisma, buildAgentTools, buildAgentToolsForAIAgent, dispatchToolCall, publishEvent } from "@chatcenter/shared";
 import type { AgentToolContext } from "@chatcenter/shared";
 import {
@@ -198,7 +199,8 @@ const STUB_COPILOT_AGENT: AgentRecord = {
 
 function renderCustomerInfoBlock(context: ConversationContext): string | undefined {
   const meta = context.conversationMeta;
-  if (!meta && !context.customerName) return undefined;
+  const mem = context.customerMemory;
+  if (!meta && !context.customerName && !mem) return undefined;
   const lines: string[] = ["## Customer & Conversation Info"];
   lines.push(`- Customer: ${context.customerName || "Unknown"}`);
   if (meta?.customerExternalId) lines.push(`- External ID / Phone: ${meta.customerExternalId}`);
@@ -209,6 +211,43 @@ function renderCustomerInfoBlock(context: ConversationContext): string | undefin
   if (meta?.createdAt) lines.push(`- Conversation Started: ${meta.createdAt}`);
   if (meta?.lastMessageAt) lines.push(`- Last Message: ${meta.lastMessageAt}`);
   if (meta?.isHandedOver !== undefined) lines.push(`- Handed Over to Human: ${meta.isHandedOver ? "Yes" : "No"}`);
+
+  // ─── Customer memory (cross-channel) ───
+  // Loaded by customer-context.service.loadCustomerContext. Tells the AI
+  // about outstanding promises, prior interactions, and trend so it doesn't
+  // restart relationships or repeat commitments.
+  if (mem) {
+    if (mem.openIssues && mem.openIssues.length) {
+      lines.push("", "## Open Issues (CRM tasks — outstanding commitments)");
+      for (const i of mem.openIssues.slice(0, 5)) {
+        const parts: string[] = [];
+        if (i.priority) parts.push(`[${i.priority}]`);
+        if (i.status) parts.push(`(${i.status})`);
+        parts.push(i.subject);
+        if (i.due_at) parts.push(`— due ${i.due_at}`);
+        lines.push(`- ${parts.join(" ")}`);
+      }
+    }
+    if (mem.recentSummaries && mem.recentSummaries.length) {
+      lines.push("", "## Recent prior interactions (cross-channel)");
+      for (const s of mem.recentSummaries.slice(0, 3)) {
+        const head: string[] = [`[${s.channel}` + (s.occurredAt ? ` ${s.occurredAt.slice(0, 10)}]` : "]")];
+        if (s.sentiment) head.push(`sentiment: ${s.sentiment}`);
+        if (s.qualification) head.push(`qualification: ${s.qualification}`);
+        lines.push(`- ${head.join(" — ")}`);
+        if (s.summary) lines.push(`  ${s.summary.slice(0, 280)}`);
+      }
+    }
+    if (mem.sentimentTrend && mem.sentimentTrend.length) {
+      lines.push(`- Sentiment trend (most-recent first): ${mem.sentimentTrend.join(", ")}`);
+    }
+    if (mem.recentCrmNotes && mem.recentCrmNotes.length) {
+      lines.push("", "## Recent CRM notes");
+      for (const n of mem.recentCrmNotes.slice(0, 3)) {
+        lines.push(`- ${n.body.slice(0, 200)}`);
+      }
+    }
+  }
   return lines.length > 1 ? lines.join("\n") : undefined;
 }
 
@@ -293,6 +332,12 @@ export class OpenAIProvider implements AIProvider {
         const surface = await buildAgentToolsForAIAgent(context.tenantId, aiAgentId, {
           identityLinking: !!contactId,
           escalation: false,
+          // Copilot is advisory — it must NOT close the conversation or
+          // schedule a follow-up on its own. Those are human-agent decisions.
+          // Leaving these on caused the LLM to fire close_conversation on
+          // casual copilot questions and bounce the chat into history.
+          closure: false,
+          followup: false,
           allowedMode: "ASSIST",
         });
         tools = [SUBMIT_SUGGESTIONS_TOOL, ...surface];
@@ -328,6 +373,7 @@ export class OpenAIProvider implements AIProvider {
           maxTokens: config?.maxTokens ?? 1024,
           metadata: { type: "suggestion", conversationId: context.conversationId },
           tools,
+          signal: context.signal,
         });
 
         const toolCalls = result.toolCalls;
@@ -408,6 +454,10 @@ export class OpenAIProvider implements AIProvider {
       }
       return out;
     } catch (err: any) {
+      // Abort: caller (voice-assist.triggerAssist) is in charge of the
+      // skip-publish decision — re-throw so we don't replace fresh
+      // suggestions with a stale "AI suggestion error" placeholder.
+      if (isAbortError(err)) throw err;
       console.error("OpenAI suggestion error:", err.message);
       return [{ id: "error", text: "Failed to get AI suggestions. Check API key and model configuration.", confidence: 0, type: "info" }];
     }
@@ -545,7 +595,16 @@ export class OpenAIProvider implements AIProvider {
       });
       chatContactId = contact?.id;
     }
-    const chatTools = buildAgentTools({ identityLinking: !!chatContactId, escalation: true });
+    // Copilot CHAT — advisory to the human agent. Same gating as
+    // suggestResponse: NEVER expose close_conversation / schedule_followup,
+    // otherwise the LLM closes the live conversation while the agent is just
+    // asking it a question.
+    const chatTools = buildAgentTools({
+      identityLinking: !!chatContactId,
+      escalation: true,
+      closure: false,
+      followup: false,
+    });
     const chatToolFnNames: string[] = chatTools
       .map((t: any) => t?.function?.name)
       .filter((n: any): n is string => typeof n === "string");

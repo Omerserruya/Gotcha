@@ -116,7 +116,7 @@ export default function HistoryPage() {
     if (!token) return;
     setLoading(true);
     try {
-      const params: Record<string, string> = { limit: "200", page: String(page) };
+      const params: Record<string, string> = { limit: "200", page: String(page), includeAutomated: "true" };
       if (search) params.search = search;
       if (channelFilter !== "ALL") params.channel = channelFilter;
       if (statusFilter !== "ALL") params.status = statusFilter;

@@ -170,6 +170,27 @@ export class TwilioProvider implements VoiceProvider {
     await create(params);
   }
 
+  async endCall(input: { callSid: string }): Promise<void> {
+    if (!input.callSid) return;
+    const client = this.getClient();
+    try {
+      // Twilio: marking a call "completed" forces the provider side to hang
+      // up immediately. If the call leg is already over (status=completed,
+      // failed, no-answer, busy, canceled) Twilio returns a 4xx — swallow
+      // it so the caller can treat endCall as idempotent.
+      await client.calls(input.callSid).update({ status: "completed" });
+      this.logger.info({ callSid: input.callSid }, "twilio-provider: endCall ok");
+    } catch (err: any) {
+      const code = err?.status ?? err?.code;
+      if (code === 404 || code === 400 || code === 20404) {
+        this.logger.warn({ callSid: input.callSid, code }, "twilio-provider: endCall noop (already finished)");
+        return;
+      }
+      this.logger.error({ err, callSid: input.callSid }, "twilio-provider: endCall failed");
+      throw err;
+    }
+  }
+
   private getClient() {
     if (!this._client) {
       if (!this.creds.accountSid || !this.creds.authToken) {

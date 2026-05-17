@@ -4,18 +4,42 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getAISuggestions, getAISummary, sendCopilotChat, getConversationIntelligence } from "@/lib/api";
+import { createCrmLeadForConversation, pickCrmCandidate, type CrmContextEnvelope } from "@/lib/api-crm";
 import ReactMarkdown from "react-markdown";
 import clsx from "clsx";
 
 interface CoPilotPanelProps {
+  /** When false, the panel is mounted but rendered as `display:none` so the AI
+   *  suggestion + intelligence fetch effects keep running in the background.
+   *  The chat surface uses this to show the floating popup without opening the
+   *  full panel (especially important on mobile, where the panel is full-screen). */
+  isOpen?: boolean;
   conversation: any;
   messages: any[];
+  /** Rich CRM context envelope fetched once by ChatPanel — drives the Customer
+   *  Context section (identity, deals, tickets, open issues, sentiment trend). */
+  crmContext?: CrmContextEnvelope | null;
+  crmLoading?: boolean;
+  /** Re-fetch CRM context after a side effect (e.g. user clicked "Create lead"
+   *  or picked a CRM candidate from the disambiguation list). */
+  onRefetchCrm?: () => void | Promise<void>;
   onInsertReply: (text: string) => void;
   onClose?: () => void;
+  /** Called when the panel needs to expand from a closed state (e.g. user taps
+   *  "All suggestions" on the floating bubble while the panel is hidden). */
+  onOpen?: () => void;
   onAiLoadingChange?: (loading: boolean) => void;
   onTopSuggestion?: (suggestion: { text: string; label: string; confidence: number } | null) => void;
   onScrollToReplies?: () => void;
   repliesRef?: React.RefObject<HTMLDivElement>;
+  /**
+   * Quote forwarded from ChatPanel's "Ask Co-Pilot" selection action.
+   * `version` lets us re-trigger the prefill effect when the agent marks
+   * the same text twice in a row (without `version`, React would diff the
+   * object as equal). When non-null we switch to the chat tab and seed
+   * `chatInput` with a markdown blockquote of the customer's words.
+   */
+  prefillQuote?: { quote: string; version: number } | null;
 }
 
 interface ThinkingStep {
@@ -34,6 +58,26 @@ interface ThinkingStep {
 // When realIntelligence is null the sidebar shows a loading skeleton instead
 // of fake data. See memory/bug_f5_copilot_not_mounted.md Bug 11.
 
+/**
+ * Detect the language the agent typed their question in so the AI reply
+ * matches. We only look at the question's own characters — the UI locale
+ * is the fallback for short / ambiguous input (e.g. emoji-only or pure
+ * numbers). Returns a BCP-47-ish code the backend understands.
+ */
+function detectQuestionLocale(text: string): string | null {
+  if (!text || text.trim().length < 2) return null;
+  // Hebrew & Arabic detect by Unicode block — most common non-English cases.
+  if (/[֐-׿]/.test(text)) return "he";
+  if (/[؀-ۿݐ-ݿ]/.test(text)) return "ar";
+  if (/[Ѐ-ӿ]/.test(text)) return "ru";
+  if (/[一-鿿]/.test(text)) return "zh";
+  if (/[぀-ゟ゠-ヿ]/.test(text)) return "ja";
+  // Latin-script: only treat as English when there are actual letters. Pure
+  // numbers / punctuation fall back to the UI locale.
+  if (/[A-Za-z]/.test(text)) return "en";
+  return null;
+}
+
 const INITIAL_THINKING_STEPS: ThinkingStep[] = [
   { id: "read", label: "readingConversation", status: "pending" },
   { id: "intent", label: "analyzingIntent", status: "pending" },
@@ -42,18 +86,39 @@ const INITIAL_THINKING_STEPS: ThinkingStep[] = [
   { id: "gen", label: "generatingSuggestions", status: "pending" },
 ];
 
-export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, onAiLoadingChange, onTopSuggestion, repliesRef }: CoPilotPanelProps) {
+export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext, crmLoading, onRefetchCrm, onInsertReply, onClose, onAiLoadingChange, onTopSuggestion, repliesRef, prefillQuote }: CoPilotPanelProps) {
   const { token } = useAuth();
   const { t, locale } = useI18n();
   const [activeTab, setActiveTab] = useState<"suggest" | "chat">("suggest");
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null);
   const [customerContextCollapsed, setCustomerContextCollapsed] = useState(false);
 
-  // Chat mode state
-  type ChatMsg = { role: "user" | "assistant"; content: string };
+  // Chat mode state.
+  //
+  // ChatMsg.referenceQuote is the customer-quoted snippet the agent was asking
+  // about (only set when the agent submitted via the "Ask Co-Pilot" handoff).
+  // It is rendered as a small gray reference block ABOVE the user bubble — it
+  // is NOT part of `content`, so the bubble itself shows only the agent's
+  // question. The Context preamble is still woven into the outbound payload
+  // (`msg`) so the backend AI sees the snippet.
+  type ChatMsg = { role: "user" | "assistant"; content: string; referenceQuote?: string };
   const [chatMessages, setChatMessages] = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+
+  // "Ask Co-Pilot on selection" handoff. Each new prefillQuote.version
+  // switches the panel to chat mode and pins the quote as a REFERENCE banner
+  // above the composer — NOT as text in the textarea. The banner stays until
+  // the agent dismisses it (X button), so they can fire multiple follow-up
+  // questions about the same snippet. On submit, the quote is woven into the
+  // outgoing message as a small "Context:" preamble so the AI sees what the
+  // agent is referring to.
+  const [referenceQuote, setReferenceQuote] = useState<string | null>(null);
+  useEffect(() => {
+    if (!prefillQuote || !prefillQuote.quote) return;
+    setActiveTab("chat");
+    setReferenceQuote(prefillQuote.quote);
+  }, [prefillQuote?.version]);
 
   // AI-powered state
   const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number; type: "reply" | "action" | "info" }[] | null>(null);
@@ -146,14 +211,28 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
     );
   }, []);
 
+  // Per-panel AbortController for the in-flight fetchAI round. When a new
+  // customer message arrives during the 1.5s debounce window we abort the
+  // older fetch — without this, two concurrent fetchAI calls race and the
+  // slower one stomps the faster one's results into the panel.
+  const fetchAbortRef = useRef<AbortController | null>(null);
+
   // Fetch AI suggestions when conversation/messages change
   const fetchAI = useCallback(async () => {
     if (!token || !conversation?.id || paused) return;
+    // Abort any older in-flight fetch BEFORE installing a new controller.
+    if (fetchAbortRef.current && !fetchAbortRef.current.signal.aborted) {
+      fetchAbortRef.current.abort();
+    }
+    const ctrl = new AbortController();
+    fetchAbortRef.current = ctrl;
+    const { signal } = ctrl;
     setAiLoading(true);
 
     try {
       // Step 1: Check suggestions first to detect if AI is configured
-      const suggestionsRes = await getAISuggestions(token, conversation.id, locale).catch(() => null);
+      const suggestionsRes = await getAISuggestions(token, conversation.id, locale, signal).catch(() => null);
+      if (signal.aborted) return;
 
       if (suggestionsRes?.data && suggestionsRes.data.length > 0) {
         const isStub = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info";
@@ -187,9 +266,10 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
       activateStep("intent");
       activateStep("kb");
       const [intelligenceRes, summaryRes] = await Promise.all([
-        getConversationIntelligence(token, conversation.id).catch(() => null),
-        getAISummary(token, conversation.id, locale).catch(() => null),
+        getConversationIntelligence(token, conversation.id, signal).catch(() => null),
+        getAISummary(token, conversation.id, locale, signal).catch(() => null),
       ]);
+      if (signal.aborted) return;
 
       // Intelligence result
       completeStep("read");
@@ -231,13 +311,36 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
     if (!lastIsOutbound) fetchAI();
   }, [fetchAI, lastIsOutbound]);
 
-  // Re-fetch when messages change significantly (only on INBOUND)
+  // Re-fetch when messages change significantly (only on INBOUND).
+  // Debounce: hold for 1500ms after the last inbound. If another inbound
+  // arrives within that window, the cleanup clears the prior timer AND
+  // the next fetchAI() call aborts any still-running AbortController from
+  // the previous round — so we never end up with two concurrent fetches
+  // or a stale reply landing on top of a fresh one.
   useEffect(() => {
     if (messages.length > 0 && !lastIsOutbound) {
-      const timer = setTimeout(() => fetchAI(), 1000);
+      const timer = setTimeout(() => {
+        // Abort the previous in-flight fetch BEFORE the new one starts —
+        // fetchAI installs a fresh controller on entry, but doing it here
+        // closes the window between "timer fires" and "fetchAI awaits".
+        if (fetchAbortRef.current && !fetchAbortRef.current.signal.aborted) {
+          fetchAbortRef.current.abort();
+        }
+        fetchAI();
+      }, 1500);
       return () => clearTimeout(timer);
     }
   }, [messages.length, lastIsOutbound]);
+
+  // Cancel any in-flight fetch when the panel unmounts so we don't update
+  // state on a torn-down component.
+  useEffect(() => {
+    return () => {
+      if (fetchAbortRef.current && !fetchAbortRef.current.signal.aborted) {
+        fetchAbortRef.current.abort();
+      }
+    };
+  }, []);
 
   function handleInsert(text: string, idx: number) {
     onInsertReply(text);
@@ -268,13 +371,40 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
   async function handleChatSubmit(e: { preventDefault: () => void }) {
     e.preventDefault();
     if (!chatInput.trim() || chatLoading || !token || !conversation?.id) return;
-    const msg = chatInput.trim();
+    const agentQuestion = chatInput.trim();
+    // When a reference quote is pinned, send it as a Context preamble so the
+    // backend AI sees both the snippet the agent marked and the question
+    // they're asking about it. The user-visible chat bubble shows ONLY the
+    // agent's question — the quote is stored on `referenceQuote` and rendered
+    // as a separate gray reference block above the bubble.
+    const pinnedQuote = referenceQuote;
+    const msg = pinnedQuote
+      ? `Context — agent marked this customer text for reference:\n"${pinnedQuote}"\n\nAgent's question: ${agentQuestion}`
+      : agentQuestion;
+    // Reply in whatever language the agent typed in — falls back to the UI
+    // locale when the question is too short or ambiguous to detect.
+    const replyLocale = detectQuestionLocale(agentQuestion) ?? locale;
     setChatInput("");
-    const updated = [...chatMessages, { role: "user" as const, content: msg }];
+    // Clear the pinned banner once the question is sent — the reference is
+    // already carried on the user message (rendered as a gray label above the
+    // bubble) so the input area resets for the next question. To re-attach
+    // the same snippet, the agent re-selects it in the chat and clicks "Ask
+    // Co-Pilot" again.
+    setReferenceQuote(null);
+    const userMsg: ChatMsg = {
+      role: "user",
+      content: agentQuestion,
+      ...(pinnedQuote ? { referenceQuote: pinnedQuote } : {}),
+    };
+    const updated = [...chatMessages, userMsg];
     setChatMessages(updated);
     setChatLoading(true);
     try {
-      const res = await sendCopilotChat(token, conversation.id, { message: msg, history: chatMessages, locale });
+      const res = await sendCopilotChat(token, conversation.id, {
+        message: msg,
+        history: chatMessages,
+        locale: replyLocale,
+      });
       setChatMessages([...updated, { role: "assistant" as const, content: res.data.reply }]);
     } catch (_err) {
       setChatMessages([...updated, { role: "assistant" as const, content: t("copilot.panel.chat.failedResponse") }]);
@@ -311,6 +441,15 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
     : "";
   const priorityColor = effectivePriority === "high" ? "text-red-500" : effectivePriority === "low" ? "text-gray-400" : "text-amber-500";
 
+
+  // When closed, keep the component mounted (so fetchAI effects continue to
+  // populate the floating suggestion bubble in ChatPanel) but render nothing
+  // visible. We intentionally do NOT use `display:none` because the panel
+  // is also a flex sibling — collapsing it via early-return preserves the
+  // chat panel's flex layout exactly as if the panel had never been opened.
+  if (!isOpen) {
+    return <span data-copilot-hidden aria-hidden style={{ display: "none" }} />;
+  }
 
   return (
     <div className="fixed inset-0 z-50 md:relative md:inset-auto md:z-auto w-full md:w-[340px] bg-white flex flex-col h-full animate-slide-in-right">
@@ -677,106 +816,21 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
               </div>
             </div>}
 
-            {/* Section 3: Customer Data */}
+            {/* Section 3: Customer Context — CRM-backed identity. Shows the
+                contact card, stage/owner, open issues, deals, tickets and a
+                sentiment trend strip. Falls back to conversation-only data
+                when CRM isn't connected or the customer hasn't been linked. */}
             {conversation && (
-              <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
-                {/* Collapsible header */}
-                <button
-                  onClick={() => setCustomerContextCollapsed((v) => !v)}
-                  className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100/60 transition-all"
-                >
-                  <div className="flex items-center gap-1.5">
-                    <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
-                    </svg>
-                    <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.customerContext.title")}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="text-[10px] text-gray-400">{customerContextCollapsed ? t("copilot.panel.customerContext.show") : t("copilot.panel.customerContext.hide")}</span>
-                    <svg
-                      className={clsx("w-3.5 h-3.5 text-gray-400 transition-transform duration-200", customerContextCollapsed ? "-rotate-90" : "rotate-0")}
-                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
-                    >
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
-                    </svg>
-                  </div>
-                </button>
-
-                {/* Collapsible body */}
-                <div className={clsx("transition-all duration-300 overflow-hidden", customerContextCollapsed ? "max-h-0" : "max-h-[300px]")}>
-                  <div className="px-3 pt-2 pb-3 space-y-2">
-                    {/* Name */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.name")}</span>
-                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerName || t("copilot.panel.customerContext.unknown")}</span>
-                    </div>
-                    {/* Phone */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.phone")}</span>
-                      <span className="text-[11px] font-medium text-gray-700">{conversation.customerPhone || "—"}</span>
-                    </div>
-                    {/* Total conversations (mock) */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.conversations")}</span>
-                      <span className="text-[11px] font-medium text-gray-700">
-                        12 <span className="text-[10px] text-violet-500 font-semibold">({t("copilot.panel.customerContext.vip")})</span>
-                      </span>
-                    </div>
-                    {/* Sentiment */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.sentiment")}</span>
-                      <div className="flex items-center gap-1">
-                        <span className={clsx(
-                          "w-2 h-2 rounded-full",
-                          effectiveSentiment === "positive" ? "bg-green-500" :
-                          effectiveSentiment === "negative" ? "bg-red-500" :
-                          "bg-gray-400"
-                        )} />
-                        <span className={clsx(
-                          "text-[11px] font-medium",
-                          effectiveSentiment === "positive" ? "text-green-600" :
-                          effectiveSentiment === "negative" ? "text-red-500" :
-                          "text-gray-500"
-                        )}>
-                          {effectiveSentiment === "positive" ? t("copilot.panel.customerContext.happy") :
-                           effectiveSentiment === "negative" ? t("copilot.panel.customerContext.angry") : t("copilot.panel.customerContext.neutral")}
-                        </span>
-                      </div>
-                    </div>
-                    {/* Channel badge */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.channel")}</span>
-                      {(() => {
-                        const ch = (conversation.channel || conversation.channelType || "").toUpperCase();
-                        const isWhatsApp = ch.includes("WHATSAPP");
-                        const isInstagram = ch.includes("INSTAGRAM");
-                        return (
-                          <span className={clsx(
-                            "text-[10px] font-semibold px-2 py-0.5 rounded-full",
-                            isWhatsApp ? "bg-green-50 text-green-600" :
-                            isInstagram ? "bg-pink-50 text-pink-600" :
-                            "bg-blue-50 text-blue-600"
-                          )}>
-                            {isWhatsApp ? "WhatsApp" : isInstagram ? "Instagram" : t("copilot.panel.customerContext.web")}
-                          </span>
-                        );
-                      })()}
-                    </div>
-                    {/* Status */}
-                    <div className="flex items-center justify-between">
-                      <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.status")}</span>
-                      <span className={clsx(
-                        "text-[10px] font-medium px-2 py-0.5 rounded-full",
-                        conversation.status === "OPEN" ? "bg-green-50 text-green-600" :
-                        conversation.status === "WAITING" ? "bg-amber-50 text-amber-600" :
-                        "bg-gray-100 text-gray-500"
-                      )}>
-                        {conversation.status}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </div>
+              <CustomerContextSection
+                conversation={conversation}
+                crmContext={crmContext}
+                crmLoading={crmLoading}
+                onRefetchCrm={onRefetchCrm}
+                collapsed={customerContextCollapsed}
+                onToggleCollapsed={() => setCustomerContextCollapsed((v) => !v)}
+                effectiveSentiment={effectiveSentiment}
+                t={t}
+              />
             )}
 
           </div>
@@ -798,6 +852,39 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className="max-w-[85%]">
+                    {/* Reference block — only on user messages that were
+                        submitted with a pinned quote. Renders as small gray
+                        text ABOVE the bubble with a return arrow that scrolls
+                        the user back to the original snippet in the chat.
+                        It is NOT part of the bubble itself, so the bubble
+                        shows only the agent's question. */}
+                    {msg.role === "user" && msg.referenceQuote && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          // Best-effort "go to reference": surface the full
+                          // quote in the active selection range so the agent
+                          // sees what they were asking about. The actual chat
+                          // panel scroll is owned by ChatPanel; this is the
+                          // minimum useful affordance from inside the copilot.
+                          try {
+                            const evt = new CustomEvent("copilot:goToReference", {
+                              detail: { quote: msg.referenceQuote },
+                            });
+                            window.dispatchEvent(evt);
+                          } catch { /* ignore */ }
+                        }}
+                        className="group mb-1 flex w-full items-start gap-1.5 px-1 text-left text-[10.5px] leading-snug text-gray-400 hover:text-gray-600 transition"
+                        title={msg.referenceQuote}
+                      >
+                        <svg className="w-3 h-3 mt-[2px] shrink-0 text-gray-300 group-hover:text-violet-500 transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" />
+                        </svg>
+                        <span className="italic line-clamp-1 break-words">
+                          &ldquo;{msg.referenceQuote}&rdquo;
+                        </span>
+                      </button>
+                    )}
                     <div className={clsx(
                       "rounded-xl px-3 py-2 text-xs leading-relaxed",
                       msg.role === "user"
@@ -842,6 +929,37 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
             </div>
             {/* Chat input */}
             <div className="bg-gray-50/30 p-2.5">
+              {/* Reference banner — pinned customer quote forwarded by the
+                  ChatPanel "Ask Co-Pilot" selection action. Stays visible
+                  across multiple questions so the agent can keep asking
+                  about the same snippet. Dismiss with the × button. */}
+              {referenceQuote && (
+                <div className="mb-2 flex items-start gap-2 rounded-lg border border-violet-200/70 bg-gradient-to-br from-violet-50 to-purple-50/60 px-2.5 py-2 shadow-sm">
+                  <div className="mt-0.5 shrink-0 w-5 h-5 rounded-md bg-gradient-to-br from-violet-500 to-purple-600 flex items-center justify-center">
+                    <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z" />
+                    </svg>
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-violet-700 mb-0.5">
+                      {t("conversations.askCopilot")}
+                    </div>
+                    <div className="text-[12px] text-gray-700 leading-snug line-clamp-3 break-words italic">
+                      &ldquo;{referenceQuote}&rdquo;
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setReferenceQuote(null)}
+                    className="shrink-0 text-gray-400 hover:text-gray-700 transition p-0.5"
+                    aria-label="clear reference"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+              )}
               <form onSubmit={handleChatSubmit} className="flex items-center gap-1.5">
                 <input
                   type="text"
@@ -871,6 +989,314 @@ export function CoPilotPanel({ conversation, messages, onInsertReply, onClose, o
         <p className="text-[10px] text-gray-400 text-center">
           {t("copilot.panel.footer")}
         </p>
+      </div>
+    </div>
+  );
+}
+
+// ─── Customer Context Section ─────────────────────────────────
+// Renders the "who is this customer" block at the bottom of the Co-Pilot:
+// CRM identity → stage / owner → open issues → deals → tickets → sentiment
+// trend. Conversation-side fields (channel, status) anchor the bottom so the
+// section is useful even when CRM is unconfigured.
+
+function CustomerContextSection({
+  conversation,
+  crmContext,
+  crmLoading,
+  onRefetchCrm,
+  collapsed,
+  onToggleCollapsed,
+  effectiveSentiment,
+  t,
+}: {
+  conversation: any;
+  crmContext: CrmContextEnvelope | null | undefined;
+  crmLoading: boolean | undefined;
+  onRefetchCrm: (() => void | Promise<void>) | undefined;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
+  effectiveSentiment: string | null;
+  t: (key: string, vars?: Record<string, string>) => string;
+}) {
+  const { token } = useAuth();
+  const [creatingLead, setCreatingLead] = useState(false);
+  const [pickingId, setPickingId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const contact = crmContext?.status === "linked" ? crmContext.contact : null;
+  const displayName = contact?.display_name || conversation.customerName || t("copilot.panel.customerContext.unknown");
+  const phone = contact?.phone || conversation.customerPhone;
+  const email = (contact as any)?.email;
+  const channel = (conversation.channel || conversation.channelType || "").toUpperCase();
+  const channelLabel = channel.includes("WHATSAPP") ? "WhatsApp" : channel.includes("INSTAGRAM") ? "Instagram" : channel.includes("MESSENGER") ? "Messenger" : t("copilot.panel.customerContext.web");
+  const channelTone = channel.includes("WHATSAPP") ? "bg-green-50 text-green-600" : channel.includes("INSTAGRAM") ? "bg-pink-50 text-pink-600" : "bg-blue-50 text-blue-600";
+
+  async function handleCreateLead() {
+    if (!token || !conversation?.id) return;
+    setCreatingLead(true);
+    setError(null);
+    try {
+      await createCrmLeadForConversation(token, conversation.id);
+      await onRefetchCrm?.();
+    } catch (err: any) {
+      setError(err?.message || "create_lead_failed");
+    } finally {
+      setCreatingLead(false);
+    }
+  }
+
+  async function handlePickCandidate(id: string, kind: string) {
+    if (!token || !conversation?.id) return;
+    setPickingId(id);
+    setError(null);
+    try {
+      await pickCrmCandidate(token, conversation.id, id, kind as any);
+      await onRefetchCrm?.();
+    } catch (err: any) {
+      setError(err?.message || "pick_candidate_failed");
+    } finally {
+      setPickingId(null);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-white shadow-sm overflow-hidden">
+      {/* Collapsible header */}
+      <button
+        onClick={onToggleCollapsed}
+        className="w-full flex items-center justify-between px-3 py-2.5 bg-gray-50 hover:bg-gray-100/60 transition-all"
+      >
+        <div className="flex items-center gap-1.5">
+          <svg className="w-3.5 h-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+          </svg>
+          <span className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">{t("copilot.panel.customerContext.title")}</span>
+          {crmContext?.vendor && (
+            <span className="text-[9px] font-medium text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-full ms-1">
+              {crmContext.vendor}
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          <span className="text-[10px] text-gray-400">{collapsed ? t("copilot.panel.customerContext.show") : t("copilot.panel.customerContext.hide")}</span>
+          <svg
+            className={clsx("w-3.5 h-3.5 text-gray-400 transition-transform duration-200", collapsed ? "-rotate-90" : "rotate-0")}
+            fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+          >
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+          </svg>
+        </div>
+      </button>
+
+      <div className={clsx("transition-all duration-300 overflow-hidden", collapsed ? "max-h-0" : "max-h-[1200px]")}>
+        <div className="px-3 pt-2 pb-3 space-y-3">
+          {/* Identity row */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.name")}</span>
+              <span className="text-[11px] font-semibold text-gray-800 truncate ms-2">{displayName}</span>
+            </div>
+            {phone && (
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.phone")}</span>
+                <span className="text-[11px] font-medium text-gray-700 font-mono truncate ms-2">{phone}</span>
+              </div>
+            )}
+            {email && (
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-400">Email</span>
+                <span className="text-[11px] font-medium text-gray-700 font-mono truncate ms-2">{email}</span>
+              </div>
+            )}
+            {contact?.stage && (
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] text-gray-400">Stage</span>
+                <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-700">{contact.stage}</span>
+              </div>
+            )}
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.channel")}</span>
+              <span className={clsx("text-[10px] font-semibold px-2 py-0.5 rounded-full", channelTone)}>{channelLabel}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.status")}</span>
+              <span className={clsx(
+                "text-[10px] font-medium px-2 py-0.5 rounded-full",
+                conversation.status === "OPEN" ? "bg-green-50 text-green-600" :
+                conversation.status === "WAITING" ? "bg-amber-50 text-amber-600" :
+                "bg-gray-100 text-gray-500"
+              )}>
+                {conversation.status}
+              </span>
+            </div>
+          </div>
+
+          {/* CRM state banners */}
+          {crmLoading && !crmContext && (
+            <div className="text-[11px] text-gray-400 italic">Loading CRM…</div>
+          )}
+
+          {crmContext?.status === "no_crm_configured" && (
+            <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
+              {t("crmPanel.noCrm") || "No CRM connected — connect one under Settings → Integrations."}
+            </div>
+          )}
+
+          {crmContext?.status === "unmapped" && (
+            <div className="rounded-lg bg-indigo-50 text-indigo-700 border border-indigo-100 px-2.5 py-2 space-y-1.5">
+              <div className="text-[11px]">{t("crmPanel.unmapped") || "This customer isn't in your CRM yet."}</div>
+              <button
+                onClick={handleCreateLead}
+                disabled={creatingLead}
+                className="w-full text-[11px] font-semibold px-2.5 py-1.5 rounded-md bg-indigo-500 text-white hover:bg-indigo-600 disabled:opacity-50 transition"
+              >
+                {creatingLead ? (t("crmPanel.creatingLead") || "Creating…") : (t("crmPanel.createLead") || "Create lead in CRM")}
+              </button>
+            </div>
+          )}
+
+          {crmContext?.status === "needs_approval" && (crmContext.candidates?.length || 0) > 0 && (
+            <div className="rounded-lg bg-amber-50 border border-amber-100 px-2.5 py-2 space-y-1.5">
+              <div className="text-[11px] font-semibold text-amber-700">
+                {t("crmPanel.needsApproval.title") || "Multiple CRM matches"}
+              </div>
+              <ul className="space-y-1">
+                {(crmContext.candidates || []).map((cand) => (
+                  <li key={cand.id} className="rounded-md bg-white border border-amber-100 px-2 py-1.5">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="flex-1 min-w-0">
+                        <div className="text-[11px] font-semibold text-gray-900 truncate">
+                          {cand.display_name || "(no name)"} <span className="text-[9px] uppercase font-normal text-gray-400">{cand.kind}</span>
+                        </div>
+                        <div className="text-[10px] text-gray-500 font-mono truncate">
+                          {[cand.email, cand.phone].filter(Boolean).join(" · ")}
+                        </div>
+                      </div>
+                      <button
+                        onClick={() => handlePickCandidate(cand.id, cand.kind)}
+                        disabled={pickingId === cand.id}
+                        className="text-[10px] font-medium px-2 py-0.5 rounded-md bg-amber-500 text-white hover:bg-amber-600 disabled:opacity-50 shrink-0"
+                      >
+                        {pickingId === cand.id ? "…" : (t("crmPanel.needsApproval.useThis") || "Use")}
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {error && (
+            <div className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-1.5">{error}</div>
+          )}
+
+          {/* Open issues — escalation-worthy, surface near the top of the section */}
+          {(crmContext?.open_issues?.length ?? 0) > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Open issues ({crmContext!.open_issues!.length})</div>
+              <ul className="space-y-1">
+                {crmContext!.open_issues!.map((iss) => (
+                  <li key={iss.id} className="rounded-md bg-white border border-amber-200 px-2 py-1.5">
+                    <div className="text-[11px] font-semibold text-amber-800 truncate">{iss.subject}</div>
+                    {iss.description && (
+                      <div className="text-[10px] text-gray-600 line-clamp-2 mt-0.5">{iss.description}</div>
+                    )}
+                    <div className="text-[10px] text-gray-500 mt-0.5 space-x-2">
+                      {iss.status && <span className="font-mono">{iss.status}</span>}
+                      {iss.priority && <span>· {iss.priority}</span>}
+                      {iss.due_at && <span>· due {new Date(iss.due_at).toLocaleDateString()}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Deals */}
+          {(crmContext?.deals?.length ?? 0) > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Deals ({crmContext!.deals!.length})</div>
+              <ul className="space-y-1">
+                {crmContext!.deals!.map((d) => (
+                  <li key={d.id} className="rounded-md bg-white border border-gray-100 px-2 py-1.5">
+                    <div className="text-[11px] font-medium text-gray-800 truncate">{d.name}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      {d.stage && <span className="me-2">{d.stage}</span>}
+                      {d.amount != null && <span className="font-mono">{d.amount}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Tickets */}
+          {(crmContext?.tickets?.length ?? 0) > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Tickets ({crmContext!.tickets!.length})</div>
+              <ul className="space-y-1">
+                {crmContext!.tickets!.map((tk) => (
+                  <li key={tk.id} className="rounded-md bg-white border border-gray-100 px-2 py-1.5">
+                    <div className="text-[11px] font-medium text-gray-800 truncate">{tk.subject}</div>
+                    <div className="text-[10px] text-gray-500 mt-0.5">
+                      {tk.status && <span className="me-2">{tk.status}</span>}
+                      {tk.priority && <span>priority: {tk.priority}</span>}
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {/* Sentiment trend */}
+          {(crmContext?.sentiment_trend?.length ?? 0) > 0 && (
+            <div className="rounded-md bg-white border border-gray-100 px-2.5 py-2">
+              <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-1">Sentiment trend</div>
+              <div className="flex items-center gap-1">
+                {crmContext!.sentiment_trend!.map((v, i) => (
+                  <span
+                    key={i}
+                    title={v}
+                    className={clsx(
+                      "h-2 flex-1 rounded-sm",
+                      v === "positive" && "bg-emerald-400",
+                      v === "negative" && "bg-rose-400",
+                      v === "neutral"  && "bg-gray-300",
+                      v === "unknown"  && "bg-gray-200",
+                    )}
+                  />
+                ))}
+              </div>
+              <div className="text-[9px] text-gray-400 mt-0.5">most-recent →</div>
+            </div>
+          )}
+
+          {/* Live sentiment from intent analysis — kept here so the agent sees
+              both the historical trend and the right-now read in one place. */}
+          {effectiveSentiment && (
+            <div className="flex items-center justify-between pt-0.5">
+              <span className="text-[11px] text-gray-400">{t("copilot.panel.customerContext.sentiment")} (now)</span>
+              <div className="flex items-center gap-1">
+                <span className={clsx(
+                  "w-2 h-2 rounded-full",
+                  effectiveSentiment === "positive" ? "bg-green-500" :
+                  effectiveSentiment === "negative" ? "bg-red-500" :
+                  "bg-gray-400"
+                )} />
+                <span className={clsx(
+                  "text-[11px] font-medium",
+                  effectiveSentiment === "positive" ? "text-green-600" :
+                  effectiveSentiment === "negative" ? "text-red-500" :
+                  "text-gray-500"
+                )}>
+                  {effectiveSentiment === "positive" ? t("copilot.panel.customerContext.happy") :
+                   effectiveSentiment === "negative" ? t("copilot.panel.customerContext.angry") : t("copilot.panel.customerContext.neutral")}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

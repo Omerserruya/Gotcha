@@ -66,6 +66,16 @@ export interface AgentToolContext {
     slug: string;
     args: Record<string, unknown>;
   }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
+  /**
+   * create_task runner. Set by ai-bot.service. Wraps executeAction with
+   * `tool: "create_task"` so the dispatcher in shared/agent-tools doesn't
+   * need to import the AI service's connector layer.
+   */
+  runCreateTask?: (opts: {
+    subject: string;
+    body: string;
+    priority?: "low" | "normal" | "high" | "urgent";
+  }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
 }
 
 export interface ScheduleMeetingArgs {
@@ -224,7 +234,16 @@ export const SCHEDULE_FOLLOWUP_TOOL = {
     description:
       "Schedule a future outbound message to the customer (WhatsApp). Use when the customer needs more time to think, " +
       "asked for info to be sent later, or you want to re-engage after a deferral. The message body MUST be in the " +
-      "customer's language and ready to send as-is.",
+      "customer's language and ready to send as-is.\n\n" +
+      "🚫 HARD RULES — break these and the follow-up will be wrong:\n" +
+      "  • You MUST have an EXPLICIT timing signal from the customer in THIS conversation before calling this tool. " +
+      "Acceptable signals: a concrete duration (\"in 2 hours\", \"tomorrow\", \"next week\"), a specific day/time " +
+      "(\"Sunday morning\"), or an explicit deferral with a window (\"call me back later today\", \"ping me in a couple of days\").\n" +
+      "  • A vague \"I'm busy\" / \"not now\" / \"let me think\" is NOT a timing signal. In that case you MUST first " +
+      "reply with a question in the customer's language — e.g. \"Sure — when would be a good time to reach out again? " +
+      "Later today, tomorrow, or sometime next week?\" — and DO NOT call schedule_followup this turn.\n" +
+      "  • Never invent a follow-up time. Never default to an arbitrary delay (e.g. 2h, 1d) the customer did not agree to.\n" +
+      "  • Confirm the chosen time back to the customer in the SAME turn the tool runs, so they know what to expect.",
     parameters: {
       type: "object",
       properties: {
@@ -239,7 +258,21 @@ export const SCHEDULE_FOLLOWUP_TOOL = {
         },
         message: {
           type: "string",
-          description: "The text to send. Must be ready-to-send, in the customer's language.",
+          description:
+            "The text that will be delivered to the customer AT THE SCHEDULED TIME — not now. " +
+            "Write it as if YOU are reaching back out to them in the future. The customer will read this " +
+            "WHEN they get it (e.g. tomorrow morning), so use future-arrival tone, NOT present-promise tone.\n\n" +
+            "✅ GOOD examples (read these out loud as if it's tomorrow at 8am):\n" +
+            "  • \"היי עומר! חוזר אליך כפי שסיכמנו — רוצה להמשיך מאיפה שעצרנו?\"\n" +
+            "  • \"Hi Omer! Following up as promised — ready to continue where we left off?\"\n" +
+            "  • \"בוקר טוב! מתקשר אליך כמו שסיכמנו אתמול. מתי נוח לדבר?\"\n\n" +
+            "❌ BAD examples (these only make sense said NOW, not at the future delivery time):\n" +
+            "  • \"אני אחזור אליך מחר ב-8 בבוקר כפי שביקשת\" — at 8am tomorrow this is nonsense.\n" +
+            "  • \"I'll get back to you tomorrow at 10am as you requested\" — wrong tense for the future delivery.\n" +
+            "  • \"Just confirming I'll follow up later\" — the customer is reading it AT the follow-up time.\n\n" +
+            "The customer's confirmation that you HEARD them (e.g. \"מעולה! אחזור אליך מחר ב-8 👍\") is the " +
+            "TURN reply you send NOW, AFTER the tool call succeeds — see STEP 4 of the follow-up flow. " +
+            "It is NOT the value of this parameter.",
         },
         reason: {
           type: "string",
@@ -248,6 +281,100 @@ export const SCHEDULE_FOLLOWUP_TOOL = {
         },
       },
       required: ["message", "reason"],
+    },
+  },
+};
+
+/**
+ * Schedule a TEMPLATE follow-up — for sends that fall OUTSIDE the WhatsApp
+ * 24h customer-service window (or any other re-engagement window). The
+ * underlying ScheduledMessage row is created with messageType=template;
+ * the scheduled-message worker hydrates the template body + variables and
+ * sends it through the Meta WhatsApp Cloud API. Quick-reply buttons are
+ * declared at template-registration time on Meta's side; we just reference
+ * the approved template by name here.
+ */
+export const SCHEDULE_FOLLOWUP_TEMPLATE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "schedule_followup_template",
+    description:
+      "Schedule a future TEMPLATE message to the customer. Use this when the send time is OUTSIDE the WhatsApp " +
+      "24h customer-service window (a free-text message would be silently dropped). Also use when re-engaging " +
+      "via WhatsApp from a different originating channel. The template_name MUST be one the operator has " +
+      "registered + approved on Meta — refer to the list in the # Context block.\n\n" +
+      "🚫 HARD RULES — break these and the follow-up will be wrong:\n" +
+      "  • You MUST have an EXPLICIT timing signal from the customer in THIS conversation. Vague non-answers " +
+      "(\"I'm busy\", \"not now\", \"maybe later\") do NOT count. If timing is unclear, reply with a question in " +
+      "the customer's language asking when to follow up, and DO NOT call this tool this turn.\n" +
+      "  • Never invent a send time. Never default to an arbitrary delay the customer did not agree to.",
+    parameters: {
+      type: "object",
+      properties: {
+        template_name: {
+          type: "string",
+          description: "Name of the approved WhatsApp template registered with Meta (must match the # Context list).",
+        },
+        language: {
+          type: "string",
+          description: "Template language code, e.g. 'he', 'en'. Defaults to the customer's locale when omitted.",
+        },
+        send_at_iso: {
+          type: "string",
+          description: "Absolute ISO8601 timestamp when the template should be sent.",
+        },
+        delay_iso8601: {
+          type: "string",
+          description: "ISO8601 duration like 'P1D'. Use this OR send_at_iso, not both.",
+        },
+        variables: {
+          type: "object",
+          description:
+            "Map of template variable values. KEYS MUST BE NUMERIC STRINGS matching the template's positional placeholders ({{1}}, {{2}}, …). Meta's WhatsApp Cloud API does not support named placeholders. Read each template's `variables:` block in the # Context section to know what each numbered slot expects. Example: { \"1\": \"עומר\", \"2\": \"17.05.2026\" }.",
+          additionalProperties: { type: "string" },
+        },
+        reason: {
+          type: "string",
+          description: "Why this template follow-up exists (audit + dedupe).",
+        },
+      },
+      required: ["template_name", "reason"],
+    },
+  },
+};
+
+/**
+ * Create a CRM task for the human team. Use after scheduling a follow-up
+ * (so an agent has visibility), when you spot work the team needs to do,
+ * or when the conversation surfaces an action item the bot can't complete.
+ */
+export const CREATE_TASK_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "create_task",
+    description:
+      "Create a CRM task for the human team. ALWAYS pair this with a successful schedule_followup or " +
+      "schedule_followup_template call so the team has visibility into upcoming work. Also use when the " +
+      "conversation surfaces an action item the bot itself cannot complete (manual outreach, document " +
+      "preparation, internal verification, etc).",
+    parameters: {
+      type: "object",
+      properties: {
+        subject: {
+          type: "string",
+          description: "Short title for the task (the human will scan a list of these).",
+        },
+        body: {
+          type: "string",
+          description: "Details: why, what to do, any context the human needs. One short paragraph.",
+        },
+        priority: {
+          type: "string",
+          enum: ["low", "normal", "high", "urgent"],
+          description: "Default 'normal'.",
+        },
+      },
+      required: ["subject", "body"],
     },
   },
 };
@@ -401,7 +528,11 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   if (opts.identityLinking !== false) tools.push(LINK_IDENTIFIER_TOOL as any);
   if (opts.escalation !== false) tools.push(ESCALATE_TOOL as any);
   if (opts.closure !== false) tools.push(CLOSE_CONVERSATION_TOOL as any);
-  if (opts.followup !== false) tools.push(SCHEDULE_FOLLOWUP_TOOL as any);
+  if (opts.followup !== false) {
+    tools.push(SCHEDULE_FOLLOWUP_TOOL as any);
+    tools.push(SCHEDULE_FOLLOWUP_TEMPLATE_TOOL as any);
+    tools.push(CREATE_TASK_TOOL as any);
+  }
   if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
@@ -912,6 +1043,156 @@ export async function dispatchToolCall(
       return {
         toolCallId: toolCall.id,
         content: JSON.stringify({ ok: false, error: err?.message || "schedule failed" }),
+      };
+    }
+  }
+
+  if (name === "schedule_followup_template") {
+    if (!ctx.conversationId) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: "no conversation context for schedule_followup_template" }),
+      };
+    }
+    try {
+      const { prisma } = await import("./prisma");
+      const conv = await prisma.conversation.findUnique({
+        where: { id: ctx.conversationId },
+        select: { channel: true, channelAccountId: true, customerExternalId: true },
+      });
+      if (!conv?.channelAccountId) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: false, error: "conversation has no channelAccountId" }),
+        };
+      }
+
+      const templateName = String(args.template_name || "").trim();
+      if (!templateName) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: false, error: "template_name required" }),
+        };
+      }
+      const language = typeof args.language === "string" && args.language ? args.language : undefined;
+
+      // Resolve the template — must be tenant-scoped, approved/active. Try
+      // exact (channel + language) first, then fall back to looser matches.
+      const tpl = await (prisma as any).messageTemplate.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          name: templateName,
+          isActive: true,
+          OR: [{ status: "APPROVED" }, { status: "PENDING_APPROVAL" }],
+          ...(language ? { language } : {}),
+        },
+        select: { id: true, language: true },
+      }).catch(() => null);
+      if (!tpl) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({
+            ok: false,
+            error: `template "${templateName}" not found / not approved for this tenant`,
+          }),
+        };
+      }
+
+      // Compute scheduledAt from send_at_iso OR delay_iso8601. Default 24h.
+      let scheduledAt: Date | null = null;
+      if (typeof args.send_at_iso === "string") {
+        const d = new Date(args.send_at_iso);
+        if (!isNaN(d.getTime())) scheduledAt = d;
+      } else if (typeof args.delay_iso8601 === "string") {
+        const ms = parseISO8601Duration(args.delay_iso8601);
+        if (ms !== null) scheduledAt = new Date(Date.now() + ms);
+      }
+      if (!scheduledAt) scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+      const reason = String(args.reason || "ai_followup_template");
+      const variables =
+        args.variables && typeof args.variables === "object" && !Array.isArray(args.variables)
+          ? (args.variables as Record<string, unknown>)
+          : {};
+
+      // Dedupe on (conversationId, reason, template).
+      const existing = await (prisma as any).scheduledMessage.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          conversationId: ctx.conversationId,
+          status: "PENDING",
+          templateId: tpl.id,
+          variables: { path: ["reason"], equals: reason } as any,
+        },
+        select: { id: true },
+      }).catch(() => null);
+      if (existing) {
+        return {
+          toolCallId: toolCall.id,
+          content: JSON.stringify({ ok: true, scheduled: true, deduped: true, scheduled_message_id: existing.id }),
+        };
+      }
+
+      const sm = await (prisma as any).scheduledMessage.create({
+        data: {
+          tenantId: ctx.tenantId,
+          conversationId: ctx.conversationId,
+          channel: conv.channel,
+          channelAccountId: conv.channelAccountId,
+          recipientExternalId: conv.customerExternalId,
+          body: "", // body is rendered by the scheduled-message worker from the template
+          messageType: "template",
+          templateId: tpl.id,
+          sendType: "conversation",
+          scheduledAt,
+          createdBy: "ai_agent",
+          variables: { ...variables, reason, source: "ai_bot" },
+        },
+      });
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({
+          ok: true,
+          scheduled: true,
+          scheduled_message_id: sm.id,
+          scheduled_at: scheduledAt.toISOString(),
+          template_name: templateName,
+          template_language: tpl.language,
+        }),
+      };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: err?.message || "template schedule failed" }),
+      };
+    }
+  }
+
+  if (name === "create_task") {
+    if (!ctx.runCreateTask) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: "create_task not wired in this context" }),
+      };
+    }
+    const subject = String(args.subject || "").trim();
+    const body = String(args.body || "").trim();
+    if (!subject) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: "subject required" }),
+      };
+    }
+    try {
+      const priority = (typeof args.priority === "string"
+        ? args.priority
+        : "normal") as "low" | "normal" | "high" | "urgent";
+      const result = await ctx.runCreateTask({ subject, body, priority });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, error: err?.message || "create_task failed" }),
       };
     }
   }

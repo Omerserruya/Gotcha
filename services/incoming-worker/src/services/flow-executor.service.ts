@@ -27,6 +27,7 @@
 import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot } from "./ai-bot.service";
+import { tryLinkIdentifierFromInbound } from "./identity-link.service";
 
 // ─── Graph shapes (ReactFlow-compatible) ─────────────────────
 
@@ -302,6 +303,17 @@ async function walk(
       type: "collect_input",
       action: "captured",
       detail: { variable: ctx.resumingCollectInputVar, value: ctx.message },
+    });
+    // Fire-and-forget identity linking when the captured value is an email
+    // or phone — bridges the conversation to the existing CRM record so the
+    // FlowCanvas path matches what the autonomous AI agent does via
+    // link_customer_identifier. Idempotent at the conversation-service end,
+    // so the universal incoming.worker hook can safely re-fire.
+    void tryLinkIdentifierFromInbound({
+      tenantId: ctx.tenantId,
+      conversationId: ctx.conversationId,
+      text: ctx.message,
+      reason: "flow Collect Input",
     });
   }
 

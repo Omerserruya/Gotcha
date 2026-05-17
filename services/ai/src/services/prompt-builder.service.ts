@@ -82,6 +82,19 @@ export interface ContextSlot {
    * known facts.
    */
   memoryBlock?: string;
+  /**
+   * Pre-rendered "WhatsApp 24h window" block — exposes the time since the
+   * customer's last inbound, whether the free-text window is open, when it
+   * expires, and a deterministic DECISION line the bot follows. Drives the
+   * free-text vs template choice in the follow-up flow.
+   */
+  whatsappWindowBlock?: string;
+  /**
+   * Pre-rendered list of the tenant's approved WhatsApp templates the bot
+   * can reference by name in `schedule_followup_template`. Empty when the
+   * tenant hasn't registered any.
+   */
+  templatesBlock?: string;
   locale?: string;
 }
 
@@ -341,6 +354,8 @@ function buildContext(opts: BuildPromptOpts): string | null {
   if (ctx?.crmBlock?.trim()) blocks.push(ctx.crmBlock.trim());
   if (ctx?.memoryBlock?.trim()) blocks.push(ctx.memoryBlock.trim());
   if (ctx?.pendingApprovalsBlock?.trim()) blocks.push(ctx.pendingApprovalsBlock.trim());
+  if (ctx?.whatsappWindowBlock?.trim()) blocks.push(ctx.whatsappWindowBlock.trim());
+  if (ctx?.templatesBlock?.trim()) blocks.push(ctx.templatesBlock.trim());
 
   return ["# Context", ...blocks].join("\n\n");
 }
@@ -672,6 +687,120 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
     "- Do NOT fabricate facts about your own actions. Don't say \"מצאתי זמן\" / \"I found a time\" — the customer chose the time. Acknowledge their proposal and confirm.",
     "- A polite close like \"if you need anything else, I'm here\" / \"אם יש שאלות נוספות אני כאן\" is allowed AFTER you have advanced (asked, proposed, executed) — never instead of advancing.",
   );
+
+  // Closure flow — fired by BEL when the customer has wrapped up
+  // (terminal "תודה" / "thanks" with no question, or hard decline). Without
+  // this block the model was sending a polite farewell in prose and never
+  // calling close_conversation, so the chat stayed OPEN forever.
+  if (opts.behaviorState.closurePosture === "ready_to_close") {
+    lines.push("");
+    lines.push("**Closure flow — STRICT:**");
+    lines.push(
+      "- The conversation has reached a natural end. Wrap up cleanly AND mark the chat closed — both in the SAME turn.",
+      "- Send a short warm farewell in the customer's language (e.g. \"בכיף, יום טוב!\" / \"You're welcome — have a great day!\"). Don't keep prompting (\"anything else I can help with?\") — the customer already wrapped up.",
+      "- In the SAME turn, you MUST call **`close_conversation`** with `resolution` matching what happened (sale_closed / info_provided / issue_resolved / not_a_fit / spam / other) and a one-line `summary`.",
+      "- Saying goodbye without calling close_conversation = task failed and your response will be rejected.",
+    );
+  }
+
+  // Follow-up / callback flow — fired by BEL when the customer defers
+  // ("call me back at 3", "אחזור אליך מחר"). The decision tree below is
+  // STRICT: it forces the model to (1) pin an explicit time, (2) pick the
+  // right delivery path based on the WhatsApp 24h window (see the
+  // "## WhatsApp customer-service window" block in # Context), and
+  // (3) ALWAYS create a task so the human team has visibility.
+  if (opts.behaviorState.closurePosture === "needs_followup") {
+    lines.push("");
+    lines.push("**Follow-up / callback flow — STRICT (revised):**");
+    lines.push("");
+    lines.push(
+      "The customer wants to be re-contacted later. Before you schedule ANYTHING you must have:",
+      "  (a) an explicit time (date AND hour),",
+      "  (b) a delivery channel that is actually usable to reach them at that time,",
+      "  (c) a task created so the human team has visibility.",
+      "",
+      "Walk this decision tree IN ORDER. Do NOT skip steps. Do NOT call any tool until the current gate is satisfied.",
+      "",
+      "══════════════ STEP 1 — PIN THE TIME (BLOCKING) ══════════════",
+      "You are warm, helpful, AND assertive about pinning a real time. Don't make the customer do the work — PROPOSE a concrete window they can confirm or adjust with one tap.",
+      "",
+      "- VAGUE deferral (\"call me later\", \"תחזור אלי\", \"בהמשך\", \"after the holiday\"):",
+      "    → Reply enthusiastically AND propose a default: \"בכיף! מחר בבוקר מתאים? מתי בערך?\" /",
+      "      \"Of course! Does tomorrow morning work — what time roughly?\"",
+      "    → Pick the default window from context (business hours, prior interactions, message tone).",
+      "    → DO NOT call any scheduling tool. You don't have a time yet.",
+      "",
+      "- DATE ONLY, no hour (\"מחר\", \"next week\", \"Wednesday\", \"ביום ראשון\"):",
+      "    → Confirm the date AND propose an hour band: \"מעולה! מחר ב-10:00 בבוקר נשמע טוב? או שעדיף אחר הצהריים?\" /",
+      "      \"Great — tomorrow at 10am works, or would afternoon be better?\"",
+      "    → ONE message, two options max. No scheduling tool this turn.",
+      "",
+      "- DATE + HOUR (\"מחר ב-10\", \"מחר ב-7 בבוקר\", \"tomorrow at 10am\", \"ביום ד' ב-15:00\"):",
+      "    → STEP 1 satisfied. You MUST move to STEP 2 and call the scheduling tool THIS TURN.",
+      "    → NEVER reply with confirmation text alone (\"מעולה, נדבר מחר ב-7\") without firing the tool —",
+      "      the customer won't actually receive a follow-up message and you will have lied.",
+      "",
+      "- BARE AGREEMENT to your proposal (\"yes\", \"sure\", \"OK\", \"sounds good\", \"כן\", \"סבבה\", \"בסדר\", \"מעולה\", \"אוקי\"):",
+      "    → The customer is agreeing to the window you proposed, but didn't name a specific hour.",
+      "    → DO NOT close the conversation. DO NOT thank them and drop the thread.",
+      "    → Reply with ONE concrete-time question that locks in the hour. Examples:",
+      "        \"מצוין! איזו שעה בדיוק עדיפה — 9:00, 10:00 או 11:00?\" /",
+      "        \"Awesome — what specific time works best, 9, 10, or 11?\"",
+      "    → No scheduling tool this turn. You still don't have an hour.",
+      "",
+      "Reality check: \"מחר\" alone is NOT a time. \"מחר בבוקר\" is borderline — confirm an hour band. \"מחר ב-7\" IS a time. \"כן\" is NOT a time — push back with a specific-hour question.",
+      "",
+      "══════════════ STEP 2 — DELIVERY CHANNEL ══════════════",
+      "Read the \"## WhatsApp customer-service window\" block in # Context. Then pick:",
+      "",
+      "  CASE A — Conversation IS on WhatsApp:",
+      "    A1) `24h_window_open=true` AND your `send_at_iso` is BEFORE `24h_window_expires_at`:",
+      "         → Call **`schedule_followup`** (free text). Standard path.",
+      "    A2) `24h_window_open=false` OR `send_at_iso` is AFTER `24h_window_expires_at`:",
+      "         → Free text will be silently dropped by Meta. You MUST use a template.",
+      "         → Call **`schedule_followup_template`** with a `template_name` from the",
+      "           \"## Approved WhatsApp templates\" block in # Context (use the name VERBATIM).",
+      "         → Quick-reply buttons declared at the template's Meta registration fire automatically.",
+      "         → When the customer taps a quick-reply, the 24h window re-opens and you can continue in free text on the next turn.",
+      "",
+      "  CASE B — Conversation is NOT on WhatsApp (Instagram, Messenger, Webchat, …):",
+      "    The platform-safe path is to move the follow-up to WhatsApp.",
+      "    B1) Customer already has a verified WhatsApp number on file (visible in # Context):",
+      "         → Schedule on WhatsApp using A2's template path. Confirm in one line:",
+      "           \"אשלח לך תזכורת בוואטסאפ למספר …\" / \"I'll text you on WhatsApp at …\"",
+      "    B2) No WhatsApp number yet:",
+      "         → Ask once: \"אשלח לך תזכורת בוואטסאפ — מה המספר?\" /",
+      "           \"I'll send you a reminder on WhatsApp — what's the best number?\"",
+      "         → DO NOT call any scheduling tool this turn. Wait for the number.",
+      "         → When the number arrives: call **`link_customer_identifier`** to attach the phone, then proceed with A2.",
+      "",
+      "══════════════ STEP 3 — CREATE A TASK (ALWAYS, AFTER A SUCCESSFUL SCHEDULE) ══════════════",
+      "Every successful follow-up scheduling MUST be paired with a task so the team has visibility:",
+      "  → Call **`create_task`** with:",
+      "      subject:  \"Follow-up scheduled — <customer name> @ <YYYY-MM-DD HH:mm>\"",
+      "      body:     \"<one-line why> · channel=<channel> · message preview: \\\"<first 80 chars>\\\"\"",
+      "      priority: \"normal\"",
+      "Skip create_task ONLY if a task with the same intent already exists for this contact in this conversation.",
+      "",
+      "══════════════ STEP 4 — CONFIRM TO THE CUSTOMER (ONLY ON SUCCESS) ══════════════",
+      "Only AFTER every required tool above returned `ok:true`:",
+      "  → ONE short, WARM confirmation line that REPEATS the exact day + hour back to the customer.",
+      "    This is mandatory — the customer must see their chosen time reflected so they know it's locked in.",
+      "    Examples (use the customer's language):",
+      "      \"מעולה! אחזור אליך מחר (18.05) ב-10:00 בבוקר 👍\"",
+      "      \"Awesome — I'll follow up tomorrow (May 18) at 10:00 AM 👍\"",
+      "    Skipping this confirmation line is a task failure — the customer is left wondering whether you actually scheduled anything.",
+      "If ANY tool returned `ok:false`:",
+      "  → Tell the customer plainly that you'll have the team handle it. DO NOT fabricate success.",
+      "",
+      "══════════════ PRE-RESPONSE SANITY GATES ══════════════",
+      "□ Do I have an EXPLICIT date AND hour? (\"מחר\" alone → STEP 1 not satisfied, ask for the hour.)",
+      "□ Inside or outside the 24h window? Match the tool: `schedule_followup` (inside) vs `schedule_followup_template` (outside).",
+      "□ Non-WhatsApp channel: do I have a verified WhatsApp number? If not, STEP 2B applies — ASK first.",
+      "□ Did I call create_task after a successful schedule?",
+      "□ Every \"I'll follow up\" / \"אשלח לך\" line in my draft must be backed by a tool that ACTUALLY returned `ok:true` this turn.",
+    );
+  }
 
   if (required.length > 0) {
     lines.push("");

@@ -32,6 +32,28 @@ export interface ConversationContext {
     customerExternalId?: string;
     aiAgentId?: string;
   };
+  /**
+   * Cross-channel customer memory bundle, loaded by
+   * customer-context.service.loadCustomerContext when CRM identity is
+   * pinned for this conversation. Optional — when present, the provider
+   * folds it into the prompt as a "what we remember about this customer"
+   * block (open issues, recent summaries, sentiment trend, CRM notes).
+   *
+   * Wired by voice-assist + ai-bot turn paths on call-answer / bot-turn
+   * so the AI has the same context the agent's side panel shows.
+   */
+  customerMemory?: {
+    openIssues: Array<{ subject: string; status: string | null; priority: string | null; due_at: string | null }>;
+    recentSummaries: Array<{ channel: string; summary: string; sentiment: string | null; qualification: string | null; occurredAt: string }>;
+    recentCrmNotes: Array<{ body: string; occurred_at: string }>;
+    sentimentTrend: ("positive" | "neutral" | "negative" | "unknown")[];
+  };
+  /**
+   * Cancellation signal for the LLM calls inside the provider. Wired by
+   * voice-assist.triggerAssist via the per-conversation turn registry so a
+   * newer customer final aborts the still-pending copilot generation.
+   */
+  signal?: AbortSignal;
 }
 
 /**

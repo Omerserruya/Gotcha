@@ -24,6 +24,7 @@ const settingsNav: SettingsNavItem[] = [
   { href: "/settings/integrations", labelKey: "settings.nav.integrations", icon: IntegrationsIcon },
   { href: "/settings/usage", labelKey: "nav.usage", icon: UsageIcon },
   { href: "/settings/policy", labelKey: "settings.nav.policy", icon: PolicyIcon },
+  { href: "/settings/post-conversation", label: "Post-Conversation", icon: PolicyIcon },
   { href: "/settings/tools", labelKey: "settings.nav.tools", icon: ToolsIcon },
   { href: "/settings/voice-copilot", labelKey: "settings.nav.voiceCopilot", icon: VoiceIcon },
   { href: "/settings/voice-channels", labelKey: "settings.nav.voiceChannels", icon: VoiceChannelsIcon, voiceOnly: true },

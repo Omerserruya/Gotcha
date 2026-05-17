@@ -127,6 +127,17 @@ export async function processAIBot(
     );
     result = res.data as AIBotReplyResult;
   } catch (err: any) {
+    // 499 — AI service aborted the in-flight LLM call because a newer
+    // inbound for this conversation showed up. The newer job will produce
+    // the reply; this job exits quietly. Critical: NO escalation, NO
+    // error-level log — that would create the same "answering per message"
+    // noise we're trying to suppress.
+    if (err.response?.status === 499 || err.response?.data?.aborted) {
+      console.log(
+        `[AI-Bot] reply aborted conv=${conversationId} (newer turn took over) — dropping this job's reply`,
+      );
+      return false;
+    }
     console.error("[AI-Bot] AI service /reply call failed:", err.response?.data || err.message);
     return false;
   }
@@ -292,6 +303,23 @@ export async function processAIBot(
     tenantId,
     data: { message: aiMessage, conversationId, channel: sendContext.channel },
   });
+
+  // If the bot called close_conversation this turn, the dispatcher already
+  // flipped the conversation row to CLOSED (see agent-tools.ts close handler)
+  // but it is "side-effect free" by design — the caller publishes the
+  // downstream event. Without this, the post-chat subscriber (which feeds
+  // summary, CRM patch, Customer Brief refresh, tasks, follow-ups) never
+  // fires for bot-initiated closes.
+  const closedByBot = result.toolCallLog.some(
+    (tc) => tc.tool === "close_conversation" && tc.decision === "executed",
+  );
+  if (closedByBot) {
+    await publishEvent({
+      event: "conversation:closed",
+      tenantId,
+      data: { id: conversationId, conversationId, channel: sendContext.channel, status: "CLOSED" },
+    });
+  }
 
   return true;
 }

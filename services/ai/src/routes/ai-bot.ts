@@ -36,6 +36,17 @@ router.post("/reply", async (req: Request, res: Response) => {
     res.json(result);
   } catch (err: any) {
     const status = err?.status || 500;
+    // 499 = client-side cancel. The newer inbound for this conversation
+    // aborted the LLM call mid-flight; the worker treats this as a silent
+    // no-op (no escalation, no error log). Keep the log line at debug
+    // volume so it's grep-able when explaining "why no reply was sent".
+    if (err?.aborted || status === 499) {
+      console.log(
+        `[ai-bot/reply] aborted conv=${req.body?.conversationId} (newer turn took over)`,
+      );
+      res.status(499).json({ aborted: true, error: "aborted-by-newer-turn" });
+      return;
+    }
     console.error("[ai-bot/reply] error:", err.message);
     res.status(status).json({ error: err.message || "Failed to generate reply" });
   }

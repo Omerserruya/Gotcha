@@ -27,6 +27,7 @@ import { HistoryPanel } from "./HistoryPanel";
 import { MessageSignals } from "./MessageSignals";
 import { AIComposeScope, AIComposeTrigger, AIComposePanel } from "@/components/ai/AIComposeInline";
 import { VoiceCallButton } from "@/components/voice/VoiceCallButton";
+import { fetchCrmContext, syncCloseToCrm, type CrmContextEnvelope } from "@/lib/api-crm";
 
 interface Props {
   conversationId: string;
@@ -46,11 +47,26 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [departments, setDepartments] = useState<any[]>([]);
   const [copilotOpen, setCopilotOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
+  // CRM context is fetched once at the chat level and fed to both the Co-Pilot
+  // (identity / deals / tickets / open issues) and the Context panel (activity
+  // / CRM notes / recent summaries). The old standalone CRM panel was removed
+  // — one less button, no surface duplication.
+  const [crmContext, setCrmContext] = useState<CrmContextEnvelope | null>(null);
+  const [crmLoading, setCrmLoading] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
   const [isDragging, setIsDragging] = useState(false);
   const [aiGenerating, setAiGenerating] = useState(false);
   const [topSuggestion, setTopSuggestion] = useState<{ text: string; label: string; confidence: number } | null>(null);
   const [popupDismissed, setPopupDismissed] = useState(false);
+  // Mark text inside a customer message → floating "Ask Co-Pilot" action.
+  // Anchor is in viewport coordinates so the bubble follows the page on scroll
+  // (we clear the selection on scroll anyway, so this is good enough).
+  const [askSelection, setAskSelection] = useState<{ text: string; x: number; y: number } | null>(null);
+  // When the agent clicks "Ask Co-Pilot", we forward the quoted text to the
+  // CoPilot panel as a prefill. The panel switches to its chat tab and seeds
+  // the composer with a quoted block — the agent types their question and hits
+  // send. Versioned so the same quote can be re-sent if the agent clicks twice.
+  const [askPrefill, setAskPrefill] = useState<{ quote: string; version: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const repliesRef = useRef<HTMLDivElement>(null);
@@ -64,6 +80,77 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       window.dispatchEvent(new CustomEvent("panel:toggle", { detail: { open: false } }));
     };
   }, [copilotOpen, historyOpen]);
+
+  // Selection inside a customer message → show floating "Ask Co-Pilot" bubble.
+  // We only react to selections initiated on the inbound message itself (the
+  // <p onMouseUp> handler wires this), so selections in agent replies, headers,
+  // or the input area are ignored.
+  const handleMessageMouseUp = useCallback(() => {
+    const sel = typeof window !== "undefined" ? window.getSelection() : null;
+    const text = sel?.toString().trim() ?? "";
+    if (!sel || !text || sel.rangeCount === 0) {
+      setAskSelection(null);
+      return;
+    }
+    const rect = sel.getRangeAt(0).getBoundingClientRect();
+    if (!rect || (rect.width === 0 && rect.height === 0)) {
+      setAskSelection(null);
+      return;
+    }
+    // Anchor centered above the selection so the bubble sits directly over
+    // the marked text. The consumer renders with `transform: translateX(-50%)`
+    // and clamps the X back inside the viewport with `max(...)` so a selection
+    // near the screen edge doesn't push the bubble off-screen.
+    setAskSelection({
+      text,
+      x: rect.left + rect.width / 2,
+      y: Math.max(8, rect.top - 40),
+    });
+  }, []);
+
+  // Clear the floating bubble on outside-click, escape, scroll, or any new
+  // selection event that produced no text (collapsed click).
+  useEffect(() => {
+    if (!askSelection) return;
+    const dismiss = () => setAskSelection(null);
+    const onSelectionChange = () => {
+      const txt = window.getSelection()?.toString().trim() ?? "";
+      if (!txt) setAskSelection(null);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setAskSelection(null); };
+    window.addEventListener("scroll", dismiss, true);
+    window.addEventListener("resize", dismiss);
+    window.addEventListener("keydown", onKey);
+    document.addEventListener("selectionchange", onSelectionChange);
+    return () => {
+      window.removeEventListener("scroll", dismiss, true);
+      window.removeEventListener("resize", dismiss);
+      window.removeEventListener("keydown", onKey);
+      document.removeEventListener("selectionchange", onSelectionChange);
+    };
+  }, [askSelection]);
+
+  // Single CRM context fetch shared by Co-Pilot (identity/deals/tickets/issues)
+  // and Context panel (activity/notes/summaries). Refetches on conversation
+  // change. Failures are silent — both panels gracefully show conversation-only
+  // data when CRM isn't connected.
+  const refetchCrm = useCallback(async () => {
+    if (!token || !conversationId) return;
+    setCrmLoading(true);
+    try {
+      const data = await fetchCrmContext(token, conversationId);
+      setCrmContext(data);
+    } catch {
+      setCrmContext(null);
+    } finally {
+      setCrmLoading(false);
+    }
+  }, [token, conversationId]);
+
+  useEffect(() => {
+    setCrmContext(null);
+    refetchCrm();
+  }, [refetchCrm]);
 
   const fetchConversation = useCallback(async () => {
     if (!token) return;
@@ -80,13 +167,18 @@ export function ChatPanel({ conversationId, onBack }: Props) {
     fetchConversation();
   }, [fetchConversation]);
 
-  // Auto-open copilot when entering a conversation where last message is inbound
+  // Auto-open copilot when entering a conversation where last message is inbound.
+  // Mobile constraint: the panel is `fixed inset-0` and takes the whole screen,
+  // so auto-opening hides the chat. Only auto-open on desktop (md+). On mobile
+  // the AI still runs in the background and surfaces via the floating suggestion
+  // bubble above the input — the agent taps it to expand the full panel.
   const hasAutoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     if (messages.length > 0 && hasAutoOpenedRef.current !== conversationId) {
       hasAutoOpenedRef.current = conversationId;
       const lastMsg = messages[messages.length - 1];
-      if (lastMsg?.direction === "INBOUND") {
+      const isDesktop = typeof window !== "undefined" && window.matchMedia("(min-width: 768px)").matches;
+      if (lastMsg?.direction === "INBOUND" && isDesktop) {
         setCopilotOpen(true);
       }
     }
@@ -260,6 +352,11 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       await closeConversation(token, conversationId);
       setShowCloseConfirm(false);
       fetchConversation();
+      // Best-effort CRM sync — summary + engagement projected to the linked
+      // CRM contact. Failures must NOT block close.
+      syncCloseToCrm(token, conversationId).catch((err) => {
+        console.warn("[ChatPanel] CRM close-sync failed:", err?.message || err);
+      });
     } catch (err: any) {
       alert(err.message);
     } finally {
@@ -470,7 +567,14 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                     <span className="text-xs truncate">{msg.fileName || t("conversations.downloadFile")}</span>
                   </a>
                 ) : null}
-                {msg.body && <p className="whitespace-pre-wrap break-words">{msg.body}</p>}
+                {msg.body && (
+                  <p
+                    className="whitespace-pre-wrap break-words"
+                    onMouseUp={msg.direction === "INBOUND" ? handleMessageMouseUp : undefined}
+                  >
+                    {msg.body}
+                  </p>
+                )}
                 <div className={clsx(
                   "flex items-center gap-1 mt-1",
                   msg.direction === "OUTBOUND" ? "justify-end" : "justify-start"
@@ -495,8 +599,11 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         {/* Input area */}
         {canSend ? (
           <div className="px-2 md:px-4 pb-3 md:pb-4 pt-2 bg-[var(--bg-chat)] relative">
-            {/* Smart AI Suggestion Popup — floating overlay */}
-            {copilotOpen && topSuggestion && topSuggestion.confidence > 85 && !popupDismissed && (
+            {/* Smart AI Suggestion Popup — floating overlay.
+                Shown whenever co-pilot has a high-confidence suggestion, regardless
+                of whether the full panel is open. On mobile this is the *only* AI
+                surface visible until the agent taps "All Suggestions" to expand. */}
+            {topSuggestion && topSuggestion.confidence > 85 && !popupDismissed && (
               <div className="absolute bottom-full left-4 right-4 md:right-auto md:left-4 md:w-[420px] mb-2 z-20 animate-fade-in-up">
                 <div className="rounded-2xl p-[1px] bg-gradient-to-br from-violet-500/20 via-purple-500/15 to-indigo-500/20 shadow-2xl shadow-violet-300/30">
                   <div className="rounded-[15px] bg-white/5 backdrop-blur-xl border border-white/10 px-3.5 py-3">
@@ -644,24 +751,69 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         )}
       </div>
 
-      {/* History Panel */}
+      {/* Context Panel (formerly History) — past conversations + CRM activity
+          + CRM notes + AI summaries + local notes. CRM data is reused from the
+          chat-level fetch so opening this panel is instant. */}
       {historyOpen && (
         <HistoryPanel
           conversation={conversation}
+          crmContext={crmContext}
+          crmLoading={crmLoading}
+          onCrmNotePosted={refetchCrm}
           onClose={() => setHistoryOpen(false)}
         />
       )}
 
-      {/* Co-Pilot Panel */}
-      {copilotOpen && (
+      {/* Floating "Ask Co-Pilot" action — shown when the agent marks any text
+          inside an inbound customer message. Click → opens CoPilot panel with
+          the quote pre-filled in the chat composer. */}
+      {askSelection && (
+        <button
+          type="button"
+          style={{
+            position: "fixed",
+            left: `${askSelection.x}px`,
+            top: `${askSelection.y}px`,
+            transform: "translateX(-50%)",
+            zIndex: 60,
+          }}
+          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-[11px] font-semibold text-white bg-gradient-to-r from-violet-500 to-purple-600 shadow-lg shadow-violet-300/40 hover:from-violet-600 hover:to-purple-700 transition-all animate-fade-in-up whitespace-nowrap"
+          onMouseDown={(e) => e.preventDefault() /* keep the text selection alive while we read it */}
+          onClick={() => {
+            const quote = askSelection.text;
+            setAskPrefill({ quote, version: Date.now() });
+            setCopilotOpen(true);
+            setAskSelection(null);
+            window.getSelection()?.removeAllRanges();
+          }}
+        >
+          <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+          </svg>
+          {t("conversations.askCopilot")}
+        </button>
+      )}
+
+      {/* Co-Pilot Panel — always mounted while a conversation is loaded so the
+          suggestion + intelligence fetch runs in the background even when the
+          panel is closed. Visibility is controlled by `isOpen`; when closed it
+          renders nothing visually but its effects keep the floating
+          "AI Recommendation" popup (above) populated. */}
+      {conversation && (
         <CoPilotPanel
+          isOpen={copilotOpen}
           conversation={conversation}
           messages={messages}
+          crmContext={crmContext}
+          crmLoading={crmLoading}
+          onRefetchCrm={refetchCrm}
           onInsertReply={(text) => setInputText(text)}
           onClose={() => setCopilotOpen(false)}
+          onOpen={() => setCopilotOpen(true)}
           onAiLoadingChange={setAiGenerating}
           onTopSuggestion={(s) => { setTopSuggestion((prev) => { if (s?.text !== prev?.text) setPopupDismissed(false); return s; }); }}
           repliesRef={repliesRef}
+          prefillQuote={askPrefill}
         />
       )}
 

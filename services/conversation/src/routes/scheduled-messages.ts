@@ -89,7 +89,7 @@ router.post("/", async (req: Request, res: Response) => {
         messageType: messageType ?? null,
         mediaUrl: mediaUrl ?? null,
         templateId: templateId ?? null,
-        variables: variables ?? null,
+        variables: variables ?? {},
         sendType: sendType ?? "regular",
         departmentId: departmentId ?? null,
         flowId: flowId ?? null,

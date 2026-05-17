@@ -32,6 +32,14 @@ export interface AIRequestParams {
   /** OpenAI function-calling tool schemas. Passed through untouched. */
   tools?: any[];
   toolChoice?: any;
+  /**
+   * Cancellation signal. When aborted, the underlying fetch to OpenAI is
+   * cancelled — the SDK throws `APIUserAbortError`. Used by the per-turn
+   * cancellation registry (`turn-cancellation.service`) so a newer customer
+   * message can drop the in-flight LLM call instead of letting both
+   * complete and replying twice.
+   */
+  signal?: AbortSignal;
 }
 
 export interface AIResponse {
@@ -117,7 +125,10 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
   }
 
-  const response = await client.chat.completions.create(requestParams);
+  const response = await client.chat.completions.create(
+    requestParams,
+    params.signal ? { signal: params.signal } : undefined,
+  );
 
   const usage = {
     input_tokens: response.usage?.prompt_tokens ?? 0,

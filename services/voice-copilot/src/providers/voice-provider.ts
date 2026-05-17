@@ -85,6 +85,14 @@ export interface VoiceProvider {
 
   /** Attach a bidirectional media stream to a call leg for transcription. */
   attachMediaStreamToCall(input: AttachMediaStreamInput): Promise<void>;
+
+  /**
+   * Terminate a call leg. Used when the agent declines or hangs up — the
+   * DB state transition is not enough, the upstream provider keeps the
+   * customer on the line (or in hold music / conference) until we tell it
+   * to drop. Idempotent: terminating an already-completed call is a no-op.
+   */
+  endCall(input: { callSid: string }): Promise<void>;
 }
 
 /**

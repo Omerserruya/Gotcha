@@ -311,6 +311,61 @@ export function updatePolicy(token: string, patch: Partial<BusinessPolicy>) {
   return req<{ data: BusinessPolicy }>("PUT", "/api/ai-assist/policy", token, patch);
 }
 
+// ─── Post-Conversation Config ───────────────────────────────
+
+export interface SummaryFieldDef {
+  key: string;
+  label: string;
+  description?: string;
+  type?: string;
+  options?: string[];
+}
+
+export interface PostConvRuleWhen {
+  intent?: string;
+  intents?: string[];
+  sentiment?: "positive" | "neutral" | "negative" | "mixed";
+  keywords?: string[];
+}
+
+export interface TaskRule {
+  id: string;
+  when: PostConvRuleWhen;
+  task: { subject: string; body?: string; priority?: "low" | "normal" | "high" | "urgent" };
+}
+
+export interface CrmRule {
+  id: string;
+  when: PostConvRuleWhen;
+  patch: Record<string, unknown>;
+}
+
+export interface PostConversationConfig {
+  summaryFields: SummaryFieldDef[];
+  taskRules: TaskRule[];
+  crmRules: CrmRule[];
+}
+
+export function getPostConversationConfig(token: string) {
+  return req<{ ok: true; config: PostConversationConfig }>(
+    "GET",
+    "/api/post-conversation-config",
+    token,
+  );
+}
+
+export function updatePostConversationConfig(
+  token: string,
+  patch: Partial<PostConversationConfig>,
+) {
+  return req<{ ok: true; config: PostConversationConfig }>(
+    "PUT",
+    "/api/post-conversation-config",
+    token,
+    patch,
+  );
+}
+
 // ─── F4/F8: Tenant Tool Permissions ────────────────────────
 
 export interface ToolPermissionRow {

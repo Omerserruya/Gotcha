@@ -129,8 +129,13 @@ export function closeConversation(token: string, id: string) {
 
 // ─── Conversation History ────────────────────────────────────
 
-export function getConversationHistory(token: string, customerExternalId: string) {
-  return apiFetch<{ data: any[] }>(`/api/conversations/history/${encodeURIComponent(customerExternalId)}`, { token });
+export function getConversationHistory(token: string, customerExternalId: string, conversationId?: string) {
+  // Passing the anchor `conversationId` lets the backend hit the linked CRM
+  // record and pull cross-platform identifiers (phone, email, every
+  // gotcha_psid_*) so the returned history spans WhatsApp + Instagram +
+  // Messenger + voice + email for the same person.
+  const qs = conversationId ? `?conversationId=${encodeURIComponent(conversationId)}` : "";
+  return apiFetch<{ data: any[] }>(`/api/conversations/history/${encodeURIComponent(customerExternalId)}${qs}`, { token });
 }
 
 // ─── Messages ───────────────────────────────────────────────
@@ -534,18 +539,18 @@ export function transferToDepartment(token: string, conversationId: string, depa
 
 // ─── AI Assist ──────────────────────────────────────────────
 
-export function getAISuggestions(token: string, conversationId: string, locale?: string) {
+export function getAISuggestions(token: string, conversationId: string, locale?: string, signal?: AbortSignal) {
   const params = locale ? `?locale=${locale}` : "";
-  return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions${params}`, { token });
+  return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions${params}`, { token, signal });
 }
 
 export function getAIPrompt(token: string, departmentId: string) {
   return apiFetch<{ data: any }>(`/api/ai-assist/prompt/${departmentId}`, { token });
 }
 
-export function getAISummary(token: string, conversationId: string, locale?: string) {
+export function getAISummary(token: string, conversationId: string, locale?: string, signal?: AbortSignal) {
   const params = locale ? `?locale=${locale}` : "";
-  return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary${params}`, { token });
+  return apiFetch<{ data: { summary: string }; copilotMode?: string }>(`/api/ai-assist/${conversationId}/summary${params}`, { token, signal });
 }
 
 export function sendCopilotChat(token: string, conversationId: string, data: { message: string; history?: Array<{ role: string; content: string }>; locale?: string }) {
@@ -1004,8 +1009,8 @@ export function getAIPerformance(token: string, params?: Record<string, string>)
   return apiFetch<{ data: any }>(`/api/analytics/ai-performance${qs}`, { token });
 }
 
-export function getConversationIntelligence(token: string, conversationId: string) {
-  return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/intelligence`, { token });
+export function getConversationIntelligence(token: string, conversationId: string, signal?: AbortSignal) {
+  return apiFetch<{ data: any }>(`/api/ai-assist/${conversationId}/intelligence`, { token, signal });
 }
 
 export function getConversationReplay(token: string, conversationId: string) {

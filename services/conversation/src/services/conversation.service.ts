@@ -249,11 +249,142 @@ export async function getAgentWorkload(tenantId: string) {
   return agents.map((a) => ({ agentId: a.id, name: a.name, email: a.email, activeCount: a._count.conversations }));
 }
 
-export async function getHistoryByCustomerExternalId(tenantId: string, customerExternalId: string) {
+const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
+const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+
+/**
+ * Ask the AI service for the CRM-side identifiers (phone, email, every
+ * GOTCHA-prefixed channel id custom field — gotcha_psid_instagram,
+ * gotcha_wa_id, etc.) tied to this conversation's linked Lead/Contact. The
+ * CRM is authoritative — local Contact rows can be sparse or missing for
+ * some channels — so the History walk uses these to find every
+ * conversation across every channel for the same person.
+ *
+ * Returns null on any failure; the caller falls back to local-only matching.
+ */
+async function fetchCrmIdentifiersForConversation(
+  tenantId: string,
+  conversationId: string,
+): Promise<{ phone: string | null; email: string | null; channelExternalIds: Record<string, string> } | null> {
+  try {
+    const url = `${AI_SERVICE_URL.replace(/\/$/, "")}/api/crm/resolve-identifiers`;
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-internal-key": INTERNAL_SERVICE_KEY,
+      },
+      body: JSON.stringify({ tenantId, conversationId }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json().catch(() => null)) as any;
+    if (!data) return null;
+    return {
+      phone: data.phone ?? null,
+      email: data.email ?? null,
+      channelExternalIds: (data.channelExternalIds ?? {}) as Record<string, string>,
+    };
+  } catch {
+    return null;
+  }
+}
+
+export async function getHistoryByCustomerExternalId(
+  tenantId: string,
+  customerExternalId: string,
+  conversationId?: string,
+) {
+  // Cross-platform history walk. The bare (tenantId, customerExternalId) lookup
+  // only finds same-channel conversations (Instagram PSID matches the PSID,
+  // phone matches the phone, etc.). To surface ALL prior conversations for
+  // this person — WhatsApp + Instagram + Messenger + voice + … — we follow
+  // two unification keys:
+  //   1. Contact.personId    — populated by unifyContact when rows share an
+  //                            email/phone, so platform contacts on different
+  //                            channels collapse to a single person.
+  //   2. Contact.metadata.crmContactId — the auto-link pointer that bridges
+  //                            inbound conversations to the same CRM Lead/
+  //                            Contact across every channel.
+  //
+  // We start from any Contact row matching the inbound externalId, gather
+  // the union of all externalIds that share its personId or crmContactId,
+  // then pull every conversation for those externalIds. The original
+  // externalId is included so conversations without a Contact pointer still
+  // appear.
+
+  const seedContacts = await prisma.contact.findMany({
+    where: { tenantId, externalId: customerExternalId },
+    select: { id: true, personId: true, metadata: true, phone: true, email: true },
+  });
+
+  const externalIds = new Set<string>([customerExternalId]);
+  const personIds = new Set<string>();
+  const crmContactIds = new Set<string>();
+  const phones = new Set<string>();
+  const emails = new Set<string>();
+  for (const c of seedContacts) {
+    if (c.personId) personIds.add(c.personId);
+    if (c.phone) phones.add(c.phone);
+    if (c.email) emails.add(c.email.toLowerCase());
+    const meta = (c.metadata as Record<string, unknown> | null) ?? {};
+    const crmId = typeof meta.crmContactId === "string" ? meta.crmContactId : null;
+    if (crmId) crmContactIds.add(crmId);
+  }
+
+  // Pull the CRM-side identifiers — the CRM is the source of truth for
+  // phone/email and gotcha_psid_* custom fields. Local Contact rows can be
+  // sparse or missing on some channels; this fills the gaps.
+  if (conversationId) {
+    const crmIdent = await fetchCrmIdentifiersForConversation(tenantId, conversationId);
+    if (crmIdent) {
+      if (crmIdent.phone) phones.add(crmIdent.phone);
+      if (crmIdent.email) emails.add(crmIdent.email.toLowerCase());
+      // Every channel custom field is a candidate externalId for that channel's
+      // conversations (PSID for IG, page-id for Messenger, WA id for WhatsApp, etc.)
+      for (const id of Object.values(crmIdent.channelExternalIds)) {
+        if (id) externalIds.add(id);
+      }
+    }
+  }
+
+  if (personIds.size > 0 || crmContactIds.size > 0 || phones.size > 0 || emails.size > 0) {
+    const siblingFilters: any[] = [];
+    if (personIds.size > 0) siblingFilters.push({ personId: { in: Array.from(personIds) } });
+    if (phones.size > 0) siblingFilters.push({ phone: { in: Array.from(phones) } });
+    if (emails.size > 0) {
+      // Email matches are normalized lowercase. Contact.email is stored as
+      // the user provided it; case-insensitive `in` via Prisma needs `mode`,
+      // but our writers already lowercase, so an `in` against lowered set
+      // matches in practice. Also add a raw exact match as a safety net.
+      siblingFilters.push({ email: { in: Array.from(emails) } });
+    }
+    // Prisma's path filter on Json works for Postgres — `path: ["crmContactId"]`
+    // matches the same key our auto-link writes.
+    for (const id of crmContactIds) {
+      siblingFilters.push({ metadata: { path: ["crmContactId"], equals: id } });
+    }
+    // Also pull externalIds that LITERALLY match the phone (Meta WhatsApp
+    // stores the customerExternalId AS the phone digits — no `+`). Trying
+    // both formats covers tenants that normalize to E.164 and tenants on
+    // legacy local format.
+    for (const p of phones) {
+      const digits = p.replace(/\D/g, "");
+      externalIds.add(p);
+      if (digits) externalIds.add(digits);
+    }
+    const siblings = await prisma.contact.findMany({
+      where: { tenantId, OR: siblingFilters },
+      select: { externalId: true },
+    });
+    for (const s of siblings) {
+      if (s.externalId) externalIds.add(s.externalId);
+    }
+  }
+
   const conversations = await prisma.conversation.findMany({
     where: {
       tenantId,
-      customerExternalId,
+      customerExternalId: { in: Array.from(externalIds) },
     },
     include: {
       assignedAgent: { select: { id: true, name: true } },

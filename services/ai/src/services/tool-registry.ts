@@ -39,6 +39,15 @@ export interface ToolSpec {
   input: Record<string, string>;
   /** Existing service endpoint (or "virtual" for executor-only tools). */
   endpoint: string;
+  /**
+   * Whether the action planner is allowed to emit this tool as a plan step.
+   * Default true. Set to false for tools that exist only on the autonomous
+   * conversational-bot surface (defined in packages/shared/src/lib/agent-tools.ts)
+   * — they still need a registry entry so admins can configure HITL in the
+   * Settings → Tools page, but the action planner must not include them in
+   * its prompt.
+   */
+  plannerEmittable?: boolean;
 }
 
 export const TOOL_REGISTRY: ToolSpec[] = [
@@ -101,15 +110,30 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     input: { contactId: "string", channel: "whatsapp|email|sms|webchat", body: "string" },
     endpoint: "POST /api/conversations/:id/messages",
   },
-  // NOTE: `update_contact` / `create_task` are intentionally absent from the
-  // action list. Their executor paths depend on a CRM connector registered via
-  // `registerCrmConnector()` in services/ai/src/services/connectors/types.ts.
-  // No tenant CRM connector is wired in-repo today, so the default is
-  // `failingCrm` which returns {ok:false} on every call. Rather than let the
-  // planner emit tools that are guaranteed to fail, we gate them out of the
-  // registry until a connector ships. Re-add them once a real CRM adapter
-  // exists. The executor switch still handles them for any direct /execute
-  // caller so no contract is broken.
+  {
+    name: "update_contact",
+    kind: "action",
+    category: "crm",
+    description: "Update a contact record in the connected CRM (fields, lifecycle, owner, etc.).",
+    input: { contactId: "string", fields: "object" },
+    endpoint: "virtual:update_contact",
+  },
+  {
+    name: "update_crm",
+    kind: "action",
+    category: "crm",
+    description: "Update arbitrary CRM record fields via the connected CRM adapter.",
+    input: { recordType: "string", recordId: "string", fields: "object" },
+    endpoint: "virtual:update_crm",
+  },
+  {
+    name: "create_ticket",
+    kind: "action",
+    category: "crm",
+    description: "Create a support ticket in the connected helpdesk/CRM.",
+    input: { subject: "string", body: "string", priority: "string?" },
+    endpoint: "virtual:create_ticket",
+  },
   {
     name: "tag_contact",
     kind: "action",
@@ -180,6 +204,88 @@ export const TOOL_REGISTRY: ToolSpec[] = [
       confidence: "number",
     },
     endpoint: "POST /api/identity/link",
+  },
+
+  // ─── BOT-SURFACE ACTION TOOLS (autonomous conversational bot only) ──
+  // These are dispatched inside packages/shared/src/lib/agent-tools.ts during
+  // live customer conversations, NOT by the action planner. They appear here
+  // ONLY so they show up in Settings → Tools for HITL configuration.
+  // plannerEmittable=false keeps the action planner from emitting them as plan
+  // steps (they have no executor case in action-executor.service.ts).
+  {
+    name: "schedule_followup",
+    kind: "action",
+    category: "messaging",
+    description:
+      "Schedule a future free-text outbound message to the customer. Used by the autonomous bot when the " +
+      "customer needs time to think or asked to be re-engaged later.",
+    input: { message: "string", delay_iso8601: "string?", send_at_iso: "string?", reason: "string" },
+    endpoint: "virtual:schedule_followup",
+    plannerEmittable: false,
+  },
+  {
+    name: "schedule_followup_template",
+    kind: "action",
+    category: "messaging",
+    description:
+      "Schedule a future WhatsApp TEMPLATE message — used by the bot when the send time falls outside " +
+      "the WhatsApp 24h customer-service window.",
+    input: {
+      template_name: "string",
+      language: "string?",
+      send_at_iso: "string?",
+      delay_iso8601: "string?",
+      variables: "object?",
+      reason: "string",
+    },
+    endpoint: "virtual:schedule_followup_template",
+    plannerEmittable: false,
+  },
+  {
+    name: "create_task",
+    kind: "action",
+    category: "crm",
+    description: "Create a CRM task for the human team. Used by the bot to flag follow-up work for agents.",
+    input: { subject: "string", body: "string", priority: "string?" },
+    endpoint: "virtual:create_task",
+    plannerEmittable: false,
+  },
+  {
+    name: "close_conversation",
+    kind: "action",
+    category: "messaging",
+    description: "Mark the current conversation as resolved (autonomous bot only).",
+    input: { resolution: "string", summary: "string" },
+    endpoint: "virtual:close_conversation",
+    plannerEmittable: false,
+  },
+  {
+    name: "escalate_to_human",
+    kind: "action",
+    category: "meta",
+    description: "Transfer the current conversation to a human agent (autonomous bot only).",
+    input: { reason: "string", priority: "string?", summary: "string?" },
+    endpoint: "virtual:escalate_to_human",
+    plannerEmittable: false,
+  },
+  {
+    name: "schedule_meeting",
+    kind: "action",
+    category: "meta",
+    description:
+      "Book a meeting on the assigned agent's calendar. Surfaced only when the tenant has a calendar " +
+      "integration connected and a MeetingType configured.",
+    input: {
+      duration_minutes: "number",
+      meeting_type: "string",
+      requested_at_iso: "string?",
+      customer_timezone: "string?",
+      customer_email: "string?",
+      additional_guests: "string[]?",
+      notes: "string?",
+    },
+    endpoint: "virtual:schedule_meeting",
+    plannerEmittable: false,
   },
 ];
 
@@ -262,7 +368,8 @@ export function renderPlannerTools(tools: AvailableTools): string {
       lines.push(`- ${t.name}(${schema}) — ${t.description}`);
     }
   };
-  group("ACTION TOOLS (executable — mutate state via connectors)", tools.actionTools);
+  const plannerActionTools = tools.actionTools.filter((t) => t.plannerEmittable !== false);
+  group("ACTION TOOLS (executable — mutate state via connectors)", plannerActionTools);
   group("INTEGRATION TOOLS (tenant-scoped — executed via tool-execution.service.ts)", tools.integrationTools);
   return lines.join("\n");
 }
@@ -285,7 +392,9 @@ export function renderSystemCapabilities(tools: AvailableTools): string {
 
 /** Back-compat shim — delegates to the new unified path. */
 export function renderToolRegistryForPrompt(): string {
-  const actionTools = TOOL_REGISTRY.filter((t) => t.kind === "action");
+  const actionTools = TOOL_REGISTRY.filter(
+    (t) => t.kind === "action" && t.plannerEmittable !== false,
+  );
   const lines: string[] = [];
   for (const t of actionTools) {
     const schema = Object.entries(t.input)

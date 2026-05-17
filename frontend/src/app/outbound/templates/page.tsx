@@ -37,6 +37,13 @@ const HEADER_TYPES = ["NONE", "TEXT", "IMAGE", "VIDEO", "DOCUMENT"];
 const STATUSES = ["APPROVED", "PENDING_APPROVAL", "REJECTED", "DRAFT"];
 
 // ─── Types ────────────────────────────────────────────────────
+interface TemplateButton {
+  type: "QUICK_REPLY" | "URL" | "PHONE_NUMBER";
+  text: string;
+  url?: string;
+  phoneNumber?: string;
+}
+
 interface Template {
   id: string;
   name: string;
@@ -49,6 +56,7 @@ interface Template {
   headerType?: string;
   headerText?: string;
   footer?: string;
+  buttons?: TemplateButton[];
   createdAt: string;
 }
 
@@ -60,7 +68,18 @@ interface ChannelAccount {
   externalId?: string;
 }
 
-const emptyForm = {
+const emptyForm: {
+  name: string;
+  channel: string;
+  channelAccountId: string;
+  category: string;
+  language: string;
+  headerType: string;
+  headerText: string;
+  body: string;
+  footer: string;
+  buttons: TemplateButton[];
+} = {
   name: "",
   channel: "WHATSAPP",
   channelAccountId: "",
@@ -70,6 +89,7 @@ const emptyForm = {
   headerText: "",
   body: "",
   footer: "",
+  buttons: [],
 };
 
 // ─── Helpers ──────────────────────────────────────────────────
@@ -84,11 +104,15 @@ function statusBadge(status: string) {
   return map[status] ?? "bg-gray-100 text-gray-500";
 }
 
-/** Extract every {{key}} placeholder from the template body in order of
- *  appearance. Supports both numeric ({{1}}) and named ({{first_name}})
- *  keys — Meta's Cloud API accepts either form. */
+/** Extract every {{n}} placeholder from the template body in order of
+ *  appearance. Meta's WhatsApp Cloud API only accepts POSITIONAL keys
+ *  ({{1}}, {{2}}, …) for body parameters — named placeholders are silently
+ *  passed through as literal text and the customer sees "{{name}}" in the
+ *  message. Anything non-numeric is excluded from the detected variable
+ *  list so the UI doesn't pretend it's a real binding.
+ */
 function parseVariables(body: string): string[] {
-  const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+  const re = /\{\{\s*(\d+)\s*\}\}/g;
   const seen = new Set<string>();
   const order: string[] = [];
   let m: RegExpExecArray | null;
@@ -101,8 +125,21 @@ function parseVariables(body: string): string[] {
   return order;
 }
 
+/** Flag any NAMED placeholder so we can warn the author. Named keys look
+ *  legitimate in the editor but Meta won't substitute them at send time. */
+function findNamedPlaceholders(body: string): string[] {
+  const re = /\{\{\s*([A-Za-z_][\w-]*)\s*\}\}/g;
+  const seen = new Set<string>();
+  const out: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(body))) {
+    if (!seen.has(m[1])) { seen.add(m[1]); out.push(m[1]); }
+  }
+  return out;
+}
+
 function renderPreview(body: string, examples: Record<string, string>): string {
-  return body.replace(/\{\{\s*([\w-]+)\s*\}\}/g, (_, key: string) => {
+  return body.replace(/\{\{\s*(\d+)\s*\}\}/g, (_, key: string) => {
     const val = examples[key];
     return val ? val : `{{${key}}}`;
   });
@@ -115,12 +152,14 @@ function WhatsAppPreview({
   body,
   footer,
   examples,
+  buttons,
 }: {
   headerType: string;
   headerText: string;
   body: string;
   footer: string;
   examples: Record<string, string>;
+  buttons?: TemplateButton[];
 }) {
   const { t } = useI18n();
   const rendered = renderPreview(body, examples);
@@ -166,6 +205,20 @@ function WhatsAppPreview({
                 {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
               </p>
             </div>
+            {Array.isArray(buttons) && buttons.length > 0 && (
+              <div className="flex flex-col gap-1 mt-1 max-w-[90%]">
+                {buttons.filter((b) => b && b.text && b.text.trim()).map((b, i) => (
+                  <div
+                    key={i}
+                    className="bg-white rounded-xl text-center text-[#0e8aff] text-xs py-1.5 px-3 shadow-sm flex items-center justify-center gap-1"
+                  >
+                    {b.type === "URL" && <span>↗</span>}
+                    {b.type === "PHONE_NUMBER" && <span>☎</span>}
+                    <span className="font-medium truncate">{b.text}</span>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -193,8 +246,12 @@ export default function TemplatesPage() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
-  // WhatsApp variable examples
+  // WhatsApp variable examples + descriptions. The sample feeds Meta's
+  // `example` block at template registration; the description is read by the
+  // bot at send time so it knows what value to substitute into each
+  // positional placeholder.
   const [varExamples, setVarExamples] = useState<Record<string, string>>({});
+  const [varDescriptions, setVarDescriptions] = useState<Record<string, string>>({});
 
   // Submit to Meta
   const [submitting, setSubmitting] = useState(false);
@@ -218,11 +275,16 @@ export default function TemplatesPage() {
       .catch(console.error);
   }, [token]);
 
-  // Sync varExamples when body changes
+  // Sync varExamples + varDescriptions when body changes
   useEffect(() => {
     if (form.channel === "WHATSAPP") {
       const vars = parseVariables(form.body);
       setVarExamples((prev) => {
+        const next: Record<string, string> = {};
+        vars.forEach((v) => { next[v] = prev[v] ?? ""; });
+        return next;
+      });
+      setVarDescriptions((prev) => {
         const next: Record<string, string> = {};
         vars.forEach((v) => { next[v] = prev[v] ?? ""; });
         return next;
@@ -272,6 +334,7 @@ export default function TemplatesPage() {
       channelAccountId: defaultAccount?.id ?? "",
     });
     setVarExamples({});
+    setVarDescriptions({});
     setError("");
     setSubmitSuccess(false);
     setShowPanel(true);
@@ -291,16 +354,21 @@ export default function TemplatesPage() {
       headerText: (tpl as any).headerContent ?? tpl.headerText ?? "",
       body: tpl.body,
       footer: tpl.footer ?? "",
+      buttons: Array.isArray(tpl.buttons) ? tpl.buttons : [],
     });
-    // Hydrate the per-variable sample inputs from the persisted variables array.
+    // Hydrate the per-variable sample + description inputs from the
+    // persisted variables array.
     const declared = Array.isArray((tpl as any).variables) ? (tpl as any).variables : [];
     const examples: Record<string, string> = {};
+    const descriptions: Record<string, string> = {};
     for (const v of declared) {
       if (v && typeof v.key === "string") {
         examples[v.key] = typeof v.sample === "string" ? v.sample : "";
+        descriptions[v.key] = typeof v.description === "string" ? v.description : "";
       }
     }
     setVarExamples(examples);
+    setVarDescriptions(descriptions);
     setError("");
     setSubmitSuccess(false);
     setShowPanel(true);
@@ -337,7 +405,26 @@ export default function TemplatesPage() {
       const variablesPayload = detectedVars.map((k) => ({
         key: k,
         sample: varExamples[k] || "",
+        description: varDescriptions[k] || "",
       }));
+
+      // Sanitize buttons: trim text, drop empties, enforce mutual-exclusivity.
+      // Meta does not allow QUICK_REPLY mixed with URL/PHONE in the same
+      // template — keep the first type the user picked and drop conflicts.
+      const cleanedButtons: TemplateButton[] = (form.buttons || [])
+        .filter((b) => b && b.text && b.text.trim())
+        .slice(0, 3)
+        .map((b) => ({
+          type: b.type,
+          text: b.text.trim(),
+          ...(b.type === "URL" && b.url ? { url: b.url.trim() } : {}),
+          ...(b.type === "PHONE_NUMBER" && b.phoneNumber ? { phoneNumber: b.phoneNumber.trim() } : {}),
+        }));
+      const firstType = cleanedButtons[0]?.type;
+      const enforcedButtons =
+        firstType === "QUICK_REPLY"
+          ? cleanedButtons.filter((b) => b.type === "QUICK_REPLY")
+          : cleanedButtons.filter((b) => b.type !== "QUICK_REPLY");
 
       const payload = {
         ...rest,
@@ -345,6 +432,7 @@ export default function TemplatesPage() {
         headerContent: headerContent || undefined,
         footer: form.footer || undefined,
         variables: variablesPayload,
+        buttons: enforcedButtons,
       };
       if (editingId) {
         await updateTemplate(token, editingId, payload);
@@ -825,24 +913,48 @@ export default function TemplatesPage() {
                       <AIComposePanel />
                     </AIComposeScope>
 
-                    {/* Variable example inputs for WhatsApp */}
+                    {/* Named-placeholder warning — Meta only accepts {{1}}, {{2}}, … */}
+                    {isWhatsApp && findNamedPlaceholders(form.body).length > 0 && (
+                      <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
+                        <span className="font-semibold">Heads up:</span> Meta only substitutes positional placeholders (
+                        <code className="bg-amber-100 px-1 rounded">{`{{1}}`}</code>,
+                        <code className="bg-amber-100 px-1 rounded ms-1">{`{{2}}`}</code>, …). Named placeholders like{" "}
+                        {findNamedPlaceholders(form.body).slice(0, 3).map((n, i) => (
+                          <code key={n} className="bg-amber-100 px-1 rounded ms-1">{`{{${n}}}`}</code>
+                        ))}{" "}
+                        will be sent as literal text. Replace them with numbered placeholders below.
+                      </div>
+                    )}
+
+                    {/* Variable example + description inputs for WhatsApp */}
                     {isWhatsApp && bodyVars.length > 0 && (
-                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-3">
+                      <div className="bg-blue-50 border border-blue-100 rounded-xl p-4 space-y-4">
                         <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
                           {t("outbound.templates.variableExamples")}
                         </p>
                         {bodyVars.map((varKey) => (
-                          <div key={varKey} className="flex items-center gap-3">
-                            <span className="shrink-0 px-2 h-8 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
-                              {`{{${varKey}}}`}
-                            </span>
+                          <div key={varKey} className="space-y-2">
+                            <div className="flex items-center gap-3">
+                              <span className="shrink-0 px-2 h-8 rounded-lg bg-blue-100 text-blue-700 text-xs font-bold flex items-center justify-center">
+                                {`{{${varKey}}}`}
+                              </span>
+                              <input
+                                type="text"
+                                value={varExamples[varKey] ?? ""}
+                                onChange={(e) =>
+                                  setVarExamples((prev) => ({ ...prev, [varKey]: e.target.value }))
+                                }
+                                placeholder={`Example value for {{${varKey}}}`}
+                                className={inputCls}
+                              />
+                            </div>
                             <input
                               type="text"
-                              value={varExamples[varKey] ?? ""}
+                              value={varDescriptions[varKey] ?? ""}
                               onChange={(e) =>
-                                setVarExamples((prev) => ({ ...prev, [varKey]: e.target.value }))
+                                setVarDescriptions((prev) => ({ ...prev, [varKey]: e.target.value }))
                               }
-                              placeholder={`Example for {{${varKey}}}`}
+                              placeholder={`Description (what should the bot put here? e.g. "Customer first name")`}
                               className={inputCls}
                             />
                           </div>
@@ -861,6 +973,99 @@ export default function TemplatesPage() {
                         placeholder={t("outbound.templates.footerPlaceholder")}
                       />
                     </div>
+
+                    {/* Buttons (Quick-Reply / URL / Phone) — up to 3 per Meta. */}
+                    {isWhatsApp && (
+                      <div>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <label className="block text-sm font-medium text-gray-700">Buttons</label>
+                          <span className="text-xs text-gray-400">{(form.buttons || []).length}/3</span>
+                        </div>
+                        <p className="text-xs text-gray-500 mb-2">
+                          Quick-reply buttons re-open the 24h WhatsApp window the moment a customer taps them. Mix-and-match is not allowed by Meta — all quick-reply OR all URL/Phone.
+                        </p>
+                        <div className="space-y-2">
+                          {(form.buttons || []).map((btn, idx) => (
+                            <div key={idx} className="flex items-start gap-2 p-2 rounded-lg border border-gray-200 bg-gray-50">
+                              <select
+                                value={btn.type}
+                                onChange={(e) => {
+                                  const next = [...(form.buttons || [])];
+                                  next[idx] = { ...next[idx], type: e.target.value as TemplateButton["type"] };
+                                  setForm({ ...form, buttons: next });
+                                }}
+                                className={`${inputCls} !w-32 shrink-0`}
+                              >
+                                <option value="QUICK_REPLY">Quick reply</option>
+                                <option value="URL">URL</option>
+                                <option value="PHONE_NUMBER">Phone</option>
+                              </select>
+                              <input
+                                type="text"
+                                value={btn.text}
+                                maxLength={25}
+                                onChange={(e) => {
+                                  const next = [...(form.buttons || [])];
+                                  next[idx] = { ...next[idx], text: e.target.value };
+                                  setForm({ ...form, buttons: next });
+                                }}
+                                placeholder="Button label (max 25 chars)"
+                                className={inputCls}
+                              />
+                              {btn.type === "URL" && (
+                                <input
+                                  type="url"
+                                  value={btn.url ?? ""}
+                                  onChange={(e) => {
+                                    const next = [...(form.buttons || [])];
+                                    next[idx] = { ...next[idx], url: e.target.value };
+                                    setForm({ ...form, buttons: next });
+                                  }}
+                                  placeholder="https://…"
+                                  className={inputCls}
+                                />
+                              )}
+                              {btn.type === "PHONE_NUMBER" && (
+                                <input
+                                  type="tel"
+                                  value={btn.phoneNumber ?? ""}
+                                  onChange={(e) => {
+                                    const next = [...(form.buttons || [])];
+                                    next[idx] = { ...next[idx], phoneNumber: e.target.value };
+                                    setForm({ ...form, buttons: next });
+                                  }}
+                                  placeholder="+972…"
+                                  className={inputCls}
+                                />
+                              )}
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const next = (form.buttons || []).filter((_, i) => i !== idx);
+                                  setForm({ ...form, buttons: next });
+                                }}
+                                className="shrink-0 px-2 h-8 text-xs text-red-600 hover:bg-red-50 rounded-lg"
+                                title="Remove"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                          {(form.buttons || []).length < 3 && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                const next = [...(form.buttons || []), { type: "QUICK_REPLY", text: "" } as TemplateButton];
+                                setForm({ ...form, buttons: next });
+                              }}
+                              className="w-full py-2 text-sm text-primary-600 border border-dashed border-primary-200 rounded-lg hover:bg-primary-50 transition"
+                            >
+                              + Add button
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
 
                   {/* WhatsApp live preview */}
@@ -872,6 +1077,7 @@ export default function TemplatesPage() {
                         body={form.body}
                         footer={form.footer}
                         examples={varExamples}
+                        buttons={form.buttons}
                       />
                     </div>
                   )}

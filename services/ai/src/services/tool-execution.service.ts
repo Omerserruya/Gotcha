@@ -253,6 +253,28 @@ export async function executeTool(params: {
     },
   }).catch((err) => console.error("[ToolExec] Audit logging failed:", err.message));
 
+  // CRM-mutating tools change the lead/contact rows the prefetch cache
+  // is keyed on. Invalidate so the next bot turn rebuilds the prompt
+  // context against fresh Zoho data instead of stale matches. Read-only
+  // slugs (*_search, get_*, list_*) are intentionally skipped — they
+  // already CAME from the cache or don't change anything.
+  if (success) {
+    const slug = catalogTool.slug || "";
+    const isReadOnly = /(^|_)(search|get|list)(_|$)/i.test(slug);
+    if (!isReadOnly && CRM_MUTATING_SLUGS.has(slug)) {
+      try {
+        const { invalidateCrmPrefetch } = await import("./crm-prefetch.service");
+        invalidateCrmPrefetch(tenantId, conversationId);
+        console.log(
+          `[ToolExec] crm-prefetch invalidated tenant=${tenantId} conv=${conversationId} ` +
+          `reason=tool_executed slug=${slug}`,
+        );
+      } catch (err: any) {
+        console.warn("[ToolExec] crm-prefetch invalidate failed:", err?.message);
+      }
+    }
+  }
+
   return {
     ok: success,
     output,
@@ -262,6 +284,26 @@ export async function executeTool(params: {
     executionId: execution.id,
   };
 }
+
+// Tool slugs that mutate CRM lead/contact rows. Anything not in this list
+// (or matching the read-only pattern above) leaves the prefetch cache alone.
+// Add new mutating slugs here when new connector tools land.
+const CRM_MUTATING_SLUGS = new Set<string>([
+  "create_lead",
+  "update_lead",
+  "delete_lead",
+  "add_lead_note",
+  "add_lead_tag",
+  "remove_lead_tag",
+  "convert_lead",
+  "create_contact",
+  "update_contact",
+  "delete_contact",
+  "add_contact_note",
+  "add_contact_tag",
+  "remove_contact_tag",
+  "merge_contacts",
+]);
 
 export async function getToolExecutions(tenantId: string, conversationId: string) {
   return prisma.toolExecution.findMany({

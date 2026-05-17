@@ -137,7 +137,9 @@ router.get("/", async (req: Request, res: Response) => {
       });
     };
 
-    for (const spec of available.systemTools) push(spec);
+    // Read-only system tools (get_conversation, list_recent_messages, …) are
+    // pre-resolved context gatherers — they never mutate state, so they have
+    // no HITL meaning. Exclude them from the settings page.
     for (const spec of available.actionTools) push(spec);
     for (const spec of available.integrationTools) push(spec);
 

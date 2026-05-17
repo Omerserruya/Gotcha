@@ -166,8 +166,8 @@ export default function OutboundCallPage() {
   }
 
   return (
-    <div className="max-w-xl">
-      <div className="bg-white border border-gray-200 rounded-xl p-5 md:p-6 shadow-subtle">
+    <div className="max-w-xl mx-auto px-3 md:px-0">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 md:p-6 shadow-subtle">
         <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("outbound.call.title")}</h2>
         <p className="text-sm text-gray-500 mb-5">{t("outbound.call.subtitle")}</p>
 
@@ -318,37 +318,41 @@ function PhoneCallUI(props: {
       style={{ background: "linear-gradient(135deg, #05070d 0%, #0f172a 50%, #05070d 100%)" }}
     >
       {/* Top bar */}
-      <div className="flex items-center justify-between px-6 md:px-10 py-5">
-        <div className="flex items-center gap-3">
+      <div className="flex items-center justify-between px-4 md:px-10 py-3 md:py-5 gap-3">
+        <div className="flex items-center gap-2.5 min-w-0 flex-1">
           <span
             className={clsx(
-              "inline-block w-2 h-2 rounded-full",
+              "inline-block w-2 h-2 rounded-full shrink-0",
               state === "active" ? "bg-emerald-400 animate-pulse" : state === "ended" ? "bg-gray-500" : "bg-amber-400"
             )}
           />
-          <div className="flex flex-col leading-tight">
-            <span className="text-sm font-medium text-gray-100">{customerName}</span>
-            <span className="text-xs text-gray-500 tabular-nums">{formatForDisplay(call.to)}</span>
+          <div className="flex flex-col leading-tight min-w-0">
+            <span className="text-sm font-medium text-gray-100 truncate">{customerName}</span>
+            <span className="text-[11px] md:text-xs text-gray-500 tabular-nums truncate">{formatForDisplay(call.to)}</span>
           </div>
         </div>
-        <div className="text-sm font-mono tabular-nums text-gray-300">{stateLabel}</div>
+        <div className="text-xs md:text-sm font-mono tabular-nums text-gray-300 shrink-0">{stateLabel}</div>
       </div>
 
       {/* Transcript flow (teleprompter) — extracted to TranscriptStage so
-          the workspace /voice/[sessionId] page renders the same visual. */}
+          the workspace /voice/[sessionId] page renders the same visual.
+          Mobile padding tightened so the text isn't squeezed by the bottom
+          controls + (on phones) the copilot drawer overlapping the bottom. */}
       <TranscriptStage
         committedTranscripts={committedTranscripts}
         currentUtterance={currentUtterance}
         agentName={agentName}
         customerName={customerName}
         isLive={isLive}
-        className="px-6 md:px-16 lg:px-32 pb-32"
+        className="px-4 md:px-16 lg:px-32 pb-44 md:pb-32"
       />
 
-      {/* AI Copilot suggestions — fired by ai-service after each customer final
-          (debounced 1500ms). Rendered as a stack of hint cards in the upper
-          right. Fades in/out per refresh. */}
-      <div className="pointer-events-none absolute top-20 right-6 md:right-10 max-w-xs w-72">
+      {/* AI Copilot suggestions.
+          - Desktop (md+): pinned to the upper-right as a 18rem-wide stack.
+          - Mobile: rendered as a swipeable horizontal strip just above the
+            controls. The desktop pin overlaps the transcript on a 360px
+            phone, so we hide it under md and use the bottom strip instead. */}
+      <div className="hidden md:block pointer-events-none absolute top-20 right-6 md:right-10 max-w-xs w-72">
         <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">{t("outbound.call.copilot")}</div>
         {copilotSuggestions.length === 0 ? (
           <div className="text-xs text-gray-600 italic">{t("outbound.call.copilotListening")}</div>
@@ -371,8 +375,36 @@ function PhoneCallUI(props: {
         )}
       </div>
 
-      {/* Controls */}
-      <div className="absolute bottom-0 inset-x-0 py-6 flex items-center justify-center gap-4">
+      {/* Mobile copilot strip — sits ABOVE the bottom controls. Horizontally
+          scrollable; cards are min-w'd so they're readable but don't push
+          the controls off-screen. */}
+      {copilotSuggestions.length > 0 && (
+        <div className="md:hidden absolute inset-x-0 bottom-24 px-3 pointer-events-none">
+          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1 px-1">{t("outbound.call.copilot")}</div>
+          <div className="flex gap-2 overflow-x-auto pointer-events-auto -mx-3 px-3 pb-1 snap-x snap-mandatory">
+            {copilotSuggestions.map((s, i) => {
+              const title = s.title || s.kind || t("outbound.call.suggestion");
+              const body = s.body || s.text || "";
+              return (
+                <div
+                  key={s.id || `${i}:${title}`}
+                  className="snap-start shrink-0 w-[78vw] max-w-[20rem] rounded-lg border border-white/10 bg-white/5 backdrop-blur px-3 py-2 text-xs text-gray-100 shadow-subtle"
+                >
+                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-300 mb-0.5">{title}</div>
+                  {body && <div className="text-gray-200 leading-snug">{body}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {/* Controls — pad-bottom honors the device safe area so the hang-up
+          button isn't tucked under the home indicator on iOS. */}
+      <div
+        className="absolute bottom-0 inset-x-0 pt-4 flex items-center justify-center gap-4"
+        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)" }}
+      >
         <button
           type="button"
           onClick={onToggleMute}

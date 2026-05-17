@@ -121,6 +121,11 @@ async function dispatchApprovedAction(args: {
 
   // ── Legacy action-planner path ─────────────────────────────
   try {
+    // Merge conversationId into the step params so executors that need it
+    // (schedule_followup, create_task, ...) can self-resolve the contact
+    // when the original LLM tool args didn't include it.
+    const stepParams: Record<string, unknown> = { ...args.params };
+    if (!stepParams.conversationId) stepParams.conversationId = args.conversationId;
     const res = await fetch(`${base}/api/action-planner/execute`, {
       method: "POST",
       headers,
@@ -131,7 +136,7 @@ async function dispatchApprovedAction(args: {
           steps: [
             {
               tool: args.tool,
-              params: args.params,
+              params: stepParams,
               reason: `Human-approved via approval request ${args.approvalId}`,
               riskLevel: "high",
             },

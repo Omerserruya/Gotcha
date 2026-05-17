@@ -1,4 +1,4 @@
-import { prisma, outgoingMessageQueue, createWorker, scheduledMessageQueue } from "@chatcenter/shared";
+import { prisma, outgoingMessageQueue, createWorker, scheduledMessageQueue, flowResumeQueue } from "@chatcenter/shared";
 
 /** Walk the template body in placeholder order. Mirrors the broadcast
  *  worker's helper so scheduled template sends honor named + numeric
@@ -105,6 +105,47 @@ async function processScheduledMessages(): Promise<void> {
           });
           continue;
         }
+      }
+
+      // ─── Flow-trigger branch ──────────────────────────────
+      // When `flowId` is set, the scheduled message is a chatbot-flow
+      // kick: enqueue the existing `flow-resume` queue with the target
+      // flow id so the flow-executor (in incoming-worker) starts it from
+      // its entry node. The flow runs with the scheduled message's
+      // `body` as the inbound payload — useful for time-triggered
+      // followups ("send retention check after 7 days of silence").
+      //
+      // Requires a `conversationId` so the flow has a scope to write
+      // into. v1 surfaces a clear FAILED state when missing rather than
+      // synthesizing a conversation — keeps the operator decision
+      // explicit. Future: auto-upsert OPEN conversation for the channel.
+      if (scheduledMessage.flowId) {
+        if (!scheduledMessage.conversationId) {
+          await prisma.scheduledMessage.update({
+            where: { id: scheduledMessage.id },
+            data: { status: "FAILED", error: "flow_trigger_needs_conversationId" },
+          });
+          continue;
+        }
+        await flowResumeQueue.add(
+          "scheduled-flow-trigger",
+          {
+            tenantId: scheduledMessage.tenantId,
+            conversationId: scheduledMessage.conversationId,
+            flowKind: "sub",
+            flowId: scheduledMessage.flowId,
+            resumeNodeId: null,
+            channel: String(scheduledMessage.channel).toLowerCase(),
+            message: scheduledMessage.body,
+          },
+          { attempts: 3, backoff: { type: "exponential", delay: 1000 } },
+        );
+        await prisma.scheduledMessage.update({
+          where: { id: scheduledMessage.id },
+          data: { status: "SENT", sentAt: new Date() },
+        });
+        processed++;
+        continue;
       }
 
       // Optimistic status update on the ScheduledMessage row.

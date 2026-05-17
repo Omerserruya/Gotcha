@@ -108,6 +108,23 @@ export interface ExecutionResult {
  * that hasn't been migrated yet, but new callers MUST use
  * validateActionAsync(tenantId, action, opts).
  */
+
+/**
+ * Parse a subset of ISO 8601 durations: P[nD]T[nH][nM]. Returns ms or
+ * null on parse failure. Sufficient for follow-up windows ("PT2H",
+ * "P1D", "P2D"). Duplicated from packages/shared/src/lib/agent-tools.ts
+ * — the shared copy is module-local. Keep these two in sync.
+ */
+function parseIso8601DurationMs(input: string): number | null {
+  const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(input.trim());
+  if (!m) return null;
+  const days = Number(m[1] || 0);
+  const hours = Number(m[2] || 0);
+  const minutes = Number(m[3] || 0);
+  const ms = ((days * 24 + hours) * 60 + minutes) * 60 * 1000;
+  return ms > 0 ? ms : null;
+}
+
 export function validateAction(
   action: PlannedAction,
   opts: { approved?: boolean; approvedBy?: string },
@@ -476,23 +493,72 @@ export async function executeAction(
         // scheduled.worker.ts polls every 30s. This IS the real path:
         // the worker picks up PENDING rows whose scheduledAt has elapsed
         // and enqueues them into outgoingMessageQueue.
+        //
+        // Param shape is dual: the post-chat pipeline calls this with the
+        // executor-native `{ contactId, body, scheduleAt }`; the
+        // approval-resume path replays the original LLM tool args verbatim
+        // (`{ message, send_at_iso, conversationId, reason }`). Accept both
+        // and self-resolve contactId from conversationId when missing.
         const p = action.params as {
-          contactId: string;
-          body: string;
-          scheduleAt: string;
+          contactId?: string;
+          conversationId?: string;
+          body?: string;
+          message?: string;
+          scheduleAt?: string;
+          send_at_iso?: string;
+          delay_iso8601?: string;
           channel?: string;
           channelAccountId?: string;
         };
-        if (!p.contactId || !p.body || !p.scheduleAt) {
-          throw new Error("schedule_followup requires contactId, body, scheduleAt");
+        const body = (p.body ?? p.message ?? "").toString();
+        // Three accepted shapes for "when":
+        //   1. `scheduleAt` — internal executor-native ISO timestamp
+        //   2. `send_at_iso` — original LLM tool arg (absolute ISO timestamp)
+        //   3. `delay_iso8601` — original LLM tool arg (ISO8601 duration like "P1D", "PT2H")
+        // The autonomous-bot dispatcher in packages/shared/src/lib/agent-tools.ts
+        // accepts all three; this approval-resume path used to drop
+        // `delay_iso8601` on the floor, which made every approved follow-up
+        // that the bot scheduled with a duration silently fail at dispatch.
+        let rawScheduleAt: string | undefined = p.scheduleAt ?? p.send_at_iso;
+        if (!rawScheduleAt && typeof p.delay_iso8601 === "string") {
+          const ms = parseIso8601DurationMs(p.delay_iso8601);
+          if (ms !== null) {
+            rawScheduleAt = new Date(Date.now() + ms).toISOString();
+          }
         }
-        const contact = await prisma.contact.findFirst({
-          where: { id: p.contactId, tenantId },
-          select: { externalId: true, channel: true },
-        });
-        if (!contact) throw new Error("contact not found");
+        if (!body) {
+          throw new Error("schedule_followup requires body|message");
+        }
+        if (!rawScheduleAt) {
+          throw new Error("schedule_followup requires scheduleAt|send_at_iso|delay_iso8601");
+        }
+
+        // Resolve contact: explicit contactId wins, else look up via conversation.
+        let contact: { externalId: string; channel: string; id?: string } | null = null;
+        let convChannelAccountId: string | undefined;
+        if (p.contactId) {
+          const c = await prisma.contact.findFirst({
+            where: { id: p.contactId, tenantId },
+            select: { id: true, externalId: true, channel: true },
+          });
+          if (c) contact = c;
+        }
+        if (!contact && p.conversationId) {
+          const conv = await prisma.conversation.findFirst({
+            where: { id: p.conversationId, tenantId },
+            select: { channel: true, channelAccountId: true, customerExternalId: true },
+          });
+          if (conv) {
+            contact = { externalId: conv.customerExternalId, channel: conv.channel as any };
+            convChannelAccountId = conv.channelAccountId ?? undefined;
+          }
+        }
+        if (!contact) {
+          throw new Error("schedule_followup: contact not found (pass contactId or conversationId)");
+        }
+
         const channel = (p.channel ?? contact.channel) as any;
-        let channelAccountId = p.channelAccountId;
+        let channelAccountId = p.channelAccountId ?? convChannelAccountId;
         if (!channelAccountId) {
           const acct = await prisma.channelAccount.findFirst({
             where: { tenantId, channel, isActive: true },
@@ -505,9 +571,9 @@ export async function executeAction(
           }
           channelAccountId = acct.id;
         }
-        const scheduledAt = new Date(p.scheduleAt);
+        const scheduledAt = new Date(rawScheduleAt);
         if (Number.isNaN(scheduledAt.getTime())) {
-          throw new Error("schedule_followup: scheduleAt must be a valid ISO datetime");
+          throw new Error("schedule_followup: scheduleAt/send_at_iso must be a valid ISO datetime");
         }
         output = await prisma.scheduledMessage.create({
           data: {
@@ -515,7 +581,7 @@ export async function executeAction(
             channel,
             channelAccountId,
             recipientExternalId: contact.externalId,
-            body: p.body,
+            body,
             scheduledAt,
             status: "PENDING" as any,
             createdBy: ctx.actorId ?? "ai",

@@ -241,6 +241,11 @@ router.post("/:id/decline", async (req: Request, res: Response) => {
       res.status(409).json({ error: result.reason });
       return;
     }
+    // Decline transitions the DB row, but the customer leg is still ringing
+    // on Twilio's side until we tell the provider to hang up. Fire-and-forget
+    // — if the upstream hangup fails we've still successfully declined for
+    // the agent. The voice-copilot endpoint is idempotent.
+    void terminateUpstreamCall(session.id, "declined");
     res.json({ data: result.session });
   } catch (err) {
     console.error("voice-sessions.decline error:", err);
@@ -276,6 +281,11 @@ router.post("/:id/hangup", async (req: Request, res: Response) => {
       res.status(409).json({ error: result.reason });
       return;
     }
+    // Drop the upstream provider leg too — DB state alone doesn't end the
+    // call for the customer. Especially important when the agent hangs up
+    // before the conference fully bridged (current === "RINGING"), since
+    // no `endConferenceOnExit` event fires to clean up Twilio's end.
+    void terminateUpstreamCall(session.id, "hangup");
     // Best-effort presence flip back to ONLINE for the assigned agent.
     const presenceAgentId = session.assignedAgentId ?? agentId;
     try {
@@ -302,5 +312,34 @@ router.post("/presence/heartbeat", async (req: Request, res: Response) => {
     res.status(500).json({ error: "failed_heartbeat" });
   }
 });
+
+// ─── Internal helpers ─────────────────────────────────────────
+
+/**
+ * Tell the voice-copilot service to terminate the upstream provider leg for
+ * this session. Fire-and-forget — failures are logged but never block the
+ * agent-facing response. The voice-copilot endpoint is idempotent.
+ *
+ * Why this lives here instead of on the provider directly: this service has
+ * no access to the per-tenant decrypted voice credentials. voice-copilot
+ * owns that surface (it already resolves the provider per-tenant for the
+ * inbound TwiML path), so we round-trip through its internal endpoint.
+ */
+async function terminateUpstreamCall(sessionId: string, reason: string): Promise<void> {
+  const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
+  const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+  try {
+    const res = await fetch(`${url}/api/voice-copilot/sessions/${encodeURIComponent(sessionId)}/terminate`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "X-Internal-Key": key },
+    });
+    if (!res.ok) {
+      const body = await res.text().catch(() => "");
+      console.warn(`[voice-sessions] upstream terminate failed session=${sessionId} reason=${reason} status=${res.status} body=${body.slice(0, 200)}`);
+    }
+  } catch (err: any) {
+    console.warn(`[voice-sessions] upstream terminate threw session=${sessionId} reason=${reason} err=${err?.message}`);
+  }
+}
 
 export default router;

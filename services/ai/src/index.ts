@@ -24,6 +24,10 @@ import toolPermissionRoutes from "./routes/tool-permissions";
 import aiDebugRoutes from "./routes/ai-debug";
 import aiBotRoutes from "./routes/ai-bot";
 import agentRoutes from "./routes/agent";
+import crmPanelRoutes from "./routes/crm-panel";
+import postConversationConfigRoutes from "./routes/post-conversation-config";
+import crmAutoLinkRoutes from "./routes/crm-auto-link";
+import customerSummaryRoutes from "./routes/customer-summary";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
@@ -90,6 +94,10 @@ app.use("/api/tool-permissions", toolPermissionRoutes);
 app.use("/api/ai-debug", aiDebugRoutes);
 app.use("/api/ai-bot", aiBotRoutes);
 app.use("/api/agent", agentRoutes);
+app.use("/api/crm", crmPanelRoutes);
+app.use("/api/post-conversation-config", postConversationConfigRoutes);
+app.use("/api/crm", crmAutoLinkRoutes);
+app.use("/api/customer-summary", customerSummaryRoutes);
 app.use("/api", postCallRoutes);
 
 // Two voice-copilot pipelines run in parallel:
@@ -104,8 +112,10 @@ app.use("/api", postCallRoutes);
 // is fully verified end-to-end the subscriber can be removed cleanly.
 import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
 import { startVoicePostCallWorker } from "./workers/voice-postcall";
+import { startPostChatSubscriber } from "./workers/post-chat/subscriber";
 startVoiceCopilotSubscriber();
 startVoicePostCallWorker();
+startPostChatSubscriber();
 startLiveRunnerSupervisor();
 
 // Phase 5: Post-Call Mode A QA. Trigger enqueues a QA job on every

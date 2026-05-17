@@ -34,6 +34,7 @@ import { createMetricsRouter } from "./routes/metrics";
 import { createLiveRouter } from "./routes/live";
 import { createTwilioTokenRouter } from "./routes/twilio-token";
 import { createTwilioTwimlRouter } from "./routes/twilio-twiml";
+import { createVoiceTerminateRouter } from "./routes/voice-terminate";
 import { createVoiceIncomingRouter } from "./routes/voice-incoming";
 import {
   createVoiceProviderResolver,
@@ -251,6 +252,10 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
     publicBaseUrl: env.PUBLIC_BASE_URL,
     logger: deps.logger,
     redis: deps.redis,
+  }));
+  app.use("/api/voice-copilot", createVoiceTerminateRouter({
+    resolveProvider: deps.resolveVoiceProvider,
+    logger: deps.logger,
   }));
 
   // 3. HTTP server

@@ -272,7 +272,7 @@ router.get("/approvals", async (req: Request, res: Response) => {
 // POST /execute — run a previously planned ExecutionPlan (F3 Action Engine)
 router.post("/execute", async (req: Request, res: Response) => {
   try {
-    const { plan, approved, dryRun, idempotencyKey } = req.body ?? {};
+    const { plan, approved, approvedBy, dryRun, idempotencyKey } = req.body ?? {};
     if (!plan || !Array.isArray(plan.steps)) {
       return res.status(400).json({ error: "plan.steps[] required" });
     }
@@ -297,11 +297,19 @@ router.post("/execute", async (req: Request, res: Response) => {
     const actorId = (req as any).user?.id;
     const authToken = (req.headers.authorization as string | undefined) ?? undefined;
     const results: any[] = [];
+    // approvedBy comes from the request body when the caller is the
+    // approvals-dispatch path (records WHO approved, not who is currently
+    // making the HTTP call). Falls back to the authenticated user when the
+    // body doesn't carry it (legacy /simulate-style callers).
+    const effectiveApprovedBy =
+      approved === true
+        ? (typeof approvedBy === "string" && approvedBy ? approvedBy : actorId)
+        : undefined;
     for (const step of plan.steps as ExecPlannedAction[]) {
       const r = await executeAction(req.tenantId!, step, {
         actorId,
         approved: approved === true,
-        approvedBy: approved === true ? actorId : undefined,
+        approvedBy: effectiveApprovedBy,
         dryRun: dryRun === true,
         idempotencyKey: typeof idempotencyKey === "string" ? idempotencyKey : undefined,
         authToken,
