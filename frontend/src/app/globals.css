@@ -784,3 +784,10 @@ body {
   margin: 0.4em 0 0.15em;
   font-size: 1em;
 }
+
+/* Copilot cue dismiss feedback — small horizontal nudge, no large motion. */
+@keyframes cue-shake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-2px); }
+  75% { transform: translateX(2px); }
+}

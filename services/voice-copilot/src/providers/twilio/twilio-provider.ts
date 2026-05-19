@@ -144,12 +144,19 @@ export class TwilioProvider implements VoiceProvider {
 
   async dialConferenceParticipant(input: DialConferenceParticipantInput): Promise<void> {
     const client = this.getClient();
-    await client.conferences(input.conferenceSid).participants.create({
+    const params: Record<string, unknown> = {
       from: input.from,
       to: input.to,
       label: input.label,
       endConferenceOnExit: input.endConferenceOnExit ?? true,
-    });
+    };
+    if (input.statusCallbackUrl) {
+      params.statusCallback = input.statusCallbackUrl;
+      params.statusCallbackEvent = ["completed"];
+      params.statusCallbackMethod = "POST";
+    }
+    const create = (client.conferences(input.conferenceSid).participants.create as unknown) as (p: Record<string, unknown>) => Promise<unknown>;
+    await create(params);
   }
 
   async attachMediaStreamToCall(input: AttachMediaStreamInput): Promise<void> {

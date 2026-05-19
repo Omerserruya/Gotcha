@@ -448,6 +448,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
       const params: Record<string, string> = { To: to };
       if (user?.tenantId) params.tenantId = user.tenantId;
+      if (user?.id) params.agentId = user.id;
       if (opts?.conversationId) params.conversationId = opts.conversationId;
       if (opts?.notes) params.notes = opts.notes;
 

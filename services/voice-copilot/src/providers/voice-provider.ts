@@ -38,6 +38,12 @@ export interface DialConferenceParticipantInput {
   /** Provider participant label (also surfaced on callback events). */
   label: string;
   endConferenceOnExit?: boolean;
+  /**
+   * URL Twilio POSTs to when the participant leg ends. Used to detect
+   * outbound customer-decline (no-answer/busy/canceled) before the leg
+   * ever joins the conference. Subscribes to the `completed` event only.
+   */
+  statusCallbackUrl?: string;
 }
 
 export interface AttachMediaStreamInput {

@@ -34,6 +34,7 @@ import {
   encryptCredentials,
   decryptCredentials,
   getRedis,
+  CopilotConfigSchema,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -75,6 +76,7 @@ interface ChannelRow {
     accountSid: string | null;
     twimlAppSid: string | null;
     apiKeySid: string | null;
+    copilotConfig: unknown;
     phoneNumbers: PhoneNumberRow[];
   } | null;
 }
@@ -136,6 +138,7 @@ function serializeChannel(row: ChannelRow) {
           accountSid: row.voiceChannel.accountSid,
           twimlAppSid: row.voiceChannel.twimlAppSid,
           apiKeySid: row.voiceChannel.apiKeySid,
+          copilotConfig: row.voiceChannel.copilotConfig ?? {},
           numbers,
         }
       : null,
@@ -531,6 +534,68 @@ router.patch("/:id", async (req: Request, res: Response) => {
     res.json({ data: serializeChannel(updated as unknown as ChannelRow) });
   } catch (err) {
     console.error("voice-channels.patch error:", err);
+    res.status(500).json({ error: "failed_to_update" });
+  }
+});
+
+// ─── GET /:id/copilot-config ────────────────────────────────
+// Returns the per-channel Live Call Copilot config (language, persona,
+// goals, required questions, data collection fields). Empty `{}` means
+// "use platform defaults".
+router.get("/:id/copilot-config", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const channel = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: true },
+    });
+    if (!channel || channel.tenantId !== req.tenantId! || channel.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json({ data: channel.voiceChannel?.copilotConfig ?? {} });
+  } catch (err) {
+    console.error("voice-channels.copilot-config.get error:", err);
+    res.status(500).json({ error: "failed_to_load" });
+  }
+});
+
+// ─── PUT /:id/copilot-config ────────────────────────────────
+// Replaces the per-channel copilot config. Validated against
+// CopilotConfigSchema before persistence. Returns the persisted config.
+router.put("/:id/copilot-config", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const channel = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: true },
+    });
+    if (!channel || channel.tenantId !== req.tenantId! || channel.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!channel.voiceChannel) {
+      res.status(409).json({ error: "voice_channel_not_initialized" });
+      return;
+    }
+
+    const parsed = CopilotConfigSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      res.status(400).json({
+        error: "invalid_config",
+        details: parsed.error.flatten(),
+      });
+      return;
+    }
+
+    const updated = await prisma.voiceChannel.update({
+      where: { id: channel.voiceChannel.id },
+      data: { copilotConfig: parsed.data as object },
+      select: { copilotConfig: true },
+    });
+    res.json({ data: updated.copilotConfig });
+  } catch (err) {
+    console.error("voice-channels.copilot-config.put error:", err);
     res.status(500).json({ error: "failed_to_update" });
   }
 });

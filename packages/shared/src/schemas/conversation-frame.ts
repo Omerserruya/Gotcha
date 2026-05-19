@@ -92,6 +92,29 @@ export const ConversationStateFrameSchema = z.object({
 
   urgency: z.enum(["low", "medium", "high"]),
   confidence: z.number().min(0).max(1),
+
+  // Output of the spelling/code-switch detector (Hebrew↔English).
+  // Optional because not every turn invokes the detector. When present,
+  // the cue projector surfaces high-confidence normalized entities as
+  // "Confirm: omer@gmail.com" cues so the rep can validate the parse.
+  spellingHints: z
+    .object({
+      spellingMode: z.boolean(),
+      confidence: z.number().min(0).max(1),
+      requiresConfirmation: z.boolean(),
+      detectedEntities: z.array(z.string()).default([]),
+      normalizedEntities: z
+        .array(
+          z.object({
+            kind: z.enum(["email", "domain", "url", "name", "phone", "other"]),
+            raw: z.string(),
+            normalized: z.string(),
+            confidence: z.number().min(0).max(1),
+          }),
+        )
+        .default([]),
+    })
+    .optional(),
 });
 
 export type ConversationStateFrame = z.infer<typeof ConversationStateFrameSchema>;

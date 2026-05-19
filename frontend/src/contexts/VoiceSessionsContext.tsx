@@ -149,6 +149,8 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
     };
 
     // voice.incoming.ringing — payload: { session: VoiceCallSession }
+    // voice.session.created — same shape, fired by /twiml/outbound when the
+    // outbound session row is created. Reuses the same upsert path.
     const ringingHandler = (data: unknown) => {
       const d = data as { session?: VoiceCallSession } | VoiceCallSession;
       const session = (d as { session?: VoiceCallSession }).session
@@ -241,6 +243,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
       if (!s) return false;
       socket = s;
       s.on("voice.incoming.ringing", ringingHandler);
+      s.on("voice.session.created", ringingHandler);
       s.on("voice.session.state", stateHandler);
       s.on("voice.session.state_changed", stateChangedHandler);
       s.on("voice.session.ended", endedHandler);
@@ -260,6 +263,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
       if (pollTimer) clearInterval(pollTimer);
       if (socket) {
         socket.off("voice.incoming.ringing", ringingHandler);
+        socket.off("voice.session.created", ringingHandler);
         socket.off("voice.session.state", stateHandler);
         socket.off("voice.session.state_changed", stateChangedHandler);
         socket.off("voice.session.ended", endedHandler);

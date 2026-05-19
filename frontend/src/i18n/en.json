@@ -797,6 +797,37 @@
     "slaWarningDesc": "Warn agents when a conversation crosses this threshold.",
     "slaDepartmentOverride": "Per-department SLA overrides",
     "slaDepartmentOverrideDesc": "Override the tenant-wide SLA for specific departments.",
+    "voiceCopilotConfig": {
+      "title": "Copilot configuration",
+      "subtitle": "Configure how the Live Call Copilot behaves for calls on this channel — language, goals, required questions and data collection fields.",
+      "loading": "Loading…",
+      "saved": "Saved",
+      "save": "Save",
+      "saving": "Saving…",
+      "cancel": "Cancel",
+      "backToChannel": "Back to channel",
+      "languageLabel": "Output language",
+      "languageHint": "Language used for the copilot's suggestions, missing-data prompts, and summary. The customer can speak any language — this only controls what the rep sees.",
+      "personaLabel": "Persona",
+      "personaHint": "Short tone descriptor, e.g. \"Friendly but professional\". Applied to the copilot's suggested actions and coaching lines.",
+      "personaPlaceholder": "Friendly but professional",
+      "goalsLabel": "Call goals",
+      "goalsHint": "What is the rep trying to accomplish on this call? The copilot biases its suggestions toward these goals.",
+      "goalsPlaceholder": "Qualify budget, schedule a demo, collect decision-maker email…",
+      "questionsLabel": "Required questions",
+      "questionsHint": "Questions the rep must cover during the call. Required ones surface as blocking missing-data cues until answered.",
+      "questionPlaceholder": "What's the main pain point you're trying to solve?",
+      "addQuestion": "Add question",
+      "emptyQuestions": "No questions configured yet. Add one to start.",
+      "dataFieldsLabel": "Data collection fields",
+      "dataFieldsHint": "Structured fields the call should capture. Field key is the internal id; label is the rep-facing description.",
+      "fieldKeyPlaceholder": "email",
+      "fieldLabelPlaceholder": "Decision-maker email",
+      "addField": "Add field",
+      "emptyFields": "No data fields configured yet.",
+      "required": "Required",
+      "remove": "Remove"
+    },
     "voiceCopilot": {
       "title": "Voice Copilot",
       "tabs": {
@@ -2590,6 +2621,15 @@
         "muteButton": "Mute",
         "unmuteButton": "Unmute",
         "hangupButton": "Hang up"
+      },
+      "declined": {
+        "noAnswer": "Customer didn't answer — closing.",
+        "busy": "Customer line was busy — closing.",
+        "failed": "Call couldn't be completed — closing."
+      },
+      "spelling": {
+        "heard": "Heard:",
+        "copyHint": "Click to copy"
       },
       "transcript": {
         "listening": "Listening…",

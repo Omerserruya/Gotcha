@@ -225,6 +225,12 @@ export default function VoiceChannelDetailPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2">
+                <Link
+                  href={`/settings/voice-channels/${channelId}/copilot`}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md bg-primary-50 text-primary-700 ring-1 ring-primary-200 hover:bg-primary-100"
+                >
+                  {t("settings.voiceCopilotConfig.title")}
+                </Link>
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 ring-1 ring-gray-200">
                   {t("settings.voiceChannels.authBYO")}
                 </span>

@@ -1,4 +1,4 @@
-import type { TranscriptUtterance } from "@chatcenter/shared";
+import type { TranscriptUtterance, CopilotConfig } from "@chatcenter/shared";
 import {
   liveBehaviorContract,
   outputSchemaBlock,
@@ -8,6 +8,7 @@ import {
   crmContextBlock,
   type CrmSnapshot,
   transcriptFenceBlock,
+  copilotConfigBlock,
 } from "./blocks";
 
 /**
@@ -41,6 +42,13 @@ export interface LivePromptInput {
   playbookStage?: PlaybookStageContext;
   /** CRM snapshot (may be unset if no CRM data fetched). */
   crm?: CrmSnapshot;
+  /**
+   * Per-channel copilot config (language, persona, goals, required
+   * questions, data fields). When supplied, the assembler emits an
+   * additional system block right after orgInstructions so channel
+   * overrides win over platform defaults.
+   */
+  copilotConfig?: CopilotConfig;
 }
 
 export interface ChatMessage {
@@ -56,11 +64,21 @@ export class LivePromptAssembler {
   build(input: LivePromptInput): ChatMessage[] {
     const messages: ChatMessage[] = [
       { role: "system", content: orgInstructionsBlock(input.org) },
+    ];
+
+    // Channel-level copilot config (language, goals, required Qs, …).
+    // Skipped when not configured — the block returns "" in that case.
+    const copilotBlock = copilotConfigBlock(input.copilotConfig);
+    if (copilotBlock) {
+      messages.push({ role: "system", content: copilotBlock });
+    }
+
+    messages.push(
       { role: "system", content: playbookStageBlock(input.playbookStage) },
       { role: "system", content: crmContextBlock(input.crm) },
       { role: "system", content: liveBehaviorContract() },
       { role: "system", content: outputSchemaBlock() },
-    ];
+    );
 
     if (input.rollingSummary && input.rollingSummary.trim().length > 0) {
       messages.push({

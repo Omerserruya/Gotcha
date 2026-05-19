@@ -16,7 +16,7 @@ export function PreviousCallsCard({ context, loading }: Props) {
   return (
     <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
       <div className="px-4 py-2.5 border-b border-gray-50">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-600">{t("voice.workspace.cards.previousCalls.title")}</span>
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-700">{t("voice.workspace.cards.previousCalls.title")}</span>
       </div>
       <div className="px-4 py-3">
         {loading && !context ? (

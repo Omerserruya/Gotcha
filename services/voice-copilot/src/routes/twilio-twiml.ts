@@ -19,7 +19,7 @@
  */
 import express, { Router, Request, Response, NextFunction } from "express";
 import twilio from "twilio";
-import { getRedis, transitionVoiceCallSessionState } from "@chatcenter/shared";
+import { getRedis, prisma, publishEvent, transitionVoiceCallSessionState } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProvider, VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
@@ -133,6 +133,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
       const to = String(body.To || "").trim();
       const conversationId = String(body.conversationId || "").trim();
       const notes = body.notes ? String(body.notes) : "";
+      const agentId = String(body.agentId || "").trim();
       // The Voice-SDK agent leg's CallSid — Twilio includes it in every
       // /outbound post. Used later to disambiguate agent vs customer on
       // participant-join (body.Caller isn't sent for conference events).
@@ -157,6 +158,62 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         ? `call-${conversationId}`
         : `call-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
+      // Create the VoiceCallSession row up-front so the unified
+      // /voice/[sessionId] workspace can render the call (mirrors the
+      // inbound path in voice-incoming.ts). Existing row reused if Twilio
+      // retries the webhook for the same agentCallSid.
+      let sessionId: string | null = null;
+      if (conversationId && agentCallSid) {
+        try {
+          const existing = await prisma.voiceCallSession.findUnique({
+            where: { callSid: agentCallSid },
+            select: { id: true },
+          });
+          if (existing) {
+            sessionId = existing.id;
+          } else {
+            const created = await prisma.voiceCallSession.create({
+              data: {
+                callSid: agentCallSid,
+                conversationId,
+                tenantId,
+                customerNumber: to,
+                direction: "outbound",
+                status: "in-progress",
+                state: "CONNECTING",
+                stateHistory: [{ state: "CONNECTING", at: new Date().toISOString(), reason: "outbound_twiml" }] as unknown as object,
+                agentId: agentId || null,
+                assignedAgentId: agentId || null,
+                claimedAt: agentId ? new Date() : null,
+              },
+            });
+            sessionId = created.id;
+
+            const sessionRow = await prisma.voiceCallSession.findUnique({
+              where: { id: created.id },
+              select: {
+                id: true, callSid: true, conversationId: true, tenantId: true,
+                direction: true, state: true, status: true, customerNumber: true,
+                agentId: true, assignedAgentId: true, claimedAt: true,
+                startedAt: true, answeredAt: true, channelId: true, meta: true,
+              },
+            });
+            await publishEvent({
+              event: "voice.session.created",
+              tenantId,
+              data: {
+                session: sessionRow,
+                sessionId: created.id,
+                conversationId,
+                callSid: agentCallSid,
+              },
+            });
+          }
+        } catch (err) {
+          logger.error({ err, conversationId, agentCallSid }, "outbound: VoiceCallSession persist failed");
+        }
+      }
+
       // Stash metadata so the status-callback handler (which has no client
       // context) can look up the customer number + conversation info.
       try {
@@ -169,6 +226,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
             callerId: provider.callerId,
             notes,
             agentCallSid,
+            sessionId,
             customerDialed: false,
           }),
           "EX", 1800,
@@ -183,7 +241,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         timeoutSeconds: 30,
       });
 
-      logger.info({ to, tenantId, conversationId, conferenceName }, "voice-copilot outbound Conference TwiML issued");
+      logger.info({ to, tenantId, conversationId, conferenceName, sessionId }, "voice-copilot outbound Conference TwiML issued");
       res.type("text/xml").status(200).send(xml);
     },
   );
@@ -272,6 +330,10 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           // Inbound conferences already have the customer waiting on hold.
           if (!isInbound && speaker === "agent" && !meta.customerDialed) {
             logger.info({ event, conferenceSid, customerNumber: meta.customerNumber }, "conference: dialing customer");
+            // Status callback lets us detect customer-decline before the leg
+            // ever joins the conference (no-answer/busy/canceled). FriendlyName
+            // carries the redis lookup key for the /customer-status handler.
+            const customerStatusUrl = `${publicBaseUrl}/api/voice-copilot/twiml/customer-status?friendlyName=${encodeURIComponent(friendlyName)}`;
             try {
               await provider.dialConferenceParticipant({
                 conferenceSid,
@@ -279,6 +341,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
                 to: meta.customerNumber,
                 label: "customer",
                 endConferenceOnExit: true,
+                statusCallbackUrl: customerStatusUrl,
               });
               meta.customerDialed = true;
               await redis.set(`conf:${friendlyName}`, JSON.stringify(meta), "EX", 1800).catch(() => { /* ignore */ });
@@ -305,11 +368,23 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
             },
           });
           logger.info({ event, conferenceSid, callSid, speaker, label: label || null, isInbound }, "conference: attached media stream to participant");
+
+          // For outbound calls, the call is ACTIVE once the customer leg
+          // joins the conference (both parties now bridged). Inbound is
+          // already ACTIVE-tracked by /api/voice/incoming/status.
+          if (!isInbound && speaker === "customer" && meta.sessionId) {
+            try {
+              await transitionVoiceCallSessionState(meta.sessionId, "ACTIVE", { reason: "customer_joined" });
+            } catch (transErr) {
+              logger.warn({ err: transErr, sessionId: meta.sessionId }, "conference: ACTIVE transition failed");
+            }
+          }
         } else if (event === "conference-end") {
-          // Transition the VoiceCallSession to ENDED for inbound conferences
-          // so backend state agrees with reality even when the browser misses
-          // the Twilio client-side disconnect event.
-          if (isInbound && meta.sessionId) {
+          // Transition the VoiceCallSession to ENDED so backend state agrees
+          // with reality even when the browser misses the Twilio client-side
+          // disconnect event. Applies to both inbound and outbound — both
+          // stash sessionId in meta now.
+          if (meta.sessionId) {
             try {
               await transitionVoiceCallSessionState(meta.sessionId, "ENDED", { reason: "conference_ended" });
             } catch (transErr) {
@@ -323,6 +398,127 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         logger.error({ err, event, conferenceSid }, "conference-status: handler error");
       }
 
+      res.status(204).end();
+    },
+  );
+
+  // ─── Customer-leg status callback (outbound decline detection) ─
+  // Twilio POSTs here when the customer-side dial completes. The leg may
+  // never have joined the conference (no-answer/busy/canceled/failed) — in
+  // that case we transition the VoiceCallSession to MISSED/FAILED and hang
+  // up the agent leg so the agent isn't left alone in an empty conference.
+  router.post(
+    "/customer-status",
+    async (req: Request, res: Response) => {
+      const body = (req.body || {}) as Record<string, string>;
+      const callStatus = String(body.CallStatus || "").toLowerCase();
+      const customerCallSid = body.CallSid;
+      const friendlyName = String((req.query?.friendlyName as string) || "").trim();
+
+      if (!friendlyName || !callStatus) {
+        res.status(204).end();
+        return;
+      }
+
+      const redis = getRedis();
+      const metaRaw = await redis.get(`conf:${friendlyName}`).catch(() => null);
+      if (!metaRaw) {
+        // Meta may already be cleared by conference-end — nothing to do.
+        res.status(204).end();
+        return;
+      }
+      const meta = JSON.parse(metaRaw) as {
+        tenantId: string; conversationId: string;
+        customerNumber: string; callerId?: string; notes?: string;
+        agentCallSid?: string; customerDialed?: boolean;
+        sessionId?: string;
+      };
+
+      let provider: VoiceProvider;
+      try {
+        provider = await resolveProvider(meta.tenantId);
+      } catch (err) {
+        if (err instanceof NoActiveVoiceChannelError) {
+          res.status(503).end();
+          return;
+        }
+        logger.error({ err, tenantId: meta.tenantId }, "customer-status: failed to resolve provider");
+        res.status(500).end();
+        return;
+      }
+
+      const signature = req.header("X-Twilio-Signature") || "";
+      const host = req.header("X-Forwarded-Host") || req.header("Host") || req.hostname;
+      const candidateUrls = ["https", "http"].map((proto) => `${proto}://${host}${req.originalUrl}`);
+      if (!provider.validateInboundSignature({ signature, candidateUrls, formParams: body })) {
+        logger.warn({ host, path: req.originalUrl }, "customer-status: signature invalid");
+        res.status(403).json({ error: "invalid_signature" });
+        return;
+      }
+
+      // We only care about leg-end statuses where the customer didn't reach
+      // the conference. `completed` is the normal end-of-call path and is
+      // already handled by `conference-end` → ENDED; ignore it here.
+      const target: "MISSED" | "FAILED" | null = (() => {
+        switch (callStatus) {
+          case "no-answer": return "MISSED";
+          case "busy":      return "MISSED";
+          case "canceled":  return "MISSED";
+          case "failed":    return "FAILED";
+          default:          return null;
+        }
+      })();
+      if (!target || !meta.sessionId) {
+        res.status(204).end();
+        return;
+      }
+
+      try {
+        const result = await transitionVoiceCallSessionState(meta.sessionId, target, {
+          reason: `customer_${callStatus}`,
+        });
+        if (!result.ok && result.reason === "invalid_transition") {
+          // Session already terminal (e.g. agent hung up first) — nothing to do.
+          logger.info({ sessionId: meta.sessionId, from: result.from, to: result.to }, "customer-status: session already terminal");
+        }
+      } catch (transErr) {
+        logger.warn({ err: transErr, sessionId: meta.sessionId, target }, "customer-status: session transition failed");
+      }
+
+      // Tell the workspace UI specifically — the generic `voice.session.state`
+      // event already fires from the transition above, but a dedicated event
+      // lets the page render "Customer didn't answer" vs a plain redirect.
+      try {
+        await publishEvent({
+          event: "voice.session.declined",
+          tenantId: meta.tenantId,
+          data: {
+            sessionId: meta.sessionId,
+            conversationId: meta.conversationId,
+            callSid: customerCallSid,
+            reason: callStatus,
+            state: target,
+          },
+        });
+      } catch (pubErr) {
+        logger.warn({ err: pubErr }, "customer-status: publishEvent failed");
+      }
+
+      // Unwind the agent's empty-conference leg. endCall is idempotent.
+      if (meta.agentCallSid) {
+        try {
+          await provider.endCall({ callSid: meta.agentCallSid });
+        } catch (endErr) {
+          logger.warn({ err: endErr, callSid: meta.agentCallSid }, "customer-status: agent endCall failed");
+        }
+      }
+
+      logger.info({
+        sessionId: meta.sessionId,
+        conversationId: meta.conversationId,
+        callStatus,
+        target,
+      }, "customer-status: handled outbound decline");
       res.status(204).end();
     },
   );

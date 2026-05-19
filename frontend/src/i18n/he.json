@@ -797,6 +797,37 @@
     "slaWarningDesc": "התרע לסוכנים כששיחה עוברת סף זה.",
     "slaDepartmentOverride": "עקיפת SLA לפי מחלקה",
     "slaDepartmentOverrideDesc": "עקיפת SLA כללי עבור מחלקות ספציפיות.",
+    "voiceCopilotConfig": {
+      "title": "הגדרות הקופיילוט",
+      "subtitle": "הגדר איך הקופיילוט יתנהג בשיחות בערוץ הזה — שפת פלט, יעדי שיחה, שאלות חובה ושדות לאיסוף.",
+      "loading": "טוען…",
+      "saved": "נשמר",
+      "save": "שמור",
+      "saving": "שומר…",
+      "cancel": "ביטול",
+      "backToChannel": "חזרה לערוץ",
+      "languageLabel": "שפת פלט",
+      "languageHint": "השפה בה הקופיילוט יציג הצעות, שאלות חסרות וסיכומים. הלקוח יכול לדבר בכל שפה — זה משפיע רק על מה שהנציג רואה.",
+      "personaLabel": "אישיות",
+      "personaHint": "תיאור קצר של הטון, למשל \"ידידותי אך מקצועי\". משפיע על ההצעות והכוונה של הקופיילוט.",
+      "personaPlaceholder": "ידידותי אך מקצועי",
+      "goalsLabel": "יעדי השיחה",
+      "goalsHint": "מה הנציג מנסה להשיג בשיחה? הקופיילוט יטה את ההצעות שלו ליעדים הללו.",
+      "goalsPlaceholder": "לאמת תקציב, לקבוע דמו, לאסוף מייל של בעל החלטה…",
+      "questionsLabel": "שאלות חובה",
+      "questionsHint": "שאלות שעל הנציג לכסות במהלך השיחה. שאלות חובה יופיעו כהתראות חוסמות עד שיתקבל מענה.",
+      "questionPlaceholder": "מה הכאב המרכזי שאתם מנסים לפתור?",
+      "addQuestion": "הוסף שאלה",
+      "emptyQuestions": "עדיין לא הוגדרו שאלות. הוסף אחת כדי להתחיל.",
+      "dataFieldsLabel": "שדות לאיסוף",
+      "dataFieldsHint": "שדות מובְנים שהשיחה צריכה ללכוד. מפתח השדה הוא המזהה הפנימי; התווית היא מה שהנציג רואה.",
+      "fieldKeyPlaceholder": "email",
+      "fieldLabelPlaceholder": "מייל של בעל החלטה",
+      "addField": "הוסף שדה",
+      "emptyFields": "עדיין לא הוגדרו שדות.",
+      "required": "חובה",
+      "remove": "מחק"
+    },
     "voiceCopilot": {
       "title": "Voice Copilot",
       "tabs": {
@@ -2591,6 +2622,15 @@
         "muteButton": "השתק",
         "unmuteButton": "בטל השתקה",
         "hangupButton": "נתק"
+      },
+      "declined": {
+        "noAnswer": "הלקוח לא ענה — סוגרים.",
+        "busy": "הקו של הלקוח תפוס — סוגרים.",
+        "failed": "השיחה נכשלה — סוגרים."
+      },
+      "spelling": {
+        "heard": "זוהה:",
+        "copyHint": "לחץ להעתקה"
       },
       "transcript": {
         "listening": "מאזין…",

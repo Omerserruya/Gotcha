@@ -7,3 +7,4 @@ export {
   type PlaybookStageContext,
 } from "./playbook-stage-block";
 export { crmContextBlock, type CrmSnapshot } from "./crm-context-block";
+export { copilotConfigBlock } from "./copilot-config-block";

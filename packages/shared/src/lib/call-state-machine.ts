@@ -45,7 +45,9 @@ export const LIVE_STATES: ReadonlySet<CallState> = new Set([
 
 const ALLOWED_TRANSITIONS: Record<CallState, ReadonlySet<CallState>> = {
   RINGING:    new Set<CallState>(["CONNECTING", "ENDED", "FAILED", "MISSED"]),
-  CONNECTING: new Set<CallState>(["ACTIVE", "ENDED", "FAILED"]),
+  // CONNECTING → MISSED covers the outbound-decline case: customer leg ends
+  // with no-answer/busy/canceled BEFORE either party reaches ACTIVE.
+  CONNECTING: new Set<CallState>(["ACTIVE", "ENDED", "FAILED", "MISSED"]),
   ACTIVE:     new Set<CallState>(["HOLD", "ENDED", "FAILED"]),
   HOLD:       new Set<CallState>(["ACTIVE", "ENDED", "FAILED"]),
   ENDED:      new Set<CallState>(),

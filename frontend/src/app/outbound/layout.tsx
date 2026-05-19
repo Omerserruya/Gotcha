@@ -4,7 +4,6 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
-import { useVoiceCall } from "@/context/VoiceCallContext";
 import clsx from "clsx";
 
 const tabs = [
@@ -17,19 +16,10 @@ const tabs = [
 export default function OutboundLayout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname();
-  const { state: callState } = useVoiceCall();
 
-  // While on a voice call, hand the whole content area to the Stage UI —
-  // skip the outbound title + tabs (sidebar stays via AppLayout).
-  const inCall = callState !== "idle" && pathname === "/outbound/call";
-
-  if (inCall) {
-    return (
-      <AppLayout>
-        <div className="h-full w-full md:pb-2">{children}</div>
-      </AppLayout>
-    );
-  }
+  // The dialer at /outbound/call hands off to /voice/[sessionId] once the
+  // call connects, so the layout chrome (title + tab strip) is always shown
+  // while the user is under /outbound/*.
 
   return (
     <AppLayout>

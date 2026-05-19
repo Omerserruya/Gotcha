@@ -28,6 +28,7 @@ import crmPanelRoutes from "./routes/crm-panel";
 import postConversationConfigRoutes from "./routes/post-conversation-config";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
+import copilotOutcomesRoutes from "./routes/copilot-outcomes";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService } from "./services/ai.service";
@@ -98,6 +99,7 @@ app.use("/api/crm", crmPanelRoutes);
 app.use("/api/post-conversation-config", postConversationConfigRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
+app.use("/api/copilot", copilotOutcomesRoutes);
 app.use("/api", postCallRoutes);
 
 // Two voice-copilot pipelines run in parallel:

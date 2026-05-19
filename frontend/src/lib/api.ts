@@ -1717,6 +1717,39 @@ export function getVoiceChannel(token: string, id: string) {
   return apiFetch<{ data: VoiceChannel }>(`/api/voice-channels/${id}`, { token });
 }
 
+// ─── Live Call Copilot config (per voice channel) ─────────────
+export interface CopilotQuestion {
+  id: string;
+  text: string;
+  required: boolean;
+}
+
+export interface CopilotDataField {
+  field: string;
+  label: string;
+  required: boolean;
+}
+
+export interface CopilotConfig {
+  language?: string;          // "he" | "en" | …
+  persona?: string;
+  goals?: string;
+  questions: CopilotQuestion[];
+  dataFields: CopilotDataField[];
+}
+
+export function getVoiceChannelCopilotConfig(token: string, id: string) {
+  return apiFetch<{ data: Partial<CopilotConfig> }>(`/api/voice-channels/${id}/copilot-config`, { token });
+}
+
+export function updateVoiceChannelCopilotConfig(token: string, id: string, config: CopilotConfig) {
+  return apiFetch<{ data: CopilotConfig }>(`/api/voice-channels/${id}/copilot-config`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify(config),
+  });
+}
+
 export function createVoiceChannelBYO(token: string, input: CreateVoiceChannelInput) {
   return apiFetch<{ data: VoiceChannel }>("/api/voice-channels", {
     token,

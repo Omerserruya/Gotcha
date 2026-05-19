@@ -5,23 +5,10 @@ import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { useVoiceCall, type CommittedUtterance, type CopilotSuggestion } from "@/context/VoiceCallContext";
+import { useVoiceCall } from "@/context/VoiceCallContext";
+import { useVoiceSessions } from "@/contexts/VoiceSessionsContext";
 import { getContacts, getTenantSettings } from "@/lib/api";
 import { normalizeE164 } from "@/lib/phone";
-import { TranscriptStage } from "@/components/voice/workspace/TranscriptStage";
-
-function formatForDisplay(input: string): string {
-  if (!input) return "";
-  if (!input.startsWith("+")) return input;
-  return input.replace(/(\+\d{1,3})(\d{3})(\d{3})(\d+)/, "$1 $2 $3 $4");
-}
-
-function formatDuration(ms: number): string {
-  const totalSeconds = Math.max(0, Math.floor(ms / 1000));
-  const mins = Math.floor(totalSeconds / 60);
-  const secs = totalSeconds % 60;
-  return `${String(mins).padStart(2, "0")}:${String(secs).padStart(2, "0")}`;
-}
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
@@ -33,25 +20,28 @@ interface Contact {
   channel?: string;
 }
 
+/**
+ * Outbound dialer.
+ *
+ * This page is intentionally thin — it only collects the destination + notes,
+ * places the call via VoiceCallContext.placeCall, and then routes the user to
+ * the unified /voice/[sessionId] workspace as soon as the VoiceCallSession
+ * row exists. That workspace renders the same transcript stage + copilot
+ * panel for both inbound and outbound calls; the old PhoneCallUI here has
+ * been removed to keep the two paths from diverging.
+ *
+ * The session row is created by voice-copilot when Twilio POSTs to
+ * /api/voice-copilot/twiml/outbound (a moment after placeCall returns), and
+ * arrives in VoiceSessionsContext via the `voice.session.created` socket
+ * event. We watch `allLive` for our pending conversationId and navigate
+ * once we see it.
+ */
 export default function OutboundCallPage() {
-  const { token, user } = useAuth();
+  const { token } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
-  const { placeCall, hangup, toggleMute, isMuted, state, call, elapsedMs, isReady, committedTranscripts, currentUtterance, copilotSuggestions } = useVoiceCall();
-
-  // Post-call navigation: when the call ends and we have a conversationId,
-  // route the agent into the chat view so the persisted transcript is visible.
-  const prevStateRef = useRef<typeof state>(state);
-  useEffect(() => {
-    const prev = prevStateRef.current;
-    if (prev !== "ended" && state === "ended" && call?.conversationId) {
-      const id = call.conversationId;
-      const timer = setTimeout(() => router.push(`/conversations?id=${encodeURIComponent(id)}`), 1500);
-      prevStateRef.current = state;
-      return () => clearTimeout(timer);
-    }
-    prevStateRef.current = state;
-  }, [state, call?.conversationId, router]);
+  const { placeCall, state, isReady } = useVoiceCall();
+  const { allLive } = useVoiceSessions();
 
   const [phoneInput, setPhoneInput] = useState("");
   const [notes, setNotes] = useState("");
@@ -60,6 +50,7 @@ export default function OutboundCallPage() {
   const [selected, setSelected] = useState<Contact | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [placing, setPlacing] = useState(false);
+  const [pendingConversationId, setPendingConversationId] = useState<string | null>(null);
   const [defaultCountry, setDefaultCountry] = useState<string>("IL");
   const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -94,6 +85,17 @@ export default function OutboundCallPage() {
     };
   }, [query, token]);
 
+  // Once the VoiceCallSession row exists (voice.session.created arrived),
+  // hand the user off to the unified /voice/[sessionId] workspace.
+  useEffect(() => {
+    if (!pendingConversationId) return;
+    const match = allLive.find((s) => s.conversationId === pendingConversationId);
+    if (match) {
+      setPendingConversationId(null);
+      router.replace(`/voice/${match.id}`);
+    }
+  }, [pendingConversationId, allLive, router]);
+
   function pickContact(c: Contact) {
     setSelected(c);
     const phone = c.phone || (c.channel === "WHATSAPP" ? c.externalId : "") || "";
@@ -119,6 +121,7 @@ export default function OutboundCallPage() {
     setPlacing(true);
     try {
       const conversationId = crypto.randomUUID();
+      setPendingConversationId(conversationId);
       await placeCall(normalized, {
         contactName: selected?.displayName,
         conversationId,
@@ -142,27 +145,11 @@ export default function OutboundCallPage() {
         });
       }
     } catch (err) {
+      setPendingConversationId(null);
       setError(err instanceof Error ? err.message : t("outbound.call.errFailed"));
     } finally {
       setPlacing(false);
     }
-  }
-
-  if (isActive && call) {
-    return (
-      <PhoneCallUI
-        call={call}
-        state={state}
-        elapsedMs={elapsedMs}
-        committedTranscripts={committedTranscripts}
-        currentUtterance={currentUtterance}
-        copilotSuggestions={copilotSuggestions}
-        agentName={user?.name || t("outbound.call.you")}
-        onHangup={hangup}
-        onToggleMute={toggleMute}
-        isMuted={isMuted}
-      />
-    );
   }
 
   return (
@@ -216,7 +203,7 @@ export default function OutboundCallPage() {
               disabled={isBusy}
             />
             {normalized && (
-              <span className="text-xs text-gray-500 tabular-nums">{formatForDisplay(normalized)}</span>
+              <span className="text-xs text-gray-500 tabular-nums">{normalized}</span>
             )}
           </div>
           {phoneInput && !normalized && (
@@ -273,188 +260,3 @@ export default function OutboundCallPage() {
     </div>
   );
 }
-
-function PhoneCallUI(props: {
-  call: { to: string; contactName?: string; conversationId?: string };
-  state: string;
-  elapsedMs: number;
-  committedTranscripts: CommittedUtterance[];
-  currentUtterance: { agent: string; customer: string };
-  copilotSuggestions: CopilotSuggestion[];
-  agentName: string;
-  onHangup: () => void;
-  onToggleMute: () => void;
-  isMuted: boolean;
-}) {
-  const { call, state, elapsedMs, committedTranscripts, currentUtterance, copilotSuggestions, agentName, onHangup, onToggleMute, isMuted } = props;
-  const { t } = useI18n();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    // Trigger fade-in after mount.
-    const id = requestAnimationFrame(() => setMounted(true));
-    return () => cancelAnimationFrame(id);
-  }, []);
-
-  const stateLabel = {
-    connecting: t("outbound.call.connecting"),
-    ringing: t("outbound.call.ringing"),
-    active: formatDuration(elapsedMs),
-    ended: t("outbound.call.ended"),
-    error: t("outbound.call.failed"),
-  }[state as "connecting" | "ringing" | "active" | "ended" | "error"] || "";
-
-  const isLive = state === "active" || state === "ringing" || state === "connecting";
-  const customerName = call.contactName || t("outbound.call.customer");
-
-  return (
-    <div
-      className={clsx(
-        // Lock to viewport so a long transcript scrolls inside the
-        // teleprompter pane instead of pushing the controls off-screen.
-        "relative h-[100dvh] max-h-[100dvh] w-full flex flex-col text-gray-100 overflow-hidden md:rounded-2xl shadow-subtle transition-opacity duration-500 ease-out",
-        mounted ? "opacity-100" : "opacity-0"
-      )}
-      style={{ background: "linear-gradient(135deg, #05070d 0%, #0f172a 50%, #05070d 100%)" }}
-    >
-      {/* Top bar */}
-      <div className="flex items-center justify-between px-4 md:px-10 py-3 md:py-5 gap-3">
-        <div className="flex items-center gap-2.5 min-w-0 flex-1">
-          <span
-            className={clsx(
-              "inline-block w-2 h-2 rounded-full shrink-0",
-              state === "active" ? "bg-emerald-400 animate-pulse" : state === "ended" ? "bg-gray-500" : "bg-amber-400"
-            )}
-          />
-          <div className="flex flex-col leading-tight min-w-0">
-            <span className="text-sm font-medium text-gray-100 truncate">{customerName}</span>
-            <span className="text-[11px] md:text-xs text-gray-500 tabular-nums truncate">{formatForDisplay(call.to)}</span>
-          </div>
-        </div>
-        <div className="text-xs md:text-sm font-mono tabular-nums text-gray-300 shrink-0">{stateLabel}</div>
-      </div>
-
-      {/* Transcript flow (teleprompter) — extracted to TranscriptStage so
-          the workspace /voice/[sessionId] page renders the same visual.
-          Mobile padding tightened so the text isn't squeezed by the bottom
-          controls + (on phones) the copilot drawer overlapping the bottom. */}
-      <TranscriptStage
-        committedTranscripts={committedTranscripts}
-        currentUtterance={currentUtterance}
-        agentName={agentName}
-        customerName={customerName}
-        isLive={isLive}
-        className="px-4 md:px-16 lg:px-32 pb-44 md:pb-32"
-      />
-
-      {/* AI Copilot suggestions.
-          - Desktop (md+): pinned to the upper-right as a 18rem-wide stack.
-          - Mobile: rendered as a swipeable horizontal strip just above the
-            controls. The desktop pin overlaps the transcript on a 360px
-            phone, so we hide it under md and use the bottom strip instead. */}
-      <div className="hidden md:block pointer-events-none absolute top-20 right-6 md:right-10 max-w-xs w-72">
-        <div className="text-[10px] uppercase tracking-widest text-gray-500 mb-2">{t("outbound.call.copilot")}</div>
-        {copilotSuggestions.length === 0 ? (
-          <div className="text-xs text-gray-600 italic">{t("outbound.call.copilotListening")}</div>
-        ) : (
-          <div className="flex flex-col gap-2">
-            {copilotSuggestions.map((s, i) => {
-              const title = s.title || s.kind || t("outbound.call.suggestion");
-              const body = s.body || s.text || "";
-              return (
-                <div
-                  key={s.id || `${i}:${title}`}
-                  className="rounded-lg border border-white/10 bg-white/5 backdrop-blur px-3 py-2 text-xs text-gray-100 shadow-subtle"
-                >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-300 mb-0.5">{title}</div>
-                  {body && <div className="text-gray-200 leading-snug">{body}</div>}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* Mobile copilot strip — sits ABOVE the bottom controls. Horizontally
-          scrollable; cards are min-w'd so they're readable but don't push
-          the controls off-screen. */}
-      {copilotSuggestions.length > 0 && (
-        <div className="md:hidden absolute inset-x-0 bottom-24 px-3 pointer-events-none">
-          <div className="text-[9px] uppercase tracking-widest text-gray-500 mb-1 px-1">{t("outbound.call.copilot")}</div>
-          <div className="flex gap-2 overflow-x-auto pointer-events-auto -mx-3 px-3 pb-1 snap-x snap-mandatory">
-            {copilotSuggestions.map((s, i) => {
-              const title = s.title || s.kind || t("outbound.call.suggestion");
-              const body = s.body || s.text || "";
-              return (
-                <div
-                  key={s.id || `${i}:${title}`}
-                  className="snap-start shrink-0 w-[78vw] max-w-[20rem] rounded-lg border border-white/10 bg-white/5 backdrop-blur px-3 py-2 text-xs text-gray-100 shadow-subtle"
-                >
-                  <div className="text-[10px] font-semibold uppercase tracking-wider text-sky-300 mb-0.5">{title}</div>
-                  {body && <div className="text-gray-200 leading-snug">{body}</div>}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
-      {/* Controls — pad-bottom honors the device safe area so the hang-up
-          button isn't tucked under the home indicator on iOS. */}
-      <div
-        className="absolute bottom-0 inset-x-0 pt-4 flex items-center justify-center gap-4"
-        style={{ paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 1.25rem)" }}
-      >
-        <button
-          type="button"
-          onClick={onToggleMute}
-          disabled={!isLive}
-          className={clsx(
-            "w-12 h-12 rounded-full flex items-center justify-center transition ring-1 ring-white/10",
-            !isLive && "bg-gray-800 text-gray-500 cursor-not-allowed",
-            isLive && isMuted && "bg-white text-gray-900 hover:scale-105",
-            isLive && !isMuted && "bg-white/10 text-gray-100 hover:bg-white/20 hover:scale-105"
-          )}
-          aria-label={isMuted ? t("outbound.call.unmute") : t("outbound.call.mute")}
-          title={isMuted ? t("outbound.call.unmuteMic") : t("outbound.call.muteMic")}
-        >
-          {isMuted ? (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M17 14a5 5 0 01-5 5m-5-5V9a5 5 0 015-5m0 0a5 5 0 015 5v2m-5 5v3m-4 0h8M3 3l18 18" />
-            </svg>
-          ) : (
-            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M19 11a7 7 0 01-14 0m7 7v4m-4 0h8m-4-9a3 3 0 01-3-3V6a3 3 0 116 0v4a3 3 0 01-3 3z" />
-            </svg>
-          )}
-        </button>
-        <button
-          type="button"
-          onClick={onHangup}
-          disabled={!isLive}
-          className={clsx(
-            "w-16 h-16 rounded-full flex items-center justify-center transition shadow-2xl ring-1 ring-black/30",
-            isLive
-              ? "bg-red-600 hover:bg-red-700 text-white hover:scale-105"
-              : "bg-gray-700 text-gray-400 cursor-not-allowed"
-          )}
-          aria-label={t("outbound.call.hangup")}
-          style={{ boxShadow: isLive ? "0 0 0 8px rgba(239, 68, 68, 0.15)" : undefined }}
-        >
-          <svg className="w-7 h-7" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85-.18.18-.43.28-.7.28-.28 0-.53-.11-.71-.29L.29 13.08C.11 12.9 0 12.65 0 12.38s.11-.53.29-.71C3.34 8.78 7.46 7 12 7s8.66 1.78 11.71 4.67c.18.18.29.43.29.71s-.11.53-.29.71l-2.48 2.48c-.18.18-.43.29-.71.29-.27 0-.52-.1-.7-.28-.79-.74-1.69-1.36-2.67-1.85-.33-.16-.56-.51-.56-.9v-3.1C15.15 9.25 13.6 9 12 9z" />
-          </svg>
-        </button>
-      </div>
-
-      {/* Muted pill */}
-      {isMuted && (
-        <div className="absolute top-5 left-1/2 -translate-x-1/2 text-[11px] uppercase tracking-[0.2em] text-amber-300 bg-amber-500/10 border border-amber-500/20 rounded-full px-3 py-1">
-          {t("outbound.call.micMuted")}
-        </div>
-      )}
-    </div>
-  );
-}
-
-

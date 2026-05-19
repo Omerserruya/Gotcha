@@ -2246,6 +2246,18 @@ model VoiceChannel {
   twimlAppSid            String? @map("twiml_app_sid") // Twilio-specific
   apiKeySid              String? @map("api_key_sid") // Twilio-specific
 
+  // Per-channel Live Call Copilot configuration. Shape:
+  //   {
+  //     language: "he" | "en" | ...,            // copilot UI + LLM output language
+  //     persona:  string,                       // short tone/persona descriptor
+  //     goals:    string,                       // free-text objective (e.g. "Schedule a demo")
+  //     questions: { id, text, required }[],    // questions the rep MUST ask
+  //     dataFields: { field, label, required }[] // fields the call MUST collect
+  //   }
+  // Stored as Json (not 5 columns) so the shape can evolve without
+  // migrations. Empty {} means "use platform defaults".
+  copilotConfig Json @default("{}") @map("copilot_config")
+
   parent       CommunicationChannel      @relation(fields: [communicationChannelId], references: [id], onDelete: Cascade)
   phoneNumbers VoiceChannelPhoneNumber[]
 
@@ -2389,4 +2401,28 @@ model CustomerBrief {
   @@index([tenantId, crmContactId])
   @@index([tenantId, contactId])
   @@map("customer_briefs")
+}
+
+// ─── Copilot Cue Trust Loop ────────────────────────────────
+//
+// Per-cue feedback recorded when the rep accepts (used it), rejects
+// (dismissed), or ignores (TTL expired un-acted) a live call copilot cue.
+//
+// Aggregated per (cueKind, cueText) → drives the Laplace-smoothed weight
+// CueProjector uses to threshold future surfaces. Without this loop the
+// copilot can't learn from rep behavior and trust degrades over time.
+model CopilotCueOutcome {
+  id             BigInt   @id @default(autoincrement())
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  cueId          String   @map("cue_id")
+  cueKind        String   @map("cue_kind")
+  cueText        String   @map("cue_text")
+  dedupKey       String   @map("dedup_key")
+  outcome        String
+  recordedAt     DateTime @default(now()) @map("recorded_at")
+
+  @@index([cueKind, cueText])
+  @@index([tenantId, conversationId])
+  @@map("copilot_cue_outcomes")
 }

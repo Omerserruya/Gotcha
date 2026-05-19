@@ -15,6 +15,7 @@ import audienceRoutes from "./routes/audiences";
 import tenantSettingsRoutes from "./routes/tenant-settings";
 import voiceSessionsRoutes from "./routes/voice-sessions";
 import voiceChannelsRoutes from "./routes/voice-channels";
+import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
 const app = createServiceApp(config);
@@ -34,6 +35,16 @@ subscribeToEvents((event) => {
   } catch {
     // Socket not ready yet — event is dropped (acceptable per MVP spec)
   }
+});
+
+// Backend safety net: when a voice session ends (browser close, drop, reaper),
+// close the linked conversation so it doesn't stay OPEN in the inbox. The
+// frontend also closes optimistically on the hangup button — both paths are
+// idempotent because close() is a no-op when status === "CLOSED".
+subscribeToEvents((event) => {
+  handleVoiceSessionEnded(event).catch((err) => {
+    console.warn("[voice-auto-close] handler threw:", (err as { message?: string })?.message ?? err);
+  });
 });
 
 // Serve uploaded media files

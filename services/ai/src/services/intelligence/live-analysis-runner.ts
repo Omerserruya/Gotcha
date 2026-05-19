@@ -2,6 +2,7 @@ import {
   ConversationStateFrameSchema,
   type ConversationStateFrame,
   type TranscriptUtterance,
+  type CopilotConfig,
 } from "@chatcenter/shared";
 import { randomUUID } from "crypto";
 import { generateResponse } from "../ai.service";
@@ -12,6 +13,8 @@ import { LivePromptAssembler } from "./prompts";
 import type { TranscriptSource } from "./sources";
 import { CallAnalysisStore } from "./persistence/call-analysis-store";
 import { publishConvEvent } from "./events";
+import { cueProjector } from "./cue-projector";
+import { detectSpellingMode } from "./analyzers/spelling-detector";
 
 /**
  * Live Call Copilot's main-turn runner.
@@ -44,6 +47,12 @@ export interface LiveRunnerOptions {
   maxOutputTokens?: number;
   /** Override the cadence policy (test injection point). */
   cadence?: AnalysisCadence;
+  /**
+   * Per-channel copilot config (language / goals / required questions /
+   * data fields / persona). Resolved once at supervisor spawn-time so the
+   * runner doesn't re-fetch on every turn.
+   */
+  copilotConfig?: CopilotConfig;
 }
 
 export class LiveAnalysisRunner {
@@ -101,6 +110,10 @@ export class LiveAnalysisRunner {
       await this.memory.flush();
     }
     await CallAnalysisStore.complete(this.opts.conversationId);
+    // Clear per-call projector state (lastSurfaceAt, dedup map, suppressed set,
+    // observed-filled set) so a stale entry can't bleed into the next call
+    // that happens to share the conversationId.
+    cueProjector.endCall(this.opts.conversationId);
   }
 
   // ── Internal ───────────────────────────────────────────────
@@ -139,10 +152,19 @@ export class LiveAnalysisRunner {
     const messages = this.assembler.build({
       rollingSummary: this.memory.tierB(),
       recentUtterances: this.memory.tierAWindow(),
+      copilotConfig: this.opts.copilotConfig,
     });
 
     const t0 = Date.now();
     let raw: string | null = null;
+    // Kick off the spelling/code-switch detector in parallel with the main
+    // LLM call. The detector returns null when its cheap pre-filter sees
+    // no triggers in the recent window, so the cost stays bounded.
+    const spellingPromise = detectSpellingMode({
+      tenantId: this.opts.tenantId,
+      conversationId: this.opts.conversationId,
+      recentUtterances: this.memory.tierAWindow(),
+    }).catch(() => null);
     try {
       console.log(
         `[live-runner] LLM call begin conv=${this.opts.conversationId} v${this.version + 1} msgs=${messages.length}`,
@@ -178,6 +200,14 @@ export class LiveAnalysisRunner {
         `[live-runner] parseFrame returned null conv=${this.opts.conversationId} rawHead=${(raw ?? "").slice(0, 120)}`,
       );
       return;
+    }
+
+    // Merge spelling-detector output into the frame before persistence so
+    // downstream consumers (cue projector + frame subscribers) see it as
+    // part of the same versioned frame.
+    const spellingHints = await spellingPromise;
+    if (spellingHints && spellingHints.spellingMode) {
+      frame.spellingHints = spellingHints;
     }
 
     // Persist to durable mirror (frames JSONB), then fan out events.
@@ -250,6 +280,28 @@ export class LiveAnalysisRunner {
         ...base,
         suggestedActions: frame.suggestedActions,
       }).catch(() => {});
+
+    // Granular event for the spelling/code-switch detector. Frontend uses
+    // this to render "Confirm: omer@gmail.com" chips inline with the
+    // current utterance, separate from the lane-routed copilot cues so
+    // they're not deduped or rate-limited by the projector.
+    if (frame.spellingHints && frame.spellingHints.normalizedEntities.length > 0)
+      await publishConvEvent(agentTarget, "spelling.detected", {
+        ...base,
+        hints: frame.spellingHints,
+      }).catch(() => {});
+
+    // Projected, lane-routed, deduped, rate-limited cues. Frontend new-style
+    // consumers subscribe to `copilot.cues.updated`; legacy listeners on
+    // coaching.hint / missing_fields.updated / risk.detected (emitted above)
+    // keep working unchanged.
+    const cues = cueProjector.project(frame);
+    if (cues.length > 0) {
+      await publishConvEvent(agentTarget, "copilot.cues.updated", {
+        ...base,
+        cues,
+      }).catch(() => {});
+    }
 
     // Phase 4: every proposed tool goes through the ActionOrchestrator,
     // which persists a ToolExecutionRequest row, applies LiveCallToolPolicy,

@@ -27,7 +27,7 @@ export function OpenTicketsCard({ openIssues, loading }: Props) {
   return (
     <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
       <div className="px-4 py-2.5 border-b border-gray-50 flex items-center justify-between">
-        <span className="text-[10px] font-semibold uppercase tracking-widest text-gray-600">
+        <span className="text-[11px] font-semibold uppercase tracking-widest text-gray-700">
           {t("voice.workspace.cards.tickets.title") || "Open issues"}
         </span>
         {issues.length > 0 && (

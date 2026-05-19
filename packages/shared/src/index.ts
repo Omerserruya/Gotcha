@@ -160,6 +160,16 @@ export {
   ConversationStateFrameSchema,
   type ConversationStateFrame,
 } from "./schemas/conversation-frame";
+export {
+  CopilotConfigSchema,
+  CopilotQuestionSchema,
+  CopilotDataFieldSchema,
+  EMPTY_COPILOT_CONFIG,
+  parseCopilotConfig,
+  type CopilotConfig,
+  type CopilotQuestion,
+  type CopilotDataField,
+} from "./schemas/copilot-config";
 
 export { normalizePhone, isValidPhone, listSupportedCountries } from "./lib/phone";
 
