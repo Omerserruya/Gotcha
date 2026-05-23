@@ -5,7 +5,6 @@ import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { Locale, localeConfig } from "@/i18n";
 import clsx from "clsx";
 import { NotificationBell } from "./NotificationBell";
 import { IncomingCallBannerSidebar } from "./voice/IncomingCallBanner";
@@ -37,7 +36,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, logout } = useAuth();
-  const { t, locale, setLocale } = useI18n();
+  const { t } = useI18n();
   const pathname = usePathname();
 
   return (
@@ -116,20 +115,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       {/* Incoming call banner — desktop sidebar slot */}
       <IncomingCallBannerSidebar />
 
-      {/* Language switcher */}
-      {!collapsed && (
-        <div className="px-3 pb-2">
-          <select
-            value={locale}
-            onChange={(e) => setLocale(e.target.value as Locale)}
-            className="w-full bg-gray-50 text-gray-600 text-xs rounded-xl px-3 py-2 border-0 ring-1 ring-gray-200/60 focus:outline-none focus:ring-2 focus:ring-primary-200"
-          >
-            {Object.entries(localeConfig).map(([key, config]) => (
-              <option key={key} value={key}>{config.label}</option>
-            ))}
-          </select>
-        </div>
-      )}
+      {/* Language switcher moved to Settings → Language (system-wide
+          setting that also affects AI-generated content like briefs,
+          summaries, and co-pilot insights). */}
 
       {/* Expand toggle - shown above avatar when collapsed */}
       {collapsed && (

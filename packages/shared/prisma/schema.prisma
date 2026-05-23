@@ -84,6 +84,13 @@ model Tenant {
   // outbound pipeline. Default "IL" matches the launch market.
   defaultCountryCode String @default("IL") @map("default_country_code")
 
+  // System language — applies to the dashboard UI, AI-generated content
+  // (customer briefs, conversation summaries, voice-copilot insights,
+  // post-call QA), and CRM-side LLM writes. Per-agent overrides live on
+  // `User.locale` so an agent can pick their own UI/AI language without
+  // affecting the rest of the org. ISO-639-1; today: "en" | "he".
+  defaultLocale String @default("en") @map("default_locale")
+
   // Feature flags (set by SYSTEM_ADMIN)
   botEnabled           Boolean  @default(false) @map("bot_enabled")
   botType              BotType? @map("bot_type")
@@ -225,6 +232,14 @@ model User {
   role                     Role     @default(AGENT)
   isActive                 Boolean  @default(true) @map("is_active")
   notificationSoundEnabled Boolean  @default(true) @map("notification_sound_enabled")
+  // E.164 personal/mobile number. Used for FORWARD_TO_AGENT inbound mode
+  // and smart-callback recognition (when the agent calls the business
+  // number back from this device, we identify them by `From === phoneNumber`).
+  phoneNumber              String?  @map("phone_number")
+  // Per-agent system-language override. NULL means "inherit from
+  // `Tenant.defaultLocale`". Drives both UI strings and all AI-generated
+  // content the agent consumes. ISO-639-1; today: "en" | "he".
+  locale                   String?  @map("locale")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @updatedAt @map("updated_at")
 
@@ -232,6 +247,12 @@ model User {
   conversations      Conversation[]      @relation("AssignedAgent")
   departmentMember   DepartmentMember?
   inAppNotifications InAppNotification[]
+  // Voice channels where this user is the default-ring target for inbound calls.
+  defaultVoiceChannels VoiceChannel[]    @relation("VoiceChannelDefaultAgent")
+  // Voice channels where this user is the AGENT_FIRST outbound target
+  // (separate from the inbound default agent so outbound can route to a
+  // different person — e.g. sales rep for outbound, support rep for inbound).
+  agentFirstVoiceChannels VoiceChannel[] @relation("VoiceChannelAgentFirstAgent")
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -283,6 +304,13 @@ model Conversation {
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
   aiSummary          String?            @map("ai_summary")
+  // Detected language of the conversation thread — set once from the
+  // first inbound message (heuristic + LLM fallback). Drives the
+  // language of suggested-reply drafts and any other "match the
+  // customer's language" content. System-language settings (tenant /
+  // agent) override THIS for surfaces that should stay in the agent's
+  // language (briefs, summaries, coaching).
+  detectedLocale     String?            @map("detected_locale")
   createdAt          DateTime           @default(now()) @map("created_at")
   updatedAt          DateTime           @updatedAt @map("updated_at")
 
@@ -540,6 +568,9 @@ model Department {
   agentToolPermissions    AgentToolPermission[]
   funnels                 TenantFunnel[]
   notificationPreferences NotificationPreference[]
+  // Voice channels that fall back to this department when the default agent
+  // doesn't answer within the channel's ring timeout.
+  voiceChannelFallback    VoiceChannel[]           @relation("VoiceChannelFallbackDept")
 
   @@unique([tenantId, name])
   @@index([tenantId])
@@ -1251,8 +1282,9 @@ model Contact {
   createdAt         DateTime    @default(now()) @map("created_at")
   updatedAt         DateTime    @updatedAt @map("updated_at")
 
-  tenant              Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  broadcastRecipients BroadcastRecipient[]
+  tenant                   Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  broadcastRecipients      BroadcastRecipient[]
+  voiceSessionParticipants VoiceSessionParticipant[]
 
   @@unique([tenantId, channel, externalId])
   @@index([tenantId])
@@ -1976,12 +2008,21 @@ model VoiceCallSession {
   stateHistory    Json       @default("[]") @map("state_history") // [{state, at, reason}]
   assignedAgentId String?    @map("assigned_agent_id")
   claimedAt       DateTime?  @map("claimed_at")
+  // For MISSED inbound sessions: stamped when the agent has actually
+  // dealt with the missed call — either by clicking "Mark as handled"
+  // in the inbox, or implicitly when a successful callback to the same
+  // customerNumber reaches ACTIVE. The /missed query filters these out,
+  // so they stop nagging the inbox once the loop is closed. Cascades
+  // server-side, so the WhatsApp template button (which dials without
+  // any browser context) still clears the inbox correctly.
+  handledAt       DateTime?  @map("handled_at")
 
   tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversation   Conversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
   channel        CommunicationChannel?    @relation(fields: [channelId], references: [id])
   postProcessing VoiceCallPostProcessing?
   actionItems    VoiceCallActionItem[]
+  participants   VoiceSessionParticipant[]
 
   @@index([tenantId, startedAt])
   @@index([agentId, startedAt])
@@ -1989,6 +2030,66 @@ model VoiceCallSession {
   @@index([assignedAgentId, state])
   @@index([channelId])
   @@map("voice_call_sessions")
+}
+
+// One row per leg ever joined to a voice session's conference: the
+// original customer, the agent who answered, and any 3rd party brought
+// in via add-participant. Drives the live participants panel (per-row
+// hold / hangup) and, post-call, lets the summarizer attribute the
+// transcript to additional CRM contacts when an added leg matched a
+// known Contact by phone.
+//
+// ADDED rows are created at dial-time (status=DIALING, callSid=null)
+// and matched on conference participant-join by `label` (Twilio echoes
+// it back as ParticipantLabel). CUSTOMER + AGENT rows are upserted at
+// participant-join time by callSid.
+enum VoiceParticipantRole {
+  CUSTOMER
+  AGENT
+  ADDED
+}
+
+enum VoiceParticipantStatus {
+  DIALING
+  JOINED
+  LEFT
+  FAILED
+}
+
+model VoiceSessionParticipant {
+  id            String                 @id @default(cuid())
+  sessionId     String                 @map("session_id")
+  role          VoiceParticipantRole
+  status        VoiceParticipantStatus @default(DIALING)
+  // Provider leg SID (Twilio CallSid). Null until participant-join fires
+  // for ADDED rows (we dial first, learn the SID from the webhook).
+  callSid       String?                @map("call_sid")
+  // Free-form display label. For ADDED rows this is the label passed to
+  // add-participant (used to match the webhook back to this row). For
+  // AGENT/CUSTOMER rows it's a stable identifier ("agent"/"customer").
+  label         String?
+  phoneNumber   String?                @map("phone_number")
+  displayName   String?                @map("display_name")
+  // Optional FK to a Contact in this tenant matched by phone at
+  // participant-join time. Drives multi-contact summary attribution.
+  contactId     String?                @map("contact_id")
+  // Whisper/consult mode: true when the leg is parked on hold music.
+  onHold        Boolean                @default(false) @map("on_hold")
+  joinedAt      DateTime?              @map("joined_at")
+  leftAt        DateTime?              @map("left_at")
+  endReason     String?                @map("end_reason")
+  createdAt     DateTime               @default(now()) @map("created_at")
+  updatedAt     DateTime               @updatedAt @map("updated_at")
+
+  session VoiceCallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  contact Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
+
+  @@unique([sessionId, callSid])
+  @@unique([sessionId, label])
+  @@index([sessionId, role])
+  @@index([sessionId, leftAt])
+  @@index([contactId])
+  @@map("voice_session_participants")
 }
 
 // ─── Call Analysis (Phase 2) ───────────────────────────────────
@@ -2172,6 +2273,33 @@ enum CommunicationChannelStatus {
   ERROR
 }
 
+// How a voice channel answers inbound calls.
+//   IN_PLATFORM      — Twilio bridges into a conference + media stream so
+//                      the agent answers in-browser with Live Call Copilot.
+//   FORWARD_TO_AGENT — TwiML simply <Dial>s the channel's defaultAgent's
+//                      `phoneNumber` (e.g. their mobile). No conference,
+//                      no copilot. Used when the agent is on the road.
+enum VoiceInboundMode {
+  IN_PLATFORM
+  FORWARD_TO_AGENT
+}
+
+// How a voice channel places outbound calls.
+//   IN_PLATFORM       — Agent's browser places the call via the Voice SDK,
+//                       Twilio fires /outbound TwiML, customer is dialed
+//                       into the conference. Default; current behavior.
+//   AGENT_FIRST       — Twilio REST first dials the default agent's
+//                       phoneNumber. Their TwiML answer joins them into
+//                       a conference; the customer is then dialed and
+//                       bridged. Used when the agent works off a mobile
+//                       and the platform initiates the dial (e.g. from
+//                       the missed-calls inbox or a pre-signed callback
+//                       link in a WhatsApp template).
+enum VoiceOutboundMode {
+  IN_PLATFORM
+  AGENT_FIRST
+}
+
 enum CallState {
   RINGING
   CONNECTING
@@ -2258,9 +2386,61 @@ model VoiceChannel {
   // migrations. Empty {} means "use platform defaults".
   copilotConfig Json @default("{}") @map("copilot_config")
 
-  parent       CommunicationChannel      @relation(fields: [communicationChannelId], references: [id], onDelete: Cascade)
-  phoneNumbers VoiceChannelPhoneNumber[]
+  // Inbound call routing. When `defaultAgentId` is set, the call rings
+  // ONLY that user's browser for the first `ringTimeoutSeconds` (default
+  // 20s); if still un-claimed after the timeout it broadcasts to every
+  // member of `fallbackDepartmentId` (or, if null, to the whole tenant
+  // as today). Null `defaultAgentId` = legacy tenant-broadcast behavior.
+  defaultAgentId       String? @map("default_agent_id")
+  fallbackDepartmentId String? @map("fallback_department_id")
+  ringTimeoutSeconds   Int     @default(20) @map("ring_timeout_seconds")
 
+  // Hard cap on how long an inbound call can ring before the platform
+  // hangs up the customer leg and marks the session MISSED. Null = no
+  // auto-hangup (legacy behavior; the call rings until Twilio's own
+  // `<Dial timeout>` gives up or the customer hangs up). When set, the
+  // value is interpreted in seconds; the runtime clamps it to a safe
+  // [10, 120] range so we never outlive Twilio's call window.
+  autoHangupSeconds Int? @map("auto_hangup_seconds")
+
+  // How inbound calls are answered:
+  //   IN_PLATFORM       — Twilio media stream + browser-side answer with
+  //                       Live Call Copilot (default; current behavior).
+  //   FORWARD_TO_AGENT  — TwiML directly <Dial>s defaultAgent.phoneNumber.
+  //                       No conference, no media stream, no copilot. If
+  //                       the agent's mobile doesn't pick up, the session
+  //                       is recorded as MISSED and the WABA missed-call
+  //                       alert template fires (if configured).
+  inboundMode VoiceInboundMode @default(IN_PLATFORM) @map("inbound_mode")
+
+  // How outbound calls are placed. AGENT_FIRST means the platform calls
+  // the agent's mobile first (via Twilio REST), and only after they
+  // answer does the platform dial the customer and bridge them. The
+  // missed-call callback flow uses this so the agent isn't tied to the
+  // browser to return a missed call.
+  outboundMode VoiceOutboundMode @default(IN_PLATFORM) @map("outbound_mode")
+
+  // Whose mobile rings when `outboundMode = AGENT_FIRST`. Separate from
+  // `defaultAgentId` so the inbound-default and the outbound-target can
+  // be different people (e.g. inbound goes to a support rep, outbound
+  // goes to a sales rep). Null → falls back to `defaultAgentId` for
+  // backward compatibility.
+  agentFirstAgentId String? @map("agent_first_agent_id")
+
+  // When `outboundMode = AGENT_FIRST`, this controls whether the
+  // workspace page opens in the browser. Default ON (current behavior).
+  // OFF is for "fire and forget" outbound — the agent clicks call, the
+  // mobile rings, no UI needed; useful when the agent isn't at the
+  // computer. Recording / transcription / summary still happen.
+  openWorkspaceOnAgentFirst Boolean @default(true) @map("open_workspace_on_agent_first")
+
+  parent             CommunicationChannel      @relation(fields: [communicationChannelId], references: [id], onDelete: Cascade)
+  defaultAgent       User?                     @relation("VoiceChannelDefaultAgent", fields: [defaultAgentId], references: [id], onDelete: SetNull)
+  agentFirstAgent    User?                     @relation("VoiceChannelAgentFirstAgent", fields: [agentFirstAgentId], references: [id], onDelete: SetNull)
+  fallbackDepartment Department?               @relation("VoiceChannelFallbackDept", fields: [fallbackDepartmentId], references: [id], onDelete: SetNull)
+  phoneNumbers       VoiceChannelPhoneNumber[]
+
+  @@index([agentFirstAgentId])
   @@map("voice_channels")
 }
 

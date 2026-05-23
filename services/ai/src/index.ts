@@ -120,6 +120,12 @@ startVoicePostCallWorker();
 startPostChatSubscriber();
 startLiveRunnerSupervisor();
 
+// Voice-flow runner — bridges live-call events into ChatbotFlow rows with
+// channel=VOICE so admins manage call automations alongside chat flows.
+// See services/ai/src/services/voice-flow/voice-flow-runner.ts.
+import { startVoiceFlowRunner } from "./services/voice-flow/voice-flow-runner";
+startVoiceFlowRunner();
+
 // Phase 5: Post-Call Mode A QA. Trigger enqueues a QA job on every
 // voice.session.ended; worker scores against persisted CallAnalysis.frames,
 // writes a QAScore row, emits qa.scored. Independent of the live path —

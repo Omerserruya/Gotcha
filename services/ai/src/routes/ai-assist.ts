@@ -1,5 +1,13 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import {
+  prisma,
+  authenticate,
+  resolveTenant,
+  requireActiveTenant,
+  requireRole,
+  resolveConversationLocale,
+  resolveEffectiveLocale,
+} from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
@@ -330,7 +338,16 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       console.warn("[suggestions] meta lookup failed:", err.message);
     }
 
-    const locale = (req.query.locale as string) || undefined;
+    // Suggested replies should track the CUSTOMER's language —
+    // resolveConversationLocale returns Conversation.detectedLocale if
+    // present, else falls back to the system effective locale. An
+    // explicit `?locale=` query string overrides for ad-hoc preview.
+    const localeOverride = (req.query.locale as string) || undefined;
+    const locale = localeOverride ?? await resolveConversationLocale({
+      tenantId: req.tenantId!,
+      conversationId: conversation.id,
+      fallbackUserId: req.user?.userId,
+    }).catch(() => undefined);
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,
@@ -375,7 +392,15 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       return;
     }
 
-    const locale = (req.query.locale as string) || undefined;
+    // The AI summary is agent-facing — should track the SYSTEM language,
+    // not the customer's. Per-agent override wins; otherwise tenant
+    // default; otherwise "en". Explicit query-string override still
+    // honored for ad-hoc preview.
+    const localeOverride = (req.query.locale as string) || undefined;
+    const locale = localeOverride ?? (await resolveEffectiveLocale({
+      tenantId: req.tenantId!,
+      userId: req.user?.userId,
+    }).catch(() => null))?.effective;
     const context: aiService.ConversationContext = {
       tenantId: req.tenantId!, conversationId: conversation.id,
       customerName: conversation.customerName || undefined,

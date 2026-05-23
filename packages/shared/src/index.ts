@@ -202,6 +202,16 @@ export {
   heartbeat,
   type AgentPresenceStatus,
 } from "./lib/agent-presence";
+export {
+  resolveEffectiveLocale,
+  resolveConversationLocale,
+  coerceLocale,
+  isSupportedLocale,
+  SUPPORTED_LOCALES,
+  SYSTEM_FALLBACK_LOCALE,
+  type SupportedLocale,
+  type ResolvedLocale,
+} from "./lib/locale";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

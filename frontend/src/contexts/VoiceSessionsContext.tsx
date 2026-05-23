@@ -321,8 +321,16 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
     const ringing: VoiceCallSession[] = [];
     const allLive: VoiceCallSession[] = [];
     let live: VoiceCallSession | null = null;
+    const myUserId = userIdRef.current;
     for (const s of sessions) {
       if (isRinging(s)) {
+        // Per-channel routing: if a default agent is set on the session it
+        // rings only that agent for the first `ringTimeoutSeconds`. After
+        // the timeout voice-copilot NULLs `assignedAgentId` so the same
+        // event broadcasts to everyone. Filter accordingly.
+        if (s.assignedAgentId && s.assignedAgentId !== myUserId) {
+          continue;
+        }
         ringing.push(s);
       } else if (isLive(s)) {
         allLive.push(s);

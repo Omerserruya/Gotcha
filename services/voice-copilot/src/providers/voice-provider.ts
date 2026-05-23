@@ -99,6 +99,36 @@ export interface VoiceProvider {
    * to drop. Idempotent: terminating an already-completed call is a no-op.
    */
   endCall(input: { callSid: string }): Promise<void>;
+
+  /**
+   * Toggle a participant's "on hold" state inside a live conference.
+   * Used for whisper / consult mode: park the customer with hold music
+   * while the agent talks privately with a 3rd party already in the
+   * conference. `hold=false` brings them back to a 3-way call.
+   */
+  setParticipantHold(input: {
+    conferenceSid: string;
+    callSid: string;
+    hold: boolean;
+  }): Promise<void>;
+
+  /**
+   * Place an outbound call via the provider's REST API to an arbitrary
+   * PSTN destination. When Twilio answers it fetches `twimlUrl` for
+   * answer-time instructions. Used by AGENT_FIRST outbound + the
+   * smart-callback bridge to ring the agent's mobile from the server,
+   * without involving the browser Voice SDK.
+   *
+   * Returns the new leg's provider CallSid so callers can correlate
+   * status-callback events back to their stored session row.
+   */
+  placeOutboundCall(input: {
+    to: string;
+    from: string;
+    twimlUrl: string;
+    statusCallbackUrl?: string;
+    timeoutSeconds?: number;
+  }): Promise<{ callSid: string }>;
 }
 
 /**

@@ -1,6 +1,16 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, validate, getRedis } from "@chatcenter/shared";
+import {
+  prisma,
+  authenticate,
+  resolveTenant,
+  requireRole,
+  validate,
+  getRedis,
+  resolveEffectiveLocale,
+  isSupportedLocale,
+  SUPPORTED_LOCALES,
+} from "@chatcenter/shared";
 import * as authService from "../services/auth.service";
 
 const router = Router();
@@ -12,6 +22,7 @@ router.get("/", async (req: Request, res: Response) => {
       where: { tenantId: req.tenantId!, role: "AGENT" },
       select: {
         id: true, name: true, email: true, isActive: true, createdAt: true,
+        phoneNumber: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
         departmentMember: {
           select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
@@ -60,6 +71,10 @@ router.post("/", requireRole("ADMIN"), validate(createAgentSchema), async (req: 
 const updateAgentSchema = z.object({
   name: z.string().min(1).optional(),
   isActive: z.boolean().optional(),
+  // E.164 personal mobile. Allow null to clear. Loose validation here —
+  // strict format enforcement happens in the frontend + voice-copilot's
+  // normalizePhone().
+  phoneNumber: z.string().nullable().optional(),
 });
 
 router.patch("/:id", requireRole("ADMIN"), validate(updateAgentSchema), async (req: Request, res: Response) => {
@@ -71,7 +86,7 @@ router.patch("/:id", requireRole("ADMIN"), validate(updateAgentSchema), async (r
     const updated = await prisma.user.update({
       where: { id: req.params.id as string },
       data: req.body,
-      select: { id: true, name: true, email: true, isActive: true },
+      select: { id: true, name: true, email: true, isActive: true, phoneNumber: true },
     });
     res.json(updated);
   } catch (err) {
@@ -494,6 +509,82 @@ router.get("/settings/first-take-care", requireRole("ADMIN"), async (_req: Reque
 
 router.put("/settings/first-take-care", requireRole("ADMIN"), async (_req: Request, res: Response) => {
   res.status(410).json({ error: "Deprecated. Bot configuration is now managed via AI Employees in AI Studio." });
+});
+
+// ─── System language ──────────────────────────────────────────
+// Three endpoints in one file: read the effective locale (anyone),
+// set the per-agent override (anyone), set the tenant default (admin).
+// The "effective" value follows the resolver precedence — agent
+// override > tenant default > "en" fallback.
+
+const localeSchema = z.object({
+  locale: z.union([z.string(), z.null()]).optional(),
+});
+
+router.get("/me/locale", async (req: Request, res: Response) => {
+  try {
+    const resolved = await resolveEffectiveLocale({
+      tenantId: req.tenantId!,
+      userId: req.user!.userId,
+    });
+    res.json({
+      data: {
+        effective: resolved.effective,
+        tenantDefault: resolved.tenantDefault,
+        userOverride: resolved.userOverride,
+        supported: SUPPORTED_LOCALES,
+      },
+    });
+  } catch (err) {
+    console.error("Get me/locale error:", err);
+    res.status(500).json({ error: "failed_to_load_locale" });
+  }
+});
+
+router.put("/me/locale", validate(localeSchema), async (req: Request, res: Response) => {
+  try {
+    const raw = (req.body as { locale?: string | null }).locale;
+    // NULL / empty / "system" all collapse to "clear the override" so
+    // the agent falls back to the tenant default.
+    let nextLocale: string | null = null;
+    if (raw && raw !== "system") {
+      if (!isSupportedLocale(raw)) {
+        res.status(400).json({ error: "unsupported_locale", supported: SUPPORTED_LOCALES });
+        return;
+      }
+      nextLocale = raw;
+    }
+    await prisma.user.update({
+      where: { id: req.user!.userId },
+      data: { locale: nextLocale },
+    });
+    const resolved = await resolveEffectiveLocale({
+      tenantId: req.tenantId!,
+      userId: req.user!.userId,
+    });
+    res.json({ data: { effective: resolved.effective, userOverride: resolved.userOverride } });
+  } catch (err) {
+    console.error("Put me/locale error:", err);
+    res.status(500).json({ error: "failed_to_set_locale" });
+  }
+});
+
+router.put("/settings/locale", requireRole("ADMIN"), validate(localeSchema), async (req: Request, res: Response) => {
+  try {
+    const raw = (req.body as { locale?: string }).locale;
+    if (!raw || !isSupportedLocale(raw)) {
+      res.status(400).json({ error: "unsupported_locale", supported: SUPPORTED_LOCALES });
+      return;
+    }
+    await prisma.tenant.update({
+      where: { id: req.tenantId! },
+      data: { defaultLocale: raw },
+    });
+    res.json({ data: { tenantDefault: raw } });
+  } catch (err) {
+    console.error("Put settings/locale error:", err);
+    res.status(500).json({ error: "failed_to_set_tenant_locale" });
+  }
 });
 
 export default router;

@@ -14,14 +14,19 @@ export async function loadCopilotConfigForConversation(
   conversationId: string,
 ): Promise<CopilotConfig> {
   try {
-    const conv = await prisma.conversation.findUnique({
-      where: { id: conversationId },
+    // Conversation rows don't carry the CommunicationChannel.id directly —
+    // the link is via VoiceCallSession.channelId (set when the call rings
+    // in / is placed out). Falls through to defaults when there's no
+    // session yet (e.g. very early in the lifecycle).
+    const session = await prisma.voiceCallSession.findFirst({
+      where: { conversationId },
       select: { channelId: true },
+      orderBy: { startedAt: "desc" },
     });
-    if (!conv?.channelId) return EMPTY_COPILOT_CONFIG;
+    if (!session?.channelId) return EMPTY_COPILOT_CONFIG;
 
     const voiceChannel = await prisma.voiceChannel.findFirst({
-      where: { communicationChannelId: conv.channelId },
+      where: { communicationChannelId: session.channelId },
       select: { copilotConfig: true },
     });
     if (!voiceChannel) return EMPTY_COPILOT_CONFIG;

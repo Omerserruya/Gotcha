@@ -122,11 +122,23 @@ export default function OutboundCallPage() {
     try {
       const conversationId = crypto.randomUUID();
       setPendingConversationId(conversationId);
-      await placeCall(normalized, {
+      const placeResult = await placeCall(normalized, {
         contactName: selected?.displayName,
         conversationId,
         notes: notes.trim() || undefined,
       });
+      // AGENT_FIRST: the server is REST-dialing the agent's mobile.
+      // The browser isn't a participant. Navigate to the workspace
+      // ONLY when the channel toggle wants it; otherwise stay on this
+      // page (fire-and-forget — agent isn't at the computer).
+      if (placeResult && placeResult.mode === "AGENT_FIRST") {
+        if (placeResult.openWorkspace && placeResult.sessionId) {
+          router.push(`/voice/${placeResult.sessionId}`);
+        } else {
+          setError(t("outbound.call.agentFirstDialed"));
+        }
+        return;
+      }
       if (token) {
         fetch(`${API_URL}/api/ai-assist/voice/start`, {
           method: "POST",

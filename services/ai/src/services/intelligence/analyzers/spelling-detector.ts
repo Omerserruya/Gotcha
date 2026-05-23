@@ -222,7 +222,7 @@ export async function detectSpellingMode(
 
   const transcript = input.recentUtterances
     .slice(-12)
-    .map((u) => `[${u.speaker ?? "spk"}] ${u.text}`)
+    .map((u) => `[${u.source ?? "spk"}] ${u.text}`)
     .join("\n");
 
   try {

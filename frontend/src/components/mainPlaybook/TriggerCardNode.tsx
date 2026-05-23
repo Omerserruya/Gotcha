@@ -227,6 +227,53 @@ function describe(
         subtitle: d.cron ? String(d.cron) : "Not set",
       };
     }
+    case "voice_trigger:call.incoming":
+      return {
+        icon: { node: VOICE_PHONE_ICON, bg: "bg-emerald-50", fg: "text-emerald-600" },
+        title: "Incoming call",
+        subtitle: "Any inbound call",
+      };
+    case "voice_trigger:call.answered":
+      return {
+        icon: { node: VOICE_PHONE_ICON, bg: "bg-emerald-50", fg: "text-emerald-600" },
+        title: "Call answered",
+        subtitle: "When an agent picks up",
+      };
+    case "voice_trigger:call.missed":
+      return {
+        icon: { node: VOICE_PHONE_END_ICON, bg: "bg-rose-50", fg: "text-rose-600" },
+        title: "Missed call",
+        subtitle: "Customer hung up before answer",
+      };
+    case "voice_trigger:call.hangup_customer":
+      return {
+        icon: { node: VOICE_PHONE_END_ICON, bg: "bg-rose-50", fg: "text-rose-600" },
+        title: "Customer hung up",
+        subtitle: "Customer ended the call",
+      };
+    case "voice_trigger:call.hangup_agent":
+      return {
+        icon: { node: VOICE_PHONE_END_ICON, bg: "bg-rose-50", fg: "text-rose-600" },
+        title: "Agent hung up",
+        subtitle: "Agent ended the call",
+      };
+    case "voice_trigger:call.intent_detected": {
+      const intent = String(d.intent || "").trim();
+      const minC = d.minConfidence ?? 0.6;
+      return {
+        icon: { node: VOICE_AI_ICON, bg: "bg-violet-50", fg: "text-violet-600" },
+        title: "Intent detected",
+        subtitle: intent ? `${intent} ≥ ${minC}` : "No intent set",
+      };
+    }
+    case "voice_trigger:call.keyword_spoken": {
+      const list: string[] = Array.isArray(d.keywords) ? d.keywords : [];
+      return {
+        icon: { node: VOICE_SEARCH_ICON, bg: "bg-amber-50", fg: "text-amber-600" },
+        title: "Keyword spoken",
+        subtitle: list.length === 0 ? "No keywords yet" : list.slice(0, 3).join(", ") + (list.length > 3 ? "…" : ""),
+      };
+    }
     default:
       return {
         icon: { node: FALLBACK_LOGO.icon, bg: FALLBACK_LOGO.bg, fg: FALLBACK_LOGO.fg },
@@ -235,3 +282,25 @@ function describe(
       };
   }
 }
+
+// Voice-trigger icon glyphs — defined inline so describe() stays self-contained.
+const VOICE_PHONE_ICON = (
+  <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" />
+  </svg>
+);
+const VOICE_PHONE_END_ICON = (
+  <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M3 3l18 18M8.13 9.36C5.78 11.5 4.5 13.92 4.5 16.5c0 1.24 1.01 2.25 2.25 2.25h2.06c.66 0 1.21-.43 1.38-1.04l.6-1.97M14.86 14.71l1.65-.5c.65-.2 1.36 0 1.73.5l1.43 1.93c.44.6.39 1.42-.13 1.97l-1.04 1.08" />
+  </svg>
+);
+const VOICE_AI_ICON = (
+  <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
+  </svg>
+);
+const VOICE_SEARCH_ICON = (
+  <svg className="w-full h-full" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+    <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" />
+  </svg>
+);

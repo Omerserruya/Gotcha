@@ -16,6 +16,7 @@
  *   - send_message_quick_reply — outbound interactive with reply buttons; pauses
  *   - send_message_image   — outbound image by URL (+ caption)
  *   - send_message_file    — outbound document by URL (+ filename, caption)
+ *   - send_message_template — outbound WABA template (WhatsApp only); re-opens 24h window
  *   - route_target         — dispatch: AI agent / sub-flow / human / department
  *   - default_fallback     — same as route_target but visually distinct
  *   - end                  — terminate: close / handoff_human / wait_for_reply
@@ -460,6 +461,18 @@ async function walk(
         break;
       }
 
+      case "send_message_template": {
+        // Looks the template up by id, builds Meta `components` from the
+        // author-supplied variable map (with {{var}} interpolation against
+        // ctx.vars), and dispatches via the WhatsApp adapter. Non-WhatsApp
+        // conversations fall through with a trace entry — flows mixing
+        // channels won't crash.
+        const result = await sendTemplate(node.data || {}, ctx);
+        ctx.trace.push({ nodeId: node.id, type: node.type, action: result });
+        currentId = outgoing[0]?.target || null;
+        break;
+      }
+
       case "route_target":
       case "default_fallback": {
         const routeType = (node.data?.routeType || "agent") as "agent" | "flow" | "human";
@@ -775,6 +788,230 @@ async function sendMedia(
   // least gets the link instead of silent failure.
   const fallback = resolvedCaption ? `${resolvedCaption}\n${resolvedUrl}` : resolvedUrl;
   await sendText(fallback, ctx);
+}
+
+// Extract `{{var}}` placeholder keys from a string in declared order.
+// Mirrors the helper used by the broadcast worker so template variables
+// resolve identically across both code paths.
+function extractTemplatePlaceholders(text: string | null | undefined): string[] {
+  if (!text) return [];
+  const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (!seen.has(m[1])) { seen.add(m[1]); order.push(m[1]); }
+  }
+  return order;
+}
+
+// Resolve a `crm:<field>` token against a Contact row. Mirrors the alias
+// surface used by outbound/scheduled (resolveCrmFieldFromContact) so flow
+// authors get the same field names regardless of which sender path runs.
+// Returns "" when the field can't be resolved — buildTemplateComponents
+// then falls back to the template's declared sample.
+function resolveCrmField(
+  field: string,
+  contact: { displayName?: string | null; email?: string | null; phone?: string | null; source?: string | null; metadata?: any } | null,
+): string {
+  if (!contact) return "";
+  const meta = (contact.metadata && typeof contact.metadata === "object" ? (contact.metadata as Record<string, unknown>) : null);
+  if (meta && Object.prototype.hasOwnProperty.call(meta, field)) {
+    const v = meta[field];
+    if (v != null && String(v).length > 0) return String(v);
+  }
+  const key = field.toLowerCase().replace(/[\s_-]/g, "");
+  if (key === "displayname" || key === "name" || key === "fullname") return contact.displayName || "";
+  if (key === "firstname" || key === "first" || key === "givenname") {
+    return (contact.displayName || "").trim().split(/\s+/)[0] || "";
+  }
+  if (key === "lastname" || key === "last" || key === "familyname" || key === "surname") {
+    const parts = (contact.displayName || "").trim().split(/\s+/);
+    return parts.length > 1 ? parts.slice(1).join(" ") : "";
+  }
+  if (key === "phone" || key === "mobile" || key === "phonenumber" || key === "tel" || key === "telephone" || key === "cell") {
+    return contact.phone || "";
+  }
+  if (key === "email" || key === "mail" || key === "emailaddress") return contact.email || "";
+  if (key === "source") return contact.source || "";
+  return "";
+}
+
+// Build Meta `template.components` from a template + author-supplied
+// variable map. Each author value is either:
+//   - "crm:<field>"  → resolved against the conversation's Contact row
+//   - plain text     → interpolated against ctx.vars (flow vars + {{vars}})
+// Missing values fall back to the template's declared sample, then "-" (Meta
+// rejects empty parameter text).
+function buildTemplateComponentsForFlow(
+  tmpl: { body: string | null; headerType: string | null; headerContent: string | null; variables?: any },
+  authorValues: Record<string, string> | undefined,
+  headerMediaOverride: string | undefined,
+  ctx: FlowExecCtx,
+  contact: { displayName?: string | null; email?: string | null; phone?: string | null; source?: string | null; metadata?: any } | null,
+): any[] {
+  const components: any[] = [];
+  const declared = Array.isArray(tmpl.variables) ? tmpl.variables : [];
+  const sampleByKey = new Map<string, string>();
+  for (const v of declared) {
+    if (v && typeof v.key === "string" && typeof v.sample === "string" && v.sample.trim()) {
+      sampleByKey.set(v.key, v.sample);
+    }
+  }
+  const valueFor = (key: string): string => {
+    const raw = authorValues ? authorValues[key] : undefined;
+    if (raw != null && String(raw).length > 0) {
+      const s = String(raw);
+      if (s.startsWith("crm:")) {
+        const v = resolveCrmField(s.slice(4), contact);
+        if (v.length > 0) return v;
+      } else {
+        const resolved = interpolate(s, ctx.vars);
+        if (resolved.length > 0) return resolved;
+      }
+    }
+    const sample = sampleByKey.get(key);
+    if (sample) return sample;
+    return "-";
+  };
+  function buildComponent(scope: "header" | "body", text: string) {
+    const keys = extractTemplatePlaceholders(text);
+    if (keys.length === 0) return null;
+    const allNumeric = keys.every((k) => /^\d+$/.test(k));
+    const componentType = scope === "header" ? "header" : "body";
+    if (allNumeric) {
+      const sorted = [...keys].sort((a, b) => Number(a) - Number(b));
+      return { type: componentType, parameters: sorted.map((k) => ({ type: "text", text: valueFor(k) })) };
+    }
+    return {
+      type: componentType,
+      parameters: keys.map((k) => ({ type: "text", parameter_name: k, text: valueFor(k) })),
+    };
+  }
+  if (tmpl.headerType === "TEXT" && tmpl.headerContent) {
+    const h = buildComponent("header", tmpl.headerContent);
+    if (h) components.push(h);
+  } else if (
+    tmpl.headerType === "IMAGE" || tmpl.headerType === "VIDEO" || tmpl.headerType === "DOCUMENT"
+  ) {
+    // Media-header override can be a flat URL, a `{{flow_var}}` mention, or
+    // a `crm:<field>` token. Resolution order mirrors body variables.
+    let overrideUrl = "";
+    if (headerMediaOverride) {
+      const s = String(headerMediaOverride);
+      if (s.startsWith("crm:")) {
+        overrideUrl = resolveCrmField(s.slice(4), contact);
+      } else {
+        overrideUrl = interpolate(s, ctx.vars);
+      }
+    }
+    const liveUrl = overrideUrl.trim() || tmpl.headerContent || "";
+    if (liveUrl) {
+      const mediaType = tmpl.headerType.toLowerCase() as "image" | "video" | "document";
+      components.push({
+        type: "header",
+        parameters: [{ type: mediaType, [mediaType]: { link: liveUrl } }],
+      });
+    }
+  }
+  if (tmpl.body) {
+    const b = buildComponent("body", tmpl.body);
+    if (b) components.push(b);
+  }
+  return components;
+}
+
+async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promise<string> {
+  // Every early-exit reason is visible in docker logs so flow authors can
+  // diagnose "I picked a template but nothing happened" without digging into
+  // the trace JSON. Keep prefix stable: `[flow.template]`.
+  const tag = "[flow.template]";
+  if (!ctx.sendCtx) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
+  const templateId = String(data.templateId || "").trim();
+  if (!templateId) { console.warn(`${tag} skip no_template conv=${ctx.conversationId}`); return "skipped_no_template"; }
+  // Templates are a WhatsApp-only concept — if the conversation is on any
+  // other channel, log and skip rather than crash. Flow author can still
+  // pipe the same playbook through multiple channels safely.
+  if (String(ctx.sendCtx.channel).toUpperCase() !== "WHATSAPP") {
+    console.warn(`${tag} skip non_whatsapp channel=${ctx.sendCtx.channel} conv=${ctx.conversationId}`);
+    return "skipped_non_whatsapp";
+  }
+  const tmpl = await prisma.messageTemplate.findFirst({
+    where: { id: templateId, tenantId: ctx.tenantId },
+  });
+  if (!tmpl) { console.warn(`${tag} skip template_not_found id=${templateId} tenant=${ctx.tenantId}`); return "skipped_template_not_found"; }
+  if (tmpl.status !== "APPROVED") { console.warn(`${tag} skip template_not_approved id=${templateId} status=${tmpl.status}`); return "skipped_template_not_approved"; }
+
+  const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
+  if (!adapter || !adapter.sendTemplateMessage) {
+    console.warn(`${tag} skip adapter_unsupported channel=${ctx.sendCtx.channel}`);
+    return "skipped_adapter_unsupported";
+  }
+
+  // Look up the Contact backing this conversation so `crm:<field>` tokens
+  // (set in the inspector) can resolve. Best-effort — when there's no
+  // contact row, crm tokens fall back to the template's declared sample.
+  const conversationRow = await prisma.conversation.findUnique({
+    where: { id: ctx.conversationId },
+    select: { customerExternalId: true, channel: true, customerName: true },
+  });
+  let contact: { displayName?: string | null; email?: string | null; phone?: string | null; source?: string | null; metadata?: any } | null = null;
+  if (conversationRow?.customerExternalId) {
+    contact = await prisma.contact.findFirst({
+      where: {
+        tenantId: ctx.tenantId,
+        externalId: conversationRow.customerExternalId,
+      },
+      select: { displayName: true, email: true, phone: true, source: true, metadata: true },
+    });
+  }
+  // Fall back to the conversation's customerName when no Contact exists yet —
+  // keeps simple `crm:displayName` mappings working on first inbound.
+  if (!contact && conversationRow) {
+    contact = { displayName: conversationRow.customerName };
+  }
+
+  const components = buildTemplateComponentsForFlow(
+    { body: tmpl.body, headerType: tmpl.headerType, headerContent: tmpl.headerContent, variables: tmpl.variables },
+    data.variables || {},
+    data.headerMediaUrl ? String(data.headerMediaUrl) : undefined,
+    ctx,
+    contact,
+  );
+
+  console.log(`${tag} attempt name=${tmpl.name} lang=${tmpl.language} to=${ctx.sendCtx.recipientId} components=${components.length}`);
+  let extId: string | null = null;
+  try {
+    extId = await adapter.sendTemplateMessage(
+      ctx.sendCtx.credentials,
+      ctx.sendCtx.channelAccountExternalId,
+      ctx.sendCtx.recipientId,
+      tmpl.name,
+      tmpl.language || "en",
+      components,
+    );
+  } catch (err: any) {
+    console.error(`${tag} fail name=${tmpl.name} err=${String(err?.message || err).slice(0, 200)}`);
+    // Persist a FAILED message row so the agent's history shows the attempt
+    // (and the failure reason) instead of silently dropping.
+    await persistOutbound(ctx, tmpl.body || tmpl.name, "template", null, {
+      templateId: tmpl.id,
+      templateName: tmpl.name,
+      language: tmpl.language,
+      components,
+      error: String(err?.message || err).slice(0, 500),
+    });
+    return "failed";
+  }
+
+  console.log(`${tag} sent name=${tmpl.name} extId=${extId} conv=${ctx.conversationId}`);
+  await persistOutbound(ctx, tmpl.body || tmpl.name, "template", extId, {
+    templateId: tmpl.id,
+    templateName: tmpl.name,
+    language: tmpl.language,
+    components,
+  });
+  return "sent";
 }
 
 async function persistOutbound(

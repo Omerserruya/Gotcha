@@ -39,6 +39,7 @@ import { SendMessageInteractiveNode } from "./SendMessageInteractiveNode";
 import { SendMessageQuickReplyNode } from "./SendMessageQuickReplyNode";
 import { SendMessageImageNode } from "./SendMessageImageNode";
 import { SendMessageFileNode } from "./SendMessageFileNode";
+import { SendMessageTemplateNode } from "./SendMessageTemplateNode";
 import { WaitNode } from "./WaitNode";
 import { CollectInputNode } from "./CollectInputNode";
 import { SetVariableNode } from "./SetVariableNode";
@@ -50,6 +51,7 @@ import { SendCommentReplyNode } from "./SendCommentReplyNode";
 import { CommentTriggerNode } from "./CommentTriggerNode";
 import { KeywordTriggerNode } from "./KeywordTriggerNode";
 import { ScheduleTriggerNode } from "./ScheduleTriggerNode";
+import { VoiceAddParticipantNode } from "./VoiceAddParticipantNode";
 import { TemplateGalleryModal } from "./TemplateGalleryModal";
 import { validateFlow } from "./flow-validator";
 import { FlowIssuesPill } from "./FlowIssuesPill";
@@ -65,6 +67,17 @@ const nodeTypes: NodeTypes = {
   comment_trigger: TriggerCardNode,
   keyword_trigger: TriggerCardNode,
   schedule_trigger: TriggerCardNode,
+  // Voice triggers (7) reuse the same When… card chrome — TriggerCardNode's
+  // describe() handles the per-type icon + title + subtitle.
+  "voice_trigger:call.incoming": TriggerCardNode,
+  "voice_trigger:call.answered": TriggerCardNode,
+  "voice_trigger:call.missed": TriggerCardNode,
+  "voice_trigger:call.hangup_customer": TriggerCardNode,
+  "voice_trigger:call.hangup_agent": TriggerCardNode,
+  "voice_trigger:call.intent_detected": TriggerCardNode,
+  "voice_trigger:call.keyword_spoken": TriggerCardNode,
+  // Voice actions render with the standard CollapsedNode chrome.
+  voice_add_participant: VoiceAddParticipantNode,
   // Decorative section header rendered above each trigger bucket.
   trigger_section_header: TriggerSectionHeaderNode,
   condition_group: ConditionGroupNode,
@@ -77,6 +90,7 @@ const nodeTypes: NodeTypes = {
   send_message_quick_reply: SendMessageQuickReplyNode,
   send_message_image: SendMessageImageNode,
   send_message_file: SendMessageFileNode,
+  send_message_template: SendMessageTemplateNode,
   send_comment_reply: SendCommentReplyNode,
   // Control / actions
   wait: WaitNode,
@@ -309,6 +323,23 @@ export const NODE_PALETTE = [
         ),
       },
       {
+        type: "send_message_template",
+        label: "Send WhatsApp Template",
+        desc: "Approved WABA template — re-opens 24h window",
+        color: "emerald",
+        bg: "bg-emerald-50",
+        border: "border-emerald-200",
+        text: "text-emerald-600",
+        iconBg: "bg-emerald-100",
+        hoverBg: "hover:bg-emerald-100",
+        ring: "ring-emerald-300",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" />
+          </svg>
+        ),
+      },
+      {
         type: "send_comment_reply",
         label: "Reply to Comment",
         desc: "Public reply on the original comment",
@@ -448,6 +479,75 @@ export const NODE_PALETTE = [
       },
     ],
   },
+  // ── Voice ─────────────────────────────────────────────────
+  // Triggers + actions for live-call automations. Wired in
+  // services/ai/src/services/voice-flow/voice-flow-runner.ts.
+  {
+    category: "Voice Triggers",
+    items: [
+      {
+        type: "voice_trigger:call.incoming", label: "Incoming Call",
+        desc: "Inbound call ringing on this channel",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>),
+      },
+      {
+        type: "voice_trigger:call.answered", label: "Call Answered",
+        desc: "Agent picked up (state → ACTIVE)",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>),
+      },
+      {
+        type: "voice_trigger:call.missed", label: "Missed Call",
+        desc: "Customer hung up before answer",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.75 9.75l4.5 4.5m0-4.5l-4.5 4.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>),
+      },
+      {
+        type: "voice_trigger:call.hangup_customer", label: "Customer Hung Up",
+        desc: "Call ended; customer disconnected first",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85" /></svg>),
+      },
+      {
+        type: "voice_trigger:call.hangup_agent", label: "Agent Hung Up",
+        desc: "Call ended; agent disconnected first",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9 19V5a2 2 0 012-2h6a2 2 0 012 2v14m-8 0H5m4 0a2 2 0 002-2v-1" /></svg>),
+      },
+      {
+        type: "voice_trigger:call.intent_detected", label: "Intent Detected",
+        desc: "AI detected an intent in the live transcript",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>),
+      },
+      {
+        type: "voice_trigger:call.keyword_spoken", label: "Keyword Spoken",
+        desc: "A configured keyword appears in the call",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>),
+      },
+    ],
+  },
+  {
+    category: "Voice Actions",
+    items: [
+      {
+        type: "voice_add_participant", label: "Add Participant",
+        desc: "Dial a 3rd party into the live conference",
+        color: "indigo", bg: "bg-indigo-50", border: "border-indigo-200", text: "text-indigo-600",
+        iconBg: "bg-indigo-100", hoverBg: "hover:bg-indigo-100", ring: "ring-indigo-300",
+        icon: (<svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M18 9v6m3-3h-6m-3 0a4 4 0 11-8 0 4 4 0 018 0zm-4 6c-3.3 0-6 1.5-6 4v1h12v-1c0-2.5-2.7-4-6-4z" /></svg>),
+      },
+    ],
+  },
 ];
 
 // ─── Layout helpers ────────────────────────────────────────────
@@ -478,6 +578,8 @@ function getDefaultData(type: string, shared: { agents: any[]; flows: any[]; dep
       return { url: "", caption: "" };
     case "send_message_file":
       return { url: "", filename: "", caption: "" };
+    case "send_message_template":
+      return { templateId: "", templateName: "", language: "", variables: {}, headerMediaUrl: "" };
     case "send_comment_reply":
       return { mode: "text", text: "", agentId: "", fallbackText: "" };
     case "wait":
@@ -1172,11 +1274,27 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   // Triggers and headers are pinned as `draggable: false`. Headers are
   // synthetic — never persisted — and are stripped on save and from the
   // validator.
-  const TRIGGER_BUCKET_ORDER: { type: string; label: string }[] = [
-    { type: "channel_entry", label: "Chats" },
-    { type: "comment_trigger", label: "Comments" },
-    { type: "keyword_trigger", label: "Keywords" },
-    { type: "schedule_trigger", label: "Schedule" },
+  // Each bucket renders a single section header followed by one or more
+  // trigger cards. Most buckets hold a single type; Voice groups all 7
+  // voice-trigger types under one "Voice" header (incoming/answered/missed
+  // /hangups/AI signals) and preserves the declared order between them.
+  const TRIGGER_BUCKET_ORDER: { types: string[]; label: string }[] = [
+    { types: ["channel_entry"], label: "Chats" },
+    { types: ["comment_trigger"], label: "Comments" },
+    { types: ["keyword_trigger"], label: "Keywords" },
+    { types: ["schedule_trigger"], label: "Schedule" },
+    {
+      types: [
+        "voice_trigger:call.incoming",
+        "voice_trigger:call.answered",
+        "voice_trigger:call.missed",
+        "voice_trigger:call.hangup_customer",
+        "voice_trigger:call.hangup_agent",
+        "voice_trigger:call.intent_detected",
+        "voice_trigger:call.keyword_spoken",
+      ],
+      label: "Voice",
+    },
   ];
   useEffect(() => {
     const PIN_X = -360;
@@ -1185,14 +1303,22 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     const CARD_H = 150;
     const BUCKET_GAP = 18;
 
-    const buckets = TRIGGER_BUCKET_ORDER.map(({ type, label }) => ({
-      type,
-      label,
-      headerId: `__sh_${type}`,
-      items: triggerNodes
-        .filter((n) => n.type === type)
-        .sort((a, b) => a.id.localeCompare(b.id)),
-    })).filter((b) => b.items.length > 0);
+    const buckets = TRIGGER_BUCKET_ORDER.map(({ types, label }) => {
+      const headerId = `__sh_${types[0]}`;
+      return {
+        types,
+        label,
+        headerId,
+        items: triggerNodes
+          .filter((n) => n.type && types.includes(n.type))
+          .sort((a, b) => {
+            const ai = a.type ? types.indexOf(a.type) : -1;
+            const bi = b.type ? types.indexOf(b.type) : -1;
+            if (ai !== bi) return ai - bi;
+            return a.id.localeCompare(b.id);
+          }),
+      };
+    }).filter((b) => b.items.length > 0);
 
     // Desired position map for triggers + their section headers.
     const targets = new Map<string, { x: number; y: number }>();

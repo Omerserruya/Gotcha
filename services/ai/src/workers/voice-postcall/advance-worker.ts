@@ -1,4 +1,4 @@
-import { createWorker, prisma } from "@chatcenter/shared";
+import { createWorker, prisma, resolveEffectiveLocale } from "@chatcenter/shared";
 import type { Job, Worker } from "bullmq";
 import {
   VOICE_POSTCALL_QUEUE_NAME,
@@ -116,10 +116,14 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     return null;
   }
 
-  const [allowedFields, config, existingActionItems] = await Promise.all([
+  const [allowedFields, config, existingActionItems, localeInfo] = await Promise.all([
     getSummarizerAllowedFields(ctx.tenantId),
     getPostConversationConfig(ctx.tenantId),
     loadExistingActionItems({ tenantId: ctx.tenantId, conversationId: ctx.conversationId }),
+    // System language drives the voice-call summary copy. Voice post-
+    // processing runs from a worker with no user context — use the
+    // tenant default. Falls back to "en" inside summarizePostConversation.
+    resolveEffectiveLocale({ tenantId: ctx.tenantId }).catch(() => null),
   ]);
   const rawSummary: PostConversationSummary = await summarizePostConversation({
     tenantId: ctx.tenantId,
@@ -127,6 +131,7 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     channel: "voice",
     allowedFields,
     existingActionItems,
+    locale: localeInfo?.effective,
   });
   // Apply tenant rule engine on top of the LLM output. Rules ADD tasks and
   // CRM patch entries; they never overwrite what the AI extracted.
@@ -311,6 +316,18 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
     localResult = { ok: r.ok, skipReason: r.skipReason, error: r.error };
   }
 
+  // Multi-contact attribution — copy the same patch onto any ADDED legs
+  // that resolved to a known Contact. This is the "log it on the second
+  // customer too" branch: if a 3rd party joined the call and they were
+  // already in CRM, the same summary fields apply to them. Skipped when
+  // no ADDED leg matched a Contact, or when the added leg never joined.
+  const additionalUpdates = await applyToAdditionalContacts({
+    ctx,
+    fields,
+    intent: structured.intent ?? "n/a",
+    originContactId: contactId,
+  });
+
   return {
     crmWritten: vendorResult.ok,
     crmOutcome: vendorResult.outcome,
@@ -319,7 +336,64 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
     crmSkipReason: vendorResult.reason,
     localContactUpdated: localResult.ok,
     localContactError: localResult.error,
+    additionalContactsUpdated: additionalUpdates.updated,
+    additionalContactsSkipped: additionalUpdates.skipped,
   };
+}
+
+/**
+ * Copy the same CRM field patch onto any ADDED participants that linked
+ * to a Contact at participant-join. Excludes the origin contact (already
+ * patched above) and any leg that never reached JOINED (DIALING/FAILED).
+ *
+ * Uses the action-executor so the same audit + permission rails apply
+ * as the origin patch. `sourceInteractionId` includes the participant
+ * id so vendor adapters can distinguish origin vs co-participant writes.
+ */
+async function applyToAdditionalContacts(args: {
+  ctx: AdvanceContext;
+  fields: Record<string, unknown>;
+  intent: string;
+  originContactId: string | null;
+}): Promise<{ updated: number; skipped: string[] }> {
+  const { ctx, fields, intent, originContactId } = args;
+  const skipped: string[] = [];
+  let updated = 0;
+  try {
+    const rows = await prisma.voiceSessionParticipant.findMany({
+      where: {
+        sessionId: ctx.sessionId,
+        role: "ADDED",
+        contactId: { not: null },
+        joinedAt: { not: null },
+      },
+      select: { id: true, contactId: true, phoneNumber: true },
+    });
+    for (const row of rows) {
+      if (!row.contactId) continue;
+      if (originContactId && row.contactId === originContactId) {
+        skipped.push(`${row.id}:same-as-origin`);
+        continue;
+      }
+      const action: PlannedAction = {
+        tool: "update_contact",
+        params: { contactId: row.contactId, fields },
+        reason: `post-call CRM merge co-participant (intent=${intent})`,
+        riskLevel: "low",
+      };
+      const r = await executeAction(ctx.tenantId, action, {
+        actorId: `voice-postcall:${ctx.sessionId}:added:${row.id}`,
+      });
+      if (r.ok) {
+        updated++;
+      } else {
+        skipped.push(`${row.id}:${r.skipReason ?? r.error ?? "failed"}`);
+      }
+    }
+  } catch (err: any) {
+    skipped.push(`query-failed:${err?.message ?? "unknown"}`);
+  }
+  return { updated, skipped };
 }
 
 async function handleFollowupGenerated(ctx: AdvanceContext): Promise<Record<string, unknown> | null> {
@@ -469,10 +543,17 @@ export async function advanceVoicePostCall(sessionId: string): Promise<void> {
       // items extracted). Refresh the persistent customer brief so the next
       // agent picking up this customer sees the latest behavioral read.
       // Best-effort: a failure MUST NOT mark the pipeline as failed.
+      // System language drives the brief text. Voice post-processing
+      // runs from a worker, so we use the tenant default (no user). Best-
+      // effort — null falls back to "en" inside the generator.
+      const briefLocaleInfo = await resolveEffectiveLocale({
+        tenantId: ctx.tenantId,
+      }).catch(() => null);
       refreshCustomerBriefFromConversation({
         tenantId: ctx.tenantId,
         conversationId: ctx.conversationId,
         sourceEvent: "voice.finalized",
+        locale: briefLocaleInfo?.effective,
       })
         .then((rec) => {
           if (rec) console.log(`[customer-brief] refreshed voice conv=${ctx.conversationId} identity=${rec.identityKey} locale=${rec.locale}`);

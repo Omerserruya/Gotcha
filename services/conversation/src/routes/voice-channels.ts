@@ -600,6 +600,189 @@ router.put("/:id/copilot-config", async (req: Request, res: Response) => {
   }
 });
 
+// ─── GET /:id/routing ───────────────────────────────────────
+// Per-channel inbound routing: defaultAgentId, fallbackDepartmentId,
+// ringTimeoutSeconds. Returns null IDs when nothing is configured.
+router.get("/:id/routing", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const ch = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: true },
+    });
+    if (!ch || ch.tenantId !== req.tenantId! || ch.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const vc = ch.voiceChannel;
+    res.json({
+      data: {
+        defaultAgentId: vc?.defaultAgentId ?? null,
+        fallbackDepartmentId: vc?.fallbackDepartmentId ?? null,
+        ringTimeoutSeconds: vc?.ringTimeoutSeconds ?? 20,
+        autoHangupSeconds: vc?.autoHangupSeconds ?? null,
+        inboundMode: vc?.inboundMode ?? "IN_PLATFORM",
+        outboundMode: vc?.outboundMode ?? "IN_PLATFORM",
+        agentFirstAgentId: vc?.agentFirstAgentId ?? null,
+        openWorkspaceOnAgentFirst: vc?.openWorkspaceOnAgentFirst ?? true,
+      },
+    });
+  } catch (err) {
+    console.error("voice-channels.routing.get error:", err);
+    res.status(500).json({ error: "failed_to_load" });
+  }
+});
+
+// ─── PUT /:id/routing ───────────────────────────────────────
+// Validates IDs belong to the tenant before persisting so a channel can
+// never point at someone else's user / department.
+router.put("/:id/routing", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const ch = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: true },
+    });
+    if (!ch || ch.tenantId !== req.tenantId! || ch.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!ch.voiceChannel) {
+      res.status(409).json({ error: "voice_channel_not_initialized" });
+      return;
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    const defaultAgentId =
+      typeof body.defaultAgentId === "string" && body.defaultAgentId.length > 0
+        ? body.defaultAgentId
+        : null;
+    const agentFirstAgentId =
+      typeof body.agentFirstAgentId === "string" && body.agentFirstAgentId.length > 0
+        ? body.agentFirstAgentId
+        : null;
+    const fallbackDepartmentId =
+      typeof body.fallbackDepartmentId === "string" && body.fallbackDepartmentId.length > 0
+        ? body.fallbackDepartmentId
+        : null;
+    const ringTimeoutRaw = Number(body.ringTimeoutSeconds);
+    const ringTimeoutSeconds =
+      Number.isFinite(ringTimeoutRaw) && ringTimeoutRaw >= 5 && ringTimeoutRaw <= 120
+        ? Math.round(ringTimeoutRaw)
+        : 20;
+    // null = no auto-hangup (legacy behavior). Accept literal null,
+    // missing field, and clamp out-of-range numbers to null.
+    const autoHangupSeconds: number | null = (() => {
+      if (body.autoHangupSeconds === null) return null;
+      const n = Number(body.autoHangupSeconds);
+      if (!Number.isFinite(n)) return null;
+      if (n < 10 || n > 120) return null;
+      return Math.round(n);
+    })();
+
+    const inboundMode: "IN_PLATFORM" | "FORWARD_TO_AGENT" =
+      body.inboundMode === "FORWARD_TO_AGENT" ? "FORWARD_TO_AGENT" : "IN_PLATFORM";
+    const outboundMode: "IN_PLATFORM" | "AGENT_FIRST" =
+      body.outboundMode === "AGENT_FIRST" ? "AGENT_FIRST" : "IN_PLATFORM";
+    // Default-true: when body doesn't carry the field at all (older
+    // clients) we preserve the existing value so toggling other fields
+    // doesn't accidentally turn this off.
+    const openWorkspaceOnAgentFirst: boolean =
+      typeof body.openWorkspaceOnAgentFirst === "boolean"
+        ? body.openWorkspaceOnAgentFirst
+        : ch.voiceChannel.openWorkspaceOnAgentFirst;
+
+    // Tenant-isolation guards — never trust the IDs from the body.
+    if (defaultAgentId) {
+      const u = await prisma.user.findUnique({
+        where: { id: defaultAgentId },
+        select: { tenantId: true },
+      });
+      if (!u || u.tenantId !== req.tenantId!) {
+        res.status(400).json({ error: "invalid_default_agent" });
+        return;
+      }
+    }
+    if (agentFirstAgentId) {
+      const u = await prisma.user.findUnique({
+        where: { id: agentFirstAgentId },
+        select: { tenantId: true },
+      });
+      if (!u || u.tenantId !== req.tenantId!) {
+        res.status(400).json({ error: "invalid_agent_first_agent" });
+        return;
+      }
+    }
+    if (fallbackDepartmentId) {
+      const d = await prisma.department.findUnique({
+        where: { id: fallbackDepartmentId },
+        select: { tenantId: true },
+      });
+      if (!d || d.tenantId !== req.tenantId!) {
+        res.status(400).json({ error: "invalid_fallback_department" });
+        return;
+      }
+    }
+
+    const updated = await prisma.voiceChannel.update({
+      where: { id: ch.voiceChannel.id },
+      data: {
+        defaultAgentId,
+        agentFirstAgentId,
+        fallbackDepartmentId,
+        ringTimeoutSeconds,
+        autoHangupSeconds,
+        inboundMode,
+        outboundMode,
+        openWorkspaceOnAgentFirst,
+      },
+      select: {
+        defaultAgentId: true,
+        agentFirstAgentId: true,
+        fallbackDepartmentId: true,
+        ringTimeoutSeconds: true,
+        autoHangupSeconds: true,
+        inboundMode: true,
+        outboundMode: true,
+        openWorkspaceOnAgentFirst: true,
+      },
+    });
+
+    // When both modes are set so the missed-call → WABA template flow
+    // can fire, make sure the template is registered with the tenant's
+    // WABA exactly once. Fire-and-forget so a Graph API hiccup doesn't
+    // fail the routing save — the ensure-template endpoint is itself
+    // idempotent (checks existence first).
+    const wantsTemplate = inboundMode === "FORWARD_TO_AGENT" && outboundMode === "AGENT_FIRST";
+    const previouslyWanted =
+      ch.voiceChannel.inboundMode === "FORWARD_TO_AGENT" &&
+      ch.voiceChannel.outboundMode === "AGENT_FIRST";
+    if (wantsTemplate && !previouslyWanted) {
+      const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
+      const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+      fetch(`${url}/api/voice-copilot/callbacks/ensure-template`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Internal-Key": key },
+        body: JSON.stringify({ tenantId: req.tenantId! }),
+      })
+        .then(async (r) => {
+          if (!r.ok) {
+            const txt = await r.text().catch(() => "");
+            console.warn(`[voice-channels] ensure-template upstream ${r.status} ${txt.slice(0, 200)}`);
+          }
+        })
+        .catch((err) => {
+          console.warn(`[voice-channels] ensure-template upstream threw: ${err?.message}`);
+        });
+    }
+
+    res.json({ data: updated });
+  } catch (err) {
+    console.error("voice-channels.routing.put error:", err);
+    res.status(500).json({ error: "failed_to_update" });
+  }
+});
+
 // ─── DELETE /:id (soft-disable) ─────────────────────────────
 // Also deactivates every active number for the channel and best-effort
 // reverts `voiceUrl` on Twilio side to empty.

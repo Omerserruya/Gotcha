@@ -16,12 +16,14 @@ const CATEGORY_ACCENTS: Record<
   string,
   { bg: string; text: string; ring: string }
 > = {
-  Triggers:       { bg: "bg-emerald-50", text: "text-emerald-600", ring: "ring-emerald-100" },
-  "Flow Control": { bg: "bg-amber-50",   text: "text-amber-600",   ring: "ring-amber-100" },
-  Logic:          { bg: "bg-blue-50",    text: "text-blue-600",    ring: "ring-blue-100" },
-  Messages:       { bg: "bg-violet-50",  text: "text-violet-600",  ring: "ring-violet-100" },
-  Actions:        { bg: "bg-pink-50",    text: "text-pink-600",    ring: "ring-pink-100" },
-  Integrations:   { bg: "bg-indigo-50",  text: "text-indigo-600",  ring: "ring-indigo-100" },
+  Triggers:        { bg: "bg-emerald-50", text: "text-emerald-600", ring: "ring-emerald-100" },
+  "Flow Control":  { bg: "bg-amber-50",   text: "text-amber-600",   ring: "ring-amber-100" },
+  Logic:           { bg: "bg-blue-50",    text: "text-blue-600",    ring: "ring-blue-100" },
+  Messages:        { bg: "bg-violet-50",  text: "text-violet-600",  ring: "ring-violet-100" },
+  Actions:         { bg: "bg-pink-50",    text: "text-pink-600",    ring: "ring-pink-100" },
+  Integrations:    { bg: "bg-indigo-50",  text: "text-indigo-600",  ring: "ring-indigo-100" },
+  "Voice Triggers":{ bg: "bg-emerald-50", text: "text-emerald-600", ring: "ring-emerald-100" },
+  "Voice Actions": { bg: "bg-indigo-50",  text: "text-indigo-600",  ring: "ring-indigo-100" },
 };
 
 const FALLBACK_ACCENT = { bg: "bg-gray-50", text: "text-gray-600", ring: "ring-gray-100" };

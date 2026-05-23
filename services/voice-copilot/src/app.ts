@@ -35,6 +35,10 @@ import { createLiveRouter } from "./routes/live";
 import { createTwilioTokenRouter } from "./routes/twilio-token";
 import { createTwilioTwimlRouter } from "./routes/twilio-twiml";
 import { createVoiceTerminateRouter } from "./routes/voice-terminate";
+import { createVoiceAddParticipantRouter } from "./routes/voice-add-participant";
+import { createVoiceConferenceControlRouter } from "./routes/voice-conference-control";
+import { createVoiceParticipantsRouter } from "./routes/voice-participants";
+import { createVoiceCallbackRouter } from "./routes/voice-callback";
 import { createVoiceIncomingRouter } from "./routes/voice-incoming";
 import {
   createVoiceProviderResolver,
@@ -255,6 +259,24 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
   }));
   app.use("/api/voice-copilot", createVoiceTerminateRouter({
     resolveProvider: deps.resolveVoiceProvider,
+    logger: deps.logger,
+  }));
+  app.use("/api/voice-copilot", createVoiceAddParticipantRouter({
+    resolveProvider: deps.resolveVoiceProvider,
+    logger: deps.logger,
+  }));
+  app.use("/api/voice-copilot", createVoiceConferenceControlRouter({
+    resolveProvider: deps.resolveVoiceProvider,
+    logger: deps.logger,
+  }));
+  app.use("/api/voice-copilot", createVoiceParticipantsRouter({
+    resolveProvider: deps.resolveVoiceProvider,
+    logger: deps.logger,
+  }));
+  app.use("/api/voice-copilot", createVoiceCallbackRouter({
+    resolveProvider: deps.resolveVoiceProvider,
+    resolveProviderByChannelId: deps.resolveVoiceProviderByChannelId,
+    publicBaseUrl: env.PUBLIC_BASE_URL,
     logger: deps.logger,
   }));
 

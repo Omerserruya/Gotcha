@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect } from "react";
+import { useRouter } from "next/navigation";
 import clsx from "clsx";
 import { useVoiceCall } from "@/context/VoiceCallContext";
 import { useAuth } from "@/context/AuthContext";
@@ -16,6 +17,7 @@ interface Props {
 export function VoiceCallButton({ to, contactName, conversationId, label }: Props) {
   const { placeCall, state, isReady } = useVoiceCall();
   const { token } = useAuth();
+  const router = useRouter();
   useEffect(() => {
     ensureDefaultCountry(token);
   }, [token]);
@@ -26,10 +28,16 @@ export function VoiceCallButton({ to, contactName, conversationId, label }: Prop
   async function onClick() {
     if (!canCall || !normalized) return;
     try {
-      await placeCall(normalized, {
+      const result = await placeCall(normalized, {
         contactName: contactName ?? undefined,
         conversationId: conversationId ?? undefined,
       });
+      // AGENT_FIRST: server is ringing the agent's mobile. Open the
+      // workspace only when the channel toggle says so. Otherwise
+      // fire-and-forget — the agent's mobile rings, no UI needed.
+      if (result && result.mode === "AGENT_FIRST" && result.openWorkspace && result.sessionId) {
+        router.push(`/voice/${result.sessionId}`);
+      }
     } catch (err) {
       // eslint-disable-next-line no-console
       console.error("[voice] place call failed:", err);

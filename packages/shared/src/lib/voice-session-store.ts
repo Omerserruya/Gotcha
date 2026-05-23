@@ -83,6 +83,30 @@ export async function transitionVoiceCallSessionState(
   }
   const session = await prisma.voiceCallSession.findUniqueOrThrow({ where: { id: sessionId } });
 
+  // Auto-handle cascade: when an OUTBOUND call to this customer reaches
+  // ACTIVE, every MISSED inbound row for the same (tenant, customerNumber)
+  // gets `handledAt` stamped. The agent has actually picked up — those
+  // missed-call inbox rows are now stale. This is the server-side path
+  // that closes the loop even when the callback came from the WhatsApp
+  // template button (no browser involved, so localStorage couldn't help).
+  if (toState === "ACTIVE" && session.direction === "outbound" && session.customerNumber) {
+    try {
+      await prisma.voiceCallSession.updateMany({
+        where: {
+          tenantId: session.tenantId,
+          direction: "inbound",
+          state: "MISSED",
+          customerNumber: session.customerNumber,
+          handledAt: null,
+        },
+        data: { handledAt: new Date() },
+      });
+    } catch {
+      // Non-fatal — the inbox would still show the rows on next reload,
+      // and the agent's explicit "Mark as handled" still works.
+    }
+  }
+
   // Broadcast the transition so live UIs (ActiveCallBar, IncomingCallBanner,
   // workspace page) drop/refresh the session without waiting on a reconcile.
   // Without this, customer-side hangups never reach the browser — the DB row
@@ -136,8 +160,17 @@ export async function claimIncomingCall(
   if (existing.state !== "RINGING") return { ok: false, reason: "not_ringing" };
 
   const nextHistory = appendHistory(existing.stateHistory, "CONNECTING", "claimed");
+  // Inbound rows are now pre-assigned to the channel's default agent at
+  // ring time (so the right UI rings first). That agent must still be
+  // able to claim — accept either `null` (unassigned ring) OR
+  // `assignedAgentId === claimer` (pre-assigned to this agent). The
+  // line 133 check above already rejects claims by a DIFFERENT agent.
   const claimed = await prisma.voiceCallSession.updateMany({
-    where: { id: sessionId, state: "RINGING", assignedAgentId: null },
+    where: {
+      id: sessionId,
+      state: "RINGING",
+      OR: [{ assignedAgentId: null }, { assignedAgentId: agentId }],
+    },
     data: {
       state: "CONNECTING",
       status: toLegacyStatus("CONNECTING"),

@@ -9,7 +9,18 @@ import { useI18n } from "@/context/I18nContext";
 import { useVoiceCall } from "@/context/VoiceCallContext";
 import { useVoiceSessions } from "@/contexts/VoiceSessionsContext";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
-import { closeConversation, getVoiceSession, type VoiceCallSession } from "@/lib/api";
+import {
+  addVoiceSessionParticipant,
+  closeConversation,
+  getVoiceSession,
+  getVoiceSessionParticipants,
+  kickVoiceParticipant,
+  setVoiceParticipantHold,
+  setVoiceSessionCustomerHold,
+  voiceSessionAgentLeave,
+  type VoiceCallSession,
+  type VoiceSessionParticipant,
+} from "@/lib/api";
 import { normalizeE164 } from "@/lib/phone";
 import { TranscriptStage } from "@/components/voice/workspace/TranscriptStage";
 import { CallRightPanel } from "@/components/voice/workspace/CallRightPanel";
@@ -130,6 +141,48 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
       return () => clearTimeout(t);
     }
   }, [session, router]);
+
+  // Missed-call callback follow-up: MissedCallsSection writes a
+  // {newSessionId → { missedSessionId, customerNumber }} entry to
+  // localStorage when an agent clicks Call back. When THIS session
+  // reaches ACTIVE (= customer actually picked up), promote the missed
+  // row AND the customer phone to the dismissed sets so it (and any
+  // sibling missed calls from the same number) stop nagging the inbox.
+  // Unanswered callbacks never reach ACTIVE, so the row stays put.
+  useEffect(() => {
+    if (!session) return;
+    const state = (session.state || "").toUpperCase();
+    if (state !== "ACTIVE") return;
+    try {
+      const PENDING_KEY = "chatcenter:pendingMissedHandle";
+      const DISMISS_KEY = "chatcenter:dismissedMissedCalls";
+      const DISMISS_PHONES_KEY = "chatcenter:dismissedMissedPhones";
+      const raw = localStorage.getItem(PENDING_KEY);
+      if (!raw) return;
+      const map = JSON.parse(raw) as Record<
+        string,
+        string | { missedSessionId: string; customerNumber: string | null }
+      >;
+      const entry = map[sessionId];
+      if (!entry) return;
+      // Legacy (string) and current (object) shapes co-exist for one
+      // bundle cycle while old tabs flush their pending state.
+      const missedId = typeof entry === "string" ? entry : entry.missedSessionId;
+      const customerNumber = typeof entry === "string" ? null : entry.customerNumber;
+      const dismissedRaw = localStorage.getItem(DISMISS_KEY);
+      const dismissed: string[] = dismissedRaw ? JSON.parse(dismissedRaw) : [];
+      if (!dismissed.includes(missedId)) dismissed.push(missedId);
+      localStorage.setItem(DISMISS_KEY, JSON.stringify(dismissed));
+      if (customerNumber) {
+        const phonesRaw = localStorage.getItem(DISMISS_PHONES_KEY);
+        const phones: string[] = phonesRaw ? JSON.parse(phonesRaw) : [];
+        if (!phones.includes(customerNumber)) phones.push(customerNumber);
+        localStorage.setItem(DISMISS_PHONES_KEY, JSON.stringify(phones));
+      }
+      delete map[sessionId];
+      localStorage.setItem(PENDING_KEY, JSON.stringify(map));
+    } catch { /* parse/quota — degrade silently */ }
+  }, [session?.state, sessionId]);
 
   // Auto-join the inbound conference if we land on this page with a claimed
   // session (CONNECTING/ACTIVE) but the local Twilio Device isn't connected yet.
@@ -274,6 +327,133 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     if (isLocalDevice) voice.toggleMute();
   }
 
+  // Add-participant flow — opens a small inline panel with a phone input
+  // that calls /api/voice-sessions/:id/add-participant. The added party
+  // joins the live conference (3-way); their leg is `endConferenceOnExit:
+  // false` so they can drop without ending the call.
+  const [addPanelOpen, setAddPanelOpen] = useState(false);
+  const [addParticipantNumber, setAddParticipantNumber] = useState("");
+  const [addingParticipant, setAddingParticipant] = useState(false);
+  const [addParticipantError, setAddParticipantError] = useState<string | null>(null);
+  async function handleAddParticipant() {
+    if (!token || !session) return;
+    const to = addParticipantNumber.trim();
+    if (!to) {
+      setAddParticipantError(t("voice.workspace.addParticipant.errInvalid"));
+      return;
+    }
+    setAddingParticipant(true);
+    setAddParticipantError(null);
+    try {
+      await addVoiceSessionParticipant(token, session.id, to);
+      setAddParticipantNumber("");
+      setAddPanelOpen(false);
+    } catch (err) {
+      setAddParticipantError(err instanceof Error ? err.message : "failed");
+    } finally {
+      setAddingParticipant(false);
+    }
+  }
+
+  // Participants panel — live legs of the conference (customer, agent,
+  // any added 3rd parties). Polled while the session is live so the UI
+  // sees DIALING → JOINED → LEFT transitions even when the websocket
+  // doesn't carry per-participant events. Per-row controls call the
+  // generic participants/:id/{hold,kick} endpoints.
+  const [participants, setParticipants] = useState<VoiceSessionParticipant[]>([]);
+  const [participantBusy, setParticipantBusy] = useState<Record<string, "hold" | "kick" | null>>({});
+  async function refreshParticipants() {
+    if (!token || !session) return;
+    try {
+      const { data } = await getVoiceSessionParticipants(token, session.id);
+      setParticipants(data);
+    } catch {
+      /* swallow — non-fatal */
+    }
+  }
+  useEffect(() => {
+    if (!token || !session) return;
+    if (TERMINAL_STATES.has((session.state || "").toUpperCase())) {
+      // One final refresh so the post-call view shows leftAt timestamps.
+      void refreshParticipants();
+      return;
+    }
+    void refreshParticipants();
+    const id = setInterval(() => void refreshParticipants(), 3000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token, session?.id, session?.state]);
+  async function handleToggleParticipantHold(p: VoiceSessionParticipant) {
+    if (!token || !session) return;
+    const next = !p.onHold;
+    setParticipantBusy((s) => ({ ...s, [p.id]: "hold" }));
+    // Optimistic update so the toggle feels instant.
+    setParticipants((rows) => rows.map((r) => (r.id === p.id ? { ...r, onHold: next } : r)));
+    try {
+      await setVoiceParticipantHold(token, session.id, p.id, next);
+    } catch (err) {
+      // Revert on failure.
+      setParticipants((rows) => rows.map((r) => (r.id === p.id ? { ...r, onHold: !next } : r)));
+      setAddParticipantError(err instanceof Error ? err.message : "hold_failed");
+    } finally {
+      setParticipantBusy((s) => ({ ...s, [p.id]: null }));
+    }
+  }
+  async function handleKickParticipant(p: VoiceSessionParticipant) {
+    if (!token || !session) return;
+    if (!window.confirm(t("voice.workspace.participants.confirmKick"))) return;
+    setParticipantBusy((s) => ({ ...s, [p.id]: "kick" }));
+    try {
+      await kickVoiceParticipant(token, session.id, p.id);
+      // Refresh so the row flips to LEFT once the participant-leave
+      // webhook lands. Don't preemptively remove — the webhook is the
+      // source of truth for leftAt/endReason.
+      void refreshParticipants();
+    } catch (err) {
+      setAddParticipantError(err instanceof Error ? err.message : "kick_failed");
+    } finally {
+      setParticipantBusy((s) => ({ ...s, [p.id]: null }));
+    }
+  }
+
+  // Whisper / cold-transfer.
+  // - "Hold customer" puts the customer leg on hold music so the agent
+  //   can speak privately with the added 3rd party (consult mode).
+  // - "Leave call" drops the agent's leg after a transfer so the
+  //   customer + 3rd party continue without us (cold transfer).
+  const [customerOnHold, setCustomerOnHold] = useState(false);
+  const [holdBusy, setHoldBusy] = useState(false);
+  const [leaveBusy, setLeaveBusy] = useState(false);
+  async function handleToggleCustomerHold() {
+    if (!token || !session || holdBusy) return;
+    const next = !customerOnHold;
+    setHoldBusy(true);
+    try {
+      await setVoiceSessionCustomerHold(token, session.id, next);
+      setCustomerOnHold(next);
+    } catch (err) {
+      // Surface as the inline error band on the add panel so the agent sees something.
+      setAddParticipantError(err instanceof Error ? err.message : "hold_failed");
+    } finally {
+      setHoldBusy(false);
+    }
+  }
+  async function handleAgentLeave() {
+    if (!token || !session || leaveBusy) return;
+    if (!window.confirm(t("voice.workspace.agentLeave.confirm"))) return;
+    setLeaveBusy(true);
+    try {
+      await voiceSessionAgentLeave(token, session.id);
+      // The agent leg is dropped server-side — the local Twilio device
+      // will fire its own end event; the redirect-on-terminal effect
+      // takes us back to /conversations.
+    } catch (err) {
+      setAddParticipantError(err instanceof Error ? err.message : "leave_failed");
+    } finally {
+      setLeaveBusy(false);
+    }
+  }
+
   if (flags.loading) {
     return (
       <div className="flex-1 flex items-center justify-center text-gray-400 text-sm">
@@ -382,6 +562,61 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
               )}
               <span>{isLocalDevice && voice.isMuted ? t("voice.workspace.header.unmuteButton") : t("voice.workspace.header.muteButton")}</span>
             </button>
+            {/* Add participant (3-way). Hidden until the conference is live
+                — RINGING/CONNECTING conferences don't yet have a conferenceSid. */}
+            {(stateLabel === "ACTIVE" || stateLabel === "HOLD") && (
+              <>
+                <button
+                  type="button"
+                  onClick={() => setAddPanelOpen((v) => !v)}
+                  aria-label={t("voice.workspace.addParticipant.button")}
+                  className={clsx(
+                    "inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition ring-1",
+                    addPanelOpen
+                      ? "bg-emerald-400 text-gray-900 ring-emerald-300"
+                      : "bg-white/15 text-gray-100 ring-white/20 hover:bg-white/25",
+                  )}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M18 9v6m3-3h-6m-3 0a4 4 0 11-8 0 4 4 0 018 0zm-4 6c-3.3 0-6 1.5-6 4v1h12v-1c0-2.5-2.7-4-6-4z" />
+                  </svg>
+                  <span>{t("voice.workspace.addParticipant.button")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleToggleCustomerHold}
+                  disabled={holdBusy}
+                  aria-label={customerOnHold ? t("voice.workspace.customerHold.resume") : t("voice.workspace.customerHold.hold")}
+                  className={clsx(
+                    "inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition ring-1",
+                    holdBusy && "opacity-60 cursor-wait",
+                    customerOnHold
+                      ? "bg-amber-400 text-gray-900 ring-amber-300"
+                      : "bg-white/15 text-gray-100 ring-white/20 hover:bg-white/25",
+                  )}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M10 9v6m4-6v6m7-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                  <span>{customerOnHold ? t("voice.workspace.customerHold.resume") : t("voice.workspace.customerHold.hold")}</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={handleAgentLeave}
+                  disabled={leaveBusy}
+                  aria-label={t("voice.workspace.agentLeave.button")}
+                  className={clsx(
+                    "inline-flex items-center gap-1.5 px-3 py-2 rounded-full text-sm font-medium transition ring-1 bg-white/15 text-gray-100 ring-white/20 hover:bg-white/25",
+                    leaveBusy && "opacity-60 cursor-wait",
+                  )}
+                >
+                  <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M9 19V5a2 2 0 012-2h6a2 2 0 012 2v14m-8 0H5m4 0a2 2 0 002-2v-1m6 3h2m-2 0a2 2 0 01-2-2v-1" />
+                  </svg>
+                  <span>{t("voice.workspace.agentLeave.button")}</span>
+                </button>
+              </>
+            )}
             <button
               type="button"
               onClick={handleHangup}
@@ -395,6 +630,129 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
             </button>
           </div>
         </div>
+
+        {/* Add-participant inline panel — slides in when the agent clicks
+            "Add". Submit dials the new leg into the live conference (3-way). */}
+        {addPanelOpen && (
+          <div className="px-4 md:px-10 mb-2">
+            <div className="flex items-center gap-2 bg-white/10 rounded-lg p-2 ring-1 ring-white/15">
+              <input
+                type="tel"
+                inputMode="tel"
+                placeholder="+972..."
+                value={addParticipantNumber}
+                onChange={(e) => setAddParticipantNumber(e.target.value)}
+                disabled={addingParticipant}
+                className="flex-1 bg-transparent text-sm text-gray-100 placeholder-gray-500 px-2 py-1.5 focus:outline-none"
+              />
+              <button
+                type="button"
+                onClick={handleAddParticipant}
+                disabled={addingParticipant || !addParticipantNumber.trim()}
+                className={clsx(
+                  "px-3 py-1.5 rounded-md text-sm font-semibold transition",
+                  addingParticipant || !addParticipantNumber.trim()
+                    ? "bg-white/10 text-gray-500 cursor-not-allowed"
+                    : "bg-emerald-500 text-gray-900 hover:bg-emerald-400",
+                )}
+              >
+                {addingParticipant ? t("voice.workspace.addParticipant.dialing") : t("voice.workspace.addParticipant.dial")}
+              </button>
+              <button
+                type="button"
+                onClick={() => { setAddPanelOpen(false); setAddParticipantError(null); }}
+                className="px-2 py-1.5 rounded-md text-sm text-gray-300 hover:bg-white/10"
+              >
+                {t("voice.workspace.addParticipant.cancel")}
+              </button>
+            </div>
+            {addParticipantError && (
+              <p className="mt-1 text-xs text-rose-300">{addParticipantError}</p>
+            )}
+          </div>
+        )}
+
+        {/* Participants panel — one row per leg with per-row hold/kick
+            controls. Rendered whenever any participant exists so post-
+            call view shows who was on the line. */}
+        {participants.length > 0 && (
+          <div className="px-4 md:px-10 mb-2">
+            <div className="bg-white/5 rounded-lg ring-1 ring-white/10 divide-y divide-white/5">
+              {participants.map((p) => {
+                const name = p.contact?.displayName || p.displayName || (p.role === "AGENT" ? agentName : null) || formatPhone(p.phoneNumber || "") || p.phoneNumber || p.label || p.role;
+                const phone = p.contact?.phone || p.phoneNumber || null;
+                const isLeft = !!p.leftAt || p.status === "LEFT" || p.status === "FAILED";
+                const busy = participantBusy[p.id];
+                const roleLabel = p.role === "CUSTOMER"
+                  ? t("voice.workspace.participants.roleCustomer")
+                  : p.role === "AGENT"
+                    ? t("voice.workspace.participants.roleAgent")
+                    : t("voice.workspace.participants.roleAdded");
+                const statusLabel = p.status === "DIALING"
+                  ? t("voice.workspace.participants.statusDialing")
+                  : p.status === "JOINED"
+                    ? t("voice.workspace.participants.statusJoined")
+                    : p.status === "LEFT"
+                      ? t("voice.workspace.participants.statusLeft")
+                      : t("voice.workspace.participants.statusFailed");
+                return (
+                  <div key={p.id} className="flex items-center justify-between gap-3 px-3 py-2">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <span
+                        className={clsx(
+                          "inline-block w-2 h-2 rounded-full shrink-0",
+                          p.status === "JOINED" && !p.onHold && "bg-emerald-400",
+                          p.status === "JOINED" && p.onHold && "bg-amber-400",
+                          p.status === "DIALING" && "bg-amber-400 animate-pulse",
+                          (p.status === "LEFT" || p.status === "FAILED") && "bg-gray-500",
+                        )}
+                      />
+                      <div className="flex flex-col min-w-0">
+                        <span className="text-sm text-gray-100 truncate">{name}</span>
+                        <span className="text-[11px] text-gray-500 truncate">
+                          {roleLabel}
+                          {phone ? ` · ${formatPhone(phone)}` : ""}
+                          {p.contact ? ` · ${t("voice.workspace.participants.crmLinked")}` : ""}
+                          {" · "}{statusLabel}
+                          {p.onHold && p.status === "JOINED" ? ` · ${t("voice.workspace.participants.onHold")}` : ""}
+                        </span>
+                      </div>
+                    </div>
+                    {!isLeft && p.status === "JOINED" && (
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => handleToggleParticipantHold(p)}
+                          disabled={busy === "hold"}
+                          className={clsx(
+                            "px-2.5 py-1 rounded-md text-xs font-medium transition ring-1",
+                            busy === "hold" && "opacity-60 cursor-wait",
+                            p.onHold
+                              ? "bg-amber-400 text-gray-900 ring-amber-300"
+                              : "bg-white/10 text-gray-100 ring-white/15 hover:bg-white/20",
+                          )}
+                        >
+                          {p.onHold ? t("voice.workspace.participants.resume") : t("voice.workspace.participants.hold")}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleKickParticipant(p)}
+                          disabled={busy === "kick"}
+                          className={clsx(
+                            "px-2.5 py-1 rounded-md text-xs font-medium transition bg-rose-500/80 text-white hover:bg-rose-500",
+                            busy === "kick" && "opacity-60 cursor-wait",
+                          )}
+                        >
+                          {t("voice.workspace.participants.hangup")}
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        )}
 
         {/* Decline banner — shown when the customer didn't pick up the
             outbound call (no-answer/busy/canceled/failed). Replaces the

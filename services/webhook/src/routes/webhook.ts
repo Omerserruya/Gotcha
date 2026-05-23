@@ -47,6 +47,34 @@ router.post("/", async (req: Request, res: Response) => {
     const body = req.body;
     console.log(`[WEBHOOK] Incoming: object=${body?.object}, entries=${body?.entry?.length || 0}`, JSON.stringify(body).slice(0, 500));
 
+    // Surface `failed` message statuses as their own untruncated log line.
+    // The block above caps at 500 chars, which chops off the error code we
+    // need to diagnose template rejects. Walk the payload for WhatsApp
+    // `statuses[].status === "failed"` entries and emit one line each
+    // carrying the full wamid + error code + error title + error_data.
+    try {
+      const entries = Array.isArray(body?.entry) ? body.entry : [];
+      for (const entry of entries) {
+        const changes = Array.isArray(entry?.changes) ? entry.changes : [];
+        for (const ch of changes) {
+          const statuses = Array.isArray(ch?.value?.statuses) ? ch.value.statuses : [];
+          for (const s of statuses) {
+            if (s?.status !== "failed") continue;
+            const wamid = String(s?.id ?? "").slice(-32);
+            const errs = Array.isArray(s?.errors) ? s.errors : [];
+            for (const e of errs) {
+              console.warn(
+                `[WEBHOOK.FAIL] wamid=...${wamid} code=${e?.code ?? "?"} title=${JSON.stringify(e?.title ?? "")} details=${JSON.stringify(e?.error_data ?? e?.message ?? "")}`,
+              );
+            }
+            if (errs.length === 0) {
+              console.warn(`[WEBHOOK.FAIL] wamid=...${wamid} status=failed (no errors array)`);
+            }
+          }
+        }
+      }
+    } catch { /* observability only — never crash the webhook on a logging miss */ }
+
     // Step 1: Detect which platform sent this webhook
     const adapter = detectInboundAdapter(body);
     if (!adapter) {

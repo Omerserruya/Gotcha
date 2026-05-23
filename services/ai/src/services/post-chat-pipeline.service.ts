@@ -19,6 +19,7 @@
 
 import { prisma } from "@chatcenter/shared";
 import { summarizePostConversation } from "./post-conversation-summarizer.service";
+import { resolveEffectiveLocale } from "@chatcenter/shared";
 import { executeAction, type PlannedAction } from "./action-executor.service";
 import {
   getSummarizerAllowedFields,
@@ -56,10 +57,13 @@ export async function runPostChatPipeline(params: {
   //    passed to the summarizer as context. The LLM uses them to dedup by
   //    INTENT (not literal subject match) and only emits suggestions that
   //    aren't already covered by mid-conversation tool calls.
-  const [allowedFields, config, existingActionItems] = await Promise.all([
+  const [allowedFields, config, existingActionItems, localeInfo] = await Promise.all([
     getSummarizerAllowedFields(params.tenantId),
     getPostConversationConfig(params.tenantId),
     loadExistingActionItems({ tenantId: params.tenantId, conversationId: params.conversationId }),
+    // System language drives the AI summary copy. Post-chat runs in a
+    // background subscriber with no user context — use the tenant default.
+    resolveEffectiveLocale({ tenantId: params.tenantId }).catch(() => null),
   ]);
   const raw = await summarizePostConversation({
     tenantId: params.tenantId,
@@ -67,6 +71,7 @@ export async function runPostChatPipeline(params: {
     channel: "chat",
     allowedFields,
     existingActionItems,
+    locale: localeInfo?.effective,
   });
   const structured = applyPostConversationRules(raw, config);
   if (structured.empty || !structured.summary) {

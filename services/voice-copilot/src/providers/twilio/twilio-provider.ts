@@ -177,6 +177,40 @@ export class TwilioProvider implements VoiceProvider {
     await create(params);
   }
 
+  async setParticipantHold(input: {
+    conferenceSid: string;
+    callSid: string;
+    hold: boolean;
+  }): Promise<void> {
+    if (!input.conferenceSid || !input.callSid) return;
+    const client = this.getClient();
+    try {
+      await client
+        .conferences(input.conferenceSid)
+        .participants(input.callSid)
+        .update({ hold: input.hold });
+      this.logger.info(
+        { conferenceSid: input.conferenceSid, callSid: input.callSid, hold: input.hold },
+        "twilio-provider: setParticipantHold ok",
+      );
+    } catch (err: any) {
+      const code = err?.status ?? err?.code;
+      // Conference / participant may have already ended — treat as no-op.
+      if (code === 404 || code === 20404) {
+        this.logger.warn(
+          { conferenceSid: input.conferenceSid, callSid: input.callSid, code },
+          "twilio-provider: setParticipantHold noop (already finished)",
+        );
+        return;
+      }
+      this.logger.error(
+        { err, conferenceSid: input.conferenceSid, callSid: input.callSid },
+        "twilio-provider: setParticipantHold failed",
+      );
+      throw err;
+    }
+  }
+
   async endCall(input: { callSid: string }): Promise<void> {
     if (!input.callSid) return;
     const client = this.getClient();
@@ -196,6 +230,32 @@ export class TwilioProvider implements VoiceProvider {
       this.logger.error({ err, callSid: input.callSid }, "twilio-provider: endCall failed");
       throw err;
     }
+  }
+
+  async placeOutboundCall(input: {
+    to: string;
+    from: string;
+    twimlUrl: string;
+    statusCallbackUrl?: string;
+    timeoutSeconds?: number;
+  }): Promise<{ callSid: string }> {
+    const client = this.getClient();
+    const params: Record<string, unknown> = {
+      to: input.to,
+      from: input.from,
+      url: input.twimlUrl,
+      method: "POST",
+      timeout: input.timeoutSeconds ?? 30,
+    };
+    if (input.statusCallbackUrl) {
+      params.statusCallback = input.statusCallbackUrl;
+      params.statusCallbackEvent = ["initiated", "ringing", "answered", "completed"];
+      params.statusCallbackMethod = "POST";
+    }
+    const create = (client.calls.create as unknown) as (p: Record<string, unknown>) => Promise<{ sid: string }>;
+    const call = await create(params);
+    this.logger.info({ to: input.to, callSid: call.sid }, "twilio-provider: placeOutboundCall ok");
+    return { callSid: call.sid };
   }
 
   private getClient() {

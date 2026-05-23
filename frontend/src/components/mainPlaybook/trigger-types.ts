@@ -5,6 +5,15 @@ export const TRIGGER_TYPES = new Set([
   "comment_trigger",
   "keyword_trigger",
   "schedule_trigger",
+  // Voice triggers — wired in node-registry under category "Voice Triggers".
+  // Match against the live-call event surface published by voice-copilot.
+  "voice_trigger:call.incoming",
+  "voice_trigger:call.answered",
+  "voice_trigger:call.missed",
+  "voice_trigger:call.hangup_customer",
+  "voice_trigger:call.hangup_agent",
+  "voice_trigger:call.intent_detected",
+  "voice_trigger:call.keyword_spoken",
 ]);
 
 export function isTriggerNode(n: Pick<Node, "type">): boolean {

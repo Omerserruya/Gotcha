@@ -226,6 +226,12 @@ export default function VoiceChannelDetailPage() {
               </div>
               <div className="flex items-center gap-2">
                 <Link
+                  href={`/settings/voice-channels/${channelId}/routing`}
+                  className="text-xs font-medium px-2.5 py-1 rounded-md bg-primary-50 text-primary-700 ring-1 ring-primary-200 hover:bg-primary-100"
+                >
+                  {t("settings.voiceChannelRouting.title")}
+                </Link>
+                <Link
                   href={`/settings/voice-channels/${channelId}/copilot`}
                   className="text-xs font-medium px-2.5 py-1 rounded-md bg-primary-50 text-primary-700 ring-1 ring-primary-200 hover:bg-primary-100"
                 >

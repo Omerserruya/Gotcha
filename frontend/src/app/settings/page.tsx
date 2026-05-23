@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { Locale, localeConfig } from "@/i18n";
 import {
   getBusinessHours, updateBusinessHours,
   getAutoGreeting, updateAutoGreeting,
@@ -92,7 +93,13 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
 
 export default function SettingsPage() {
   const { token, user } = useAuth();
-  const { t } = useI18n();
+  const { t, locale, setLocale, tenantDefault, userOverride, setTenantDefault } = useI18n();
+  const [localeSaving, setLocaleSaving] = useState(false);
+  const [localeMessage, setLocaleMessage] = useState("");
+  // We let users (including non-admin agents) pick their personal
+  // language even when they can't see admin-only sections below.
+  // The admin gate at the bottom of the page only hides admin
+  // surfaces; the Language card is rendered above it.
   const [config, setConfig] = useState<BusinessHoursConfig>(DEFAULT_CONFIG);
   const [slaConfig, setSlaConfig] = useState<SlaConfig>(DEFAULT_SLA);
   const [idleConfig, setIdleConfig] = useState<IdleAutomationConfig>(DEFAULT_IDLE);
@@ -226,10 +233,121 @@ export default function SettingsPage() {
     }
   }
 
+  const handleAgentLocale = useCallback(
+    async (value: string) => {
+      setLocaleSaving(true);
+      setLocaleMessage("");
+      try {
+        // "system" collapses to NULL → inherit the tenant default.
+        const next: Locale | null = value === "system" ? null : (value as Locale);
+        await setLocale(next);
+        setLocaleMessage(t("settings.language.saved"));
+      } catch {
+        setLocaleMessage(t("settings.language.saveFailed"));
+      } finally {
+        setLocaleSaving(false);
+        setTimeout(() => setLocaleMessage(""), 3000);
+      }
+    },
+    [setLocale, t],
+  );
+
+  const handleTenantLocale = useCallback(
+    async (value: string) => {
+      setLocaleSaving(true);
+      setLocaleMessage("");
+      try {
+        await setTenantDefault(value as Locale);
+        setLocaleMessage(t("settings.language.savedTenant"));
+      } catch {
+        setLocaleMessage(t("settings.language.saveFailed"));
+      } finally {
+        setLocaleSaving(false);
+        setTimeout(() => setLocaleMessage(""), 3000);
+      }
+    },
+    [setTenantDefault, t],
+  );
+
+  // Language card — shown to EVERY user (including non-admin agents).
+  // Tenant-default row is admin-only inside the card; agents see only
+  // their personal override row.
+  const languageCard = (
+    <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
+      <h2 className="font-semibold text-gray-900">{t("settings.language.title")}</h2>
+      <p className="text-xs text-gray-500 mt-1">{t("settings.language.subtitle")}</p>
+
+      {localeMessage && (
+        <div className="mt-3 bg-emerald-50 text-emerald-700 text-xs px-3 py-2 rounded-lg border border-emerald-200">
+          {localeMessage}
+        </div>
+      )}
+
+      <div className="mt-4 space-y-4">
+        {/* Per-agent override (everyone) */}
+        <div>
+          <label className="text-xs font-medium text-gray-600 block mb-1">
+            {t("settings.language.myLanguage")}
+          </label>
+          <select
+            value={userOverride ?? "system"}
+            onChange={(e) => handleAgentLocale(e.target.value)}
+            disabled={localeSaving}
+            className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
+          >
+            <option value="system">
+              {t("settings.language.useTenantDefault")}
+              {tenantDefault ? ` (${localeConfig[tenantDefault]?.label ?? tenantDefault})` : ""}
+            </option>
+            {Object.entries(localeConfig).map(([key, config]) => (
+              <option key={key} value={key}>
+                {config.label}
+              </option>
+            ))}
+          </select>
+          <p className="text-[10px] text-gray-400 mt-1">
+            {t("settings.language.myLanguageHint")
+              .replace("{effective}", localeConfig[locale]?.label ?? locale)}
+          </p>
+        </div>
+
+        {/* Tenant default (admin only) */}
+        {user?.role === "ADMIN" && (
+          <div>
+            <label className="text-xs font-medium text-gray-600 block mb-1">
+              {t("settings.language.tenantDefault")}
+            </label>
+            <select
+              value={tenantDefault ?? "en"}
+              onChange={(e) => handleTenantLocale(e.target.value)}
+              disabled={localeSaving}
+              className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
+            >
+              {Object.entries(localeConfig).map(([key, config]) => (
+                <option key={key} value={key}>
+                  {config.label}
+                </option>
+              ))}
+            </select>
+            <p className="text-[10px] text-gray-400 mt-1">
+              {t("settings.language.tenantDefaultHint")}
+            </p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+
   if (user?.role !== "ADMIN") {
+    // Non-admins see ONLY the language card. Other admin surfaces
+    // (SLA, business hours, etc.) remain hidden behind this gate.
     return (
-      <div className="flex items-center justify-center h-full">
-        <p className="text-gray-400">{t("settings.adminRequired")}</p>
+      <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-full pb-20">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
+          <p className="text-sm text-gray-500 mt-1">{t("settings.personalSubtitle")}</p>
+        </div>
+        {languageCard}
       </div>
     );
   }
@@ -241,6 +359,8 @@ export default function SettingsPage() {
         <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
         <p className="text-sm text-gray-500 mt-1">{t("settings.subtitle")}</p>
       </div>
+
+      {languageCard}
 
       {/* AI Guardrails — quick links to the F8 policy + F4 tool gate admin surfaces. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

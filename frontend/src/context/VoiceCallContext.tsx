@@ -94,7 +94,18 @@ interface VoiceCallContextType {
    * regress UI state. `null` until the first frame for the active call.
    */
   latestFrame: ConversationStateFrame | null;
-  placeCall: (to: string, opts?: { contactName?: string; conversationId?: string; notes?: string }) => Promise<void>;
+  /**
+   * Place an outbound call. Returns `{ mode: "AGENT_FIRST", sessionId,
+   * openWorkspace }` when the channel is configured to ring the agent's
+   * mobile first (the browser is NOT a participant). Callers should
+   * navigate to /voice/<sessionId> ONLY when `openWorkspace=true`;
+   * otherwise leave the agent on the current page (fire-and-forget).
+   * Returns void in the IN_PLATFORM path (current Twilio SDK flow).
+   */
+  placeCall: (
+    to: string,
+    opts?: { contactName?: string; conversationId?: string; notes?: string },
+  ) => Promise<void | { mode: "AGENT_FIRST"; sessionId: string | null; openWorkspace: boolean }>;
   /** Dial the agent's browser into an already-running conference (inbound answer flow). */
   joinConference: (conferenceName: string) => Promise<void>;
   hangup: () => void;
@@ -423,8 +434,51 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     if (noActiveChannel) {
       throw new Error("no_active_voice_channel");
     }
+    if (!token) {
+      throw new Error("not_authenticated");
+    }
 
     setError(null);
+
+    // Channel outboundMode gate. The server decides whether this call
+    // uses the browser SDK (IN_PLATFORM) or rings the agent's mobile
+    // first (AGENT_FIRST). For AGENT_FIRST we skip device.connect()
+    // entirely — the agent talks via their phone, not the browser.
+    let gateMode: "IN_PLATFORM" | "AGENT_FIRST" = "IN_PLATFORM";
+    let agentFirstSessionId: string | null = null;
+    let agentFirstOpenWorkspace = true;
+    try {
+      const { startOutboundVoiceCall } = await import("@/lib/api");
+      const { data } = await startOutboundVoiceCall(token, to, {
+        conversationId: opts?.conversationId,
+        notes: opts?.notes,
+      });
+      gateMode = data.mode;
+      if (data.mode === "AGENT_FIRST") {
+        agentFirstSessionId = data.sessionId;
+        agentFirstOpenWorkspace = data.openWorkspace;
+      }
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error("[voice] start-outbound gate failed:", err);
+      setError(err instanceof Error ? err.message : "start_outbound_failed");
+      setState("error");
+      resetToIdleSoon();
+      throw err;
+    }
+
+    if (gateMode === "AGENT_FIRST") {
+      // The platform is REST-dialing the agent's mobile right now.
+      // The browser is NOT participating in this call — don't open
+      // the Twilio Device, don't change call state. Whether to open
+      // the workspace page is the per-channel toggle (openWorkspace).
+      return {
+        mode: "AGENT_FIRST",
+        sessionId: agentFirstSessionId,
+        openWorkspace: agentFirstOpenWorkspace,
+      };
+    }
+
     setState("connecting");
     const info: CallInfo = { to, ...(opts || {}) };
     setCall(info);

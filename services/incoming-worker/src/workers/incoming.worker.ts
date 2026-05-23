@@ -304,6 +304,22 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     },
   });
 
+  // First-inbound language detection — populates Conversation.detectedLocale
+  // once per thread. Drives suggested-reply language so drafts match the
+  // customer regardless of the agent's system-language setting. Idempotent
+  // and fire-and-forget; subsequent inbounds short-circuit at the read.
+  void (async () => {
+    try {
+      const { recordDetectedLocaleIfMissing } = await import("../services/locale-detect.service");
+      await recordDetectedLocaleIfMissing({
+        conversationId: conversation.id,
+        text: body || "",
+      });
+    } catch (err) {
+      console.warn("[incoming] locale-detect hook threw:", (err as { message?: string })?.message ?? err);
+    }
+  })();
+
   // Universal identity-link hook — fires on every persisted INBOUND so the
   // same email/phone bridging works for AI bot, FlowCanvas, AND human-handled
   // chats (co-pilot mode). The conversation service owns idempotency, so a

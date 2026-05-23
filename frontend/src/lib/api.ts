@@ -258,7 +258,11 @@ export function createAgent(token: string, data: { name: string; email: string; 
   });
 }
 
-export function updateAgent(token: string, id: string, data: { name?: string; isActive?: boolean }) {
+export function updateAgent(
+  token: string,
+  id: string,
+  data: { name?: string; isActive?: boolean; phoneNumber?: string | null },
+) {
   return apiFetch<any>(`/api/agents/${id}`, {
     token,
     method: "PATCH",
@@ -1747,6 +1751,251 @@ export function updateVoiceChannelCopilotConfig(token: string, id: string, confi
     token,
     method: "PUT",
     body: JSON.stringify(config),
+  });
+}
+
+// ─── Voice channel inbound routing ────────────────────────────
+export type VoiceInboundMode = "IN_PLATFORM" | "FORWARD_TO_AGENT";
+export type VoiceOutboundMode = "IN_PLATFORM" | "AGENT_FIRST";
+
+export interface VoiceChannelRouting {
+  /** Inbound: who rings first when a customer calls in. */
+  defaultAgentId: string | null;
+  /** Inbound fallback department when defaultAgent doesn't pick up. */
+  fallbackDepartmentId: string | null;
+  /** Inbound: ring duration before fallback kicks in. */
+  ringTimeoutSeconds: number;
+  /**
+   * Inbound: opt-in hard cap on how long an unanswered call rings before
+   * the platform hangs up and marks it MISSED. Null = no auto-hangup
+   * (legacy behavior — the call rings until Twilio's own timeout or
+   * the customer hangs up).
+   */
+  autoHangupSeconds: number | null;
+  inboundMode: VoiceInboundMode;
+  outboundMode: VoiceOutboundMode;
+  /**
+   * Outbound (AGENT_FIRST): whose mobile rings when an outbound call
+   * is placed. Null → falls back to defaultAgent for backward compat.
+   * Independent of defaultAgentId so inbound/outbound can route to
+   * different people.
+   */
+  agentFirstAgentId: string | null;
+  /**
+   * When `outboundMode = AGENT_FIRST`, controls whether the UI opens
+   * the workspace page on click-to-call. Default true. Set false for
+   * "fire and forget" — agent walks away from the computer, mobile rings.
+   */
+  openWorkspaceOnAgentFirst: boolean;
+}
+
+// ─── Missed voice calls inbox ─────────────────────────────────
+export interface MissedVoiceSession {
+  id: string;
+  callSid: string | null;
+  conversationId: string;
+  channelId: string | null;
+  customerNumber: string | null;
+  customerId: string | null;
+  agentId: string | null;
+  assignedAgentId: string | null;
+  startedAt: string;
+  meta?: Record<string, unknown> | null;
+  contact: {
+    id: string;
+    displayName: string | null;
+    phone: string | null;
+    email: string | null;
+    tags: string[] | null;
+  } | null;
+}
+
+export function getMissedVoiceSessions(token: string, limit = 50) {
+  return apiFetch<{ data: MissedVoiceSession[] }>(
+    `/api/voice-sessions/missed?limit=${limit}`,
+    { token },
+  );
+}
+
+export function callbackMissedVoiceSession(token: string, sessionId: string) {
+  return apiFetch<{ data: { sessionId: string; conversationId: string; agentCallSid: string } }>(
+    `/api/voice-sessions/missed/${sessionId}/callback`,
+    { token, method: "POST" },
+  );
+}
+
+export function handleMissedVoiceSession(token: string, sessionId: string) {
+  return apiFetch<{ data: { handledCount: number; customerNumber: string | null } }>(
+    `/api/voice-sessions/missed/${sessionId}/handle`,
+    { token, method: "POST" },
+  );
+}
+
+export interface MissedVoiceSessionDetail {
+  session: {
+    id: string;
+    conversationId: string;
+    customerNumber: string | null;
+    startedAt: string;
+  };
+  contact: {
+    id: string;
+    displayName: string | null;
+    email: string | null;
+    phone: string | null;
+    tags: string[] | null;
+    metadata: Record<string, unknown> | null;
+    personId: string | null;
+    lastInteractionAt: string | null;
+  } | null;
+  brief: {
+    brief: string;
+    signals: string[];
+    tone: string | null;
+    mood: string | null;
+    recommendedBehaviors: string[];
+    conversationCount: number;
+    generatedAt: string;
+    locale: string;
+  } | null;
+  priorConversations: Array<{
+    id: string;
+    channel: string;
+    status: string;
+    aiSummary: string | null;
+    lastMessageAt: string | null;
+    customerName: string | null;
+  }>;
+}
+
+export function getMissedVoiceSessionDetail(token: string, sessionId: string) {
+  return apiFetch<{ data: MissedVoiceSessionDetail }>(
+    `/api/voice-sessions/missed/${sessionId}/detail`,
+    { token },
+  );
+}
+
+export function setVoiceSessionCustomerHold(token: string, sessionId: string, hold: boolean) {
+  return apiFetch<{ data: { hold: boolean; conferenceSid: string } }>(
+    `/api/voice-sessions/${sessionId}/customer-hold`,
+    { token, method: "POST", body: JSON.stringify({ hold }) },
+  );
+}
+
+export function voiceSessionAgentLeave(token: string, sessionId: string) {
+  return apiFetch<{ data: { agentDropped: boolean } }>(
+    `/api/voice-sessions/${sessionId}/agent-leave`,
+    { token, method: "POST" },
+  );
+}
+
+export function addVoiceSessionParticipant(token: string, sessionId: string, to: string, label?: string) {
+  return apiFetch<{ data: { id: string; to: string; label: string; conferenceSid: string } }>(
+    `/api/voice-sessions/${sessionId}/add-participant`,
+    {
+      token,
+      method: "POST",
+      body: JSON.stringify({ to, label }),
+    },
+  );
+}
+
+export type VoiceParticipantRole = "CUSTOMER" | "AGENT" | "ADDED";
+export type VoiceParticipantStatus = "DIALING" | "JOINED" | "LEFT" | "FAILED";
+
+export interface VoiceSessionParticipant {
+  id: string;
+  role: VoiceParticipantRole;
+  status: VoiceParticipantStatus;
+  callSid: string | null;
+  label: string | null;
+  phoneNumber: string | null;
+  displayName: string | null;
+  contactId: string | null;
+  onHold: boolean;
+  joinedAt: string | null;
+  leftAt: string | null;
+  endReason: string | null;
+  contact: {
+    id: string;
+    displayName: string | null;
+    phone: string | null;
+    email: string | null;
+    tags: unknown;
+  } | null;
+}
+
+export function getVoiceSessionParticipants(token: string, sessionId: string) {
+  return apiFetch<{ data: VoiceSessionParticipant[] }>(
+    `/api/voice-sessions/${sessionId}/participants`,
+    { token },
+  );
+}
+
+export function setVoiceParticipantHold(
+  token: string,
+  sessionId: string,
+  participantId: string,
+  hold: boolean,
+) {
+  return apiFetch<{ data: { id: string; onHold: boolean } }>(
+    `/api/voice-sessions/${sessionId}/participants/${participantId}/hold`,
+    { token, method: "POST", body: JSON.stringify({ hold }) },
+  );
+}
+
+export type StartOutboundResult =
+  | { mode: "IN_PLATFORM" }
+  | {
+      mode: "AGENT_FIRST";
+      sessionId: string | null;
+      conversationId: string | null;
+      /**
+       * Per-channel preference: when false the UI should NOT navigate
+       * to the workspace page (mobile-only outbound, hands-off).
+       */
+      openWorkspace: boolean;
+    };
+
+export function startOutboundVoiceCall(
+  token: string,
+  to: string,
+  opts?: { conversationId?: string; notes?: string },
+) {
+  return apiFetch<{ data: StartOutboundResult }>(
+    `/api/voice-sessions/start-outbound`,
+    {
+      token,
+      method: "POST",
+      body: JSON.stringify({
+        to,
+        conversationId: opts?.conversationId,
+        notes: opts?.notes,
+      }),
+    },
+  );
+}
+
+export function kickVoiceParticipant(
+  token: string,
+  sessionId: string,
+  participantId: string,
+) {
+  return apiFetch<{ data: { id: string; kicked: boolean; alreadyLeft?: boolean } }>(
+    `/api/voice-sessions/${sessionId}/participants/${participantId}/kick`,
+    { token, method: "POST" },
+  );
+}
+
+export function getVoiceChannelRouting(token: string, id: string) {
+  return apiFetch<{ data: VoiceChannelRouting }>(`/api/voice-channels/${id}/routing`, { token });
+}
+
+export function updateVoiceChannelRouting(token: string, id: string, routing: VoiceChannelRouting) {
+  return apiFetch<{ data: VoiceChannelRouting }>(`/api/voice-channels/${id}/routing`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify(routing),
   });
 }
 

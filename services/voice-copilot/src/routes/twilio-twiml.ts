@@ -19,10 +19,18 @@
  */
 import express, { Router, Request, Response, NextFunction } from "express";
 import twilio from "twilio";
-import { getRedis, prisma, publishEvent, transitionVoiceCallSessionState } from "@chatcenter/shared";
+import {
+  getRedis,
+  prisma,
+  publishEvent,
+  transitionVoiceCallSessionState,
+  TERMINAL_STATES,
+  type CallState,
+} from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProvider, VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
+import { fireMissedTemplate } from "../lib/missed-template";
 
 const VoiceResponse = twilio.twiml.VoiceResponse;
 
@@ -277,7 +285,21 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         agentCallSid?: string; customerDialed?: boolean;
         // Inbound-only fields
         callSid?: string; sessionId?: string;
+        // Stashed on first participant-join so the add-participant REST
+        // endpoint can dial the new leg into the right Twilio conference.
+        conferenceSid?: string;
+        // Stashed when the customer leg joins so hold/unhold can target
+        // the right participant — outbound dials the customer second so
+        // the callSid isn't known up-front.
+        customerCallSid?: string;
       };
+
+      // Persist the conferenceSid once we see it so the workspace's
+      // "Add participant" feature has somewhere to look it up.
+      if (conferenceSid && meta.conferenceSid !== conferenceSid) {
+        meta.conferenceSid = conferenceSid;
+        await redis.set(`conf:${friendlyName}`, JSON.stringify(meta), "EX", 1800).catch(() => { /* ignore */ });
+      }
 
       // Resolve provider for the stashed tenant; verify Twilio's signature
       // against the (now-known) provider's auth token.
@@ -369,14 +391,142 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           });
           logger.info({ event, conferenceSid, callSid, speaker, label: label || null, isInbound }, "conference: attached media stream to participant");
 
-          // For outbound calls, the call is ACTIVE once the customer leg
-          // joins the conference (both parties now bridged). Inbound is
-          // already ACTIVE-tracked by /api/voice/incoming/status.
-          if (!isInbound && speaker === "customer" && meta.sessionId) {
+          // The call is ACTIVE once a human-on-each-side bridge exists:
+          //   • Outbound — agent leg is already CONNECTING from placement;
+          //     when the customer joins the conference, both parties are
+          //     bridged → ACTIVE.
+          //   • Inbound  — customer joined first (hold music), session is
+          //     CONNECTING after the agent clicks /answer; when the agent's
+          //     browser actually joins the conference, both parties are
+          //     bridged → ACTIVE. The earlier "/api/voice/incoming/status
+          //     in-progress → ACTIVE" path was removed because Twilio sends
+          //     `in-progress` as soon as TwiML returns (hold music = active
+          //     from Twilio's POV), which would auto-stamp `answeredAt`
+          //     before any human picked up and break missed-call detection.
+          const triggerActive = (!isInbound && speaker === "customer") || (isInbound && speaker === "agent");
+          if (triggerActive && meta.sessionId) {
             try {
-              await transitionVoiceCallSessionState(meta.sessionId, "ACTIVE", { reason: "customer_joined" });
+              await transitionVoiceCallSessionState(meta.sessionId, "ACTIVE", {
+                reason: isInbound ? "agent_joined" : "customer_joined",
+              });
             } catch (transErr) {
               logger.warn({ err: transErr, sessionId: meta.sessionId }, "conference: ACTIVE transition failed");
+            }
+          }
+
+          // Stash the customer's callSid so hold/unhold endpoints can
+          // target the right Twilio participant. For inbound the customer
+          // is meta.callSid (the original ring); for outbound it's the
+          // leg labeled "customer" that we just dialed.
+          if (speaker === "customer" && callSid && meta.customerCallSid !== callSid) {
+            meta.customerCallSid = callSid;
+            await redis.set(`conf:${friendlyName}`, JSON.stringify(meta), "EX", 1800).catch(() => { /* ignore */ });
+          }
+
+          // ─── VoiceSessionParticipant tracking ─────────────────
+          // Three cases:
+          //   1. label ∈ {"agent","customer"} → CUSTOMER/AGENT leg.
+          //      Upsert by (sessionId, callSid).
+          //   2. label set to something else → ADDED leg. The row was
+          //      pre-inserted by add-participant; match it by label and
+          //      attach the now-known callSid + joinedAt.
+          //   3. label empty → bare leg (e.g. inbound customer that came
+          //      via the original ring before our labeling existed).
+          //      Treat as CUSTOMER/AGENT by callSid identity.
+          if (meta.sessionId && callSid) {
+            try {
+              const isAddedLeg = label && label !== "agent" && label !== "customer";
+              if (isAddedLeg) {
+                // Attach the new callSid + JOINED status to the pre-
+                // inserted row matched by (sessionId, label).
+                await prisma.voiceSessionParticipant.updateMany({
+                  where: {
+                    sessionId: meta.sessionId,
+                    label,
+                    callSid: null,
+                  },
+                  data: {
+                    callSid,
+                    status: "JOINED",
+                    joinedAt: new Date(),
+                  },
+                });
+              } else {
+                const role = speaker === "agent" ? "AGENT" : "CUSTOMER";
+                const phoneNumber = speaker === "customer" ? meta.customerNumber : null;
+                await prisma.voiceSessionParticipant.upsert({
+                  where: {
+                    sessionId_callSid: {
+                      sessionId: meta.sessionId,
+                      callSid,
+                    },
+                  },
+                  create: {
+                    sessionId: meta.sessionId,
+                    role,
+                    status: "JOINED",
+                    callSid,
+                    label: speaker, // "agent" | "customer"
+                    phoneNumber,
+                    joinedAt: new Date(),
+                  },
+                  update: {
+                    status: "JOINED",
+                    joinedAt: new Date(),
+                  },
+                });
+              }
+            } catch (err) {
+              logger.warn({ err, sessionId: meta.sessionId, callSid, label }, "participant-join: row upsert failed");
+            }
+          }
+        } else if (event === "participant-leave") {
+          // Mark the matching row LEFT. Lookup by (sessionId, callSid) —
+          // it's been stable since participant-join. Best-effort; if no
+          // row matches we never tracked the leg, which is fine.
+          const callSid = body.CallSid;
+          if (meta.sessionId && callSid) {
+            try {
+              await prisma.voiceSessionParticipant.updateMany({
+                where: { sessionId: meta.sessionId, callSid, leftAt: null },
+                data: { status: "LEFT", leftAt: new Date(), endReason: "participant_left" },
+              });
+            } catch (err) {
+              logger.warn({ err, sessionId: meta.sessionId, callSid }, "participant-leave: row update failed");
+            }
+
+            // Auto-close safety net: if every tracked participant has
+            // now left, force-transition the session to a terminal state.
+            // Twilio's own conference-end webhook normally drives this
+            // when a leg with endConferenceOnExit=true leaves, but in
+            // edge cases (cold transfer to added-only legs, dropped
+            // status events) the conference can outlive the last real
+            // speaker. If `answeredAt` is null nobody actually picked up
+            // (the customer hung up while still on hold) — log as MISSED
+            // so the missed-call inbox is correct.
+            try {
+              const remaining = await prisma.voiceSessionParticipant.count({
+                where: { sessionId: meta.sessionId, leftAt: null },
+              });
+              if (remaining === 0) {
+                const fresh = await prisma.voiceCallSession.findUnique({
+                  where: { id: meta.sessionId },
+                  select: { state: true, answeredAt: true },
+                });
+                if (fresh && !TERMINAL_STATES.has(fresh.state as CallState)) {
+                  const target: CallState = fresh.answeredAt ? "ENDED" : "MISSED";
+                  logger.info({ sessionId: meta.sessionId, target }, "participant-leave: no participants left, closing session");
+                  await transitionVoiceCallSessionState(meta.sessionId, target, { reason: "all_participants_left" })
+                    .catch((err) => logger.warn({ err, sessionId: meta.sessionId, target }, "participant-leave: transition failed"));
+                  // Fire the WhatsApp callback template only on MISSED —
+                  // ENDED means someone actually spoke, no nudge needed.
+                  if (target === "MISSED") {
+                    fireMissedTemplate(meta.sessionId, logger);
+                  }
+                }
+              }
+            } catch (err) {
+              logger.warn({ err, sessionId: meta.sessionId }, "participant-leave: remaining-count check failed");
             }
           }
         } else if (event === "conference-end") {
@@ -384,11 +534,48 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           // with reality even when the browser misses the Twilio client-side
           // disconnect event. Applies to both inbound and outbound — both
           // stash sessionId in meta now.
+          //
+          // Race guard: an agent decline / customer-hangup-while-ringing can
+          // have set MISSED (or FAILED) just before this fires. The FSM
+          // rejects MISSED→ENDED, but we read first so the "lost the race"
+          // path is silent instead of logging a transition warning, and so
+          // a session that never reached ACTIVE isn't incorrectly downgraded
+          // to ENDED on the rare path where conference-end fires AFTER an
+          // explicit terminal write.
           if (meta.sessionId) {
             try {
-              await transitionVoiceCallSessionState(meta.sessionId, "ENDED", { reason: "conference_ended" });
+              const fresh = await prisma.voiceCallSession.findUnique({
+                where: { id: meta.sessionId },
+                select: { state: true, answeredAt: true },
+              });
+              if (fresh && !TERMINAL_STATES.has(fresh.state as CallState)) {
+                // Conference ending without anyone ever answering means
+                // nobody actually spoke to the caller — log as MISSED
+                // instead of ENDED so the missed-call inbox is correct.
+                const target: CallState = fresh.answeredAt ? "ENDED" : "MISSED";
+                await transitionVoiceCallSessionState(meta.sessionId, target, { reason: "conference_ended" });
+                // Fire the WhatsApp template only when we actually flipped
+                // to MISSED here (the /status webhook handles the case
+                // where Twilio reports the parent leg terminally first).
+                // Idempotent — the endpoint short-circuits if already fired.
+                if (target === "MISSED") {
+                  fireMissedTemplate(meta.sessionId, logger);
+                }
+              }
             } catch (transErr) {
               logger.warn({ err: transErr, sessionId: meta.sessionId }, "conference-end: session transition failed");
+            }
+            // Sweep any participants still marked live and close them
+            // out. Twilio sends participant-leave for each leg before
+            // conference-end in the happy path, but a hard hangup can
+            // leave rows stuck on status=JOINED.
+            try {
+              await prisma.voiceSessionParticipant.updateMany({
+                where: { sessionId: meta.sessionId, leftAt: null },
+                data: { status: "LEFT", leftAt: new Date(), endReason: "conference_ended" },
+              });
+            } catch (err) {
+              logger.warn({ err, sessionId: meta.sessionId }, "conference-end: participant sweep failed");
             }
           }
           await redis.del(`conf:${friendlyName}`).catch(() => { /* ignore */ });

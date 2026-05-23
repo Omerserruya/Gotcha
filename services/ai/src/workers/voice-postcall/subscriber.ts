@@ -65,31 +65,32 @@ async function resolveSessionId(data: SessionLookup): Promise<string | null> {
 
 async function enqueueAdvance(sessionId: string): Promise<void> {
   // Multiple end-of-call events fire concurrently for the same session
-  // (`voice.session.ended` plus `voice.session.state*`). Prisma's upsert
-  // is SELECT-then-INSERT/UPDATE under the hood, so concurrent handlers
-  // race and a Postgres unique-constraint violation (P2002) is the
-  // expected losing-side outcome — treat it as success, not an error.
+  // (`voice.session.ended` plus `voice.session.state*`). The earlier
+  // implementation used `upsert` and swallowed the P2002 from the losing
+  // race, but Prisma's engine still logs `prisma:error` before our catch
+  // sees the failure — every call produced 3 noisy stack traces.
+  //
+  // `createMany({ skipDuplicates: true })` translates to
+  // `INSERT ... ON CONFLICT DO NOTHING` so the conflict never escalates
+  // to an error event. Same idempotency, zero log noise. We never need
+  // to update an existing row here — the workers themselves bump `stage`
+  // / `attempts` later.
   try {
-    await prisma.voiceCallPostProcessing.upsert({
-      where: { sessionId },
-      create: {
+    await prisma.voiceCallPostProcessing.createMany({
+      data: [{
         sessionId,
         stage: "PENDING",
         attempts: 0,
         startedAt: new Date(),
-      },
-      update: {},
+      }],
+      skipDuplicates: true,
     });
   } catch (err) {
-    const code = (err as { code?: string })?.code;
-    if (code !== "P2002") {
-      console.warn(
-        "[voice-postcall.subscriber] upsert postprocessing row failed:",
-        (err as { message?: string })?.message,
-      );
-      return;
-    }
-    // P2002 — another concurrent handler created the row first; that's fine.
+    console.warn(
+      "[voice-postcall.subscriber] createMany postprocessing row failed:",
+      (err as { message?: string })?.message,
+    );
+    return;
   }
   try {
     await getVoicePostCallQueue().add(

@@ -14,6 +14,7 @@
 import { prisma, subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
 import { runPostChatPipeline } from "../../services/post-chat-pipeline.service";
 import { refreshCustomerBriefFromConversation } from "../../services/customer-brief.service";
+import { resolveEffectiveLocale } from "@chatcenter/shared";
 import { syncCloseToCrm } from "../../routes/crm-panel";
 
 let _sub: ReturnType<typeof subscribeToEvents> | null = null;
@@ -59,10 +60,17 @@ async function handleClosed(evt: ServiceEvent): Promise<void> {
   // conversation's analysis and the cross-channel brief reflects it.
   // Best-effort: a failure here MUST NOT block conversation close, so we
   // catch and log.
+  // Resolve the tenant's system language so the persistent brief gets
+  // generated in the right tongue (briefs are stored per-locale on the
+  // CustomerBrief table). Falls back to "en" on failure — non-fatal.
+  const briefLocaleInfo = await resolveEffectiveLocale({
+    tenantId: String(tenantId),
+  }).catch(() => null);
   refreshCustomerBriefFromConversation({
     tenantId: String(tenantId),
     conversationId: String(conversationId),
     sourceEvent: "chat.closed",
+    locale: briefLocaleInfo?.effective,
   })
     .then((rec) => {
       if (rec) console.log(`[customer-brief] refreshed conv=${conversationId} identity=${rec.identityKey} locale=${rec.locale}`);

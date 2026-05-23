@@ -27,6 +27,7 @@ import { CustomerAvatar } from "./CustomerAvatar";
 import { NewConversationPanel } from "./NewConversationPanel";
 import ConfirmModal from "@/components/ConfirmModal";
 import { LiveCallsSection } from "@/components/voice/LiveCallsSection";
+import { MissedCallsSection } from "@/components/voice/MissedCallsSection";
 
 interface Props {
   selectedId: string | null;
@@ -454,6 +455,10 @@ export function ConversationList({ selectedId, onSelect }: Props) {
             `voiceInboxUiEnabled = true` AND there is at least one RINGING
             or live session, so non-voice tenants see today's inbox. */}
         <LiveCallsSection />
+        {/* Missed voice calls. Renders null when there are zero un-dismissed
+            missed sessions, so non-voice tenants and "clean" inboxes see no
+            extra surface. Tap a row → drawer with caller context + call-back. */}
+        <MissedCallsSection />
         {loading ? (
           <div className="flex items-center justify-center py-12">
             <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />

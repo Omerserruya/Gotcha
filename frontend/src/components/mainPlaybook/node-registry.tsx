@@ -3,7 +3,7 @@
 import React from "react";
 import { VariableMentionInput } from "./VariableMentionInput";
 import { useAuth } from "@/context/AuthContext";
-import { getChannelPosts } from "@/lib/api";
+import { getChannelPosts, getTemplates, getAudienceSchema } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 
 // Per-tenant lookups injected by the editor (agents/flows/departments lists for
@@ -118,6 +118,9 @@ const ICONS: Record<string, React.ReactNode> = {
   search: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z" /></svg>),
   schedule: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25" /></svg>),
   agent: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>),
+  phone: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6.75c0 8.284 6.716 15 15 15h2.25a2.25 2.25 0 002.25-2.25v-1.372c0-.516-.351-.966-.852-1.091l-4.423-1.106c-.44-.11-.902.055-1.173.417l-.97 1.293c-.282.376-.769.542-1.21.38a12.035 12.035 0 01-7.143-7.143c-.162-.441.004-.928.38-1.21l1.293-.97c.363-.271.527-.734.417-1.173L6.963 3.102a1.125 1.125 0 00-1.091-.852H4.5A2.25 2.25 0 002.25 4.5v2.25z" /></svg>),
+  template: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m0 12.75h7.5m-7.5 3H12M10.5 2.25H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>),
+  phoneEnd: (<svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}><path strokeLinecap="round" strokeLinejoin="round" d="M12 9c-1.6 0-3.15.25-4.6.72v3.1c0 .39-.23.74-.56.9-.98.49-1.87 1.12-2.66 1.85" /></svg>),
 };
 
 // ─── REGISTRY ─────────────────────────────────────────────────────
@@ -375,6 +378,28 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     ),
   },
 
+  // WhatsApp template send — only WABA channels accept templates. Used to
+  // (re-)open a 24h customer-service window from inside a flow. Variables
+  // are stored as { key → value } where each value is plain text with
+  // optional `{{var}}` mentions (resolved against the flow's runtime vars).
+  send_message_template: {
+    type: "send_message_template", label: "Send WhatsApp Template", color: "emerald", icon: ICONS.template, category: "Messages",
+    handles: { target: "top", sources: [{ position: "bottom" }] },
+    defaultData: () => ({
+      templateId: "",
+      templateName: "",
+      language: "",
+      variables: {},
+      headerMediaUrl: "",
+    }),
+    validate: (d) => d.templateId ? "ok" : "missing",
+    summary: (d) => {
+      if (!d.templateId) return "(pick a template)";
+      return d.templateName ? `Template: ${truncate(String(d.templateName), 30)}` : "Template selected";
+    },
+    Body: SendMessageTemplateBody,
+  },
+
   // Public reply on the original comment (NOT a DM). Distinct from
   // send_message_*: it goes through the IG/Messenger comments API and is
   // visible to everyone on the post. Pairs naturally with comment_trigger.
@@ -573,6 +598,107 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: ScheduleTriggerBody,
   },
 
+  // ── Voice triggers ────────────────────────────────────────────
+  // Each entry's `type` is the literal `voice_trigger:<kind>` string the
+  // voice-flow-runner matches against. See
+  // services/ai/src/services/voice-flow/voice-flow-runner.ts.
+  "voice_trigger:call.incoming": {
+    type: "voice_trigger:call.incoming", label: "Voice: Incoming call", color: "emerald", icon: ICONS.phone, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({}),
+    validate: () => "ok",
+    summary: () => "When an inbound call rings",
+    Body: () => <p className="text-xs text-gray-500">Fires for every inbound call on this channel.</p>,
+  },
+  "voice_trigger:call.answered": {
+    type: "voice_trigger:call.answered", label: "Voice: Call answered", color: "emerald", icon: ICONS.phone, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({}),
+    validate: () => "ok",
+    summary: () => "When an agent picks up",
+    Body: () => <p className="text-xs text-gray-500">Fires when the call transitions to ACTIVE.</p>,
+  },
+  "voice_trigger:call.missed": {
+    type: "voice_trigger:call.missed", label: "Voice: Missed call", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({}),
+    validate: () => "ok",
+    summary: () => "Customer hung up before answer",
+    Body: () => <p className="text-xs text-gray-500">Fires when state transitions to MISSED.</p>,
+  },
+  "voice_trigger:call.hangup_customer": {
+    type: "voice_trigger:call.hangup_customer", label: "Voice: Customer hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({}),
+    validate: () => "ok",
+    summary: () => "Customer ended the call",
+    Body: () => <p className="text-xs text-gray-500">Fires when the call ends and the customer disconnected first.</p>,
+  },
+  "voice_trigger:call.hangup_agent": {
+    type: "voice_trigger:call.hangup_agent", label: "Voice: Agent hung up", color: "emerald", icon: ICONS.phoneEnd, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({}),
+    validate: () => "ok",
+    summary: () => "Agent ended the call",
+    Body: () => <p className="text-xs text-gray-500">Fires when the call ends and the agent disconnected first.</p>,
+  },
+  "voice_trigger:call.intent_detected": {
+    type: "voice_trigger:call.intent_detected", label: "Voice: Intent detected", color: "emerald", icon: ICONS.ai, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({ intent: "", minConfidence: 0.6 }),
+    validate: (d) => (d.intent && String(d.intent).trim()) ? "ok" : "missing",
+    summary: (d) => d.intent ? `Intent: ${d.intent} (≥${d.minConfidence ?? 0.6})` : "(no intent set)",
+    Body: ({ data, onChange }) => (
+      <div className="space-y-3">
+        <Field
+          label="Intent name"
+          hint='Token-level match. "refund" matches request_refund / process_refund. Use "request_refund" for exact, or "process refund" to require both tokens.'
+        >
+          <input className={inspectorInput + " font-mono"} value={data.intent || ""} onChange={(e) => onChange({ intent: e.target.value })} placeholder="refund" />
+        </Field>
+        <Field label="Min confidence (0–1)" hint="0.6 is strict; try 0.4 if matches are missed.">
+          <input type="number" min={0} max={1} step={0.05} className={inspectorInput} value={data.minConfidence ?? 0.6} onChange={(e) => onChange({ minConfidence: Math.max(0, Math.min(1, Number(e.target.value) || 0)) })} />
+        </Field>
+      </div>
+    ),
+  },
+  "voice_trigger:call.keyword_spoken": {
+    type: "voice_trigger:call.keyword_spoken", label: "Voice: Keyword spoken", color: "emerald", icon: ICONS.search, category: "Voice Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({ keywords: [] }),
+    validate: (d) => (Array.isArray(d.keywords) && d.keywords.length > 0) ? "ok" : "missing",
+    summary: (d) => {
+      const kw = Array.isArray(d.keywords) ? d.keywords : [];
+      return kw.length === 0 ? "(no keywords)" : `Any of: ${kw.slice(0, 3).join(", ")}${kw.length > 3 ? "…" : ""}`;
+    },
+    Body: ({ data, onChange }) => (
+      <div className="space-y-3">
+        <Field label="Keywords (comma-sep)">
+          <textarea rows={3} className={inspectorInput + " resize-none"} value={joinKw(data.keywords)} onChange={(e) => onChange({ keywords: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} placeholder="cancel, refund, escalate" />
+        </Field>
+        <p className="text-xs text-gray-500">Matches against the rolling call summary. Case-insensitive.</p>
+      </div>
+    ),
+  },
+
+  // ── Voice actions ─────────────────────────────────────────────
+  voice_add_participant: {
+    type: "voice_add_participant", label: "Voice: Add participant", color: "indigo", icon: ICONS.phone, category: "Voice Actions",
+    handles: { target: "top", sources: [{ position: "bottom" }] },
+    defaultData: () => ({ to: "", label: "" }),
+    validate: (d) => (d.to && String(d.to).trim()) ? "ok" : "missing",
+    summary: (d) => d.to ? `Dial ${d.to}` : "(no number)",
+    Body: ({ data, onChange }) => (
+      <div className="space-y-3">
+        <Field label="Phone (E.164)">
+          <input className={inspectorInput + " font-mono"} value={data.to || ""} onChange={(e) => onChange({ to: e.target.value })} placeholder="+972..." />
+        </Field>
+        <Field label="Label (optional)">
+          <input className={inspectorInput} value={data.label || ""} onChange={(e) => onChange({ label: e.target.value })} placeholder="manager" />
+        </Field>
+      </div>
+    ),
+  },
   // ── Routing target (legacy router-style; kept for back-compat) ────
   route_target: {
     type: "route_target", label: "Route Target", color: "violet", icon: ICONS.agent, category: "Routing",
@@ -1038,6 +1164,312 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
         Reply publicly before DM
       </label>
     </div>
+  );
+}
+
+// ─── send_message_template body ───────────────────────────────────
+// Picker over APPROVED WhatsApp templates for this tenant. Once selected,
+// extracts `{{placeholder}}` keys from the template body + header text and
+// renders one VariableMentionInput per placeholder; values are stored under
+// `data.variables[key]`. Header media URL is exposed separately when the
+// template uses an IMAGE/VIDEO/DOCUMENT header — it overrides the template's
+// example URL at send time.
+//
+// Mirrors broadcasts: the runtime executor calls the same WhatsApp adapter
+// path and substitutes variables identically.
+interface TemplateRow {
+  id: string;
+  name: string;
+  language: string;
+  status: string;
+  body: string;
+  headerType: string | null;
+  headerContent: string | null;
+  variables?: Array<{ key: string; sample?: string }>;
+}
+
+function extractPlaceholderKeys(text: string | null | undefined): string[] {
+  if (!text) return [];
+  const re = /\{\{\s*([\w-]+)\s*\}\}/g;
+  const seen = new Set<string>();
+  const order: string[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(text))) {
+    if (!seen.has(m[1])) { seen.add(m[1]); order.push(m[1]); }
+  }
+  return order;
+}
+
+// Common CRM aliases the resolver guarantees on every contact, regardless
+// of which CRM module (leads/contacts/accounts/deals) the tenant uses.
+// Same alias surface as `resolveCrmFieldFromContact` in outbound/scheduled.
+const COMMON_CRM_FIELDS: { name: string; label: string }[] = [
+  { name: "displayName", label: "Full name" },
+  { name: "firstName", label: "First name" },
+  { name: "lastName", label: "Last name" },
+  { name: "phone", label: "Phone" },
+  { name: "email", label: "Email" },
+  { name: "source", label: "Source" },
+];
+
+interface CrmSchemaField { name: string; label: string; type?: string }
+
+// Each variable value is one of:
+//   - plain text        → "Hello {{customer_name}}"  (with mention support)
+//   - "crm:<fieldName>" → look up the field on the conversation's contact
+// Encoded as a single string per outbound-campaign convention so the runtime
+// resolvers in incoming-worker + voice-flow-runner can share a parser.
+function isCrmValue(v: unknown): v is string {
+  return typeof v === "string" && v.startsWith("crm:");
+}
+function readCrmField(v: string): string {
+  return v.startsWith("crm:") ? v.slice(4) : "";
+}
+
+function SendMessageTemplateBody({ data, onChange }: { data: any; onChange: (p: any) => void }) {
+  const { token } = useAuth();
+  const [templates, setTemplates] = React.useState<TemplateRow[]>([]);
+  const [loading, setLoading] = React.useState(true);
+  const [error, setError] = React.useState<string | null>(null);
+  const [crmFields, setCrmFields] = React.useState<CrmSchemaField[]>([]);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    if (!token) return;
+    setLoading(true);
+    getTemplates(token, { channel: "WHATSAPP", status: "APPROVED", limit: "200" })
+      .then((res) => { if (!cancelled) setTemplates((res.data || []) as TemplateRow[]); })
+      .catch((err) => { if (!cancelled) setError(err instanceof Error ? err.message : "load_failed"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  // Pull tenant CRM schema (both leads + contacts) once, merge unique fields.
+  // Failures are silent — the picker still ships the common alias list above.
+  React.useEffect(() => {
+    if (!token) return;
+    let cancelled = false;
+    Promise.all([
+      getAudienceSchema(token, "leads").catch(() => null),
+      getAudienceSchema(token, "contacts").catch(() => null),
+    ]).then((results) => {
+      if (cancelled) return;
+      const seen = new Set<string>();
+      const merged: CrmSchemaField[] = [];
+      for (const res of results) {
+        const fields = ((res?.data as any)?.crm?.schema?.fields ?? []) as CrmSchemaField[];
+        for (const f of fields) {
+          if (!f?.name || seen.has(f.name)) continue;
+          seen.add(f.name);
+          merged.push(f);
+        }
+      }
+      setCrmFields(merged);
+    });
+    return () => { cancelled = true; };
+  }, [token]);
+
+  const selected = templates.find((t) => t.id === data.templateId) || null;
+  // Union of body + header placeholders, in declared order.
+  const placeholderKeys = React.useMemo(() => {
+    if (!selected) return [];
+    const fromBody = extractPlaceholderKeys(selected.body);
+    const fromHeader = selected.headerType === "TEXT" ? extractPlaceholderKeys(selected.headerContent) : [];
+    const merged: string[] = [];
+    const seen = new Set<string>();
+    for (const k of [...fromHeader, ...fromBody]) {
+      if (!seen.has(k)) { seen.add(k); merged.push(k); }
+    }
+    return merged;
+  }, [selected]);
+
+  function pickTemplate(id: string) {
+    const t = templates.find((row) => row.id === id);
+    onChange({
+      templateId: id,
+      templateName: t?.name || "",
+      language: t?.language || "",
+      variables: {},
+      headerMediaUrl: "",
+    });
+  }
+
+  function updateVar(key: string, value: string) {
+    const next = { ...(data.variables || {}), [key]: value };
+    onChange({ variables: next });
+  }
+
+  const hasMediaHeader = selected?.headerType === "IMAGE" || selected?.headerType === "VIDEO" || selected?.headerType === "DOCUMENT";
+  const headerVal = String(data.headerMediaUrl || "");
+  const headerIsCrm = isCrmValue(headerVal);
+  const headerCrmField = headerIsCrm ? readCrmField(headerVal) : "";
+
+  return (
+    <div className="space-y-3">
+      <Field label="Template" hint="Only APPROVED WhatsApp templates for this tenant are listed.">
+        {loading ? (
+          <div className="text-xs text-gray-400 py-2">Loading templates…</div>
+        ) : error ? (
+          <div className="text-xs text-rose-600 py-2">Couldn't load templates.</div>
+        ) : templates.length === 0 ? (
+          <div className="text-xs text-gray-500 py-2">
+            No approved WhatsApp templates yet. Create one in Settings → Templates and submit it to Meta.
+          </div>
+        ) : (
+          <select
+            className={inspectorInput}
+            value={data.templateId || ""}
+            onChange={(e) => pickTemplate(e.target.value)}
+          >
+            <option value="">(pick a template)</option>
+            {templates.map((t) => (
+              <option key={t.id} value={t.id}>
+                {t.name} · {t.language}
+              </option>
+            ))}
+          </select>
+        )}
+      </Field>
+
+      {!loading && data.templateId && !selected ? (
+        <div className="text-[11px] text-rose-600 bg-rose-50 rounded-lg px-3 py-2 ring-1 ring-rose-200">
+          The previously selected template is no longer available. Pick another.
+        </div>
+      ) : null}
+
+      {/* Header media URL — same Static/CRM picker pattern as the variables
+          below, so authors can pull the live image/PDF/video URL from a
+          contact field (e.g. invoice_pdf_url) instead of hard-coding one. */}
+      {selected && hasMediaHeader ? (
+        <div className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-3 space-y-2">
+          <div className="text-xs font-semibold text-emerald-900">
+            Header {selected.headerType?.toLowerCase()}
+          </div>
+          <div className="flex items-center gap-2">
+            <select
+              value={headerIsCrm ? "crm" : "static"}
+              onChange={(e) => onChange({ headerMediaUrl: e.target.value === "crm" ? "crm:" : "" })}
+              className="text-xs px-2 py-1 rounded border border-gray-200 bg-white shrink-0"
+            >
+              <option value="static">Static URL</option>
+              <option value="crm">From CRM field</option>
+            </select>
+            {headerIsCrm ? (
+              <CrmFieldPicker
+                value={headerCrmField}
+                fields={crmFields}
+                onChange={(field) => onChange({ headerMediaUrl: `crm:${field}` })}
+              />
+            ) : (
+              <div className="flex-1 min-w-[140px]">
+                <VariableMentionInput
+                  value={headerVal}
+                  onChange={(v) => onChange({ headerMediaUrl: v })}
+                  placeholder={`https://.../${selected.headerType?.toLowerCase()}`}
+                  tone="emerald"
+                />
+              </div>
+            )}
+          </div>
+          <p className="text-[11px] text-emerald-700/80">
+            Overrides the template's example media at send time. Variables and CRM fields supported.
+          </p>
+        </div>
+      ) : null}
+
+      {selected && placeholderKeys.length > 0 ? (
+        <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2">
+          <div className="text-xs font-semibold text-violet-900">Template variables</div>
+          <div className="text-[11px] text-violet-700/80">
+            Static = literal text with flow {`{{var}}`} mentions. CRM = pulled from the conversation's contact (displayName, phone, email, or any tenant CRM field).
+          </div>
+          <div className="space-y-2">
+            {placeholderKeys.map((key) => {
+              const declaredSample = (selected.variables || []).find((v) => v.key === key)?.sample;
+              const raw = String((data.variables || {})[key] || "");
+              const isCrm = isCrmValue(raw);
+              const crmField = isCrm ? readCrmField(raw) : "";
+              return (
+                <div key={key} className="flex flex-wrap items-center gap-2 bg-white rounded-lg border border-gray-200 p-2 min-w-0">
+                  <code className="px-2 py-1 text-xs font-mono bg-gray-100 rounded shrink-0">{`{{${key}}}`}</code>
+                  <select
+                    value={isCrm ? "crm" : "static"}
+                    onChange={(e) => updateVar(key, e.target.value === "crm" ? "crm:" : "")}
+                    className="text-xs px-2 py-1 rounded border border-gray-200 bg-gray-50 shrink-0"
+                  >
+                    <option value="static">Static</option>
+                    <option value="crm">From CRM</option>
+                  </select>
+                  {isCrm ? (
+                    <CrmFieldPicker
+                      value={crmField}
+                      fields={crmFields}
+                      onChange={(field) => updateVar(key, `crm:${field}`)}
+                    />
+                  ) : (
+                    <div className="flex-1 min-w-[140px]">
+                      <VariableMentionInput
+                        value={raw}
+                        onChange={(v) => updateVar(key, v)}
+                        placeholder={declaredSample || `value for ${key}`}
+                        tone="emerald"
+                      />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {selected && placeholderKeys.length === 0 ? (
+        <div className="text-[11px] text-gray-400">This template has no body variables.</div>
+      ) : null}
+
+      {selected ? (
+        <div className="text-[11px] text-gray-400 bg-gray-50 rounded-lg px-3 py-2 line-clamp-4 whitespace-pre-wrap">
+          {selected.body || "(empty body)"}
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
+// Shared CRM-field <select> — common aliases on top, full tenant schema below.
+// Used for both header media and per-variable mapping so the picker UX stays
+// identical across the inspector.
+function CrmFieldPicker({
+  value,
+  fields,
+  onChange,
+}: {
+  value: string;
+  fields: CrmSchemaField[];
+  onChange: (field: string) => void;
+}) {
+  return (
+    <select
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="flex-1 min-w-[140px] max-w-full text-xs px-2 py-1 rounded border border-gray-200 bg-white truncate"
+    >
+      <option value="">Pick CRM field…</option>
+      <optgroup label="Common">
+        {COMMON_CRM_FIELDS.map((f) => (
+          <option key={f.name} value={f.name}>{f.label}</option>
+        ))}
+      </optgroup>
+      {fields.length > 0 && (
+        <optgroup label="All CRM fields">
+          {fields.map((f) => (
+            <option key={f.name} value={f.name}>
+              {f.label} ({f.name})
+            </option>
+          ))}
+        </optgroup>
+      )}
+    </select>
   );
 }
 

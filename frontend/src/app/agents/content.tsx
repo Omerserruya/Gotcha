@@ -24,6 +24,7 @@ export function AgentsContent() {
   // Form fields
   const [formName, setFormName] = useState("");
   const [formEmail, setFormEmail] = useState("");
+  const [formPhone, setFormPhone] = useState("");
   const [formPassword, setFormPassword] = useState("");
   const [formDepartmentId, setFormDepartmentId] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -63,6 +64,7 @@ export function AgentsContent() {
     setPanelAgent(null);
     setFormName("");
     setFormEmail("");
+    setFormPhone("");
     setFormPassword("");
     setFormDepartmentId("");
     setFormError("");
@@ -77,6 +79,7 @@ export function AgentsContent() {
     setPanelAgent(agent);
     setFormName(agent.name || "");
     setFormEmail(agent.email || "");
+    setFormPhone(agent.phoneNumber || "");
     setFormPassword("");
     setFormDepartmentId(agent.departmentId || "");
     setFormError("");
@@ -109,7 +112,14 @@ export function AgentsContent() {
         }
       } else {
         if (!panelAgent || !formName.trim()) return;
-        await updateAgent(token, panelAgent.id, { name: formName.trim() });
+        const phoneTrim = formPhone.trim();
+        await updateAgent(token, panelAgent.id, {
+          name: formName.trim(),
+          // Empty string clears the number; otherwise pass through verbatim
+          // and let the server normalize. The voice-copilot routes apply
+          // E.164 normalization at TwiML build time.
+          phoneNumber: phoneTrim ? phoneTrim : null,
+        });
         // Handle department change
         const currentDeptId = panelAgent.departmentId || "";
         if (formDepartmentId !== currentDeptId) {
@@ -355,6 +365,29 @@ export function AgentsContent() {
                       )}
                     />
                   </div>
+
+                  {/* Personal phone — used for FORWARD_TO_AGENT inbound mode
+                      on voice channels, and for the smart-callback bridge
+                      (we recognize the agent when they call the business
+                      number back from their mobile). Only editable in edit
+                      mode since create uses a separate registration flow. */}
+                  {panelMode === "edit" && (
+                    <div>
+                      <label className="block text-sm font-medium text-gray-700 mb-1.5">
+                        {t("agents.phoneNumber")}
+                      </label>
+                      <input
+                        type="tel"
+                        value={formPhone}
+                        onChange={(e) => setFormPhone(e.target.value)}
+                        placeholder="+972501234567"
+                        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition font-mono"
+                      />
+                      <p className="mt-1 text-[11px] text-gray-400">
+                        {t("agents.phoneNumberHint")}
+                      </p>
+                    </div>
+                  )}
 
                   {/* Password (create only) */}
                   {panelMode === "create" && (
