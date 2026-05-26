@@ -110,6 +110,33 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
 
     const copilotConfig = await getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
 
+    // Effective locale for the live copilot. The hints are for the AGENT,
+    // so we resolve the assigned agent's per-user override first; falling
+    // back to Tenant.defaultLocale if unset. openai.provider injects a
+    // "Respond in <language>" line into the suggest prompt whenever this
+    // is non-"en", so without this the live cues come back in English even
+    // when the agent has switched the UI to Hebrew.
+    let locale: string | undefined;
+    try {
+      const assignedAgentId = (conversation as any).assignedAgentId as string | null;
+      if (assignedAgentId) {
+        const agent = await prisma.user.findUnique({
+          where: { id: assignedAgentId },
+          select: { locale: true },
+        });
+        if (agent?.locale) locale = agent.locale;
+      }
+      if (!locale) {
+        const tenant = await prisma.tenant.findUnique({
+          where: { id: tenantId },
+          select: { defaultLocale: true },
+        });
+        if (tenant?.defaultLocale) locale = tenant.defaultLocale;
+      }
+    } catch (err) {
+      console.warn("[voice-assist] locale resolution failed (non-fatal):", err);
+    }
+
     let suggestions: any[] = [];
     if (copilotConfig) {
       // Load the cross-channel customer-memory bundle (open issues, recent
@@ -153,6 +180,7 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
         })),
         copilotConfig,
         customerMemory,
+        locale,
         signal: turn.signal,
       };
       suggestions = await getSuggestions(context);

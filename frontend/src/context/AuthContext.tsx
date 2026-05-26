@@ -55,6 +55,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // Broadcast token transitions so providers that live OUTSIDE AuthProvider
+  // (e.g., I18nProvider — kept above us so it doesn't remount the voice
+  // tree on locale re-renders) can re-hydrate without subscribing to this
+  // context. Skipped on the very first render before localStorage hydrates.
+  const tokenBroadcastInitRef = useRef(false);
+  useEffect(() => {
+    if (!tokenBroadcastInitRef.current) {
+      tokenBroadcastInitRef.current = true;
+      // Still dispatch once after first render so providers mounted with
+      // no token initially can pick up the hydrated value (or stay empty
+      // if the user is logged out).
+    }
+    try { window.dispatchEvent(new Event("auth:token-changed")); } catch { /* SSR/no window */ }
+  }, [token]);
+
   const scheduleRefresh = useCallback((accessToken: string) => {
     clearRefreshTimer();
     const expiryMs = getTokenExpiryMs(accessToken);

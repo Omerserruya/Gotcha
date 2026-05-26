@@ -1,0 +1,32 @@
+# Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
+
+region        = "us-east-1"
+project       = "chatcenter"
+env           = "prod"
+instance_type = "t4g.large"
+
+# SSH access — three options, pick ONE:
+#
+# (A) RECOMMENDED — let Terraform create the AWS key pair from your local
+#     public key. Then set allowed_ssh_cidrs to your current IP.
+#     Find your IP:  curl -4 ifconfig.me
+# ssh_public_key_path = "~/.ssh/id_ed25519.pub"
+# allowed_ssh_cidrs   = ["1.2.3.4/32"]
+#
+# (B) Reuse an EC2 key pair you already created in the AWS Console:
+# key_pair_name     = "my-existing-keypair"
+# allowed_ssh_cidrs = ["1.2.3.4/32"]
+#
+# (C) NO SSH AT ALL — use SSM Session Manager (`aws ssm start-session ...`)
+#     which gives you a shell without opening port 22 or managing keys.
+#     Leave everything below commented out.
+
+# Cloudflare Tunnel = no need for a public static IP.
+create_eip = false
+
+# Storage
+root_volume_size_gb     = 100
+snapshot_retention_days = 7
+
+# DESTROYS the backup bucket on `terraform destroy`. Keep false in prod.
+backup_bucket_force_destroy = false

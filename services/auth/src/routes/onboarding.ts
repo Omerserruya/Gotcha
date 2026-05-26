@@ -298,14 +298,15 @@ router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response):
 });
 
 // ─── Step A: Save Business Profile ──────────────────────────
+// Minimal schema — only the two fields actually surfaced in Screen 1.
+// Legacy fields (industry, businessPriority, daily conversations, agents)
+// are kept on the model but defaulted server-side so a future settings
+// page can still surface them without forcing them through onboarding.
 
 const businessProfileSchema = z.object({
   organizationName: z.string().min(1).max(200),
-  industry: z.string().min(1).max(100),
   businessDescription: z.string().min(1).max(2000),
-  businessPriority: z.enum(["MAXIMIZE_SALES", "FAST_RESPONSE", "PREMIUM_EXPERIENCE", "REDUCE_WORKLOAD"]),
-  estimatedDailyConversations: z.number().int().min(1).max(100000),
-  numberOfAgents: z.number().int().min(1).max(10000),
+  locale: z.string().min(2).max(10).optional(),
 });
 
 router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
@@ -325,26 +326,47 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
       return;
     }
 
+    const { organizationName, businessDescription, locale } = req.body as {
+      organizationName: string;
+      businessDescription: string;
+      locale?: string;
+    };
+
+    const existing = await prisma.businessProfile.findUnique({
+      where: { tenantId: req.tenantId! },
+      select: { industry: true, businessPriority: true, estimatedDailyConversations: true, numberOfAgents: true },
+    });
+
     const profile = await prisma.businessProfile.upsert({
       where: { tenantId: req.tenantId! },
-      update: req.body,
-      create: { tenantId: req.tenantId!, ...req.body },
+      update: { organizationName, businessDescription },
+      create: {
+        tenantId: req.tenantId!,
+        organizationName,
+        businessDescription,
+        industry: existing?.industry ?? "Other",
+        businessPriority: existing?.businessPriority ?? "FAST_RESPONSE",
+        estimatedDailyConversations: existing?.estimatedDailyConversations ?? 100,
+        numberOfAgents: existing?.numberOfAgents ?? 5,
+      },
     });
 
-    // Update onboarding tracker
+    // Mirror name + locale onto Tenant so the dashboard, AI content, and
+    // routing read the same values without joining BusinessProfile.
+    await prisma.tenant.update({
+      where: { id: req.tenantId! },
+      data: {
+        name: organizationName,
+        ...(locale ? { defaultLocale: locale } : {}),
+        ...(tenant.status === "PENDING_ADMIN_SETUP" ? { status: "PENDING_ONBOARDING" as const } : {}),
+      },
+    });
+
     await prisma.tenantOnboarding.upsert({
       where: { tenantId: req.tenantId! },
-      update: { currentStep: "DEPARTMENTS" },
-      create: { tenantId: req.tenantId!, currentStep: "DEPARTMENTS" },
+      update: {},
+      create: { tenantId: req.tenantId!, currentStep: "BUSINESS_PROFILE" },
     });
-
-    // Update tenant status to PENDING_ONBOARDING if it was PENDING_ADMIN_SETUP
-    if (tenant.status === "PENDING_ADMIN_SETUP") {
-      await prisma.tenant.update({
-        where: { id: req.tenantId! },
-        data: { status: "PENDING_ONBOARDING" },
-      });
-    }
 
     res.json({ data: profile });
   } catch (err) {
@@ -573,7 +595,13 @@ router.post("/generate-configs", requireRole("ADMIN"), async (req: Request, res:
   }
 });
 
-// ─── Complete Onboarding (Triggers Agent Generation + Activation) ──
+// ─── Complete Onboarding (Activation + async AI generation) ──
+// The new 2-screen flow makes this the synchronous critical path:
+//   1. Verify profile exists
+//   2. Auto-create a default "General" department if none exists
+//   3. Flip tenant.status = ACTIVE (so AppLayout stops redirecting to /setup)
+//   4. Fire-and-forget the AI config generation — the user enters the app
+//      immediately; agents materialize within a few seconds in the background.
 
 router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
@@ -588,73 +616,70 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
     }
 
     if (tenant.status === "ACTIVE") {
-      res.status(400).json({ error: "Tenant is already active" });
+      res.json({ data: { status: "ACTIVE", message: "Already active" } });
       return;
     }
 
-    // ── Validate: Business profile exists ──
     const profile = await prisma.businessProfile.findUnique({
       where: { tenantId: req.tenantId! },
+      select: { id: true },
     });
     if (!profile) {
       res.status(400).json({ error: "Business profile is required before activation" });
       return;
     }
 
-    // ── Validate: At least one department exists ──
-    const departments = await prisma.department.findMany({
-      where: { tenantId: req.tenantId!, isActive: true },
-      select: { id: true, name: true, slaTarget: true },
-    });
-    if (departments.length === 0) {
-      res.status(400).json({ error: "At least one department is required before activation" });
-      return;
-    }
-
-    // ── Validate: Required SLA fields ──
-    const missingSlaDepts = departments.filter((d) => !d.slaTarget);
-    if (missingSlaDepts.length > 0) {
-      res.status(400).json({
-        error: "All departments must have SLA targets defined",
-        departments: missingSlaDepts.map((d) => d.name),
-      });
-      return;
-    }
-
-    // ── Validate: Admin account is active ──
     const admin = await prisma.user.findFirst({
       where: { tenantId: req.tenantId!, role: "ADMIN", isActive: true },
+      select: { id: true },
     });
     if (!admin) {
       res.status(400).json({ error: "An active admin account is required before activation" });
       return;
     }
 
-    // ── Generate agent configs for all departments via AI service ──
-    await callAIGenerateConfigs(req.tenantId!, req.headers.authorization!);
-
-    // ── Verify AI agents were generated ──
-    const agentCount = await prisma.aIAgent.count({
-      where: { tenantId: req.tenantId! },
+    // Auto-create a single "General" department if the tenant has none.
+    // Keeps the AI generator happy without forcing the user through a
+    // wizard step they don't need on day one.
+    let departments = await prisma.department.findMany({
+      where: { tenantId: req.tenantId!, isActive: true },
+      select: { id: true, name: true },
     });
-    if (agentCount === 0) {
-      res.status(500).json({ error: "Failed to generate AI agent configurations" });
-      return;
+    if (departments.length === 0) {
+      const dept = await prisma.department.create({
+        data: {
+          tenantId: req.tenantId!,
+          name: "General",
+          queueMode: "CLAIM",
+          slaTarget: 30,
+          aiSuggestionsEnabled: true,
+        },
+        select: { id: true, name: true },
+      });
+      departments = [dept];
     }
 
-    // ── Activate tenant ──
+    // Activate first, generate AI configs after. The activation flip is
+    // the only thing the user blocks on; the LLM call can take seconds.
     await prisma.$transaction([
       prisma.tenant.update({
         where: { id: req.tenantId! },
         data: { status: "ACTIVE" },
       }),
-      prisma.tenantOnboarding.update({
+      prisma.tenantOnboarding.upsert({
         where: { tenantId: req.tenantId! },
-        data: { currentStep: "COMPLETED", completedAt: new Date() },
+        create: { tenantId: req.tenantId!, currentStep: "COMPLETED", completedAt: new Date() },
+        update: { currentStep: "COMPLETED", completedAt: new Date() },
       }),
     ]);
 
-    // ── Send activation confirmation (non-blocking) ──
+    const authHeader = req.headers.authorization;
+    if (authHeader) {
+      callAIGenerateConfigs(req.tenantId!, authHeader).catch((err) => {
+        console.error(`[Onboarding] Async generate-configs failed for tenant ${req.tenantId}:`, err.message);
+      });
+    }
+
     sendActivationConfirmation(req.tenantId!).catch((err) => {
       console.error("Failed to send activation confirmation:", err);
     });
@@ -662,9 +687,8 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
     res.json({
       data: {
         status: "ACTIVE",
-        message: "Tenant onboarding completed successfully",
+        message: "Tenant activated. AI configurations generating in background.",
         departmentsActivated: departments.length,
-        aiAgentsConfigured: agentCount,
       },
     });
   } catch (err) {
@@ -734,6 +758,99 @@ router.get("/agent-config/:departmentId", requireRole("ADMIN"), async (req: Requ
   } catch (err) {
     console.error("Get copilot config error:", err);
     res.status(500).json({ error: "Failed to get copilot config" });
+  }
+});
+
+// ─── Onboarding Missions ────────────────────────────────────
+// Five hardcoded missions, status derived from existing tables.
+// `done` if completed, `active` for the first incomplete one, `pending` for the rest.
+// `deepLink` is consumed by the sidebar MissionPanel so route changes stay server-side.
+
+type MissionId =
+  | "confirm_business"
+  | "connect_channel"
+  | "send_test_reply"
+  | "review_agent_tone"
+  | "invite_teammate";
+
+interface MissionResult {
+  id: MissionId;
+  done: boolean;
+  deepLink: string;
+}
+
+router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.tenantId!;
+
+    const [profile, connectedChannel, outboundMessage, agentForTone, userCount] = await Promise.all([
+      prisma.businessProfile.findUnique({ where: { tenantId }, select: { id: true } }),
+      prisma.channelAccount.findFirst({
+        where: { tenantId, connectionStatus: "CONNECTED" },
+        select: { id: true },
+      }),
+      prisma.message.findFirst({
+        where: { tenantId, direction: "OUTBOUND" },
+        select: { id: true },
+      }),
+      prisma.aIAgent.findFirst({
+        where: { tenantId },
+        select: { id: true, createdAt: true, updatedAt: true },
+        orderBy: { createdAt: "asc" },
+      }),
+      prisma.user.count({ where: { tenantId, isActive: true } }),
+    ]);
+
+    const agentTouched =
+      agentForTone &&
+      agentForTone.updatedAt.getTime() - agentForTone.createdAt.getTime() > 60_000;
+
+    const missions: MissionResult[] = [
+      {
+        id: "confirm_business",
+        done: !!profile,
+        deepLink: "/setup",
+      },
+      {
+        id: "connect_channel",
+        done: !!connectedChannel,
+        deepLink: "/channels",
+      },
+      {
+        id: "send_test_reply",
+        done: !!outboundMessage,
+        deepLink: "/conversations",
+      },
+      {
+        id: "review_agent_tone",
+        done: !!agentTouched,
+        deepLink: agentForTone ? `/ai-studio/agents/${agentForTone.id}` : "/ai-studio",
+      },
+      {
+        id: "invite_teammate",
+        done: userCount > 1,
+        deepLink: "/settings",
+      },
+    ];
+
+    let activeAssigned = false;
+    const out = missions.map((m) => {
+      let status: "done" | "active" | "pending";
+      if (m.done) {
+        status = "done";
+      } else if (!activeAssigned) {
+        status = "active";
+        activeAssigned = true;
+      } else {
+        status = "pending";
+      }
+      return { id: m.id, status, deepLink: m.deepLink };
+    });
+
+    res.json({ data: { missions: out } });
+  } catch (err) {
+    console.error("Get missions error:", err);
+    res.status(500).json({ error: "Failed to get missions" });
   }
 });
 

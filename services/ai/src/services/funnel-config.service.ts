@@ -20,6 +20,7 @@
  * today. Funnel config is purely additive.
  */
 
+import type { StageCopilotConfig } from "@chatcenter/shared";
 import type {
   ConversationStage,
   Intent,
@@ -50,6 +51,21 @@ export interface FunnelStage {
    * downstream stage when this guard matches (e.g. "objection cleared").
    */
   exit?: StageGuard;
+  /**
+   * Vendor CRM value this stage corresponds to (e.g. HubSpot's
+   * `lifecyclestage` value, Zoho's `Stage` picklist label). Used to
+   * resolve the customer's current stage from a CRM context fetch and
+   * to write the new stage back on transition.
+   */
+  crmValue?: string;
+  /**
+   * Stage-scoped copilot configuration: per-stage goal, required
+   * questions, required data fields, exit criteria, and `nextStageId`.
+   * When present, supersedes the channel-level CopilotConfig.goals /
+   * questions / dataFields during live cue generation and post-call
+   * evaluation.
+   */
+  copilot?: StageCopilotConfig;
 }
 
 export interface StageGuard {

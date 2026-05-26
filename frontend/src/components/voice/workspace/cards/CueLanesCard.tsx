@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import clsx from "clsx";
 import { getSocket } from "@/lib/socket";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
 import { postCueOutcome, type CueKind, type CueOutcome } from "@/lib/api-copilot";
 import { useCopilotProfile, type CopilotProfile, type CopilotTier } from "@/lib/copilot-prefs";
 
@@ -64,11 +65,14 @@ const SILENCE_MS = 15_000;
 
 export function CueLanesCard({ conversationId }: Props) {
   const { token } = useAuth();
+  const { t } = useI18n();
   const { profile, setTier } = useCopilotProfile();
   const [cues, setCues] = useState<InternalCue[]>([]);
   const [focusIdx, setFocusIdx] = useState(0);
   const [flash, setFlash] = useState<{ key: string; kind: "accept" | "reject" } | null>(null);
-  const [nowTick, setNowTick] = useState(() => Date.now());
+  // Initialised to 0 so the static-export build and first client render
+  // agree; the 1s ticker effect immediately bumps it to real Date.now().
+  const [nowTick, setNowTick] = useState(0);
 
   /** dedupKeys this rep has already actioned this session. */
   const resolvedRef = useRef<Set<string>>(new Set());
@@ -129,8 +133,11 @@ export function CueLanesCard({ conversationId }: Props) {
     setFocusIdx(0);
   }, [conversationId]);
 
-  // 1Hz ticker so decay bars + stale + cooldown re-render.
+  // 1Hz ticker so decay bars + stale + cooldown re-render. The seed
+  // before the interval fires keeps nowTick at 0 for one paint to avoid
+  // hydration mismatch under static export.
   useEffect(() => {
+    setNowTick(Date.now());
     const id = window.setInterval(() => setNowTick(Date.now()), 1000);
     return () => window.clearInterval(id);
   }, []);
@@ -290,7 +297,7 @@ export function CueLanesCard({ conversationId }: Props) {
               <span className="relative inline-flex rounded-full h-2 w-2 bg-rose-500" />
             </span>
             <span className="text-[11px] font-bold uppercase tracking-widest text-rose-700">
-              Pulse
+              {t("liveCopilot.cues.lanePulse")}
             </span>
             <span className="text-[11px] text-rose-700/70 tabular-nums">
               {lanesView.pulse.length}
@@ -337,7 +344,7 @@ export function CueLanesCard({ conversationId }: Props) {
             {lanesView.queued > 0 && (
               <span
                 className="text-[11px] text-gray-500 px-1.5 py-0.5 rounded-full bg-gray-100"
-                title="Cues queued silently to respect your tier's visibility cap."
+                title={t("liveCopilot.cues.queuedTitle")}
               >
                 +{lanesView.queued}
               </span>
@@ -349,12 +356,12 @@ export function CueLanesCard({ conversationId }: Props) {
               silent ? (
                 <ListeningDot />
               ) : (
-                <p className="text-[12px] text-gray-400 italic">No coaching cues right now.</p>
+                <p className="text-[12px] text-gray-400 italic">{t("liveCopilot.cues.noCues")}</p>
               )
             ) : (
               <>
                 <Lane
-                  name="Direction"
+                  name={t("liveCopilot.cues.laneDirection")}
                   tone="amber"
                   cues={lanesView.direction}
                   profile={profile}
@@ -366,7 +373,7 @@ export function CueLanesCard({ conversationId }: Props) {
                   dim={lanesView.dim}
                 />
                 <Lane
-                  name="Strategy"
+                  name={t("liveCopilot.cues.laneStrategy")}
                   tone="indigo"
                   cues={lanesView.strategy}
                   profile={profile}
@@ -403,26 +410,27 @@ function keyAt(view: { pulse: InternalCue[]; direction: InternalCue[]; strategy:
 // ─── Tier selector ──────────────────────────────────────────────
 
 function TierSelector({ tier, onChange }: { tier: CopilotTier; onChange: (t: CopilotTier) => void }) {
+  const { t: translate } = useI18n();
   return (
     <div className="ml-auto flex items-center gap-0.5 bg-gray-100 rounded-md p-0.5">
-      {(["junior", "mid", "senior"] as const).map((t) => (
+      {(["junior", "mid", "senior"] as const).map((opt) => (
         <button
-          key={t}
+          key={opt}
           type="button"
-          onClick={() => onChange(t)}
+          onClick={() => onChange(opt)}
           className={clsx(
             "px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider rounded transition",
-            tier === t ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700",
+            tier === opt ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700",
           )}
           title={
-            t === "junior"
-              ? "More cues, all lanes, animations on"
-              : t === "mid"
-              ? "Default"
-              : "Whisper mode — pulse only"
+            opt === "junior"
+              ? translate("liveCopilot.cues.tierJuniorDesc")
+              : opt === "mid"
+              ? translate("liveCopilot.cues.tierMidDesc")
+              : translate("liveCopilot.cues.tierSeniorDesc")
           }
         >
-          {t}
+          {opt}
         </button>
       ))}
     </div>
@@ -491,6 +499,7 @@ interface CueRowProps {
 }
 
 function CueRow({ cue, tone, profile, now, flash, focused, suppressedRecently, onAct, prominent }: CueRowProps) {
+  const { t } = useI18n();
   // Entrance animation: mounted false → true on next tick. Senior skips.
   const [entered, setEntered] = useState(!profile.animations);
   useEffect(() => {
@@ -568,8 +577,8 @@ function CueRow({ cue, tone, profile, now, flash, focused, suppressedRecently, o
           prominent ? "w-9 h-9" : "w-8 h-8",
           acceptCls[tone],
         )}
-        aria-label="Accept cue (Enter)"
-        title="I used this · Enter"
+        aria-label={t("liveCopilot.cues.acceptAria")}
+        title={t("liveCopilot.cues.acceptAria")}
       >
         <svg className={prominent ? "w-4 h-4" : "w-3.5 h-3.5"} viewBox="0 0 20 20" fill="currentColor">
           <path
@@ -586,8 +595,8 @@ function CueRow({ cue, tone, profile, now, flash, focused, suppressedRecently, o
           "shrink-0 inline-flex items-center justify-center rounded-md text-gray-400 hover:bg-gray-100 hover:text-gray-700 focus:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 transition",
           prominent ? "w-9 h-9" : "w-8 h-8",
         )}
-        aria-label="Dismiss cue (Esc)"
-        title="Not useful · Esc"
+        aria-label={t("liveCopilot.cues.dismissAria")}
+        title={t("liveCopilot.cues.notUseful")}
       >
         <svg className={prominent ? "w-3.5 h-3.5" : "w-3 h-3"} viewBox="0 0 20 20" fill="currentColor">
           <path d="M6.225 4.811a1 1 0 011.414 0L10 7.172l2.361-2.361a1 1 0 111.414 1.414L11.414 8.586l2.361 2.361a1 1 0 11-1.414 1.414L10 10l-2.361 2.361a1 1 0 11-1.414-1.414l2.361-2.361-2.361-2.361a1 1 0 010-1.414z" />

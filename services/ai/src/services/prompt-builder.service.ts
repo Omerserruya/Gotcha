@@ -4,17 +4,31 @@
  * Sits BELOW the Behavior Engine Layer. The BEL emits a frozen
  * `BehaviorState`; this builder consumes it and renders the system prompt.
  *
- * Section order is fixed (the platform's contract — authors do not choose):
+ * ── Section order — driven by OpenAI prefix cache layout ─────────────
  *
- *     [ Identity ]
- *     [ Goals ]
- *     [ Context ]
- *     [ Decision Layer ]
- *     [ Playbooks ]                  — strategy contract + selected conversation playbooks + author flow
- *     [ Knowledge ]
- *     [ Guardrails ]
- *     [ Execution Contract ]         — MANDATORY action enforcement (above Tools)
- *     [ Tools ]                      — allowed & required action categories from BehaviorState
+ * The prompt is rendered in THREE blocks separated by `---`. The order
+ * is load-bearing for caching — anything in the first two blocks renders
+ * byte-identical across all turns of the same conversation, so OpenAI's
+ * automatic prefix cache (which routes on the `user` field = sessionId)
+ * starts hitting from turn 2 onwards:
+ *
+ *   [ Per-AGENT block ]            ← stable for every conversation this
+ *     • Identity (sans tone intensity)  agent ever runs
+ *     • Knowledge slice
+ *     • Guardrails (sans turn-only "forbidden behaviors")
+ *     • Agent-level playbook anchors / escalation rules / author flow
+ *
+ *   [ Per-CONVERSATION block ]     ← stable for the lifetime of one chat
+ *     • Customer & conversation info (no lastMessageAt)
+ *     • CRM snapshot, customer-brief memory, templates list
+ *
+ *   [ Per-TURN block ]             ← fresh every turn — must come LAST
+ *     • Conversation State (BehaviorState)
+ *     • Tone intensity (this turn)
+ *     • Goals + Decision Layer + selected playbooks
+ *     • Strategy forbidden behaviors
+ *     • WhatsApp 24h window + pending approvals
+ *     • Execution Contract + Tools Policy + output contract reminder
  *
  * The builder NEVER decides behavior. It reads `behaviorState` and renders.
  * No prompt section can override the BEL.
@@ -57,7 +71,6 @@ export type { AgentMode, BehaviorState };
 export interface AgentRecord {
   name: string;
   role: string;
-  description?: string | null;
   tone?: string | null;
   style?: unknown;
   identity?: unknown;
@@ -116,6 +129,15 @@ export interface BuildPromptOpts {
    * are exposed (the prompt will print a "no capabilities" notice).
    */
   toolFunctionNames?: string[];
+  /**
+   * Active pipeline stage for THIS customer, resolved at call time from
+   * the CRM vendor's stage field against the tenant funnel. When present,
+   * the per-turn block renders the stage's goal, required questions, data
+   * fields, exit criteria, and next-stage hint — so the agent is funnel-
+   * guided regardless of channel (chat / voice / future). Undefined when
+   * no funnel is configured or the resolver couldn't determine a stage.
+   */
+  stageContext?: import("./intelligence/prompts/blocks/copilot-config-block").StageContextForPrompt;
 }
 
 // ─── ESCALATION TOOL ────────────────────────────────────────
@@ -151,19 +173,152 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
     throw new Error(`[prompt-builder] Unknown strategy in BehaviorState: ${opts.behaviorState.strategy}`);
   }
 
+  // Generator mode is config-builder, not a customer conversation — the
+  // three-block cache layout doesn't apply; render the legacy fixed shape.
+  if (opts.behaviorState.mode === "generator") {
+    const gSections: string[] = [];
+    push(gSections, buildIdentity(opts, strategy));
+    push(gSections, buildGoals(opts, strategy));
+    push(gSections, buildContext(opts));
+    push(gSections, buildDecisionLayer(opts, strategy));
+    push(gSections, buildPlaybooks(opts, strategy));
+    push(gSections, buildKnowledge(opts));
+    push(gSections, buildGuardrails(opts, strategy));
+    push(gSections, buildExecutionContract(opts, strategy));
+    push(gSections, buildToolsPolicy(opts));
+    return gSections.join("\n\n---\n\n");
+  }
+
   const sections: string[] = [];
 
-  push(sections, buildIdentity(opts, strategy));
-  push(sections, buildGoals(opts, strategy));
-  push(sections, buildContext(opts));
-  push(sections, buildDecisionLayer(opts, strategy));
-  push(sections, buildPlaybooks(opts, strategy));
-  push(sections, buildKnowledge(opts));
-  push(sections, buildGuardrails(opts, strategy));
-  push(sections, buildExecutionContract(opts, strategy));
-  push(sections, buildToolsPolicy(opts));
+  // ── BLOCK 1 — Per-AGENT (stable for every conversation this agent runs) ──
+  push(sections, buildAgentBlock(opts, strategy));
+
+  // ── BLOCK 2 — Per-CONVERSATION (stable for the lifetime of this chat) ──
+  push(sections, buildConversationBlock(opts));
+
+  // ── BLOCK 3 — Per-TURN (fresh every turn, MUST come last for caching) ──
+  push(sections, buildTurnBlock(opts, strategy));
 
   return sections.join("\n\n---\n\n");
+}
+
+// ─── Block 1: Per-AGENT ─────────────────────────────────────
+// Everything here reads ONLY from opts.agent.* and platform constants. No
+// BehaviorState reads, no customer info, no transcript. Byte-identical
+// across every conversation this agent ever runs → maximum cache reuse.
+function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
+  const parts: string[] = [];
+  push(parts, buildIdentity(opts, strategy));
+  push(parts, buildAgentPlaybooksStatic(opts));
+  push(parts, buildGuardrailsBase(opts));
+  if (parts.length === 0) return null;
+  return parts.join("\n\n");
+}
+
+// ─── Block 2: Per-CONVERSATION ─────────────────────────────
+// Stable for the lifetime of one chat. NO lastMessageAt, NO BehaviorState,
+// NO strategy-derived content, NO Knowledge slice (KB retrieval is
+// per-turn — see buildTurnBlock). If anything in here drifts turn-to-turn,
+// the cache breaks at that byte position.
+function buildConversationBlock(opts: BuildPromptOpts): string | null {
+  const parts: string[] = [];
+
+  const ctx = opts.context;
+  const ctxBlocks: string[] = [];
+  if (ctx?.customerBlock?.trim()) ctxBlocks.push(ctx.customerBlock.trim());
+  if (ctx?.crmBlock?.trim()) ctxBlocks.push(ctx.crmBlock.trim());
+  if (ctx?.memoryBlock?.trim()) ctxBlocks.push(ctx.memoryBlock.trim());
+  if (ctx?.templatesBlock?.trim()) ctxBlocks.push(ctx.templatesBlock.trim());
+  if (ctxBlocks.length > 0) {
+    parts.push(["# Conversation Context", ...ctxBlocks].join("\n\n"));
+  }
+
+  if (parts.length === 0) return null;
+  return parts.join("\n\n");
+}
+
+// ─── Block 3: Per-TURN ──────────────────────────────────────
+// Everything BehaviorState-driven lives here. Re-rendered every turn.
+// Knowledge (KB slice) lives in this block too: retrieval is per-turn
+// (driven by the customer's latest message), so placing it here means the
+// per-conversation block stays byte-stable even when KB chunks change.
+// Pipeline stage (from the tenant funnel + customer's CRM stage value) is
+// also rendered here — the stage can change mid-conversation if a tool
+// auto-advances the customer, so it's not safe in the per-conv block.
+function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): string {
+  const parts: string[] = [];
+  push(parts, buildTurnState(opts));
+  push(parts, buildPipelineStage(opts));
+  push(parts, buildGoals(opts, strategy));
+  push(parts, buildDecisionLayer(opts, strategy));
+  push(parts, buildPlaybooksDynamic(opts, strategy));
+  push(parts, buildStrategyForbidden(strategy));
+  push(parts, buildKnowledge(opts));
+  push(parts, buildExecutionContract(opts, strategy));
+  push(parts, buildToolsPolicy(opts));
+  return parts.join("\n\n");
+}
+
+// Per-turn pipeline-stage block — renders the customer's current funnel
+// stage so the agent knows exactly what goal to drive toward and what
+// criteria advance them to the next stage. Identical shape to the voice
+// copilot's stage block (see prompts/blocks/copilot-config-block.ts)
+// so the funnel feels the same on chat and voice.
+function buildPipelineStage(opts: BuildPromptOpts): string | null {
+  const stage = opts.stageContext;
+  if (!stage) return null;
+
+  const lines: string[] = ["# Pipeline Stage (this turn)"];
+  lines.push(`Active stage: **${stage.label}** (\`${stage.id}\`)`);
+  if (stage.nextLabel) {
+    lines.push(`Next stage on advance: **${stage.nextLabel}** — every move should drive toward advancing here.`);
+  }
+
+  const goal = stage.copilot?.goal?.trim();
+  if (goal) lines.push(`Stage goal: ${goal}`);
+
+  const requiredQs = (stage.copilot?.requiredQuestions ?? []).filter((q) => q.text?.trim());
+  if (requiredQs.length > 0) {
+    lines.push("");
+    lines.push("Required questions for this stage (ask any not yet answered in the transcript):");
+    for (const q of requiredQs) {
+      lines.push(`- ${q.required ? "[required] " : ""}${q.text.trim()}`);
+    }
+  }
+
+  const requiredFields = (stage.copilot?.requiredDataFields ?? []).filter((f) => f.field?.trim());
+  if (requiredFields.length > 0) {
+    lines.push("");
+    lines.push("Data fields to collect for this stage:");
+    for (const f of requiredFields) {
+      lines.push(`- ${f.required ? "[required] " : ""}\`${f.field}\` (${f.label})`);
+    }
+  }
+
+  const exit = stage.copilot?.exitCriteria;
+  if (exit) {
+    const parts: string[] = [];
+    if (exit.mustHaveFields && exit.mustHaveFields.length > 0) {
+      parts.push(`  - must-have fields: ${exit.mustHaveFields.join(", ")}`);
+    }
+    if (exit.mustAskQuestions && exit.mustAskQuestions.length > 0) {
+      parts.push(`  - must-ask questions: ${exit.mustAskQuestions.join(" | ")}`);
+    }
+    if (exit.positiveSignals && exit.positiveSignals.length > 0) {
+      parts.push(`  - positive signals (any-of): ${exit.positiveSignals.join(" | ")}`);
+    }
+    if (exit.negativeSignals && exit.negativeSignals.length > 0) {
+      parts.push(`  - BLOCKED if heard (any-of): ${exit.negativeSignals.join(" | ")}`);
+    }
+    if (parts.length > 0) {
+      lines.push("");
+      lines.push("Stage exit criteria (advance only when these are met):");
+      lines.push(...parts);
+    }
+  }
+
+  return lines.join("\n");
 }
 
 function push(sections: string[], part: string | null): void {
@@ -235,7 +390,10 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     : "You are an AI employee.";
   lines.push(headline);
 
-  if (a.description?.trim()) lines.push(a.description.trim());
+  // `description` field removed per spec — the agent's identity is fully
+  // expressed through structured fields (role, persona, tone, identity,
+  // behavioralAnchors). Free-text description was a config violation that
+  // bypassed the structured-prompt contract.
 
   if (mode === "agent") {
     lines.push("");
@@ -283,7 +441,8 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     if (toneLines.length) lines.push(`Tone: ${toneLines.join(", ")}.`);
   }
 
-  lines.push(`Tone intensity (this turn): **${opts.behaviorState.toneIntensity}** — ${describeToneIntensity(opts.behaviorState.toneIntensity)}`);
+  // Tone intensity is BehaviorState-driven — rendered in the per-turn block,
+  // NOT here, so Identity stays byte-stable across turns.
 
   const persona = asRecord(a.persona);
   if (persona) {
@@ -342,8 +501,10 @@ function buildGoals(opts: BuildPromptOpts, strategy: StrategyContract): string |
   return lines.join("\n");
 }
 
-// ─── Section: Context ───────────────────────────────────────
-
+// ─── Section: Context (legacy path — generator mode only) ──
+// Customer-conversation flows now render context via buildConversationBlock
+// (per-conv stable) + buildTurnState (per-turn). This is kept so the
+// generator mode prompt still renders the same shape it did before.
 function buildContext(opts: BuildPromptOpts): string | null {
   const ctx = opts.context;
   const blocks: string[] = [];
@@ -358,6 +519,29 @@ function buildContext(opts: BuildPromptOpts): string | null {
   if (ctx?.templatesBlock?.trim()) blocks.push(ctx.templatesBlock.trim());
 
   return ["# Context", ...blocks].join("\n\n");
+}
+
+// ─── Per-TURN: state block ─────────────────────────────────
+// BehaviorState rendering + per-turn context (WhatsApp window timestamps,
+// pending approvals). These are the things that CANNOT be cached because
+// they change every customer message.
+function buildTurnState(opts: BuildPromptOpts): string {
+  const lines: string[] = [];
+  lines.push(renderBehaviorStateBlock(opts.behaviorState));
+  lines.push("");
+  lines.push(
+    `**Tone intensity (this turn):** ${opts.behaviorState.toneIntensity} — ${describeToneIntensity(opts.behaviorState.toneIntensity)}`,
+  );
+  const ctx = opts.context;
+  if (ctx?.whatsappWindowBlock?.trim()) {
+    lines.push("");
+    lines.push(ctx.whatsappWindowBlock.trim());
+  }
+  if (ctx?.pendingApprovalsBlock?.trim()) {
+    lines.push("");
+    lines.push(ctx.pendingApprovalsBlock.trim());
+  }
+  return lines.join("\n");
 }
 
 function renderBehaviorStateBlock(s: BehaviorState): string {
@@ -476,6 +660,15 @@ const LOCALE_LANGUAGE: Record<string, string> = {
 };
 
 // ─── Section: Playbooks ─────────────────────────────────────
+//
+// Split into two halves for cache layout:
+//   • `buildAgentPlaybooksStatic`   — author flow, behavioral anchors,
+//     escalation rules. Reads ONLY from opts.agent.*. Per-agent stable.
+//   • `buildPlaybooksDynamic`       — strategy contract + the playbooks
+//     BEL selected this turn. Per-turn (strategy & playbookIds change).
+//
+// `buildPlaybooks` is kept as the original combined renderer; generator
+// mode still uses it to preserve its prompt shape.
 
 function buildPlaybooks(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
   if (opts.behaviorState.mode === "generator") return GENERATOR_PLAYBOOKS;
@@ -508,6 +701,51 @@ function buildPlaybooks(opts: BuildPromptOpts, strategy: StrategyContract): stri
 
   if (blocks.length === 0) return null;
   return ["# Playbooks", blocks.join("\n\n")].join("\n\n");
+}
+
+// Per-agent slice: author flow + behavioral anchors + escalation rules.
+// All read from opts.agent.* — no BehaviorState, no strategy. Stable.
+function buildAgentPlaybooksStatic(opts: BuildPromptOpts): string | null {
+  const blocks: string[] = [];
+
+  const flow = coerceArray(opts.agent.conversationFlow);
+  if (flow && flow.length) blocks.push(renderFlow(flow));
+
+  const anchors = coerceArray(opts.agent.behavioralAnchors);
+  if (anchors && anchors.length) blocks.push(renderAnchors(anchors));
+
+  const escalation = coerceArray(opts.agent.escalationRules);
+  if (escalation && escalation.length) blocks.push(renderEscalationRules(escalation));
+
+  if (blocks.length === 0) return null;
+  return ["# Agent Playbook Anchors", blocks.join("\n\n")].join("\n\n");
+}
+
+// Per-turn slice: strategy contract + the playbooks BEL chose this turn.
+// `DEFAULT_TACTICAL_SEQUENCE` only fires when no author flow AND no
+// selected playbooks — when it DOES fire, the static block above already
+// rendered the author flow (so we don't double-render it here).
+function buildPlaybooksDynamic(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
+  const blocks: string[] = [];
+
+  blocks.push(renderStrategyContract(strategy));
+
+  for (const pid of opts.behaviorState.playbookIds) {
+    const pb = CONVERSATION_PLAYBOOKS[pid];
+    if (pb) blocks.push(renderConversationPlaybook(pb));
+  }
+
+  const hasAuthorFlow = (coerceArray(opts.agent.conversationFlow) ?? []).length > 0;
+  if (
+    !hasAuthorFlow &&
+    strategy.name !== "SUPPORT_AGENT" &&
+    opts.behaviorState.playbookIds.length === 0
+  ) {
+    blocks.push(DEFAULT_TACTICAL_SEQUENCE);
+  }
+
+  if (blocks.length === 0) return null;
+  return ["# Active Strategy & Playbooks (this turn)", blocks.join("\n\n")].join("\n\n");
 }
 
 function renderStrategyContract(s: StrategyContract): string {
@@ -611,6 +849,15 @@ function buildKnowledge(opts: BuildPromptOpts): string | null {
 }
 
 // ─── Section: Guardrails ────────────────────────────────────
+//
+// Split for cache layout:
+//   • `buildGuardrailsBase`        — platform guardrails + agent's custom
+//     business rules + truthfulness footer. Per-agent stable.
+//   • `buildStrategyForbidden`     — strategy.forbiddenBehaviors. Per-turn
+//     (strategy changes as the conversation evolves).
+//
+// `buildGuardrails` is preserved for generator mode (which still renders
+// the legacy flat shape).
 
 function buildGuardrails(opts: BuildPromptOpts, strategy: StrategyContract): string {
   const blocks: string[] = ["# Guardrails"];
@@ -634,6 +881,27 @@ function buildGuardrails(opts: BuildPromptOpts, strategy: StrategyContract): str
   blocks.push(TRUTHFULNESS_FOOTER);
 
   return blocks.join("\n\n");
+}
+
+// Per-agent slice — no strategy reads.
+function buildGuardrailsBase(opts: BuildPromptOpts): string {
+  const blocks: string[] = ["# Guardrails"];
+  if (GUARDRAILS) blocks.push(GUARDRAILS);
+  const custom = asStringArray(opts.agent.customGuardrails);
+  if (custom.length) {
+    blocks.push(["## Additional Business Rules", ...custom.map((c) => `- ${c}`)].join("\n"));
+  }
+  blocks.push(TRUTHFULNESS_FOOTER);
+  return blocks.join("\n\n");
+}
+
+// Per-turn slice — strategy-specific forbidden behaviors.
+function buildStrategyForbidden(strategy: StrategyContract): string | null {
+  if (!strategy.forbiddenBehaviors.length) return null;
+  return [
+    `## Forbidden in this turn (${strategy.name})`,
+    ...strategy.forbiddenBehaviors.map((f) => `- ${f}`),
+  ].join("\n");
 }
 
 const TRUTHFULNESS_FOOTER = `## Truthfulness

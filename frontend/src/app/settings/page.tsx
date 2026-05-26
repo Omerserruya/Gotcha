@@ -242,11 +242,15 @@ export default function SettingsPage() {
         const next: Locale | null = value === "system" ? null : (value as Locale);
         await setLocale(next);
         setLocaleMessage(t("settings.language.saved"));
-      } catch {
-        setLocaleMessage(t("settings.language.saveFailed"));
+      } catch (err: any) {
+        // Show the actual server reason (e.g. "unsupported_locale",
+        // "failed_to_set_locale") so the user — and we, while debugging —
+        // can tell what went wrong instead of just "try again".
+        const reason = err?.message ? ` (${err.message})` : "";
+        setLocaleMessage(`${t("settings.language.saveFailed")}${reason}`);
       } finally {
         setLocaleSaving(false);
-        setTimeout(() => setLocaleMessage(""), 3000);
+        setTimeout(() => setLocaleMessage(""), 5000);
       }
     },
     [setLocale, t],
@@ -259,11 +263,12 @@ export default function SettingsPage() {
       try {
         await setTenantDefault(value as Locale);
         setLocaleMessage(t("settings.language.savedTenant"));
-      } catch {
-        setLocaleMessage(t("settings.language.saveFailed"));
+      } catch (err: any) {
+        const reason = err?.message ? ` (${err.message})` : "";
+        setLocaleMessage(`${t("settings.language.saveFailed")}${reason}`);
       } finally {
         setLocaleSaving(false);
-        setTimeout(() => setLocaleMessage(""), 3000);
+        setTimeout(() => setLocaleMessage(""), 5000);
       }
     },
     [setTenantDefault, t],

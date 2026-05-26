@@ -190,7 +190,7 @@ async function renderAgentMode(opts: {
     agent: {
       name: config.name,
       role: config.role,
-      description: config.description,
+      // description removed per spec — see prompt-builder AgentRecord.
       tone: config.tone,
       style: config.style,
       identity: config.identity,

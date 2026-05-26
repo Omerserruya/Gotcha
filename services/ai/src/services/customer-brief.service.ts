@@ -136,7 +136,11 @@ export async function refreshCustomerBriefFromConversation(args: {
     where: { id: args.conversationId },
     select: { channel: true, customerExternalId: true, customerName: true },
   });
-  // We need contactId for the weakest-key fallback. Resolve via (channel, externalId).
+  // We need contactId for the weakest-key fallback. Try the exact
+  // (channel, externalId) tuple first; if nothing matches and the
+  // customerExternalId is phone-shaped (voice / WhatsApp / SMS), fall back
+  // to a phone-column lookup so we cross channels — the same human ingested
+  // first on WhatsApp resolves on a later voice call.
   let contactId: string | null = null;
   if (conv?.channel && conv?.customerExternalId) {
     const c = await (prisma as any).contact.findFirst({
@@ -144,6 +148,21 @@ export async function refreshCustomerBriefFromConversation(args: {
       select: { id: true },
     });
     contactId = c?.id ?? null;
+    if (!contactId) {
+      const normalized = conv.customerExternalId.replace(/[\s-]/g, "");
+      if (/^\+?\d{6,}$/.test(normalized)) {
+        const candidates = Array.from(new Set([
+          conv.customerExternalId,
+          normalized,
+          normalized.startsWith("+") ? normalized.slice(1) : `+${normalized}`,
+        ]));
+        const xchannel = await (prisma as any).contact.findFirst({
+          where: { tenantId: args.tenantId, mergedIntoId: null, phone: { in: candidates } },
+          select: { id: true },
+        });
+        contactId = xchannel?.id ?? null;
+      }
+    }
   }
 
   const hints: IdentityHints = {
@@ -403,6 +422,13 @@ async function generateBriefText(args: {
   try {
     const result = await generateResponse({
       tenantId: args.tenantId,
+      // Per-contact brief — pin to the strongest available identity so
+      // repeat briefs for the same person route to the same backend cache.
+      sessionId: args.bundle.personId
+        ? `person:${args.bundle.personId}`
+        : args.bundle.crmContactId
+          ? `crm:${args.bundle.crmContactId}`
+          : undefined,
       model: getDefaultModel(),
       messages: [
         { role: "system", content: systemPrompt },

@@ -40,6 +40,7 @@ export async function generateFollowup(
 
   const response = await generateResponse({
     tenantId,
+    sessionId: conversationId,
     messages: [
       {
         role: "system",

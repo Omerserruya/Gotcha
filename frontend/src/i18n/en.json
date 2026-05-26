@@ -1502,9 +1502,40 @@
     "saving": "Saving...",
     "send": "Send"
   },
+  "onboarding": {
+    "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
+    "missions": {
+      "title": "Get set up",
+      "hide": "Hide",
+      "items": {
+        "confirm_business": "Confirm your business",
+        "connect_channel": "Connect a channel",
+        "send_test_reply": "Send a test reply",
+        "review_agent_tone": "Review your AI's tone",
+        "invite_teammate": "Invite a teammate"
+      }
+    }
+  },
   "setup": {
     "title": "Organization Setup",
     "subtitle": "Complete the setup to activate your workspace",
+    "confirmTitle": "Confirm your business",
+    "confirmSubtitle": "Just the basics — we'll fine-tune the rest from inside the app.",
+    "language": "Language",
+    "oneLineWhatYouDo": "In one line, what do you do?",
+    "oneLinePlaceholder": "e.g. We sell handmade leather bags online",
+    "confirmAndContinue": "Confirm and continue",
+    "outcomeTitle": "What should we help you do first?",
+    "outcomeSubtitle": "Pick one — you can do all three later.",
+    "outcomeFooter": "You can switch focus anytime from the sidebar.",
+    "preparingWorkspace": "Setting up your workspace…",
+    "errSaveProfile": "Couldn't save business profile.",
+    "errActivate": "Couldn't activate workspace.",
+    "outcomes": {
+      "replyFaster": "Reply faster",
+      "qualifyLeads": "Qualify leads",
+      "handleCalls": "Handle calls"
+    },
     "stepBusinessProfile": "Business Profile",
     "stepDepartments": "Departments",
     "stepAiConfig": "AI Configuration",
@@ -2874,5 +2905,187 @@
     "errApprove": "Approve failed",
     "errReject": "Reject failed",
     "errReasonRequired": "A rejection reason is required"
+  },
+  "callRightPanel": {
+    "tabs": {
+      "live": "Live",
+      "customer": "Customer",
+      "history": "History"
+    },
+    "emptyCustomer": {
+      "title": "Nothing flagged for this customer",
+      "body": "Open tickets, recent CRM notes, and tags from your CRM will land here."
+    },
+    "emptyHistory": {
+      "title": "No prior contact",
+      "body": "Once this customer has more activity across channels you'll see it summarized here."
+    },
+    "brief": {
+      "loadFailed": "Failed to load AI brief"
+    }
+  },
+  "postConvSettings": {
+    "title": "Post-Conversation Schema",
+    "subtitle": "What the AI extracts when a call ends or a chat closes — and what it does next.",
+    "save": "Save changes",
+    "saving": "Saving…",
+    "saved": "Saved",
+    "loading": "Loading…",
+    "loadFailed": "Failed to load config",
+    "saveFailed": "Failed to save",
+    "summary": {
+      "title": "Summary fields",
+      "subtitle": "CRM slots the AI should fill if discussed. Only fields mentioned in the conversation are written — prior values are preserved.",
+      "empty": "No custom fields yet.",
+      "keyPlaceholder": "key (e.g. budget)",
+      "labelPlaceholder": "Label",
+      "descriptionPlaceholder": "Description / hint for the AI",
+      "remove": "Remove",
+      "add": "+ Add field"
+    },
+    "taskRules": {
+      "title": "Task rules",
+      "subtitle": "When the AI detects an intent or keyword, automatically queue a task for the rep.",
+      "empty": "No task rules yet.",
+      "whenIntent": "When intent =",
+      "intentPlaceholder": "e.g. pricing_objection",
+      "orKeywords": "or keywords:",
+      "keywordsPlaceholder": "comma-separated",
+      "createTask": "Create task:",
+      "subjectPlaceholder": "Subject (e.g. Send pricing deck)",
+      "priorityLow": "low",
+      "priorityNormal": "normal",
+      "priorityHigh": "high",
+      "priorityUrgent": "urgent",
+      "add": "+ Add rule"
+    },
+    "crmRules": {
+      "title": "CRM rules",
+      "subtitle": "When the AI detects an intent, patch specific CRM fields. Sparse — only the fields you list here are written.",
+      "empty": "No CRM rules yet.",
+      "whenIntent": "When intent =",
+      "intentPlaceholder": "e.g. ready_to_buy",
+      "sentiment": "sentiment:",
+      "sentimentAny": "(any)",
+      "sentimentPositive": "positive",
+      "sentimentNeutral": "neutral",
+      "sentimentNegative": "negative",
+      "sentimentMixed": "mixed",
+      "patchJson": "Patch (JSON):",
+      "add": "+ Add rule"
+    }
+  },
+  "funnels": {
+    "title": "Pipeline Funnels",
+    "subtitle": "Each funnel is a sequence of pipeline stages. For every stage you can configure a goal, required questions, required data fields, exit criteria, and the vendor CRM stage value to write on advance.",
+    "adminOnly": "Admin only.",
+    "loading": "Loading…",
+    "createTitle": "Create a new funnel",
+    "createSubtitle": "Funnels group your pipeline stages. After creating, you'll be taken to the editor where you can author each stage's goal, required questions, exit criteria, and CRM stage mapping.",
+    "createPlaceholder": "funnel id (e.g. sales-saas)",
+    "createButton": "Create",
+    "creating": "Creating…",
+    "idRequired": "Funnel id is required (e.g. \"sales-saas\").",
+    "loadFailed": "Failed to load funnels",
+    "createFailed": "Failed to create funnel",
+    "emptyTitle": "No funnels yet",
+    "emptyBody": "Create your first funnel above to enable stage-driven copilot goals.",
+    "active": "Active",
+    "tenantDefault": "tenant default",
+    "stagesCount": "{n} stages",
+    "transitionsCount": "{n} transitions",
+    "activate": "Activate",
+    "delete": "Delete",
+    "deleteConfirm": "Delete funnel \"{id}\"? This cannot be undone.",
+    "editor": {
+      "adminOnly": "Admin only.",
+      "loading": "Loading…",
+      "notFound": "Funnel not found.",
+      "backLink": "← All funnels",
+      "stagesActive": "{n} stages · Active",
+      "stagesInactive": "{n} stages",
+      "deptSuffix": " · Department {id}",
+      "tenantSuffix": " · Tenant default",
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "saved": "Saved.",
+      "saveFailed": "Save failed",
+      "loadFailed": "Failed to load funnel",
+      "untitled": "Untitled",
+      "hasGoal": "has goal",
+      "moveUp": "Move up",
+      "moveDown": "Move down",
+      "remove": "Remove",
+      "stageId": "Stage id",
+      "displayLabel": "Display label",
+      "baseStage": "Base stage (BEL anchor)",
+      "crmValue": "Vendor CRM stage value",
+      "crmHint": "Maps this stage to your CRM's stage field (HubSpot lifecyclestage, Zoho Stage, etc.). Stages without a value can be displayed but not written by auto-advance or manual override.",
+      "crmPlaceholder": "e.g. qualifiedlead",
+      "copilotConfig": "Copilot config",
+      "stageGoal": "Stage goal",
+      "stageGoalHint": "What the rep should achieve on a call while the customer is in this stage. Drives the live cue projector.",
+      "stageGoalPlaceholder": "e.g. Qualify budget and timeline; secure a demo for next week.",
+      "nextStage": "Next stage on advance",
+      "nextStageHint": "Stage to advance to when exit criteria are met. Leave blank to use the first outgoing transition.",
+      "deriveFromTransitions": "— derive from transitions —",
+      "addStage": "+ Add stage",
+      "newStage": "New stage",
+      "removeStageConfirm": "Remove this stage?",
+      "questions": {
+        "title": "Required questions",
+        "add": "+ Add",
+        "empty": "No questions configured.",
+        "textPlaceholder": "What's your budget?",
+        "required": "required",
+        "remove": "Remove"
+      },
+      "dataFields": {
+        "title": "Required data fields",
+        "add": "+ Add",
+        "hint": "Fill either column — the other is auto-derived on save (label slugifies to field key; field key humanizes to label).",
+        "empty": "No fields configured.",
+        "fieldPlaceholder": "field_key",
+        "labelPlaceholder": "Rep-facing label",
+        "required": "required",
+        "remove": "Remove"
+      },
+      "exitCriteria": {
+        "title": "Exit criteria",
+        "hint": "Used by the post-call summarizer to evaluate whether the stage can advance. Comma- or newline-separated.",
+        "mustHaveFields": "Must-have fields",
+        "mustHaveFieldsPlaceholder": "budget, timeline",
+        "mustAskQuestions": "Must-ask questions",
+        "mustAskQuestionsPlaceholder": "What is your timeline?\nWho is the decision maker?",
+        "positiveSignals": "Positive signals (any-of)",
+        "positiveSignalsPlaceholder": "ready to start, send me the contract",
+        "negativeSignals": "Negative signals (block advance)",
+        "negativeSignalsPlaceholder": "not interested, too expensive"
+      }
+    }
+  },
+  "liveCopilot": {
+    "instructions": {
+      "title": "How to use",
+      "intro": "Suggestions appear here as the customer speaks. Use ↑/↓ to focus a cue, Enter to accept, Esc to dismiss.",
+      "tierJunior": "Junior tier — pulse, direction, and strategy lanes all visible.",
+      "tierMid": "Mid tier — balanced lanes with moderate cooldown.",
+      "tierSenior": "Senior tier — whisper mode, pulse only.",
+      "listening": "Listening — hints appear after the customer speaks."
+    },
+    "cues": {
+      "noCues": "No coaching cues right now.",
+      "queuedTitle": "Cues queued silently to respect your tier's visibility cap.",
+      "lanePulse": "Pulse",
+      "laneDirection": "Direction",
+      "laneStrategy": "Strategy",
+      "acceptAria": "Accept cue (Enter)",
+      "dismissAria": "Dismiss cue (Esc)",
+      "notUseful": "Not useful · Esc",
+      "tierJuniorDesc": "More cues, all lanes, animations on",
+      "tierMidDesc": "Default",
+      "tierSeniorDesc": "Whisper mode — pulse only"
+    }
   }
 }

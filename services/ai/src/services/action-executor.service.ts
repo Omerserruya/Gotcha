@@ -1,7 +1,8 @@
 import { prisma, evaluateToolGate } from "@chatcenter/shared";
-import type { ToolGateResult } from "@chatcenter/shared";
+import type { ToolGateResult, ScheduleMeetingArgs } from "@chatcenter/shared";
 import { getPolicy, validateAgainstPolicy } from "./policy.service";
 import { getCrmConnector, getMessagingConnector } from "./connectors/types";
+import { makeScheduleMeetingHandler } from "./schedule-handler.service";
 
 /**
  * Internal HTTP helper — calls the conversation service over the service
@@ -61,6 +62,7 @@ export type ActionTool =
   | "create_ticket"
   | "create_task"
   | "schedule_followup"
+  | "schedule_meeting"
   | "generate_followup"
   | "tag_contact"
   | "get_contact"
@@ -588,6 +590,62 @@ export async function executeAction(
           },
           select: { id: true, scheduledAt: true, status: true },
         });
+        break;
+      }
+      case "schedule_meeting": {
+        // Approval-resume path for the LLM's `schedule_meeting` tool. The
+        // live-bot path wires `ctx.scheduleMeeting` into the shared
+        // dispatcher; this branch mirrors that wiring so an approved
+        // meeting actually gets created instead of throwing "unsupported
+        // tool" at the human approver.
+        //
+        // aiAgentId resolution: the LLM tool args don't carry it; we read
+        // it from the conversation's `assignedAiAgentId`. Required because
+        // makeScheduleMeetingHandler looks up the agent's connected
+        // calendar (Google / Calendly) to know which adapter to use.
+        const p = action.params as ScheduleMeetingArgs & { conversationId?: string };
+        if (!p.conversationId) {
+          throw new Error("schedule_meeting requires conversationId in params");
+        }
+        const conv = await prisma.conversation.findFirst({
+          where: { id: p.conversationId, tenantId },
+          select: { assignedAiAgentId: true },
+        });
+        const aiAgentId = (conv as any)?.assignedAiAgentId as string | null | undefined;
+        if (!aiAgentId) {
+          throw new Error(
+            `schedule_meeting: conversation ${p.conversationId} has no assignedAiAgentId — cannot resolve calendar adapter`,
+          );
+        }
+        const handler = makeScheduleMeetingHandler({ tenantId, aiAgentId });
+        const result = await handler({
+          duration_minutes: p.duration_minutes,
+          meeting_type: p.meeting_type,
+          requested_at_iso: p.requested_at_iso,
+          customer_timezone: p.customer_timezone,
+          customer_email: p.customer_email,
+          additional_guests: p.additional_guests,
+          notes: p.notes,
+        });
+        if (!result.ok) {
+          // INVALID / PROPOSE / generic failure — surface the reason to
+          // the audit row and bubble up as a non-ok ExecutionResult so the
+          // approvals dispatch logs the real cause.
+          const reason =
+            "reason" in result && result.reason
+              ? result.reason
+              : "verdict" in result
+                ? `verdict=${result.verdict}`
+                : "schedule_meeting failed";
+          throw new Error(reason);
+        }
+        output = {
+          verdict: result.verdict,
+          eventId: result.eventId,
+          joinUrl: result.joinUrl,
+          startMs: result.startMs,
+          endMs: result.endMs,
+        };
         break;
       }
       default:

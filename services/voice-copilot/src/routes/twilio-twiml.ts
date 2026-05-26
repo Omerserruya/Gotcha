@@ -727,5 +727,25 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
     },
   );
 
+  // TwiML-App-level StatusCallback registered during channel provisioning
+  // (see services/conversation/src/routes/voice-channels.ts: Applications.json
+  // StatusCallback URL). Twilio's payload here is the standard webhook shape
+  // (CallSid, CallStatus, ApplicationSid, AccountSid, From, To...) — there
+  // is no tenantId field, so the standard signature verifier can't run.
+  // The endpoint is logging-only; Twilio doesn't accept commands from the
+  // response, so an unverified 204 is safe and stops the 404 noise in logs.
+  router.post("/outbound-status", (req: Request, res: Response) => {
+    const body = (req.body || {}) as Record<string, string>;
+    logger.info({
+      callSid: body.CallSid,
+      callStatus: body.CallStatus,
+      applicationSid: body.ApplicationSid,
+      from: body.From,
+      to: body.To,
+      duration: body.CallDuration,
+    }, "voice-copilot outbound app status");
+    res.status(204).end();
+  });
+
   return router;
 }

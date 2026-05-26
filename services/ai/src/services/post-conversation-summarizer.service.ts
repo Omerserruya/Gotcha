@@ -40,6 +40,68 @@ export interface StatusChange {
   reason: string;
 }
 
+/**
+ * Free-form bonus observation the LLM noticed but couldn't fit into the
+ * tenant's structured template (`summaryFields`). The business owner sees
+ * these under the freestyle summary; humans decide whether to promote a
+ * recurring `label` into the template later. Bonus items are NEVER written
+ * to the CRM — they live in `CallAnalysis.meta.structured.bonus_highlights`
+ * only, so the sparse-patch invariant is preserved.
+ */
+export interface BonusHighlight {
+  /** Short snake_case label, e.g. "competitor_mentioned", "callback_requested". */
+  label: string;
+  /** The concrete value or quote, e.g. "Salesforce" or "Thursday afternoon". */
+  value: string;
+  /** Why this matters — one short sentence. */
+  reason: string;
+}
+
+/**
+ * Pipeline-stage transition the summarizer suggests after evaluating the
+ * call against the active stage's exit criteria.
+ *
+ * Conservative contract:
+ *   - `to` must be one of the stage ids supplied as `candidateStageIds`
+ *     (typically the active stage's `copilot.nextStageId`).
+ *   - `confidence` is 0..1. The advance-worker auto-applies when
+ *     confidence ≥ 0.75 AND evidence is non-empty; otherwise it routes the
+ *     suggestion to human review as a CRM task.
+ *   - `evidence` MUST cite at least one short transcript quote or CRM
+ *     field that proves the criteria were satisfied. No evidence → no
+ *     auto-apply, regardless of confidence.
+ *   - `criteriaMet` / `criteriaMissed` are short labels for the UI badge.
+ */
+export interface StageTransitionSuggestion {
+  to: string;
+  confidence: number;
+  evidence: string[];
+  criteriaMet: string[];
+  criteriaMissed: string[];
+  reason: string;
+}
+
+/** Inputs needed for stage-aware post-call evaluation. */
+export interface StageContextForSummary {
+  /** Active stage id (matches a FunnelStage.id). */
+  currentStageId: string;
+  /** Display label for the active stage. */
+  currentStageLabel: string;
+  /** Free-text goal for the active stage (mirrors copilot.goal). */
+  currentStageGoal?: string;
+  /** Exit-criteria summary, one short line per criterion. */
+  exitCriteria?: {
+    mustHaveFields?: string[];
+    mustAskQuestions?: string[];
+    positiveSignals?: string[];
+    negativeSignals?: string[];
+  };
+  /** Ids the LLM may pick from for `to`. Empty list disables transition. */
+  candidateStageIds: string[];
+  /** Display labels keyed by id, surfaced to the LLM for clarity. */
+  candidateLabels?: Record<string, string>;
+}
+
 export interface PostConversationSummary {
   summary: string;
   sentiment: Sentiment | null;
@@ -49,6 +111,14 @@ export interface PostConversationSummary {
   suggested_tasks: SuggestedTask[];
   suggested_followup: SuggestedFollowup | null;
   status_change: StatusChange | null;
+  /** Pipeline-stage transition. Null when no funnel was supplied. */
+  stage_transition_suggestion: StageTransitionSuggestion | null;
+  /**
+   * Free-form items the LLM flagged as important but that fall outside the
+   * tenant's structured template. Surface-only — never written to CRM, so
+   * the sparse-patch invariant for `crm_patch` is preserved.
+   */
+  bonus_highlights: BonusHighlight[];
   /** Set true when the LLM call failed or produced no usable output. */
   empty?: boolean;
 }
@@ -58,9 +128,11 @@ interface BuildPromptArgs {
   locale?: string;
   allowedFields?: string[];
   existingActionItems?: ExistingActionItems;
+  stage?: StageContextForSummary;
 }
 
-function buildSystemPrompt({ allowedFields, locale, existingActionItems }: BuildPromptArgs): string {
+function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }: BuildPromptArgs): string {
+  const hasStage = !!stage && stage.candidateStageIds.length > 0;
   const lines: string[] = [
     "You are a post-conversation analyst. The customer interaction has ENDED.",
     "Your job is to produce a STRUCTURED JSON summary that downstream automations consume.",
@@ -81,7 +153,16 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems }: Build
     '  "crm_patch": { /* sparse — only keys from mentioned_fields */ },',
     '  "suggested_tasks": [ { "subject": "...", "body": "...", "priority": "low|normal|high|urgent", "reason": "why" } ],',
     '  "suggested_followup": { "send_at_iso": "ISO-8601", "message": "ready-to-send text", "reason": "why" } | null,',
-    '  "status_change": { "to": "qualified|disqualified|nurture|...", "reason": "why" } | null',
+    '  "status_change": { "to": "qualified|disqualified|nurture|...", "reason": "why" } | null,',
+    '  "bonus_highlights": [ { "label": "snake_case_label", "value": "concrete value or short quote", "reason": "why business owner cares" } ],',
+    '  "stage_transition_suggestion": {',
+    '    "to": "<one of the candidate stage ids>",',
+    '    "confidence": 0.0,                          // 0..1; ≥0.75 will auto-apply',
+    '    "evidence": ["short transcript quote", "..."], // MUST cite from the transcript',
+    '    "criteriaMet": ["budget collected", "..."],',
+    '    "criteriaMissed": ["decision_maker still unknown"],',
+    '    "reason": "why this stage advance is justified"',
+    "  } | null",
     "}",
     "",
     "RULES:",
@@ -89,7 +170,63 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems }: Build
     "- `suggested_followup` ONLY when the customer explicitly deferred or asked for a callback at a specific time.",
     "- `status_change` ONLY when the conversation gave you direct evidence (explicit buy intent, hard rejection, etc.).",
     "- Tasks should be specific and actionable ('Send Q3 pricing PDF to Acme'), not vague ('follow up').",
+    "",
+    "BONUS HIGHLIGHTS RULE (important for the freestyle/template separation):",
+    "- `crm_patch` is for STRUCTURED template slots only — never put anything outside the allowed keys there.",
+    "- Use `bonus_highlights` for anything materially important the business owner should know that DOESN'T fit the template:",
+    "  • a competitor the customer mentioned",
+    "  • a specific objection or concern",
+    "  • a named decision blocker or stakeholder",
+    "  • churn risk signals (frustration, cancellation hints)",
+    "  • an opportunity (upsell signal, referral mention)",
+    "- DO NOT use `bonus_highlights` for trivia ('greeted politely', 'said hello'). Keep it material.",
+    "- `label` MUST be a short snake_case key (so identical observations across calls can be counted later).",
+    "- Empty list is fine — most calls won't have bonus items.",
+    "- A bonus highlight is NEVER also in crm_patch. If it belongs in the template, it goes ONLY in crm_patch.",
   ];
+
+  if (hasStage) {
+    const candList = stage!.candidateStageIds
+      .map((id) => `${id}${stage!.candidateLabels?.[id] ? ` (${stage!.candidateLabels[id]})` : ""}`)
+      .join(", ");
+    const stageBlock: string[] = [
+      "",
+      "STAGE TRANSITION RULES (only when a funnel is active):",
+      `- ACTIVE STAGE: ${stage!.currentStageLabel} (id=${stage!.currentStageId}).`,
+    ];
+    if (stage!.currentStageGoal) {
+      stageBlock.push(`- STAGE GOAL: ${stage!.currentStageGoal}`);
+    }
+    stageBlock.push(
+      `- CANDIDATE NEXT STAGES (only pick \`to\` from this set; null means "do not advance"): ${candList || "(none — keep null)"}.`,
+      "- `stage_transition_suggestion` MUST be `null` UNLESS the transcript shows direct evidence that the exit criteria were satisfied.",
+      "- `confidence` must reflect strength of evidence. <0.75 → the system will route this for human review.",
+      "- `evidence` MUST include at least one short transcript quote OR a CRM field this conversation populated. No evidence → suggestion is rejected.",
+      "- If the customer expressed a negative signal (e.g. \"not interested\", \"too expensive\"), DO NOT propose an advance; emit null and explain in `reason`.",
+    );
+    for (const line of stageBlock) lines.push(line);
+    const exit = stage!.exitCriteria;
+    if (exit) {
+      lines.push("- EXIT CRITERIA for the active stage:");
+      if (exit.mustHaveFields?.length) {
+        lines.push(`  • data fields required: ${exit.mustHaveFields.join(", ")}`);
+      }
+      if (exit.mustAskQuestions?.length) {
+        lines.push(`  • questions required: ${exit.mustAskQuestions.join(" | ")}`);
+      }
+      if (exit.positiveSignals?.length) {
+        lines.push(`  • positive signals (any-of): ${exit.positiveSignals.join(" | ")}`);
+      }
+      if (exit.negativeSignals?.length) {
+        lines.push(`  • BLOCKING negative signals (any-of): ${exit.negativeSignals.join(" | ")}`);
+      }
+    }
+  } else {
+    lines.push(
+      "",
+      "STAGE TRANSITION: No funnel is configured. `stage_transition_suggestion` MUST be null.",
+    );
+  }
 
   // Intent-aware dedup: if the bot already created tasks or scheduled
   // follow-ups during the conversation, the analyst LLM gets to see them
@@ -115,7 +252,18 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems }: Build
     for (const f of allowedFields) lines.push(`- ${f}`);
   }
   if (locale && locale !== "en") {
-    lines.push("", `Write \`summary\` and the \`message\` field of \`suggested_followup\` in: ${locale}.`);
+    lines.push(
+      "",
+      `LANGUAGE — write ALL human-facing text in: ${locale}.`,
+      "Localized fields:",
+      "  • `summary`",
+      "  • `suggested_followup.message` AND `suggested_followup.reason`",
+      "  • every `suggested_tasks[].subject`, `.body`, `.reason`",
+      "  • every `bonus_highlights[].value` AND `.reason`  (but KEEP `.label` in snake_case English so observations can be grouped across tenants)",
+      "  • `stage_transition_suggestion.reason`",
+      "  • `status_change.reason`",
+      "Keep machine-readable enums (`sentiment`, `intent`, `status_change.to`, `priority`, snake_case labels, CRM keys in `crm_patch`) in English — these are not human-facing copy.",
+    );
   }
   return lines.join("\n");
 }
@@ -190,7 +338,10 @@ function sparsifyPatch(patch: unknown, mentioned: Set<string>): Record<string, u
   return out;
 }
 
-function validateAndCoerce(raw: unknown): PostConversationSummary {
+function validateAndCoerce(
+  raw: unknown,
+  stage?: StageContextForSummary,
+): PostConversationSummary {
   const empty: PostConversationSummary = {
     summary: "",
     sentiment: null,
@@ -200,6 +351,8 @@ function validateAndCoerce(raw: unknown): PostConversationSummary {
     suggested_tasks: [],
     suggested_followup: null,
     status_change: null,
+    stage_transition_suggestion: null,
+    bonus_highlights: [],
     empty: true,
   };
   if (!raw || typeof raw !== "object") return empty;
@@ -253,6 +406,71 @@ function validateAndCoerce(raw: unknown): PostConversationSummary {
     }
   }
 
+  // ── bonus_highlights — surface-only, never CRM-written ──
+  // Lossy on purpose: trim count to keep the workspace card readable, and
+  // drop entries with no label/value. Keys are normalized to snake_case so
+  // identical observations across calls can be counted later. We DO NOT
+  // cross-check against crm_patch keys — the prompt forbids overlap, and
+  // if the LLM duplicates anyway, the structured slot remains
+  // authoritative; the bonus is just an extra free-form mirror.
+  const bonusRaw = Array.isArray(obj.bonus_highlights) ? obj.bonus_highlights : [];
+  const bonus_highlights: BonusHighlight[] = [];
+  for (const b of bonusRaw) {
+    if (!b || typeof b !== "object") continue;
+    const bb = b as Record<string, unknown>;
+    if (!isNonEmptyString(bb.label) || !isNonEmptyString(bb.value)) continue;
+    const label = bb.label.trim().toLowerCase().replace(/[^a-z0-9_]+/g, "_").replace(/^_+|_+$/g, "");
+    if (!label) continue;
+    bonus_highlights.push({
+      label,
+      value: bb.value.trim(),
+      reason: isNonEmptyString(bb.reason) ? bb.reason.trim() : "noted by AI",
+    });
+    if (bonus_highlights.length >= 8) break;
+  }
+
+  // ── stage_transition_suggestion — strict validation ──
+  // Reject anything outside the candidate set. Reject when evidence is
+  // empty (the LLM didn't justify) or confidence is malformed. The
+  // advance-worker further gates by threshold + evidence so even a
+  // permissive LLM can't drift a customer through the funnel.
+  let stage_transition_suggestion: StageTransitionSuggestion | null = null;
+  if (
+    stage &&
+    stage.candidateStageIds.length > 0 &&
+    obj.stage_transition_suggestion &&
+    typeof obj.stage_transition_suggestion === "object"
+  ) {
+    const s = obj.stage_transition_suggestion as Record<string, unknown>;
+    const to = isNonEmptyString(s.to) ? s.to.trim() : null;
+    const confidenceRaw = typeof s.confidence === "number" ? s.confidence : NaN;
+    const evidenceArr = Array.isArray(s.evidence)
+      ? (s.evidence.filter(isNonEmptyString) as string[]).map((q) => q.trim())
+      : [];
+    const metArr = Array.isArray(s.criteriaMet)
+      ? (s.criteriaMet.filter(isNonEmptyString) as string[]).map((q) => q.trim())
+      : [];
+    const missedArr = Array.isArray(s.criteriaMissed)
+      ? (s.criteriaMissed.filter(isNonEmptyString) as string[]).map((q) => q.trim())
+      : [];
+    const reason = isNonEmptyString(s.reason)
+      ? s.reason.trim()
+      : "post-call stage evaluation";
+
+    const inCandidates = !!to && stage.candidateStageIds.includes(to);
+    const validConfidence = Number.isFinite(confidenceRaw) && confidenceRaw >= 0 && confidenceRaw <= 1;
+    if (to && inCandidates && validConfidence && evidenceArr.length > 0) {
+      stage_transition_suggestion = {
+        to,
+        confidence: Math.max(0, Math.min(1, confidenceRaw)),
+        evidence: evidenceArr.slice(0, 6),
+        criteriaMet: metArr.slice(0, 8),
+        criteriaMissed: missedArr.slice(0, 8),
+        reason,
+      };
+    }
+  }
+
   return {
     summary,
     sentiment: coerceSentiment(obj.sentiment),
@@ -262,6 +480,8 @@ function validateAndCoerce(raw: unknown): PostConversationSummary {
     suggested_tasks,
     suggested_followup,
     status_change,
+    stage_transition_suggestion,
+    bonus_highlights,
   };
 }
 
@@ -273,6 +493,12 @@ export async function summarizePostConversation(params: {
   allowedFields?: string[];
   model?: string;
   existingActionItems?: ExistingActionItems;
+  /**
+   * Active pipeline stage + the set of candidate next stages. When supplied,
+   * the LLM is asked to evaluate the call against the stage's exit criteria
+   * and emit a `stage_transition_suggestion`. Omit for unstaged tenants.
+   */
+  stage?: StageContextForSummary;
 }): Promise<PostConversationSummary> {
   const [transcript, frameCtx] = await Promise.all([
     loadTranscript(params.conversationId, params.tenantId),
@@ -289,6 +515,8 @@ export async function summarizePostConversation(params: {
       suggested_tasks: [],
       suggested_followup: null,
       status_change: null,
+      stage_transition_suggestion: null,
+      bonus_highlights: [],
       empty: true,
     };
   }
@@ -298,6 +526,7 @@ export async function summarizePostConversation(params: {
     locale: params.locale,
     allowedFields: params.allowedFields,
     existingActionItems: params.existingActionItems,
+    stage: params.stage,
   });
 
   const userParts: string[] = [];
@@ -312,18 +541,19 @@ export async function summarizePostConversation(params: {
   try {
     const result = await generateResponse({
       tenantId: params.tenantId,
+      sessionId: params.conversationId,
       model: params.model || getDefaultModel(),
       messages: [
         { role: "system", content: systemPrompt },
         { role: "user", content: userParts.join("\n\n") },
       ],
       temperature: 0.2,
-      maxTokens: 800,
+      maxTokens: 1100,
       responseFormat: { type: "json_object" },
       metadata: { type: "post_conversation_summary", conversationId: params.conversationId },
     });
     if (!result.content) {
-      return validateAndCoerce(null);
+      return validateAndCoerce(null, params.stage);
     }
     let parsed: unknown;
     try {
@@ -334,12 +564,12 @@ export async function summarizePostConversation(params: {
         err?.message,
         result.content.slice(0, 200),
       );
-      return validateAndCoerce(null);
+      return validateAndCoerce(null, params.stage);
     }
-    return validateAndCoerce(parsed);
+    return validateAndCoerce(parsed, params.stage);
   } catch (err: any) {
     console.error("[post-conversation-summarizer] LLM call failed:", err?.message);
-    return validateAndCoerce(null);
+    return validateAndCoerce(null, params.stage);
   }
 }
 

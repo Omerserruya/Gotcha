@@ -24,8 +24,21 @@ export interface AIRequestParams {
     conversationId?: string;
     aiAgentId?: string;
     type?: string; // "suggestion" | "chat" | "summary" | "classification" | "onboarding"
+    /**
+     * Hash of the cached system prefix (SYSTEM_CORE + SESSION_PROFILE).
+     * Logged with usage so we can detect prefix drift within a session —
+     * if this changes mid-session, the OpenAI prefix cache is invalidated.
+     */
+    systemPromptHash?: string;
     [key: string]: any;
   };
+  /**
+   * Stable identifier for the conversation/call. Passed to OpenAI as the
+   * `user` parameter so requests within a session route consistently —
+   * this is a prerequisite for OpenAI's automatic prompt-prefix caching
+   * (https://platform.openai.com/docs/guides/prompt-caching).
+   */
+  sessionId?: string;
   temperature?: number;
   maxTokens?: number;
   responseFormat?: { type: "json_object" | "text" };
@@ -54,6 +67,12 @@ export interface AIResponse {
     input_tokens: number;
     output_tokens: number;
     total_tokens: number;
+    /**
+     * Subset of `input_tokens` that hit OpenAI's automatic prefix cache.
+     * 0 when the prefix wasn't reused (cold cache, prefix < 1024 tokens,
+     * or prefix bytes diverged from prior call in the session).
+     */
+    cached_tokens: number;
   };
 }
 
@@ -105,6 +124,59 @@ function getClient(): OpenAI {
 
 // ─── Core: Generate Response ────────────────────────────────
 
+// In-memory per-session cache-prefix tracker.
+//
+// Spec assertion contract: for a given sessionId, the system MUST keep the
+// system-prompt prefix byte-identical across calls. If it drifts, the
+// prefix cache breaks silently — that's a system design violation and the
+// caller needs to see it. We capture a SHA-256 of the first system message
+// here and compare on every subsequent call with the same sessionId.
+//
+// LRU-bounded so a long-lived process doesn't grow unbounded.
+interface SessionPrefixRecord {
+  hash: string;
+  firstSeenAt: number;
+  callCount: number;
+}
+const SESSION_PREFIX_CACHE = new Map<string, SessionPrefixRecord>();
+const SESSION_PREFIX_CACHE_MAX = 500;
+
+function recordAndAssertPrefix(
+  sessionId: string,
+  systemPrefix: string,
+): { hash: string; drift: boolean; isFirstCall: boolean } {
+  // Lazy import to avoid loading node:crypto when generateResponse is
+  // never called (e.g. embedding-only entry points).
+  // eslint-disable-next-line @typescript-eslint/no-var-requires
+  const { createHash } = require("crypto") as typeof import("crypto");
+  const hash = createHash("sha256").update(systemPrefix).digest("hex").slice(0, 16);
+
+  const existing = SESSION_PREFIX_CACHE.get(sessionId);
+  if (!existing) {
+    if (SESSION_PREFIX_CACHE.size >= SESSION_PREFIX_CACHE_MAX) {
+      // Drop the oldest entry — Map preserves insertion order.
+      const firstKey = SESSION_PREFIX_CACHE.keys().next().value;
+      if (firstKey !== undefined) SESSION_PREFIX_CACHE.delete(firstKey);
+    }
+    SESSION_PREFIX_CACHE.set(sessionId, { hash, firstSeenAt: Date.now(), callCount: 1 });
+    return { hash, drift: false, isFirstCall: true };
+  }
+
+  existing.callCount += 1;
+  if (existing.hash !== hash) {
+    console.warn(
+      `[aiService] CACHE PREFIX DRIFT — sessionId=${sessionId} ` +
+      `had hash=${existing.hash} (call #${existing.callCount - 1}) but now hash=${hash}. ` +
+      `Prefix cache broken from this call onward. Check that the system prompt's per-agent + per-conv blocks render byte-identical across turns.`,
+    );
+    // Overwrite so future calls compare against the new prefix instead of
+    // log-spamming every turn.
+    existing.hash = hash;
+    return { hash, drift: true, isFirstCall: false };
+  }
+  return { hash, drift: false, isFirstCall: false };
+}
+
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
   const model = params.model || defaultModel;
@@ -117,6 +189,12 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     max_tokens: params.maxTokens ?? 1024,
   };
 
+  // Pin to a stable backend route so OpenAI's automatic prefix cache can
+  // hit consistently across turns in the same conversation/call.
+  if (params.sessionId) {
+    (requestParams as any).user = params.sessionId;
+  }
+
   if (params.responseFormat) {
     requestParams.response_format = params.responseFormat;
   }
@@ -125,16 +203,50 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
   }
 
+  // Compute + compare the per-session system-prompt-prefix hash BEFORE the
+  // API call so any drift is logged even if the call throws. The "prefix"
+  // is the first system message (the per-agent + per-conv stable blocks).
+  let prefixAssertion: { hash: string; drift: boolean; isFirstCall: boolean } | null = null;
+  if (params.sessionId) {
+    const firstSystem = params.messages.find((m: any) => m.role === "system");
+    const systemPrefix = typeof firstSystem?.content === "string" ? firstSystem.content : "";
+    if (systemPrefix) {
+      prefixAssertion = recordAndAssertPrefix(params.sessionId, systemPrefix);
+    }
+  }
+
   const response = await client.chat.completions.create(
     requestParams,
     params.signal ? { signal: params.signal } : undefined,
   );
 
+  const cachedTokens =
+    (response.usage as any)?.prompt_tokens_details?.cached_tokens ?? 0;
   const usage = {
     input_tokens: response.usage?.prompt_tokens ?? 0,
     output_tokens: response.usage?.completion_tokens ?? 0,
     total_tokens: response.usage?.total_tokens ?? 0,
+    cached_tokens: cachedTokens,
   };
+
+  // Spec assertion #2: once we're past the first call for a session AND the
+  // prefix hash didn't drift, we expect cached_tokens > 0. A miss here means
+  // either (a) under 1024 prompt tokens (cache minimum) or (b) the OpenAI
+  // backend evicted the prefix (~5min TTL). Logged as warn — not an error,
+  // because both conditions are legitimate, but operators need to see it.
+  if (
+    params.sessionId &&
+    prefixAssertion &&
+    !prefixAssertion.drift &&
+    !prefixAssertion.isFirstCall &&
+    cachedTokens === 0
+  ) {
+    console.warn(
+      `[aiService] expected cache hit but cached_tokens=0 — sessionId=${params.sessionId} ` +
+      `hash=${prefixAssertion.hash} promptTokens=${usage.input_tokens}. ` +
+      `Likely cause: prompt prefix < 1024 tokens, or >5min since last call (cache TTL).`,
+    );
+  }
 
   const content = response.choices[0]?.message?.content || "";
   const rawToolCalls = (response.choices[0]?.message as any)?.tool_calls as any[] | undefined;
@@ -147,9 +259,17 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     promptTokens: usage.input_tokens,
     completionTokens: usage.output_tokens,
     totalTokens: usage.total_tokens,
+    cachedPromptTokens: cachedTokens,
     metadata: {
       conversationId: params.metadata?.conversationId,
       aiAgentId: params.metadata?.aiAgentId,
+      sessionId: params.sessionId,
+      // Spec assertion fields surfaced on every usage row so the platform
+      // dashboard can detect violations: hash drift = prompt instability;
+      // cached_prefix_used=false post-first-call = caching not working.
+      systemPromptHash: prefixAssertion?.hash ?? params.metadata?.systemPromptHash,
+      systemPromptHashDrift: prefixAssertion?.drift ?? false,
+      cachedPrefixUsed: cachedTokens > 0,
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
 
@@ -246,6 +366,9 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     stream: true,
     stream_options: { include_usage: true },
   };
+  if (params.sessionId) {
+    (requestParams as any).user = params.sessionId;
+  }
   if (params.tools && params.tools.length > 0) {
     (requestParams as any).tools = params.tools;
     if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
@@ -257,7 +380,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   // OpenAI delivers tool_calls in deltas keyed by an `index`. We assemble
   // them as we go and only emit a finalised list on `done`.
   const toolCallAcc: Record<number, { id?: string; type: "function"; function: { name?: string; arguments?: string } }> = {};
-  let usage: AIResponse["usage"] = { input_tokens: 0, output_tokens: 0, total_tokens: 0 };
+  let usage: AIResponse["usage"] = { input_tokens: 0, output_tokens: 0, total_tokens: 0, cached_tokens: 0 };
 
   for await (const chunk of stream) {
     const choice = chunk.choices?.[0];
@@ -282,6 +405,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
         input_tokens: chunk.usage.prompt_tokens ?? 0,
         output_tokens: chunk.usage.completion_tokens ?? 0,
         total_tokens: chunk.usage.total_tokens ?? 0,
+        cached_tokens: (chunk.usage as any)?.prompt_tokens_details?.cached_tokens ?? 0,
       };
     }
   }
@@ -302,9 +426,13 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     promptTokens: usage.input_tokens,
     completionTokens: usage.output_tokens,
     totalTokens: usage.total_tokens,
+    cachedPromptTokens: usage.cached_tokens,
     metadata: {
       conversationId: params.metadata?.conversationId,
       aiAgentId: params.metadata?.aiAgentId,
+      sessionId: params.sessionId,
+      systemPromptHash: params.metadata?.systemPromptHash,
+      cachedPrefixUsed: usage.cached_tokens > 0,
     },
   }).catch((err) => console.error("[aiService] Usage tracking (stream) failed:", err.message));
 

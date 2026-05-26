@@ -1356,6 +1356,21 @@ const TRANSACTIONAL_MARKERS = [
   "free trial", "trial period", "discount",
   "כמה עולה", "כמה זה עולה", "מה המחיר", "מה העלות", "מחירון",
   "תוכנית מחיר", "מסלול", "דמו", "ניסיון", "הדגמה", "תקופת ניסיון", "הנחה",
+  // Booking / meeting requests — customer is signaling they want a real next step.
+  "demo", "meeting", "appointment", "consultation", "call back", "callback",
+  "set up a call", "set up a meeting", "set up a demo", "schedule a call",
+  "schedule a meeting", "schedule a demo", "book a call", "book a meeting",
+  "book a demo", "jump on a call", "hop on a call", "quick call",
+  "talk to sales", "speak with sales", "speak to sales", "sales rep",
+  "פגישה", "תור", "התייעצות", "שיחה קצרה", "לקבוע פגישה", "לקבוע שיחה",
+  "לקבוע דמו", "לדבר עם איש מכירות", "לדבר עם נציג מכירות",
+  // Buying-stage signals that aren't questions about price.
+  "interested in", "i'm interested", "im interested", "tell me more about pricing",
+  "next step", "next steps", "get started", "how do i get started",
+  "how do we get started", "how do i start", "how to start", "how to begin",
+  "ready to move forward", "let's move forward", "move forward",
+  "מעוניין", "מעניין אותי", "השלב הבא", "צעד הבא", "להתחיל", "איך מתחילים",
+  "איך אני מתחיל", "מוכן להתקדם",
 ];
 
 const INFORMATIONAL_MARKERS = [

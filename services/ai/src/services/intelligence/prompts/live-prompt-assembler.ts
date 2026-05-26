@@ -9,6 +9,9 @@ import {
   type CrmSnapshot,
   transcriptFenceBlock,
   copilotConfigBlock,
+  type StageContextForPrompt,
+  alreadyAnsweredBlock,
+  type AlreadyAnsweredInput,
 } from "./blocks";
 
 /**
@@ -49,6 +52,22 @@ export interface LivePromptInput {
    * overrides win over platform defaults.
    */
   copilotConfig?: CopilotConfig;
+  /**
+   * Active pipeline stage for THIS customer, resolved at runner-spawn
+   * time from the CRM vendor's stage field against the tenant funnel.
+   * When present, the stage's copilot block (goal, required Qs/fields,
+   * exit criteria) supersedes the channel-level goals during cue
+   * generation. Channel `goals` becomes the fallback for unstaged calls.
+   */
+  stageContext?: StageContextForPrompt;
+  /**
+   * Per-turn "already answered" hint sheet. Combines CRM-known identifiers
+   * (set once at runner spawn) with the cue projector's accumulated
+   * observedFilled set (updated every frame). The block instructs the LLM
+   * to OMIT any of these from missingFields. Without it, the bot re-asks
+   * customers for their name/email/etc. several turns after they answered.
+   */
+  alreadyAnswered?: AlreadyAnsweredInput;
 }
 
 export interface ChatMessage {
@@ -66,11 +85,23 @@ export class LivePromptAssembler {
       { role: "system", content: orgInstructionsBlock(input.org) },
     ];
 
-    // Channel-level copilot config (language, goals, required Qs, …).
-    // Skipped when not configured — the block returns "" in that case.
-    const copilotBlock = copilotConfigBlock(input.copilotConfig);
+    // Channel-level + stage-level copilot config (language, persona, goal,
+    // required Qs, data fields, exit criteria). Stage takes precedence
+    // over channel for goal/Qs/fields when both are present. Skipped when
+    // neither is configured — the block returns "" in that case.
+    const copilotBlock = copilotConfigBlock(input.copilotConfig, input.stageContext);
     if (copilotBlock) {
       messages.push({ role: "system", content: copilotBlock });
+    }
+
+    // ALREADY-ANSWERED hint sheet. Rendered AFTER copilotConfigBlock (so the
+    // LLM has already seen the field/question list) and BEFORE the
+    // behaviorContract — close enough to the schema instructions to act as
+    // a binding rule, far enough from the transcript that it's not
+    // overshadowed by the live audio.
+    const aaBlock = alreadyAnsweredBlock(input.alreadyAnswered);
+    if (aaBlock) {
+      messages.push({ role: "system", content: aaBlock });
     }
 
     messages.push(

@@ -1,12 +1,11 @@
 "use client";
 
-import { use } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import CustomerTimeline from "@/components/CustomerTimeline";
 
-export default function ContactDetailPage({ params }: { params: Promise<{ id: string }> }) {
-  const { id } = use(params);
+export default function ContactDetailPage({ params }: { params: { id: string } }) {
+  const { id } = params;
   const { token } = useAuth();
   if (!token) return null;
   return (

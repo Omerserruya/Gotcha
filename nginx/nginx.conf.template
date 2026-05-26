@@ -359,6 +359,18 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Pipeline-stage transitions (manual override + audit history).
+        # Owned by the AI service. Cannot live under /api/conversations
+        # because that prefix already proxies to the conversation service.
+        location /api/stage-transitions {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/action-contracts {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -443,6 +455,23 @@ http {
         location /api/ai-debug {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # System Copilot agent runtime. /api/agent/run is an SSE stream —
+        # disable buffering, keep the connection alive, and raise the read
+        # timeout so long-running tool loops aren't cut off by nginx.
+        location /api/agent {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -679,6 +708,21 @@ http {
 
         location ~ ^/t/([^/]+)/api/ai-agents(.*)$ {
             proxy_pass http://ai_service/api/ai-agents$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Tenant-prefixed System Copilot agent runtime. SSE — see comment
+        # on the unprefixed /api/agent block above.
+        location ~ ^/t/([^/]+)/api/agent(.*)$ {
+            proxy_pass http://ai_service/api/agent$2$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

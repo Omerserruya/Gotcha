@@ -1,0 +1,37 @@
+# Production gateway = API reverse-proxy + static frontend in one nginx image.
+#
+# Build context MUST be the repo root so this Dockerfile can COPY from
+# frontend/ AND gateway/.
+#
+# IMPORTANT: this Dockerfile assumes `frontend/out/` already exists. Generate
+# it on the HOST before building:
+#
+#   cd frontend && NEXT_TELEMETRY_DISABLED=1 NEXT_OUTPUT=export \
+#     NEXT_PUBLIC_API_URL=… NEXT_PUBLIC_WS_URL=… \
+#     NEXT_PUBLIC_META_APP_ID=… NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=… \
+#     npm run build
+#
+# Then from repo root:
+#
+#   docker buildx build -f gateway/Dockerfile.prod -t <image> .
+#
+# Why host-built /out instead of an in-container Stage 1: cross-arch buildx
+# (amd64 host → linux/arm64 target) emulates the Node builder under QEMU, and
+# QEMU networking can't reach fonts.gstatic.com — `next/font/google` hangs and
+# times out after ~30 min. Static files are arch-independent, so building on
+# the host and copying into an arm64 nginx:alpine works fine.
+#
+# Runtime: envsubst rewrites the *_PORT variables in the config template at
+# container start (same trick as the dev gateway in docker-compose.yml), then
+# nginx runs in the foreground.
+
+FROM nginx:alpine
+
+# Pre-built Next.js static export (run `npm run build` on the host first).
+COPY frontend/out /usr/share/nginx/html
+
+# Proxy config template. Rendered at container start by the entrypoint
+# script (envsubst over the *_PORT variables, same as the dev gateway).
+COPY gateway/nginx.prod.conf.template /etc/nginx/nginx.conf.template
+
+CMD ["sh", "-c", "envsubst '$AUTH_PORT $CONVERSATION_PORT $WEBHOOK_PORT $ANALYTICS_PORT $CHATBOT_PORT $AI_PORT $VOICE_COPILOT_PORT $NOTIFICATIONS_PORT' < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf && nginx -g 'daemon off;'"]

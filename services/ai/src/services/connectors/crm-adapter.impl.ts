@@ -55,36 +55,77 @@ import { coerceSearchPhone, normalizeEmail, normalizePhone } from "./crm-identit
 function nowIso(): string { return new Date().toISOString(); }
 
 /**
+ * Per-locale labels for the CRM activity note. Falls back to English when
+ * the tenant's effective locale isn't represented here. Add a new locale
+ * by adding its block — `renderInteractionBody` picks it up automatically.
+ */
+interface NoteLabels {
+  inbound: string; outbound: string;
+  duration: string; messages: string;
+  started: string; ended: string;
+  summary: string; sentiment: string;
+  qualification: string; actionItems: string;
+  minutesShort: string; secondsShort: string;
+}
+
+const NOTE_LABELS: Record<string, NoteLabels> = {
+  en: {
+    inbound: "Inbound", outbound: "Outbound",
+    duration: "Duration", messages: "Messages",
+    started: "Started", ended: "Ended",
+    summary: "Summary", sentiment: "Sentiment",
+    qualification: "Qualification", actionItems: "Action items",
+    minutesShort: "m", secondsShort: "s",
+  },
+  he: {
+    inbound: "נכנסת", outbound: "יוצאת",
+    duration: "משך", messages: "הודעות",
+    started: "התחלה", ended: "סיום",
+    summary: "סיכום", sentiment: "סנטימנט",
+    qualification: "כשירות", actionItems: "פעולות לביצוע",
+    minutesShort: "ד׳", secondsShort: "ש׳",
+  },
+};
+
+function resolveNoteLabels(locale?: string): NoteLabels {
+  if (locale && NOTE_LABELS[locale]) return NOTE_LABELS[locale];
+  return NOTE_LABELS.en;
+}
+
+/**
  * Format an interaction envelope as plain-text note body.
  * Used by adapters whose `appendInteraction` falls back to "createNote".
+ * Labels are localized via `i.locale` (set by syncCloseToCrm from the
+ * tenant's effective system language).
  */
 export function renderInteractionBody(i: InteractionEnvelope): string {
+  const L = resolveNoteLabels(i.locale);
   const lines: string[] = [];
   const channel = i.channel.toUpperCase();
-  const dir = i.direction === "inbound" ? "Inbound" : "Outbound";
+  const dir = i.direction === "inbound" ? L.inbound : L.outbound;
   lines.push(`GOTCHA — ${dir} ${channel}`);
-  if (i.duration_seconds != null) lines.push(`Duration: ${formatDuration(i.duration_seconds)}`);
-  if (i.message_count != null) lines.push(`Messages: ${i.message_count}`);
-  if (i.started_at) lines.push(`Started: ${i.started_at}`);
-  if (i.ended_at) lines.push(`Ended: ${i.ended_at}`);
+  if (i.duration_seconds != null) lines.push(`${L.duration}: ${formatDuration(i.duration_seconds, L)}`);
+  if (i.message_count != null) lines.push(`${L.messages}: ${i.message_count}`);
+  if (i.started_at) lines.push(`${L.started}: ${i.started_at}`);
+  if (i.ended_at) lines.push(`${L.ended}: ${i.ended_at}`);
   lines.push("");
-  if (i.summary) lines.push("Summary:", i.summary.trim(), "");
+  if (i.summary) lines.push(`${L.summary}:`, i.summary.trim(), "");
   const eng = i.engagement || {};
-  if (eng.sentiment) lines.push(`Sentiment: ${eng.sentiment}`);
-  if (eng.qualification) lines.push(`Qualification: ${eng.qualification}`);
+  if (eng.sentiment) lines.push(`${L.sentiment}: ${eng.sentiment}`);
+  if (eng.qualification) lines.push(`${L.qualification}: ${eng.qualification}`);
   if (Array.isArray(eng.action_items) && eng.action_items.length) {
-    lines.push("", "Action items:");
+    lines.push("", `${L.actionItems}:`);
     for (const a of eng.action_items) lines.push(`- ${a}`);
   }
   lines.push("", `[gotcha_source_interaction_id=${i.source_interaction_id}]`);
   return lines.join("\n").trim();
 }
 
-function formatDuration(seconds: number): string {
-  if (!Number.isFinite(seconds) || seconds <= 0) return "0s";
+function formatDuration(seconds: number, L: NoteLabels): string {
+  if (!Number.isFinite(seconds) || seconds <= 0) return `0${L.secondsShort}`;
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
-  return m > 0 ? `${m}m ${s}s` : `${s}s`;
+  return m > 0 ? `${m}${L.minutesShort} ${s}${L.secondsShort}` : `${s}${L.secondsShort}`;
 }
 
 // ─── HubSpot ────────────────────────────────────────────────

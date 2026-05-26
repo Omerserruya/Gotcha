@@ -13,6 +13,8 @@ interface AiFeatureRow {
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
+  /** Subset of promptTokens that hit OpenAI's automatic prefix cache. */
+  cachedPromptTokens?: number;
   costUsd: number;
   calls: number;
 }
@@ -21,6 +23,7 @@ interface AiModelRow {
   totalTokens: number;
   promptTokens: number;
   completionTokens: number;
+  cachedPromptTokens?: number;
   costUsd: number;
   calls: number;
 }
@@ -29,6 +32,8 @@ interface TenantAiRow {
   usage: Record<string, { total: number; count: number; costUsd: number }>;
   aiByFeature: AiFeatureRow[];
   aiCostUsd: number;
+  aiCachedPromptTokens?: number;
+  aiPromptTokens?: number;
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -71,6 +76,8 @@ export default function SystemUsagePage() {
     totalTokens: number;
     promptTokens: number;
     completionTokens: number;
+    /** Subset of promptTokens that came from OpenAI's prefix cache (50% billing). */
+    cachedPromptTokens?: number;
     costUsd: number;
     calls: number;
     byFeature: AiFeatureRow[];
@@ -104,6 +111,24 @@ export default function SystemUsagePage() {
 
   const aiTotalCost = aiTokens?.costUsd ?? 0;
   const aiTotalTokens = aiTokens?.totalTokens ?? 0;
+  // Cache observability — driven by OpenAI's prompt_tokens_details.cached_tokens
+  // captured per call in trackAIUsage. Hit % is cached / total prompt; savings
+  // is the 50% billing discount applied to cached tokens (per AI_MODEL_PRICING).
+  const aiPromptTokens = aiTokens?.promptTokens ?? 0;
+  const aiCachedTokens = aiTokens?.cachedPromptTokens ?? 0;
+  const aiCacheHitPct = aiPromptTokens > 0 ? (aiCachedTokens / aiPromptTokens) * 100 : 0;
+  // Savings estimate: cached tokens were billed at 50% off, so saved = 0.5 *
+  // (cached / 1M) * promptRate. We don't have per-call model on the aggregate,
+  // so use the weighted blended rate from byModel (falls back to gpt-4o-mini).
+  const blendedPromptUsdPerToken = aiTokens && aiTokens.byModel.length > 0
+    ? aiTokens.byModel.reduce((acc, m) => {
+        // Use cost / tokens as the observed per-token rate; ignores cached
+        // discount already baked into costUsd so it's only an estimate.
+        const obs = m.totalTokens > 0 ? m.costUsd / m.totalTokens : 0;
+        return acc + obs;
+      }, 0) / Math.max(1, aiTokens.byModel.length)
+    : 0;
+  const aiCachedSavingsUsd = aiCachedTokens * blendedPromptUsdPerToken * 0.5;
 
   // Max tenant total for bar sizing (falls back to 1 to avoid NaN)
   const maxTenantUsage = Math.max(1, ...byTenant.map((t) =>
@@ -140,8 +165,12 @@ export default function SystemUsagePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Global Stat Cards — includes AI cost */}
-            <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+            {/* Global Stat Cards — includes AI cost + cache hit observability.
+                Cache Hit % surfaces whether the sessionId-pinned prefix cache
+                is actually delivering savings. <20% on a workload that should
+                be cacheable (autonomous agents, live copilot) signals broken
+                prefix stability. */}
+            <div className="grid grid-cols-2 md:grid-cols-6 gap-4">
               <StatCard
                 label="Est. AI Cost"
                 value={formatCost(aiTotalCost)}
@@ -152,6 +181,12 @@ export default function SystemUsagePage() {
                 label="AI Tokens"
                 value={formatNumber(aiTotalTokens)}
                 sub={`${formatNumber(aiTokens?.promptTokens || 0)} in / ${formatNumber(aiTokens?.completionTokens || 0)} out`}
+              />
+              <StatCard
+                label="Cache Hit"
+                value={aiPromptTokens > 0 ? `${aiCacheHitPct.toFixed(1)}%` : "—"}
+                sub={`${formatNumber(aiCachedTokens)} cached · saved ~${formatCost(aiCachedSavingsUsd)}`}
+                accent={aiCacheHitPct >= 40 ? "green" : aiCacheHitPct >= 20 ? "amber" : aiPromptTokens > 0 ? "red" : undefined}
               />
               <StatCard
                 label="Messages Sent"
@@ -181,6 +216,8 @@ export default function SystemUsagePage() {
                         <th className="text-start py-2 px-3">Feature</th>
                         <th className="text-end py-2 px-3">Calls</th>
                         <th className="text-end py-2 px-3">Prompt</th>
+                        <th className="text-end py-2 px-3" title="Subset of prompt tokens that hit OpenAI's prefix cache (billed 50% off)">Cached</th>
+                        <th className="text-end py-2 px-3">Hit %</th>
                         <th className="text-end py-2 px-3">Completion</th>
                         <th className="text-end py-2 px-3">Total</th>
                         <th className="text-end py-2 px-3">Cost</th>
@@ -189,7 +226,10 @@ export default function SystemUsagePage() {
                     <tbody className="divide-y divide-gray-50">
                       {aiTokens.byFeature
                         .sort((a, b) => b.totalTokens - a.totalTokens)
-                        .map((row) => (
+                        .map((row) => {
+                          const cached = row.cachedPromptTokens ?? 0;
+                          const hitPct = row.promptTokens > 0 ? (cached / row.promptTokens) * 100 : 0;
+                          return (
                         <tr key={row.feature} className="hover:bg-gray-50/50">
                           <td className="py-2 px-3">
                             <span className="inline-flex items-center gap-2">
@@ -199,11 +239,25 @@ export default function SystemUsagePage() {
                           </td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{row.calls.toLocaleString()}</td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{formatNumber(row.promptTokens)}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{cached > 0 ? formatNumber(cached) : "—"}</td>
+                          <td className={clsx(
+                            "py-2 px-3 text-end font-mono text-xs font-semibold",
+                            row.promptTokens === 0
+                              ? "text-gray-300"
+                              : hitPct >= 40
+                                ? "text-emerald-600"
+                                : hitPct >= 20
+                                  ? "text-amber-600"
+                                  : "text-rose-600",
+                          )}>
+                            {row.promptTokens > 0 ? `${hitPct.toFixed(0)}%` : "—"}
+                          </td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{formatNumber(row.completionTokens)}</td>
                           <td className="py-2 px-3 text-end font-semibold text-gray-900 font-mono text-xs">{formatNumber(row.totalTokens)}</td>
                           <td className="py-2 px-3 text-end font-semibold text-green-600 font-mono text-xs">{formatCost(row.costUsd)}</td>
                         </tr>
-                      ))}
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -221,20 +275,39 @@ export default function SystemUsagePage() {
                         <th className="text-start py-2 px-3">Model</th>
                         <th className="text-end py-2 px-3">Calls</th>
                         <th className="text-end py-2 px-3">Total Tokens</th>
+                        <th className="text-end py-2 px-3" title="Subset of prompt tokens that hit OpenAI's prefix cache">Cached</th>
+                        <th className="text-end py-2 px-3">Hit %</th>
                         <th className="text-end py-2 px-3">Cost</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-50">
                       {aiTokens.byModel
                         .sort((a, b) => b.costUsd - a.costUsd)
-                        .map((row) => (
+                        .map((row) => {
+                          const cached = row.cachedPromptTokens ?? 0;
+                          const hitPct = row.promptTokens > 0 ? (cached / row.promptTokens) * 100 : 0;
+                          return (
                         <tr key={row.model} className="hover:bg-gray-50/50">
                           <td className="py-2 px-3 font-mono text-xs text-gray-700">{row.model}</td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{row.calls.toLocaleString()}</td>
                           <td className="py-2 px-3 text-end font-semibold text-gray-900 font-mono text-xs">{formatNumber(row.totalTokens)}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{cached > 0 ? formatNumber(cached) : "—"}</td>
+                          <td className={clsx(
+                            "py-2 px-3 text-end font-mono text-xs font-semibold",
+                            row.promptTokens === 0
+                              ? "text-gray-300"
+                              : hitPct >= 40
+                                ? "text-emerald-600"
+                                : hitPct >= 20
+                                  ? "text-amber-600"
+                                  : "text-rose-600",
+                          )}>
+                            {row.promptTokens > 0 ? `${hitPct.toFixed(0)}%` : "—"}
+                          </td>
                           <td className="py-2 px-3 text-end font-semibold text-green-600 font-mono text-xs">{formatCost(row.costUsd)}</td>
                         </tr>
-                      ))}
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
@@ -270,6 +343,21 @@ export default function SystemUsagePage() {
                           <div className="text-end">
                             <p className="text-sm font-semibold text-gray-700">{tenantTotal.toLocaleString()}</p>
                             <p className="text-xs text-green-600 font-semibold">{formatCost(entry.aiCostUsd)}</p>
+                            {(entry.aiPromptTokens ?? 0) > 0 && (
+                              <p
+                                className={clsx(
+                                  "text-[10px] font-mono font-semibold",
+                                  (entry.aiCachedPromptTokens ?? 0) / (entry.aiPromptTokens ?? 1) >= 0.4
+                                    ? "text-emerald-600"
+                                    : (entry.aiCachedPromptTokens ?? 0) / (entry.aiPromptTokens ?? 1) >= 0.2
+                                      ? "text-amber-600"
+                                      : "text-rose-600",
+                                )}
+                                title={`${(entry.aiCachedPromptTokens ?? 0).toLocaleString()} cached / ${(entry.aiPromptTokens ?? 0).toLocaleString()} prompt`}
+                              >
+                                cache {(((entry.aiCachedPromptTokens ?? 0) / (entry.aiPromptTokens ?? 1)) * 100).toFixed(0)}%
+                              </p>
+                            )}
                           </div>
                         </div>
                         {/* Stacked bar */}
@@ -348,19 +436,41 @@ function StatCard({
   value,
   sub,
   highlight,
+  accent,
 }: {
   label: string;
   value: string;
   sub?: string;
   highlight?: boolean;
+  /** Color-coded accent for at-a-glance health (cache hit, etc). */
+  accent?: "green" | "amber" | "red";
 }) {
+  // `accent` styles are mutually exclusive with `highlight`; if both are set,
+  // accent wins so signal-driven cards (Cache Hit) override the static green
+  // treatment used for cost.
+  const accentCls = accent === "green"
+    ? "bg-emerald-50 border-emerald-200 text-emerald-700"
+    : accent === "amber"
+      ? "bg-amber-50 border-amber-200 text-amber-700"
+      : accent === "red"
+        ? "bg-rose-50 border-rose-200 text-rose-700"
+        : null;
   return (
     <div className={clsx(
       "rounded-2xl border p-5",
-      highlight ? "bg-green-50 border-green-200" : "bg-white border-gray-200"
+      accentCls ?? (highlight ? "bg-green-50 border-green-200" : "bg-white border-gray-200"),
     )}>
-      <p className={clsx("text-xs font-medium uppercase tracking-wider", highlight ? "text-green-600" : "text-gray-500")}>{label}</p>
-      <p className={clsx("text-2xl font-bold mt-1", highlight ? "text-green-700" : "text-gray-900")}>{value}</p>
+      <p className={clsx(
+        "text-xs font-medium uppercase tracking-wider",
+        accent ? accentCls?.split(" ")[2] : highlight ? "text-green-600" : "text-gray-500",
+      )}>{label}</p>
+      <p className={clsx(
+        "text-2xl font-bold mt-1",
+        accent === "green" ? "text-emerald-700"
+          : accent === "amber" ? "text-amber-700"
+          : accent === "red" ? "text-rose-700"
+          : highlight ? "text-green-700" : "text-gray-900",
+      )}>{value}</p>
       {sub && <p className="text-[10px] text-gray-400 mt-0.5">{sub}</p>}
     </div>
   );

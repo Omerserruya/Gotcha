@@ -7,4 +7,5 @@ export {
   type PlaybookStageContext,
 } from "./playbook-stage-block";
 export { crmContextBlock, type CrmSnapshot } from "./crm-context-block";
-export { copilotConfigBlock } from "./copilot-config-block";
+export { copilotConfigBlock, type StageContextForPrompt } from "./copilot-config-block";
+export { alreadyAnsweredBlock, type AlreadyAnsweredInput } from "./already-answered-block";

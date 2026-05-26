@@ -14,13 +14,32 @@ import Image from "next/image";
 import clsx from "clsx";
 
 interface CustomerGroup {
-  key: string; // customerExternalId or customerPhone
+  key: string; // normalised cross-channel identity (phone digits / email / externalId)
   name: string;
-  channel: string;
+  channel: string;            // primary channel (most recent conversation)
+  channels: Set<string>;      // all channels this customer has used — drives the badge strip
   conversations: any[];
   lastMessageAt: string;
   lastMessageBody: string;
   totalMessages: number;
+}
+
+// Normalise a customer identifier so the same human shows up as ONE row even
+// when WhatsApp stores their phone, Voice stores E.164, and SMS stores a
+// formatted variant. Returns `null` when no recognisable identifier exists —
+// callers fall back to the conversation id (one row per conversation).
+function customerKey(conv: any): string {
+  const ext = (conv.customerExternalId || "").trim();
+  const phone = (conv.customerPhone || "").trim();
+  const email = (conv.customerEmail || "").trim().toLowerCase();
+  // Phones: collapse to last 10 digits so "+1 (415) 555-0100", "415-555-0100"
+  // and "14155550100" all collide. Short codes / non-phone PSIDs fall through.
+  const phoneSource = phone || ext;
+  const digits = phoneSource.replace(/\D+/g, "");
+  if (digits.length >= 10) return `p:${digits.slice(-10)}`;
+  if (email && email.includes("@")) return `e:${email}`;
+  if (ext) return `x:${ext}`;
+  return `c:${conv.id}`;
 }
 
 function ScoreBar({ label, score, max = 5 }: { label: string; score: number; max?: number }) {
@@ -146,16 +165,20 @@ export default function HistoryPage() {
     }
   }, [token, deleteTarget, fetchConversations]);
 
-  // Group conversations by customer
+  // Group conversations by customer — ONE row per real human across every
+  // channel. `customerKey()` normalises phones / emails so WhatsApp + Voice
+  // + SMS for the same person collapse into a single entry instead of three
+  // sibling rows.
   const customerGroups = useMemo(() => {
     const groups: Record<string, CustomerGroup> = {};
     for (const conv of conversations) {
-      const key = conv.customerExternalId || conv.customerPhone || conv.id;
+      const key = customerKey(conv);
       if (!groups[key]) {
         groups[key] = {
           key,
           name: conv.customerName || conv.customerExternalId || conv.customerPhone || "Unknown",
           channel: conv.channel || "WHATSAPP",
+          channels: new Set<string>(),
           conversations: [],
           lastMessageAt: conv.lastMessageAt || conv.createdAt,
           lastMessageBody: conv.lastMessageBody || "",
@@ -163,10 +186,20 @@ export default function HistoryPage() {
         };
       }
       groups[key].conversations.push(conv);
+      groups[key].channels.add(conv.channel || "WHATSAPP");
       groups[key].totalMessages += conv._count?.messages || 0;
       if (conv.lastMessageAt && conv.lastMessageAt > groups[key].lastMessageAt) {
         groups[key].lastMessageAt = conv.lastMessageAt;
         groups[key].lastMessageBody = conv.lastMessageBody || "";
+        // Primary channel = whichever channel the most-recent message arrived
+        // on. Drives the customer-row avatar tint + the header avatar.
+        groups[key].channel = conv.channel || groups[key].channel;
+      }
+      // Prefer a real customerName over the fallback identifier.
+      if (conv.customerName && !groups[key].name.includes(conv.customerName)) {
+        if (groups[key].name === "Unknown" || groups[key].name === conv.customerExternalId) {
+          groups[key].name = conv.customerName;
+        }
       }
     }
     return Object.values(groups).sort(
@@ -371,6 +404,17 @@ export default function HistoryPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-sm font-semibold text-gray-900 truncate">{group.name}</span>
+                          {/* Cross-platform badges — every channel the customer
+                              has touched. Capped at 4 visible to keep the row
+                              tidy when a customer has used many channels. */}
+                          <div className="flex items-center gap-0.5 shrink-0">
+                            {Array.from(group.channels).slice(0, 4).map((ch) => (
+                              <ChannelBadge key={ch} channel={ch} size="sm" />
+                            ))}
+                            {group.channels.size > 4 && (
+                              <span className="text-[9px] text-gray-400 ml-0.5">+{group.channels.size - 4}</span>
+                            )}
+                          </div>
                         </div>
                         <p className="text-xs text-gray-400 truncate">{group.lastMessageBody || t("common.noResults")}</p>
                         <div className="flex items-center gap-2 mt-1">
@@ -516,9 +560,12 @@ export default function HistoryPage() {
                       )}
                     >
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-[10px] text-gray-500 font-medium">
-                          {format(new Date(conv.createdAt), "MMM d, yyyy")}
-                        </span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                          <ChannelBadge channel={conv.channel || "WHATSAPP"} size="sm" />
+                          <span className="text-[10px] text-gray-500 font-medium">
+                            {format(new Date(conv.createdAt), "MMM d, yyyy")}
+                          </span>
+                        </div>
                         <span className={clsx(
                           "text-[9px] px-1.5 py-0.5 rounded-full font-medium",
                           conv.status === "OPEN" ? "bg-green-50 text-green-600"

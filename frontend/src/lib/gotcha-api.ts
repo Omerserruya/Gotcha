@@ -126,7 +126,7 @@ export async function runAgentStream(
   onEvent: (ev: AgentSSEEvent) => void,
   signal?: AbortSignal,
 ): Promise<void> {
-  const res = await fetch("/api/agent/run", {
+  const res = await fetch(`${API_URL}/api/agent/run`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

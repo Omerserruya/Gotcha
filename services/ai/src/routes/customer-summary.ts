@@ -54,10 +54,29 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
       res.status(404).json({ error: "conversation_not_found" });
       return;
     }
-    const contact = await (prisma as any).contact.findFirst({
+    // Try the exact (channel, externalId) tuple first — the fast path that
+    // works when the contact was first ingested on the same channel as this
+    // conversation. For voice calls that miss (the contact was usually
+    // created earlier on WhatsApp / SMS / etc.), fall back to a phone-column
+    // lookup so the brief resolves the same human across channels.
+    let contact = await (prisma as any).contact.findFirst({
       where: { tenantId, channel: conv.channel, externalId: conv.customerExternalId },
       select: { id: true, personId: true, metadata: true },
     });
+    if (!contact && conv.customerExternalId) {
+      const normalized = conv.customerExternalId.replace(/[\s-]/g, "");
+      if (/^\+?\d{6,}$/.test(normalized)) {
+        const candidates = Array.from(new Set([
+          conv.customerExternalId,
+          normalized,
+          normalized.startsWith("+") ? normalized.slice(1) : `+${normalized}`,
+        ]));
+        contact = await (prisma as any).contact.findFirst({
+          where: { tenantId, mergedIntoId: null, phone: { in: candidates } },
+          select: { id: true, personId: true, metadata: true },
+        });
+      }
+    }
     const meta = (contact?.metadata ?? {}) as Record<string, any>;
     const hints = {
       personId: contact?.personId ?? null,

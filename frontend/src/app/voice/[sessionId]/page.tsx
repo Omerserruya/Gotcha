@@ -846,8 +846,10 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
 
       {/* Right panel — desktop sidebar AND mobile slide-over.
           The mobile slide-over is rendered as a fixed full-screen overlay
-          so it doesn't compete with the call stage for vertical space. */}
-      <div className="hidden md:flex md:w-[380px] flex-shrink-0 flex-col md:rounded-2xl md:overflow-hidden">
+          so it doesn't compete with the call stage for vertical space.
+          Width grows on larger screens so the cards don't compress into
+          a narrow column where everything looks stacked and noisy. */}
+      <div className="hidden md:flex md:w-[400px] lg:w-[440px] xl:w-[480px] flex-shrink-0 flex-col md:rounded-2xl md:overflow-hidden bg-gray-50 ring-1 ring-gray-200">
         <CallRightPanel sessionId={session.id} conversationId={conversationId} />
       </div>
       {mobileContextOpen && (

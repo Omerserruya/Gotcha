@@ -31,7 +31,7 @@ router.get(
   requireActiveTenant(),
   requireRole("ADMIN"),
   async (req: Request, res: Response) => {
-    const tenantId = (req as any).tenant?.id;
+    const tenantId = req.tenantId;
     if (!tenantId) {
       res.status(400).json({ error: "tenant required" });
       return;
@@ -48,7 +48,7 @@ router.put(
   requireActiveTenant(),
   requireRole("ADMIN"),
   async (req: Request, res: Response) => {
-    const tenantId = (req as any).tenant?.id;
+    const tenantId = req.tenantId;
     if (!tenantId) {
       res.status(400).json({ error: "tenant required" });
       return;

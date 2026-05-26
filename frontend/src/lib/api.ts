@@ -753,15 +753,35 @@ export function getOnboardingStatus(token: string) {
 
 export function saveBusinessProfile(token: string, data: {
   organizationName: string;
-  industry: string;
   businessDescription: string;
-  businessPriority: string;
-  estimatedDailyConversations: number;
-  numberOfAgents: number;
+  locale?: string;
+  // Legacy fields — kept optional so callers outside the 2-screen flow
+  // (e.g. settings) can still patch them; onboarding ignores them.
+  industry?: string;
+  businessPriority?: string;
+  estimatedDailyConversations?: number;
+  numberOfAgents?: number;
 }) {
   return apiFetch<{ data: any }>("/api/onboarding/business-profile", {
     token, method: "POST", body: JSON.stringify(data),
   });
+}
+
+export type OnboardingMissionId =
+  | "confirm_business"
+  | "connect_channel"
+  | "send_test_reply"
+  | "review_agent_tone"
+  | "invite_teammate";
+
+export interface OnboardingMission {
+  id: OnboardingMissionId;
+  status: "done" | "active" | "pending";
+  deepLink: string;
+}
+
+export function getOnboardingMissions(token: string) {
+  return apiFetch<{ data: { missions: OnboardingMission[] } }>("/api/onboarding/missions", { token });
 }
 
 export function getBusinessProfile(token: string) {
@@ -1705,6 +1725,18 @@ export interface VoiceChannel {
   createdAt: string;
   numbers: VoiceChannelPhoneNumber[];
   config?: Record<string, unknown>;
+  /**
+   * Phase 6: AI Employee bound to this channel via FK column (was in
+   * copilot_config JSONB). Null = no employee assigned; the live runner
+   * falls back to legacy per-channel copilot config.
+   */
+  aiAgentId?: string | null;
+  /**
+   * Per-channel pipeline funnel override. Stored inside the copilot_config
+   * JSONB blob today (pending Phase 7 promotion to a real FK column).
+   * Null = use the department-scoped funnel resolution.
+   */
+  funnelId?: string | null;
 }
 
 export interface CreateVoiceChannelInput {
@@ -1740,6 +1772,55 @@ export interface CopilotConfig {
   goals?: string;
   questions: CopilotQuestion[];
   dataFields: CopilotDataField[];
+  /**
+   * TenantFunnel.id (cuid) — pins this voice channel to a specific funnel
+   * for stage resolution. Overrides the department-scoped funnel lookup.
+   * Lets a tenant run different pipelines per phone number.
+   */
+  funnelId?: string;
+  /**
+   * AIAgent.id — the AI Employee that drives call-pilot turns on this
+   * channel. Same employee record used for chat/copilot; mode=callpilot
+   * is selected at call time. Phase 6 migrates this to a real FK on
+   * `voice_channels.ai_agent_id`.
+   */
+  aiAgentId?: string;
+}
+
+// ─── AI Employees (AIAgent) ──────────────────────────────────
+
+export interface AIAgentSummary {
+  id: string;
+  name: string;
+  role?: string | null;
+  status?: string | null;
+}
+
+export function listAIAgents(token: string) {
+  return apiFetch<{ data: AIAgentSummary[] }>(`/api/ai-agents`, { token });
+}
+
+// ─── AI Skills catalog ───────────────────────────────────────
+// System skills (operational / language / execution) registered at module
+// load in services/ai/src/worker/skills/. The wizard / agent editor
+// renders these as checkboxes so operators compose agents from the same
+// vocabulary the runtime uses.
+export interface AISkillMetadata {
+  id: string;
+  kind: "operational" | "language" | "execution";
+  name: string;
+  description?: string;
+  whenToUse?: string;
+}
+
+export function listAISkills(token: string) {
+  return apiFetch<{
+    data: {
+      skills: AISkillMetadata[];
+      grouped: Record<"operational" | "language" | "execution", AISkillMetadata[]>;
+      count: number;
+    };
+  }>(`/api/ai-skills`, { token });
 }
 
 export function getVoiceChannelCopilotConfig(token: string, id: string) {
@@ -1752,6 +1833,43 @@ export function updateVoiceChannelCopilotConfig(token: string, id: string, confi
     method: "PUT",
     body: JSON.stringify(config),
   });
+}
+
+// ─── Voice channel ↔ AI Employee (Phase 6) ────────────────────
+// Reads/writes `voice_channels.ai_agent_id`. Replaces the legacy
+// `copilot_config.aiAgentId` JSONB field which was promoted to a real
+// FK column. The detail page calls these directly so the picker is a
+// first-class control on the channel, not buried in the copilot config.
+export function getVoiceChannelAIAgent(token: string, id: string) {
+  return apiFetch<{ data: { aiAgentId: string | null } }>(
+    `/api/voice-channels/${id}/ai-agent`,
+    { token },
+  );
+}
+
+export function updateVoiceChannelAIAgent(token: string, id: string, aiAgentId: string | null) {
+  return apiFetch<{ data: { aiAgentId: string | null } }>(
+    `/api/voice-channels/${id}/ai-agent`,
+    { token, method: "PUT", body: JSON.stringify({ aiAgentId }) },
+  );
+}
+
+// ─── Voice channel ↔ Pipeline funnel ──────────────────────────
+// Per-channel funnel override (calls answered on this number use this
+// funnel for stage resolution instead of the department default).
+// Backed by copilot_config.funnelId today; Phase 7 promotes to FK column.
+export function getVoiceChannelFunnel(token: string, id: string) {
+  return apiFetch<{ data: { funnelId: string | null } }>(
+    `/api/voice-channels/${id}/funnel`,
+    { token },
+  );
+}
+
+export function updateVoiceChannelFunnel(token: string, id: string, funnelId: string | null) {
+  return apiFetch<{ data: { funnelId: string | null } }>(
+    `/api/voice-channels/${id}/funnel`,
+    { token, method: "PUT", body: JSON.stringify({ funnelId }) },
+  );
 }
 
 // ─── Voice channel inbound routing ────────────────────────────

@@ -154,6 +154,12 @@ export interface InteractionEnvelope {
     action_items?: string[];
     [k: string]: unknown;
   };
+  /**
+   * Tenant's effective locale — drives the label translations used by
+   * renderInteractionBody ("Duration:" vs "משך:"). Falls back to "en" when
+   * absent. Use SupportedLocale shape ("en" | "he").
+   */
+  locale?: string;
 }
 
 export interface CreateNoteArgs {

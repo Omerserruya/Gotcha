@@ -40,7 +40,7 @@ router.post("/generate-configs", authenticate, resolveTenant, requireRole("ADMIN
           name: a.name,
           role: a.role,
           status: a.status,
-          descriptionPreview: (a.description || "").substring(0, 200),
+          // descriptionPreview removed — description column dropped per spec.
           hasIdentity: !!a.identity,
           hasGoals: !!a.goals,
           hasTone: !!a.toneConfig,
@@ -269,6 +269,7 @@ router.post("/compose", async (req: Request, res: Response) => {
 
     const result = await generateResponse({
       tenantId: req.tenantId!,
+      sessionId: conversationId,
       messages: [
         { role: "system", content: sys.join("\n") },
         { role: "user", content: blocks.join("\n\n") },

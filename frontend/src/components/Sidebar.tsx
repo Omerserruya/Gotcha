@@ -8,6 +8,7 @@ import { useI18n } from "@/context/I18nContext";
 import clsx from "clsx";
 import { NotificationBell } from "./NotificationBell";
 import { IncomingCallBannerSidebar } from "./voice/IncomingCallBanner";
+import { MissionPanel } from "./onboarding/MissionPanel";
 
 const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
@@ -114,6 +115,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
 
       {/* Incoming call banner — desktop sidebar slot */}
       <IncomingCallBannerSidebar />
+
+      {/* Onboarding mission panel — auto-hides when all 5 are done */}
+      <MissionPanel collapsed={collapsed} />
 
       {/* Language switcher moved to Settings → Language (system-wide
           setting that also affects AI-generated content like briefs,

@@ -1,0 +1,17 @@
+# Local state — move to S3 backend in versions.tf when ready
+*.tfstate
+*.tfstate.*
+*.tfstate.backup
+
+# Local override
+*.tfvars
+!terraform.tfvars.example
+
+# Provider plugins + lock
+.terraform/
+# Keep the lock so everyone uses the same provider versions:
+!.terraform.lock.hcl
+
+# Plan files
+*.tfplan
+crash.log

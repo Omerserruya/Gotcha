@@ -26,7 +26,7 @@ router.use(authenticate, resolveTenant, requireActiveTenant());
 
 router.post("/run", async (req: Request, res: Response) => {
   const tenantId = req.tenantId!;
-  const userId = (req as any).userId as string | undefined;
+  const userId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
   if (!userId) {
     res.status(401).json({ error: "no user context" });
     return;
@@ -112,7 +112,7 @@ router.post("/run", async (req: Request, res: Response) => {
 
 router.post("/clear", async (req: Request, res: Response) => {
   const tenantId = req.tenantId!;
-  const userId = (req as any).userId as string | undefined;
+  const userId = ((req as any).user?.userId ?? (req as any).user?.id) as string | undefined;
   if (!userId) {
     res.status(401).json({ error: "no user context" });
     return;

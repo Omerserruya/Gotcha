@@ -366,12 +366,22 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
       stopTimer();
-      if (deviceRef.current) {
+      // CRITICAL — do NOT destroy the device while a call is live. This
+      // cleanup runs on every dep change (e.g., voiceFlags settling from
+      // loading=true to loading=false right after the agent clicks Call),
+      // and an unconditional destroy() kills the in-flight Twilio Voice
+      // SDK call mid-handshake. The agent leg drops, conference ends
+      // within ~150ms of participant-join, and the customer never gets
+      // dialed (404 on dialConferenceParticipant). Only tear down when
+      // there's no active connection to lose; the guarded branches above
+      // (no token / flags off / no active channel) already destroy
+      // explicitly when we really do need to drop the device.
+      if (!activeCallRef.current && deviceRef.current) {
         try { deviceRef.current.destroy(); } catch { /* ignore */ }
         deviceRef.current = null;
+        twilioTokenRef.current = null;
+        setIsReady(false);
       }
-      twilioTokenRef.current = null;
-      setIsReady(false);
     };
   }, [token, voiceFlags.loading, voiceFlags.voiceCopilotEnabled, voiceFlags.hasActiveVoiceChannel, noActiveChannel, stopTimer]);
 

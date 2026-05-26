@@ -395,7 +395,6 @@ model AIAgent {
   tenantId            String        @map("tenant_id")
   name                String
   role                String        @default("customer_support") // customer_support, sales, booking, billing, custom
-  description         String?
   avatarColor         String        @default("#7c5cfc") @map("avatar_color")
   status              AIAgentStatus @default(DRAFT)
   tone                String        @default("professional") // professional, friendly, casual, formal
@@ -445,15 +444,29 @@ model AIAgent {
   // pre-flight so the bot can't bypass them.
   escalationGates Json @default("[]") @map("escalation_gates")
 
+  // Department this AI employee belongs to. NULL = tenant-wide agent (no
+  // department binding). Used by the stage resolver to decide which funnel
+  // applies, and by routing to find the agent for a department.
+  departmentId String? @map("department_id")
+
+  // Funnel this agent runs (TenantFunnel.id). NULL = fall through to
+  // channel override → conversation department → tenant default.
+  funnelId String? @map("funnel_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   tenant         Tenant             @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  department     Department?        @relation("AIAgentDepartment", fields: [departmentId], references: [id], onDelete: SetNull)
+  funnel         TenantFunnel?      @relation("AIAgentFunnel", fields: [funnelId], references: [id], onDelete: SetNull)
   knowledgeBases AIAgentKnowledge[]
   routerRules    RouterRule[]       @relation("RouterRuleAIAgent")
+  voiceChannels  VoiceChannel[]     @relation("VoiceChannelAIAgent")
 
   @@index([tenantId])
   @@index([tenantId, status])
+  @@index([tenantId, departmentId])
+  @@index([tenantId, funnelId])
   @@map("ai_agents")
 }
 
@@ -568,6 +581,7 @@ model Department {
   agentToolPermissions    AgentToolPermission[]
   funnels                 TenantFunnel[]
   notificationPreferences NotificationPreference[]
+  aiAgents                AIAgent[]                @relation("AIAgentDepartment")
   // Voice channels that fall back to this department when the default agent
   // doesn't answer within the channel's ring timeout.
   voiceChannelFallback    VoiceChannel[]           @relation("VoiceChannelFallbackDept")
@@ -1762,7 +1776,9 @@ model TenantFunnel {
   /// NULL = tenant default (applies when no department-specific funnel exists).
   departmentId      String?  @map("department_id")
   isActive          Boolean  @default(true) @map("is_active")
-  /// FunnelStage[] — see funnel-config.service.ts.
+  /// FunnelStage[] — see funnel-config.service.ts. Each stage may carry
+  /// `crmValue` (vendor stage mapping) and `copilot` (per-stage goal,
+  /// required questions, required data fields, exit criteria, nextStageId).
   stages            Json
   /// FunnelTransition[]
   transitions       Json     @default("[]")
@@ -1774,10 +1790,69 @@ model TenantFunnel {
   updatedAt         DateTime @updatedAt @map("updated_at")
 
   department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
+  aiAgents   AIAgent[]   @relation("AIAgentFunnel")
 
   @@unique([tenantId, departmentId, funnelId])
   @@index([tenantId, departmentId, isActive])
   @@map("tenant_funnels")
+}
+
+/// Stage transition audit log.
+///
+/// Captures every pipeline-stage change initiated by:
+///   - AUTO: the post-call summarizer's stage_transition_suggestion auto-
+///     applied (confidence ≥ 0.75 + evidence + vendor crmValue).
+///   - MANUAL: a rep clicked "Override stage" from the live workspace.
+///   - REVIEW_TASK: the summarizer suggested a transition but it was
+///     below threshold, so a CRM task was created for human review and
+///     the transition was NOT applied. Kept for funnel velocity analytics
+///     ("how often does the bot need a human?").
+///
+/// vendor_write_ok records whether the CRM patch succeeded — for MANUAL
+/// and AUTO sources we attempt the vendor write; for REVIEW_TASK it's
+/// always false (no write attempted).
+model StageTransition {
+  id               String   @id @default(cuid())
+  tenantId         String   @map("tenant_id")
+  conversationId   String   @map("conversation_id")
+  contactId        String?  @map("contact_id")
+  /// Funnel id at the time of the transition. Captured for historical
+  /// accuracy — the funnel may be edited later.
+  funnelId         String   @map("funnel_id")
+  /// Stage ids (within `tenant_funnels.stages`). Free-form strings so
+  /// renames don't break the audit.
+  fromStageId      String?  @map("from_stage_id")
+  fromStageLabel   String?  @map("from_stage_label")
+  toStageId        String   @map("to_stage_id")
+  toStageLabel     String?  @map("to_stage_label")
+  /// AUTO | MANUAL | REVIEW_TASK — string column so adding sources later
+  /// doesn't require an enum migration.
+  source           String
+  /// 0..1 — null for MANUAL where confidence isn't computed.
+  confidence       Float?
+  /// Free-text justification (rep-supplied for MANUAL; LLM-supplied for AUTO/REVIEW_TASK).
+  reason           String?
+  /// Short transcript quotes the LLM cited.
+  evidence         Json     @default("[]")
+  /// criteriaMet[] from the summarizer output.
+  criteriaMet      Json     @default("[]") @map("criteria_met")
+  /// criteriaMissed[] from the summarizer output.
+  criteriaMissed   Json     @default("[]") @map("criteria_missed")
+  /// Vendor stage value that was written (or would have been).
+  vendorValue      String?  @map("vendor_value")
+  /// True when applyCrmPatchKindAware succeeded; false for REVIEW_TASK
+  /// (no write attempted) or any vendor failure.
+  vendorWriteOk    Boolean  @default(false) @map("vendor_write_ok")
+  /// Vendor adapter error message when vendorWriteOk = false.
+  vendorWriteError String?  @map("vendor_write_error")
+  /// User id when source=MANUAL; "voice-postcall:<sessionId>" when AUTO/REVIEW_TASK.
+  actorId          String?  @map("actor_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, conversationId, createdAt])
+  @@index([tenantId, contactId, createdAt])
+  @@index([tenantId, createdAt])
+  @@map("stage_transitions")
 }
 
 // ─── Action Contracts (deterministic tool-chain enforcement) ───
@@ -2434,13 +2509,22 @@ model VoiceChannel {
   // computer. Recording / transcription / summary still happen.
   openWorkspaceOnAgentFirst Boolean @default(true) @map("open_workspace_on_agent_first")
 
+  // Phase 6: AI Employee assigned to this voice channel as a first-class
+  // FK. Drives call-pilot turns (mode=callpilot) — same AIAgent that runs
+  // the tenant's chat/copilot turns. Migrated out of the copilotConfig
+  // JSONB blob; the JSONB field is retained for backwards-compat reads
+  // for one release window, then dropped.
+  aiAgentId String? @map("ai_agent_id")
+
   parent             CommunicationChannel      @relation(fields: [communicationChannelId], references: [id], onDelete: Cascade)
   defaultAgent       User?                     @relation("VoiceChannelDefaultAgent", fields: [defaultAgentId], references: [id], onDelete: SetNull)
   agentFirstAgent    User?                     @relation("VoiceChannelAgentFirstAgent", fields: [agentFirstAgentId], references: [id], onDelete: SetNull)
   fallbackDepartment Department?               @relation("VoiceChannelFallbackDept", fields: [fallbackDepartmentId], references: [id], onDelete: SetNull)
+  aiAgent            AIAgent?                  @relation("VoiceChannelAIAgent", fields: [aiAgentId], references: [id], onDelete: SetNull)
   phoneNumbers       VoiceChannelPhoneNumber[]
 
   @@index([agentFirstAgentId])
+  @@index([aiAgentId])
   @@map("voice_channels")
 }
 

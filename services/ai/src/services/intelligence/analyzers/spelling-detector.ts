@@ -228,6 +228,7 @@ export async function detectSpellingMode(
   try {
     const res = await generateResponse({
       tenantId: input.tenantId,
+      sessionId: input.conversationId,
       messages: [
         { role: "system", content: SYSTEM_PROMPT },
         { role: "user", content: `<transcript>\n${transcript}\n</transcript>` },

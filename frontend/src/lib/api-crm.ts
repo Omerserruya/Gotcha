@@ -95,6 +95,34 @@ export interface RecentSummary {
   isCurrentConversation: boolean;
 }
 
+export interface CrmActiveStage {
+  /** Funnel stage id. */
+  id: string;
+  /** Display label for the stage. */
+  label: string;
+  /** Per-stage copilot goal (rep-facing). */
+  goal: string | null;
+  /** How the stage was determined. */
+  source: "crm-match" | "crm-fallback-first" | "no-crm";
+  /** Raw vendor stage value (HubSpot lifecyclestage, Zoho Stage, etc.). */
+  vendor_stage: string | null;
+  /** Stage-scoped required questions. */
+  required_questions: Array<{ id: string; text: string; required: boolean }>;
+  /** Stage-scoped required data fields. */
+  required_data_fields: Array<{ field: string; label: string; required: boolean }>;
+  /** Exit criteria summarized for the UI badge. */
+  exit_criteria: {
+    mustHaveFields: string[];
+    mustAskQuestions: string[];
+    positiveSignals: string[];
+    negativeSignals: string[];
+  } | null;
+  /** Next stage in the funnel (or null when this is terminal / unresolved). */
+  next: { id: string; label: string } | null;
+  /** Every stage in the active funnel — populates the manual-override dropdown. */
+  all_stages: Array<{ id: string; label: string; crmValue: string | null }>;
+}
+
 export interface CrmContextEnvelope {
   vendor: string | null;
   status: CrmContextStatus;
@@ -110,6 +138,8 @@ export interface CrmContextEnvelope {
   recent_crm_notes?: CrmActivity[];
   /** Aggregate sentiment trend (last 5 conversations). */
   sentiment_trend?: ("positive" | "neutral" | "negative" | "unknown")[];
+  /** Active funnel stage for this customer (drives live copilot + post-call eval). */
+  active_stage?: CrmActiveStage | null;
   /** Set when status === "needs_approval" — operator must pick the survivor. */
   candidates?: CrmContactSummary[];
   /** Reason from the identity service (e.g. weak_merge_signal, merge_not_available). */
@@ -209,6 +239,75 @@ export async function postCrmNote(token: string, conversationId: string, body: s
     `/api/crm/conversation/${conversationId}/notes`,
     token,
     { method: "POST", body: JSON.stringify({ body }) },
+  );
+  return r.data;
+}
+
+// ─── Pipeline-stage admin ──────────────────────────────────
+
+export interface StageTransitionRow {
+  id: string;
+  conversationId: string;
+  contactId: string | null;
+  funnelId: string;
+  fromStageId: string | null;
+  fromStageLabel: string | null;
+  toStageId: string;
+  toStageLabel: string | null;
+  source: "AUTO" | "MANUAL" | "REVIEW_TASK" | string;
+  confidence: number | null;
+  reason: string | null;
+  evidence: string[];
+  criteriaMet: string[];
+  criteriaMissed: string[];
+  vendorValue: string | null;
+  vendorWriteOk: boolean;
+  vendorWriteError: string | null;
+  actorId: string | null;
+  createdAt: string;
+}
+
+export async function overrideConversationStage(
+  token: string,
+  conversationId: string,
+  body: { to: string; reason?: string },
+): Promise<{
+  ok: boolean;
+  from: { id: string; label: string } | null;
+  to: { id: string; label: string };
+  vendorValue: string;
+  vendorWriteOk: boolean;
+  vendorWriteError: string | null;
+  auditId: string | undefined;
+}> {
+  const r = await authedFetch<{ data: any }>(
+    `/api/stage-transitions/conversations/${conversationId}/override`,
+    token,
+    { method: "POST", body: JSON.stringify(body) },
+  );
+  return r.data;
+}
+
+export async function listConversationStageHistory(
+  token: string,
+  conversationId: string,
+  limit = 25,
+): Promise<StageTransitionRow[]> {
+  const r = await authedFetch<{ data: StageTransitionRow[] }>(
+    `/api/stage-transitions/conversations/${conversationId}?limit=${limit}`,
+    token,
+  );
+  return r.data;
+}
+
+export async function listContactStageHistory(
+  token: string,
+  contactId: string,
+  limit = 50,
+): Promise<StageTransitionRow[]> {
+  const r = await authedFetch<{ data: StageTransitionRow[] }>(
+    `/api/stage-transitions/contacts/${contactId}?limit=${limit}`,
+    token,
   );
   return r.data;
 }

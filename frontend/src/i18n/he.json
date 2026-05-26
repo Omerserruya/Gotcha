@@ -1503,9 +1503,40 @@
     "saving": "שומר...",
     "send": "שלח"
   },
+  "onboarding": {
+    "channelsBanner": "בחרו WhatsApp, אינסטגרם או אימייל כדי לחבר את הערוץ הראשון.",
+    "missions": {
+      "title": "להתחיל",
+      "hide": "הסתר",
+      "items": {
+        "confirm_business": "אישור פרטי העסק",
+        "connect_channel": "חיבור ערוץ",
+        "send_test_reply": "שליחת תגובת בדיקה",
+        "review_agent_tone": "סקירת הטון של ה-AI",
+        "invite_teammate": "הזמנת חבר צוות"
+      }
+    }
+  },
   "setup": {
     "title": "הגדרת ארגון",
     "subtitle": "השלם את ההגדרה כדי להפעיל את סביבת העבודה",
+    "confirmTitle": "אישור פרטי העסק",
+    "confirmSubtitle": "רק היסודות — את השאר נכוונן מתוך האפליקציה.",
+    "language": "שפה",
+    "oneLineWhatYouDo": "במשפט אחד, במה אתם עוסקים?",
+    "oneLinePlaceholder": "לדוגמה: אנחנו מוכרים תיקי עור בעבודת יד אונליין",
+    "confirmAndContinue": "אישור והמשך",
+    "outcomeTitle": "במה נעזור לכם להתחיל?",
+    "outcomeSubtitle": "בחרו אחד — אפשר לעשות את כל השלושה מאוחר יותר.",
+    "outcomeFooter": "אפשר להחליף מיקוד בכל רגע מהסרגל הצדדי.",
+    "preparingWorkspace": "מכינים את סביבת העבודה…",
+    "errSaveProfile": "שמירת פרטי העסק נכשלה.",
+    "errActivate": "הפעלת סביבת העבודה נכשלה.",
+    "outcomes": {
+      "replyFaster": "להגיב מהר יותר",
+      "qualifyLeads": "להסמיך לידים",
+      "handleCalls": "לטפל בשיחות"
+    },
     "stepBusinessProfile": "פרופיל עסקי",
     "stepDepartments": "מחלקות",
     "stepAiConfig": "הגדרת AI",
@@ -2875,5 +2906,187 @@
     "errApprove": "האישור נכשל",
     "errReject": "הדחייה נכשלה",
     "errReasonRequired": "נדרשת סיבה לדחייה"
+  },
+  "callRightPanel": {
+    "tabs": {
+      "live": "חי",
+      "customer": "לקוח",
+      "history": "היסטוריה"
+    },
+    "emptyCustomer": {
+      "title": "אין שום דבר מסומן ללקוח זה",
+      "body": "פניות פתוחות, הערות CRM אחרונות ותגיות מה-CRM שלך יופיעו כאן."
+    },
+    "emptyHistory": {
+      "title": "אין קשר קודם",
+      "body": "כשלוקח זה יצבור עוד פעילות בערוצים השונים תראה כאן סיכום."
+    },
+    "brief": {
+      "loadFailed": "טעינת תקציר ה-AI נכשלה"
+    }
+  },
+  "postConvSettings": {
+    "title": "סכמת סוף שיחה",
+    "subtitle": "מה ה-AI שולף כששיחה מסתיימת — ומה הוא עושה עם זה.",
+    "save": "שמור שינויים",
+    "saving": "שומר…",
+    "saved": "נשמר",
+    "loading": "טוען…",
+    "loadFailed": "טעינת הגדרות נכשלה",
+    "saveFailed": "שמירה נכשלה",
+    "summary": {
+      "title": "שדות סיכום",
+      "subtitle": "שדות CRM שה-AI ימלא אם הוזכרו בשיחה. רק שדות שדוברו ייכתבו — ערכים קיימים נשמרים.",
+      "empty": "אין שדות מותאמים אישית.",
+      "keyPlaceholder": "מפתח (למשל budget)",
+      "labelPlaceholder": "תווית",
+      "descriptionPlaceholder": "תיאור / רמז ל-AI",
+      "remove": "הסר",
+      "add": "+ הוסף שדה"
+    },
+    "taskRules": {
+      "title": "כללי משימות",
+      "subtitle": "כאשר ה-AI מזהה כוונה או מילת מפתח, צור משימה אוטומטית לנציג.",
+      "empty": "אין עדיין כללי משימה.",
+      "whenIntent": "כשהכוונה =",
+      "intentPlaceholder": "למשל pricing_objection",
+      "orKeywords": "או מילות מפתח:",
+      "keywordsPlaceholder": "מופרדות בפסיק",
+      "createTask": "צור משימה:",
+      "subjectPlaceholder": "נושא (למשל שלח חוברת מחירים)",
+      "priorityLow": "נמוכה",
+      "priorityNormal": "רגילה",
+      "priorityHigh": "גבוהה",
+      "priorityUrgent": "דחופה",
+      "add": "+ הוסף כלל"
+    },
+    "crmRules": {
+      "title": "כללי CRM",
+      "subtitle": "כאשר ה-AI מזהה כוונה, עדכן שדות CRM ספציפיים. דליל — נכתבים רק השדות שתרשום כאן.",
+      "empty": "אין עדיין כללי CRM.",
+      "whenIntent": "כשהכוונה =",
+      "intentPlaceholder": "למשל ready_to_buy",
+      "sentiment": "סנטימנט:",
+      "sentimentAny": "(כל)",
+      "sentimentPositive": "חיובי",
+      "sentimentNeutral": "ניטרלי",
+      "sentimentNegative": "שלילי",
+      "sentimentMixed": "מעורב",
+      "patchJson": "עדכון (JSON):",
+      "add": "+ הוסף כלל"
+    }
+  },
+  "funnels": {
+    "title": "משפכי פייפליין",
+    "subtitle": "כל משפך הוא רצף של שלבי פייפליין. עבור כל שלב ניתן להגדיר מטרה, שאלות נדרשות, שדות נתונים נדרשים, קריטריוני יציאה ואת ערך השלב במערכת ה-CRM שיירשם בעת מעבר שלב.",
+    "adminOnly": "למנהלים בלבד.",
+    "loading": "טוען…",
+    "createTitle": "יצירת משפך חדש",
+    "createSubtitle": "משפכים מקבצים את שלבי הפייפליין שלך. לאחר היצירה תועבר לעורך שבו ניתן לכתוב לכל שלב מטרה, שאלות נדרשות, קריטריוני יציאה ומיפוי שלב CRM.",
+    "createPlaceholder": "מזהה משפך (למשל sales-saas)",
+    "createButton": "צור",
+    "creating": "יוצר…",
+    "idRequired": "מזהה משפך נדרש (למשל \"sales-saas\").",
+    "loadFailed": "טעינת המשפכים נכשלה",
+    "createFailed": "יצירת המשפך נכשלה",
+    "emptyTitle": "אין עדיין משפכים",
+    "emptyBody": "צור את המשפך הראשון שלך למעלה כדי לאפשר מטרות קופיילוט מבוססות שלב.",
+    "active": "פעיל",
+    "tenantDefault": "ברירת מחדל לארגון",
+    "stagesCount": "{n} שלבים",
+    "transitionsCount": "{n} מעברים",
+    "activate": "הפעל",
+    "delete": "מחק",
+    "deleteConfirm": "למחוק את המשפך \"{id}\"? לא ניתן לבטל.",
+    "editor": {
+      "adminOnly": "למנהלים בלבד.",
+      "loading": "טוען…",
+      "notFound": "משפך לא נמצא.",
+      "backLink": "← כל המשפכים",
+      "stagesActive": "{n} שלבים · פעיל",
+      "stagesInactive": "{n} שלבים",
+      "deptSuffix": " · מחלקה {id}",
+      "tenantSuffix": " · ברירת מחדל לארגון",
+      "cancel": "ביטול",
+      "save": "שמור",
+      "saving": "שומר…",
+      "saved": "נשמר.",
+      "saveFailed": "השמירה נכשלה",
+      "loadFailed": "טעינת המשפך נכשלה",
+      "untitled": "ללא כותרת",
+      "hasGoal": "יש מטרה",
+      "moveUp": "הזז למעלה",
+      "moveDown": "הזז למטה",
+      "remove": "הסר",
+      "stageId": "מזהה שלב",
+      "displayLabel": "תווית תצוגה",
+      "baseStage": "שלב בסיס (עוגן BEL)",
+      "crmValue": "ערך שלב ב-CRM",
+      "crmHint": "ממפה את השלב הזה לשדה השלב במערכת ה-CRM שלך (HubSpot lifecyclestage, Zoho Stage וכו'). שלבים ללא ערך יוצגו אבל לא ייכתבו על-ידי מעבר אוטומטי או ידני.",
+      "crmPlaceholder": "למשל qualifiedlead",
+      "copilotConfig": "תצורת קופיילוט",
+      "stageGoal": "מטרת השלב",
+      "stageGoalHint": "מה הנציג צריך להשיג בשיחה כשהלקוח בשלב הזה. מניע את מקרין הרמזים החי.",
+      "stageGoalPlaceholder": "למשל זהה תקציב ולוח זמנים; קבע הדגמה לשבוע הבא.",
+      "nextStage": "שלב הבא בעת מעבר",
+      "nextStageHint": "שלב לעבור אליו כשמתקיימים תנאי היציאה. השאר ריק כדי להשתמש במעבר היוצא הראשון.",
+      "deriveFromTransitions": "— גזור ממעברים —",
+      "addStage": "+ הוסף שלב",
+      "newStage": "שלב חדש",
+      "removeStageConfirm": "להסיר את השלב הזה?",
+      "questions": {
+        "title": "שאלות נדרשות",
+        "add": "+ הוסף",
+        "empty": "אין שאלות מוגדרות.",
+        "textPlaceholder": "מה התקציב שלך?",
+        "required": "חובה",
+        "remove": "הסר"
+      },
+      "dataFields": {
+        "title": "שדות מידע נדרשים",
+        "add": "+ הוסף",
+        "hint": "מלא אחת מהעמודות — השנייה תיגזר אוטומטית בשמירה (תווית מומרת למזהה שדה; מזהה שדה מומר לתווית).",
+        "empty": "אין שדות מוגדרים.",
+        "fieldPlaceholder": "field_key",
+        "labelPlaceholder": "תווית פונה לנציג",
+        "required": "חובה",
+        "remove": "הסר"
+      },
+      "exitCriteria": {
+        "title": "תנאי יציאה",
+        "hint": "משמש את הסכמת סוף-שיחה כדי להעריך האם השלב יכול להתקדם. מופרד בפסיק או בשורה חדשה.",
+        "mustHaveFields": "שדות חובה",
+        "mustHaveFieldsPlaceholder": "תקציב, לוח זמנים",
+        "mustAskQuestions": "שאלות שחייבים לשאול",
+        "mustAskQuestionsPlaceholder": "מה לוח הזמנים שלך?\nמי מקבל ההחלטות?",
+        "positiveSignals": "סימנים חיוביים (כל אחד)",
+        "positiveSignalsPlaceholder": "מוכן להתחיל, שלח לי את החוזה",
+        "negativeSignals": "סימנים שליליים (חוסם מעבר)",
+        "negativeSignalsPlaceholder": "לא מעוניין, יקר מדי"
+      }
+    }
+  },
+  "liveCopilot": {
+    "instructions": {
+      "title": "איך להשתמש",
+      "intro": "הצעות מופיעות כאן בזמן שהלקוח מדבר. השתמש בחיצים ↑/↓ למיקוד רמז, Enter לקבלה, Esc לדחייה.",
+      "tierJunior": "רמת ג'וניור — כל המסלולים גלויים: דופק, כיוון ואסטרטגיה.",
+      "tierMid": "רמת ביניים — מסלולים מאוזנים עם קולדאון מתון.",
+      "tierSenior": "רמת סניור — מצב לחישה, רק מסלול דופק.",
+      "listening": "מאזין — רמזים יופיעו לאחר שהלקוח ידבר."
+    },
+    "cues": {
+      "noCues": "אין כרגע רמזי קואצ'ינג.",
+      "queuedTitle": "רמזים מתורנים בשקט כדי לכבד את מגבלת הנראות של הרמה שלך.",
+      "lanePulse": "דופק",
+      "laneDirection": "כיוון",
+      "laneStrategy": "אסטרטגיה",
+      "acceptAria": "קבל רמז (Enter)",
+      "dismissAria": "דחה רמז (Esc)",
+      "notUseful": "לא שימושי · Esc",
+      "tierJuniorDesc": "יותר רמזים, כל המסלולים, אנימציות פעילות",
+      "tierMidDesc": "ברירת מחדל",
+      "tierSeniorDesc": "מצב לחישה — רק דופק"
+    }
   }
 }

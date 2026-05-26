@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
+import { useI18n } from "@/context/I18nContext";
 import {
   getPostConversationConfig,
   updatePostConversationConfig,
@@ -39,6 +40,7 @@ function genId(): string {
 
 export default function PostConversationSettingsPage() {
   const { token } = useAuth();
+  const { t } = useI18n();
   const [config, setConfig] = useState<PostConversationConfig>(EMPTY);
   const [loading, setLoading] = useState(true);
   const [dirty, setDirty] = useState(false);
@@ -53,12 +55,12 @@ export default function PostConversationSettingsPage() {
         const res = await getPostConversationConfig(token);
         setConfig(res.config ?? EMPTY);
       } catch (e: any) {
-        setError(e?.message ?? "Failed to load config");
+        setError(e?.message ?? t("postConvSettings.loadFailed"));
       } finally {
         setLoading(false);
       }
     })();
-  }, [token]);
+  }, [token, t]);
 
   function mutate(next: PostConversationConfig) {
     setConfig(next);
@@ -73,10 +75,10 @@ export default function PostConversationSettingsPage() {
       const res = await updatePostConversationConfig(token, config);
       setConfig(res.config ?? EMPTY);
       setDirty(false);
-      setToast("Saved");
+      setToast(t("postConvSettings.saved"));
       setTimeout(() => setToast(null), 2000);
     } catch (e: any) {
-      setError(e?.message ?? "Failed to save");
+      setError(e?.message ?? t("postConvSettings.saveFailed"));
     } finally {
       setSaving(false);
     }
@@ -88,9 +90,9 @@ export default function PostConversationSettingsPage() {
     <div className="p-6">
       <div className="flex items-center justify-between mb-4 max-w-4xl">
         <div>
-          <h1 className="text-xl font-semibold text-gray-900">Post-Conversation Schema</h1>
+          <h1 className="text-xl font-semibold text-gray-900">{t("postConvSettings.title")}</h1>
           <p className="text-xs text-gray-500 mt-1">
-            What the AI extracts when a call ends or a chat closes — and what it does next.
+            {t("postConvSettings.subtitle")}
           </p>
         </div>
         <button
@@ -103,7 +105,7 @@ export default function PostConversationSettingsPage() {
               : "bg-gray-100 text-gray-400 cursor-not-allowed",
           )}
         >
-          {saving ? "Saving…" : dirty ? "Save changes" : "Saved"}
+          {saving ? t("postConvSettings.saving") : dirty ? t("postConvSettings.save") : t("postConvSettings.saved")}
         </button>
       </div>
 
@@ -120,7 +122,7 @@ export default function PostConversationSettingsPage() {
 
       {loading ? (
         <div className="bg-white rounded-xl shadow-subtle p-6 text-sm text-gray-500 max-w-4xl">
-          Loading…
+          {t("postConvSettings.loading")}
         </div>
       ) : (
         <div className="space-y-6 max-w-4xl">
@@ -151,6 +153,7 @@ function SummaryFieldsSection({
   fields: SummaryFieldDef[];
   onChange: (next: SummaryFieldDef[]) => void;
 }) {
+  const { t } = useI18n();
   function update(idx: number, patch: Partial<SummaryFieldDef>) {
     const next = fields.slice();
     next[idx] = { ...next[idx]!, ...patch };
@@ -165,40 +168,39 @@ function SummaryFieldsSection({
   return (
     <section className="bg-white rounded-xl shadow-subtle p-5">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">Summary fields</h2>
+        <h2 className="text-sm font-semibold text-gray-800">{t("postConvSettings.summary.title")}</h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          CRM slots the AI should fill if discussed. Only fields mentioned in the
-          conversation are written — prior values are preserved.
+          {t("postConvSettings.summary.subtitle")}
         </p>
       </header>
       <div className="space-y-2">
         {fields.length === 0 && (
-          <p className="text-xs text-gray-400 italic">No custom fields yet.</p>
+          <p className="text-xs text-gray-400 italic">{t("postConvSettings.summary.empty")}</p>
         )}
         {fields.map((f, idx) => (
           <div key={idx} className="grid grid-cols-12 gap-2 items-center">
             <input
               className="col-span-3 px-3 py-2 border border-gray-200 rounded-lg text-sm font-mono"
-              placeholder="key (e.g. budget)"
+              placeholder={t("postConvSettings.summary.keyPlaceholder")}
               value={f.key}
               onChange={(e) => update(idx, { key: e.target.value })}
             />
             <input
               className="col-span-3 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              placeholder="Label"
+              placeholder={t("postConvSettings.summary.labelPlaceholder")}
               value={f.label}
               onChange={(e) => update(idx, { label: e.target.value })}
             />
             <input
               className="col-span-5 px-3 py-2 border border-gray-200 rounded-lg text-sm"
-              placeholder="Description / hint for the AI"
+              placeholder={t("postConvSettings.summary.descriptionPlaceholder")}
               value={f.description ?? ""}
               onChange={(e) => update(idx, { description: e.target.value })}
             />
             <button
               onClick={() => remove(idx)}
               className="col-span-1 text-gray-400 hover:text-red-600 text-sm"
-              aria-label="Remove"
+              aria-label={t("postConvSettings.summary.remove")}
             >
               ×
             </button>
@@ -209,7 +211,7 @@ function SummaryFieldsSection({
         onClick={add}
         className="mt-3 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
       >
-        + Add field
+        {t("postConvSettings.summary.add")}
       </button>
     </section>
   );
@@ -224,6 +226,7 @@ function TaskRulesSection({
   rules: TaskRule[];
   onChange: (next: TaskRule[]) => void;
 }) {
+  const { t } = useI18n();
   function update(idx: number, patch: Partial<TaskRule>) {
     const next = rules.slice();
     next[idx] = { ...next[idx]!, ...patch };
@@ -241,31 +244,31 @@ function TaskRulesSection({
   return (
     <section className="bg-white rounded-xl shadow-subtle p-5">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">Task rules</h2>
+        <h2 className="text-sm font-semibold text-gray-800">{t("postConvSettings.taskRules.title")}</h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          When the AI detects an intent or keyword, automatically queue a task for the rep.
+          {t("postConvSettings.taskRules.subtitle")}
         </p>
       </header>
       <div className="space-y-3">
         {rules.length === 0 && (
-          <p className="text-xs text-gray-400 italic">No task rules yet.</p>
+          <p className="text-xs text-gray-400 italic">{t("postConvSettings.taskRules.empty")}</p>
         )}
         {rules.map((r, idx) => (
           <div key={r.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
             <div className="grid grid-cols-12 gap-2 items-center">
-              <span className="col-span-2 text-xs text-gray-500">When intent =</span>
+              <span className="col-span-2 text-xs text-gray-500">{t("postConvSettings.taskRules.whenIntent")}</span>
               <input
                 className="col-span-3 px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-mono"
-                placeholder="e.g. pricing_objection"
+                placeholder={t("postConvSettings.taskRules.intentPlaceholder")}
                 value={r.when.intent ?? ""}
                 onChange={(e) =>
                   update(idx, { when: { ...r.when, intent: e.target.value || undefined } })
                 }
               />
-              <span className="col-span-2 text-xs text-gray-500 text-right">or keywords:</span>
+              <span className="col-span-2 text-xs text-gray-500 text-right">{t("postConvSettings.taskRules.orKeywords")}</span>
               <input
                 className="col-span-4 px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-                placeholder="comma-separated"
+                placeholder={t("postConvSettings.taskRules.keywordsPlaceholder")}
                 value={(r.when.keywords ?? []).join(", ")}
                 onChange={(e) =>
                   update(idx, {
@@ -282,16 +285,16 @@ function TaskRulesSection({
               <button
                 onClick={() => remove(idx)}
                 className="col-span-1 text-gray-400 hover:text-red-600 text-sm"
-                aria-label="Remove"
+                aria-label={t("postConvSettings.summary.remove")}
               >
                 ×
               </button>
             </div>
             <div className="grid grid-cols-12 gap-2 items-center">
-              <span className="col-span-2 text-xs text-gray-500">Create task:</span>
+              <span className="col-span-2 text-xs text-gray-500">{t("postConvSettings.taskRules.createTask")}</span>
               <input
                 className="col-span-6 px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
-                placeholder="Subject (e.g. Send pricing deck)"
+                placeholder={t("postConvSettings.taskRules.subjectPlaceholder")}
                 value={r.task.subject}
                 onChange={(e) =>
                   update(idx, { task: { ...r.task, subject: e.target.value } })
@@ -306,10 +309,10 @@ function TaskRulesSection({
                   })
                 }
               >
-                <option value="low">low</option>
-                <option value="normal">normal</option>
-                <option value="high">high</option>
-                <option value="urgent">urgent</option>
+                <option value="low">{t("postConvSettings.taskRules.priorityLow")}</option>
+                <option value="normal">{t("postConvSettings.taskRules.priorityNormal")}</option>
+                <option value="high">{t("postConvSettings.taskRules.priorityHigh")}</option>
+                <option value="urgent">{t("postConvSettings.taskRules.priorityUrgent")}</option>
               </select>
             </div>
           </div>
@@ -319,7 +322,7 @@ function TaskRulesSection({
         onClick={add}
         className="mt-3 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
       >
-        + Add rule
+        {t("postConvSettings.taskRules.add")}
       </button>
     </section>
   );
@@ -334,6 +337,7 @@ function CrmRulesSection({
   rules: CrmRule[];
   onChange: (next: CrmRule[]) => void;
 }) {
+  const { t } = useI18n();
   function update(idx: number, patch: Partial<CrmRule>) {
     const next = rules.slice();
     next[idx] = { ...next[idx]!, ...patch };
@@ -348,29 +352,28 @@ function CrmRulesSection({
   return (
     <section className="bg-white rounded-xl shadow-subtle p-5">
       <header className="mb-3">
-        <h2 className="text-sm font-semibold text-gray-800">CRM rules</h2>
+        <h2 className="text-sm font-semibold text-gray-800">{t("postConvSettings.crmRules.title")}</h2>
         <p className="text-xs text-gray-500 mt-0.5">
-          When the AI detects an intent, patch specific CRM fields. Sparse — only the
-          fields you list here are written.
+          {t("postConvSettings.crmRules.subtitle")}
         </p>
       </header>
       <div className="space-y-3">
         {rules.length === 0 && (
-          <p className="text-xs text-gray-400 italic">No CRM rules yet.</p>
+          <p className="text-xs text-gray-400 italic">{t("postConvSettings.crmRules.empty")}</p>
         )}
         {rules.map((r, idx) => (
           <div key={r.id} className="border border-gray-200 rounded-lg p-3 space-y-2">
             <div className="grid grid-cols-12 gap-2 items-center">
-              <span className="col-span-2 text-xs text-gray-500">When intent =</span>
+              <span className="col-span-2 text-xs text-gray-500">{t("postConvSettings.crmRules.whenIntent")}</span>
               <input
                 className="col-span-4 px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-mono"
-                placeholder="e.g. ready_to_buy"
+                placeholder={t("postConvSettings.crmRules.intentPlaceholder")}
                 value={r.when.intent ?? ""}
                 onChange={(e) =>
                   update(idx, { when: { ...r.when, intent: e.target.value || undefined } })
                 }
               />
-              <span className="col-span-2 text-xs text-gray-500 text-right">sentiment:</span>
+              <span className="col-span-2 text-xs text-gray-500 text-right">{t("postConvSettings.crmRules.sentiment")}</span>
               <select
                 className="col-span-3 px-3 py-1.5 border border-gray-200 rounded-lg text-sm"
                 value={r.when.sentiment ?? ""}
@@ -388,22 +391,22 @@ function CrmRulesSection({
                   })
                 }
               >
-                <option value="">(any)</option>
-                <option value="positive">positive</option>
-                <option value="neutral">neutral</option>
-                <option value="negative">negative</option>
-                <option value="mixed">mixed</option>
+                <option value="">{t("postConvSettings.crmRules.sentimentAny")}</option>
+                <option value="positive">{t("postConvSettings.crmRules.sentimentPositive")}</option>
+                <option value="neutral">{t("postConvSettings.crmRules.sentimentNeutral")}</option>
+                <option value="negative">{t("postConvSettings.crmRules.sentimentNegative")}</option>
+                <option value="mixed">{t("postConvSettings.crmRules.sentimentMixed")}</option>
               </select>
               <button
                 onClick={() => remove(idx)}
                 className="col-span-1 text-gray-400 hover:text-red-600 text-sm"
-                aria-label="Remove"
+                aria-label={t("postConvSettings.summary.remove")}
               >
                 ×
               </button>
             </div>
             <div className="grid grid-cols-12 gap-2 items-start">
-              <span className="col-span-2 text-xs text-gray-500 pt-2">Patch (JSON):</span>
+              <span className="col-span-2 text-xs text-gray-500 pt-2">{t("postConvSettings.crmRules.patchJson")}</span>
               <textarea
                 className="col-span-10 px-3 py-1.5 border border-gray-200 rounded-lg text-sm font-mono"
                 rows={2}
@@ -427,7 +430,7 @@ function CrmRulesSection({
         onClick={add}
         className="mt-3 px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg"
       >
-        + Add rule
+        {t("postConvSettings.crmRules.add")}
       </button>
     </section>
   );

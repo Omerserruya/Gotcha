@@ -1,5 +1,6 @@
 import {
   ConversationStateFrameSchema,
+  prisma,
   type ConversationStateFrame,
   type TranscriptUtterance,
   type CopilotConfig,
@@ -10,6 +11,7 @@ import { getActionOrchestrator } from "../orchestrator";
 import { ConversationMemory } from "./memory";
 import { LiveCadence, type AnalysisCadence } from "./cadence";
 import { LivePromptAssembler } from "./prompts";
+import type { StageContextForPrompt } from "./prompts/blocks/copilot-config-block";
 import type { TranscriptSource } from "./sources";
 import { CallAnalysisStore } from "./persistence/call-analysis-store";
 import { publishConvEvent } from "./events";
@@ -43,7 +45,7 @@ export interface LiveRunnerOptions {
   playbookStageId?: string;
   /** Cap utterances fed into Tier A window per turn. Default 32. */
   tierAWindow?: number;
-  /** Max LLM output tokens. Default 700. */
+  /** Max LLM output tokens. Default 400 (sufficient for typical frames). */
   maxOutputTokens?: number;
   /** Override the cadence policy (test injection point). */
   cadence?: AnalysisCadence;
@@ -53,6 +55,13 @@ export interface LiveRunnerOptions {
    * runner doesn't re-fetch on every turn.
    */
   copilotConfig?: CopilotConfig;
+  /**
+   * Active pipeline stage for this customer, resolved once at spawn time
+   * by the supervisor. Drives stage-aware goal/required-Qs/exit-criteria
+   * in the prompt assembler. Null/undefined when no funnel is configured
+   * or the resolver couldn't determine a stage.
+   */
+  stageContext?: StageContextForPrompt;
 }
 
 export class LiveAnalysisRunner {
@@ -62,6 +71,18 @@ export class LiveAnalysisRunner {
   private version = 0;
   private running = false;
   private endedReason: string | null = null;
+  /**
+   * Identifiers the rep already has for this customer. Loaded ONCE at
+   * runner start from the local Conversation + Contact rows. Merged with
+   * the cue projector's observedFilled set each turn and rendered as the
+   * "ALREADY ANSWERED" prompt block so the LLM doesn't re-emit
+   * missingFields for things already known.
+   */
+  private knownIdentifiers: {
+    customerName?: string | null;
+    contactPhone?: string | null;
+    contactEmail?: string | null;
+  } = {};
 
   constructor(
     private readonly source: TranscriptSource,
@@ -87,6 +108,19 @@ export class LiveAnalysisRunner {
     this.memory = await ConversationMemory.load(this.opts.conversationId, {
       tierAMax: this.opts.tierAWindow ?? 32,
     });
+
+    // Pre-load CRM-known identifiers so the "ALREADY ANSWERED" block can be
+    // populated on the very first turn. Failures are non-fatal — the block
+    // simply renders without those fields and the projector's observedFilled
+    // set still drives suppression.
+    try {
+      this.knownIdentifiers = await this.loadKnownIdentifiers();
+    } catch (err) {
+      console.warn(
+        "[live-runner] loadKnownIdentifiers failed (non-fatal):",
+        (err as { message?: string })?.message ?? err,
+      );
+    }
 
     // Run in the background; the caller does not await stream consumption.
     this.consume().catch((err: any) => {
@@ -117,6 +151,72 @@ export class LiveAnalysisRunner {
   }
 
   // ── Internal ───────────────────────────────────────────────
+
+  /**
+   * One-shot CRM-known-identifier lookup against LOCAL state only — no
+   * external CRM calls. Pulls the customer's display name from the
+   * Conversation row and any verified phone/email from the linked Contact.
+   * Used to populate the "ALREADY ANSWERED" prompt block so the LLM doesn't
+   * re-ask for things we already know.
+   *
+   * Heavier vendor CRM lookups (Zoho / HubSpot) intentionally NOT done here
+   * — they belong to `prefetchCrmContext` which has caching, rate-limiting,
+   * and HITL semantics. The live runner needs sub-millisecond identifier
+   * resolution, so we stay on local DB.
+   */
+  private async loadKnownIdentifiers(): Promise<{
+    customerName?: string | null;
+    contactPhone?: string | null;
+    contactEmail?: string | null;
+  }> {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: this.opts.conversationId },
+      select: {
+        tenantId: true,
+        customerName: true,
+        customerExternalId: true,
+        channel: true,
+      },
+    });
+    if (!conv) return {};
+
+    // Contact has no FK from Conversation — the join is on
+    // (tenantId, channel, externalId). Look it up once; if absent we fall
+    // back to whatever the conversation row carries directly.
+    let contactPhone: string | null = null;
+    let contactEmail: string | null = null;
+    if (conv.customerExternalId) {
+      try {
+        const contact = await prisma.contact.findUnique({
+          where: {
+            tenantId_channel_externalId: {
+              tenantId: conv.tenantId,
+              channel: conv.channel,
+              externalId: conv.customerExternalId,
+            },
+          },
+          select: { phone: true, email: true },
+        });
+        contactPhone = contact?.phone ?? null;
+        contactEmail = contact?.email ?? null;
+      } catch {
+        /* fall through to the channel-id heuristic below */
+      }
+    }
+
+    // For phone-shaped channels (WhatsApp / voice / SMS) the
+    // customerExternalId IS the phone — use it when Contact didn't have one.
+    if (!contactPhone && conv.customerExternalId) {
+      const looksLikePhone = /^\+?\d{6,}$/.test(conv.customerExternalId.replace(/[\s-]/g, ""));
+      if (looksLikePhone) contactPhone = conv.customerExternalId;
+    }
+
+    return {
+      customerName: conv.customerName,
+      contactPhone,
+      contactEmail,
+    };
+  }
 
   private async consume(): Promise<void> {
     if (!this.memory) return;
@@ -149,10 +249,24 @@ export class LiveAnalysisRunner {
   private async runTurn(): Promise<void> {
     if (!this.memory) return;
 
+    // Merge per-call CRM-known identifiers + the cue projector's
+    // observedFilled set into a single "already answered" hint block. The
+    // projector accumulates across frames, so even when an early utterance
+    // ("My name is Omer") falls out of the Tier-A window, the field stays
+    // marked as known and the LLM is told NOT to re-emit it as missing.
+    const observedFilled = cueProjector.getObservedFilled(this.opts.conversationId);
+
     const messages = this.assembler.build({
       rollingSummary: this.memory.tierB(),
       recentUtterances: this.memory.tierAWindow(),
       copilotConfig: this.opts.copilotConfig,
+      stageContext: this.opts.stageContext,
+      alreadyAnswered: {
+        customerName: this.knownIdentifiers.customerName,
+        contactPhone: this.knownIdentifiers.contactPhone,
+        contactEmail: this.knownIdentifiers.contactEmail,
+        observedFilled,
+      },
     });
 
     const t0 = Date.now();
@@ -171,9 +285,17 @@ export class LiveAnalysisRunner {
       );
       const res = await generateResponse({
         tenantId: this.opts.tenantId,
+        // Voice live-copilot turns rapidly — pinning the conversation here
+        // is the single biggest cache win in the live path because every
+        // frame for the same call shares a stable SYSTEM_CORE prefix.
+        sessionId: this.opts.conversationId,
         messages,
         responseFormat: { type: "json_object" },
-        maxTokens: this.opts.maxOutputTokens ?? 700,
+        // Live frames are small in practice (intent + a few cues + missing
+        // fields). 400 is enough for ~99% of frames and shaves median latency
+        // because the response stream completes faster. Override via
+        // opts.maxOutputTokens if a tenant produces unusually verbose frames.
+        maxTokens: this.opts.maxOutputTokens ?? 400,
         metadata: {
           conversationId: this.opts.conversationId,
           type: "voice_copilot_frame",

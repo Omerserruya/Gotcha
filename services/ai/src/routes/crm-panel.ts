@@ -15,7 +15,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
 import {
   analyzeConversation,
@@ -146,6 +146,126 @@ async function loadConversationContext(tenantId: string, conversationId: string)
   };
 }
 
+/**
+ * Build the funnel-aware active-stage payload for the CRM context envelope.
+ *
+ * Resolved by the same stage-resolver the live runner uses, so the
+ * frontend stage progress card and the live cue copilot always agree on
+ * which stage is active. Returns null when no funnel is configured or
+ * we couldn't determine a stage — the frontend then hides the card.
+ */
+async function resolveActiveStagePayload(args: {
+  tenantId: string;
+  conversationId: string;
+  departmentId: string | null;
+}): Promise<{
+  id: string;
+  label: string;
+  goal: string | null;
+  source: "crm-match" | "crm-fallback-first" | "no-crm";
+  vendor_stage: string | null;
+  required_questions: Array<{ id: string; text: string; required: boolean }>;
+  required_data_fields: Array<{ field: string; label: string; required: boolean }>;
+  exit_criteria: {
+    mustHaveFields: string[];
+    mustAskQuestions: string[];
+    positiveSignals: string[];
+    negativeSignals: string[];
+  } | null;
+  next: { id: string; label: string } | null;
+  /**
+   * Every stage in the active funnel — populates the manual override
+   * dropdown on the live workspace. Stages without `crmValue` are kept
+   * (UI flags them as non-writable but still shows them for context).
+   */
+  all_stages: Array<{ id: string; label: string; crmValue: string | null }>;
+} | null> {
+  try {
+    const { resolveActiveStage } = await import("../services/intelligence/stage-resolver.service");
+    const r = await resolveActiveStage({
+      tenantId: args.tenantId,
+      conversationId: args.conversationId,
+      departmentId: args.departmentId,
+    });
+    if (!r) return null;
+    const copilot = r.stage.copilot;
+    return {
+      id: r.stage.id,
+      label: r.stage.label,
+      goal: copilot?.goal ?? null,
+      source: r.source,
+      vendor_stage: r.vendorStage,
+      required_questions: (copilot?.requiredQuestions ?? []).map((q) => ({
+        id: q.id,
+        text: q.text,
+        required: q.required,
+      })),
+      required_data_fields: (copilot?.requiredDataFields ?? []).map((f) => ({
+        field: f.field,
+        label: f.label,
+        required: f.required,
+      })),
+      exit_criteria: copilot?.exitCriteria
+        ? {
+            mustHaveFields: copilot.exitCriteria.mustHaveFields ?? [],
+            mustAskQuestions: copilot.exitCriteria.mustAskQuestions ?? [],
+            positiveSignals: copilot.exitCriteria.positiveSignals ?? [],
+            negativeSignals: copilot.exitCriteria.negativeSignals ?? [],
+          }
+        : null,
+      next: r.nextStage
+        ? { id: r.nextStage.id, label: r.nextStage.label }
+        : null,
+      all_stages: r.funnel.stages.map((s) => ({
+        id: s.id,
+        label: s.label,
+        crmValue: s.crmValue ?? null,
+      })),
+    };
+  } catch (err: any) {
+    console.warn(
+      "[crm-panel] resolveActiveStagePayload failed (non-fatal):",
+      err?.message,
+    );
+    return null;
+  }
+}
+
+/**
+ * Cache the vendor's stage value onto Contact.metadata so the live-call
+ * stage resolver can read it without re-calling the vendor adapter on
+ * every turn. Called after each successful context fetch — best-effort,
+ * never blocks the panel render.
+ */
+async function cacheCrmStageOnContact(args: {
+  contactId: string | null;
+  stage: string | null | undefined;
+  vendor: string;
+}): Promise<void> {
+  if (!args.contactId || !args.stage) return;
+  try {
+    const row = await (prisma as any).contact.findUnique({
+      where: { id: args.contactId },
+      select: { metadata: true },
+    });
+    const meta = (row?.metadata ?? {}) as Record<string, any>;
+    meta.crmStageCache = {
+      value: args.stage,
+      vendor: args.vendor,
+      cachedAt: new Date().toISOString(),
+    };
+    await (prisma as any).contact.update({
+      where: { id: args.contactId },
+      data: { metadata: meta },
+    });
+  } catch (err: any) {
+    console.warn(
+      "[crm-panel] cacheCrmStageOnContact failed (non-fatal):",
+      err?.message,
+    );
+  }
+}
+
 async function persistCrmLinkage(args: {
   tenantId: string;
   contactId: string;
@@ -252,6 +372,19 @@ router.get(
           crmObjectKind: loaded.resolved.crmObjectKind,
           crmNoteLimit: 10,
         }).catch(() => null);
+        // Cache vendor stage onto Contact.metadata so the live-call
+        // stage resolver can read it cheaply during the next call.
+        await cacheCrmStageOnContact({
+          contactId: loaded.resolved.contactId,
+          stage: ctx.context.contact?.stage ?? null,
+          vendor: adapter.vendor,
+        });
+        // Resolve active funnel stage (uses the cache we just wrote).
+        const activeStage = await resolveActiveStagePayload({
+          tenantId,
+          conversationId,
+          departmentId: (loaded.conv as any).departmentId ?? null,
+        });
         res.json({
           data: {
             vendor: adapter.vendor,
@@ -262,6 +395,7 @@ router.get(
             recent_crm_notes: bundle?.recent_crm_notes ?? [],
             recent_activities: bundle?.recent_activities ?? ctx.context.recent_activities ?? [],
             sentiment_trend: bundle?.sentiment_trend ?? [],
+            active_stage: activeStage,
             fallback,
           },
         });
@@ -307,6 +441,17 @@ router.get(
         crmObjectKind: contact.kind,
         crmNoteLimit: 10,
       }).catch(() => null);
+      // Cache vendor stage (same rationale as the already-linked path).
+      await cacheCrmStageOnContact({
+        contactId: loaded.resolved.contactId,
+        stage: ctx.ok && ctx.context ? ctx.context.contact?.stage ?? null : null,
+        vendor: adapter.vendor,
+      });
+      const activeStage = await resolveActiveStagePayload({
+        tenantId,
+        conversationId,
+        departmentId: (loaded.conv as any).departmentId ?? null,
+      });
       res.json({
         data: {
           vendor: adapter.vendor,
@@ -317,6 +462,7 @@ router.get(
           recent_crm_notes: bundle?.recent_crm_notes ?? [],
           recent_activities: bundle?.recent_activities ?? (ctx.ok && ctx.context ? ctx.context.recent_activities : []) ?? [],
           sentiment_trend: bundle?.sentiment_trend ?? [],
+          active_stage: activeStage,
           link_meta: {
             outcome: outcome.status,
             was_enriched: outcome.status === "linked" ? outcome.was_enriched : undefined,
@@ -600,6 +746,31 @@ export async function syncCloseToCrm(
   tenantId: string,
   conversationId: string,
 ): Promise<CrmSyncCloseResult> {
+  // Idempotency guard. The manual "End conversation" button and the
+  // conversation:closed event subscriber both fire syncCloseToCrm — without
+  // this check the CRM gets two activity notes ~2s apart (different LLM
+  // wording each time because the summarizer ran twice). 5-min window is
+  // long enough to absorb the race but short enough that an operator who
+  // intentionally re-runs the sync later still gets a fresh note.
+  try {
+    const recent = await (prisma as any).auditLog?.findFirst?.({
+      where: {
+        tenantId,
+        action: "crm.sync_close.ok",
+        targetType: "conversation",
+        targetId: conversationId,
+        createdAt: { gte: new Date(Date.now() - 5 * 60 * 1000) },
+      },
+      select: { id: true },
+    });
+    if (recent) {
+      console.log(`[crm-sync-close] skip reason=already_synced conv=${conversationId} tenant=${tenantId}`);
+      return { status: "skipped", synced: false, reason: "already_synced" };
+    }
+  } catch (err: any) {
+    console.warn("[crm-sync-close] dedup-check failed (proceeding):", err?.message);
+  }
+
   const loaded = await loadConversationContext(tenantId, conversationId);
   if (!loaded) return { status: "not_found", synced: false };
 
@@ -611,6 +782,15 @@ export async function syncCloseToCrm(
 
   // Self-heal: if the panel was never opened (or the link wasn't persisted),
   // run identity lookup now so close-of-conversation still hits the CRM.
+  //
+  // Auto-create policy: when the conversation has at least one strong
+  // identifier (phone or email — including the channel-derived phone for
+  // WhatsApp/SMS/voice), promote the recovery to `create_if_missing`. This
+  // turns the agent-back-office into a system job: an inbound or outbound
+  // call closing with a known number always lands in the CRM as a lead,
+  // and the summarizer's `crm_patch` then enriches it with whatever else
+  // came up in the call. Anonymous callers (no phone, no email — e.g.
+  // blocked caller-ID) still skip — creating empty leads is just noise.
   if (!loaded.resolved.crmContactId || !loaded.resolved.crmObjectKind) {
     console.log(
       `[crm-sync-close] missing_link conv=${conversationId} tenant=${tenantId} ` +
@@ -618,7 +798,21 @@ export async function syncCloseToCrm(
       `externalId=${loaded.resolved.externalId} — attempting identity recovery`,
     );
     const hints = extractIdentityHints(loaded.resolved, loaded.contactMetadata);
-    const outcome = await linkOrCreateCrmContact({ adapter, hints, mode: "search_only" });
+    const hasStrongId =
+      Boolean(hints.phone) ||
+      Boolean(hints.email) ||
+      hints.channels.some(
+        (c) =>
+          (c.channel === "whatsapp" || c.channel === "sms" || c.channel === "voice" || c.channel === "email") &&
+          Boolean(c.external_id),
+      );
+    const recoveryMode: "search_only" | "create_if_missing" = hasStrongId ? "create_if_missing" : "search_only";
+    console.log(
+      `[crm-sync-close] recovery_mode=${recoveryMode} hasStrongId=${hasStrongId} ` +
+      `hasPhone=${Boolean(hints.phone)} hasEmail=${Boolean(hints.email)} ` +
+      `hasName=${Boolean(hints.display_name)}`,
+    );
+    const outcome = await linkOrCreateCrmContact({ adapter, hints, mode: recoveryMode });
     const recovered =
       outcome.status === "linked" ||
       outcome.status === "merged" ||
@@ -673,6 +867,12 @@ export async function syncCloseToCrm(
   const summary = (intel as any)?.summary ?? loaded.conv.aiSummary ?? null;
   const crmContactId = loaded.resolved.crmContactId!;
   const crmObjectKind = loaded.resolved.crmObjectKind!;
+  // Resolve the tenant's effective system language so the CRM note labels
+  // ("Duration:", "Summary:", …) match the summary text the LLM wrote
+  // earlier. Failure → fall back to "en" inside renderInteractionBody.
+  const noteLocale = await resolveEffectiveLocale({ tenantId })
+    .then((r) => r.effective)
+    .catch(() => undefined);
   const result = await adapter.appendInteraction({
     contact_id: crmContactId,
     kind: crmObjectKind,
@@ -690,6 +890,7 @@ export async function syncCloseToCrm(
         qualification: (intel as any)?.qualification ?? null,
         action_items: Array.isArray((intel as any)?.actionItems) ? (intel as any).actionItems : [],
       },
+      locale: noteLocale,
     },
     payload_version: 1,
   });

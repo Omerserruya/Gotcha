@@ -77,6 +77,7 @@ interface ChannelRow {
     twimlAppSid: string | null;
     apiKeySid: string | null;
     copilotConfig: unknown;
+    aiAgentId: string | null;
     phoneNumbers: PhoneNumberRow[];
   } | null;
 }
@@ -132,6 +133,15 @@ function serializeChannel(row: ChannelRow) {
     hasAuthToken: Boolean(row.encryptedSecrets),
     accountSidFingerprint: fingerprint(row.voiceChannel?.accountSid ?? null),
     numbers,
+    aiAgentId: row.voiceChannel?.aiAgentId ?? null,
+    // Pipeline funnel override — still lives inside the copilot_config JSONB
+    // (`copilot_config.funnelId`) pending Phase 7 promotion to a real FK
+    // column. Surface it at the top level so the detail page can render the
+    // picker without parsing the blob.
+    funnelId: (() => {
+      const cfg = (row.voiceChannel?.copilotConfig ?? {}) as Record<string, unknown>;
+      return typeof cfg.funnelId === "string" && cfg.funnelId.length > 0 ? cfg.funnelId : null;
+    })(),
     voiceChannel: row.voiceChannel
       ? {
           id: row.voiceChannel.id,
@@ -139,6 +149,7 @@ function serializeChannel(row: ChannelRow) {
           twimlAppSid: row.voiceChannel.twimlAppSid,
           apiKeySid: row.voiceChannel.apiKeySid,
           copilotConfig: row.voiceChannel.copilotConfig ?? {},
+          aiAgentId: row.voiceChannel.aiAgentId ?? null,
           numbers,
         }
       : null,
@@ -588,14 +599,181 @@ router.put("/:id/copilot-config", async (req: Request, res: Response) => {
       return;
     }
 
+    // Phase 6: `aiAgentId` is no longer part of the JSONB blob — it has its
+    // own FK column on `voice_channels` written via PUT /:id/ai-agent. Strip
+    // it here so a stale client can't reintroduce the dual-source-of-truth.
+    const { aiAgentId: _ignoredAiAgentId, ...persistable } = parsed.data;
+
     const updated = await prisma.voiceChannel.update({
       where: { id: channel.voiceChannel.id },
-      data: { copilotConfig: parsed.data as object },
-      select: { copilotConfig: true },
+      data: { copilotConfig: persistable as object },
+      select: { copilotConfig: true, aiAgentId: true },
     });
-    res.json({ data: updated.copilotConfig });
+    // Surface the FK in the response so the client stays in sync without a
+    // second round-trip to GET /:id/ai-agent.
+    res.json({
+      data: { ...(updated.copilotConfig as object), aiAgentId: updated.aiAgentId },
+    });
   } catch (err) {
     console.error("voice-channels.copilot-config.put error:", err);
+    res.status(500).json({ error: "failed_to_update" });
+  }
+});
+
+// ─── GET /:id/ai-agent ──────────────────────────────────────
+// Returns { aiAgentId } — the AI Employee bound to this voice channel.
+// Phase 6 moved this off `copilot_config.aiAgentId` (JSONB) onto a real
+// FK column. Empty body when nothing is configured; the live runner then
+// falls back to the legacy per-channel copilot config (until Phase 7
+// retires that path entirely).
+router.get("/:id/ai-agent", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const channel = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: { select: { aiAgentId: true } } },
+    });
+    if (!channel || channel.tenantId !== req.tenantId! || channel.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    res.json({ data: { aiAgentId: channel.voiceChannel?.aiAgentId ?? null } });
+  } catch (err) {
+    console.error("voice-channels.ai-agent.get error:", err);
+    res.status(500).json({ error: "failed_to_load" });
+  }
+});
+
+// ─── PUT /:id/ai-agent ──────────────────────────────────────
+// Body: { aiAgentId: string | null }. Validates the agent belongs to the
+// same tenant before writing — never trust the id from the client. Pass
+// null/"" to detach the channel from any AI Employee (falls back to legacy
+// channel config for the duration of Phase 6).
+router.put("/:id/ai-agent", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const channel = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: true },
+    });
+    if (!channel || channel.tenantId !== req.tenantId! || channel.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!channel.voiceChannel) {
+      res.status(409).json({ error: "voice_channel_not_initialized" });
+      return;
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    const raw = body.aiAgentId;
+    const aiAgentId: string | null =
+      typeof raw === "string" && raw.length > 0 ? raw : null;
+
+    if (aiAgentId) {
+      const agent = await prisma.aIAgent.findUnique({
+        where: { id: aiAgentId },
+        select: { tenantId: true },
+      });
+      if (!agent || agent.tenantId !== req.tenantId!) {
+        res.status(400).json({ error: "invalid_ai_agent" });
+        return;
+      }
+    }
+
+    const updated = await prisma.voiceChannel.update({
+      where: { id: channel.voiceChannel.id },
+      data: { aiAgentId },
+      select: { aiAgentId: true },
+    });
+    res.json({ data: { aiAgentId: updated.aiAgentId } });
+  } catch (err) {
+    console.error("voice-channels.ai-agent.put error:", err);
+    res.status(500).json({ error: "failed_to_update" });
+  }
+});
+
+// ─── GET /:id/funnel ────────────────────────────────────────
+// Returns { funnelId } — the per-channel pipeline funnel override. Stored
+// inside the copilot_config JSONB blob today (`copilot_config.funnelId`);
+// Phase 7 will promote this to a real FK column. Null/empty means
+// "fall back to the department-scoped funnel resolution".
+router.get("/:id/funnel", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const channel = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: { select: { copilotConfig: true } } },
+    });
+    if (!channel || channel.tenantId !== req.tenantId! || channel.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    const cfg = (channel.voiceChannel?.copilotConfig ?? {}) as Record<string, unknown>;
+    const funnelId = typeof cfg.funnelId === "string" && cfg.funnelId.length > 0
+      ? cfg.funnelId
+      : null;
+    res.json({ data: { funnelId } });
+  } catch (err) {
+    console.error("voice-channels.funnel.get error:", err);
+    res.status(500).json({ error: "failed_to_load" });
+  }
+});
+
+// ─── PUT /:id/funnel ────────────────────────────────────────
+// Body: { funnelId: string | null }. Validates the funnel belongs to the
+// same tenant before writing. Pass null/"" to clear the override so the
+// channel falls back to the department-scoped funnel.
+router.put("/:id/funnel", async (req: Request, res: Response) => {
+  try {
+    const id = String(req.params.id);
+    const channel = await prisma.communicationChannel.findUnique({
+      where: { id },
+      include: { voiceChannel: true },
+    });
+    if (!channel || channel.tenantId !== req.tenantId! || channel.channelType !== "VOICE") {
+      res.status(404).json({ error: "not_found" });
+      return;
+    }
+    if (!channel.voiceChannel) {
+      res.status(409).json({ error: "voice_channel_not_initialized" });
+      return;
+    }
+
+    const body = (req.body || {}) as Record<string, unknown>;
+    const raw = body.funnelId;
+    const funnelId: string | null =
+      typeof raw === "string" && raw.length > 0 ? raw : null;
+
+    if (funnelId) {
+      const funnel = await prisma.tenantFunnel.findUnique({
+        where: { id: funnelId },
+        select: { tenantId: true },
+      });
+      if (!funnel || funnel.tenantId !== req.tenantId!) {
+        res.status(400).json({ error: "invalid_funnel" });
+        return;
+      }
+    }
+
+    // Merge into the existing JSONB blob — never overwrite other legacy
+    // fields (persona/goals/etc.) that might still carry transitional data.
+    const existing = (channel.voiceChannel.copilotConfig ?? {}) as Record<string, unknown>;
+    const next: Record<string, unknown> = { ...existing };
+    if (funnelId) next.funnelId = funnelId;
+    else delete next.funnelId;
+
+    const updated = await prisma.voiceChannel.update({
+      where: { id: channel.voiceChannel.id },
+      data: { copilotConfig: next as object },
+      select: { copilotConfig: true },
+    });
+    const stored = (updated.copilotConfig ?? {}) as Record<string, unknown>;
+    res.json({
+      data: { funnelId: typeof stored.funnelId === "string" ? stored.funnelId : null },
+    });
+  } catch (err) {
+    console.error("voice-channels.funnel.put error:", err);
     res.status(500).json({ error: "failed_to_update" });
   }
 });

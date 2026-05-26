@@ -11,11 +11,18 @@ import {
   deactivateVoiceChannelNumber,
   deleteVoiceChannel,
   getVoiceChannel,
+  getVoiceChannelAIAgent,
+  getVoiceChannelFunnel,
+  listAIAgents,
   refreshVoiceChannelNumbers,
+  updateVoiceChannelAIAgent,
+  updateVoiceChannelFunnel,
+  type AIAgentSummary,
   type VoiceChannel,
   type VoiceChannelPhoneNumber,
   type VoiceChannelStatus,
 } from "@/lib/api";
+import { listFunnelSummaries, type FunnelSummary } from "@/lib/api-funnel";
 import clsx from "clsx";
 
 const STATUS_CLASS: Record<VoiceChannelStatus, string> = {
@@ -56,6 +63,19 @@ export default function VoiceChannelDetailPage() {
   const [pendingNumberId, setPendingNumberId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  // Phase 6: AI Employee is now a first-class FK on the channel, surfaced
+  // here instead of inside the Copilot Configuration sub-page. We track it
+  // independently so the picker can save without rebuilding the whole
+  // channel row.
+  const [aiAgents, setAiAgents] = useState<AIAgentSummary[]>([]);
+  const [aiAgentId, setAiAgentId] = useState<string>("");
+  const [aiAgentSaving, setAiAgentSaving] = useState(false);
+  // Pipeline funnel override (per-channel). Together with the AI Employee
+  // these are the only two AI-related decisions that live ON the channel —
+  // everything else was deleted from the legacy Copilot Configuration page.
+  const [funnels, setFunnels] = useState<FunnelSummary[]>([]);
+  const [funnelId, setFunnelId] = useState<string>("");
+  const [funnelSaving, setFunnelSaving] = useState(false);
 
   const reload = useCallback(async () => {
     if (!token || !channelId) return;
@@ -74,6 +94,60 @@ export default function VoiceChannelDetailPage() {
   useEffect(() => {
     reload();
   }, [reload]);
+
+  // Load AI Employee binding + funnel binding + tenant lists in parallel —
+  // all four are small and the cards need them to render.
+  useEffect(() => {
+    if (!token || !channelId) return;
+    let cancelled = false;
+    Promise.all([
+      getVoiceChannelAIAgent(token, channelId).catch(() => ({ data: { aiAgentId: null as string | null } })),
+      listAIAgents(token).catch(() => ({ data: [] as AIAgentSummary[] })),
+      getVoiceChannelFunnel(token, channelId).catch(() => ({ data: { funnelId: null as string | null } })),
+      listFunnelSummaries(token).catch(() => [] as FunnelSummary[]),
+    ]).then(([aiBind, agentList, funnelBind, funnelList]) => {
+      if (cancelled) return;
+      setAiAgentId(aiBind.data.aiAgentId ?? "");
+      setAiAgents(agentList.data ?? []);
+      setFunnelId(funnelBind.data.funnelId ?? "");
+      setFunnels(funnelList);
+    });
+    return () => { cancelled = true; };
+  }, [token, channelId]);
+
+  async function handleAiAgentChange(nextId: string) {
+    if (!token || !channelId || aiAgentSaving) return;
+    const prev = aiAgentId;
+    setAiAgentId(nextId);
+    setAiAgentSaving(true);
+    setError(null);
+    try {
+      await updateVoiceChannelAIAgent(token, channelId, nextId || null);
+      flash(t("settings.voiceChannels.detail.aiEmployeeSaved") || "Saved.");
+    } catch (err) {
+      setAiAgentId(prev);
+      setError(err instanceof Error ? err.message : "ai_agent_update_failed");
+    } finally {
+      setAiAgentSaving(false);
+    }
+  }
+
+  async function handleFunnelChange(nextId: string) {
+    if (!token || !channelId || funnelSaving) return;
+    const prev = funnelId;
+    setFunnelId(nextId);
+    setFunnelSaving(true);
+    setError(null);
+    try {
+      await updateVoiceChannelFunnel(token, channelId, nextId || null);
+      flash("Saved.");
+    } catch (err) {
+      setFunnelId(prev);
+      setError(err instanceof Error ? err.message : "funnel_update_failed");
+    } finally {
+      setFunnelSaving(false);
+    }
+  }
 
   function flash(msg: string) {
     setToast(msg);
@@ -231,12 +305,6 @@ export default function VoiceChannelDetailPage() {
                 >
                   {t("settings.voiceChannelRouting.title")}
                 </Link>
-                <Link
-                  href={`/settings/voice-channels/${channelId}/copilot`}
-                  className="text-xs font-medium px-2.5 py-1 rounded-md bg-primary-50 text-primary-700 ring-1 ring-primary-200 hover:bg-primary-100"
-                >
-                  {t("settings.voiceCopilotConfig.title")}
-                </Link>
                 <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-gray-50 text-gray-600 ring-1 ring-gray-200">
                   {t("settings.voiceChannels.authBYO")}
                 </span>
@@ -277,6 +345,101 @@ export default function VoiceChannelDetailPage() {
               {error}
             </div>
           )}
+
+          {/* AI Employee — the AIAgent that drives call-pilot turns on
+              this channel. Phase 6 promoted this to a real FK column
+              (`voice_channels.ai_agent_id`). The AI Employee's own config
+              (language, persona, tone, goals, guardrails, etc.) is the
+              single source of truth — edit it in Settings → AI Employees. */}
+          <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <h2 className="font-semibold text-gray-900">AI Employee</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  The AI Employee that drives call-pilot turns on this channel. All
+                  the agent-level configuration (language, persona, tone, goals,
+                  guardrails) is set on the employee — edit it in Settings → AI
+                  Employees.
+                </p>
+              </div>
+              {aiAgentId && (
+                <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-md uppercase tracking-wider bg-emerald-50 text-emerald-700 ring-1 ring-emerald-100">
+                  Attached
+                </span>
+              )}
+            </div>
+            <select
+              value={aiAgentId}
+              onChange={(e) => handleAiAgentChange(e.target.value)}
+              disabled={aiAgentSaving}
+              className="w-full md:w-96 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:opacity-50"
+            >
+              <option value="">— None —</option>
+              {aiAgents.map((a) => (
+                <option key={a.id} value={a.id}>
+                  {a.name}
+                  {a.role ? ` · ${a.role}` : ""}
+                  {a.status && a.status !== "active" ? ` · ${a.status}` : ""}
+                </option>
+              ))}
+            </select>
+            {aiAgents.length === 0 && (
+              <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                No AI Employees exist yet. Create one in Settings → AI Employees first.
+              </p>
+            )}
+          </div>
+
+          {/* Pipeline funnel — per-channel override of the department-scoped
+              funnel resolution. Drives stage-aware copilot during calls
+              answered on this number. Independent of the AI Employee
+              because the funnel is a CRM/sales-process decision, not an
+              agent personality decision. */}
+          <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6">
+            <div className="flex items-start justify-between gap-3 mb-2">
+              <div>
+                <h2 className="font-semibold text-gray-900">Pipeline funnel</h2>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Which funnel the live copilot uses for calls answered on this
+                  channel. Leave on <em>Auto</em> to fall back to the
+                  department-scoped funnel (or the tenant default).{" "}
+                  <Link href="/settings/funnels" className="text-indigo-600 hover:underline">
+                    Manage funnels →
+                  </Link>
+                </p>
+              </div>
+              {funnelId && (
+                <span className="shrink-0 text-[10px] font-semibold px-1.5 py-0.5 rounded-md uppercase tracking-wider bg-indigo-50 text-indigo-700 ring-1 ring-indigo-100">
+                  Channel override
+                </span>
+              )}
+            </div>
+            <select
+              value={funnelId}
+              onChange={(e) => handleFunnelChange(e.target.value)}
+              disabled={funnelSaving}
+              className="w-full md:w-96 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:opacity-50"
+            >
+              <option value="">— Auto (department default) —</option>
+              {funnels.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.funnelId}
+                  {f.departmentId ? ` · dept ${f.departmentId}` : " · tenant default"}
+                  {f.isActive ? " · active" : ""}
+                  {" · "}{f.stageCount} stages
+                </option>
+              ))}
+            </select>
+            {funnels.length === 0 && (
+              <p className="mt-2 text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded px-2 py-1">
+                No funnels exist yet.{" "}
+                <Link href="/settings/funnels" className="font-semibold underline">
+                  Create one first
+                </Link>{" "}
+                to enable stage-driven goals.
+              </p>
+            )}
+          </div>
 
           {/* Phone numbers */}
           <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6">

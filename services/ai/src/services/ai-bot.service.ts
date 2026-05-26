@@ -24,6 +24,8 @@ import { executeAction, type PlannedAction } from "./action-executor.service";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.service";
+import { resolveActiveStage } from "./intelligence/stage-resolver.service";
+import type { StageContextForPrompt } from "./intelligence/prompts/blocks/copilot-config-block";
 import {
   buildAgentPrompt,
   renderOutputContractInstruction,
@@ -135,7 +137,7 @@ function toAgentRecord(row: any): AgentRecord {
   return {
     name: row.name,
     role: row.role,
-    description: row.description,
+    // description removed per spec — see prompt-builder AgentRecord.
     tone: row.tone,
     style: row.style,
     identity: row.identity,
@@ -248,54 +250,37 @@ function computeUnmetRequiredActions(
 }
 
 function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] {
-  const allowed = new Set<ActionCategory>(state.allowedActions);
+  // Strategy-based tool gating is DISABLED — the agent gets the full tool
+  // surface (escalate, schedule_*, create_lead, close, etc.) on every turn
+  // regardless of strategy. The behavior prompt (allowedActions /
+  // forbiddenBehaviors text rendered into the system prompt) still steers
+  // tone and move-selection, but the model can always reach a critical
+  // tool when the situation calls for it (e.g. escalate_to_human on a
+  // brand-new conversation, schedule_meeting when a customer offers a
+  // concrete slot, close_conversation when the customer says goodbye).
+  //
+  // Previously this filter physically removed schedule_* / write / close
+  // tools when the BEL picked QUALIFY or GUIDE — which is the strategy for
+  // every message-1 turn and for most informational chats — so the LLM
+  // verbalized actions it had no tool for. That mismatch is the bug; the
+  // unfiltered surface is the fix.
+  //
+  // Action Contract sequence gate is preserved: when a blocking contract
+  // is mid-execution, the model is still narrowed to the pending tool plus
+  // the always-on essentials (escalate, identity link, reads, submits).
 
-  const baseFiltered = tools.filter((t: any) => {
-    const name: string | undefined = t?.function?.name;
-    if (!name) return true;
-
-    if (name === "escalate_to_human") return true;
-    if (name === "link_customer_identifier") return allowed.has("identity_link");
-    if (name === "close_conversation") return allowed.has("close_conversation");
-    // create_task isn't its own ActionCategory — it rides on schedule_followup
-    // (the bot pairs them) and on add_note (CRM-side write semantics).
-    if (name === "create_task") return allowed.has("schedule_followup") || allowed.has("add_note");
-    if (name.startsWith("submit_")) return true;
-    if (/(_search|_get|_lookup|_read)$/.test(name)) return true;
-
-    if (/^integration_create_lead/.test(name)) return allowed.has("create_lead");
-    if (/^integration_create_contact/.test(name)) return allowed.has("create_contact");
-    if (/(update_|patch_)/.test(name)) return allowed.has("update_record");
-    if (/(_note$|add_note)/.test(name)) return allowed.has("add_note");
-    if (/(tag_|_tag$)/.test(name)) return allowed.has("tag");
-    // Both schedule_followup and schedule_followup_template share the
-    // same allowed-action gate; the prompt decides which one to call
-    // based on the WhatsApp 24h window status.
-    if (/(schedule_followup|set_followup)/.test(name)) return allowed.has("schedule_followup");
-    if (/(book_|schedule_meeting|schedule_demo)/.test(name)) return allowed.has("schedule_booking");
-    if (/(send_proposal|send_quote|create_proposal)/.test(name)) return allowed.has("send_proposal");
-
-    return allowed.has("update_record");
-  });
-
-  // ── Action Contract gate ─────────────────────────────────────
-  // When a blocking contract is active, the LLM MUST only see the pending
-  // tools (plus essentials). For SEQUENCE contracts, only the next-step
-  // tool is exposed — we can't even let the model TRY out-of-order calls
-  // because some providers will silently bias toward emitting whatever's
-  // in the schema. Stripping the rest is the deterministic fix.
   const cs = state.actionContractState;
   if (!cs?.active || !cs.blocking || cs.pendingTools.length === 0) {
-    return baseFiltered;
+    return tools;
   }
   const pendingSet = new Set(cs.pendingTools);
-  return baseFiltered.filter((t: any) => {
+  return tools.filter((t: any) => {
     const name: string | undefined = t?.function?.name;
     if (!name) return true;
-    if (name === "escalate_to_human") return true;       // always available
-    if (name === "link_customer_identifier") return true; // identity bookkeeping
-    if (name.startsWith("submit_")) return true;          // copilot submission
-    if (/(_search|_get|_lookup|_read)$/.test(name)) return true; // pure reads
+    if (name === "escalate_to_human") return true;
+    if (name === "link_customer_identifier") return true;
+    if (name.startsWith("submit_")) return true;
+    if (/(_search|_get|_lookup|_read)$/.test(name)) return true;
     return pendingSet.has(name);
   });
 }
@@ -427,7 +412,9 @@ function renderCustomerInfoBlock(conv: any): string | undefined {
   if (conv.channel) lines.push(`- Channel: ${conv.channel}`);
   if (conv.status) lines.push(`- Conversation Status: ${conv.status}`);
   if (conv.createdAt) lines.push(`- Conversation Started: ${conv.createdAt.toISOString()}`);
-  if (conv.lastMessageAt) lines.push(`- Last Message: ${conv.lastMessageAt.toISOString()}`);
+  // `lastMessageAt` deliberately omitted — it changes every turn and would
+  // break the per-conversation cache prefix. The latest customer message is
+  // already in the transcript appended after the system prompt.
   if (lines.length <= 1) return undefined;
   lines.push("");
   lines.push(
@@ -875,9 +862,49 @@ async function generateAIBotReplyInner(
   // SINGLE filter — replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
   tools = filterToolsByAllowedActions(tools, behaviorState);
 
+  // Sort tools alphabetically by function name BEFORE the OpenAI call so the
+  // `tools` array is byte-stable across turns of the same conversation.
+  // The model picks tools by name; array order doesn't influence its choice,
+  // so this is purely a cache-prefix-stability optimization with zero
+  // behavioral effect. Required because the upstream assemble path
+  // (built-in + adapter + integration tools) doesn't guarantee a deterministic
+  // order, and OpenAI's prefix cache is byte-sensitive on the entire request.
+  tools = (tools as any[]).slice().sort((a, b) => {
+    const an = a?.function?.name ?? "";
+    const bn = b?.function?.name ?? "";
+    return an < bn ? -1 : an > bn ? 1 : 0;
+  });
+
   const toolFunctionNames: string[] = (tools as any[])
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
+
+  // ── Pipeline stage resolution ──────────────────────────────
+  // The same stage-resolver the voice copilot uses — pulls the customer's
+  // current funnel stage from CRM, falls back to the funnel's first stage
+  // for new contacts, or returns null when no funnel is configured. The
+  // chat bot now follows the funnel exactly the way call-pilot does:
+  // stage.goal / requiredQuestions / requiredDataFields / exitCriteria
+  // all flow into the per-turn prompt block. Fail-soft — any error here
+  // just means the bot falls back to the agent-level config.
+  let stageContext: StageContextForPrompt | undefined;
+  try {
+    const resolved = await resolveActiveStage({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      departmentId: conversation.departmentId ?? null,
+    });
+    if (resolved) {
+      stageContext = {
+        id: resolved.stage.id,
+        label: resolved.stage.label,
+        nextLabel: resolved.nextStage?.label ?? null,
+        copilot: resolved.stage.copilot,
+      };
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] stage resolution failed (non-fatal):", err?.message);
+  }
 
   const systemPrompt = buildAgentPrompt({
     behaviorState,
@@ -885,13 +912,17 @@ async function generateAIBotReplyInner(
     context: ctxSlot,
     knowledge: { block: kbBlock },
     toolFunctionNames,
+    stageContext,
   });
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
-  // Output-contract instruction as the first user message — keeps the model
-  // anchored to the per-turn shape requested by BEL.
-  const ocInstruction = renderOutputContractInstruction(behaviorState.outputContract);
-  if (ocInstruction.trim()) chatMessages.push({ role: "user", content: ocInstruction });
+  // The output-contract instruction is now rendered inside the per-turn
+  // block of the system prompt (see buildExecutionContract). Sending it
+  // ALSO as a separate user message at index 1 was injecting BEL-driven
+  // content into the chatMessages prefix, which broke the cache layout
+  // every time the contract flipped (REPLY → READY_MESSAGE → ...). The
+  // model still sees the same instruction — just once, in the system
+  // prompt — so behavior is unchanged.
 
   for (const m of messages) {
     if (!m.body?.trim()) continue;
@@ -912,6 +943,11 @@ async function generateAIBotReplyInner(
   for (let round = 0; round < 3; round++) {
     const response = await generateResponse({
       tenantId: opts.tenantId,
+      // Pin every autonomous turn of the SAME conversation to one session so
+      // OpenAI's automatic prefix cache routes consistently across turns.
+      // Without this, multiple turns of the same conversation may land on
+      // different backends and miss the cache — silently doubling token cost.
+      sessionId: opts.conversationId,
       model,
       messages: chatMessages,
       temperature: config.temperature ?? 0.7,
@@ -1105,6 +1141,7 @@ async function generateAIBotReplyInner(
 
     const retryResponse = await generateResponse({
       tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
       model,
       messages: chatMessages,
       temperature: config.temperature ?? 0.7,
@@ -1178,6 +1215,7 @@ async function generateAIBotReplyInner(
       // Final pass to get the customer-facing reply text.
       const finalResp = await generateResponse({
         tenantId: opts.tenantId,
+        sessionId: opts.conversationId,
         model,
         messages: chatMessages,
         temperature: config.temperature ?? 0.7,
@@ -1297,6 +1335,10 @@ export async function generateAIBotOneshot(opts: {
 
   const result = await generateResponse({
     tenantId: opts.tenantId,
+    // One-shot replies have no conversation — pin to the agent so repeat
+    // one-shots from the same agent (comment replies, smart-tasks, etc.)
+    // share a cache routing key when the system prompt is stable.
+    sessionId: `ai-agent:${config.id}`,
     model,
     messages: [
       { role: "system", content: systemPrompt },

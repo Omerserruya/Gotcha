@@ -132,8 +132,14 @@
     },
     {
       "path": "src/i18n/en.json",
-      "accessCount": 93,
-      "lastAccessed": 1778530056681,
+      "accessCount": 100,
+      "lastAccessed": 1779777740878,
+      "type": "directory"
+    },
+    {
+      "path": "src/i18n/he.json",
+      "accessCount": 65,
+      "lastAccessed": 1779777775444,
       "type": "directory"
     },
     {
@@ -149,28 +155,22 @@
       "type": "file"
     },
     {
-      "path": "src/i18n/he.json",
-      "accessCount": 61,
-      "lastAccessed": 1778530060537,
-      "type": "directory"
-    },
-    {
       "path": "src/components/conversations/CoPilotPanel.tsx",
       "accessCount": 56,
       "lastAccessed": 1778786580097,
       "type": "file"
     },
     {
+      "path": "src/lib/api.ts",
+      "accessCount": 52,
+      "lastAccessed": 1779617480318,
+      "type": "directory"
+    },
+    {
       "path": "src/app/ai-studio/page.tsx",
       "accessCount": 51,
       "lastAccessed": 1776887461617,
       "type": "file"
-    },
-    {
-      "path": "src/lib/api.ts",
-      "accessCount": 50,
-      "lastAccessed": 1778786762753,
-      "type": "directory"
     },
     {
       "path": "src/components/landing/LandingPage.tsx",
@@ -191,15 +191,15 @@
       "type": "file"
     },
     {
-      "path": "src/components/landing/SolutionsSection.tsx",
-      "accessCount": 28,
-      "lastAccessed": 1774624051685,
+      "path": "src/app/history/page.tsx",
+      "accessCount": 35,
+      "lastAccessed": 1779777617609,
       "type": "file"
     },
     {
-      "path": "src/app/history/page.tsx",
-      "accessCount": 27,
-      "lastAccessed": 1776362058961,
+      "path": "src/components/landing/SolutionsSection.tsx",
+      "accessCount": 28,
+      "lastAccessed": 1774624051685,
       "type": "file"
     },
     {
@@ -251,6 +251,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/conversations/ConversationList.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1779775820990,
+      "type": "directory"
+    },
+    {
       "path": "src/components/landing/FeaturesSection.tsx",
       "accessCount": 11,
       "lastAccessed": 1774624045497,
@@ -273,12 +279,6 @@
       "accessCount": 10,
       "lastAccessed": 1777279011803,
       "type": "file"
-    },
-    {
-      "path": "src/components/conversations/ConversationList.tsx",
-      "accessCount": 10,
-      "lastAccessed": 1778498905201,
-      "type": "directory"
     },
     {
       "path": "src/components/Sidebar.tsx",
@@ -314,6 +314,12 @@
       "path": "src/lib",
       "accessCount": 5,
       "lastAccessed": 1776365307185,
+      "type": "directory"
+    },
+    {
+      "path": "next.config.js",
+      "accessCount": 4,
+      "lastAccessed": 1779775900816,
       "type": "directory"
     },
     {
@@ -381,12 +387,6 @@
       "accessCount": 2,
       "lastAccessed": 1775927786178,
       "type": "file"
-    },
-    {
-      "path": "next.config.js",
-      "accessCount": 2,
-      "lastAccessed": 1776364615896,
-      "type": "directory"
     },
     {
       "path": "src/components/ChannelAccountPicker.tsx",

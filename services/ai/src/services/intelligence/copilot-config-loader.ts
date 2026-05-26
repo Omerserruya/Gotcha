@@ -27,11 +27,17 @@ export async function loadCopilotConfigForConversation(
 
     const voiceChannel = await prisma.voiceChannel.findFirst({
       where: { communicationChannelId: session.channelId },
-      select: { copilotConfig: true },
+      // Phase 6: aiAgentId is now a real FK column. The JSONB still carries
+      // legacy goals/persona/questions/dataFields — those remain the
+      // fallback for tenants without a funnel. We overlay the FK onto the
+      // parsed config so downstream consumers keep reading a uniform shape.
+      select: { copilotConfig: true, aiAgentId: true },
     });
     if (!voiceChannel) return EMPTY_COPILOT_CONFIG;
 
-    return parseCopilotConfig(voiceChannel.copilotConfig);
+    const parsed = parseCopilotConfig(voiceChannel.copilotConfig);
+    if (voiceChannel.aiAgentId) parsed.aiAgentId = voiceChannel.aiAgentId;
+    return parsed;
   } catch (err) {
     console.warn(
       "[copilot-config-loader] lookup failed, using defaults:",

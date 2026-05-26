@@ -42,12 +42,52 @@ export interface StageGuard {
   markers?: string[];
 }
 
+export interface StageCopilotQuestion {
+  id: string;
+  text: string;
+  required: boolean;
+}
+
+export interface StageCopilotDataField {
+  field: string;
+  label: string;
+  required: boolean;
+}
+
+export interface StageExitCriteria {
+  mustHaveFields?: string[];
+  mustAskQuestions?: string[];
+  positiveSignals?: string[];
+  negativeSignals?: string[];
+}
+
+export interface StageCopilotConfig {
+  goal?: string;
+  requiredQuestions?: StageCopilotQuestion[];
+  requiredDataFields?: StageCopilotDataField[];
+  exitCriteria?: StageExitCriteria;
+  nextStageId?: string;
+}
+
 export interface FunnelStage {
   id: string;
   label: string;
   baseStage: ConversationStage;
   entry?: StageGuard;
   exit?: StageGuard;
+  /**
+   * Vendor CRM stage value this funnel stage maps to. Used to resolve
+   * the customer's current stage from the CRM context fetch and as the
+   * value written when an auto-advance fires.
+   */
+  crmValue?: string;
+  /**
+   * Stage-scoped copilot configuration: per-stage goal, required questions,
+   * required data fields, exit criteria, and explicit nextStageId. When
+   * present, supersedes the channel-level copilot goals/questions/fields
+   * during live cue generation and post-call evaluation.
+   */
+  copilot?: StageCopilotConfig;
 }
 
 export interface FunnelTransition {
@@ -90,6 +130,26 @@ export function listFunnels(token: string, departmentId?: string | null) {
     qs = `?departmentId=${departmentId === null ? "null" : encodeURIComponent(departmentId)}`;
   }
   return authedFetch<{ data: FunnelRow[] }>(`/api/funnels${qs}`, token);
+}
+
+/** Lightweight summary for selector dropdowns — caller doesn't need stages JSON. */
+export interface FunnelSummary {
+  id: string;
+  funnelId: string;
+  departmentId: string | null;
+  isActive: boolean;
+  stageCount: number;
+}
+
+export async function listFunnelSummaries(token: string): Promise<FunnelSummary[]> {
+  const r = await listFunnels(token);
+  return r.data.map((f) => ({
+    id: f.id,
+    funnelId: f.funnelId,
+    departmentId: f.departmentId,
+    isActive: f.isActive,
+    stageCount: Array.isArray(f.stages) ? f.stages.length : 0,
+  }));
 }
 
 export function getFunnel(token: string, id: string) {

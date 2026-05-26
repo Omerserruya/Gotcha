@@ -24,6 +24,9 @@ import {
 } from "../../services/post-conversation-crm.service";
 import { refreshCustomerBriefFromConversation } from "../../services/customer-brief.service";
 import { loadExistingActionItems } from "../../services/existing-action-items.service";
+import { resolveActiveStage } from "../../services/intelligence/stage-resolver.service";
+import { recordStageTransition } from "../../services/stage-transition-audit.service";
+import { syncCloseToCrm } from "../../routes/crm-panel";
 
 /**
  * Phase 1 — Live Call CoPilot post-call pipeline worker.
@@ -116,7 +119,11 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     return null;
   }
 
-  const [allowedFields, config, existingActionItems, localeInfo] = await Promise.all([
+  const conv = await prisma.conversation.findUnique({
+    where: { id: ctx.conversationId },
+    select: { departmentId: true },
+  });
+  const [allowedFields, config, existingActionItems, localeInfo, stage] = await Promise.all([
     getSummarizerAllowedFields(ctx.tenantId),
     getPostConversationConfig(ctx.tenantId),
     loadExistingActionItems({ tenantId: ctx.tenantId, conversationId: ctx.conversationId }),
@@ -124,7 +131,30 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     // processing runs from a worker with no user context — use the
     // tenant default. Falls back to "en" inside summarizePostConversation.
     resolveEffectiveLocale({ tenantId: ctx.tenantId }).catch(() => null),
+    // Active pipeline stage for THIS customer — feeds stage-aware exit
+    // criteria + transition suggestion into the summarizer. Null when
+    // there's no funnel configured (the LLM is then told to keep
+    // stage_transition_suggestion = null).
+    resolveActiveStage({
+      tenantId: ctx.tenantId,
+      conversationId: ctx.conversationId,
+      departmentId: conv?.departmentId ?? null,
+    }).catch(() => null),
   ]);
+  const stageInput = stage
+    ? {
+        currentStageId: stage.stage.id,
+        currentStageLabel: stage.stage.label,
+        currentStageGoal: stage.stage.copilot?.goal,
+        exitCriteria: stage.stage.copilot?.exitCriteria,
+        // Candidate set: the explicit nextStage when present, plus any
+        // outgoing transitions in the funnel. Avoids stranding the LLM
+        // with a one-option choice when the funnel branches.
+        candidateStageIds: collectCandidateStageIds(stage),
+        candidateLabels: collectCandidateStageLabels(stage),
+      }
+    : undefined;
+
   const rawSummary: PostConversationSummary = await summarizePostConversation({
     tenantId: ctx.tenantId,
     conversationId: ctx.conversationId,
@@ -132,6 +162,7 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     allowedFields,
     existingActionItems,
     locale: localeInfo?.effective,
+    stage: stageInput,
   });
   // Apply tenant rule engine on top of the LLM output. Rules ADD tasks and
   // CRM patch entries; they never overwrite what the AI extracted.
@@ -179,7 +210,41 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     suggestedTaskCount: structured.suggested_tasks.length,
     hasFollowup: !!structured.suggested_followup,
     hasStatusChange: !!structured.status_change,
+    stageId: stage?.stage.id,
+    stageLabel: stage?.stage.label,
+    stageTransitionTo: structured.stage_transition_suggestion?.to,
+    stageTransitionConfidence: structured.stage_transition_suggestion?.confidence,
   };
+}
+
+// ─── Stage candidate collection ─────────────────────────────────
+
+/**
+ * Resolve the set of stage ids the LLM may suggest as `to`. We start with
+ * the explicit `nextStage` (most opinionated) and union in any outgoing
+ * transitions defined on the funnel for the active stage. Constrains the
+ * LLM so it can't suggest a leap (e.g. lead → closed) that the funnel
+ * doesn't allow.
+ */
+function collectCandidateStageIds(
+  stage: NonNullable<Awaited<ReturnType<typeof resolveActiveStage>>>,
+): string[] {
+  const ids = new Set<string>();
+  if (stage.nextStage) ids.add(stage.nextStage.id);
+  for (const t of stage.funnel.transitions || []) {
+    if (t.from === stage.stage.id) ids.add(t.to);
+  }
+  return Array.from(ids);
+}
+
+function collectCandidateStageLabels(
+  stage: NonNullable<Awaited<ReturnType<typeof resolveActiveStage>>>,
+): Record<string, string> {
+  const labels: Record<string, string> = {};
+  for (const s of stage.funnel.stages) {
+    labels[s.id] = s.label;
+  }
+  return labels;
 }
 
 async function loadStructured(conversationId: string): Promise<PostConversationSummary | null> {
@@ -285,8 +350,27 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
   if (structured.status_change) {
     fields["status"] = structured.status_change.to;
   }
-  if (Object.keys(fields).length === 0) {
-    return { crmWriteSkipped: "no-fields" };
+
+  // ── Stage transition evaluation ─────────────────────────────
+  // Conservative auto-advance: confidence ≥ STAGE_AUTOADVANCE_THRESHOLD
+  // AND evidence is non-empty AND the destination stage carries a
+  // `crmValue` (otherwise we have nothing to write to the vendor). Below
+  // threshold → emit a CRM task for human review instead of writing.
+  const stageOutcome = await evaluateStageTransition({
+    tenantId: ctx.tenantId,
+    conversationId: ctx.conversationId,
+    sessionId: ctx.sessionId,
+    suggestion: structured.stage_transition_suggestion,
+  });
+  if (stageOutcome.applyValue) {
+    // Stage advance is written under the same vendor field key the
+    // funnel admin maps to (`stage`). This rides along with the other
+    // sparse fields so we make one vendor write, not two.
+    fields["stage"] = stageOutcome.applyValue;
+  }
+
+  if (Object.keys(fields).length === 0 && !stageOutcome.taskCreated) {
+    return { crmWriteSkipped: "no-fields", stage: stageOutcome.summary };
   }
 
   // Kind-aware vendor write — Leads vs Contacts route to the right module.
@@ -328,6 +412,20 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
     originContactId: contactId,
   });
 
+  // Commit the stage-transition audit row exactly once. For AUTO this
+  // records whether the vendor write succeeded; for REVIEW_TASK it
+  // records the intent + the block reasons. Best-effort — failures
+  // never break the post-call pipeline.
+  await stageOutcome.commit({
+    ok: !!vendorResult.ok,
+    error: vendorResult.reason,
+  }).catch((err: any) => {
+    console.warn(
+      "[voice-postcall] stage audit commit failed:",
+      err?.message ?? err,
+    );
+  });
+
   return {
     crmWritten: vendorResult.ok,
     crmOutcome: vendorResult.outcome,
@@ -338,7 +436,225 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
     localContactError: localResult.error,
     additionalContactsUpdated: additionalUpdates.updated,
     additionalContactsSkipped: additionalUpdates.skipped,
+    stage: stageOutcome.summary,
   };
+}
+
+// ─── Stage transition: auto-apply OR create review task ─────────
+
+/**
+ * Conservative threshold. The LLM is told this in the prompt, and the
+ * advance-worker enforces it independently — confidence below this AND/OR
+ * missing evidence routes to a human-review CRM task.
+ */
+const STAGE_AUTOADVANCE_THRESHOLD = 0.75;
+
+interface StageTransitionOutcome {
+  /** Vendor stage value to write into the same CRM patch (when applying). */
+  applyValue?: string;
+  /** A "Review stage change" CRM task was created for human approval. */
+  taskCreated?: boolean;
+  /**
+   * Pending audit payload — committed AFTER the vendor write so we can
+   * record whether the write actually succeeded. Caller is responsible
+   * for invoking `commit()` exactly once.
+   */
+  commit: (vendorResult: { ok: boolean; error?: string }) => Promise<void>;
+  /** Compact summary for the post-call meta payload. */
+  summary: Record<string, unknown>;
+}
+
+async function evaluateStageTransition(args: {
+  tenantId: string;
+  conversationId: string;
+  sessionId: string;
+  suggestion: PostConversationSummary["stage_transition_suggestion"];
+}): Promise<StageTransitionOutcome> {
+  const noop = async () => { /* nothing to audit */ };
+  const s = args.suggestion;
+  if (!s) {
+    return { summary: { suggested: false }, commit: noop };
+  }
+
+  const conv = await prisma.conversation.findUnique({
+    where: { id: args.conversationId },
+    select: { departmentId: true },
+  });
+  const stage = await resolveActiveStage({
+    tenantId: args.tenantId,
+    conversationId: args.conversationId,
+    departmentId: conv?.departmentId ?? null,
+  }).catch(() => null);
+  if (!stage) {
+    return { summary: { suggested: true, applied: false, reason: "no-funnel" }, commit: noop };
+  }
+
+  const target = stage.funnel.stages.find((st) => st.id === s.to);
+  if (!target) {
+    return {
+      summary: {
+        suggested: true,
+        applied: false,
+        reason: "target-not-in-funnel",
+        to: s.to,
+      },
+      commit: noop,
+    };
+  }
+
+  const contactId = await findContactIdForConversation(
+    args.tenantId,
+    args.conversationId,
+  );
+  const hasEvidence = s.evidence && s.evidence.length > 0;
+  const confident = s.confidence >= STAGE_AUTOADVANCE_THRESHOLD;
+  const canWriteVendor = !!target.crmValue && target.crmValue.trim().length > 0;
+
+  // Auto-apply path: confidence + evidence + writable vendor field.
+  if (hasEvidence && confident && canWriteVendor) {
+    return {
+      applyValue: target.crmValue!,
+      summary: {
+        suggested: true,
+        applied: true,
+        from: stage.stage.id,
+        to: target.id,
+        confidence: s.confidence,
+        evidence: s.evidence,
+        reason: s.reason,
+      },
+      commit: async (vendorResult) => {
+        await recordStageTransition({
+          tenantId: args.tenantId,
+          conversationId: args.conversationId,
+          contactId,
+          funnelId: stage.funnel.funnelId,
+          fromStageId: stage.stage.id,
+          fromStageLabel: stage.stage.label,
+          toStageId: target.id,
+          toStageLabel: target.label,
+          source: "AUTO",
+          confidence: s.confidence,
+          reason: s.reason,
+          evidence: s.evidence,
+          criteriaMet: s.criteriaMet,
+          criteriaMissed: s.criteriaMissed,
+          vendorValue: target.crmValue ?? null,
+          vendorWriteOk: vendorResult.ok,
+          vendorWriteError: vendorResult.error ?? null,
+          actorId: `voice-postcall:${args.sessionId}`,
+        });
+      },
+    };
+  }
+
+  // Otherwise create a human-review CRM task. Even when we have no local
+  // contact, this still records intent on the conversation timeline.
+  const blockReasons: string[] = [];
+  if (!hasEvidence) blockReasons.push("no_evidence");
+  if (!confident) blockReasons.push(`confidence<${STAGE_AUTOADVANCE_THRESHOLD}`);
+  if (!canWriteVendor) blockReasons.push("no_vendor_value");
+
+  try {
+    const identity = await getCrmIdentity(args.tenantId, args.conversationId);
+    const task = {
+      subject: `Review suggested stage change: ${stage.stage.label} → ${target.label}`,
+      body: [
+        `Confidence: ${(s.confidence * 100).toFixed(0)}%`,
+        `Reason: ${s.reason}`,
+        s.evidence.length > 0 ? `Evidence:\n${s.evidence.map((e) => `  • ${e}`).join("\n")}` : "Evidence: (none)",
+        s.criteriaMet.length > 0 ? `Met: ${s.criteriaMet.join(", ")}` : "",
+        s.criteriaMissed.length > 0 ? `Missed: ${s.criteriaMissed.join(", ")}` : "",
+        `Blocking: ${blockReasons.join(", ") || "below threshold"}`,
+      ].filter(Boolean).join("\n"),
+      priority: "normal" as const,
+    };
+    const r = await createCrmTaskKindAware({
+      tenantId: args.tenantId,
+      conversationId: args.conversationId,
+      task,
+      identity,
+      sourceInteractionId: args.conversationId,
+    });
+    return {
+      taskCreated: r.ok,
+      summary: {
+        suggested: true,
+        applied: false,
+        reason: blockReasons.join(","),
+        from: stage.stage.id,
+        to: target.id,
+        confidence: s.confidence,
+        reviewTaskCreated: r.ok,
+        reviewTaskFailure: r.ok ? undefined : r.reason,
+      },
+      commit: async () => {
+        // Below-threshold suggestions still get audited so funnel
+        // velocity dashboards can show "X stage changes pending review".
+        await recordStageTransition({
+          tenantId: args.tenantId,
+          conversationId: args.conversationId,
+          contactId,
+          funnelId: stage.funnel.funnelId,
+          fromStageId: stage.stage.id,
+          fromStageLabel: stage.stage.label,
+          toStageId: target.id,
+          toStageLabel: target.label,
+          source: "REVIEW_TASK",
+          confidence: s.confidence,
+          reason: s.reason,
+          evidence: s.evidence,
+          criteriaMet: s.criteriaMet,
+          criteriaMissed: s.criteriaMissed,
+          vendorValue: target.crmValue ?? null,
+          vendorWriteOk: false,
+          vendorWriteError: blockReasons.join(","),
+          actorId: `voice-postcall:${args.sessionId}`,
+        });
+      },
+    };
+  } catch (err) {
+    return {
+      summary: {
+        suggested: true,
+        applied: false,
+        reason: blockReasons.join(",") || "unknown",
+        from: stage.stage.id,
+        to: target.id,
+        confidence: s.confidence,
+        reviewTaskError: (err as { message?: string })?.message,
+      },
+      commit: noop,
+    };
+  }
+}
+
+/**
+ * Resolve the Contact id from a (tenant, conversation) pair. Standalone
+ * helper used by audit writes that don't have an AdvanceContext handy.
+ */
+async function findContactIdForConversation(
+  tenantId: string,
+  conversationId: string,
+): Promise<string | null> {
+  try {
+    const conv = await prisma.conversation.findUnique({
+      where: { id: conversationId },
+      select: { customerExternalId: true, channel: true },
+    });
+    if (!conv?.customerExternalId) return null;
+    const c = await prisma.contact.findFirst({
+      where: {
+        tenantId,
+        channel: conv.channel as any,
+        externalId: conv.customerExternalId,
+      },
+      select: { id: true },
+    });
+    return c?.id ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /**
@@ -471,8 +787,24 @@ async function hasPendingFollowupForConversation(args: {
   }
 }
 
-async function handleFinalized(_ctx: AdvanceContext): Promise<Record<string, unknown> | null> {
-  return { finishedAt: new Date().toISOString() };
+async function handleFinalized(ctx: AdvanceContext): Promise<Record<string, unknown> | null> {
+  // Project the finalized voice call as a CRM activity note (duration,
+  // message count, summary, sentiment). Mirrors what post-chat does at end
+  // of chat — without this, voice calls never produce a CRM "call log"
+  // entry the rep can scan later. syncCloseToCrm is idempotent (5-min
+  // dedup), so retries don't double-post.
+  const crmNote = await syncCloseToCrm(ctx.tenantId, ctx.conversationId)
+    .catch((err: any) => ({
+      status: "error" as const,
+      synced: false,
+      reason: err?.message ?? "sync_failed",
+    }));
+  return {
+    finishedAt: new Date().toISOString(),
+    crmNoteStatus: crmNote.status,
+    crmNoteSynced: (crmNote as any).synced ?? false,
+    crmNoteReason: (crmNote as any).reason ?? undefined,
+  };
 }
 
 // ─── Worker entrypoint ────────────────────────────────────────

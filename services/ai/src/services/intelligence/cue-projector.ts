@@ -75,7 +75,17 @@ interface CallProjectorState {
   surfacesInWindow: number[];                  // ms timestamps of last surfaces
   liveByDedup: Map<string, ProjectedCue>;      // active (TTL not expired) dedup map
   suppressedForCall: Set<string>;              // dedupKeys accepted or rejected this call
-  observedFilled: Set<LeadField>;              // fields the LLM has ever reported as required=false (heuristic "filled" tracker)
+  observedFilled: Set<LeadField>;              // fields known answered — see absorbFrame
+  /**
+   * Fields the LLM has emitted as required=true at some point in the call.
+   * Tracked separately so we can apply the "previously asked, now silent =
+   * answered" heuristic: if a field appears in this set but is ABSENT from
+   * the current frame's missingFields, the LLM has stopped asking → mark
+   * as filled. Without this, the projector would only ever mark a field
+   * filled if the LLM explicitly emits it with required=false, which is
+   * rare in practice.
+   */
+  previouslyRequired: Set<LeadField>;
 }
 
 export class CueProjector {
@@ -128,6 +138,18 @@ export class CueProjector {
     goalStateMachine.reset(conversationId);
   }
 
+  /**
+   * Returns the set of LeadFields the projector currently considers filled
+   * for this call. Used by the live runner to render an "ALREADY ANSWERED
+   * — DO NOT RE-ASK" block into the next prompt so the LLM stops
+   * re-emitting missingFields for things the rep has already heard.
+   */
+  getObservedFilled(conversationId: string): LeadField[] {
+    const st = this.state.get(conversationId);
+    if (!st) return [];
+    return [...st.observedFilled];
+  }
+
   /** Test-only — inspect internal state without exposing the Map. */
   _stateForTest(conversationId: string): CallProjectorState | undefined {
     return this.state.get(conversationId);
@@ -144,6 +166,7 @@ export class CueProjector {
         liveByDedup: new Map(),
         suppressedForCall: new Set(),
         observedFilled: new Set(),
+        previouslyRequired: new Set(),
       };
       this.state.set(conversationId, st);
     }
@@ -151,21 +174,43 @@ export class CueProjector {
   }
 
   /**
-   * Track which LeadFields the LLM has reported as required=false at least
-   * once. That's the closest we get to "filled" without an entity-extraction
-   * stream. A field never seen by the LLM is treated as missing; a field
-   * seen with required=true is treated as missing; a field seen with
-   * required=false is treated as filled.
+   * Update the per-call "filled fields" tracker from this frame.
    *
-   * Once CRM hookup lands, swap this for a LeadStateProvider that reads
-   * via prefetchCrmContext — the rest of the projector doesn't change.
+   * Three signals are folded in (in increasing strength):
+   *
+   *  1. Field emitted with `required: false` → filled (explicit; the LLM is
+   *     saying "this is no longer missing"). Weakest signal because the LLM
+   *     rarely emits filled fields explicitly.
+   *
+   *  2. Field WAS previously emitted with `required: true` but is ABSENT
+   *     from THIS frame's missingFields → filled (the LLM had been asking
+   *     about it, then stopped — the practical interpretation is that the
+   *     customer answered). This is the heuristic that fixes the "bot
+   *     re-asks the same question two turns later" bug.
+   *
+   *  3. (future) frame.crmPatch entries → filled. Not in the schema yet,
+   *     but when added, will be the strongest signal.
+   *
+   * Result accumulates into st.observedFilled for the lifetime of the
+   * call. Cleared in endCall().
    */
   private absorbFrame(frame: ConversationStateFrame, st: CallProjectorState): void {
-    const seen = new Set(frame.missingFields.map((m) => m.field));
-    for (const f of Object.keys(FIELD_PROMPTS) as LeadField[]) {
-      if (!seen.has(f)) continue;
-      const entry = frame.missingFields.find((m) => m.field === f);
-      if (entry && !entry.required) st.observedFilled.add(f);
+    const currentByField = new Map(frame.missingFields.map((m) => [m.field, m] as const));
+
+    // Signal 1: explicit "required=false" → filled.
+    for (const m of frame.missingFields) {
+      if (!m.required) st.observedFilled.add(m.field as LeadField);
+    }
+
+    // Signal 2: previously seen as required but now silent → filled.
+    for (const f of st.previouslyRequired) {
+      if (!currentByField.has(f)) st.observedFilled.add(f);
+    }
+
+    // Update previouslyRequired AFTER the silence check so we never compare
+    // a field against itself within the same frame.
+    for (const m of frame.missingFields) {
+      if (m.required) st.previouslyRequired.add(m.field as LeadField);
     }
   }
 

@@ -166,10 +166,35 @@ export {
   CopilotDataFieldSchema,
   EMPTY_COPILOT_CONFIG,
   parseCopilotConfig,
+  StageCopilotConfigSchema,
+  StageExitCriteriaSchema,
+  EMPTY_STAGE_COPILOT_CONFIG,
+  parseStageCopilotConfig,
   type CopilotConfig,
   type CopilotQuestion,
   type CopilotDataField,
+  type StageCopilotConfig,
+  type StageExitCriteria,
 } from "./schemas/copilot-config";
+
+// AI Worker — unified config (Phase 0: types only)
+export {
+  AIWorkerModeSchema,
+  AISkillKindSchema,
+  AISkillSchema,
+  AIWorkerIdentitySchema,
+  AIWorkerGuardrailsSchema,
+  AIWorkerConfigSchema,
+  AIWorkerSessionProfileSchema,
+  type AIWorkerMode,
+  type AISkillKind,
+  type AISkill,
+  type AIWorkerIdentity,
+  type AIWorkerGuardrails,
+  type AIWorkerConfig,
+  type AIWorkerSessionProfile,
+  type AIWorkerPromptFingerprint,
+} from "./schemas/ai-worker";
 
 export { normalizePhone, isValidPhone, listSupportedCountries } from "./lib/phone";
 

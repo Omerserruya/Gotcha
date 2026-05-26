@@ -639,7 +639,10 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
 
     // AI-specific: feature + model breakdowns (only rows where type='ai_tokens')
     const aiWhere = { type: "ai_tokens", createdAt: { gte: since } };
-    const [byFeature, byModel, aiTotals] = await Promise.all([
+    // Cached prompt tokens live on `metadata.cachedPromptTokens` (JSONB) — Prisma
+    // can't aggregate them via groupBy, so we run parallel raw aggregates and
+    // merge by key. Empty/missing values count as 0.
+    const [byFeature, byModel, aiTotals, cachedTotalsRows, cachedByFeatureRows, cachedByModelRows] = await Promise.all([
       prisma.usageLog.groupBy({
         by: ["feature"],
         where: aiWhere,
@@ -659,7 +662,34 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
         _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
         _count: { id: true },
       }),
+      prisma.$queryRaw<Array<{ cached: bigint }>>`
+        SELECT COALESCE(SUM(COALESCE((metadata->>'cachedPromptTokens')::int, 0)), 0)::bigint AS cached
+        FROM   usage_logs
+        WHERE  type = 'ai_tokens' AND created_at >= ${since}
+      `,
+      prisma.$queryRaw<Array<{ feature: string | null; cached: bigint }>>`
+        SELECT feature,
+               COALESCE(SUM(COALESCE((metadata->>'cachedPromptTokens')::int, 0)), 0)::bigint AS cached
+        FROM   usage_logs
+        WHERE  type = 'ai_tokens' AND created_at >= ${since}
+        GROUP  BY feature
+      `,
+      prisma.$queryRaw<Array<{ model: string | null; cached: bigint }>>`
+        SELECT model,
+               COALESCE(SUM(COALESCE((metadata->>'cachedPromptTokens')::int, 0)), 0)::bigint AS cached
+        FROM   usage_logs
+        WHERE  type = 'ai_tokens' AND created_at >= ${since}
+        GROUP  BY model
+      `,
     ]);
+
+    const cachedTotal = Number(cachedTotalsRows[0]?.cached ?? 0);
+    const cachedByFeature = new Map(
+      cachedByFeatureRows.map((r) => [r.feature ?? "unknown", Number(r.cached)]),
+    );
+    const cachedByModel = new Map(
+      cachedByModelRows.map((r) => [r.model ?? "unknown", Number(r.cached)]),
+    );
 
     const aiTokens = {
       totalTokens: aiTotals._sum.quantity || 0,
@@ -667,11 +697,16 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
       completionTokens: aiTotals._sum.completionTokens || 0,
       costUsd: Number(aiTotals._sum.costUsd ?? 0),
       calls: aiTotals._count.id || 0,
+      // Cache observability — derived from OpenAI's prompt_tokens_details.cached_tokens
+      // captured in trackAIUsage(). Hit % is cached / total prompt; savings is the
+      // 50%-discount applied at billing time vs. uncached.
+      cachedPromptTokens: cachedTotal,
       byFeature: byFeature.map((r) => ({
         feature: r.feature ?? "unknown",
         totalTokens: r._sum.quantity || 0,
         promptTokens: r._sum.promptTokens || 0,
         completionTokens: r._sum.completionTokens || 0,
+        cachedPromptTokens: cachedByFeature.get(r.feature ?? "unknown") ?? 0,
         costUsd: Number(r._sum.costUsd ?? 0),
         calls: r._count.id,
       })),
@@ -680,6 +715,7 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
         totalTokens: r._sum.quantity || 0,
         promptTokens: r._sum.promptTokens || 0,
         completionTokens: r._sum.completionTokens || 0,
+        cachedPromptTokens: cachedByModel.get(r.model ?? "unknown") ?? 0,
         costUsd: Number(r._sum.costUsd ?? 0),
         calls: r._count.id,
       })),
@@ -712,12 +748,27 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
 
     // Per-tenant AI feature breakdown — answers "which feature used how many
     // tokens per tenant" directly, no JSON probing needed.
-    const byTenantFeature = await prisma.usageLog.groupBy({
-      by: ["tenantId", "feature"],
-      where: { type: "ai_tokens", createdAt: { gte: since } },
-      _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
-      _count: { id: true },
-    });
+    const [byTenantFeature, cachedByTenantFeatureRows] = await Promise.all([
+      prisma.usageLog.groupBy({
+        by: ["tenantId", "feature"],
+        where: { type: "ai_tokens", createdAt: { gte: since } },
+        _sum: { promptTokens: true, completionTokens: true, quantity: true, costUsd: true },
+        _count: { id: true },
+      }),
+      // Cached tokens live on `metadata` JSONB; aggregate via raw SQL and merge
+      // by (tenantId, feature) below. Missing values count as 0.
+      prisma.$queryRaw<Array<{ tenant_id: string; feature: string | null; cached: bigint }>>`
+        SELECT tenant_id,
+               feature,
+               COALESCE(SUM(COALESCE((metadata->>'cachedPromptTokens')::int, 0)), 0)::bigint AS cached
+        FROM   usage_logs
+        WHERE  type = 'ai_tokens' AND created_at >= ${since}
+        GROUP  BY tenant_id, feature
+      `,
+    ]);
+    const cachedByTenantFeature = new Map(
+      cachedByTenantFeatureRows.map((r) => [`${r.tenant_id}::${r.feature ?? "unknown"}`, Number(r.cached)]),
+    );
 
     // Get tenant names
     const tenantIds = [...new Set(byTenant.map((r) => r.tenantId))];
@@ -738,10 +789,13 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
           totalTokens: number;
           promptTokens: number;
           completionTokens: number;
+          cachedPromptTokens: number;
           costUsd: number;
           calls: number;
         }>;
         aiCostUsd: number;
+        aiCachedPromptTokens: number;
+        aiPromptTokens: number;
       }
     > = {};
     for (const row of byTenant) {
@@ -751,6 +805,8 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
           usage: {},
           aiByFeature: [],
           aiCostUsd: 0,
+          aiCachedPromptTokens: 0,
+          aiPromptTokens: 0,
         };
       }
       grouped[row.tenantId].usage[row.type] = {
@@ -762,15 +818,21 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
     for (const row of byTenantFeature) {
       if (!grouped[row.tenantId]) continue;
       const cost = Number(row._sum.costUsd ?? 0);
+      const cachedForRow =
+        cachedByTenantFeature.get(`${row.tenantId}::${row.feature ?? "unknown"}`) ?? 0;
+      const prompt = row._sum.promptTokens || 0;
       grouped[row.tenantId].aiByFeature.push({
         feature: row.feature ?? "unknown",
         totalTokens: row._sum.quantity || 0,
-        promptTokens: row._sum.promptTokens || 0,
+        promptTokens: prompt,
         completionTokens: row._sum.completionTokens || 0,
+        cachedPromptTokens: cachedForRow,
         costUsd: cost,
         calls: row._count.id,
       });
       grouped[row.tenantId].aiCostUsd += cost;
+      grouped[row.tenantId].aiCachedPromptTokens += cachedForRow;
+      grouped[row.tenantId].aiPromptTokens += prompt;
     }
 
     // Sort by total usage descending

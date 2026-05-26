@@ -255,7 +255,8 @@ export async function generateAgentConfig(
         tenantId,
         name: `${department.name} AI Employee`,
         role: "customer_support",
-        description: `AI Employee for ${department.name} department`,
+        // description column dropped per spec — identity is expressed via
+        // structured fields (identity, persona, behavioralAnchors, etc).
         ...agentData,
       },
     });

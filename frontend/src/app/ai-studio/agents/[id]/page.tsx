@@ -6,11 +6,14 @@ import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, generateAIEmployeeConfig, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
+import { listFunnelSummaries, type FunnelSummary } from "@/lib/api-funnel";
 import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
 import TestChatModal from "@/components/TestChatModal";
-import FunnelSection from "@/components/FunnelSection";
+// FunnelSection import removed — funnels are now managed at /settings/funnels.
+// The agent is funnel-guided at runtime via resolveActiveStage; there is no
+// per-agent funnel override config to edit on this page.
 import ActionContractsSection from "@/components/ActionContractsSection";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -61,10 +64,14 @@ interface ConversationFlowStep {
 interface AgentFormData {
   name: string;
   role: AgentRole;
-  description: string;
+  // description field removed per spec — agent identity is fully
+  // expressed through structured fields (role, persona, identity,
+  // behavioralAnchors, etc.). Free-text description was bypassing
+  // the structured-prompt contract.
   avatarColor: string;
   tone: string;
   departmentId: string;
+  funnelId: string;
   languages: { english: boolean; hebrew: boolean; arabic: boolean };
   style: {
     useEmojis: boolean;
@@ -126,10 +133,10 @@ function mapApiToForm(agent: any): AgentFormData {
   return {
     name: agent.name || "",
     role: (agent.role || "custom") as AgentRole,
-    description: agent.description || "",
     avatarColor: hexToGradient(agent.avatarColor) || "from-violet-400 to-violet-600",
     tone: agent.tone || "friendly",
     departmentId: agent.departmentId || "",
+    funnelId: agent.funnelId || "",
     languages: typeof agent.languages === "string"
       ? JSON.parse(agent.languages)
       : (agent.languages || { english: true, hebrew: false, arabic: false }),
@@ -175,10 +182,10 @@ function mapApiToForm(agent: any): AgentFormData {
 const NEW_AGENT_DEFAULT: AgentFormData = {
   name: "",
   role: "custom",
-  description: "",
   avatarColor: "from-violet-400 to-violet-600",
   tone: "friendly",
   departmentId: "",
+  funnelId: "",
   languages: { english: true, hebrew: false, arabic: false },
   style: { useEmojis: false, concise: true, useFirstName: false, proactive: false },
   tools: [],
@@ -283,6 +290,7 @@ export default function AgentEditorPage() {
   const [customRuleInput, setCustomRuleInput] = useState("");
   const [showCustomRuleInput, setShowCustomRuleInput] = useState(false);
   const [departments, setDepartments] = useState<any[]>([]);
+  const [funnels, setFunnels] = useState<FunnelSummary[]>([]);
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showKnowledgePanel, setShowKnowledgePanel] = useState(false);
   const [showTestChat, setShowTestChat] = useState(false);
@@ -299,14 +307,25 @@ export default function AgentEditorPage() {
 
   const wizardChatRef = useRef<HTMLDivElement>(null);
 
+  // Wizard questions — aligned with the post-refactor architecture.
+  //
+  // Dropped from the legacy 9-question flow:
+  //   • "responsibility" — fed into AIAgent.description, which was removed
+  //     per spec. The agent's responsibility is now expressed through the
+  //     structured Identity block + Behavioral anchors.
+  //   • "aiDisclosure"   — conflicts with the new copilot voice rules
+  //     ("NEVER reveal you are an AI"). Identity-disclosure rules belong
+  //     in Custom guardrails when an operator explicitly wants them.
+  //   • "extra"          — free-text dump that bypassed structured fields.
+  //
+  // Future UX cleanup (not in this batch): replace the conversational
+  // Q&A shell with a stepped form. Add an explicit Skills picker step
+  // pulling from listAISkills(). Add a Funnel-guidance info step.
   const WIZARD_QUESTIONS = [
     { key: "name", question: t("aiStudio.wizard.q1Name") },
-    { key: "responsibility", question: t("aiStudio.wizard.q2Responsibility") },
     { key: "channels", question: t("aiStudio.wizard.q3Channels") },
     { key: "communication", question: t("aiStudio.wizard.q4Communication") },
     { key: "escalation", question: t("aiStudio.wizard.q5Escalation") },
-    { key: "aiDisclosure", question: t("aiStudio.wizard.q6AiDisclosure") },
-    { key: "extra", question: t("aiStudio.wizard.q7Extra") },
     { key: "conversationFlow", question: t("aiStudio.wizard.q8ConversationFlow") },
     { key: "guardrails", question: t("aiStudio.wizard.q9Guardrails") },
   ];
@@ -352,7 +371,6 @@ export default function AgentEditorPage() {
           const patchData: Partial<AgentFormData> = {
             name: generated.name || answers.name || "",
             role: generated.role || "custom",
-            description: generated.description || "",
             tone: generated.tone || "friendly",
             channels: {
               whatsapp: (answers.channels || "").toLowerCase().includes("whatsapp"),
@@ -415,6 +433,12 @@ export default function AgentEditorPage() {
     getDepartments(token).then((res) => setDepartments((res as any)?.data || [])).catch(() => {});
   }, [token]);
 
+  // Load funnels for the picker
+  useEffect(() => {
+    if (!token) return;
+    listFunnelSummaries(token).then(setFunnels).catch(() => {});
+  }, [token]);
+
   function patch(partial: Partial<AgentFormData>) {
     setForm((prev) => ({ ...prev, ...partial }));
   }
@@ -436,9 +460,10 @@ export default function AgentEditorPage() {
       const payload = {
         name: form.name,
         role: form.role,
-        description: form.description,
         avatarColor: GRADIENT_TO_HEX[form.avatarColor] || "#7c5cfc",
         tone: form.tone,
+        departmentId: form.departmentId || null,
+        funnelId: form.funnelId || null,
         languages: form.languages,
         style: form.style,
         channels: channelsArr,
@@ -814,19 +839,10 @@ export default function AgentEditorPage() {
               <p className="text-xs text-gray-400 mt-1">{t("aiStudio.agents.editor.setup.departmentHint")}</p>
             </div>
 
-            {/* Description */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {t("aiStudio.agents.editor.setup.description")}
-              </label>
-              <textarea
-                value={form.description}
-                onChange={(e) => patch({ description: e.target.value })}
-                placeholder={t("aiStudio.agents.editor.setup.descriptionPlaceholder")}
-                rows={3}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
-              />
-            </div>
+            {/* description textarea removed — the agent's identity is fully
+                expressed through Personality (tone/style), Identity object,
+                Behavioral anchors, and Custom guardrails below. Free-text
+                description was bypassing the structured-prompt contract. */}
           </SectionCard>
 
           {/* ── Section 2: Personality ── */}
@@ -1005,12 +1021,41 @@ export default function AgentEditorPage() {
             </button>
           </SectionCard>
 
-          {/* ── Section 5: Funnel (BEL overlay) ── */}
+          {/* ── Section 5: Funnel binding ──
+              The agent IS funnel-guided at runtime — `resolveActiveStage`
+              runs on every turn (chat + voice) and injects the current
+              stage's goal, required questions, data fields, and exit
+              criteria into the prompt. Picker below pins a specific
+              funnel to THIS agent; leaving it blank falls through to the
+              channel override → department → tenant default. */}
           <SectionCard
             title="Funnel"
-            subtitle="Stages, strategy & playbook overrides applied on top of the BEL for this employee's mode."
+            subtitle="Pipeline this AI employee runs. Blank = use the department/tenant default."
           >
-            <FunnelSection />
+            <select
+              value={form.funnelId}
+              onChange={(e) => patch({ funnelId: e.target.value })}
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+            >
+              <option value="">Use department / tenant default</option>
+              {funnels.map((f) => (
+                <option key={f.id} value={f.id}>
+                  {f.funnelId}
+                  {f.departmentId ? "" : " (tenant default)"}
+                  {f.isActive ? "" : " — inactive"}
+                  {" · "}{f.stageCount} stages
+                </option>
+              ))}
+            </select>
+            <p className="text-xs text-gray-400 mt-2">
+              Per-turn goal, required questions, data fields, and exit criteria are read from the resolved funnel's active stage on every turn.
+            </p>
+            <a
+              href="/settings/funnels"
+              className="inline-flex items-center gap-1.5 mt-2 text-sm font-medium text-indigo-600 hover:text-indigo-700 transition"
+            >
+              Manage funnels in Settings →
+            </a>
           </SectionCard>
 
           {/* ── Section 6: Action Contracts (deterministic tool chains) ── */}
@@ -1113,7 +1158,7 @@ export default function AgentEditorPage() {
           </SectionCard>
 
 
-          {/* ── Section 6: Conversation Flow ── */}
+          {/* ── Section 8: Conversation Flow ── */}
           <SectionCard
             title={t("aiStudio.agents.editor.conversationFlow.title")}
             subtitle={t("aiStudio.agents.editor.conversationFlow.subtitle")}
@@ -1174,7 +1219,7 @@ export default function AgentEditorPage() {
               <p className="mt-2 text-xs text-gray-400">{t("aiStudio.agents.editor.conversationFlow.hint")}</p>
             </SectionCard>
 
-          {/* ── Section 7: Custom Guardrails ── */}
+          {/* ── Section 9: Custom Guardrails ── */}
           <SectionCard
             title={t("aiStudio.agents.editor.customGuardrails.title")}
             subtitle={t("aiStudio.agents.editor.customGuardrails.subtitle")}

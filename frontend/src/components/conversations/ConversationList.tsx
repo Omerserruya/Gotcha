@@ -63,10 +63,19 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  const [lastReadMap, setLastReadMap] = useState<Record<string, string>>(getLastReadMap);
+  // Initial state MUST match the static build (empty/defaults) or React
+  // hydration throws #425/#418/#423 and unmounts the tree — see I18nContext
+  // for the same pattern. localStorage is hydrated in a useEffect below.
+  const [lastReadMap, setLastReadMap] = useState<Record<string, string>>({});
   const [slaConfig, setSlaConfig] = useState<{ enabled: boolean; slaMinutes: number; warningThreshold: number } | null>(null);
   const [deptSlaMap, setDeptSlaMap] = useState<Record<string, { enabled: boolean; slaMinutes: number }>>({});
-  const [markedUnread, setMarkedUnread] = useState<Set<string>>(getMarkedUnread);
+  const [markedUnread, setMarkedUnread] = useState<Set<string>>(() => new Set());
+
+  // Post-hydration warm-up from localStorage.
+  useEffect(() => {
+    setLastReadMap(getLastReadMap());
+    setMarkedUnread(getMarkedUnread());
+  }, []);
   const [contextMenu, setContextMenu] = useState<{ convId: string; x: number; y: number } | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);

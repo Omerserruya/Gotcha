@@ -53,11 +53,24 @@ export interface AIUsageEvent {
   promptTokens: number;
   completionTokens?: number;
   totalTokens: number;
+  /**
+   * Subset of `promptTokens` that hit OpenAI's automatic prefix cache.
+   * 0 when the prefix wasn't reused. Used to measure cache hit rate per
+   * tenant/feature so we can verify the AIWorker prefix-stability contract
+   * is actually delivering token savings.
+   */
+  cachedPromptTokens?: number;
   metadata?: {
     conversationId?: string;
     messageId?: string;
     documentId?: string;
     aiAgentId?: string;
+    /** Stable session id (conversation/call). Pinned via OpenAI `user` param. */
+    sessionId?: string;
+    /** Hash of SYSTEM_CORE+SESSION_PROFILE. Must be constant per sessionId. */
+    systemPromptHash?: string;
+    /** True iff the OpenAI response reported cached_tokens > 0. */
+    cachedPrefixUsed?: boolean;
     [key: string]: unknown;
   };
 }
@@ -65,7 +78,14 @@ export interface AIUsageEvent {
 export async function trackAIUsage(event: AIUsageEvent): Promise<void> {
   try {
     const completionTokens = event.completionTokens ?? 0;
-    const costUsd = estimateAICost(event.promptTokens, completionTokens, event.model);
+    const cachedPromptTokens = event.cachedPromptTokens ?? 0;
+    // OpenAI bills cached prompt tokens at 50% of the standard rate.
+    // Bill uncached at full rate, cached at half rate so the cost number
+    // reflects the actual savings rather than over-charging post-cache.
+    const uncachedPromptTokens = Math.max(0, event.promptTokens - cachedPromptTokens);
+    const costUsd =
+      estimateAICost(uncachedPromptTokens, completionTokens, event.model) +
+      estimateAICost(cachedPromptTokens, 0, event.model) * 0.5;
     await prisma.usageLog.create({
       data: {
         tenantId: event.tenantId,
@@ -77,7 +97,10 @@ export async function trackAIUsage(event: AIUsageEvent): Promise<void> {
         promptTokens: event.promptTokens,
         completionTokens,
         costUsd: costUsd.toFixed(6) as any, // Prisma Decimal accepts string
-        metadata: (event.metadata as any) ?? undefined,
+        metadata: {
+          ...(event.metadata ?? {}),
+          ...(cachedPromptTokens > 0 ? { cachedPromptTokens } : {}),
+        } as any,
       },
     });
   } catch (err: any) {

@@ -151,7 +151,7 @@ export function buildConfigFromAIAgent(agent: {
   const agentRecord: AgentRecord = {
     name: agent.name,
     role: agent.role,
-    description: agent.description,
+    // description removed per spec — see prompt-builder AgentRecord.
     tone: agent.tone,
     style: agent.style,
     identity: agent.identity,
@@ -269,7 +269,7 @@ export async function getAIEmployeeForDepartment(tenantId: string, departmentId:
   if (rule?.aiAgentId) {
     return prisma.aIAgent.findUnique({
       where: { id: rule.aiAgentId },
-      select: { id: true, name: true, role: true, status: true, avatarColor: true, description: true, persona: true },
+      select: { id: true, name: true, role: true, status: true, avatarColor: true, persona: true },
     });
   }
   return null;

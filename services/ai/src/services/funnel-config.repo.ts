@@ -79,6 +79,49 @@ export async function loadFunnelForTenant(opts: {
 }
 
 /**
+ * Load a specific funnel by its TenantFunnel.id, scoped to the tenant.
+ * Used by the stage-resolver when a voice channel pins a specific funnel
+ * via copilotConfig.funnelId — bypasses the department-based fallback
+ * chain. Same fail-soft contract as loadFunnelForTenant.
+ */
+export async function loadFunnelById(opts: {
+  tenantId: string;
+  funnelDbId: string;
+}): Promise<FunnelConfig | null> {
+  if (!opts.funnelDbId) return null;
+  const cacheKey = `${opts.tenantId}:byid:${opts.funnelDbId}`;
+  const cached = cache.get(cacheKey);
+  const now = Date.now();
+  if (cached && cached.expiresAt > now) return cached.value;
+
+  let value: FunnelConfig | null = null;
+  try {
+    const row = await (prisma as any).tenantFunnel?.findFirst?.({
+      where: { id: opts.funnelDbId, tenantId: opts.tenantId },
+    });
+    if (row) {
+      const candidate: FunnelConfig = {
+        tenantId: row.tenantId,
+        funnelId: row.funnelId,
+        departmentId: row.departmentId ?? null,
+        stages: row.stages ?? [],
+        transitions: row.transitions ?? [],
+        strategyOverrides: row.strategyOverrides ?? undefined,
+        playbookOverrides: row.playbookOverrides ?? undefined,
+      };
+      if (validateFunnel(candidate)) value = candidate;
+    }
+  } catch (err: any) {
+    if (!/Unknown arg|Cannot read|undefined.*findFirst/.test(err?.message || "")) {
+      console.warn("[funnel-config.repo] loadFunnelById failed (non-fatal):", err?.message);
+    }
+    value = null;
+  }
+  cache.set(cacheKey, { value, expiresAt: now + TTL_MS });
+  return value;
+}
+
+/**
  * Cheap shape check. We do not run a full schema validation on the hot
  * path; just enough to reject obvious garbage.
  */

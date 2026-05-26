@@ -14,6 +14,7 @@ import {
   updateWebchatSettings,
 } from "@/lib/api";
 import { ChannelBadge } from "@/components/conversations/ChannelBadge";
+import { ChannelsOnboardingBanner } from "@/components/onboarding/ChannelsOnboardingBanner";
 import clsx from "clsx";
 import ConfirmModal from "@/components/ConfirmModal";
 
@@ -364,6 +365,9 @@ function ChannelsPageContent() {
         <h1 className="text-2xl font-bold text-gray-900">{t("channels.title")}</h1>
         <p className="text-sm text-gray-500 mt-1">{t("channels.subtitle")}</p>
       </div>
+
+      {/* Onboarding nudge — only when connect_channel mission is active */}
+      <ChannelsOnboardingBanner />
 
       {/* Toast message */}
       {message && (

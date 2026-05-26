@@ -1,0 +1,441 @@
+# Production docker-compose — pulls pre-built images from a registry, never builds.
+#
+# Usage:
+#   1. Set REGISTRY + TAG (and the rest of .env) on the host.
+#   2. docker compose -f docker-compose.prod.yml pull
+#   3. docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate
+#   4. docker compose -f docker-compose.prod.yml up -d
+#
+# Images are expected at:  ${REGISTRY}/${REPO:-chatcenter}:<service>-${TAG}
+# Build + push everything with:  ./scripts/docker-publish.sh
+# Or one service:                 docker buildx build --platform linux/arm64 \
+#                                   -f services/auth/Dockerfile \
+#                                   -t $REGISTRY/chatcenter:auth-$TAG --push .
+#
+# Key differences vs dev docker-compose.yml:
+#   • No `build:` blocks — `image:` only
+#   • No host port mappings on db/redis/qdrant (internal network only)
+#   • `restart: unless-stopped` everywhere so a reboot brings the stack back
+#   • JSON-file log driver with rotation so /var/lib/docker doesn't fill the disk
+#   • `pull_policy: always` so `docker compose up -d` actually picks up new tags
+#     even when TAG didn't change (rolling :latest deploys).
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+x-restart: &default-restart
+  restart: unless-stopped
+
+services:
+  # ─── Infrastructure ──────────────────────────────────────
+  db:
+    image: postgres:16-alpine
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD required in prod}
+      POSTGRES_DB: ${POSTGRES_DB:-whatsapp_cc}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    # No host port exposure in prod — services reach it on the internal network.
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    <<: *default-restart
+    logging: *default-logging
+    # Persist to disk so queued jobs survive a restart.
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    <<: *default-restart
+    logging: *default-logging
+    volumes:
+      - qdrant_data:/qdrant/storage
+    # No host port exposure in prod — AI service reaches it on the internal network.
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c ':> /dev/tcp/localhost/6333' || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ─── API Gateway + Static Frontend (single nginx image) ────────────
+  # Prod merges the gateway and the Next.js static export into one image
+  # (built from gateway/Dockerfile.prod). The dev compose still has a
+  # separate `frontend` Node SSR container so HMR works locally.
+  gateway:
+    image: ${REGISTRY}/${REPO:-chatcenter}:gateway-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    ports:
+      - "${GATEWAY_PORT:-80}:80"
+    environment:
+      AUTH_PORT: ${AUTH_PORT:-4001}
+      CONVERSATION_PORT: ${CONVERSATION_PORT:-4002}
+      WEBHOOK_PORT: ${WEBHOOK_PORT:-4003}
+      ANALYTICS_PORT: ${ANALYTICS_PORT:-4004}
+      CHATBOT_PORT: ${CHATBOT_PORT:-4005}
+      AI_PORT: ${AI_PORT:-4006}
+      VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
+      NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
+    depends_on:
+      - auth
+      - conversation
+      - webhook
+      - analytics
+      - chatbot
+      - ai
+      - voice-copilot
+      - notifications
+
+  # ─── Microservices ───────────────────────────────────────
+  auth:
+    image: ${REGISTRY:?REGISTRY required}/${REPO:-chatcenter}:auth-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${AUTH_PORT:-4001}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WEBHOOK_URL: ${WEBHOOK_URL:-}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:?CHANNEL_ENCRYPTION_KEY required}
+      OAUTH_REDIRECT_URI: ${OAUTH_REDIRECT_URI:-}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      FRONTEND_URL: ${FRONTEND_URL}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+      SYSTEM_ADMIN_SETUP_SECRET: ${SYSTEM_ADMIN_SETUP_SECRET:?required}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      ONBOARDING_CHAT_MODEL: ${ONBOARDING_CHAT_MODEL:-gpt-4o-mini}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_OAUTH_REDIRECT_URI: ${GOOGLE_OAUTH_REDIRECT_URI:-}
+      GMAIL_PUBSUB_TOPIC: ${GMAIL_PUBSUB_TOPIC:-}
+      MICROSOFT_CLIENT_ID: ${MICROSOFT_CLIENT_ID:-}
+      MICROSOFT_CLIENT_SECRET: ${MICROSOFT_CLIENT_SECRET:-}
+      MICROSOFT_OAUTH_REDIRECT_URI: ${MICROSOFT_OAUTH_REDIRECT_URI:-}
+      MICROSOFT_TENANT_ID: ${MICROSOFT_TENANT_ID:-common}
+      SLACK_CLIENT_ID: ${SLACK_CLIENT_ID:-}
+      SLACK_CLIENT_SECRET: ${SLACK_CLIENT_SECRET:-}
+      SLACK_OAUTH_REDIRECT_URI: ${SLACK_OAUTH_REDIRECT_URI:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  conversation:
+    image: ${REGISTRY}/${REPO:-chatcenter}:conversation-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${CONVERSATION_PORT:-4002}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      FRONTEND_URL: ${FRONTEND_URL}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?required}
+      META_APP_ID: ${META_APP_ID:-}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  webhook:
+    image: ${REGISTRY}/${REPO:-chatcenter}:webhook-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${WEBHOOK_PORT:-4003}
+      JWT_SECRET: ${JWT_SECRET}
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  analytics:
+    image: ${REGISTRY}/${REPO:-chatcenter}:analytics-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${ANALYTICS_PORT:-4004}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  chatbot:
+    image: ${REGISTRY}/${REPO:-chatcenter}:chatbot-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${CHATBOT_PORT:-4005}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  ai:
+    image: ${REGISTRY}/${REPO:-chatcenter}:ai-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${AI_PORT:-4006}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY required}
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
+      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4o-mini}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
+      RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-500}
+      RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-50}
+      CONFLUENCE_CLIENT_ID: ${CONFLUENCE_CLIENT_ID:-}
+      CONFLUENCE_CLIENT_SECRET: ${CONFLUENCE_CLIENT_SECRET:-}
+      CONFLUENCE_REDIRECT_URI: ${CONFLUENCE_REDIRECT_URI:-}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI:-}
+      GOOGLE_CALENDAR_REDIRECT_URI: ${GOOGLE_CALENDAR_REDIRECT_URI:-}
+      CALENDLY_CLIENT_ID: ${CALENDLY_CLIENT_ID:-}
+      CALENDLY_CLIENT_SECRET: ${CALENDLY_CLIENT_SECRET:-}
+      CALENDLY_REDIRECT_URI: ${CALENDLY_REDIRECT_URI:-}
+      DASHBOARD_URL: ${DASHBOARD_URL:-}
+      ZOHO_CLIENT_ID: ${ZOHO_CLIENT_ID:-}
+      ZOHO_CLIENT_SECRET: ${ZOHO_CLIENT_SECRET:-}
+      ZOHO_REDIRECT_URI: ${ZOHO_REDIRECT_URI:-}
+      ZOHO_ACCOUNTS_URL: ${ZOHO_ACCOUNTS_URL:-https://accounts.zoho.com}
+      STRIPE_CLIENT_ID: ${STRIPE_CLIENT_ID:-}
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_REDIRECT_URI: ${STRIPE_REDIRECT_URI:-}
+      HUBSPOT_CLIENT_ID: ${HUBSPOT_CLIENT_ID:-}
+      HUBSPOT_CLIENT_SECRET: ${HUBSPOT_CLIENT_SECRET:-}
+      HUBSPOT_REDIRECT_URI: ${HUBSPOT_REDIRECT_URI:-}
+      SHOPIFY_API_KEY: ${SHOPIFY_API_KEY:-}
+      SHOPIFY_API_SECRET: ${SHOPIFY_API_SECRET:-}
+      SHOPIFY_REDIRECT_URI: ${SHOPIFY_REDIRECT_URI:-}
+      WIX_CLIENT_ID: ${WIX_CLIENT_ID:-}
+      WIX_CLIENT_SECRET: ${WIX_CLIENT_SECRET:-}
+      WIX_REDIRECT_URI: ${WIX_REDIRECT_URI:-}
+      SQUARE_APPLICATION_ID: ${SQUARE_APPLICATION_ID:-}
+      SQUARE_APPLICATION_SECRET: ${SQUARE_APPLICATION_SECRET:-}
+      SQUARE_REDIRECT_URI: ${SQUARE_REDIRECT_URI:-}
+      SALESFORCE_CLIENT_ID: ${SALESFORCE_CLIENT_ID:-}
+      SALESFORCE_CLIENT_SECRET: ${SALESFORCE_CLIENT_SECRET:-}
+      SALESFORCE_REDIRECT_URI: ${SALESFORCE_REDIRECT_URI:-}
+      MONDAY_CLIENT_ID: ${MONDAY_CLIENT_ID:-}
+      MONDAY_CLIENT_SECRET: ${MONDAY_CLIENT_SECRET:-}
+      MONDAY_REDIRECT_URI: ${MONDAY_REDIRECT_URI:-}
+      ADAPTER_RATE_BURST: ${ADAPTER_RATE_BURST:-10}
+      ADAPTER_RATE_REFILL_PER_SEC: ${ADAPTER_RATE_REFILL_PER_SEC:-1}
+      FRONTEND_URL: ${FRONTEND_URL}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+
+  notifications:
+    image: ${REGISTRY}/${REPO:-chatcenter}:notifications-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${NOTIFICATIONS_PORT:-4008}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL}
+      NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
+      SMTP_HOST: ${SMTP_HOST:-}
+      SMTP_PORT: ${SMTP_PORT:-587}
+      SMTP_USER: ${SMTP_USER:-}
+      SMTP_PASS: ${SMTP_PASS:-}
+      SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  voice-copilot:
+    image: ${REGISTRY}/${REPO:-chatcenter}:voice-copilot-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      NODE_ENV: production
+      PORT: ${VOICE_COPILOT_PORT:-4007}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      STT_PROVIDER: ${STT_PROVIDER:-stub}
+      STT_STUB_SEED: ${STT_STUB_SEED:-42}
+      DEEPGRAM_API_KEY: ${DEEPGRAM_API_KEY:-}
+      LOG_LEVEL: ${LOG_LEVEL:-info}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+      PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
+      PUBLIC_URL: ${NEXT_PUBLIC_API_URL}
+      JWT_SECRET: ${JWT_SECRET}
+      DATABASE_URL: ${DATABASE_URL}
+    depends_on:
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:${VOICE_COPILOT_PORT:-4007}/healthz || exit 1"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 15s
+
+  # ─── Workers (independently scalable) ────────────────────
+  incoming-worker:
+    image: ${REGISTRY}/${REPO:-chatcenter}:incoming-worker-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      META_APP_ID: ${META_APP_ID:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
+      QDRANT_API_KEY: ${QDRANT_API_KEY:-}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
+      CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+      qdrant: { condition: service_healthy }
+    deploy:
+      replicas: ${INCOMING_WORKER_REPLICAS:-1}
+
+  outgoing-worker:
+    image: ${REGISTRY}/${REPO:-chatcenter}:outgoing-worker-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
+      CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
+      FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      UPLOADS_DIR: /app/uploads
+    volumes:
+      - uploads:/app/uploads
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    deploy:
+      replicas: ${OUTGOING_WORKER_REPLICAS:-1}
+
+  # ─── DB Migration (on-demand: docker compose --profile migrate run --rm migrate) ─────
+  # Uses the auth image because it includes prisma + the migrations dir baked in.
+  migrate:
+    image: ${REGISTRY}/${REPO:-chatcenter}:auth-${TAG:-latest}
+    pull_policy: always
+    restart: "no"
+    logging: *default-logging
+    command: >
+      sh -c "cd /app/packages/shared && npx prisma migrate deploy && npx tsx prisma/seed.ts"
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
+      WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
+      MESSENGER_PAGE_ID: ${MESSENGER_PAGE_ID:-}
+      MESSENGER_ACCESS_TOKEN: ${MESSENGER_ACCESS_TOKEN:-}
+    depends_on:
+      db: { condition: service_healthy }
+    profiles:
+      - migrate
+
+  # Frontend service removed in prod — the static export is baked into the
+  # gateway image (gateway/Dockerfile.prod). NEXT_PUBLIC_* values are baked
+  # at build time inside that image; to switch domains, rebuild + push a
+  # new gateway tag. Dev (docker-compose.yml) still runs Next.js as its own
+  # standalone Node container so HMR works locally.
+
+volumes:
+  pgdata:
+  qdrant_data:
+  redis_data:
+  uploads:

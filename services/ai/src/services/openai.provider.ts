@@ -190,10 +190,11 @@ async function persistMessageSignals(
 }
 
 // Minimal stub agent used when no copilotConfig is present (tests / dev).
+// `description` field dropped per spec — identity flows through role +
+// persona + identity block, never free-text on the agent record.
 const STUB_COPILOT_AGENT: AgentRecord = {
   name: "AI Copilot",
   role: "customer_support",
-  description: "Assist a human agent with reply suggestions, context insights, and chat.",
   tone: "professional",
 };
 
@@ -367,6 +368,9 @@ export class OpenAIProvider implements AIProvider {
       for (let round = 0; round < 4; round++) {
         const result = await generateResponse({
           tenantId: context.tenantId || "",
+          // Same conversation → same session so the prefix cache routes
+          // suggestion turns consistently to the same backend.
+          sessionId: context.conversationId,
           model,
           messages: chatMessages,
           temperature: config?.temperature ?? 0.7,
@@ -482,6 +486,7 @@ export class OpenAIProvider implements AIProvider {
     try {
       const result = await generateResponse({
         tenantId: context.tenantId || "",
+        sessionId: context.conversationId,
         model,
         messages: [
           {
@@ -654,6 +659,7 @@ export class OpenAIProvider implements AIProvider {
       for (let round = 0; round < 3; round++) {
         const result = await generateResponse({
           tenantId: params.tenantId || "",
+          sessionId: params.conversationId,
           model,
           messages,
           temperature: config?.temperature ?? 0.7,

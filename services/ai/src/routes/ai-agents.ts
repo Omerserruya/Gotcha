@@ -240,6 +240,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       temperature, maxTokens, identity, goals, toneConfig,
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
       confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
+      departmentId, funnelId,
       knowledgeBaseIds, toolIds,
     } = req.body;
 
@@ -253,7 +254,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         tenantId: req.tenantId! as string,
         name,
         role: role || "customer_support",
-        description: description || null,
+        // description column dropped per spec — caller-supplied value is ignored.
         avatarColor: avatarColor || "#7c5cfc",
         status: status || "DRAFT",
         tone: tone || "professional",
@@ -278,6 +279,8 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         escalationMessage: escalationMessage || "Let me connect you with a team member who can help further.",
         conversationFlow: conversationFlow || null,
         customGuardrails: customGuardrails || null,
+        departmentId: departmentId || null,
+        funnelId: funnelId || null,
       },
     });
 
@@ -326,6 +329,15 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     }
 
     const { knowledgeBaseIds, toolIds, mode: _dropMode, ...updateData } = req.body;
+
+    // Empty strings from the dropdowns mean "no binding" — coerce to NULL
+    // so the FK constraint accepts it (Postgres won't accept "" as a cuid).
+    if (Object.prototype.hasOwnProperty.call(updateData, "departmentId") && !updateData.departmentId) {
+      updateData.departmentId = null;
+    }
+    if (Object.prototype.hasOwnProperty.call(updateData, "funnelId") && !updateData.funnelId) {
+      updateData.funnelId = null;
+    }
 
     const agent = await prisma.aIAgent.update({
       where: { id: req.params.id as string },

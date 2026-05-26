@@ -1,7 +1,9 @@
-import { subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
+import { subscribeToEvents, prisma, type ServiceEvent } from "@chatcenter/shared";
 import { LiveStreamingSource } from "./sources";
 import { LiveAnalysisRunner } from "./live-analysis-runner";
 import { loadCopilotConfigForConversation } from "./copilot-config-loader";
+import { resolveActiveStage } from "./stage-resolver.service";
+import type { StageContextForPrompt } from "./prompts/blocks/copilot-config-block";
 
 /**
  * Maps bus lifecycle events to LiveAnalysisRunner lifecycle.
@@ -90,10 +92,13 @@ async function handleStarted(evt: ServiceEvent): Promise<void> {
     `[intelligence.supervisor] spinning up live runner for callSid=${callSid} conv=${conversationId}`,
   );
 
-  // Resolve the per-channel copilot config exactly once at spawn time so
-  // every turn shares the same language/goals/data-fields configuration.
-  // Falls through to EMPTY_COPILOT_CONFIG on lookup failure — never blocks.
-  const copilotConfig = await loadCopilotConfigForConversation(conversationId);
+  // Resolve the per-channel copilot config + active pipeline stage
+  // exactly once at spawn time so every turn shares the same
+  // language/goals/data-fields/stage configuration. Both fail-soft.
+  const [copilotConfig, stageContext] = await Promise.all([
+    loadCopilotConfigForConversation(conversationId),
+    resolveStageContextForConversation(tenantId, conversationId),
+  ]);
 
   // A late session.started retry can race the lookup — re-check to keep
   // the singleton-per-callSid invariant after the await.
@@ -106,6 +111,7 @@ async function handleStarted(evt: ServiceEvent): Promise<void> {
     callSid,
     agentId,
     copilotConfig,
+    stageContext,
   });
 
   runners.set(callSid, { runner, source });
@@ -137,4 +143,40 @@ function handleEnded(evt: ServiceEvent): void {
 /** Test seam — list active runner callSids. */
 export function __activeRunnerCallSidsForTests(): string[] {
   return [...runners.keys()];
+}
+
+/**
+ * Resolve the active pipeline stage for the conversation's customer +
+ * department, shaped for the prompt assembler. Returns undefined when no
+ * funnel is configured or the resolver couldn't determine a stage — the
+ * assembler then falls back to channel-level CopilotConfig.goals.
+ */
+async function resolveStageContextForConversation(
+  tenantId: string,
+  conversationId: string,
+): Promise<StageContextForPrompt | undefined> {
+  try {
+    const conv = await prisma.conversation.findFirst({
+      where: { id: conversationId, tenantId },
+      select: { departmentId: true },
+    });
+    const resolved = await resolveActiveStage({
+      tenantId,
+      conversationId,
+      departmentId: conv?.departmentId ?? null,
+    });
+    if (!resolved) return undefined;
+    return {
+      id: resolved.stage.id,
+      label: resolved.stage.label,
+      nextLabel: resolved.nextStage?.label ?? null,
+      copilot: resolved.stage.copilot,
+    };
+  } catch (err) {
+    console.warn(
+      "[intelligence.supervisor] stage resolve failed:",
+      (err as { message?: string })?.message ?? err,
+    );
+    return undefined;
+  }
 }
