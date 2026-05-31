@@ -1697,6 +1697,92 @@ export function getSystemUsageByTenant(token: string, days?: number) {
   return apiFetch<{ data: any[] }>(`/api/system/usage/by-tenant${qs}`, { token });
 }
 
+// ─── System Admin: Pricing-Model Analytics ──────────────────
+
+export type PricingCategoryKey =
+  | "autonomous_agent"
+  | "copilot_inbox"
+  | "call_pilot"
+  | "embedded_chat"
+  | "system_copilot"
+  | "background_ai"
+  | "embeddings"
+  | "other";
+
+export interface PricingCategoryRow {
+  category: PricingCategoryKey;
+  label: string;
+  description: string;
+  color: string;
+  /** True when this category is naturally priced per customer thread. */
+  perConversation: boolean;
+  calls: number;
+  conversations: number;
+  promptTokens: number;
+  completionTokens: number;
+  cachedPromptTokens: number;
+  totalTokens: number;
+  costUsd: number;
+  inputCostUsd: number;
+  outputCostUsd: number;
+  /** Blended input rate over the actual model mix (USD per 1K). */
+  blendedInputUsdPer1K: number | null;
+  blendedOutputUsdPer1K: number | null;
+  avgCostPerCall: number;
+  avgCostPerConversation: number | null;
+  avgTokensPerCall: number;
+  avgTokensPerConversation: number | null;
+  cacheHitPct: number | null;
+  modelMix: Array<{
+    model: string;
+    calls: number;
+    promptTokens: number;
+    completionTokens: number;
+    cachedPromptTokens: number;
+    inputCostUsd: number;
+    outputCostUsd: number;
+  }>;
+}
+
+export interface PricingUnitCosts {
+  period: number;
+  categories: PricingCategoryRow[];
+  totals: {
+    calls: number;
+    conversations: number;
+    promptTokens: number;
+    completionTokens: number;
+    cachedPromptTokens: number;
+    totalTokens: number;
+    costUsd: number;
+    inputCostUsd: number;
+    outputCostUsd: number;
+  };
+  pricing: Record<string, { prompt: number; completion: number }>;
+}
+
+export interface PricingTrends {
+  period: number;
+  days: string[];
+  series: Array<{
+    category: PricingCategoryKey;
+    label: string;
+    color: string;
+    cost: number[];
+    calls: number[];
+  }>;
+}
+
+export function getPricingUnitCosts(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: PricingUnitCosts }>(`/api/system/pricing/unit-costs${qs}`, { token });
+}
+
+export function getPricingTrends(token: string, days?: number) {
+  const qs = days ? `?days=${days}` : "";
+  return apiFetch<{ data: PricingTrends }>(`/api/system/pricing/trends${qs}`, { token });
+}
+
 // ─── Voice Channels (Phase 2 — Twilio onboarding) ───────────
 //
 // Tenant-owned Twilio accounts (BYO). `authToken` is write-only — the
@@ -2152,6 +2238,189 @@ export function deactivateVoiceChannelNumber(token: string, id: string, numberId
 
 export function deleteVoiceChannel(token: string, id: string) {
   return apiFetch<{ success: boolean }>(`/api/voice-channels/${id}`, {
+    token,
+    method: "DELETE",
+  });
+}
+
+// ─── Permissions & Feature Flags ────────────────────────────
+
+export interface FeatureMetadata {
+  key: string;
+  displayName: string;
+  description: string;
+  category:
+    | "messaging"
+    | "voice"
+    | "ai"
+    | "knowledge"
+    | "crm"
+    | "automation"
+    | "commerce"
+    | "integrations"
+    | "analytics"
+    | "notifications"
+    | "admin";
+  defaultEnabled: boolean;
+  defaultAgentAccess: "none" | "all";
+  legacyColumn?: string;
+}
+
+export interface TenantFeatureView {
+  feature: string;
+  displayName: string;
+  description: string;
+  category: FeatureMetadata["category"];
+  enabled: boolean;
+  config: Record<string, unknown> | null;
+  configured: boolean;
+  updatedAt: string | null;
+  updatedBy: string | null;
+}
+
+export interface TenantRole {
+  id: string;
+  tenantId: string;
+  name: string;
+  description: string | null;
+  isSystem: boolean;
+  createdAt: string;
+  updatedAt: string;
+  features: { roleId: string; feature: string; createdAt: string }[];
+  _count?: { assignments: number };
+}
+
+export interface UserFeatureGrantRow {
+  id: string;
+  userId: string;
+  feature: string;
+  granted: boolean;
+  reason: string | null;
+  createdAt: string;
+  updatedAt: string;
+  updatedBy: string | null;
+}
+
+// SYSTEM_ADMIN — feature registry + tenant feature toggles
+
+export function getFeatureRegistry(token: string) {
+  return apiFetch<{ data: FeatureMetadata[] }>("/api/system/features", { token });
+}
+
+export function getSystemTenantFeatures(token: string, tenantId: string) {
+  return apiFetch<{ data: TenantFeatureView[] }>(
+    `/api/system/tenants/${tenantId}/features`,
+    { token },
+  );
+}
+
+export function updateSystemTenantFeature(
+  token: string,
+  tenantId: string,
+  feature: string,
+  body: { enabled: boolean; config?: Record<string, unknown> | null },
+) {
+  return apiFetch<{ data: TenantFeatureView }>(
+    `/api/system/tenants/${tenantId}/features/${feature}`,
+    { token, method: "PUT", body: JSON.stringify(body) },
+  );
+}
+
+// Tenant ADMIN — roles + grants
+
+export function getMyFeatures(token: string) {
+  return apiFetch<{ data: { features: string[]; role: string } }>(
+    "/api/permissions/me",
+    { token },
+  );
+}
+
+export function getPermissionsFeatureRegistry(token: string) {
+  return apiFetch<{ data: FeatureMetadata[] }>("/api/permissions/features", { token });
+}
+
+export function getUserResolvedFeatures(token: string, userId: string) {
+  return apiFetch<{
+    data: { user: { id: string; role: string; email: string; name: string }; features: string[] };
+  }>(`/api/permissions/users/${userId}`, { token });
+}
+
+export function getUserGrants(token: string, userId: string) {
+  return apiFetch<{ data: UserFeatureGrantRow[] }>(
+    `/api/permissions/users/${userId}/grants`,
+    { token },
+  );
+}
+
+export function setUserGrant(
+  token: string,
+  userId: string,
+  feature: string,
+  body: { granted: boolean; reason?: string },
+) {
+  return apiFetch<{ data: UserFeatureGrantRow }>(
+    `/api/permissions/users/${userId}/grants/${feature}`,
+    { token, method: "PUT", body: JSON.stringify(body) },
+  );
+}
+
+export function deleteUserGrant(token: string, userId: string, feature: string) {
+  return apiFetch<void>(
+    `/api/permissions/users/${userId}/grants/${feature}`,
+    { token, method: "DELETE" },
+  );
+}
+
+export function getTenantRoles(token: string) {
+  return apiFetch<{ data: TenantRole[] }>("/api/permissions/roles", { token });
+}
+
+export function createTenantRole(
+  token: string,
+  body: { name: string; description?: string; features?: string[] },
+) {
+  return apiFetch<{ data: TenantRole }>("/api/permissions/roles", {
+    token,
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function updateTenantRole(
+  token: string,
+  roleId: string,
+  body: { name?: string; description?: string | null },
+) {
+  return apiFetch<{ data: TenantRole }>(`/api/permissions/roles/${roleId}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify(body),
+  });
+}
+
+export function deleteTenantRole(token: string, roleId: string) {
+  return apiFetch<void>(`/api/permissions/roles/${roleId}`, {
+    token,
+    method: "DELETE",
+  });
+}
+
+export function setTenantRoleFeatures(token: string, roleId: string, features: string[]) {
+  return apiFetch<{ data: TenantRole }>(
+    `/api/permissions/roles/${roleId}/features`,
+    { token, method: "PUT", body: JSON.stringify({ features }) },
+  );
+}
+
+export function assignUserToRole(token: string, userId: string, roleId: string) {
+  return apiFetch<{ data: { userId: string; roleId: string } }>(
+    `/api/permissions/users/${userId}/roles/${roleId}`,
+    { token, method: "POST" },
+  );
+}
+
+export function unassignUserFromRole(token: string, userId: string, roleId: string) {
+  return apiFetch<void>(`/api/permissions/users/${userId}/roles/${roleId}`, {
     token,
     method: "DELETE",
   });

@@ -142,6 +142,8 @@ model Tenant {
   toolExecutionRequests   ToolExecutionRequest[]
   communicationChannels   CommunicationChannel[]
   agentPresences          AgentPresence[]
+  tenantFeatures          TenantFeature[]
+  tenantRoles             TenantRole[]
 
   @@index([status])
   @@map("tenants")
@@ -253,6 +255,8 @@ model User {
   // (separate from the inbound default agent so outbound can route to a
   // different person — e.g. sales rep for outbound, support rep for inbound).
   agentFirstVoiceChannels VoiceChannel[] @relation("VoiceChannelAgentFirstAgent")
+  roleAssignments         UserRoleAssignment[]
+  featureGrants           UserFeatureGrant[]
 
   @@unique([tenantId, email])
   @@index([tenantId])
@@ -418,9 +422,18 @@ model AIAgent {
 
   // Structured AI personality blocks
   identity   Json? // { role, responsibility, representationGuidelines[] }
-  goals      Json? // { focus, slaAwareness, conversionObjective }
+  goals      Json? // { focus, slaAwareness, conversionObjective }  (legacy; superseded by `goal`/`successCriteria` columns)
   toneConfig Json? @map("tone_config") // { formalityLevel, empathyLevel, assertiveness }
   behavioral Json? // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
+
+  // First-class goal + success criteria. Always rendered into the system
+  // prompt by buildGoals() — so non-funnel agents (Support, Research)
+  // have meaningful per-agent goal text. For Sales/SDR/Recruiting these
+  // STACK with the funnel stage's goal; for Support/Research they ARE
+  // the goal. Required at save time for Support/Research/Billing/Custom;
+  // optional for Sales/SDR/Recruiting (funnel provides the goal there).
+  goal            String? @db.Text
+  successCriteria String? @map("success_criteria") @db.Text
 
   // Autonomous behavior settings
   maxAutonomousMessages Int    @default(10) @map("max_autonomous_messages")
@@ -1071,6 +1084,15 @@ model AgentToolPermission {
   tenantToolId    String   @map("tenant_tool_id")
   isAllowed       Boolean  @default(true) @map("is_allowed")
   requireApproval Boolean  @default(false) @map("require_approval")
+
+  // Per-agent tool SEMANTICS (Tier 2). Override what the tool MEANS to
+  // THIS agent — e.g. the same `create_task` is "schedule SDR callback"
+  // for a Sales agent and "create support ticket" for a Support agent.
+  // Rendered into the OpenAI function.description by composeToolDescription
+  // so the LLM picks tools by per-agent intent, not platform-global text.
+  description String? @db.Text // what this tool does FOR THIS AGENT
+  usageRule   String? @map("usage_rule") @db.Text // when to use / preconditions / forbidden contexts for THIS AGENT
+
   createdAt       DateTime @default(now()) @map("created_at")
   updatedAt       DateTime @updatedAt @map("updated_at")
 
@@ -2689,4 +2711,108 @@ model CopilotCueOutcome {
   @@index([cueKind, cueText])
   @@index([tenantId, conversationId])
   @@map("copilot_cue_outcomes")
+}
+
+// ─── Feature Permissions ─────────────────────────────────────
+//
+// Two-layer model:
+//   1. TenantFeature      — SYSTEM_ADMIN says "this tenant can use feature X"
+//   2. TenantRole + grants — tenant ADMIN says "this user/role can use feature X"
+//
+// Feature keys are defined in code at packages/shared/src/lib/features.ts
+// (FEATURES const). The DB stores them as opaque strings so adding a feature
+// is a code change + a row insert, not a schema migration.
+//
+// Resolution order for hasFeature(user, tenant, feature):
+//   SYSTEM_ADMIN              → true
+//   tenant feature disabled   → false
+//   user-level revoke         → false
+//   user-level grant          → true
+//   ADMIN role                → true
+//   role assignment grants it → true
+//   AGENT + defaultAgentAccess="all" → true
+//   else                      → false
+
+model TenantFeature {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  feature   String   // matches FEATURES key
+  enabled   Boolean  @default(false)
+  // Optional feature-specific config (e.g. auto-buy spending limits).
+  config    Json?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  // Audit: who flipped it. NULL for system-seeded rows (migrations, backfill).
+  updatedBy String?  @map("updated_by")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, feature])
+  @@index([tenantId])
+  @@map("tenant_features")
+}
+
+model TenantRole {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  name        String
+  description String?
+  // System-managed roles (e.g. seeded "Default Agent") cannot be deleted
+  // by tenant admins. Custom roles created by the tenant admin can.
+  isSystem    Boolean  @default(false) @map("is_system")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  features    TenantRoleFeature[]
+  assignments UserRoleAssignment[]
+
+  @@unique([tenantId, name])
+  @@index([tenantId])
+  @@map("tenant_roles")
+}
+
+model TenantRoleFeature {
+  roleId    String   @map("role_id")
+  feature   String   // matches FEATURES key
+  createdAt DateTime @default(now()) @map("created_at")
+
+  role TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([roleId, feature])
+  @@index([feature])
+  @@map("tenant_role_features")
+}
+
+model UserRoleAssignment {
+  userId     String   @map("user_id")
+  roleId     String   @map("role_id")
+  assignedAt DateTime @default(now()) @map("assigned_at")
+  assignedBy String?  @map("assigned_by")
+
+  user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
+
+  @@id([userId, roleId])
+  @@index([roleId])
+  @@map("user_role_assignments")
+}
+
+model UserFeatureGrant {
+  id        String   @id @default(cuid())
+  userId    String   @map("user_id")
+  feature   String   // matches FEATURES key
+  // true  = explicit grant (overrides "no role grant")
+  // false = explicit revoke (overrides "role grants this")
+  granted   Boolean
+  reason    String?
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+  updatedBy String?  @map("updated_by")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, feature])
+  @@index([userId])
+  @@map("user_feature_grants")
 }

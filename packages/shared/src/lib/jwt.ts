@@ -1,7 +1,25 @@
 import jwt from "jsonwebtoken";
 import crypto from "crypto";
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+/**
+ * JWT signing secret.
+ *
+ * In production we refuse to start with the placeholder — the previous
+ * fallback (`"change-me"`) meant a missing env var silently produced a
+ * verifiable token any attacker could forge. Dev/test still gets the
+ * placeholder so the toolchain boots without env wiring.
+ */
+function resolveJwtSecret(): string {
+  const v = process.env.JWT_SECRET;
+  if (v && v.length >= 16) return v;
+  if (process.env.NODE_ENV === "production") {
+    throw new Error(
+      "[jwt] JWT_SECRET is required in production (>=16 chars). Refusing to boot with a default secret.",
+    );
+  }
+  return v || "change-me";
+}
+const JWT_SECRET = resolveJwtSecret();
 const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
 const REFRESH_TOKEN_DAYS = parseInt(process.env.REFRESH_TOKEN_DAYS || "30", 10);
 

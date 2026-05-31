@@ -414,8 +414,13 @@ services:
     pull_policy: always
     restart: "no"
     logging: *default-logging
+    # Prod migrate runs SCHEMA only — `prisma migrate deploy` applies every
+    # un-applied migration in packages/shared/prisma/migrations/ (idempotent,
+    # never re-runs an already-applied one). It does NOT run seed.ts, which
+    # exists for local dev only and would otherwise re-create a "Demo
+    # Company" tenant on every deploy.
     command: >
-      sh -c "cd /app/packages/shared && npx prisma migrate deploy && npx tsx prisma/seed.ts"
+      sh -c "cd /app/packages/shared && npx prisma migrate deploy"
     environment:
       DATABASE_URL: ${DATABASE_URL}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}

@@ -18,7 +18,14 @@ import ActionContractsSection from "@/components/ActionContractsSection";
 
 // ─── Types ────────────────────────────────────────────────────
 type Tone = "professional" | "friendly" | "casual" | "formal";
-type AgentRole = "customer_support" | "sales" | "booking" | "billing" | "custom";
+type AgentRole = "customer_support" | "sales" | "sdr" | "recruiting" | "booking" | "billing" | "research" | "custom";
+
+// Roles for which a funnel binding is REQUIRED at save time (server
+// enforces this too — see services/ai/src/routes/ai-agents.ts).
+const FUNNEL_REQUIRED_ROLES: AgentRole[] = ["sales", "sdr", "recruiting"];
+function roleRequiresFunnel(role: AgentRole | string): boolean {
+  return (FUNNEL_REQUIRED_ROLES as string[]).includes(String(role));
+}
 
 interface EscalationRule {
   id: string;
@@ -35,6 +42,10 @@ interface Tool {
   integration: string;
   risk: "low" | "medium" | "high";
   enabled: boolean;
+  // Per-agent semantics (Tier 2). Both optional; null = use catalog defaults.
+  description?: string;  // what this tool means FOR THIS AGENT
+  usageRule?: string;    // when/how to use FOR THIS AGENT
+  expanded?: boolean;    // local UI state — show the per-agent editor
 }
 
 interface KnowledgeSource {
@@ -68,6 +79,11 @@ interface AgentFormData {
   // expressed through structured fields (role, persona, identity,
   // behavioralAnchors, etc.). Free-text description was bypassing
   // the structured-prompt contract.
+  // Required for non-funnel roles (Support, Research, Custom, Billing);
+  // optional for Sales/SDR/Recruiting where the funnel stage provides
+  // the goal. Always rendered into the system prompt when present.
+  goal: string;
+  successCriteria: string;
   avatarColor: string;
   tone: string;
   departmentId: string;
@@ -133,6 +149,8 @@ function mapApiToForm(agent: any): AgentFormData {
   return {
     name: agent.name || "",
     role: (agent.role || "custom") as AgentRole,
+    goal: typeof agent.goal === "string" ? agent.goal : "",
+    successCriteria: typeof agent.successCriteria === "string" ? agent.successCriteria : "",
     avatarColor: hexToGradient(agent.avatarColor) || "from-violet-400 to-violet-600",
     tone: agent.tone || "friendly",
     departmentId: agent.departmentId || "",
@@ -150,6 +168,9 @@ function mapApiToForm(agent: any): AgentFormData {
       integration: t.integration || "",
       risk: (t.risk || "low").toLowerCase() as "low" | "medium" | "high",
       enabled: t.enabled ?? true,
+      description: typeof t.description === "string" ? t.description : "",
+      usageRule: typeof t.usageRule === "string" ? t.usageRule : "",
+      expanded: false,
     })),
     knowledge: (agent.knowledgeBases || []).map((ak: any) => ({
       id: ak.knowledgeBase?.id || ak.id,
@@ -182,6 +203,8 @@ function mapApiToForm(agent: any): AgentFormData {
 const NEW_AGENT_DEFAULT: AgentFormData = {
   name: "",
   role: "custom",
+  goal: "",
+  successCriteria: "",
   avatarColor: "from-violet-400 to-violet-600",
   tone: "friendly",
   departmentId: "",
@@ -212,7 +235,7 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
 };
 
 // ─── Small shared components ───────────────────────────────────
-function SectionCard({ title, subtitle, children }: { title: string; subtitle?: string; children: React.ReactNode }) {
+function SectionCard({ title, subtitle, children }: { title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode }) {
   return (
     <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
       <div className="mb-4">
@@ -453,6 +476,16 @@ export default function AgentEditorPage() {
       const toolIds = form.tools
         .filter((t) => t.enabled && t.tenantToolId)
         .map((t) => t.tenantToolId);
+      // Per-tool semantics overrides (Tier 2). Only sent for enabled tools
+      // that have at least one of description/usageRule set, so unchanged
+      // tools keep the route's default upsert path.
+      const tools = form.tools
+        .filter((t) => t.enabled && t.tenantToolId)
+        .map((t) => ({
+          tenantToolId: t.tenantToolId,
+          description: (t.description ?? "").trim() || null,
+          usageRule: (t.usageRule ?? "").trim() || null,
+        }));
       const knowledgeBaseIds = form.knowledge
         .filter((k) => k.enabled)
         .map((k) => k.id);
@@ -460,6 +493,8 @@ export default function AgentEditorPage() {
       const payload = {
         name: form.name,
         role: form.role,
+        goal: form.goal.trim() || null,
+        successCriteria: form.successCriteria.trim() || null,
         avatarColor: GRADIENT_TO_HEX[form.avatarColor] || "#7c5cfc",
         tone: form.tone,
         departmentId: form.departmentId || null,
@@ -473,6 +508,7 @@ export default function AgentEditorPage() {
         conversationFlow: form.conversationFlow.length > 0 ? form.conversationFlow : null,
         customGuardrails: form.customGuardrails.length > 0 ? form.customGuardrails : null,
         toolIds,
+        tools,
         knowledgeBaseIds,
       };
 
@@ -815,10 +851,56 @@ export default function AgentEditorPage() {
               >
                 <option value="customer_support">{t("aiStudio.agents.editor.setup.roleSupport")}</option>
                 <option value="sales">{t("aiStudio.agents.editor.setup.roleSales")}</option>
+                <option value="sdr">SDR (outbound qualification)</option>
+                <option value="recruiting">Recruiting</option>
                 <option value="booking">{t("aiStudio.agents.editor.setup.roleBooking")}</option>
                 <option value="billing">{t("aiStudio.agents.editor.setup.roleBilling")}</option>
+                <option value="research">Research</option>
                 <option value="custom">{t("aiStudio.agents.editor.setup.roleCustom")}</option>
               </select>
+              <p className="text-xs text-gray-400 mt-1">
+                {roleRequiresFunnel(form.role)
+                  ? "Pipeline role — funnel binding is required below."
+                  : "Outcome role — goal text is required below."}
+              </p>
+            </div>
+
+            {/* Goal — always rendered into the system prompt. Required for
+                non-funnel roles, optional but recommended for funnel roles. */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Goal
+                {!roleRequiresFunnel(form.role) && <span className="text-red-400 ml-1">*</span>}
+              </label>
+              <textarea
+                value={form.goal}
+                onChange={(e) => patch({ goal: e.target.value })}
+                placeholder="What outcome is this agent driving toward? One sentence. E.g. &quot;Resolve the customer's issue or escalate cleanly; capture CSAT signal.&quot;"
+                rows={2}
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                {roleRequiresFunnel(form.role)
+                  ? "Optional. The funnel stage goal is the primary driver; this stacks beneath it."
+                  : "Required. Rendered into every turn's prompt as the agent's anchor goal."}
+              </p>
+            </div>
+
+            {/* Success criteria — measurable conditions that indicate "done". */}
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Success criteria
+              </label>
+              <textarea
+                value={form.successCriteria}
+                onChange={(e) => patch({ successCriteria: e.target.value })}
+                placeholder='What does success look like? E.g. "Customer confirms issue resolved AND positive CSAT signal in transcript."'
+                rows={2}
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+              />
+              <p className="text-xs text-gray-400 mt-1">
+                Optional but recommended. The bot uses this to decide when to close vs. continue.
+              </p>
             </div>
 
             {/* Department */}
@@ -927,31 +1009,87 @@ export default function AgentEditorPage() {
                 </div>
 
                 <div className="space-y-2">
-                  {tools.map((tool) => (
+                  {tools.map((tool) => {
+                    const hasOverrides = (tool.description ?? "").trim().length > 0 || (tool.usageRule ?? "").trim().length > 0;
+                    return (
                     <div
                       key={tool.id}
                       className={clsx(
-                        "flex items-center gap-3 p-3 rounded-xl border transition",
+                        "rounded-xl border transition",
                         tool.enabled
                           ? "border-gray-200 bg-white"
                           : "border-gray-100 bg-gray-50/50"
                       )}
                     >
-                      <input
-                        type="checkbox"
-                        checked={tool.enabled}
-                        onChange={() => toggleTool(tool.id)}
-                        className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
-                      />
-                      <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
-                      <RiskBadge risk={tool.risk} />
-                      {tool.risk === "high" && tool.enabled && (
-                        <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
-                        </svg>
+                      <div className="flex items-center gap-3 p-3">
+                        <input
+                          type="checkbox"
+                          checked={tool.enabled}
+                          onChange={() => toggleTool(tool.id)}
+                          className="w-4 h-4 rounded border-gray-300 text-violet-600 focus:ring-violet-500"
+                        />
+                        <span className="text-sm text-gray-800 flex-1">{tool.name}</span>
+                        {hasOverrides && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-medium border bg-violet-50 text-violet-600 border-violet-200">
+                            per-agent
+                          </span>
+                        )}
+                        <RiskBadge risk={tool.risk} />
+                        {tool.risk === "high" && tool.enabled && (
+                          <svg className="w-4 h-4 text-red-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
+                          </svg>
+                        )}
+                        {tool.enabled && (
+                          <button
+                            type="button"
+                            onClick={() => patch({
+                              tools: form.tools.map((tt) => tt.id === tool.id ? { ...tt, expanded: !tt.expanded } : tt)
+                            })}
+                            className="text-xs text-violet-600 hover:text-violet-700 font-medium px-2 py-1 rounded hover:bg-violet-50 transition shrink-0"
+                            title="Edit per-agent description and usage rule"
+                          >
+                            {tool.expanded ? "Hide" : "Edit"}
+                          </button>
+                        )}
+                      </div>
+                      {tool.enabled && tool.expanded && (
+                        <div className="border-t border-gray-100 px-3 py-3 space-y-3 bg-gray-50/40">
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Description for this agent
+                              <span className="text-gray-400 font-normal"> (optional, overrides catalog)</span>
+                            </label>
+                            <textarea
+                              value={tool.description ?? ""}
+                              onChange={(e) => patch({
+                                tools: form.tools.map((tt) => tt.id === tool.id ? { ...tt, description: e.target.value } : tt)
+                              })}
+                              placeholder="What this tool means FOR THIS AGENT. E.g. &quot;Schedule a follow-up call with the SDR team — not used for customer support tickets.&quot;"
+                              rows={2}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition resize-none"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-xs font-medium text-gray-700 mb-1">
+                              Usage rule for this agent
+                              <span className="text-gray-400 font-normal"> (optional, stacks on catalog)</span>
+                            </label>
+                            <textarea
+                              value={tool.usageRule ?? ""}
+                              onChange={(e) => patch({
+                                tools: form.tools.map((tt) => tt.id === tool.id ? { ...tt, usageRule: e.target.value } : tt)
+                              })}
+                              placeholder="When THIS AGENT should use it. E.g. &quot;Only after budget &gt; 10k confirmed. Never before qualifying the timeline.&quot;"
+                              rows={2}
+                              className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition resize-none"
+                            />
+                          </div>
+                        </div>
                       )}
                     </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             ))}
@@ -1029,15 +1167,35 @@ export default function AgentEditorPage() {
               funnel to THIS agent; leaving it blank falls through to the
               channel override → department → tenant default. */}
           <SectionCard
-            title="Funnel"
-            subtitle="Pipeline this AI employee runs. Blank = use the department/tenant default."
+            title={
+              <span className="inline-flex items-center gap-1.5">
+                Funnel
+                {roleRequiresFunnel(form.role) && (
+                  <span className="text-red-400 text-sm">*</span>
+                )}
+              </span>
+            }
+            subtitle={
+              roleRequiresFunnel(form.role)
+                ? "Pipeline this AI employee runs — REQUIRED for this role."
+                : "Pipeline this AI employee runs. Blank = use the department/tenant default."
+            }
           >
             <select
               value={form.funnelId}
               onChange={(e) => patch({ funnelId: e.target.value })}
-              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+              className={clsx(
+                "w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:bg-white outline-none transition",
+                roleRequiresFunnel(form.role) && !form.funnelId
+                  ? "border-red-300 focus:border-red-400"
+                  : "border-gray-200 focus:border-violet-300"
+              )}
             >
-              <option value="">Use department / tenant default</option>
+              <option value="">
+                {roleRequiresFunnel(form.role)
+                  ? "— Select a funnel (required) —"
+                  : "Use department / tenant default"}
+              </option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.funnelId}
@@ -1048,7 +1206,9 @@ export default function AgentEditorPage() {
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-2">
-              Per-turn goal, required questions, data fields, and exit criteria are read from the resolved funnel's active stage on every turn.
+              {roleRequiresFunnel(form.role)
+                ? "Save will fail with 422 if no funnel is selected."
+                : "Per-turn goal, required questions, data fields, and exit criteria are read from the resolved funnel's active stage on every turn."}
             </p>
             <a
               href="/settings/funnels"

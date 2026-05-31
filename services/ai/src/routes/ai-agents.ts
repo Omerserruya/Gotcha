@@ -215,6 +215,10 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
       integration: tp.tenantTool.tenantIntegration.integration.name,
       enabled: tp.isAllowed,
       requireApproval: tp.requireApproval,
+      // Per-agent semantics (Tier 2). NULL when the operator hasn't
+      // customized — composeToolDescription falls back to catalog defaults.
+      description: (tp as any).description ?? null,
+      usageRule: (tp as any).usageRule ?? null,
     }));
 
     res.json({
@@ -230,6 +234,18 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
   }
 });
 
+// Roles for which a funnel is REQUIRED at save time. These are
+// outcome-driven roles whose conversations advance through pipeline
+// stages — the funnel provides the stage goals + exit criteria.
+// Roles NOT in this set (support, billing, custom, research) rely on
+// `agent.goal` + `agent.successCriteria` instead and the funnel binding
+// is optional.
+const FUNNEL_REQUIRED_ROLES = new Set(["sales", "sdr", "recruiting"]);
+
+function requiresFunnel(role: string | undefined | null): boolean {
+  return FUNNEL_REQUIRED_ROLES.has(String(role || "").toLowerCase());
+}
+
 // ─── Create AI Agent ─────────────────────────────────────────
 router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
@@ -241,12 +257,36 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
       confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
       departmentId, funnelId,
+      goal, successCriteria,
       knowledgeBaseIds, toolIds,
     } = req.body;
 
     if (!name) {
       res.status(400).json({ error: "Name is required" });
       return;
+    }
+
+    // Role-driven validation: funnel is required for Sales/SDR/Recruiting;
+    // goal is required for everyone else (Support/Billing/Custom/Research).
+    // Either way the agent must have SOME notion of "what am I trying to
+    // achieve" — funnel-driven or text-driven.
+    const effectiveRole = String(role || "customer_support").toLowerCase();
+    if (requiresFunnel(effectiveRole)) {
+      if (!funnelId) {
+        res.status(422).json({
+          error: "funnel_required_for_role",
+          message: `Role \`${effectiveRole}\` requires a funnel binding. Create a funnel under Settings → Funnels first, or pick a non-pipeline role.`,
+        });
+        return;
+      }
+    } else {
+      if (!goal || typeof goal !== "string" || !goal.trim()) {
+        res.status(422).json({
+          error: "goal_required_for_role",
+          message: `Role \`${effectiveRole}\` requires an explicit \`goal\` — a one-sentence outcome the agent drives toward.`,
+        });
+        return;
+      }
     }
 
     const agent = await prisma.aIAgent.create({
@@ -281,6 +321,8 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         customGuardrails: customGuardrails || null,
         departmentId: departmentId || null,
         funnelId: funnelId || null,
+        goal: typeof goal === "string" ? goal.trim() || null : null,
+        successCriteria: typeof successCriteria === "string" ? successCriteria.trim() || null : null,
       },
     });
 
@@ -328,7 +370,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       return;
     }
 
-    const { knowledgeBaseIds, toolIds, mode: _dropMode, ...updateData } = req.body;
+    const { knowledgeBaseIds, toolIds, tools: toolsWithOverrides, mode: _dropMode, ...updateData } = req.body;
 
     // Empty strings from the dropdowns mean "no binding" — coerce to NULL
     // so the FK constraint accepts it (Postgres won't accept "" as a cuid).
@@ -337,6 +379,41 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     }
     if (Object.prototype.hasOwnProperty.call(updateData, "funnelId") && !updateData.funnelId) {
       updateData.funnelId = null;
+    }
+
+    // Normalize the new goal / successCriteria fields the same way create
+    // does — trim and convert empty strings to NULL.
+    if (Object.prototype.hasOwnProperty.call(updateData, "goal")) {
+      updateData.goal = typeof updateData.goal === "string"
+        ? updateData.goal.trim() || null
+        : null;
+    }
+    if (Object.prototype.hasOwnProperty.call(updateData, "successCriteria")) {
+      updateData.successCriteria = typeof updateData.successCriteria === "string"
+        ? updateData.successCriteria.trim() || null
+        : null;
+    }
+
+    // Role-driven validation on update — applied with the post-merge view
+    // so a role-change-without-funnel or goal-clear cannot leave the agent
+    // in an unrunnable state.
+    const merged = { ...existing, ...updateData };
+    if (requiresFunnel(merged.role)) {
+      if (!merged.funnelId) {
+        res.status(422).json({
+          error: "funnel_required_for_role",
+          message: `Role \`${merged.role}\` requires a funnel binding.`,
+        });
+        return;
+      }
+    } else {
+      if (!merged.goal || !String(merged.goal).trim()) {
+        res.status(422).json({
+          error: "goal_required_for_role",
+          message: `Role \`${merged.role}\` requires an explicit \`goal\`.`,
+        });
+        return;
+      }
     }
 
     const agent = await prisma.aIAgent.update({
@@ -358,10 +435,30 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       }
     }
 
-    // Update tool assignments if provided
-    if (toolIds && Array.isArray(toolIds)) {
+    // Update tool assignments if provided.
+    // Preferred shape: `tools: [{ tenantToolId, description?, usageRule? }]`
+    // which carries per-agent semantics. Legacy shape `toolIds: string[]`
+    // is kept for backward compat — when both are present, `tools` wins.
+    const useToolsShape = Array.isArray(toolsWithOverrides);
+    if (useToolsShape || (toolIds && Array.isArray(toolIds))) {
       await prisma.agentToolPermission.deleteMany({ where: { tenantId: req.tenantId! as string, aiAgentId: agent.id } });
-      if (toolIds.length > 0) {
+      if (useToolsShape && toolsWithOverrides.length > 0) {
+        await prisma.agentToolPermission.createMany({
+          data: toolsWithOverrides
+            .filter((t: any) => t && typeof t.tenantToolId === "string" && t.tenantToolId.length > 0)
+            .map((t: any) => ({
+              tenantId: req.tenantId! as string,
+              aiAgentId: agent.id,
+              tenantToolId: t.tenantToolId,
+              isAllowed: true,
+              description:
+                typeof t.description === "string" && t.description.trim() ? t.description.trim() : null,
+              usageRule:
+                typeof t.usageRule === "string" && t.usageRule.trim() ? t.usageRule.trim() : null,
+            })),
+          skipDuplicates: true,
+        });
+      } else if (!useToolsShape && toolIds.length > 0) {
         await prisma.agentToolPermission.createMany({
           data: toolIds.map((toolId: string) => ({
             tenantId: req.tenantId! as string,

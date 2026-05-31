@@ -15,6 +15,7 @@ const navItems = [
   { href: "/system/onboarding", icon: OnboardingIcon, label: "Onboarding" },
   { href: "/system/chat", icon: ChatIcon, label: "AI Chat" },
   { href: "/system/usage", icon: UsageIcon, label: "Platform Usage" },
+  { href: "/system/pricing", icon: PricingIcon, label: "Pricing Model" },
 ];
 
 export function SystemLayout({ children }: { children: React.ReactNode }) {
@@ -161,6 +162,14 @@ function UsageIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 14.25v2.25m3-4.5v4.5m3-6.75v6.75m3-9v9M6 20.25h12A2.25 2.25 0 0020.25 18V6A2.25 2.25 0 0018 3.75H6A2.25 2.25 0 003.75 6v12A2.25 2.25 0 006 20.25z" />
+    </svg>
+  );
+}
+
+function PricingIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 18L9 11.25l4.306 4.306a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941" />
     </svg>
   );
 }

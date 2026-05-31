@@ -22,6 +22,12 @@ import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse } from "./ai.service";
 import { executeAction, type PlannedAction } from "./action-executor.service";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
+import { validateAndPersist } from "./output-validator.service";
+import {
+  createTurnBudget,
+  BudgetExceededError,
+  auditBudgetAbort,
+} from "./cost-budget.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.service";
 import { resolveActiveStage } from "./intelligence/stage-resolver.service";
@@ -142,6 +148,8 @@ function toAgentRecord(row: any): AgentRecord {
     style: row.style,
     identity: row.identity,
     goals: row.goals,
+    goal: row.goal ?? null,
+    successCriteria: row.successCriteria ?? null,
     toneConfig: row.toneConfig,
     behavioral: row.behavioral,
     persona: row.persona,
@@ -197,6 +205,65 @@ function detectHumanHandoff(text: string): boolean {
 }
 
 /**
+ * Deterministic escalation gates, evaluated PRE-BEL.
+ *
+ * Mirrors the worker-side `checkEscalationThresholds` (incoming-worker/
+ * src/services/ai-bot.service.ts) so direct callers of the AI service
+ * (not just the worker) cannot bypass them. When any gate trips, the
+ * caller passes `flags.escalationGateFired: true` into the BEL, which
+ * forces strategy=RESOLVE + escalationPressure=escalate_now + required
+ * action `escalate_to_human` — the same path a worker-side trip takes.
+ *
+ * Three gates:
+ *   1. max_messages — total OUTBOUND ai_bot messages on this conversation
+ *      hits the per-agent cap (default 10).
+ *   2. max_minutes  — wall-clock minutes since conversation.createdAt
+ *      exceeds the per-agent cap (default 15).
+ *   3. Returns `false` for keyword-match — that's already handled by
+ *      `detectHumanHandoff` and flows through `humanHandoffRequested`.
+ */
+async function evaluateEscalationGates(opts: {
+  tenantId: string;
+  conversationId: string;
+  config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null };
+  conversationCreatedAt: Date;
+}): Promise<boolean> {
+  const maxMsgs = opts.config.maxAutonomousMessages || 10;
+  try {
+    const aiMessageCount = await prisma.message.count({
+      where: {
+        conversationId: opts.conversationId,
+        tenantId: opts.tenantId,
+        direction: "OUTBOUND",
+        metadata: { path: ["source"], equals: "ai_bot" },
+      },
+    });
+    if (aiMessageCount >= maxMsgs) {
+      console.log(
+        `[ai-bot] escalation gate tripped: ai_messages=${aiMessageCount} cap=${maxMsgs} convo=${opts.conversationId}`,
+      );
+      return true;
+    }
+  } catch (err: any) {
+    // Fail-open on transient DB error — the worker still has its own
+    // copy of this check; don't block legitimate replies because the
+    // metadata-path query hiccupped.
+    console.warn("[ai-bot] escalation gate count failed (non-fatal):", err?.message);
+  }
+
+  const maxMins = opts.config.maxAutonomousMinutes || 15;
+  const minutesElapsed = (Date.now() - opts.conversationCreatedAt.getTime()) / 60000;
+  if (minutesElapsed >= maxMins) {
+    console.log(
+      `[ai-bot] escalation gate tripped: elapsed=${Math.round(minutesElapsed)}m cap=${maxMins}m convo=${opts.conversationId}`,
+    );
+    return true;
+  }
+
+  return false;
+}
+
+/**
  * Filter the LLM tool surface using ONLY `state.allowedActions`. The BEL
  * has already accounted for strategy, autonomy, CRM existence, and pending
  * approvals; this function performs the deterministic name → category
@@ -224,6 +291,175 @@ function actionCategoriesForTool(toolName: string): ActionCategory[] {
   if (/(send_proposal|send_quote|create_proposal)/.test(toolName)) return ["send_proposal"];
   if (/(update_|patch_)/.test(toolName)) return ["update_record"];
   return [];
+}
+
+/**
+ * Programmatic exit-criteria gate for `close_conversation`. The funnel
+ * stage's `mustHaveFields` are rendered into the prompt as instructions,
+ * but the LLM can still call `close_conversation` while fields are
+ * missing. This gate intercepts the dispatch and refuses to close
+ * until each `mustHaveField` has evidence (contact-row value OR
+ * transcript mention).
+ *
+ * Evidence model (best-effort, conservative):
+ *   - `email` / `phone`: presence on the resolved Contact row, or
+ *     extractable from any inbound message body via regex.
+ *   - generic field: case-insensitive substring of the field label
+ *     appears in the concatenated transcript (catches "budget", "ICP",
+ *     "timeline"…). False positives are tolerable; the LLM will be
+ *     asked to confirm anyway.
+ *
+ * Limitations:
+ *   - `name` is not enforced (too many false positives on first names
+ *     embedded in greetings); the LLM's structured outputs handle it.
+ *   - Stage-advance tools (vendor-specific) are NOT gated here; only
+ *     `close_conversation` is, because it is the unambiguous "done"
+ *     signal across tenants.
+ */
+function checkExitCriteriaGate(
+  toolName: string,
+  stageContext: StageContextForPrompt | undefined,
+  evidence: { email?: string | null; phone?: string | null; transcript: string },
+): { blocked: boolean; reason?: string; missing?: string[]; stageLabel?: string } {
+  if (toolName !== "close_conversation") return { blocked: false };
+  const mustHave = stageContext?.copilot?.exitCriteria?.mustHaveFields ?? [];
+  if (!mustHave.length) return { blocked: false };
+
+  const transcript = evidence.transcript || "";
+  const emailRe = /\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b/;
+  const phoneRe = /(\+?\d[\d\s\-().]{7,}\d)/;
+
+  const missing: string[] = [];
+  for (const fieldRaw of mustHave) {
+    const field = String(fieldRaw || "").trim();
+    if (!field) continue;
+    const lower = field.toLowerCase();
+
+    if (lower === "email") {
+      if (evidence.email && evidence.email.trim()) continue;
+      if (emailRe.test(transcript)) continue;
+      missing.push(field);
+      continue;
+    }
+    if (lower === "phone" || lower === "phone_number" || lower === "mobile") {
+      if (evidence.phone && evidence.phone.trim()) continue;
+      if (phoneRe.test(transcript)) continue;
+      missing.push(field);
+      continue;
+    }
+    if (lower === "name" || lower === "full_name" || lower === "first_name") {
+      // Too noisy to enforce — defer to LLM/structured fields.
+      continue;
+    }
+
+    // Generic: substring of the field label must appear somewhere in
+    // the transcript. Escape regex metachars defensively.
+    const safe = field.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const fieldRe = new RegExp(`\\b${safe}\\b`, "i");
+    if (!fieldRe.test(transcript)) missing.push(field);
+  }
+
+  if (missing.length === 0) return { blocked: false };
+
+  return {
+    blocked: true,
+    reason:
+      `Cannot close — funnel stage \`${stageContext?.label ?? stageContext?.id ?? "current"}\` ` +
+      `requires fields not yet captured: ${missing.map((m) => `\`${m}\``).join(", ")}. ` +
+      `Ask the customer for each missing field before calling \`close_conversation\` again.`,
+    missing,
+    stageLabel: stageContext?.label,
+  };
+}
+
+/**
+ * Programmatic BEL allowedActions gate. Evaluated at dispatch time —
+ * NOT at surface-build time (see filterToolsByAllowedActions comment
+ * for why surface-level narrowing was disabled).
+ *
+ * Block iff: the tool maps to one-or-more known ActionCategories and
+ * none of those categories are in BehaviorState.allowedActions. Tools
+ * with empty categories (custom/adapter tools we haven't taxonomized)
+ * are always allowed — default-permit for unmodeled tools.
+ *
+ * Always-allowed (safety + read): escalate_to_human, link_customer_identifier,
+ * submit_*, *_search/*_get/*_lookup/*_read.
+ *
+ * When this fires often, the fix is BEL classification (e.g. BEL picked
+ * QUALIFY when the customer was actually transactional+hot) — not
+ * weakening the gate.
+ */
+function checkAllowedActionsGate(
+  toolName: string,
+  state: BehaviorState,
+): { blocked: boolean; reason?: string; categories?: ActionCategory[]; allowed?: ActionCategory[] } {
+  if (!toolName) return { blocked: false };
+  if (toolName === "escalate_to_human") return { blocked: false };
+  if (toolName === "link_customer_identifier") return { blocked: false };
+  if (toolName.startsWith("submit_")) return { blocked: false };
+  if (/(_search|_get|_lookup|_read)$/.test(toolName)) return { blocked: false };
+
+  const cats = actionCategoriesForTool(toolName);
+  if (cats.length === 0) return { blocked: false }; // unmodeled → permit
+
+  const allowed = state.allowedActions || [];
+  const intersects = cats.some((c) => allowed.includes(c));
+  if (intersects) return { blocked: false };
+
+  return {
+    blocked: true,
+    reason:
+      `Tool \`${toolName}\` maps to action categories [${cats.join(", ")}] which are NOT in the ` +
+      `current strategy's allowedActions [${allowed.join(", ")}]. Pivot to a permitted action ` +
+      `or wait for the strategy to change.`,
+    categories: cats,
+    allowed,
+  };
+}
+
+/**
+ * Programmatic Action Contract gate. Evaluated at dispatch time (NOT
+ * just at surface-build time) so a tool that survived surface narrowing
+ * cannot still fire out-of-sequence.
+ *
+ * Block iff: the tool is a `requiredTool` of any blocking contract AND
+ * it is not currently in that contract's `pending` set AND it has not
+ * already been `completed`. Returns the tools the LLM must call first
+ * so the synthesized tool-result message can name them verbatim.
+ *
+ * Always-allowed escape valves (escalate_to_human, link_customer_identifier,
+ * submit_*, read-only *_search/*_get/*_lookup/*_read) are never blocked —
+ * the safety latch must remain reachable.
+ */
+function checkContractGate(
+  toolName: string,
+  state: BehaviorState,
+): { blocked: boolean; reason?: string; mustCallFirst?: string[]; contractTrigger?: string } {
+  if (!toolName) return { blocked: false };
+  if (toolName === "escalate_to_human") return { blocked: false };
+  if (toolName === "link_customer_identifier") return { blocked: false };
+  if (toolName.startsWith("submit_")) return { blocked: false };
+  if (/(_search|_get|_lookup|_read)$/.test(toolName)) return { blocked: false };
+
+  const cs = state.actionContractState;
+  if (!cs?.active) return { blocked: false };
+
+  for (const c of cs.contracts) {
+    if (!c.blocking) continue;
+    if (!c.requiredTools.includes(toolName)) continue;
+    if (c.pending.includes(toolName)) continue; // currently allowed
+    if (c.completed.includes(toolName)) continue; // already done — idempotent
+    // Tool is part of the contract but the LLM is jumping the sequence.
+    return {
+      blocked: true,
+      reason:
+        `Action Contract \`${c.trigger}\` (${c.executionMode}) requires you to complete: ` +
+        `${c.pending.map((p) => `\`${p}\``).join(", ")} before calling \`${toolName}\`.`,
+      mustCallFirst: c.pending,
+      contractTrigger: c.trigger,
+    };
+  }
+  return { blocked: false };
 }
 
 /**
@@ -516,6 +752,43 @@ async function generateAIBotReplyInner(
     throw Object.assign(new Error("Conversation not found"), { status: 404 });
   }
 
+  // Per-turn / per-conversation / per-tenant-day token caps. Preflight
+  // runs before any heavy lookups so a tripped cap aborts cheaply. The
+  // budget enforcer is fail-open on DB errors — a transient UsageLog
+  // hiccup never blocks live traffic, but the in-memory per-turn counter
+  // still trips runaway loops below.
+  const budget = createTurnBudget({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+  });
+  try {
+    await budget.preflight();
+  } catch (err) {
+    if (err instanceof BudgetExceededError) {
+      auditBudgetAbort({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        scope: err.scope,
+        used: err.used,
+        cap: err.cap,
+        details: { stage: "preflight" },
+      });
+      return {
+        reply: null,
+        escalation: {
+          reason: `budget_exceeded:${err.scope}`,
+          priority: "low",
+          summary: `Token budget exceeded (${err.scope}): ${err.used}/${err.cap}.`,
+        },
+        awaitingApproval: null,
+        toolCallLog: [],
+        modelUsed: config.model || "gpt-4o-mini",
+        totalTokens: 0,
+      };
+    }
+    throw err;
+  }
+
   const messages = await prisma.message.findMany({
     where: { conversationId: opts.conversationId, tenantId: opts.tenantId },
     orderBy: { createdAt: "asc" },
@@ -557,10 +830,12 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] CRM prefetch failed (non-fatal):", err?.message);
   }
 
-  // Identity lookups.
+  // Identity lookups. Email + phone are fetched here so the
+  // exit-criteria gate can verify `mustHaveFields` without a second
+  // DB hit on every `close_conversation` dispatch.
   const contactRow = await prisma.contact.findFirst({
     where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
-    select: { id: true },
+    select: { id: true, email: true, phone: true },
   });
   const priorConversationCount = await prisma.conversation.count({
     where: {
@@ -616,6 +891,15 @@ async function generateAIBotReplyInner(
     flags: {
       pendingApprovalsCount: pendingApprovals.length,
       humanHandoffRequested: detectHumanHandoff(opts.incomingMessage),
+      escalationGateFired: await evaluateEscalationGates({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        config: {
+          maxAutonomousMessages: config.maxAutonomousMessages,
+          maxAutonomousMinutes: config.maxAutonomousMinutes,
+        },
+        conversationCreatedAt: conversation.createdAt,
+      }),
     },
     funnel,
     actionContracts,
@@ -752,6 +1036,10 @@ async function generateAIBotReplyInner(
     identityLinking: !!contactRow?.id,
     escalation: true,
     scheduleMeeting: hasConnectedCalendar,
+    // Honor CatalogTool.allowedModes — tools tagged ASSIST-only are dropped
+    // from the autonomous surface. The copilot path uses {closure,followup}
+    // flags; the autonomous path uses this mode filter.
+    allowedMode: "AUTO",
   });
 
   // ── Custom API tools ── (tenant-defined HTTP calls as bot tools)
@@ -859,6 +1147,25 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] adapter tool surface failed:", err?.message);
   }
 
+  // Surface-level CRM strip — when crm-prefetch finds an existing lead or
+  // contact, the prompt builder injects a note telling the LLM that
+  // create_lead/create_contact have been removed. That note is necessary
+  // but not sufficient: a confused LLM can still emit the tool call and
+  // duplicate the CRM record. Belt-and-braces — actually drop the tool
+  // from the array so the model literally cannot select it.
+  if (crmHasLead) {
+    tools = (tools as any[]).filter((t) => {
+      const n = t?.function?.name || "";
+      return !/^(?:integration_)?create_lead\b/.test(n);
+    });
+  }
+  if (crmHasCustomer) {
+    tools = (tools as any[]).filter((t) => {
+      const n = t?.function?.name || "";
+      return !/^(?:integration_)?create_contact\b/.test(n);
+    });
+  }
+
   // SINGLE filter — replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
   tools = filterToolsByAllowedActions(tools, behaviorState);
 
@@ -958,6 +1265,20 @@ async function generateAIBotReplyInner(
     });
 
     totalTokens += response.usage.total_tokens || 0;
+    budget.addUsage(response.usage.total_tokens || 0);
+    if (budget.exceededTurnCap()) {
+      auditBudgetAbort({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        scope: "turn",
+        used: budget.tokensThisTurn(),
+        cap: budget.caps.perTurn,
+        details: { stage: "main_loop", round },
+      });
+      // Accept whatever text we have (possibly empty); abort the loop.
+      replyText = response.content?.trim() || null;
+      break;
+    }
 
     const toolCalls = response.toolCalls;
     if (toolCalls && toolCalls.length > 0) {
@@ -972,6 +1293,151 @@ async function generateAIBotReplyInner(
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
         try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+
+        // Exit-criteria gate — refuse to close the conversation until
+        // the resolved funnel stage's `mustHaveFields` have evidence.
+        // Defense-in-depth on top of the prompt-level instruction.
+        const exitGate = checkExitCriteriaGate(toolName, stageContext, {
+          email: contactRow?.email,
+          phone: contactRow?.phone,
+          transcript: messages.map((m) => m.body || "").join("\n"),
+        });
+        if (exitGate.blocked) {
+          const gateContent = JSON.stringify({
+            ok: false,
+            error: exitGate.reason,
+            exit_criteria_gate: true,
+            missing_fields: exitGate.missing,
+            stage: exitGate.stageLabel,
+          });
+          toolCallLog.push({
+            tool: toolName,
+            args: toolArgs,
+            result: gateContent,
+            decision: "exit_criteria_blocked",
+            sideEffect: "exit_criteria_blocked",
+          });
+          prisma.auditLog
+            .create({
+              data: {
+                tenantId: opts.tenantId,
+                actorType: "system",
+                action: "ai.exit_criteria_blocked",
+                targetType: "conversation",
+                targetId: opts.conversationId,
+                metadata: {
+                  tool: toolName,
+                  reason: exitGate.reason,
+                  missing: exitGate.missing,
+                  stage: exitGate.stageLabel,
+                  source: "ai_bot",
+                } as any,
+              },
+            })
+            .catch((err: any) => console.error(`[ai-bot] exit_criteria_blocked audit failed:`, err?.message));
+          chatMessages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: gateContent,
+          });
+          continue;
+        }
+
+        // BEL allowedActions gate — dispatch-time enforcement of the
+        // strategy's permitted action categories. Surface stays full
+        // (the model can SEE every tool to avoid the "talks-about-tool-
+        // it-doesn't-have" failure mode the author hit earlier) but
+        // the RUNTIME refuses to execute tools whose category isn't
+        // in BehaviorState.allowedActions. The LLM sees a tool result
+        // explaining the strategy mismatch and can pivot.
+        const actionsGate = checkAllowedActionsGate(toolName, behaviorState);
+        if (actionsGate.blocked) {
+          const gateContent = JSON.stringify({
+            ok: false,
+            error: actionsGate.reason,
+            allowed_actions_gate: true,
+            tool_categories: actionsGate.categories,
+            allowed_actions: actionsGate.allowed,
+          });
+          toolCallLog.push({
+            tool: toolName,
+            args: toolArgs,
+            result: gateContent,
+            decision: "actions_blocked",
+            sideEffect: "actions_blocked",
+          });
+          prisma.auditLog
+            .create({
+              data: {
+                tenantId: opts.tenantId,
+                actorType: "system",
+                action: "ai.actions_blocked",
+                targetType: "conversation",
+                targetId: opts.conversationId,
+                metadata: {
+                  tool: toolName,
+                  reason: actionsGate.reason,
+                  categories: actionsGate.categories,
+                  allowedActions: actionsGate.allowed,
+                  strategy: behaviorState.strategy,
+                  source: "ai_bot",
+                } as any,
+              },
+            })
+            .catch((err: any) => console.error(`[ai-bot] actions_blocked audit failed:`, err?.message));
+          chatMessages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: gateContent,
+          });
+          continue;
+        }
+
+        // Programmatic Action Contract gate — refuse to dispatch tools
+        // that jump a SEQUENCE contract's order. The surface filter
+        // also narrows blocking contracts, but this is a defense-in-depth
+        // check that catches custom/adapter tool names that may slip
+        // past the surface filter's regex.
+        const contractGate = checkContractGate(toolName, behaviorState);
+        if (contractGate.blocked) {
+          const gateContent = JSON.stringify({
+            ok: false,
+            error: contractGate.reason,
+            contract_gate: true,
+            must_call_first: contractGate.mustCallFirst,
+          });
+          toolCallLog.push({
+            tool: toolName,
+            args: toolArgs,
+            result: gateContent,
+            decision: "contract_blocked",
+            sideEffect: "contract_blocked",
+          });
+          prisma.auditLog
+            .create({
+              data: {
+                tenantId: opts.tenantId,
+                actorType: "system",
+                action: "ai.contract_blocked",
+                targetType: "conversation",
+                targetId: opts.conversationId,
+                metadata: {
+                  tool: toolName,
+                  reason: contractGate.reason,
+                  mustCallFirst: contractGate.mustCallFirst,
+                  contractTrigger: contractGate.contractTrigger,
+                  source: "ai_bot",
+                } as any,
+              },
+            })
+            .catch((err: any) => console.error(`[ai-bot] contract_blocked audit failed:`, err?.message));
+          chatMessages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: gateContent,
+          });
+          continue;
+        }
 
         const exec = await getActionOrchestrator().submit(
           {
@@ -1116,7 +1582,12 @@ async function generateAIBotReplyInner(
     }
   }
 
-  if ((unmetRequired.length > 0 || contractViolations.length > 0) && !awaitingApproval && !pendingEscalation) {
+  if (
+    (unmetRequired.length > 0 || contractViolations.length > 0) &&
+    !awaitingApproval &&
+    !pendingEscalation &&
+    !budget.exceededTurnCap()
+  ) {
     const reasonParts: string[] = [];
     if (unmetRequired.length) {
       reasonParts.push(
@@ -1151,6 +1622,7 @@ async function generateAIBotReplyInner(
       signal,
     });
     totalTokens += retryResponse.usage.total_tokens || 0;
+    budget.addUsage(retryResponse.usage.total_tokens || 0);
 
     const retryToolCalls = retryResponse.toolCalls;
     if (retryToolCalls && retryToolCalls.length > 0) {
@@ -1212,20 +1684,35 @@ async function generateAIBotReplyInner(
           content: result.content,
         });
       }
-      // Final pass to get the customer-facing reply text.
-      const finalResp = await generateResponse({
-        tenantId: opts.tenantId,
-        sessionId: opts.conversationId,
-        model,
-        messages: chatMessages,
-        temperature: config.temperature ?? 0.7,
-        maxTokens: config.maxTokens ?? 1024,
-        tools: tools as any[],
-        metadata: { type: "ai_bot_retry_final", conversationId: opts.conversationId, aiAgentId: config.id },
-        signal,
-      });
-      totalTokens += finalResp.usage.total_tokens || 0;
-      if (finalResp.content?.trim()) replyText = finalResp.content.trim();
+      // Final pass to get the customer-facing reply text — unless the
+      // per-turn budget already tripped on the retry, in which case we
+      // ship whatever the retry already produced.
+      if (budget.exceededTurnCap()) {
+        auditBudgetAbort({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          scope: "turn",
+          used: budget.tokensThisTurn(),
+          cap: budget.caps.perTurn,
+          details: { stage: "contract_retry_skip_final" },
+        });
+        if (retryResponse.content?.trim()) replyText = retryResponse.content.trim();
+      } else {
+        const finalResp = await generateResponse({
+          tenantId: opts.tenantId,
+          sessionId: opts.conversationId,
+          model,
+          messages: chatMessages,
+          temperature: config.temperature ?? 0.7,
+          maxTokens: config.maxTokens ?? 1024,
+          tools: tools as any[],
+          metadata: { type: "ai_bot_retry_final", conversationId: opts.conversationId, aiAgentId: config.id },
+          signal,
+        });
+        totalTokens += finalResp.usage.total_tokens || 0;
+        budget.addUsage(finalResp.usage.total_tokens || 0);
+        if (finalResp.content?.trim()) replyText = finalResp.content.trim();
+      }
     } else {
       // Model still didn't call. Use whatever text it returned and log the persistent violation.
       console.warn(`[ai-bot] Contract violation persists after retry. Accepting reply anyway.`);
@@ -1292,8 +1779,20 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] escalation emit failed:", err?.message);
   }
 
+  // Output validator — last defence against prompt-leakage and fabricated
+  // execution claims ("I refunded your card" with no refund tool call).
+  // Fire-and-forget audit on any violation; returns a safe deflection in
+  // the same language. Skipped when we're handing off (approval / escalation).
+  const safeReply = awaitingApproval
+    ? null
+    : await validateAndPersist(replyText, {
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        toolCallLog,
+      });
+
   return {
-    reply: awaitingApproval ? null : replyText,
+    reply: safeReply,
     escalation: pendingEscalation,
     awaitingApproval,
     toolCallLog,

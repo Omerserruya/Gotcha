@@ -428,22 +428,54 @@ router.get("/:id/context", async (req: Request, res: Response) => {
             select: { id: true, displayName: true, externalId: true, phone: true, email: true, tags: true, metadata: true },
           })
         : Promise.resolve(null),
-      // Prior conversations: prefer matching by the customer's external id /
-      // phone since Conversation doesn't carry a customerId FK. Fall back to
-      // customerName for legacy un-linked rows.
-      prisma.conversation.findMany({
-        where: {
-          tenantId: req.tenantId!,
-          id: { not: session.conversationId },
-          OR: [
-            { customerExternalId: session.customerNumber },
-            { customerName: session.customerNumber },
-          ],
-        },
-        take: 10,
-        orderBy: { updatedAt: "desc" },
-        select: { id: true, channel: true, status: true, customerName: true, lastMessageAt: true, aiSummary: true },
-      }),
+      // Prior conversations: a naive `customerExternalId = phone` match only
+      // catches WhatsApp and Voice. Instagram & Messenger use PSIDs (no phone
+      // in externalId), so those conversations got silently dropped from the
+      // right-panel history.
+      //
+      // Mirror the cross-channel walker used by /missed/:id/detail (above)
+      // so the panel surfaces ALL channels for the same person:
+      //   1. Seed with phone variants (E.164 + bare digits).
+      //   2. Hand each seed to getHistoryByCustomerExternalId — that helper
+      //      walks Contact.personId, CRM mapping (metadata.crmContactId),
+      //      and CRM sibling-channel fields (gotcha_psid_*, gotcha_messenger_id_*)
+      //      to collect every external id belonging to the same person.
+      //   3. De-dup, sort by lastMessageAt desc, take top 10.
+      (async () => {
+        const seedExternalIds = new Set<string>();
+        if (session.customerNumber) {
+          seedExternalIds.add(session.customerNumber);
+          const digits = session.customerNumber.replace(/\D/g, "");
+          if (digits) seedExternalIds.add(digits);
+        }
+        const collected = new Map<string, {
+          id: string; channel: string; status: string; customerName: string | null;
+          lastMessageAt: Date | null; aiSummary: string | null;
+        }>();
+        for (const seed of seedExternalIds) {
+          const rows = await getHistoryByCustomerExternalId(req.tenantId!, seed, session.conversationId)
+            .catch(() => [] as Awaited<ReturnType<typeof getHistoryByCustomerExternalId>>);
+          for (const c of rows) {
+            if (c.id === session.conversationId) continue;
+            if (collected.has(c.id)) continue;
+            collected.set(c.id, {
+              id: c.id,
+              channel: c.channel,
+              status: c.status,
+              customerName: c.customerName,
+              lastMessageAt: c.lastMessageAt,
+              aiSummary: c.aiSummary,
+            });
+          }
+        }
+        return Array.from(collected.values())
+          .sort((a, b) => {
+            const ta = a.lastMessageAt ? new Date(a.lastMessageAt).getTime() : 0;
+            const tb = b.lastMessageAt ? new Date(b.lastMessageAt).getTime() : 0;
+            return tb - ta;
+          })
+          .slice(0, 10);
+      })(),
       prisma.callAnalysis.findUnique({
         where: { conversationId: session.conversationId },
         select: { rollingSummary: true, finalSummary: true, status: true },

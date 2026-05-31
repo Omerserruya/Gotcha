@@ -76,9 +76,37 @@ export {
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
 export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
 export type { AIUsageEvent } from "./lib/ai-usage";
+export {
+  AI_FEATURE_CATEGORIES,
+  AI_CATEGORY_ORDER,
+  categorizeFeature,
+  categoryLabel,
+  categorySqlCase,
+} from "./lib/ai-feature-categories";
+export type { AiFeatureCategory, AiFeatureCategoryDef } from "./lib/ai-feature-categories";
 export { getRedis, closeRedis } from "./lib/redis";
 export { signToken, verifyToken, generateRefreshToken, getJwtExpiresInMs } from "./lib/jwt";
+export {
+  FEATURES,
+  FEATURE_METADATA,
+  ALL_FEATURES,
+  isFeature,
+  getFeatureMetadata,
+  listFeaturesByCategory,
+} from "./lib/features";
+export type { Feature, FeatureCategory, FeatureMetadata } from "./lib/features";
+export {
+  hasFeature,
+  isFeatureEnabledForTenant,
+  getUserFeatures,
+  getTenantFeatures,
+  assertFeature,
+  invalidatePermissionsCache,
+  FeatureGateError,
+} from "./lib/permissions";
+export type { PermissionUser } from "./lib/permissions";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
+export { redact, safeLogger } from "./lib/log-redact";
 export {
   incomingMessageQueue,
   outgoingMessageQueue,
@@ -117,6 +145,7 @@ export type { SecretProvider } from "./secrets";
 // Middleware
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
+export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";

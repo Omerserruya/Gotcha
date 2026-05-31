@@ -603,7 +603,10 @@ export async function buildAgentToolsForAIAgent(
         type: "function",
         function: {
           name: `integration_${ct.slug}`,
-          description: composeToolDescription(ct),
+          description: composeToolDescription(ct, {
+            agentDescription: row.description ?? null,
+            agentUsageRule: row.usageRule ?? null,
+          }),
           parameters,
         },
       };
@@ -630,17 +633,41 @@ export async function buildAgentToolsForAIAgent(
  * the agent's hand-written system prompt and stops over-firing when the
  * prompt forgets to mention a tool.
  */
-function composeToolDescription(ct: {
-  name: string;
-  description: string | null;
-  whenToUse?: string | null;
-  exampleUsage?: unknown;
-}): string {
+function composeToolDescription(
+  ct: {
+    name: string;
+    description: string | null;
+    whenToUse?: string | null;
+    exampleUsage?: unknown;
+  },
+  perAgent?: {
+    agentDescription?: string | null;
+    agentUsageRule?: string | null;
+  },
+): string {
   const parts: string[] = [];
-  parts.push(ct.description || ct.name);
+  // Per-agent description, when present, REPLACES the catalog description —
+  // an operator who wrote a per-agent meaning ("For THIS agent: send a
+  // follow-up SMS, not an email") is making an authoritative override.
+  // Catalog description is kept as a fallback when no override exists.
+  const baseDesc =
+    perAgent?.agentDescription && perAgent.agentDescription.trim()
+      ? perAgent.agentDescription.trim()
+      : ct.description || ct.name;
+  parts.push(baseDesc);
+
+  // Catalog-level whenToUse is the platform-wide rule. Per-agent
+  // usageRule STACKS on top — both render, so a Sales agent's "only
+  // after budget confirmed" rule is added alongside the catalog's
+  // generic guidance. If the operator wants to fully override, they
+  // can blank out the catalog rule via tenant config.
   if (ct.whenToUse && ct.whenToUse.trim()) {
     parts.push(`When to use: ${ct.whenToUse.trim()}`);
   }
+  if (perAgent?.agentUsageRule && perAgent.agentUsageRule.trim()) {
+    parts.push(`When to use (for this agent): ${perAgent.agentUsageRule.trim()}`);
+  }
+
   const example = pickFirstExample(ct.exampleUsage);
   if (example) parts.push(`Example: ${example}`);
   return parts.join("\n\n");

@@ -9,6 +9,12 @@ import {
   signToken,
   publishEvent,
   crossTenantMiddleware,
+  AI_MODEL_PRICING,
+  AI_FEATURE_CATEGORIES,
+  AI_CATEGORY_ORDER,
+  categorySqlCase,
+  categoryLabel,
+  type AiFeatureCategory,
 } from "@chatcenter/shared";
 import { sendOnboardingEmail } from "../services/notification.service";
 
@@ -846,6 +852,351 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
   } catch (err) {
     console.error("System usage by tenant error:", err);
     res.status(500).json({ error: "Failed to get usage by tenant" });
+  }
+});
+
+// ─── System Admin: Pricing-Model Unit Economics ────────────
+//
+// Powers /system/pricing. For each customer-facing AI surface (Autonomous
+// Agent, Inbox Co-pilot, Call-pilot, Embedded Chat, etc) we return raw
+// totals plus unit averages: $/call and $/conversation. The frontend turns
+// those into a pricing calculator (markup % → suggested price per unit) and
+// a trends chart.
+//
+// Notes:
+//  - Categorisation lives in @chatcenter/shared/lib/ai-feature-categories so
+//    backend SQL CASE and frontend display labels stay in sync.
+//  - We split prompt vs completion cost using AI_MODEL_PRICING because input
+//    and output are billed at very different rates (e.g. gpt-4o = $2.50 in /
+//    $10 out per 1M). The stored UsageLog.costUsd column already reflects
+//    cache discounts; we re-derive the split here without re-applying them.
+//  - Per-conversation averages count distinct `metadata.conversationId` —
+//    embeddings and one-shot classifications won't have one, so those
+//    categories return null for that metric.
+
+router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
+  try {
+    const days = parseInt(req.query.days as string) || 30;
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+
+    type CategoryAgg = {
+      category: AiFeatureCategory;
+      calls: bigint;
+      conversations: bigint;
+      prompt_tokens: bigint;
+      completion_tokens: bigint;
+      cached_prompt_tokens: bigint;
+      total_tokens: bigint;
+      cost_usd: string | number | null;
+    };
+    type CategoryModelAgg = {
+      category: AiFeatureCategory;
+      model: string | null;
+      calls: bigint;
+      prompt_tokens: bigint;
+      completion_tokens: bigint;
+      cached_prompt_tokens: bigint;
+    };
+
+    // The category CASE expression is built from the shared mapping so both
+    // queries below classify identically.
+    const caseSql = categorySqlCase("feature");
+
+    const [byCategory, byCategoryModel] = await Promise.all([
+      prisma.$queryRawUnsafe<CategoryAgg[]>(
+        `
+        SELECT
+          ${caseSql} AS category,
+          COUNT(*)::bigint AS calls,
+          COUNT(DISTINCT metadata->>'conversationId')
+            FILTER (WHERE metadata->>'conversationId' IS NOT NULL)::bigint AS conversations,
+          COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+          COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+          COALESCE(SUM(COALESCE((metadata->>'cachedPromptTokens')::int, 0)), 0)::bigint AS cached_prompt_tokens,
+          COALESCE(SUM(quantity), 0)::bigint AS total_tokens,
+          COALESCE(SUM(cost_usd), 0) AS cost_usd
+        FROM usage_logs
+        WHERE type = 'ai_tokens' AND created_at >= $1
+        GROUP BY category
+        `,
+        since,
+      ),
+      prisma.$queryRawUnsafe<CategoryModelAgg[]>(
+        `
+        SELECT
+          ${caseSql} AS category,
+          model,
+          COUNT(*)::bigint AS calls,
+          COALESCE(SUM(prompt_tokens), 0)::bigint AS prompt_tokens,
+          COALESCE(SUM(completion_tokens), 0)::bigint AS completion_tokens,
+          COALESCE(SUM(COALESCE((metadata->>'cachedPromptTokens')::int, 0)), 0)::bigint AS cached_prompt_tokens
+        FROM usage_logs
+        WHERE type = 'ai_tokens' AND created_at >= $1
+        GROUP BY category, model
+        `,
+        since,
+      ),
+    ]);
+
+    // Re-derive input vs output cost per category from real model mix. The
+    // stored cost_usd column is the blended cached/uncached total; we want
+    // to separate the input-side spend from the output-side spend so the
+    // pricing calculator can show two rates (in vs out per 1K).
+    const modelMixByCategory = new Map<AiFeatureCategory, CategoryModelAgg[]>();
+    for (const row of byCategoryModel) {
+      const k = row.category;
+      const arr = modelMixByCategory.get(k) ?? [];
+      arr.push(row);
+      modelMixByCategory.set(k, arr);
+    }
+
+    const defaultPricing = AI_MODEL_PRICING["gpt-4o-mini"]!;
+    const categoryDefMap = new Map(AI_FEATURE_CATEGORIES.map((d) => [d.key, d] as const));
+
+    const categories = byCategory.map((row) => {
+      const promptTokens = Number(row.prompt_tokens);
+      const completionTokens = Number(row.completion_tokens);
+      const cachedPromptTokens = Number(row.cached_prompt_tokens);
+      const totalTokens = Number(row.total_tokens);
+      const calls = Number(row.calls);
+      const conversations = Number(row.conversations);
+      const costUsd = Number(row.cost_usd ?? 0);
+
+      // Per-model split: bill uncached prompt at full rate, cached at 50%,
+      // completion at full rate. Mirrors trackAIUsage()'s accounting.
+      let inputCostUsd = 0;
+      let outputCostUsd = 0;
+      const modelMix = (modelMixByCategory.get(row.category) ?? []).map((m) => {
+        const pricing = (m.model && AI_MODEL_PRICING[m.model]) || defaultPricing;
+        const mPrompt = Number(m.prompt_tokens);
+        const mCompletion = Number(m.completion_tokens);
+        const mCached = Math.min(Number(m.cached_prompt_tokens), mPrompt);
+        const mUncached = Math.max(0, mPrompt - mCached);
+        const mIn =
+          (mUncached / 1_000_000) * pricing.prompt +
+          (mCached / 1_000_000) * pricing.prompt * 0.5;
+        const mOut = (mCompletion / 1_000_000) * pricing.completion;
+        inputCostUsd += mIn;
+        outputCostUsd += mOut;
+        return {
+          model: m.model ?? "unknown",
+          calls: Number(m.calls),
+          promptTokens: mPrompt,
+          completionTokens: mCompletion,
+          cachedPromptTokens: mCached,
+          inputCostUsd: mIn,
+          outputCostUsd: mOut,
+        };
+      });
+
+      // Blended per-1K rates over the actual model mix consumed. Null when
+      // there are no tokens of that direction (e.g. embeddings have no
+      // completion tokens).
+      const blendedInputUsdPer1K = promptTokens > 0 ? (inputCostUsd / promptTokens) * 1000 : null;
+      const blendedOutputUsdPer1K =
+        completionTokens > 0 ? (outputCostUsd / completionTokens) * 1000 : null;
+
+      const def = categoryDefMap.get(row.category);
+
+      return {
+        category: row.category,
+        label: def?.label ?? categoryLabel(row.category),
+        description: def?.description ?? "",
+        color: def?.color ?? "slate",
+        perConversation: def?.perConversation ?? false,
+        calls,
+        conversations,
+        promptTokens,
+        completionTokens,
+        cachedPromptTokens,
+        totalTokens,
+        costUsd,
+        // Re-derived split — may drift slightly from stored costUsd because
+        // of rounding; surface both so the dashboard can show observed total
+        // and the in/out breakdown.
+        inputCostUsd,
+        outputCostUsd,
+        blendedInputUsdPer1K,
+        blendedOutputUsdPer1K,
+        avgCostPerCall: calls > 0 ? costUsd / calls : 0,
+        avgCostPerConversation: conversations > 0 ? costUsd / conversations : null,
+        avgTokensPerCall: calls > 0 ? totalTokens / calls : 0,
+        avgTokensPerConversation: conversations > 0 ? totalTokens / conversations : null,
+        cacheHitPct: promptTokens > 0 ? (cachedPromptTokens / promptTokens) * 100 : null,
+        modelMix,
+      };
+    });
+
+    // Stable ordering — categories without any data still appear with zeros
+    // so the calculator UI can offer them as inputs even before traffic.
+    const present = new Map(categories.map((c) => [c.category, c]));
+    const ordered = AI_CATEGORY_ORDER.map((key) => {
+      if (present.has(key)) return present.get(key)!;
+      const def = categoryDefMap.get(key);
+      return {
+        category: key,
+        label: def?.label ?? categoryLabel(key),
+        description: def?.description ?? "",
+        color: def?.color ?? "slate",
+        perConversation: def?.perConversation ?? false,
+        calls: 0,
+        conversations: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        cachedPromptTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        inputCostUsd: 0,
+        outputCostUsd: 0,
+        blendedInputUsdPer1K: null as number | null,
+        blendedOutputUsdPer1K: null as number | null,
+        avgCostPerCall: 0,
+        avgCostPerConversation: null as number | null,
+        avgTokensPerCall: 0,
+        avgTokensPerConversation: null as number | null,
+        cacheHitPct: null as number | null,
+        modelMix: [] as Array<{
+          model: string;
+          calls: number;
+          promptTokens: number;
+          completionTokens: number;
+          cachedPromptTokens: number;
+          inputCostUsd: number;
+          outputCostUsd: number;
+        }>,
+      };
+    });
+
+    const totals = ordered.reduce(
+      (acc, c) => {
+        acc.calls += c.calls;
+        acc.conversations += c.conversations;
+        acc.promptTokens += c.promptTokens;
+        acc.completionTokens += c.completionTokens;
+        acc.cachedPromptTokens += c.cachedPromptTokens;
+        acc.totalTokens += c.totalTokens;
+        acc.costUsd += c.costUsd;
+        acc.inputCostUsd += c.inputCostUsd;
+        acc.outputCostUsd += c.outputCostUsd;
+        return acc;
+      },
+      {
+        calls: 0,
+        conversations: 0,
+        promptTokens: 0,
+        completionTokens: 0,
+        cachedPromptTokens: 0,
+        totalTokens: 0,
+        costUsd: 0,
+        inputCostUsd: 0,
+        outputCostUsd: 0,
+      },
+    );
+
+    res.json({
+      data: {
+        period: days,
+        categories: ordered,
+        totals,
+        // Echo pricing table so the calculator can render "what we pay per
+        // 1M tokens per model" without an extra round-trip.
+        pricing: AI_MODEL_PRICING,
+      },
+    });
+  } catch (err) {
+    console.error("Pricing unit-costs error:", err);
+    res.status(500).json({ error: "Failed to compute pricing unit costs" });
+  }
+});
+
+// ─── System Admin: Pricing-Model Cost Trends ────────────────
+//
+// Daily cost-per-category buckets for the period. Used by the trends chart
+// on /system/pricing. Returns dense buckets (zero-filled) so the chart x-axis
+// never has gaps.
+
+router.get("/pricing/trends", authenticate, requireSystemAdmin(), async (req: Request, res: Response) => {
+  try {
+    const days = Math.min(parseInt(req.query.days as string) || 30, 365);
+    const since = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
+    since.setUTCHours(0, 0, 0, 0);
+
+    const caseSql = categorySqlCase("feature");
+
+    type TrendRow = {
+      day: Date;
+      category: AiFeatureCategory;
+      cost_usd: string | number | null;
+      calls: bigint;
+    };
+    const rows = await prisma.$queryRawUnsafe<TrendRow[]>(
+      `
+      SELECT
+        date_trunc('day', created_at)::date AS day,
+        ${caseSql} AS category,
+        COALESCE(SUM(cost_usd), 0) AS cost_usd,
+        COUNT(*)::bigint AS calls
+      FROM usage_logs
+      WHERE type = 'ai_tokens' AND created_at >= $1
+      GROUP BY day, category
+      ORDER BY day
+      `,
+      since,
+    );
+
+    // Build the full day list (UTC) — zero-fill missing days so the chart
+    // shows a continuous timeline.
+    const dayList: string[] = [];
+    const today = new Date();
+    today.setUTCHours(0, 0, 0, 0);
+    for (let d = new Date(since); d <= today; d.setUTCDate(d.getUTCDate() + 1)) {
+      dayList.push(d.toISOString().slice(0, 10));
+    }
+
+    // Pre-seed zero series per category in stable order.
+    const seriesMap = new Map<AiFeatureCategory, { cost: number[]; calls: number[] }>();
+    for (const key of AI_CATEGORY_ORDER) {
+      seriesMap.set(key, {
+        cost: new Array(dayList.length).fill(0),
+        calls: new Array(dayList.length).fill(0),
+      });
+    }
+    const dayIndex = new Map(dayList.map((d, i) => [d, i] as const));
+
+    for (const row of rows) {
+      const dayStr = (row.day instanceof Date ? row.day : new Date(row.day))
+        .toISOString()
+        .slice(0, 10);
+      const idx = dayIndex.get(dayStr);
+      if (idx === undefined) continue;
+      const series = seriesMap.get(row.category) ?? seriesMap.get("other")!;
+      series.cost[idx] = Number(row.cost_usd ?? 0);
+      series.calls[idx] = Number(row.calls);
+    }
+
+    const categoryDefMap = new Map(AI_FEATURE_CATEGORIES.map((d) => [d.key, d] as const));
+    const series = AI_CATEGORY_ORDER.map((key) => {
+      const def = categoryDefMap.get(key);
+      const s = seriesMap.get(key)!;
+      return {
+        category: key,
+        label: def?.label ?? categoryLabel(key),
+        color: def?.color ?? "slate",
+        cost: s.cost,
+        calls: s.calls,
+      };
+    });
+
+    res.json({
+      data: {
+        period: days,
+        days: dayList,
+        series,
+      },
+    });
+  } catch (err) {
+    console.error("Pricing trends error:", err);
+    res.status(500).json({ error: "Failed to compute pricing trends" });
   }
 });
 

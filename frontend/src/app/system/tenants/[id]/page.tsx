@@ -6,6 +6,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser, toggleFirstTakeCare, updateBotConfig, getAIPrompt } from "@/lib/api";
 import { SystemLayout } from "@/components/SystemLayout";
+import { FeaturesSection } from "./FeaturesSection";
 import clsx from "clsx";
 
 export default function TenantDetailPage() {
@@ -380,6 +381,9 @@ export default function TenantDetailPage() {
             </div>
           )}
         </div>
+
+        {/* Features (two-layer permission system — tenant level) */}
+        <FeaturesSection tenantId={tenantId} onMessage={showMsg} />
 
         {/* AI Prompt Viewer */}
         {tenant.departments && tenant.departments.length > 0 && (

@@ -15,6 +15,7 @@ import audienceRoutes from "./routes/audiences";
 import tenantSettingsRoutes from "./routes/tenant-settings";
 import voiceSessionsRoutes from "./routes/voice-sessions";
 import voiceChannelsRoutes from "./routes/voice-channels";
+import autoBuyRoutes from "./routes/auto-buy";
 import { handleVoiceSessionEnded } from "./subscribers/voice-auto-close";
 
 const config = { name: "conversation-service", port: parseInt(process.env.PORT || "4002", 10) };
@@ -64,6 +65,7 @@ app.use("/api/audiences", audienceRoutes);
 app.use("/api/tenant-settings", tenantSettingsRoutes);
 app.use("/api/voice-sessions", voiceSessionsRoutes);
 app.use("/api/voice-channels", voiceChannelsRoutes);
+app.use("/api/auto-buy", autoBuyRoutes);
 
 // NOTE: Outgoing message worker has been extracted to @chatcenter/outgoing-worker service
 // for independent scaling. This service is now API + WebSocket only.

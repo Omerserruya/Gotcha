@@ -4,8 +4,10 @@ import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
 import channelRoutes from "./routes/channels";
 import systemRoutes from "./routes/system";
+import systemFeatureRoutes from "./routes/system-features";
 import onboardingRoutes from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
+import permissionsRoutes from "./routes/permissions";
 import rateLimit from "express-rate-limit";
 
 const config = { name: "auth-service", port: parseInt(process.env.PORT || "4001", 10) };
@@ -31,7 +33,9 @@ app.use("/api/auth", authRoutes);
 app.use("/api/agents", agentRoutes);
 app.use("/api/departments", departmentRoutes);
 app.use("/api/channels", channelRoutes);
+app.use("/api/system", systemFeatureRoutes);
 app.use("/api/system", systemRoutes);
+app.use("/api/permissions", permissionsRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 app.use("/api/waitlist", waitlistRoutes);
 
