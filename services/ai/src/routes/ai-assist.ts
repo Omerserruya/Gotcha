@@ -1,4 +1,5 @@
 import { Router, Request, Response } from "express";
+import * as crypto from "crypto";
 import {
   prisma,
   authenticate,
@@ -9,6 +10,7 @@ import {
   resolveEffectiveLocale,
 } from "@chatcenter/shared";
 import * as aiService from "../services/ai-assist.service";
+import { runDeduped } from "../services/copilot-dedup.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-config-generator";
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
@@ -294,84 +296,133 @@ router.post("/compose", async (req: Request, res: Response) => {
 });
 
 router.get("/:conversationId/suggestions", async (req: Request, res: Response) => {
-  try {
-    const convId = req.params.conversationId as string;
-    const conversation = await prisma.conversation.findFirst({ where: { id: convId, tenantId: req.tenantId! } });
-    if (!conversation) { res.status(404).json({ error: "Conversation not found" }); return; }
+  // Request-instance ID — accepted from the client to dedup retries and
+  // double-fires. Falls back to a server-generated id so legacy clients
+  // (no header / no query param) still get concurrency dedup, just not
+  // idempotency dedup.
+  const requestInstanceId =
+    (req.header("x-request-instance-id") || (req.query.ri as string) || crypto.randomBytes(12).toString("hex")).slice(0, 64);
+  const convId = req.params.conversationId as string;
+  const tenantId = req.tenantId!;
+  const startedAt = Date.now();
 
-    const messages = await prisma.message.findMany({
-      where: { conversationId: convId, tenantId: req.tenantId! },
-      orderBy: { createdAt: "desc" }, take: 20,
-      select: { direction: true, body: true, senderName: true, createdAt: true },
+  try {
+    const outcome = await runDeduped({
+      key: `${tenantId}:${convId}`,
+      requestInstanceId,
+      fn: async () => {
+        const conversation = await prisma.conversation.findFirst({ where: { id: convId, tenantId } });
+        if (!conversation) return { status: 404, body: { error: "Conversation not found" } };
+
+        const messages = await prisma.message.findMany({
+          where: { conversationId: convId, tenantId },
+          orderBy: { createdAt: "desc" }, take: 20,
+          select: { direction: true, body: true, senderName: true, createdAt: true },
+        });
+
+        const copilotConfig = await aiService.getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
+
+        // No AI Employee configured — return stub so frontend shows "not configured"
+        if (!copilotConfig) {
+          return {
+            status: 200,
+            body: { data: [{ id: "no-config", text: "No AI Employee configured.", confidence: 0, type: "info" }], copilotMode: "READY_MESSAGE" },
+          };
+        }
+
+        // Resolve department + assigned-agent names for the copilot's
+        // "Customer & Conversation Info" block. Best-effort — copilot still
+        // works without these.
+        let departmentName: string | undefined;
+        let assignedAgentName: string | undefined;
+        try {
+          if ((conversation as any).departmentId) {
+            const dept = await prisma.department.findUnique({
+              where: { id: (conversation as any).departmentId },
+              select: { name: true },
+            });
+            departmentName = dept?.name || undefined;
+          }
+          if ((conversation as any).assignedAgentId) {
+            const agent = await prisma.user.findUnique({
+              where: { id: (conversation as any).assignedAgentId },
+              select: { name: true, email: true },
+            });
+            if (agent) {
+              assignedAgentName = agent.name?.trim() || agent.email || undefined;
+            }
+          }
+        } catch (err: any) {
+          console.warn("[suggestions] meta lookup failed:", err.message);
+        }
+
+        // Suggested replies should track the CUSTOMER's language —
+        // resolveConversationLocale returns Conversation.detectedLocale if
+        // present, else falls back to the system effective locale. An
+        // explicit `?locale=` query string overrides for ad-hoc preview.
+        const localeOverride = (req.query.locale as string) || undefined;
+        const locale = localeOverride ?? await resolveConversationLocale({
+          tenantId,
+          conversationId: conversation.id,
+          fallbackUserId: req.user?.userId,
+        }).catch(() => undefined);
+        const context: aiService.ConversationContext = {
+          tenantId, conversationId: conversation.id,
+          customerName: conversation.customerName || undefined,
+          messages: messages.reverse().map((m: any) => ({
+            direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
+          })),
+          copilotConfig,
+          locale,
+          conversationMeta: {
+            channel: conversation.channel,
+            status: (conversation as any).status,
+            departmentName,
+            assignedAgentName,
+            isHandedOver: (conversation as any).isHandedOver,
+            createdAt: conversation.createdAt?.toISOString(),
+            lastMessageAt: (conversation as any).lastMessageAt?.toISOString(),
+            customerExternalId: conversation.customerExternalId,
+            aiAgentId: (conversation as any).assignedAiAgentId || undefined,
+          },
+        };
+        const suggestions = await aiService.getSuggestions(context);
+        return {
+          status: 200,
+          body: { data: suggestions, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" },
+        };
+      },
     });
 
-    const copilotConfig = await aiService.getEffectiveCopilotConfig(req.tenantId!, (conversation as any).departmentId);
+    // Structured log line — required by Fix #5 (observability). One
+    // line per request so log-grepping by conversationId works.
+    console.log(JSON.stringify({
+      tag: "copilot.suggestions",
+      tenantId,
+      conversationId: convId,
+      requestInstanceId,
+      dedupReason: outcome.reason,           // primary | attached | idempotent
+      waitedMs: outcome.waitedMs,
+      totalMs: Date.now() - startedAt,
+      status: outcome.result.status,
+      aborted: !!(req as any).aborted,
+    }));
 
-    // No AI Employee configured — return stub so frontend shows "not configured"
-    if (!copilotConfig) {
-      res.json({ data: [{ id: "no-config", text: "No AI Employee configured.", confidence: 0, type: "info" }], copilotMode: "READY_MESSAGE" });
-      return;
-    }
-
-    // Resolve department + assigned-agent names for the copilot's
-    // "Customer & Conversation Info" block. Best-effort — copilot still
-    // works without these.
-    let departmentName: string | undefined;
-    let assignedAgentName: string | undefined;
-    try {
-      if ((conversation as any).departmentId) {
-        const dept = await prisma.department.findUnique({
-          where: { id: (conversation as any).departmentId },
-          select: { name: true },
-        });
-        departmentName = dept?.name || undefined;
-      }
-      if ((conversation as any).assignedAgentId) {
-        const agent = await prisma.user.findUnique({
-          where: { id: (conversation as any).assignedAgentId },
-          select: { name: true, email: true },
-        });
-        if (agent) {
-          assignedAgentName = agent.name?.trim() || agent.email || undefined;
-        }
-      }
-    } catch (err: any) {
-      console.warn("[suggestions] meta lookup failed:", err.message);
-    }
-
-    // Suggested replies should track the CUSTOMER's language —
-    // resolveConversationLocale returns Conversation.detectedLocale if
-    // present, else falls back to the system effective locale. An
-    // explicit `?locale=` query string overrides for ad-hoc preview.
-    const localeOverride = (req.query.locale as string) || undefined;
-    const locale = localeOverride ?? await resolveConversationLocale({
-      tenantId: req.tenantId!,
-      conversationId: conversation.id,
-      fallbackUserId: req.user?.userId,
-    }).catch(() => undefined);
-    const context: aiService.ConversationContext = {
-      tenantId: req.tenantId!, conversationId: conversation.id,
-      customerName: conversation.customerName || undefined,
-      messages: messages.reverse().map((m: any) => ({
-        direction: m.direction, body: m.body, senderName: m.senderName || undefined, createdAt: m.createdAt.toISOString(),
-      })),
-      copilotConfig,
-      locale,
-      conversationMeta: {
-        channel: conversation.channel,
-        status: (conversation as any).status,
-        departmentName,
-        assignedAgentName,
-        isHandedOver: (conversation as any).isHandedOver,
-        createdAt: conversation.createdAt?.toISOString(),
-        lastMessageAt: (conversation as any).lastMessageAt?.toISOString(),
-        customerExternalId: conversation.customerExternalId,
-        aiAgentId: (conversation as any).assignedAiAgentId || undefined,
-      },
-    };
-    const suggestions = await aiService.getSuggestions(context);
-    res.json({ data: suggestions, copilotMode: copilotConfig.copilotMode || "READY_MESSAGE" });
-  } catch (err) { console.error("AI suggestions error:", err); res.status(500).json({ error: "Failed to get suggestions" }); }
+    if ((req as any).aborted || res.headersSent) return; // client gave up
+    res.status(outcome.result.status).json(outcome.result.body);
+  } catch (err: any) {
+    console.error("AI suggestions error:", err);
+    console.log(JSON.stringify({
+      tag: "copilot.suggestions",
+      tenantId,
+      conversationId: convId,
+      requestInstanceId,
+      dedupReason: "error",
+      totalMs: Date.now() - startedAt,
+      error: err?.message || String(err),
+    }));
+    if (!res.headersSent) res.status(500).json({ error: "Failed to get suggestions" });
+  }
 });
 
 router.get("/:conversationId/summary", async (req: Request, res: Response) => {

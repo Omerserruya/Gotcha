@@ -392,6 +392,12 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Re
 const updateTenantSchema = z.object({
   name: z.string().min(1).max(100).optional(),
   isActive: z.boolean().optional(),
+  // Voice Phase-1 master toggle and its two sub-flags. Flipping
+  // voiceCopilotEnabled is what makes /settings/voice-channels appear in
+  // the tenant's sidebar (see frontend/src/lib/use-voice-flags.ts).
+  voiceCopilotEnabled: z.boolean().optional(),
+  voiceInboxUiEnabled: z.boolean().optional(),
+  voiceIncomingEnabled: z.boolean().optional(),
 });
 
 router.patch("/tenants/:id", authenticate, requireSystemAdmin(), validate(updateTenantSchema), async (req: Request, res: Response): Promise<void> => {

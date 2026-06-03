@@ -144,6 +144,7 @@ model Tenant {
   agentPresences          AgentPresence[]
   tenantFeatures          TenantFeature[]
   tenantRoles             TenantRole[]
+  invites                 TenantInvite[]
 
   @@index([status])
   @@map("tenants")
@@ -635,12 +636,44 @@ model BusinessProfile {
   businessPriority            BusinessPriority @map("business_priority")
   estimatedDailyConversations Int              @map("estimated_daily_conversations")
   numberOfAgents              Int              @map("number_of_agents")
+  // Multi-select goals captured during onboarding v2 — array of slugs like
+  // ["reply_faster", "qualify_leads", "handle_calls"]. Drives the post-
+  // onboarding home screen, mission ordering, and the guided tour focus.
+  businessGoals               Json?            @map("business_goals")
+  // Website domain captured during onboarding so we can re-run the AI
+  // analysis later (e.g. on a "refresh description" button in settings).
+  websiteDomain               String?          @map("website_domain")
   createdAt                   DateTime         @default(now()) @map("created_at")
   updatedAt                   DateTime         @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("business_profiles")
+}
+
+// ─── Tenant Invitations ─────────────────────────────────────
+// Minimal invitation model — used both for the onboarding "invite
+// teammate by email" step and for the shareable tenant invite link.
+// `email` is nullable so the same model handles both: filled = direct
+// invite (email-targeted), null = open-link invite anyone can accept.
+
+model TenantInvite {
+  id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
+  token      String    @unique
+  email      String?
+  role       String    @default("AGENT")
+  invitedBy  String?   @map("invited_by")
+  expiresAt  DateTime  @map("expires_at")
+  acceptedAt DateTime? @map("accepted_at")
+  userId     String?   @map("user_id")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([email])
+  @@map("tenant_invites")
 }
 
 // ─── Tenant Onboarding Tracker ──────────────────────────────

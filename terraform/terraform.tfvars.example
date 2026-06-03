@@ -1,7 +1,7 @@
 # Copy to terraform.tfvars and edit. terraform.tfvars is gitignored.
 
-region        = "us-east-1"
-project       = "chatcenter"
+region        = "il-central-1"
+project       = "gotcha"
 env           = "prod"
 instance_type = "t4g.large"
 

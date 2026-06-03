@@ -16,6 +16,6 @@ terraform {
   # backend "s3" {
   #   bucket = "chatcenter-tfstate-CHANGE_ME"
   #   key    = "prod/terraform.tfstate"
-  #   region = "us-east-1"
+  #   region = "il-central-1"
   # }
 }

@@ -16,7 +16,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
@@ -61,8 +62,7 @@ export default function FunnelEditorPage() {
   const { token, user } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
-  const params = useParams<{ id: string }>();
-  const funnelDbId = params?.id;
+  const funnelDbId = useDynamicParam();
 
   const [funnel, setFunnel] = useState<FunnelRow | null>(null);
   const [stages, setStages] = useState<FunnelStage[]>([]);

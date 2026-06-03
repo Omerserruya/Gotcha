@@ -2,12 +2,12 @@
 # Build and push every service to Docker Hub as a tag inside a single repo.
 #
 # Convention:
-#   docker.io/<user>/chatcenter:<service>-<sha>     (immutable)
-#   docker.io/<user>/chatcenter:<service>-latest    (rolling pointer)
+#   docker.io/<user>/gotcha:<service>-<sha>     (immutable)
+#   docker.io/<user>/gotcha:<service>-latest    (rolling pointer)
 #
 # Required env:
-#   REGISTRY   e.g. docker.io/omerts        (no trailing slash)
-#   REPO       defaults to "chatcenter"
+#   REGISTRY   e.g. docker.io/omerserruya   (no trailing slash)
+#   REPO       defaults to "gotcha"
 #   TAG        defaults to short git SHA
 #   PLATFORM   defaults to linux/amd64 (use linux/arm64,linux/amd64 for multi-arch)
 #
@@ -27,7 +27,7 @@
 set -euo pipefail
 
 : "${REGISTRY:?REGISTRY required, e.g. docker.io/omerts}"
-REPO="${REPO:-chatcenter}"
+REPO="${REPO:-gotcha}"
 TAG="${TAG:-$(git rev-parse --short HEAD)}"
 PLATFORM="${PLATFORM:-linux/amd64}"
 

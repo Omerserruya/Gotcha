@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback } from "react";
-import { useParams } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser, toggleFirstTakeCare, updateBotConfig, getAIPrompt } from "@/lib/api";
@@ -11,8 +11,7 @@ import clsx from "clsx";
 
 export default function TenantDetailPage() {
   const { token } = useAuth();
-  const params = useParams();
-  const tenantId = params.id as string;
+  const tenantId = useDynamicParam();
 
   const [tenant, setTenant] = useState<any>(null);
   const [loading, setLoading] = useState(true);
@@ -34,6 +33,13 @@ export default function TenantDetailPage() {
   const [botEnabled, setBotEnabled] = useState(false);
   const [botType, setBotType] = useState<string | null>(null);
   const [botConfigSaving, setBotConfigSaving] = useState(false);
+  // Voice Phase-1 flags — surfaced here so a system admin can flip them
+  // per-tenant without touching the DB. The tenant's settings sidebar
+  // gates /settings/voice-channels on voiceCopilotEnabled.
+  const [voiceCopilotEnabled, setVoiceCopilotEnabled] = useState(false);
+  const [voiceInboxUiEnabled, setVoiceInboxUiEnabled] = useState(false);
+  const [voiceIncomingEnabled, setVoiceIncomingEnabled] = useState(false);
+  const [voiceSaving, setVoiceSaving] = useState(false);
   const [aiPromptDeptId, setAiPromptDeptId] = useState<string | null>(null);
   const [aiPromptData, setAiPromptData] = useState<any>(null);
   const [aiPromptLoading, setAiPromptLoading] = useState(false);
@@ -53,6 +59,9 @@ export default function TenantDetailPage() {
       setFtcEnabled(!!res.data.firstTakeCareEnabled);
       setBotEnabled(!!res.data.botEnabled);
       setBotType(res.data.botType || null);
+      setVoiceCopilotEnabled(!!res.data.voiceCopilotEnabled);
+      setVoiceInboxUiEnabled(!!res.data.voiceInboxUiEnabled);
+      setVoiceIncomingEnabled(!!res.data.voiceIncomingEnabled);
     } catch (err) {
       console.error("Failed to load tenant:", err);
     } finally {
@@ -83,6 +92,22 @@ export default function TenantDetailPage() {
       fetchTenant();
     } catch (err: any) {
       showMsg(err.message || "Failed to update", "error");
+    }
+  }
+
+  async function handleSaveVoiceFlag(field: "voiceCopilotEnabled" | "voiceInboxUiEnabled" | "voiceIncomingEnabled", next: boolean) {
+    if (!token) return;
+    setVoiceSaving(true);
+    try {
+      await updateTenant(token, tenantId, { [field]: next });
+      if (field === "voiceCopilotEnabled") setVoiceCopilotEnabled(next);
+      if (field === "voiceInboxUiEnabled") setVoiceInboxUiEnabled(next);
+      if (field === "voiceIncomingEnabled") setVoiceIncomingEnabled(next);
+      showMsg(next ? "Enabled" : "Disabled");
+    } catch (err: any) {
+      showMsg(err?.message || "Failed to update voice flag", "error");
+    } finally {
+      setVoiceSaving(false);
     }
   }
 
@@ -380,6 +405,58 @@ export default function TenantDetailPage() {
               </div>
             </div>
           )}
+        </div>
+
+        {/* Voice CoPilot — Phase-1 master + sub-flags. These live on the
+            Tenant model (voice_copilot_enabled, etc.), separate from the
+            general FeaturesSection toggles below. */}
+        <div className="bg-white rounded-2xl border border-gray-200 p-6">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-sky-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 18.75a6 6 0 006-6v-1.5m-6 7.5a6 6 0 01-6-6v-1.5m6 7.5v3.75m-3.75 0h7.5M12 15.75a3 3 0 01-3-3V4.5a3 3 0 116 0v8.25a3 3 0 01-3 3z" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="font-semibold text-gray-900">Voice CoPilot</h2>
+              <p className="text-xs text-gray-400 mt-0.5">Master switches for the voice channel and call assistance features.</p>
+            </div>
+          </div>
+
+          {([
+            { key: "voiceCopilotEnabled" as const, value: voiceCopilotEnabled, title: "Voice CoPilot enabled", desc: "Master switch — unhides /settings/voice-channels and unlocks all voice APIs." },
+            { key: "voiceInboxUiEnabled" as const, value: voiceInboxUiEnabled, title: "Voice inbox UI", desc: "Show voice sessions inside the Conversations inbox." },
+            { key: "voiceIncomingEnabled" as const, value: voiceIncomingEnabled, title: "Incoming voice calls", desc: "Allow inbound voice calls to ring agents from this tenant." },
+          ]).map((row) => (
+            <div key={row.key} className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+              <div className="pr-4">
+                <p className="text-sm font-medium text-gray-700">{row.title}</p>
+                <p className="text-xs text-gray-400 mt-0.5">{row.desc}</p>
+              </div>
+              <div className="flex items-center gap-3 shrink-0">
+                <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ring-1 ${
+                  row.value ? "bg-green-50 text-green-600 ring-green-200" : "bg-gray-100 text-gray-500 ring-gray-200"
+                }`}>
+                  {row.value ? "Enabled" : "Disabled"}
+                </span>
+                <button
+                  onClick={() => handleSaveVoiceFlag(row.key, !row.value)}
+                  disabled={voiceSaving}
+                  className={clsx(
+                    "relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus:outline-none disabled:opacity-50",
+                    row.value ? "bg-sky-500" : "bg-gray-200"
+                  )}
+                  role="switch"
+                  aria-checked={row.value}
+                >
+                  <span className={clsx(
+                    "pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform ring-0 transition duration-200 ease-in-out",
+                    row.value ? "translate-x-5" : "translate-x-0"
+                  )} />
+                </button>
+              </div>
+            </div>
+          ))}
         </div>
 
         {/* Features (two-layer permission system — tenant level) */}

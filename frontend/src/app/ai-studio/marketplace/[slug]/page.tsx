@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -82,7 +83,7 @@ function getLogoColor(name: string) {
 }
 
 export default function IntegrationDetailPage() {
-  const { slug } = useParams<{ slug: string }>();
+  const slug = useDynamicParam("slug");
   const router = useRouter();
   const { token } = useAuth();
   const { t } = useI18n();

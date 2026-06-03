@@ -266,10 +266,11 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       return;
     }
 
-    // Role-driven validation: funnel is required for Sales/SDR/Recruiting;
-    // goal is required for everyone else (Support/Billing/Custom/Research).
-    // Either way the agent must have SOME notion of "what am I trying to
-    // achieve" — funnel-driven or text-driven.
+    // Role-driven guardrails: funnel-required roles still need a funnel
+    // binding (pipelines depend on stage definitions). For text-driven
+    // roles `goal` is preferred but not blocking — if missing we synthesize
+    // a sensible default from name/description/role so the wizard and
+    // legacy agents (created before `goal` existed) keep working.
     const effectiveRole = String(role || "customer_support").toLowerCase();
     if (requiresFunnel(effectiveRole)) {
       if (!funnelId) {
@@ -279,15 +280,15 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         });
         return;
       }
-    } else {
-      if (!goal || typeof goal !== "string" || !goal.trim()) {
-        res.status(422).json({
-          error: "goal_required_for_role",
-          message: `Role \`${effectiveRole}\` requires an explicit \`goal\` — a one-sentence outcome the agent drives toward.`,
-        });
-        return;
-      }
     }
+    const normalizedGoal: string | null = (() => {
+      if (typeof goal === "string" && goal.trim()) return goal.trim();
+      if (requiresFunnel(effectiveRole)) return null;
+      const desc = typeof description === "string" ? description.trim() : "";
+      if (desc) return desc.length > 240 ? desc.slice(0, 237) + "…" : desc;
+      const safeName = typeof name === "string" && name.trim() ? name.trim() : "this agent";
+      return `Help every customer reach the outcome ${safeName} is built for.`;
+    })();
 
     const agent = await prisma.aIAgent.create({
       data: {
@@ -321,7 +322,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         customGuardrails: customGuardrails || null,
         departmentId: departmentId || null,
         funnelId: funnelId || null,
-        goal: typeof goal === "string" ? goal.trim() || null : null,
+        goal: normalizedGoal,
         successCriteria: typeof successCriteria === "string" ? successCriteria.trim() || null : null,
       },
     });
@@ -394,26 +395,17 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
         : null;
     }
 
-    // Role-driven validation on update — applied with the post-merge view
-    // so a role-change-without-funnel or goal-clear cannot leave the agent
-    // in an unrunnable state.
+    // Role-driven guardrails on update — funnel binding is still required
+    // for pipeline roles (Sales/SDR/Recruiting) because stages drive
+    // behavior. `goal` is preferred but not blocking on PATCH — legacy
+    // agents (pre-dating the field) and partial saves must still succeed.
     const merged = { ...existing, ...updateData };
-    if (requiresFunnel(merged.role)) {
-      if (!merged.funnelId) {
-        res.status(422).json({
-          error: "funnel_required_for_role",
-          message: `Role \`${merged.role}\` requires a funnel binding.`,
-        });
-        return;
-      }
-    } else {
-      if (!merged.goal || !String(merged.goal).trim()) {
-        res.status(422).json({
-          error: "goal_required_for_role",
-          message: `Role \`${merged.role}\` requires an explicit \`goal\`.`,
-        });
-        return;
-      }
+    if (requiresFunnel(merged.role) && !merged.funnelId) {
+      res.status(422).json({
+        error: "funnel_required_for_role",
+        message: `Role \`${merged.role}\` requires a funnel binding.`,
+      });
+      return;
     }
 
     const agent = await prisma.aIAgent.update({

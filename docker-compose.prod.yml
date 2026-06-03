@@ -6,11 +6,11 @@
 #   3. docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate
 #   4. docker compose -f docker-compose.prod.yml up -d
 #
-# Images are expected at:  ${REGISTRY}/${REPO:-chatcenter}:<service>-${TAG}
+# Images are expected at:  ${REGISTRY}/${REPO:-gotcha}:<service>-${TAG}
 # Build + push everything with:  ./scripts/docker-publish.sh
 # Or one service:                 docker buildx build --platform linux/arm64 \
 #                                   -f services/auth/Dockerfile \
-#                                   -t $REGISTRY/chatcenter:auth-$TAG --push .
+#                                   -t $REGISTRY/gotcha:auth-$TAG --push .
 #
 # Key differences vs dev docker-compose.yml:
 #   • No `build:` blocks — `image:` only
@@ -80,7 +80,7 @@ services:
   # (built from gateway/Dockerfile.prod). The dev compose still has a
   # separate `frontend` Node SSR container so HMR works locally.
   gateway:
-    image: ${REGISTRY}/${REPO:-chatcenter}:gateway-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:gateway-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -107,7 +107,7 @@ services:
 
   # ─── Microservices ───────────────────────────────────────
   auth:
-    image: ${REGISTRY:?REGISTRY required}/${REPO:-chatcenter}:auth-${TAG:-latest}
+    image: ${REGISTRY:?REGISTRY required}/${REPO:-gotcha}:auth-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -155,7 +155,7 @@ services:
       redis: { condition: service_healthy }
 
   conversation:
-    image: ${REGISTRY}/${REPO:-chatcenter}:conversation-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:conversation-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -181,7 +181,7 @@ services:
       redis: { condition: service_healthy }
 
   webhook:
-    image: ${REGISTRY}/${REPO:-chatcenter}:webhook-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:webhook-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -203,7 +203,7 @@ services:
       redis: { condition: service_healthy }
 
   analytics:
-    image: ${REGISTRY}/${REPO:-chatcenter}:analytics-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:analytics-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -219,7 +219,7 @@ services:
       redis: { condition: service_healthy }
 
   chatbot:
-    image: ${REGISTRY}/${REPO:-chatcenter}:chatbot-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:chatbot-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -235,7 +235,7 @@ services:
       redis: { condition: service_healthy }
 
   ai:
-    image: ${REGISTRY}/${REPO:-chatcenter}:ai-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:ai-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -303,7 +303,7 @@ services:
       qdrant: { condition: service_healthy }
 
   notifications:
-    image: ${REGISTRY}/${REPO:-chatcenter}:notifications-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:notifications-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -326,7 +326,7 @@ services:
       redis: { condition: service_healthy }
 
   voice-copilot:
-    image: ${REGISTRY}/${REPO:-chatcenter}:voice-copilot-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:voice-copilot-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -356,7 +356,7 @@ services:
 
   # ─── Workers (independently scalable) ────────────────────
   incoming-worker:
-    image: ${REGISTRY}/${REPO:-chatcenter}:incoming-worker-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:incoming-worker-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -376,6 +376,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
+      # Required by shared/jwt.ts at module-load — even workers that don't
+      # mint tokens import the shared barrel, which triggers the prod
+      # JWT_SECRET length check.
+      JWT_SECRET: ${JWT_SECRET}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -387,7 +391,7 @@ services:
       replicas: ${INCOMING_WORKER_REPLICAS:-1}
 
   outgoing-worker:
-    image: ${REGISTRY}/${REPO:-chatcenter}:outgoing-worker-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:outgoing-worker-${TAG:-latest}
     pull_policy: always
     <<: *default-restart
     logging: *default-logging
@@ -398,6 +402,8 @@ services:
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
+      # Required by shared/jwt.ts at module-load (see incoming-worker note).
+      JWT_SECRET: ${JWT_SECRET}
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -410,7 +416,7 @@ services:
   # ─── DB Migration (on-demand: docker compose --profile migrate run --rm migrate) ─────
   # Uses the auth image because it includes prisma + the migrations dir baked in.
   migrate:
-    image: ${REGISTRY}/${REPO:-chatcenter}:auth-${TAG:-latest}
+    image: ${REGISTRY}/${REPO:-gotcha}:auth-${TAG:-latest}
     pull_policy: always
     restart: "no"
     logging: *default-logging

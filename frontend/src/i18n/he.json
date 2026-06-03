@@ -1508,6 +1508,7 @@
     "missions": {
       "title": "להתחיל",
       "hide": "הסתר",
+      "next": "הבא",
       "items": {
         "confirm_business": "אישור פרטי העסק",
         "connect_channel": "חיבור ערוץ",

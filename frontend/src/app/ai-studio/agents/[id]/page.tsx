@@ -1,7 +1,8 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
@@ -299,7 +300,7 @@ function StatusDot({ status }: { status: "synced" | "syncing" | "error" }) {
 
 // ─── Main page ─────────────────────────────────────────────────
 export default function AgentEditorPage() {
-  const { id } = useParams<{ id: string }>();
+  const id = useDynamicParam();
   const router = useRouter();
   const { t } = useI18n();
   const { token } = useAuth();
@@ -310,6 +311,8 @@ export default function AgentEditorPage() {
   const [loading, setLoading] = useState(!isNew);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [customRuleInput, setCustomRuleInput] = useState("");
   const [showCustomRuleInput, setShowCustomRuleInput] = useState(false);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -437,15 +440,24 @@ export default function AgentEditorPage() {
   useEffect(() => {
     if (isNew || !token) return;
     setLoading(true);
+    setLoadError(null);
     getAIAgent(token, id)
       .then((res) => {
         if (res.data) {
           setForm(mapApiToForm(res.data));
         }
       })
-      .catch((err) => {
+      .catch((err: any) => {
         console.error("Failed to load agent:", err);
-        router.push("/ai-studio");
+        // Surface 404 / 500 instead of silently bouncing — the redirect
+        // was hiding a real backend error (P2022 on missing columns)
+        // from operators trying to debug prod.
+        const msg = err?.message || err?.error || "Failed to load AI Employee.";
+        if (err?.status === 404) {
+          router.push("/ai-studio");
+        } else {
+          setLoadError(typeof msg === "string" ? msg : "Failed to load AI Employee.");
+        }
       })
       .finally(() => setLoading(false));
   }, [id, token, isNew]);
@@ -469,6 +481,7 @@ export default function AgentEditorPage() {
   async function handleSave() {
     if (!token) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const channelsArr = Object.entries(form.channels)
         .filter(([, v]) => v)
@@ -520,8 +533,13 @@ export default function AgentEditorPage() {
         setSaved(true);
         setTimeout(() => setSaved(false), 2500);
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Save failed:", err);
+      const msg =
+        err?.message ||
+        err?.error ||
+        "Save failed. Please check required fields and try again.";
+      setSaveError(typeof msg === "string" ? msg : "Save failed.");
     } finally {
       setSaving(false);
     }
@@ -602,6 +620,33 @@ export default function AgentEditorPage() {
       <AppLayout>
         <div className="p-3 md:p-6 flex items-center justify-center h-screen">
           <div className="w-8 h-8 border-2 border-violet-500 border-t-transparent rounded-full animate-spin" />
+        </div>
+      </AppLayout>
+    );
+  }
+
+  if (loadError) {
+    return (
+      <AppLayout>
+        <div className="p-3 md:p-6 flex items-center justify-center h-screen">
+          <div className="max-w-md w-full bg-white border border-red-200 rounded-2xl shadow-sm p-6 text-center space-y-3">
+            <h2 className="text-lg font-semibold text-gray-900">Couldn&apos;t open this AI Employee</h2>
+            <p className="text-sm text-gray-500">{loadError}</p>
+            <div className="flex gap-2 justify-center">
+              <button
+                onClick={() => router.push("/ai-studio")}
+                className="px-3 py-1.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
+              >
+                Back to AI Studio
+              </button>
+              <button
+                onClick={() => { setLoadError(null); router.refresh(); }}
+                className="px-3 py-1.5 rounded-xl bg-violet-500 text-white text-sm hover:bg-violet-600"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
         </div>
       </AppLayout>
     );
@@ -705,6 +750,7 @@ export default function AgentEditorPage() {
                     onKeyDown={(e) => { if (e.key === "Enter") handleWizardAnswer(); }}
                     placeholder={t("aiStudio.wizard.inputPlaceholder")}
                     autoFocus
+                    data-tour="wizard-input"
                     className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
                   />
                   <button
@@ -752,6 +798,16 @@ export default function AgentEditorPage() {
         </button>
 
         <div className="max-w-2xl space-y-5">
+          {saveError && (
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 flex items-start gap-2">
+              <svg className="w-4 h-4 mt-0.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" />
+              </svg>
+              <div className="flex-1">{saveError}</div>
+              <button onClick={() => setSaveError(null)} className="text-red-500 hover:text-red-700" aria-label="Dismiss">×</button>
+            </div>
+          )}
+
           {/* Page header */}
           <div className="flex items-center gap-3">
             <div className={clsx(
@@ -1444,6 +1500,7 @@ export default function AgentEditorPage() {
               type="button"
               onClick={handleSave}
               disabled={saving}
+              data-tour="save-ai-employee"
               className="flex items-center gap-2 px-6 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-60"
             >
               {saving ? (

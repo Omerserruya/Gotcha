@@ -1507,6 +1507,7 @@
     "missions": {
       "title": "Get set up",
       "hide": "Hide",
+      "next": "Next",
       "items": {
         "confirm_business": "Confirm your business",
         "connect_channel": "Connect a channel",

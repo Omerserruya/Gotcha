@@ -1,7 +1,9 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
+import * as crypto from "crypto";
+import * as bcrypt from "bcryptjs";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage } from "@chatcenter/shared";
-import { sendActivationConfirmation } from "../services/notification.service";
+import { sendActivationConfirmation, createMagicLink, sendOnboardingInvite, sendTeammateInvite } from "../services/notification.service";
 import OpenAI from "openai";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
@@ -307,6 +309,12 @@ const businessProfileSchema = z.object({
   organizationName: z.string().min(1).max(200),
   businessDescription: z.string().min(1).max(2000),
   locale: z.string().min(2).max(10).optional(),
+  // Onboarding v2 — multi-select goals and the original domain the user
+  // typed (so we can re-analyze later from settings without making them
+  // retype it). Both optional so the legacy single-screen flow still
+  // works against this endpoint.
+  businessGoals: z.array(z.string().min(1).max(64)).max(6).optional(),
+  websiteDomain: z.string().max(255).optional(),
 });
 
 router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
@@ -326,10 +334,12 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
       return;
     }
 
-    const { organizationName, businessDescription, locale } = req.body as {
+    const { organizationName, businessDescription, locale, businessGoals, websiteDomain } = req.body as {
       organizationName: string;
       businessDescription: string;
       locale?: string;
+      businessGoals?: string[];
+      websiteDomain?: string;
     };
 
     const existing = await prisma.businessProfile.findUnique({
@@ -339,7 +349,12 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
 
     const profile = await prisma.businessProfile.upsert({
       where: { tenantId: req.tenantId! },
-      update: { organizationName, businessDescription },
+      update: {
+        organizationName,
+        businessDescription,
+        ...(businessGoals !== undefined ? { businessGoals } : {}),
+        ...(websiteDomain !== undefined ? { websiteDomain } : {}),
+      },
       create: {
         tenantId: req.tenantId!,
         organizationName,
@@ -348,6 +363,8 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
         businessPriority: existing?.businessPriority ?? "FAST_RESPONSE",
         estimatedDailyConversations: existing?.estimatedDailyConversations ?? 100,
         numberOfAgents: existing?.numberOfAgents ?? 5,
+        ...(businessGoals !== undefined ? { businessGoals } : {}),
+        ...(websiteDomain !== undefined ? { websiteDomain } : {}),
       },
     });
 
@@ -854,4 +871,383 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
   }
 });
 
+// ─── Domain Analysis (Onboarding v2 — AI-suggested description) ──
+//
+// Fetches the user's homepage and asks the LLM to produce a one-sentence
+// "what this business does" suggestion the user can confirm or edit.
+// Falls through to a structured failure response if either step fails —
+// the UI then shows the manual one-line input as fallback.
+
+const analyzeDomainSchema = z.object({
+  domain: z.string().min(3).max(255),
+  locale: z.string().min(2).max(10).optional().default("en"),
+});
+
+function normalizeDomain(raw: string): string | null {
+  const trimmed = raw.trim().toLowerCase();
+  if (!trimmed) return null;
+  let withProto = trimmed;
+  if (!/^https?:\/\//.test(withProto)) withProto = `https://${withProto}`;
+  try {
+    const u = new URL(withProto);
+    if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(u.hostname)) return null;
+    return u.origin;
+  } catch {
+    return null;
+  }
+}
+
+async function fetchHomepageText(origin: string, timeoutMs = 8000): Promise<string | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    const r = await fetch(origin, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (compatible; GotchaOnboarding/1.0; +https://gotcha.co.il)",
+        Accept: "text/html,application/xhtml+xml",
+      },
+      signal: ctl.signal,
+      redirect: "follow",
+    });
+    if (!r.ok) return null;
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
+    const html = await r.text();
+    // Cheap extraction — strip scripts/styles/tags, collapse whitespace,
+    // cap to ~6KB so we don't blow the LLM context on huge pages.
+    const stripped = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+    return stripped.slice(0, 6000) || null;
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+router.post("/analyze-domain", requireRole("ADMIN"), validate(analyzeDomainSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { domain, locale } = req.body as { domain: string; locale: string };
+    const origin = normalizeDomain(domain);
+    if (!origin) {
+      res.json({ data: { ok: false, reason: "invalid_domain" } });
+      return;
+    }
+
+    const pageText = await fetchHomepageText(origin);
+    if (!pageText) {
+      res.json({ data: { ok: false, reason: "fetch_failed", domain: origin } });
+      return;
+    }
+
+    const client = getOpenAIClient();
+    if (!client) {
+      res.json({ data: { ok: false, reason: "ai_unavailable", domain: origin } });
+      return;
+    }
+
+    const lang = LOCALE_NAMES[locale] || "English";
+    const model = process.env.ONBOARDING_CHAT_MODEL || "gpt-4o-mini";
+    let suggestion: string | null = null;
+    try {
+      const response = await client.chat.completions.create({
+        model,
+        temperature: 0.3,
+        max_tokens: 160,
+        response_format: { type: "json_object" },
+        messages: [
+          {
+            role: "system",
+            content: `You analyze a business homepage and produce a one-sentence summary of WHAT THE BUSINESS DOES, written in ${lang}. Respond ONLY with JSON: {"description": "..."}. The description must be 1-2 sentences, plain text, no emojis, no marketing fluff, no mention of the homepage or the analysis. If you cannot tell what the business does, set description to an empty string.`,
+          },
+          {
+            role: "user",
+            content: `Homepage URL: ${origin}\n\nHomepage text (truncated):\n${pageText}`,
+          },
+        ],
+      });
+
+      if (response.usage) {
+        trackAIUsage({
+          tenantId: req.tenantId!,
+          feature: "onboarding_domain_analysis",
+          model,
+          promptTokens: response.usage.prompt_tokens,
+          completionTokens: response.usage.completion_tokens,
+          totalTokens: response.usage.total_tokens,
+        }).catch(() => { /* fire-and-forget */ });
+      }
+
+      const content = response.choices[0]?.message?.content;
+      if (content) {
+        const parsed = JSON.parse(content);
+        const desc = typeof parsed.description === "string" ? parsed.description.trim() : "";
+        if (desc.length >= 10) suggestion = desc;
+      }
+    } catch (err: any) {
+      console.warn("[Onboarding] Domain analysis LLM failed:", err?.message);
+    }
+
+    if (!suggestion) {
+      res.json({ data: { ok: false, reason: "no_summary", domain: origin } });
+      return;
+    }
+
+    res.json({ data: { ok: true, domain: origin, description: suggestion } });
+  } catch (err) {
+    console.error("Analyze domain error:", err);
+    res.status(500).json({ error: "Failed to analyze domain" });
+  }
+});
+
+// ─── Invite Teammates (Onboarding v2) ────────────────────────
+//
+// Two flavors:
+//   1. POST /invite-team   — array of emails, each gets a magic-link email
+//   2. POST /invite-link   — one shareable URL the admin can paste anywhere
+//
+// Both produce TenantInvite rows. Direct email invites also create a
+// placeholder User immediately so we can sign them in via the existing
+// magic-link verifier without changing that route's shape.
+
+const inviteTeamSchema = z.object({
+  emails: z.array(z.string().email()).min(1).max(25),
+  role: z.enum(["ADMIN", "AGENT"]).optional().default("AGENT"),
+});
+
+const INVITE_LINK_EXPIRY_DAYS = 14;
+
+router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { emails, role } = req.body as { emails: string[]; role: "ADMIN" | "AGENT" };
+    const tenantId = req.tenantId!;
+    const inviter = await prisma.user.findUnique({
+      where: { id: req.user!.userId },
+      select: { name: true, email: true },
+    });
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { name: true, slug: true },
+    });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    const cleanedEmails = Array.from(new Set(emails.map((e) => e.trim().toLowerCase()).filter(Boolean)));
+    const results: Array<{ email: string; status: "sent" | "exists" | "failed"; error?: string }> = [];
+
+    for (const email of cleanedEmails) {
+      try {
+        const existingUser = await prisma.user.findUnique({
+          where: { tenantId_email: { tenantId, email } },
+          select: { id: true },
+        });
+        if (existingUser) {
+          results.push({ email, status: "exists" });
+          continue;
+        }
+
+        // Create a placeholder user with a random password — they will
+        // log in via the magic link and can change it later from /settings.
+        const tempPassword = crypto.randomBytes(24).toString("hex");
+        const hashed = await bcrypt.hash(tempPassword, 12);
+        const user = await prisma.user.create({
+          data: {
+            tenantId,
+            email,
+            password: hashed,
+            name: email.split("@")[0] || "Teammate",
+            role,
+            isActive: true,
+          },
+          select: { id: true },
+        });
+
+        const linkToken = await createMagicLink(tenantId, user.id);
+        const inviteToken = crypto.randomBytes(24).toString("hex");
+        const expiresAt = new Date(Date.now() + INVITE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+        await prisma.tenantInvite.create({
+          data: {
+            tenantId,
+            token: inviteToken,
+            email,
+            role,
+            invitedBy: req.user!.userId,
+            userId: user.id,
+            expiresAt,
+          },
+        });
+
+        await sendTeammateInvite({
+          email,
+          tenantName: tenant.name,
+          tenantSlug: tenant.slug,
+          inviterName: inviter?.name || inviter?.email || "Your team",
+          magicLinkToken: linkToken,
+        });
+
+        results.push({ email, status: "sent" });
+      } catch (perEmailErr: any) {
+        console.error(`[Onboarding] Invite failed for ${email}:`, perEmailErr?.message);
+        results.push({ email, status: "failed", error: perEmailErr?.message || "send failed" });
+      }
+    }
+
+    res.json({ data: { results } });
+  } catch (err) {
+    console.error("Invite team error:", err);
+    res.status(500).json({ error: "Failed to send invites" });
+  }
+});
+
+router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.tenantId!;
+    const role = (req.body?.role as "ADMIN" | "AGENT") === "ADMIN" ? "ADMIN" : "AGENT";
+
+    const tenant = await prisma.tenant.findUnique({
+      where: { id: tenantId },
+      select: { slug: true },
+    });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    const token = crypto.randomBytes(24).toString("hex");
+    const expiresAt = new Date(Date.now() + INVITE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
+    await prisma.tenantInvite.create({
+      data: {
+        tenantId,
+        token,
+        role,
+        invitedBy: req.user!.userId,
+        expiresAt,
+      },
+    });
+
+    const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+    const url = `${frontendUrl}/join?token=${token}`;
+    res.json({ data: { url, token, expiresAt } });
+  } catch (err) {
+    console.error("Generate invite link error:", err);
+    res.status(500).json({ error: "Failed to generate invite link" });
+  }
+});
+
+// Public route — used by the /join page to render tenant context before
+// the user fills the form. Auth NOT required.
+const publicRouter = Router();
+
+publicRouter.get("/invite/:token", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const token = req.params.token as string;
+    const invite = await prisma.tenantInvite.findUnique({
+      where: { token },
+      include: { tenant: { select: { name: true, slug: true } } },
+    });
+    if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) {
+      res.status(404).json({ error: "invite_invalid_or_expired" });
+      return;
+    }
+    res.json({
+      data: {
+        tenant: invite.tenant,
+        email: invite.email,
+        role: invite.role,
+        requiresPassword: !invite.userId,
+      },
+    });
+  } catch (err) {
+    console.error("Get invite error:", err);
+    res.status(500).json({ error: "Failed to load invite" });
+  }
+});
+
+const acceptInviteSchema = z.object({
+  token: z.string().min(1),
+  name: z.string().min(1).max(120),
+  email: z.string().email().optional(),
+  password: z.string().min(8).max(128),
+});
+
+publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { token, name, email, password } = req.body as {
+      token: string; name: string; email?: string; password: string;
+    };
+
+    const invite = await prisma.tenantInvite.findUnique({ where: { token } });
+    if (!invite || invite.acceptedAt || invite.expiresAt < new Date()) {
+      res.status(404).json({ error: "invite_invalid_or_expired" });
+      return;
+    }
+
+    const finalEmail = (invite.email || email || "").trim().toLowerCase();
+    if (!finalEmail) {
+      res.status(400).json({ error: "email_required" });
+      return;
+    }
+
+    const hashed = await bcrypt.hash(password, 12);
+    let user;
+
+    if (invite.userId) {
+      // Targeted invite — user row exists from invite-team. Just set
+      // their real password + name and mark the invite accepted.
+      user = await prisma.user.update({
+        where: { id: invite.userId },
+        data: { name, password: hashed, isActive: true },
+        select: { id: true, email: true, name: true, role: true, tenantId: true },
+      });
+    } else {
+      // Open-link invite — create the user now. Reject if the email is
+      // already in this tenant (collision = ask them to log in instead).
+      const existing = await prisma.user.findUnique({
+        where: { tenantId_email: { tenantId: invite.tenantId, email: finalEmail } },
+        select: { id: true },
+      });
+      if (existing) {
+        res.status(409).json({ error: "email_already_in_tenant" });
+        return;
+      }
+      user = await prisma.user.create({
+        data: {
+          tenantId: invite.tenantId,
+          email: finalEmail,
+          name,
+          password: hashed,
+          role: invite.role === "ADMIN" ? "ADMIN" : "AGENT",
+          isActive: true,
+        },
+        select: { id: true, email: true, name: true, role: true, tenantId: true },
+      });
+    }
+
+    await prisma.tenantInvite.update({
+      where: { id: invite.id },
+      data: { acceptedAt: new Date(), userId: user.id },
+    });
+
+    // Don't sign a session here — the /join page redirects to /login
+    // with the email pre-filled. Keeps this route stateless and simple.
+    res.json({ data: { ok: true, tenantId: user.tenantId } });
+  } catch (err) {
+    console.error("Accept invite error:", err);
+    res.status(500).json({ error: "Failed to accept invite" });
+  }
+});
+
+export { publicRouter as publicInviteRouter };
 export default router;

@@ -1,13 +1,13 @@
 "use client";
 
-import { useRouter, useParams } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { FlowEditor } from "@/components/chatbot/FlowEditor";
 
 export default function FlowBuilderPage() {
   const router = useRouter();
-  const params = useParams();
-  const flowId = params.id as string;
+  const flowId = useDynamicParam();
 
   return (
     <AppLayout>

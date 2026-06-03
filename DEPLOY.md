@@ -24,7 +24,7 @@ AWS EC2 (t4g.large, ARM, default VPC, no public-facing services)
        ├─ db (Postgres 16) + redis + qdrant
        └─ uploads volume (local EBS)
 
-Docker images: Docker Hub — single repo, one tag per service (`chatcenter:auth-<sha>`, `chatcenter:ai-<sha>`, …)
+Docker images: Docker Hub — single repo, one tag per service (`gotcha:auth-<sha>`, `gotcha:ai-<sha>`, …)
 Backups: nightly pg_dump + uploads tar → S3, daily EBS snapshots via DLM (7-day retention)
 Secrets: SSM Parameter Store (SecureString)
 Shell access: SSH (your key) OR SSM Session Manager (zero open ports)
@@ -55,7 +55,7 @@ Shell access: SSH (your key) OR SSM Session Manager (zero open ports)
 
 | Field | Value |
 |---|---|
-| User name | `terraform-chatcenter` |
+| User name | `terraform-gotcha` |
 | Console access | **No** (CLI-only) |
 | Permissions option | **Attach policies directly** |
 
@@ -95,8 +95,8 @@ Click **Create inline policy → JSON** and paste:
         "s3:GetBucketTagging", "s3:PutBucketTagging"
       ],
       "Resource": [
-        "arn:aws:s3:::chatcenter-*",
-        "arn:aws:s3:::chatcenter-*/*"
+        "arn:aws:s3:::gotcha-*",
+        "arn:aws:s3:::gotcha-*/*"
       ]
     },
     {
@@ -113,8 +113,8 @@ Click **Create inline policy → JSON** and paste:
         "iam:ListInstanceProfilesForRole"
       ],
       "Resource": [
-        "arn:aws:iam::*:role/chatcenter-*",
-        "arn:aws:iam::*:instance-profile/chatcenter-*"
+        "arn:aws:iam::*:role/gotcha-*",
+        "arn:aws:iam::*:instance-profile/gotcha-*"
       ]
     },
     {
@@ -150,7 +150,7 @@ Click **Create inline policy → JSON** and paste:
 }
 ```
 
-Name it `chatcenter-terraform-policy`.
+Name it `gotcha-terraform-policy`.
 
 </details>
 
@@ -163,18 +163,18 @@ User → **Security credentials** → **Create access key** → use case **Comma
 ### 1.4 Configure your laptop
 
 ```bash
-aws configure --profile chatcenter
+aws configure --profile gotcha
 # AWS Access Key ID:     AKIA...
 # AWS Secret Access Key: ********
-# Default region name:   us-east-1
+# Default region name:   il-central-1
 # Default output format: json
 
-export AWS_PROFILE=chatcenter
+export AWS_PROFILE=gotcha
 # Add to ~/.bashrc or ~/.zshrc to make permanent
 
 # Verify
 aws sts get-caller-identity
-# expect: Account + Arn ending in user/terraform-chatcenter
+# expect: Account + Arn ending in user/terraform-gotcha
 ```
 
 ---
@@ -212,8 +212,8 @@ terraform apply
 Save the outputs:
 ```bash
 terraform output                          # see everything
-terraform output -raw instance_id         # for SSM shell-in
-terraform output -raw instance_public_ip  # for SSH
+terraform output -raw instance_id         # for SSM / SSH-over-SSM shell-in + push-deploy.sh
+terraform output -raw instance_public_ip  # initial cloudflared install only (not a service entrypoint)
 terraform output -raw backup_bucket       # S3 backups bucket
 ```
 
@@ -233,19 +233,21 @@ From your laptop:
 
 ```bash
 aws ssm put-parameter \
-  --name "/chatcenter/prod/DOCKERHUB_USERNAME" \
+  --name "/gotcha/prod/DOCKERHUB_USERNAME" \
   --type "String" \
   --value "<your-dockerhub-username>" \
-  --region us-east-1
+  --region il-central-1
 
 aws ssm put-parameter \
-  --name "/chatcenter/prod/DOCKERHUB_TOKEN" \
+  --name "/gotcha/prod/DOCKERHUB_TOKEN" \
   --type "SecureString" \
   --value "dckr_pat_xxxxx" \
-  --region us-east-1
+  --region il-central-1
 ```
 
-The EC2 IAM role already has read access to `/chatcenter/prod/*`.
+The EC2 IAM role already has read access to `/gotcha/prod/*`.
+
+> ⚠️ **Prefix + region must match.** The instance role can only read `/${project}/${env}/*` (i.e. `/gotcha/prod/*`, see `terraform/iam.tf`) **in the region the box runs in (`il-central-1`)**. A param written to the wrong prefix or region → `AccessDeniedException` or the box never sees it. To update an existing param, add `--overwrite`.
 
 > **Public images?** Skip 3.2 — no login needed on the EC2.
 
@@ -266,7 +268,7 @@ echo "dckr_pat_xxxxx" | docker login -u <your-dockerhub-username> --password-std
 
 # Required env
 export REGISTRY=docker.io/<your-dockerhub-username>   # registry host + namespace
-export REPO=chatcenter                                # the ONE repo to push everything into
+export REPO=gotcha                                # the ONE repo to push everything into
 export PLATFORM=linux/arm64                           # ⚠️ t4g.large is ARM — match it!
 export TAG=$(git rev-parse --short HEAD)              # or v1.0.0
 
@@ -296,18 +298,39 @@ PLATFORM=linux/arm64,linux/amd64 ./scripts/docker-publish.sh   # multi-arch (~2�
 
 ## Step 5 — Shell into the EC2
 
-### Option A — SSH
+The box has **no open port 22 and no public service IP** (Cloudflare Tunnel dials out), so you reach it
+through **SSM**. Two ways — set up Option A once; keep Option B as the always-works fallback.
 
+### Option A — SSH over an SSM tunnel (recommended)
+
+Gives you a normal `ubuntu` shell **plus** `scp`/`rsync`/port-forwarding — all tunneled through SSM,
+still zero open ports. Needs the `session-manager-plugin` locally.
+
+**One-time setup:**
+
+1. Add your laptop's public key to the box (run once, from inside Option B's raw SSM session):
+   ```bash
+   # on the box — paste the contents of your ~/.ssh/id_ed25519.pub:
+   sudo -u ubuntu bash -c 'mkdir -p ~ubuntu/.ssh && echo "PASTE_YOUR_PUBLIC_KEY" >> ~ubuntu/.ssh/authorized_keys && chmod 600 ~ubuntu/.ssh/authorized_keys'
+   ```
+
+2. Teach local SSH to tunnel through SSM — append to `~/.ssh/config` (then `chmod 600 ~/.ssh/config`):
+   ```sshconfig
+   host i-* mi-*
+     ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region il-central-1 --profile gotcha"
+     User ubuntu
+   ```
+
+**Connect** — use the **instance id** as the hostname (the `host i-*` pattern triggers the tunnel):
 ```bash
-ssh -i ~/.ssh/id_ed25519 ubuntu@$(terraform -chdir=terraform output -raw instance_public_ip)
-# or just:
-$(terraform -chdir=terraform output -raw ssh_command)
+ssh -i ~/.ssh/id_ed25519 ubuntu@$(terraform -chdir=terraform output -raw instance_id)
 ```
 
-### Option B — SSM Session Manager (no keys, no open ports)
+### Option B — raw SSM session (fallback, always works)
 
+No SSH key or config needed — works even if Option A breaks.
 ```bash
-aws ssm start-session --target $(terraform -chdir=terraform output -raw instance_id) --region us-east-1
+aws ssm start-session --target $(terraform -chdir=terraform output -raw instance_id) --region il-central-1 --profile gotcha
 sudo -u ubuntu -i
 ```
 
@@ -323,8 +346,8 @@ This installs Docker, the CloudWatch agent, cloudflared, and the nightly backup 
 ### Log in to Docker Hub from EC2 (private images only)
 
 ```bash
-DH_USER=$(aws ssm get-parameter --name /chatcenter/prod/DOCKERHUB_USERNAME --region us-east-1 --query 'Parameter.Value' --output text)
-DH_TOKEN=$(aws ssm get-parameter --name /chatcenter/prod/DOCKERHUB_TOKEN --with-decryption --region us-east-1 --query 'Parameter.Value' --output text)
+DH_USER=$(aws ssm get-parameter --name /gotcha/prod/DOCKERHUB_USERNAME --region il-central-1 --query 'Parameter.Value' --output text)
+DH_TOKEN=$(aws ssm get-parameter --name /gotcha/prod/DOCKERHUB_TOKEN --with-decryption --region il-central-1 --query 'Parameter.Value' --output text)
 echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
 ```
 
@@ -332,25 +355,67 @@ That writes `~/.docker/config.json` — persistent across reboots.
 
 ---
 
-## Step 6 — Clone the app + write `.env`
+## Step 6 — Copy deploy files + write `.env`
 
-On the EC2:
+The box runs **images** — it does **not** need the source tree. It needs only two host files:
+`docker-compose.prod.yml` (what `docker compose` reads) and `.env` (Compose auto-loads it from the
+working dir for `${VAR}` substitution). All volumes are named Docker volumes and the nginx/gateway
+config is baked into the image, so nothing else has to be on the host.
+
+Prepare the app dir on the box (once) and create your local `.env`:
+```bash
+# on the box (via SSM/SSH):
+sudo chown -R ubuntu:ubuntu /opt/chatcenter
+
+# on your laptop, in the repo root:
+cp .env.example .env && nano .env      # fill in the values below
+```
+
+**Push with the helper script** (rides the SSH-over-SSM tunnel from Step 5):
+```bash
+./scripts/push-deploy.sh               # sends docker-compose.prod.yml + .env
+./scripts/push-deploy.sh --shell       # ...then drops you into a shell on the box
+```
+It auto-resolves the instance id (terraform output → `gotcha-prod-app` tag), defaults to region
+`il-central-1` / profile `gotcha`, and verifies each file exists before copying. Override via env:
+`INSTANCE_ID=`, `REGION=`, `PROFILE=`, `SSH_KEY=`, `FILES="a b c"`.
+
+<details>
+<summary>Manual equivalent (plain scp)</summary>
 
 ```bash
-sudo chown -R ubuntu:ubuntu /opt/chatcenter
-cd /opt/chatcenter
-git clone <your-repo-url> .
-
-cp .env.example .env
-nano .env
+scp -i ~/.ssh/id_ed25519 docker-compose.prod.yml .env \
+  ubuntu@$(terraform -chdir=terraform output -raw instance_id):/opt/chatcenter/
 ```
+</details>
+
+<details>
+<summary>No SSH key set up? Relay via the backup S3 bucket (zero SSH, zero extra IAM)</summary>
+
+The instance already has read/write to its backup bucket (`iam.tf` `BackupBucketRW`):
+```bash
+# laptop:
+BUCKET=$(terraform -chdir=terraform output -raw backup_bucket)
+aws s3 cp docker-compose.prod.yml "s3://$BUCKET/deploy/docker-compose.prod.yml"
+aws s3 cp .env                    "s3://$BUCKET/deploy/.env"
+
+# box (via SSM), with BUCKET=<value of: terraform output -raw backup_bucket>:
+cd /opt/chatcenter
+aws s3 cp "s3://$BUCKET/deploy/docker-compose.prod.yml" .
+aws s3 cp "s3://$BUCKET/deploy/.env" .
+```
+</details>
+
+> 🔁 **Future config changes** (compose or `.env`): re-run `./scripts/push-deploy.sh`, then on the box
+> `docker compose -f docker-compose.prod.yml up -d`. Image/code changes still go through Docker Hub
+> (Step 4) — this push is only for the two host files.
 
 Required values in `.env`:
 
 ```bash
 # Registry — what you pushed in Step 4
 REGISTRY=docker.io/<your-dockerhub-username>
-REPO=chatcenter
+REPO=gotcha
 TAG=<the tag you pushed>
 
 # Database
@@ -458,7 +523,7 @@ Once the box is running, future deploys are 2 steps:
 ### Local — build + push
 ```bash
 export REGISTRY=docker.io/<user>
-export REPO=chatcenter
+export REPO=gotcha
 export PLATFORM=linux/arm64
 export TAG=$(git rev-parse --short HEAD)
 docker login
@@ -469,13 +534,16 @@ SERVICES=ai,frontend ./scripts/docker-publish.sh
 
 ### EC2 — pull + restart
 ```bash
-ssh / ssm into box
+ssh -i ~/.ssh/id_ed25519 ubuntu@$(terraform -chdir=terraform output -raw instance_id)   # SSH-over-SSM
 cd /opt/chatcenter
 sed -i "s/^TAG=.*/TAG=$NEW_TAG/" .env       # or keep using :latest with pull_policy: always
 docker compose -f docker-compose.prod.yml pull
 docker compose -f docker-compose.prod.yml --profile migrate run --rm migrate
 docker compose -f docker-compose.prod.yml up -d
 ```
+
+> If you changed `docker-compose.prod.yml` or `.env` locally, push them first with
+> `./scripts/push-deploy.sh` (see Step 6) — then run the pull + restart above.
 
 > Want to automate this? Add `.github/workflows/deploy.yml` that builds on `push to main` and SSMs into the box to pull + restart. Ask and I'll generate it.
 
@@ -502,10 +570,11 @@ docker compose -f docker-compose.prod.yml up -d
 | Symptom | Fix |
 |---|---|
 | `pull access denied` on private image | `docker login` on EC2 was never run, or token expired. Re-run the SSM-fetch + `docker login` block from Step 5. |
+| `AccessDeniedException` reading an SSM param, or box never sees a new value | Param is in the wrong prefix/region. It must be under `/gotcha/prod/*` **and** in `il-central-1` (where the box reads). Re-`put-parameter` with the right `--name`/`--region` (`--overwrite` to replace). Note SSM is **pull-based** — after updating a param you must re-fetch + restart the app for the new value to take effect. |
 | `toomanyrequests` from Docker Hub | Free tier limits anonymous pulls. Login fixes it (200/6h authed; unlimited on Pro). |
 | `exec format error` | Image built for amd64. Rebuild with `PLATFORM=linux/arm64 ./scripts/docker-publish.sh`. |
 | `unknown flag: --name` when running publish script | Buildx plugin not installed. `sudo apt-get install docker-buildx-plugin` then re-run. |
-| `invalid reference format` pushing image | `REGISTRY` includes the repo name (e.g. `omerserruya/chatcenter`). It should be only `docker.io/omerserruya`; the repo goes in `REPO`. |
+| `invalid reference format` pushing image | `REGISTRY` includes the repo name (e.g. `omerserruya/gotcha`). It should be only `docker.io/omerserruya`; the repo goes in `REPO`. |
 | `cloudflared` won't connect | `sudo journalctl -u cloudflared -f` — usually wrong tunnel ID in `config.yml`. |
 | Frontend shows wrong API URL | `NEXT_PUBLIC_*` is baked at build time. Rebuild + push the frontend image with the right `--build-arg`. |
 | `voice.yourdomain.com` drops mid-call | Cloudflare proxy WSS sometimes flakes on Twilio. Set `voice.` to **DNS-only (grey cloud)**, keep `app.` proxied. |
@@ -578,6 +647,7 @@ The migration path is clean because your services are already stateless — only
 | `.env.example` | Environment variable template |
 | `nginx/nginx.conf.template` | Gateway routing rules |
 | `scripts/docker-publish.sh` | One-shot: build + push every service to Docker Hub |
+| `scripts/push-deploy.sh` | Push `docker-compose.prod.yml` + `.env` to the box over the SSM SSH tunnel |
 | `frontend/Dockerfile` | Multi-stage: Next.js static export → nginx:alpine |
 | `frontend/nginx-frontend.conf` | SPA fallback for client-side dynamic routes |
 

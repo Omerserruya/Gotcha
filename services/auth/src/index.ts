@@ -5,7 +5,7 @@ import departmentRoutes from "./routes/departments";
 import channelRoutes from "./routes/channels";
 import systemRoutes from "./routes/system";
 import systemFeatureRoutes from "./routes/system-features";
-import onboardingRoutes from "./routes/onboarding";
+import onboardingRoutes, { publicInviteRouter } from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
 import permissionsRoutes from "./routes/permissions";
 import rateLimit from "express-rate-limit";
@@ -37,6 +37,11 @@ app.use("/api/system", systemFeatureRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/onboarding", onboardingRoutes);
+// Public invite endpoints — viewable / acceptable WITHOUT auth so a
+// teammate who clicked the link can land on /join, see the tenant
+// name, and create their account. Tenant is identified via the
+// signed-random token, not the bearer header.
+app.use("/api/public/onboarding", publicInviteRouter);
 app.use("/api/waitlist", waitlistRoutes);
 
 startService(app, config);

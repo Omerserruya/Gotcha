@@ -543,9 +543,25 @@ export function transferToDepartment(token: string, conversationId: string, depa
 
 // ─── AI Assist ──────────────────────────────────────────────
 
-export function getAISuggestions(token: string, conversationId: string, locale?: string, signal?: AbortSignal) {
+export function getAISuggestions(
+  token: string,
+  conversationId: string,
+  locale?: string,
+  signal?: AbortSignal,
+  // Per-invocation idempotency key — the backend dedup layer collapses
+  // repeated requests with the same id into one execution and short-
+  // circuits retries. Callers SHOULD generate a fresh id per
+  // user-meaningful trigger (new inbound message, manual refresh click)
+  // and reuse it across automatic retries.
+  requestInstanceId?: string,
+) {
   const params = locale ? `?locale=${locale}` : "";
-  return apiFetch<{ data: any[]; copilotMode?: string }>(`/api/ai-assist/${conversationId}/suggestions${params}`, { token, signal });
+  const extraHeaders: Record<string, string> = {};
+  if (requestInstanceId) extraHeaders["X-Request-Instance-Id"] = requestInstanceId;
+  return apiFetch<{ data: any[]; copilotMode?: string }>(
+    `/api/ai-assist/${conversationId}/suggestions${params}`,
+    { token, signal, headers: extraHeaders },
+  );
 }
 
 export function getAIPrompt(token: string, departmentId: string) {
@@ -755,6 +771,10 @@ export function saveBusinessProfile(token: string, data: {
   organizationName: string;
   businessDescription: string;
   locale?: string;
+  // Onboarding v2 — multi-select goals + the original domain the user
+  // typed so we can re-run the analysis later from settings.
+  businessGoals?: string[];
+  websiteDomain?: string;
   // Legacy fields — kept optional so callers outside the 2-screen flow
   // (e.g. settings) can still patch them; onboarding ignores them.
   industry?: string;
@@ -764,6 +784,50 @@ export function saveBusinessProfile(token: string, data: {
 }) {
   return apiFetch<{ data: any }>("/api/onboarding/business-profile", {
     token, method: "POST", body: JSON.stringify(data),
+  });
+}
+
+// Onboarding v2 — analyze a domain to AI-suggest a business description.
+export interface AnalyzeDomainResult {
+  ok: boolean;
+  domain?: string;
+  description?: string;
+  reason?: "invalid_domain" | "fetch_failed" | "ai_unavailable" | "no_summary";
+}
+export function analyzeBusinessDomain(token: string, domain: string, locale?: string) {
+  return apiFetch<{ data: AnalyzeDomainResult }>("/api/onboarding/analyze-domain", {
+    token, method: "POST", body: JSON.stringify({ domain, locale }),
+  });
+}
+
+// Onboarding v2 — invite teammates by email (magic-link based).
+export interface InviteTeamResult {
+  email: string;
+  status: "sent" | "exists" | "failed";
+  error?: string;
+}
+export function inviteTeam(token: string, emails: string[], role?: "ADMIN" | "AGENT") {
+  return apiFetch<{ data: { results: InviteTeamResult[] } }>("/api/onboarding/invite-team", {
+    token, method: "POST", body: JSON.stringify({ emails, role: role || "AGENT" }),
+  });
+}
+
+// Onboarding v2 — generate a shareable tenant invite link.
+export function createInviteLink(token: string, role?: "ADMIN" | "AGENT") {
+  return apiFetch<{ data: { url: string; token: string; expiresAt: string } }>("/api/onboarding/invite-link", {
+    token, method: "POST", body: JSON.stringify({ role: role || "AGENT" }),
+  });
+}
+
+// Public — fetch invite details by token (used by /join page).
+export function getPublicInvite(inviteToken: string) {
+  return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string; requiresPassword: boolean } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
+}
+
+// Public — accept an invite (creates the user / sets their password).
+export function acceptPublicInvite(payload: { token: string; name: string; email?: string; password: string }) {
+  return apiFetch<{ data: { ok: true; tenantId: string } }>("/api/public/onboarding/invite/accept", {
+    method: "POST", body: JSON.stringify(payload),
   });
 }
 

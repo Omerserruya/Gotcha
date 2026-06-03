@@ -1014,3 +1014,94 @@ export async function sendActivationConfirmation(tenantId: string): Promise<void
     await logNotification(payload, "failed", err.message);
   }
 }
+
+// ─── Teammate Invite (Onboarding v2 "Invite your team") ─────
+//
+// Fires from POST /api/onboarding/invite-team. The link drops the
+// teammate straight into the workspace via the existing magic-link
+// verifier — no separate signup form for the email-targeted flow.
+
+interface TeammateInviteArgs {
+  email: string;
+  tenantName: string;
+  tenantSlug: string;
+  inviterName: string;
+  magicLinkToken: string;
+}
+
+function teammateInviteHtml(args: TeammateInviteArgs, joinUrl: string): string {
+  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+  const logoUrl = `${frontendUrl}/logo.png`;
+  return `<!DOCTYPE html>
+<html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><title>${args.inviterName} invited you to ${args.tenantName}</title></head>
+<body style="margin:0;padding:0;background-color:#08080c;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;-webkit-font-smoothing:antialiased;">
+<table role="presentation" width="100%" cellpadding="0" cellspacing="0" border="0" style="background-color:#08080c;">
+  <tr><td align="center" style="padding:40px 16px 20px;">
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+      <tr><td align="center" style="padding-bottom:32px;">
+        <img src="${logoUrl}" alt="GOTCHA." width="140" style="display:block;border:0;outline:none;max-width:140px;height:auto;" />
+      </td></tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+      <tr><td style="background:linear-gradient(135deg,#7C3291 0%,#5A72B3 50%,#6DCED9 100%);border-radius:20px 20px 0 0;padding:48px 40px 40px;text-align:center;">
+        <h1 style="margin:0 0 8px;font-size:28px;font-weight:800;color:#ffffff;line-height:1.2;letter-spacing:-0.5px;">
+          You're invited to ${args.tenantName}.
+        </h1>
+        <p style="margin:0;font-size:15px;color:rgba(255,255,255,0.85);line-height:1.5;font-weight:400;">
+          ${args.inviterName} wants you on the team.
+        </p>
+      </td></tr>
+    </table>
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:520px;">
+      <tr><td style="background-color:#0f0f16;padding:36px 40px 40px;text-align:center;border-radius:0 0 20px 20px;">
+        <a href="${joinUrl}" target="_blank" style="display:inline-block;background-color:#7C3291;color:#ffffff;font-size:16px;font-weight:700;text-decoration:none;padding:14px 40px;border-radius:12px;mso-padding-alt:14px 40px;">
+          Accept &amp; Open Workspace &rarr;
+        </a>
+        <p style="margin:24px 0 0;font-size:12px;color:#71717a;line-height:1.6;">
+          The link is valid for 48 hours. If you didn't expect this invite you can ignore the email.
+        </p>
+      </td></tr>
+    </table>
+  </td></tr>
+</table>
+</body></html>`;
+}
+
+export async function sendTeammateInvite(args: TeammateInviteArgs): Promise<void> {
+  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
+  const joinUrl = `${frontendUrl}/login?magic=${args.magicLinkToken}`;
+  const subject = `${args.inviterName} invited you to ${args.tenantName}`;
+  const text = `${args.inviterName} invited you to join ${args.tenantName} on GOTCHA.\n\nAccept your invite: ${joinUrl}\n\nThis link is valid for 48 hours.`;
+  const html = teammateInviteHtml(args, joinUrl);
+
+  // Resolve tenantId by slug so logNotification has the right scope.
+  let tenantIdForLog = "";
+  try {
+    const t = await prisma.tenant.findUnique({ where: { slug: args.tenantSlug }, select: { id: true } });
+    tenantIdForLog = t?.id || "";
+  } catch { /* best-effort logging only */ }
+
+  const payload: NotificationPayload = {
+    tenantId: tenantIdForLog,
+    channel: "email",
+    type: "teammate_invite",
+    recipient: args.email,
+    subject,
+    body: text,
+    metadata: { tenantSlug: args.tenantSlug, inviterName: args.inviterName },
+  };
+
+  try {
+    await sendHtmlEmail(args.email, subject, html, text);
+    if (tenantIdForLog) await logNotification(payload, "sent");
+  } catch (err: any) {
+    console.error("Failed to send teammate invite:", err);
+    if (tenantIdForLog) await logNotification(payload, "failed", err.message);
+    throw err;
+  }
+}
+
+// Older import alias kept for the existing onboarding route (it
+// imports `sendOnboardingInvite` even though we only need
+// `sendTeammateInvite`). Re-export so the import line stays minimal.
+export const sendOnboardingInvite = sendTeammateInvite;

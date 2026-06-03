@@ -132,9 +132,10 @@ export function MissionPanel({ collapsed }: Props) {
                 type="button"
                 onClick={() => go(m)}
                 disabled={isDone}
+                data-tour={`mission-${m.id}`}
                 className={clsx(
-                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition",
-                  isActive && "bg-white text-primary-700 font-medium ring-1 ring-primary-200 shadow-sm",
+                  "w-full flex items-center gap-2 px-2 py-1.5 rounded-lg text-left text-xs transition relative",
+                  isActive && "bg-white text-primary-700 font-medium ring-2 ring-primary-300 shadow-sm",
                   !isActive && !isDone && "text-gray-400 hover:text-gray-600",
                   isDone && "text-gray-400 line-through cursor-default"
                 )}
@@ -145,12 +146,20 @@ export function MissionPanel({ collapsed }: Props) {
                       <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
                     </svg>
                   ) : isActive ? (
-                    <span className="w-2 h-2 rounded-full bg-primary-500" />
+                    <span className="relative inline-flex h-2 w-2">
+                      <span className="absolute inline-flex h-full w-full rounded-full bg-primary-400 opacity-75 animate-ping" />
+                      <span className="relative inline-flex w-2 h-2 rounded-full bg-primary-500" />
+                    </span>
                   ) : (
                     <span className="w-1.5 h-1.5 rounded-full bg-gray-300" />
                   )}
                 </span>
                 <span className="truncate">{label}</span>
+                {isActive && (
+                  <span className="ml-auto shrink-0 text-[9px] uppercase tracking-wide bg-primary-500 text-white rounded-full px-1.5 py-0.5">
+                    {t("onboarding.missions.next") || "Next"}
+                  </span>
+                )}
               </button>
             </li>
           );

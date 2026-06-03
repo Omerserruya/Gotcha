@@ -227,11 +227,21 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
     const ctrl = new AbortController();
     fetchAbortRef.current = ctrl;
     const { signal } = ctrl;
+    // Per-invocation idempotency key. The backend dedup layer
+    // (services/ai/src/services/copilot-dedup.service.ts) collapses
+    // concurrent calls for the same conversationId into one execution
+    // AND short-circuits repeated requests sharing this id within 60s.
+    // A retried request reuses the same id (good — dedup applies). A
+    // distinct user-meaningful trigger generates a fresh id.
+    const requestInstanceId =
+      typeof crypto !== "undefined" && (crypto as any).randomUUID
+        ? (crypto as any).randomUUID()
+        : `ri_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
     setAiLoading(true);
 
     try {
       // Step 1: Check suggestions first to detect if AI is configured
-      const suggestionsRes = await getAISuggestions(token, conversation.id, locale, signal).catch(() => null);
+      const suggestionsRes = await getAISuggestions(token, conversation.id, locale, signal, requestInstanceId).catch(() => null);
       if (signal.aborted) return;
 
       if (suggestionsRes?.data && suggestionsRes.data.length > 0) {

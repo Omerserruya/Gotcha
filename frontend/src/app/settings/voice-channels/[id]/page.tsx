@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter } from "next/navigation";
+import { useDynamicParam } from "@/lib/useRouteParam";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
@@ -43,7 +44,6 @@ function truncateSid(sid?: string): string {
 export default function VoiceChannelDetailPage() {
   const { token, user } = useAuth();
   const { t } = useI18n();
-  const params = useParams<{ id: string }>();
   const router = useRouter();
   const flags = useVoiceFlags();
 
@@ -54,7 +54,7 @@ export default function VoiceChannelDetailPage() {
     ERROR: t("settings.voiceChannels.statusError"),
   };
 
-  const channelId = params?.id;
+  const channelId = useDynamicParam();
 
   const [channel, setChannel] = useState<VoiceChannel | null>(null);
   const [loading, setLoading] = useState(true);

@@ -156,14 +156,14 @@
     },
     {
       "path": "src/components/conversations/CoPilotPanel.tsx",
-      "accessCount": 56,
-      "lastAccessed": 1778786580097,
+      "accessCount": 61,
+      "lastAccessed": 1780251417688,
       "type": "file"
     },
     {
       "path": "src/lib/api.ts",
-      "accessCount": 53,
-      "lastAccessed": 1779877672214,
+      "accessCount": 55,
+      "lastAccessed": 1780251397352,
       "type": "directory"
     },
     {
