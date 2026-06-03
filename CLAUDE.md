@@ -10,6 +10,60 @@ If PRD.md defines *what to build*, this file defines *how intelligence behaves w
 
 ---
 
+# 🗺️ Repository Reality (authoritative)
+
+GOTCHA / ChatCenter is a **monorepo** using npm workspaces: `packages/*` and `services/*`,
+plus top-level `gateway/` and `frontend/`.
+
+## Service inventory
+| Path | Role |
+|------|------|
+| `services/ai` | **The ONLY service permitted to make NEW LLM/AI calls.** Reasoning, copilots, AI employees. Internal: `http://ai:4006`. |
+| `services/auth` | Authentication, users/tenants, onboarding. |
+| `services/conversation` | Conversations & inbox/messaging core. |
+| `services/chatbot` | Chatbot / automation runtime. |
+| `services/analytics` | Analytics & reporting. |
+| `services/notifications` | Notifications fan-out. |
+| `services/webhook` | Inbound webhooks (channels/providers). |
+| `services/incoming-worker` | Inbound message processing (incl. knowledge retrieval). |
+| `services/outgoing-worker` | Outbound message dispatch. |
+| `services/voice-copilot` | Voice channel & voice automation. Internal: `http://voice-copilot:4007`. |
+| `gateway/` | API gateway / entry (nginx in front). |
+| `frontend/` | Next.js web UI. |
+| `packages/shared` | `@chatcenter/shared`: Prisma schema + shared code. DB via `npm run db:generate` / `npm run db:migrate`. |
+
+> ⚠️ The AI service directory is **`services/ai`** (not "service-ai"). All references should use `services/ai`.
+
+## Inter-service communication
+Services talk over the Docker network via **service DNS names + HTTP** (e.g. `http://ai:4006`,
+`http://voice-copilot:4007`). The `gateway/` is the external entry; `nginx/` fronts it. No
+cross-service direct DB joins — go through a service's API.
+
+## Bring up the full stack (E2E)
+```bash
+docker compose up --build -d      # alias: npm run docker:up   (dev only — docker-compose.yml)
+docker compose ps                 # health
+docker compose down               # tear down
+```
+**Dev only.** Never use `docker-compose.prod.yml` from the pipeline.
+
+---
+
+# 🧱 Pipeline Build Rules (hard, enforced by the Claude-Trello pipeline)
+
+1. **No new microservices.** If one seems needed → STOP, comment on the card, ask the user.
+2. **NEW LLM/AI calls live ONLY in `services/ai`.** Enforced **diff-based** (reviewer checks the PR
+   diff). Two **grandfathered** pre-existing exceptions exist and must NOT be extended or copied:
+   - `services/auth/src/routes/onboarding.ts` (chat completions during onboarding)
+   - `services/incoming-worker/src/services/knowledge-retrieval.service.ts` (embeddings for RAG)
+3. **No new dependencies.** `npm install` / `pip install` / `yarn add` are blocked for agents.
+4. **No half-work.** User-facing tickets must touch **UI (`frontend/`) AND backend** and be E2E-verified.
+5. **Main is sacred.** No direct commits to main, no force-push, no `git reset --hard`. PR-based merges
+   only; only the Deployer merges, and only after explicit user approval.
+6. **One autonomous session at a time** (global single-flight lock).
+
+---
+
 # ⚠️ Non-Negotiable Principles
 
 ## 1. AI is NOT the system — it operates the system
