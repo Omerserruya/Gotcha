@@ -73,6 +73,19 @@ export interface IncomingCommentJob {
   };
 }
 
+// Generic inbound webhook trigger. Shares the "incoming-messages" BullMQ queue
+// with the message + comment paths (one worker, discriminated by
+// job.name = "webhook-trigger"). Emitted by services/webhook when an
+// authenticated POST /webhooks/:token arrives. Carries the caller's raw JSON
+// body untouched in `payload` — looking up the customer, running the flow, and
+// variable injection all happen downstream (ticket 3), not at ingest.
+export interface WebhookTriggerJob {
+  triggerId: string;
+  workflowId: string;
+  tenantId: string;
+  payload: unknown;
+}
+
 export interface OutgoingMessageJob {
   tenantId: string;
   conversationId: string | null;

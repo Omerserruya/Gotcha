@@ -122,14 +122,20 @@
   "hotPaths": [
     {
       "path": "prisma/schema.prisma",
-      "accessCount": 4,
-      "lastAccessed": 1777879794859,
+      "accessCount": 14,
+      "lastAccessed": 1780558307911,
       "type": "file"
     },
     {
       "path": "src/lib/agent-tools.ts",
       "accessCount": 2,
       "lastAccessed": 1777918626142,
+      "type": "file"
+    },
+    {
+      "path": ".env",
+      "accessCount": 2,
+      "lastAccessed": 1780558313234,
       "type": "file"
     },
     {
@@ -172,6 +178,12 @@
       "path": "src/middleware/tenant.ts",
       "accessCount": 1,
       "lastAccessed": 1779870213517,
+      "type": "file"
+    },
+    {
+      "path": "prisma/migrations/20260604120000_add_webhook_trigger/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1780558173040,
       "type": "file"
     }
   ],

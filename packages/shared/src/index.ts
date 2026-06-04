@@ -5,6 +5,7 @@ export type { ServiceConfig } from "./lib/service-app";
 export type {
   IncomingMessageJob,
   IncomingCommentJob,
+  WebhookTriggerJob,
   OutgoingMessageJob,
   AnalyticsJob,
   BroadcastJob,

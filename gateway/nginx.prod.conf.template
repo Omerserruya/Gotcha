@@ -243,6 +243,16 @@ http {
             proxy_set_header X-Hub-Signature-256 $http_x_hub_signature_256;
         }
 
+        # ─── Generic inbound webhook triggers (POST /webhooks/:token) ──
+        location /webhooks {
+            proxy_pass http://webhook_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+            proxy_set_header X-Webhook-Secret $http_x_webhook_secret;
+        }
+
         # ─── Analytics Service ────────────────────────────
         location /api/analytics {
             limit_req zone=api burst=20 nodelay;
