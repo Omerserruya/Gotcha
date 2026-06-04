@@ -1601,6 +1601,49 @@ export function autoGenerateFlowCanvas(token: string) {
   return apiFetch<{ data: any }>("/api/flow-canvas/auto-generate", { token, method: "POST" });
 }
 
+// ─── Webhook Triggers ───────────────────────────────────────
+// Management API for the Main Playbook's Webhook trigger node. The returned
+// `data` carries { id, workflowId, token, secret, enabled, path }; the browser
+// builds the full URL as `${location.origin}${path}`.
+export interface WebhookTriggerDto {
+  id: string;
+  workflowId: string;
+  token: string;
+  secret: string;
+  enabled: boolean;
+  path: string;
+}
+
+export function getWebhookTrigger(token: string, workflowId: string) {
+  return apiFetch<{ data: WebhookTriggerDto | null }>(
+    `/api/webhook-triggers?workflowId=${encodeURIComponent(workflowId)}`,
+    { token },
+  );
+}
+
+export function createWebhookTrigger(token: string, workflowId: string) {
+  return apiFetch<{ data: WebhookTriggerDto }>("/api/webhook-triggers", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ workflowId }),
+  });
+}
+
+export function regenerateWebhookSecret(token: string, id: string) {
+  return apiFetch<{ data: WebhookTriggerDto }>(
+    `/api/webhook-triggers/${id}/regenerate-secret`,
+    { token, method: "POST" },
+  );
+}
+
+export function setWebhookTriggerEnabled(token: string, id: string, enabled: boolean) {
+  return apiFetch<{ data: WebhookTriggerDto }>(`/api/webhook-triggers/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
 // ─── Department Tree ────────────────────────────────────────
 
 export function getDepartmentTree(token: string) {

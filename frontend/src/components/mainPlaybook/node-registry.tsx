@@ -3,7 +3,16 @@
 import React from "react";
 import { VariableMentionInput } from "./VariableMentionInput";
 import { useAuth } from "@/context/AuthContext";
-import { getChannelPosts, getTemplates, getAudienceSchema } from "@/lib/api";
+import {
+  getChannelPosts,
+  getTemplates,
+  getAudienceSchema,
+  getWebhookTrigger,
+  createWebhookTrigger,
+  regenerateWebhookSecret,
+  setWebhookTriggerEnabled,
+  type WebhookTriggerDto,
+} from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 
 // Per-tenant lookups injected by the editor (agents/flows/departments lists for
@@ -598,6 +607,22 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: ScheduleTriggerBody,
   },
 
+  webhook_trigger: {
+    type: "webhook_trigger", label: "Trigger: Webhook", color: "emerald", icon: ICONS.link, category: "Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    defaultData: () => ({ name: "Webhook", workflowId: "" }),
+    // The node is only "ok" once a workflow is linked — that's what the
+    // WebhookTrigger record (URL + secret) is provisioned against.
+    validate: (d) => (String(d.workflowId || "").trim() ? "ok" : "missing"),
+    summary: (d, shared) => {
+      const id = String(d.workflowId || "").trim();
+      if (!id) return "No flow linked yet";
+      const flow = shared?.flows?.find((f) => f.id === id);
+      return `Runs: ${flow?.name || id}`;
+    },
+    Body: WebhookTriggerBody,
+  },
+
   // ── Voice triggers ────────────────────────────────────────────
   // Each entry's `type` is the literal `voice_trigger:<kind>` string the
   // voice-flow-runner matches against. See
@@ -941,6 +966,155 @@ function ScheduleTriggerBody({ data, onChange }: { data: any; onChange: (p: any)
       <Field label="Timezone">
         <input className={inspectorInput} value={data.timezone || "UTC"} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="America/New_York" />
       </Field>
+    </div>
+  );
+}
+
+// Webhook trigger inspector. Lets the author link the node to a flow, then
+// provisions + shows the inbound URL and shared secret for that flow's
+// WebhookTrigger record (copy / regenerate / enable-disable). The URL/secret
+// state lives on the backend record — never persisted into the canvas JSON —
+// so a rotated secret can't go stale here.
+function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (p: any) => void; shared?: SharedData }) {
+  const { token } = useAuth();
+  const workflowId: string = String(data.workflowId || "").trim();
+  const flows = shared?.flows || [];
+
+  const [trigger, setTrigger] = React.useState<WebhookTriggerDto | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState<"url" | "secret" | null>(null);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const fullUrl = trigger ? `${origin}${trigger.path}` : "";
+
+  // Load the existing trigger whenever the linked flow changes.
+  React.useEffect(() => {
+    if (!token || !workflowId) {
+      setTrigger(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getWebhookTrigger(token, workflowId)
+      .then((r) => { if (!cancelled) setTrigger(r.data); })
+      .catch(() => { if (!cancelled) setError("Couldn't load webhook details"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [token, workflowId]);
+
+  async function copy(text: string, which: "url" | "secret") {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
+    } catch {
+      setError("Copy failed — select and copy manually");
+    }
+  }
+
+  async function provision() {
+    if (!token || !workflowId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await createWebhookTrigger(token, workflowId);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't generate the webhook URL");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function regenerate() {
+    if (!token || !trigger) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await regenerateWebhookSecret(token, trigger.id);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't regenerate the secret");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleEnabled(next: boolean) {
+    if (!token || !trigger) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setWebhookTriggerEnabled(token, trigger.id, next);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't update the toggle");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-3">
+      <Field label="Run this flow" hint="The webhook runs this flow when it fires. The flow reads the request body via {{body.*}}.">
+        <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
+          <option value="">Select a flow…</option>
+          {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+        </select>
+      </Field>
+
+      {!workflowId ? (
+        <p className="text-[11px] text-gray-400">Pick a flow to generate its webhook URL.</p>
+      ) : loading ? (
+        <p className="text-xs text-gray-400">Loading webhook…</p>
+      ) : !trigger ? (
+        <button
+          type="button"
+          onClick={provision}
+          disabled={busy}
+          className="w-full text-sm font-medium rounded-lg px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+        >
+          {busy ? "Generating…" : "Generate webhook URL"}
+        </button>
+      ) : (
+        <>
+          <Field label="Webhook URL" hint="POST your JSON payload here.">
+            <div className="flex items-center gap-1.5">
+              <input readOnly value={fullUrl} className={inspectorInput + " font-mono text-[11px]"} onFocus={(e) => e.currentTarget.select()} />
+              <button type="button" onClick={() => copy(fullUrl, "url")} className="shrink-0 text-xs font-medium rounded-lg px-2.5 py-2 border border-gray-200 hover:bg-gray-50 transition">
+                {copied === "url" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </Field>
+
+          <Field label="Secret" hint="Send as the x-webhook-secret header. Requests without it are rejected (401).">
+            <div className="flex items-center gap-1.5">
+              <input readOnly value={trigger.secret} className={inspectorInput + " font-mono text-[11px]"} onFocus={(e) => e.currentTarget.select()} />
+              <button type="button" onClick={() => copy(trigger.secret, "secret")} className="shrink-0 text-xs font-medium rounded-lg px-2.5 py-2 border border-gray-200 hover:bg-gray-50 transition">
+                {copied === "secret" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </Field>
+
+          <button type="button" onClick={regenerate} disabled={busy} className="text-xs font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50">
+            Regenerate secret
+          </button>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 pt-1">
+            <input type="checkbox" checked={trigger.enabled} disabled={busy} onChange={(e) => toggleEnabled(e.target.checked)} className="accent-emerald-500" />
+            Enabled {trigger.enabled ? "" : "(disabled — inbound calls return 403)"}
+          </label>
+
+          <p className="text-[11px] text-gray-400">
+            Read payload fields in the linked flow with <code className="font-mono">{"{{body.field}}"}</code> — e.g. <code className="font-mono">{"{{body.email}}"}</code>.
+          </p>
+        </>
+      )}
+
+      {error ? <p className="text-[11px] text-rose-500">{error}</p> : null}
     </div>
   );
 }
