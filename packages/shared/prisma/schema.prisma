@@ -553,9 +553,10 @@ model ChatbotFlow {
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations   Conversation[]
-  webhookTriggers WebhookTrigger[]
+  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations Conversation[]
+  // WebhookTrigger.workflowId references a flow here in "flow" mode, but is a
+  // plain (un-FK'd) anchor — see that model — so there is no relation back-ref.
 
   @@index([tenantId, isActive])
   @@index([tenantId, channel, isActive])
@@ -578,6 +579,12 @@ model ChatbotFlow {
 model WebhookTrigger {
   id         String   @id @default(cuid())
   tenantId   String   @map("tenant_id")
+  // Anchor that provisions the URL and identifies this trigger's node on the
+  // Main Playbook canvas. In "flow" mode it is a real ChatbotFlow id (validated
+  // in app code, trigger-admin.ts). In "connected" mode it is the webhook_trigger
+  // node's own canvas id — NOT a ChatbotFlow — so this is a plain (indexed)
+  // string, not an FK relation. See the dropped FK in
+  // migrations/20260604150000_webhook_trigger_drop_flow_fk.
   workflowId String   @map("workflow_id")
   token      String   @unique // unguessable path segment that identifies this trigger
   secret     String // shared secret expected in an inbound request header
@@ -586,8 +593,10 @@ model WebhookTrigger {
   //   "flow"      → run the associated ChatbotFlow (`workflowId`) — original behavior.
   //   "connected" → walk the nodes wired to this webhook trigger node on the
   //                 Main Playbook canvas (FlowCanvas), context-free.
-  // The associated `workflowId` stays the anchor in both modes (it provisions
-  // the URL and identifies which canvas node this trigger represents).
+  // The `workflowId` stays the anchor in both modes (it provisions the URL and
+  // identifies which canvas node this trigger represents) — but only "flow" mode
+  // requires it to be a real ChatbotFlow; "connected" mode anchors to the
+  // trigger node's own canvas id.
   targetMode String   @default("flow") @map("target_mode")
   // User-declared shape of the inbound request body: [{ key, type }] where type
   // is "string" | "number" | "boolean". Lets the mapper (manual field binding)
@@ -597,8 +606,7 @@ model WebhookTrigger {
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 
-  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  workflow ChatbotFlow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([workflowId])

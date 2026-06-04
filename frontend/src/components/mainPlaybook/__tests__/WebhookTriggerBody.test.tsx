@@ -92,6 +92,50 @@ describe("WebhookTriggerBody — dual target mode", () => {
     render(<Body data={{ workflowId: "flow_1", targetMode: "connected" }} onChange={() => {}} shared={shared} />);
     expect(screen.getByText(/Drag from this trigger/)).toBeInTheDocument();
   });
+
+  it("connected mode hides the flow selector and auto-anchors to the node id", async () => {
+    const onChange = vi.fn();
+    render(
+      <Body
+        data={{ workflowId: "", targetMode: "connected" }}
+        onChange={onChange}
+        shared={shared}
+        nodeId="wh_node_1"
+      />,
+    );
+    // No flow picker in connected mode — the user isn't forced to choose a flow.
+    expect(screen.queryByText("Run this flow")).not.toBeInTheDocument();
+    // The trigger auto-anchors to its own canvas node id.
+    await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workflowId: "wh_node_1" }));
+  });
+
+  it("does not re-anchor an existing connected trigger that already has an anchor", async () => {
+    const onChange = vi.fn();
+    render(
+      <Body
+        data={{ workflowId: "flow_1", targetMode: "connected" }}
+        onChange={onChange}
+        shared={shared}
+        nodeId="wh_node_1"
+      />,
+    );
+    // Go-forward only: a legacy anchor (a real flow id) is left untouched.
+    await waitFor(() => expect(screen.getByText(/Drag from this trigger/)).toBeInTheDocument());
+    expect(onChange).not.toHaveBeenCalledWith({ workflowId: "wh_node_1" });
+  });
+});
+
+describe("webhook_trigger node validation", () => {
+  const entry = NODE_REGISTRY.webhook_trigger;
+
+  it("validates a connected-mode node with no flow picked", () => {
+    expect(entry.validate!({ targetMode: "connected", workflowId: "" })).toBe("ok");
+  });
+
+  it("still requires a flow in flow mode", () => {
+    expect(entry.validate!({ targetMode: "flow", workflowId: "" })).toBe("missing");
+    expect(entry.validate!({ targetMode: "flow", workflowId: "flow_1" })).toBe("ok");
+  });
 });
 
 describe("WebhookTriggerBody — How to use panel", () => {
