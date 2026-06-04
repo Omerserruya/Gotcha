@@ -11,15 +11,17 @@ vi.mock("../services/identity-link.service", () => ({
 // `conversation` mock is deliberately included so the tests can assert it is
 // NEVER called on a context-free webhook run. `vi.hoisted` makes these mock
 // objects available inside the (hoisted) vi.mock factory below.
-const { chatbotFlow, conversation } = vi.hoisted(() => ({
+const { chatbotFlow, conversation, flowCanvas } = vi.hoisted(() => ({
   chatbotFlow: { findFirst: vi.fn(), update: vi.fn() },
   conversation: { update: vi.fn(), findFirst: vi.fn(), findUnique: vi.fn() },
+  flowCanvas: { findUnique: vi.fn() },
 }));
 
 vi.mock("@chatcenter/shared", () => ({
   prisma: {
     chatbotFlow,
     conversation,
+    flowCanvas,
     contact: { findFirst: vi.fn(), update: vi.fn() },
     message: { create: vi.fn() },
     messageTemplate: { findFirst: vi.fn() },
@@ -153,5 +155,71 @@ describe("executeWebhookFlow (context-free)", () => {
     expect(res.executed).toBe(true);
     const setEntry = res.trace.find((t) => t.type === "set_variable");
     expect(setEntry?.detail?.value).toBe("hello");
+  });
+});
+
+describe("executeWebhookFlow — connected-nodes mode", () => {
+  function canvas(nodes: TestNode[], edges: TestEdge[]) {
+    return { id: "canvas-1", tenantId: "tenant-1", nodes, edges };
+  }
+
+  it("walks the canvas from the matching webhook trigger node, never running the flow", async () => {
+    const nodes: TestNode[] = [
+      // Two webhook triggers on the canvas; only the one bound to this workflow runs.
+      { id: "wt-other", type: "webhook_trigger", data: { workflowId: "other" } },
+      { id: "wt-1", type: "webhook_trigger", data: { workflowId: "flow-1" } },
+      { id: "n2", type: "set_variable", data: { variable: "captured", value: "{{body.order_id}}" } },
+      { id: "n3", type: "end", data: { kind: "close" } },
+    ];
+    const edges: TestEdge[] = [
+      { id: "e1", source: "wt-1", target: "n2" },
+      { id: "e2", source: "n2", target: "n3" },
+    ];
+    flowCanvas.findUnique.mockResolvedValue(canvas(nodes, edges));
+
+    const res = await executeWebhookFlow({
+      tenantId: "tenant-1",
+      workflowId: "flow-1",
+      payload: { order_id: 99 },
+      targetMode: "connected",
+    });
+
+    expect(res.executed).toBe(true);
+    const setEntry = res.trace.find((t) => t.type === "set_variable" && t.action === "set");
+    expect(setEntry?.detail?.value).toBe("99");
+    // Connected mode reads the canvas, never the ChatbotFlow.
+    expect(chatbotFlow.findFirst).not.toHaveBeenCalled();
+    // Context-free: no Conversation touched.
+    expect(conversation.update).not.toHaveBeenCalled();
+  });
+
+  it("returns not-executed when the tenant has no canvas", async () => {
+    flowCanvas.findUnique.mockResolvedValue(null);
+
+    const res = await executeWebhookFlow({
+      tenantId: "tenant-1",
+      workflowId: "flow-1",
+      payload: {},
+      targetMode: "connected",
+    });
+
+    expect(res.executed).toBe(false);
+    expect(res.halted).toBe(false);
+  });
+
+  it("halts cleanly when the trigger node has no outgoing edge", async () => {
+    const nodes: TestNode[] = [{ id: "wt-1", type: "webhook_trigger", data: { workflowId: "flow-1" } }];
+    flowCanvas.findUnique.mockResolvedValue(canvas(nodes, []));
+
+    const res = await executeWebhookFlow({
+      tenantId: "tenant-1",
+      workflowId: "flow-1",
+      payload: {},
+      targetMode: "connected",
+    });
+
+    expect(res.executed).toBe(true);
+    expect(res.halted).toBe(true);
+    expect(res.reason).toBe("no_outgoing_edge");
   });
 });

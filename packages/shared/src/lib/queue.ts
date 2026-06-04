@@ -84,6 +84,13 @@ export interface WebhookTriggerJob {
   workflowId: string;
   tenantId: string;
   payload: unknown;
+  // How the inbound call runs (see WebhookTrigger.targetMode):
+  //   "flow"      → run the associated ChatbotFlow (`workflowId`).
+  //   "connected" → walk the nodes wired to the webhook trigger node on the
+  //                 Main Playbook canvas, context-free.
+  // Optional + defaults to "flow" downstream so jobs enqueued before this field
+  // existed keep the original behavior.
+  targetMode?: "flow" | "connected";
 }
 
 export interface OutgoingMessageJob {

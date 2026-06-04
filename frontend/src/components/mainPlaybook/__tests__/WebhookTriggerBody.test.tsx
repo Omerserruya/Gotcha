@@ -13,8 +13,13 @@ const trigger: WebhookTriggerDto = {
   token: "abc123token",
   secret: "s3cr3t-value",
   enabled: true,
+  targetMode: "flow",
   path: "/webhooks/abc123token",
 };
+
+const mocks = vi.hoisted(() => ({
+  setWebhookTriggerMode: vi.fn(),
+}));
 
 vi.mock("@/lib/api", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/lib/api")>();
@@ -24,6 +29,9 @@ vi.mock("@/lib/api", async (importOriginal) => {
     createWebhookTrigger: vi.fn(() => Promise.resolve({ data: trigger })),
     regenerateWebhookSecret: vi.fn(() => Promise.resolve({ data: trigger })),
     setWebhookTriggerEnabled: vi.fn(() => Promise.resolve({ data: trigger })),
+    // Resolved value is configured lazily in beforeEach to avoid referencing
+    // `trigger` inside this hoisted factory before it is initialized.
+    setWebhookTriggerMode: mocks.setWebhookTriggerMode,
   };
 });
 
@@ -36,6 +44,52 @@ function renderBody() {
     <Body data={{ workflowId: "flow_1" }} onChange={() => {}} shared={shared} />,
   );
 }
+
+describe("WebhookTriggerBody — dual target mode", () => {
+  beforeEach(() => {
+    mocks.setWebhookTriggerMode.mockClear();
+    mocks.setWebhookTriggerMode.mockResolvedValue({
+      data: { ...trigger, targetMode: "connected" },
+    });
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn(() => Promise.resolve()) },
+    });
+  });
+
+  it("renders both target-mode options and defaults to flow mode", () => {
+    render(<Body data={{ workflowId: "flow_1" }} onChange={() => {}} shared={shared} />);
+
+    const flowBtn = screen.getByRole("button", { name: /Run another flow/ });
+    const connectedBtn = screen.getByRole("button", { name: /Run connected nodes/ });
+    expect(flowBtn).toBeInTheDocument();
+    expect(connectedBtn).toBeInTheDocument();
+    // Default preserves current behavior: flow mode is the pressed option.
+    expect(flowBtn).toHaveAttribute("aria-pressed", "true");
+    expect(connectedBtn).toHaveAttribute("aria-pressed", "false");
+  });
+
+  it("switching to connected persists on the node config and mirrors to the backend", async () => {
+    const onChange = vi.fn();
+    render(<Body data={{ workflowId: "flow_1", targetMode: "flow" }} onChange={onChange} shared={shared} />);
+
+    // Wait for the existing trigger to load so the backend mirror fires.
+    await waitFor(() => expect(screen.getByText("How to use")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /Run connected nodes/ }));
+
+    // Node config updated immediately.
+    expect(onChange).toHaveBeenCalledWith({ targetMode: "connected" });
+    // Backend reconciled because a trigger record already exists.
+    await waitFor(() =>
+      expect(mocks.setWebhookTriggerMode).toHaveBeenCalledWith("test-token", "wt_1", "connected"),
+    );
+  });
+
+  it("shows the connected-nodes wiring hint when in connected mode", () => {
+    render(<Body data={{ workflowId: "flow_1", targetMode: "connected" }} onChange={() => {}} shared={shared} />);
+    expect(screen.getByText(/Drag from this trigger/)).toBeInTheDocument();
+  });
+});
 
 describe("WebhookTriggerBody — How to use panel", () => {
   beforeEach(() => {

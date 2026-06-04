@@ -67,6 +67,10 @@ router.post("/:token", async (req: Request, res: Response) => {
       workflowId: trigger.workflowId,
       tenantId: trigger.tenantId,
       payload: req.body,
+      // Drives whether the worker runs the associated flow or walks the nodes
+      // wired to the trigger node on the canvas. Anything other than "connected"
+      // falls back to the original flow behavior.
+      targetMode: trigger.targetMode === "connected" ? "connected" : "flow",
     };
 
     await incomingMessageQueue.add("webhook-trigger", job, {

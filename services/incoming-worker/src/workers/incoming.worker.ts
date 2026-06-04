@@ -500,7 +500,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
  * `body` (n8n style), readable as `{{body.<field>}}` in downstream nodes.
  */
 async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void> {
-  const { tenantId, workflowId, triggerId, payload } = job.data;
+  const { tenantId, workflowId, triggerId, payload, targetMode } = job.data;
 
   // Mirror the message path's tenant gate — don't run flows for suspended /
   // inactive tenants.
@@ -514,9 +514,10 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
   }
 
   const { executeWebhookFlow } = await import("../services/flow-executor.service");
-  const result = await executeWebhookFlow({ tenantId, workflowId, payload });
+  const mode = targetMode === "connected" ? "connected" : "flow";
+  const result = await executeWebhookFlow({ tenantId, workflowId, payload, targetMode: mode });
   console.log(
-    `[incoming-worker] webhook-trigger flow=${workflowId} trigger=${triggerId} ` +
+    `[incoming-worker] webhook-trigger flow=${workflowId} trigger=${triggerId} mode=${mode} ` +
       `executed=${result.executed} halted=${result.halted} reason=${result.reason ?? "-"} steps=${result.trace.length}`,
   );
 }

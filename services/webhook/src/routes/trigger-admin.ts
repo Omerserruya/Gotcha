@@ -17,10 +17,13 @@ import {
  * is what the Main Playbook's Webhook trigger node talks to from the browser to
  * provision / inspect / rotate / toggle a trigger for a given workflow.
  *
- * A WebhookTrigger is bound to a ChatbotFlow (`workflowId`) — that is the flow
- * ticket 3's executeWebhookFlow runs when an authenticated inbound POST hits
- * the ingest route. There is at most ONE trigger per (tenant, workflow); create
- * is idempotent and returns the existing record.
+ * A WebhookTrigger is bound to a ChatbotFlow (`workflowId`) — the anchor that
+ * provisions the URL and identifies the trigger node on the canvas. Its
+ * `targetMode` decides what an authenticated inbound POST runs: "flow" runs that
+ * associated ChatbotFlow; "connected" walks the nodes wired to the webhook
+ * trigger node on the Main Playbook canvas (see executeWebhookFlow). There is at
+ * most ONE trigger per (tenant, workflow); create is idempotent and returns the
+ * existing record (reconciling its mode if the caller passes a different one).
  *
  * Mounted at /api/webhook-triggers (the gateway's /api/webhook prefix already
  * proxies this path to the webhook service — no nginx change needed).
@@ -52,6 +55,7 @@ function serialize(t: {
   token: string;
   secret: string;
   enabled: boolean;
+  targetMode: string;
 }) {
   return {
     id: t.id,
@@ -59,6 +63,8 @@ function serialize(t: {
     token: t.token,
     secret: t.secret,
     enabled: t.enabled,
+    // "flow" | "connected" — what the inbound POST runs. See WebhookTrigger model.
+    targetMode: t.targetMode === "connected" ? "connected" : "flow",
     path: `/webhooks/${t.token}`,
   };
 }
@@ -95,6 +101,12 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
     if (!workflowId) {
       return res.status(400).json({ error: "workflowId is required" });
     }
+    // Optional at create — defaults to the original flow behavior. Anything
+    // other than "connected" is normalized to "flow". `hasMode` distinguishes
+    // "caller omitted it" (don't reconcile an existing record) from "caller
+    // explicitly chose flow".
+    const hasMode = req.body?.targetMode !== undefined;
+    const targetMode = req.body?.targetMode === "connected" ? "connected" : "flow";
 
     // The trigger FK-binds to a ChatbotFlow; make sure it exists and belongs to
     // this tenant before minting credentials for it.
@@ -109,6 +121,16 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
       where: { tenantId: req.tenantId!, workflowId },
     });
     if (existing) {
+      // Idempotent create still reconciles the mode if the caller explicitly
+      // passed a different one (keeps the node config and the trigger record in
+      // sync). When no mode was sent, return the existing record untouched.
+      if (hasMode && existing.targetMode !== targetMode) {
+        const synced = await prisma.webhookTrigger.update({
+          where: { id: existing.id },
+          data: { targetMode },
+        });
+        return res.json({ data: serialize(synced) });
+      }
       return res.json({ data: serialize(existing) });
     }
 
@@ -119,6 +141,7 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
         token: generateToken(),
         secret: generateSecret(),
         enabled: true,
+        targetMode,
       },
     });
     return res.status(201).json({ data: serialize(created) });
@@ -157,15 +180,21 @@ router.post(
 );
 
 /**
- * PATCH /api/webhook-triggers/:id  { enabled }
- * Enable / disable the trigger. A disabled trigger answers inbound POSTs with
- * 403 (see routes/triggers.ts).
+ * PATCH /api/webhook-triggers/:id  { enabled?, targetMode? }
+ * Update the trigger's enabled flag and/or its target mode ("flow" |
+ * "connected"). At least one field is required. A disabled trigger answers
+ * inbound POSTs with 403 (see routes/triggers.ts).
  */
 router.patch("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
-    if (typeof req.body?.enabled !== "boolean") {
-      return res.status(400).json({ error: "enabled (boolean) is required" });
+    const hasEnabled = typeof req.body?.enabled === "boolean";
+    const hasMode = req.body?.targetMode !== undefined;
+    if (!hasEnabled && !hasMode) {
+      return res.status(400).json({ error: "enabled (boolean) or targetMode is required" });
+    }
+    if (hasMode && req.body.targetMode !== "flow" && req.body.targetMode !== "connected") {
+      return res.status(400).json({ error: 'targetMode must be "flow" or "connected"' });
     }
     const trigger = await prisma.webhookTrigger.findFirst({
       where: { id, tenantId: req.tenantId! },
@@ -173,9 +202,12 @@ router.patch("/:id", requireRole("ADMIN"), async (req: Request, res: Response) =
     if (!trigger) {
       return res.status(404).json({ error: "Trigger not found" });
     }
+    const data: { enabled?: boolean; targetMode?: string } = {};
+    if (hasEnabled) data.enabled = req.body.enabled;
+    if (hasMode) data.targetMode = req.body.targetMode;
     const updated = await prisma.webhookTrigger.update({
       where: { id: trigger.id },
-      data: { enabled: req.body.enabled },
+      data,
     });
     return res.json({ data: serialize(updated) });
   } catch (err) {

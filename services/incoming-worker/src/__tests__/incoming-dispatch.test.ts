@@ -38,7 +38,7 @@ describe("incoming worker dispatch — webhook-trigger routing", () => {
     executeWebhookFlow.mockResolvedValue({ executed: true, halted: true, trace: [] });
   });
 
-  it("runs the linked flow for an active tenant, forwarding the payload", async () => {
+  it("runs the linked flow for an active tenant, forwarding the payload (defaults to flow mode)", async () => {
     tenant.findUnique.mockResolvedValue({ status: "ACTIVE" });
 
     await dispatch(WEBHOOK_JOB);
@@ -47,6 +47,23 @@ describe("incoming worker dispatch — webhook-trigger routing", () => {
       tenantId: "t1",
       workflowId: "w1",
       payload: { order_id: 7 },
+      targetMode: "flow",
+    });
+  });
+
+  it("forwards connected target mode to the executor", async () => {
+    tenant.findUnique.mockResolvedValue({ status: "ACTIVE" });
+
+    await dispatch({
+      name: "webhook-trigger",
+      data: { triggerId: "tr2", workflowId: "w2", tenantId: "t1", payload: { a: 1 }, targetMode: "connected" },
+    } as any);
+
+    expect(executeWebhookFlow).toHaveBeenCalledWith({
+      tenantId: "t1",
+      workflowId: "w2",
+      payload: { a: 1 },
+      targetMode: "connected",
     });
   });
 

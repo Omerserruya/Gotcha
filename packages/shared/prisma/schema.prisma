@@ -582,6 +582,13 @@ model WebhookTrigger {
   token      String   @unique // unguessable path segment that identifies this trigger
   secret     String // shared secret expected in an inbound request header
   enabled    Boolean  @default(true)
+  // What the inbound POST runs:
+  //   "flow"      → run the associated ChatbotFlow (`workflowId`) — original behavior.
+  //   "connected" → walk the nodes wired to this webhook trigger node on the
+  //                 Main Playbook canvas (FlowCanvas), context-free.
+  // The associated `workflowId` stays the anchor in both modes (it provisions
+  // the URL and identifies which canvas node this trigger represents).
+  targetMode String   @default("flow") @map("target_mode")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 

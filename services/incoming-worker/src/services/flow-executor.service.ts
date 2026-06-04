@@ -222,7 +222,15 @@ export async function executeWebhookFlow(opts: {
   tenantId: string;
   workflowId: string;
   payload: unknown;
+  // "flow" (default) runs the associated ChatbotFlow; "connected" walks the
+  // nodes wired to the webhook trigger node on the Main Playbook canvas. The
+  // two paths share walk() — only entry resolution + which graph differs.
+  targetMode?: "flow" | "connected";
 }): Promise<FlowExecutionResult> {
+  if (opts.targetMode === "connected") {
+    return executeWebhookConnectedNodes(opts);
+  }
+
   const flow = await prisma.chatbotFlow.findFirst({
     where: { id: opts.workflowId, tenantId: opts.tenantId, isActive: true },
   });
@@ -268,6 +276,55 @@ export async function executeWebhookFlow(opts: {
     trace: [],
   };
   return walk(startId, nodes, edges, ctx);
+}
+
+// ─── Public entry: context-free webhook run (connected-nodes mode) ──
+//
+// Sibling of executeWebhookFlow's default path. Instead of running a separate
+// ChatbotFlow, this walks the nodes wired to the webhook trigger node on the
+// tenant's Main Playbook canvas (FlowCanvas) — the same canvas the trigger node
+// lives on. Everything downstream is identical to the flow-mode webhook run:
+// the payload is exposed as `{{body.*}}`, there is no conversation/customer, and
+// every Conversation-bound concern degrades gracefully (Send* no-op, pause nodes
+// halt without persisting resume state, etc).
+//
+// The trigger node is identified by its associated `workflowId` (the same anchor
+// flow-mode uses); we prefer the node whose `data.workflowId` matches, then fall
+// back to any webhook trigger node on the canvas.
+async function executeWebhookConnectedNodes(opts: {
+  tenantId: string;
+  workflowId: string;
+  payload: unknown;
+}): Promise<FlowExecutionResult> {
+  const canvas = await prisma.flowCanvas.findUnique({ where: { tenantId: opts.tenantId } });
+  const nodes = (canvas?.nodes as unknown as GraphNode[]) || [];
+  const edges = (canvas?.edges as unknown as GraphEdge[]) || [];
+  if (!canvas || nodes.length === 0) return { executed: false, halted: false, trace: [] };
+
+  const entryNode =
+    nodes.find(
+      (n) => n.type === "webhook_trigger" && String(n.data?.workflowId || "") === opts.workflowId,
+    ) ||
+    nodes.find((n) => n.type === "webhook_trigger") ||
+    null;
+  if (!entryNode) return { executed: false, halted: false, reason: "no_entry", trace: [] };
+
+  const ctx: FlowExecCtx = {
+    tenantId: opts.tenantId,
+    conversationId: null,
+    message: "",
+    channel: "",
+    sendCtx: null,
+    vars: { body: opts.payload ?? {} },
+    // Main Playbook canvas. Irrelevant for context-free runs (no resume jobs are
+    // scheduled when conversationId is null) but tagged honestly.
+    flowScope: "main",
+    trace: [],
+  };
+  // Start at the trigger node itself — walk()'s `webhook_trigger` case enters it
+  // and continues to its first outgoing edge, so an unwired trigger halts cleanly
+  // with no_outgoing_edge instead of crashing.
+  return walk(entryNode.id, nodes, edges, ctx);
 }
 
 // ─── Internals ───────────────────────────────────────────────

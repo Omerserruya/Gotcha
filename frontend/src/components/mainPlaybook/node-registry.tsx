@@ -11,7 +11,9 @@ import {
   createWebhookTrigger,
   regenerateWebhookSecret,
   setWebhookTriggerEnabled,
+  setWebhookTriggerMode,
   type WebhookTriggerDto,
+  type WebhookTargetMode,
 } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 
@@ -610,13 +612,15 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   webhook_trigger: {
     type: "webhook_trigger", label: "Trigger: Webhook", color: "emerald", icon: ICONS.link, category: "Triggers",
     handles: { sources: [{ position: "bottom" }] },
-    defaultData: () => ({ name: "Webhook", workflowId: "" }),
-    // The node is only "ok" once a workflow is linked — that's what the
-    // WebhookTrigger record (URL + secret) is provisioned against.
+    // targetMode defaults to "flow" — preserves the original separate-flow run.
+    defaultData: () => ({ name: "Webhook", workflowId: "", targetMode: "flow" }),
+    // The node is only "ok" once a workflow is linked — that's the anchor the
+    // WebhookTrigger record (URL + secret) is provisioned against, in both modes.
     validate: (d) => (String(d.workflowId || "").trim() ? "ok" : "missing"),
     summary: (d, shared) => {
       const id = String(d.workflowId || "").trim();
       if (!id) return "No flow linked yet";
+      if (d.targetMode === "connected") return "Runs: connected nodes";
       const flow = shared?.flows?.find((f) => f.id === id);
       return `Runs: ${flow?.name || id}`;
     },
@@ -978,6 +982,7 @@ function ScheduleTriggerBody({ data, onChange }: { data: any; onChange: (p: any)
 function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (p: any) => void; shared?: SharedData }) {
   const { token } = useAuth();
   const workflowId: string = String(data.workflowId || "").trim();
+  const targetMode: WebhookTargetMode = data.targetMode === "connected" ? "connected" : "flow";
   const flows = shared?.flows || [];
 
   const [trigger, setTrigger] = React.useState<WebhookTriggerDto | null>(null);
@@ -1034,10 +1039,29 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
     setBusy(true);
     setError(null);
     try {
-      const r = await createWebhookTrigger(token, workflowId);
+      const r = await createWebhookTrigger(token, workflowId, targetMode);
       setTrigger(r.data);
     } catch {
       setError("Couldn't generate the webhook URL");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Switch what the webhook runs. Always persist on the node config; when a
+  // trigger record already exists, mirror the mode to the backend so the
+  // ingest route dispatches correctly without re-provisioning.
+  async function changeMode(next: WebhookTargetMode) {
+    if (next === targetMode) return;
+    onChange({ targetMode: next });
+    if (!token || !trigger || trigger.targetMode === next) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setWebhookTriggerMode(token, trigger.id, next);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't update the run mode");
     } finally {
       setBusy(false);
     }
@@ -1073,12 +1097,67 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
 
   return (
     <div className="space-y-3">
-      <Field label="Run this flow" hint="The webhook runs this flow when it fires. The flow reads the request body via {{body.*}}.">
-        <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
-          <option value="">Select a flow…</option>
-          {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-        </select>
+      {/* What the webhook runs. Default "flow" preserves the original behavior. */}
+      <Field label="When this webhook fires" hint="Run the nodes wired to this trigger on the canvas, or run a separate flow.">
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => changeMode("connected")}
+            aria-pressed={targetMode === "connected"}
+            aria-label="Run connected nodes"
+            className={[
+              "text-xs font-medium rounded-lg px-2.5 py-2 border transition text-left",
+              targetMode === "connected"
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                : "border-gray-200 text-gray-600 hover:bg-gray-50",
+            ].join(" ")}
+          >
+            Run connected nodes
+            <span className="block text-[10px] font-normal text-gray-400 mt-0.5">Walk the canvas from here</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => changeMode("flow")}
+            aria-pressed={targetMode === "flow"}
+            aria-label="Run another flow"
+            className={[
+              "text-xs font-medium rounded-lg px-2.5 py-2 border transition text-left",
+              targetMode === "flow"
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                : "border-gray-200 text-gray-600 hover:bg-gray-50",
+            ].join(" ")}
+          >
+            Run another flow
+            <span className="block text-[10px] font-normal text-gray-400 mt-0.5">Run a separate flow</span>
+          </button>
+        </div>
       </Field>
+
+      {targetMode === "connected" ? (
+        <Field
+          label="Webhook"
+          hint="Identifies this webhook and provisions its URL. The nodes wired to this trigger's handle run when it fires — this flow itself is not run."
+        >
+          <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
+            <option value="">Select a flow…</option>
+            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </Field>
+      ) : (
+        <Field label="Run this flow" hint="The webhook runs this flow when it fires. The flow reads the request body via {{body.*}}.">
+          <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
+            <option value="">Select a flow…</option>
+            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </Field>
+      )}
+
+      {targetMode === "connected" && workflowId ? (
+        <p className="text-[11px] text-gray-500 bg-emerald-50/60 border border-emerald-100 rounded-lg px-2.5 py-2">
+          Drag from this trigger&apos;s bottom handle to the first node you want to run.
+          Those connected nodes execute in order, reading the request body via <code className="font-mono">{"{{body.*}}"}</code>.
+        </p>
+      ) : null}
 
       {!workflowId ? (
         <p className="text-[11px] text-gray-400">Pick a flow to generate its webhook URL.</p>

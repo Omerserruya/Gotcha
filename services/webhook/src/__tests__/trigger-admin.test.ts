@@ -136,7 +136,44 @@ describe("WebhookTrigger management API", () => {
       expect(typeof createArg.secret).toBe("string");
       expect(createArg.secret.length).toBeGreaterThanOrEqual(16);
       expect(createArg.enabled).toBe(true);
+      // Defaults to the original flow behavior when no mode is supplied.
+      expect(createArg.targetMode).toBe("flow");
+      expect(res.body.data.targetMode).toBe("flow");
       expect(res.body.data.path).toBe(`/webhooks/${createArg.token}`);
+    });
+
+    it("mints a connected-mode trigger when targetMode is supplied", async () => {
+      (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "flow-1" });
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(null);
+      (prisma.webhookTrigger.create as any).mockImplementation(({ data }: any) => ({
+        id: "trig-new",
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .post("/api/webhook-triggers")
+        .send({ workflowId: "flow-1", targetMode: "connected" });
+      expect(res.status).toBe(201);
+      const createArg = (prisma.webhookTrigger.create as any).mock.calls[0][0].data;
+      expect(createArg.targetMode).toBe("connected");
+      expect(res.body.data.targetMode).toBe("connected");
+    });
+
+    it("reconciles the mode on an idempotent create when explicitly changed", async () => {
+      (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "flow-1" });
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue({ ...TRIGGER, targetMode: "flow" });
+      (prisma.webhookTrigger.update as any).mockImplementation(({ data }: any) => ({
+        ...TRIGGER,
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .post("/api/webhook-triggers")
+        .send({ workflowId: "flow-1", targetMode: "connected" });
+      expect(res.status).toBe(200);
+      expect(prisma.webhookTrigger.create).not.toHaveBeenCalled();
+      expect((prisma.webhookTrigger.update as any).mock.calls[0][0].data).toEqual({
+        targetMode: "connected",
+      });
+      expect(res.body.data.targetMode).toBe("connected");
     });
   });
 
@@ -169,11 +206,34 @@ describe("WebhookTrigger management API", () => {
   });
 
   describe("PATCH /api/webhook-triggers/:id", () => {
-    it("400s when enabled is not a boolean", async () => {
+    it("400s when neither enabled nor targetMode is provided", async () => {
       const res = await request(createTestApp())
         .patch("/api/webhook-triggers/trig-1")
         .send({ enabled: "yes" });
       expect(res.status).toBe(400);
+    });
+
+    it("400s for an invalid targetMode", async () => {
+      const res = await request(createTestApp())
+        .patch("/api/webhook-triggers/trig-1")
+        .send({ targetMode: "bogus" });
+      expect(res.status).toBe(400);
+    });
+
+    it("persists a targetMode change", async () => {
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(TRIGGER);
+      (prisma.webhookTrigger.update as any).mockImplementation(({ data }: any) => ({
+        ...TRIGGER,
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .patch("/api/webhook-triggers/trig-1")
+        .send({ targetMode: "connected" });
+      expect(res.status).toBe(200);
+      expect((prisma.webhookTrigger.update as any).mock.calls[0][0].data).toEqual({
+        targetMode: "connected",
+      });
+      expect(res.body.data.targetMode).toBe("connected");
     });
 
     it("404s for an unknown / cross-tenant trigger", async () => {
