@@ -1609,6 +1609,17 @@ export function autoGenerateFlowCanvas(token: string) {
 // the webhook trigger node on the Main Playbook canvas.
 export type WebhookTargetMode = "flow" | "connected";
 
+// The declarable type of a single expected body field. Drives the field-type
+// picker in the Webhook trigger Inspector; the mapper (Card 5) reads these to
+// offer real source choices. Keep in sync with the backend WebhookFieldType.
+export type WebhookFieldType = "string" | "number" | "boolean";
+
+// One user-declared field expected in the inbound request body.
+export interface WebhookBodyField {
+  key: string;
+  type: WebhookFieldType;
+}
+
 export interface WebhookTriggerDto {
   id: string;
   workflowId: string;
@@ -1616,6 +1627,9 @@ export interface WebhookTriggerDto {
   secret: string;
   enabled: boolean;
   targetMode: WebhookTargetMode;
+  // User-declared shape of the request body. Source fields for the mapper.
+  // Declaration only — inbound payloads are not validated against it.
+  bodySchema: WebhookBodyField[];
   path: string;
 }
 
@@ -1658,6 +1672,20 @@ export function setWebhookTriggerMode(token: string, id: string, targetMode: Web
     token,
     method: "PATCH",
     body: JSON.stringify({ targetMode }),
+  });
+}
+
+// Persist the user-declared body schema (the expected request-body fields the
+// mapper will bind from). Declaration only — not enforced on inbound payloads.
+export function setWebhookTriggerBodySchema(
+  token: string,
+  id: string,
+  bodySchema: WebhookBodyField[],
+) {
+  return apiFetch<{ data: WebhookTriggerDto }>(`/api/webhook-triggers/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ bodySchema }),
   });
 }
 

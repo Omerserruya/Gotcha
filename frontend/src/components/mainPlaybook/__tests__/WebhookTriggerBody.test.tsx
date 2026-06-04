@@ -14,11 +14,13 @@ const trigger: WebhookTriggerDto = {
   secret: "s3cr3t-value",
   enabled: true,
   targetMode: "flow",
+  bodySchema: [],
   path: "/webhooks/abc123token",
 };
 
 const mocks = vi.hoisted(() => ({
   setWebhookTriggerMode: vi.fn(),
+  setWebhookTriggerBodySchema: vi.fn(),
 }));
 
 vi.mock("@/lib/api", async (importOriginal) => {
@@ -32,6 +34,7 @@ vi.mock("@/lib/api", async (importOriginal) => {
     // Resolved value is configured lazily in beforeEach to avoid referencing
     // `trigger` inside this hoisted factory before it is initialized.
     setWebhookTriggerMode: mocks.setWebhookTriggerMode,
+    setWebhookTriggerBodySchema: mocks.setWebhookTriggerBodySchema,
   };
 });
 
@@ -156,5 +159,88 @@ describe("WebhookTriggerBody — How to use panel", () => {
         .find((s) => s.startsWith("curl -X POST"));
       expect(curlArg).toContain("x-webhook-secret: s3cr3t-value");
     });
+  });
+});
+
+describe("WebhookTriggerBody — expected body fields editor", () => {
+  beforeEach(() => {
+    mocks.setWebhookTriggerBodySchema.mockReset();
+    mocks.setWebhookTriggerBodySchema.mockImplementation((_t, _id, bodySchema) =>
+      Promise.resolve({ data: { ...trigger, bodySchema } }),
+    );
+    Object.assign(navigator, {
+      clipboard: { writeText: vi.fn(() => Promise.resolve()) },
+    });
+  });
+
+  it("seeds the editor from the trigger's declared schema", async () => {
+    const withSchema = { ...trigger, bodySchema: [{ key: "phone_number", type: "string" as const }] };
+    const { getWebhookTrigger } = await import("@/lib/api");
+    (getWebhookTrigger as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: withSchema });
+
+    render(<Body data={{ workflowId: "flow_1" }} onChange={() => {}} shared={shared} />);
+
+    await waitFor(() => expect(screen.getByText("Expected body fields")).toBeInTheDocument());
+    const keyInput = await screen.findByDisplayValue("phone_number");
+    expect(keyInput).toBeInTheDocument();
+  });
+
+  it("adds a field, and persists it (key + type) on blur", async () => {
+    render(<Body data={{ workflowId: "flow_1" }} onChange={() => {}} shared={shared} />);
+    await waitFor(() => expect(screen.getByText("Expected body fields")).toBeInTheDocument());
+
+    fireEvent.click(screen.getByRole("button", { name: /Add field/ }));
+
+    const keyInput = screen.getByPlaceholderText("field_name");
+    fireEvent.change(keyInput, { target: { value: "name" } });
+    fireEvent.blur(keyInput);
+
+    await waitFor(() =>
+      expect(mocks.setWebhookTriggerBodySchema).toHaveBeenCalledWith("test-token", "wt_1", [
+        { key: "name", type: "string" },
+      ]),
+    );
+  });
+
+  it("persists immediately when the field type changes", async () => {
+    const withSchema = { ...trigger, bodySchema: [{ key: "age", type: "string" as const }] };
+    const { getWebhookTrigger } = await import("@/lib/api");
+    (getWebhookTrigger as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: withSchema });
+
+    render(<Body data={{ workflowId: "flow_1" }} onChange={() => {}} shared={shared} />);
+    await waitFor(() => expect(screen.getByText("Expected body fields")).toBeInTheDocument());
+
+    const typeSelect = screen.getByLabelText("Field type");
+    fireEvent.change(typeSelect, { target: { value: "number" } });
+
+    await waitFor(() =>
+      expect(mocks.setWebhookTriggerBodySchema).toHaveBeenCalledWith("test-token", "wt_1", [
+        { key: "age", type: "number" },
+      ]),
+    );
+  });
+
+  it("removes a field and persists the remaining set", async () => {
+    const withSchema = {
+      ...trigger,
+      bodySchema: [
+        { key: "phone_number", type: "string" as const },
+        { key: "name", type: "string" as const },
+      ],
+    };
+    const { getWebhookTrigger } = await import("@/lib/api");
+    (getWebhookTrigger as ReturnType<typeof vi.fn>).mockResolvedValueOnce({ data: withSchema });
+
+    render(<Body data={{ workflowId: "flow_1" }} onChange={() => {}} shared={shared} />);
+    await waitFor(() => expect(screen.getByText("Expected body fields")).toBeInTheDocument());
+
+    const removeButtons = screen.getAllByRole("button", { name: "Remove field" });
+    fireEvent.click(removeButtons[0]);
+
+    await waitFor(() =>
+      expect(mocks.setWebhookTriggerBodySchema).toHaveBeenCalledWith("test-token", "wt_1", [
+        { key: "name", type: "string" },
+      ]),
+    );
   });
 });
