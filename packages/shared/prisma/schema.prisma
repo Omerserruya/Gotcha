@@ -145,6 +145,7 @@ model Tenant {
   tenantFeatures          TenantFeature[]
   tenantRoles             TenantRole[]
   invites                 TenantInvite[]
+  webhookTriggers         WebhookTrigger[]
 
   @@index([status])
   @@map("tenants")
@@ -552,12 +553,44 @@ model ChatbotFlow {
   createdAt   DateTime     @default(now()) @map("created_at")
   updatedAt   DateTime     @updatedAt @map("updated_at")
 
-  tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations Conversation[]
+  tenant          Tenant           @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations   Conversation[]
+  webhookTriggers WebhookTrigger[]
 
   @@index([tenantId, isActive])
   @@index([tenantId, channel, isActive])
   @@map("chatbot_flows")
+}
+
+// ─── Webhook Triggers ────────────────────────────────────────
+//
+// Lets a workflow (ChatbotFlow) be fired by an inbound HTTP call instead of
+// the built-in trigger kinds (channel_entry / comment / keyword / schedule).
+// Foundation for the custom-webhook-as-workflow-trigger feature — pure data
+// model, no route/dispatch logic yet.
+//
+// The webhook runs the flow context-free (no conversation/customer). Customer
+// resolution is a separate in-flow node, out of scope here.
+//
+// Security at this stage = an unguessable URL `token` (unique-indexed for O(1)
+// lookup) plus a basic shared `secret` checked in a request header. No HMAC /
+// IP allowlist yet.
+model WebhookTrigger {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  workflowId String   @map("workflow_id")
+  token      String   @unique // unguessable path segment that identifies this trigger
+  secret     String // shared secret expected in an inbound request header
+  enabled    Boolean  @default(true)
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant   Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  workflow ChatbotFlow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workflowId])
+  @@map("webhook_triggers")
 }
 
 // ─── Departments ────────────────────────────────────────────
