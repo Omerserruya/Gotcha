@@ -623,13 +623,15 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     handles: { sources: [{ position: "bottom" }] },
     // targetMode defaults to "flow" — preserves the original separate-flow run.
     defaultData: () => ({ name: "Webhook", workflowId: "", targetMode: "flow" }),
-    // The node is only "ok" once a workflow is linked — that's the anchor the
-    // WebhookTrigger record (URL + secret) is provisioned against, in both modes.
-    validate: (d) => (String(d.workflowId || "").trim() ? "ok" : "missing"),
+    // Connected mode needs no flow pick — it auto-anchors to the node's own id,
+    // so it's always valid. Flow mode still requires a linked flow (the anchor
+    // the WebhookTrigger record is provisioned against).
+    validate: (d) =>
+      d.targetMode === "connected" || String(d.workflowId || "").trim() ? "ok" : "missing",
     summary: (d, shared) => {
+      if (d.targetMode === "connected") return "Runs: connected nodes";
       const id = String(d.workflowId || "").trim();
       if (!id) return "No flow linked yet";
-      if (d.targetMode === "connected") return "Runs: connected nodes";
       const flow = shared?.flows?.find((f) => f.id === id);
       return `Runs: ${flow?.name || id}`;
     },
@@ -1058,6 +1060,18 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
     return () => { cancelled = true; };
   }, [token, workflowId]);
 
+  // Auto-anchor for connected mode: the user no longer picks a flow here — the
+  // trigger anchors to its own canvas node id (used only to provision the URL and
+  // to locate this webhook_trigger node on the Main Playbook). Set it once when
+  // we're in connected mode without an anchor yet. Go-forward only: an existing
+  // anchor (legacy connected triggers that picked a real flow) is left untouched.
+  React.useEffect(() => {
+    if (targetMode === "connected" && !workflowId && nodeId) {
+      onChange({ workflowId: nodeId });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetMode, workflowId, nodeId]);
+
   async function copy(text: string, which: string) {
     try {
       await navigator.clipboard.writeText(text);
@@ -1235,17 +1249,10 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
         </div>
       </Field>
 
-      {targetMode === "connected" ? (
-        <Field
-          label="Webhook"
-          hint="Identifies this webhook and provisions its URL. The nodes wired to this trigger's handle run when it fires — this flow itself is not run."
-        >
-          <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
-            <option value="">Select a flow…</option>
-            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
-          </select>
-        </Field>
-      ) : (
+      {/* Connected mode runs the nodes wired to this trigger — there's no flow to
+          pick, so the selector is hidden and the trigger auto-anchors to its own
+          node id. Flow mode still requires an explicit flow. */}
+      {targetMode === "connected" ? null : (
         <Field label="Run this flow" hint="The webhook runs this flow when it fires. The flow reads the request body via {{body.*}}.">
           <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
             <option value="">Select a flow…</option>
@@ -1262,7 +1269,13 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
       ) : null}
 
       {!workflowId ? (
-        <p className="text-[11px] text-gray-400">Pick a flow to generate its webhook URL.</p>
+        // Connected mode auto-anchors (see effect above) — no flow pick needed,
+        // so this is just the one-tick gap before the anchor is set.
+        targetMode === "connected" ? (
+          <p className="text-xs text-gray-400">Loading webhook…</p>
+        ) : (
+          <p className="text-[11px] text-gray-400">Pick a flow to generate its webhook URL.</p>
+        )
       ) : loading ? (
         <p className="text-xs text-gray-400">Loading webhook…</p>
       ) : !trigger ? (

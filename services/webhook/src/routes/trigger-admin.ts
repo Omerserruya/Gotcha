@@ -17,13 +17,15 @@ import {
  * is what the Main Playbook's Webhook trigger node talks to from the browser to
  * provision / inspect / rotate / toggle a trigger for a given workflow.
  *
- * A WebhookTrigger is bound to a ChatbotFlow (`workflowId`) — the anchor that
- * provisions the URL and identifies the trigger node on the canvas. Its
- * `targetMode` decides what an authenticated inbound POST runs: "flow" runs that
- * associated ChatbotFlow; "connected" walks the nodes wired to the webhook
- * trigger node on the Main Playbook canvas (see executeWebhookFlow). There is at
- * most ONE trigger per (tenant, workflow); create is idempotent and returns the
- * existing record (reconciling its mode if the caller passes a different one).
+ * A WebhookTrigger carries a `workflowId` anchor that provisions the URL and
+ * identifies the trigger node on the canvas. Its `targetMode` decides both what
+ * that anchor means and what an authenticated inbound POST runs: "flow" runs the
+ * associated ChatbotFlow (so `workflowId` must be a real flow the tenant owns);
+ * "connected" walks the nodes wired to the webhook trigger node on the Main
+ * Playbook canvas (see executeWebhookFlow) and the anchor is simply the trigger
+ * node's own canvas id — no flow pick required. There is at most ONE trigger per
+ * (tenant, workflow); create is idempotent and returns the existing record
+ * (reconciling its mode if the caller passes a different one).
  *
  * Mounted at /api/webhook-triggers (the gateway's /api/webhook prefix already
  * proxies this path to the webhook service — no nginx change needed).
@@ -148,13 +150,20 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
     }
     const bodySchema = normalizeBodySchema(req.body?.bodySchema);
 
-    // The trigger FK-binds to a ChatbotFlow; make sure it exists and belongs to
-    // this tenant before minting credentials for it.
-    const flow = await prisma.chatbotFlow.findFirst({
-      where: { id: workflowId, tenantId: req.tenantId! },
-    });
-    if (!flow) {
-      return res.status(404).json({ error: "Workflow not found" });
+    // Flow mode runs a separate ChatbotFlow, so the `workflowId` the user picked
+    // must be a real flow the tenant owns — validate it before minting
+    // credentials. Connected mode is different: there is no "flow to run", the
+    // `workflowId` is only an auto-anchor (the trigger node's own canvas id) used
+    // to locate the webhook_trigger node on the Main Playbook. Don't force a flow
+    // pick there and skip the flow-exists check. (Go-forward only — existing
+    // connected triggers that still carry a real flow id keep working.)
+    if (targetMode !== "connected") {
+      const flow = await prisma.chatbotFlow.findFirst({
+        where: { id: workflowId, tenantId: req.tenantId! },
+      });
+      if (!flow) {
+        return res.status(404).json({ error: "Workflow not found" });
+      }
     }
 
     const existing = await prisma.webhookTrigger.findFirst({

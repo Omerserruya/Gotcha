@@ -160,6 +160,35 @@ describe("WebhookTrigger management API", () => {
       expect(res.body.data.targetMode).toBe("connected");
     });
 
+    it("connected mode provisions without a flow pick / flow-exists check (auto-anchored to the node id)", async () => {
+      // No ChatbotFlow exists for the auto-anchor (it's the trigger node's own
+      // canvas id, not a flow) — connected mode must NOT consult chatbotFlow and
+      // must NOT 404.
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(null);
+      (prisma.webhookTrigger.create as any).mockImplementation(({ data }: any) => ({
+        id: "trig-new",
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .post("/api/webhook-triggers")
+        .send({ workflowId: "wh_node_1", targetMode: "connected" });
+      expect(res.status).toBe(201);
+      expect(prisma.chatbotFlow.findFirst).not.toHaveBeenCalled();
+      const createArg = (prisma.webhookTrigger.create as any).mock.calls[0][0].data;
+      expect(createArg.workflowId).toBe("wh_node_1");
+      expect(createArg.targetMode).toBe("connected");
+    });
+
+    it("flow mode still requires a real flow (404s when it doesn't exist)", async () => {
+      // Guards that relaxing the FK for connected mode did NOT weaken flow mode.
+      (prisma.chatbotFlow.findFirst as any).mockResolvedValue(null);
+      const res = await request(createTestApp())
+        .post("/api/webhook-triggers")
+        .send({ workflowId: "flow-x", targetMode: "flow" });
+      expect(res.status).toBe(404);
+      expect(prisma.webhookTrigger.create).not.toHaveBeenCalled();
+    });
+
     it("reconciles the mode on an idempotent create when explicitly changed", async () => {
       (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "flow-1" });
       (prisma.webhookTrigger.findFirst as any).mockResolvedValue({ ...TRIGGER, targetMode: "flow" });
