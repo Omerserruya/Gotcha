@@ -589,6 +589,11 @@ model WebhookTrigger {
   // The associated `workflowId` stays the anchor in both modes (it provisions
   // the URL and identifies which canvas node this trigger represents).
   targetMode String   @default("flow") @map("target_mode")
+  // User-declared shape of the inbound request body: [{ key, type }] where type
+  // is "string" | "number" | "boolean". Lets the mapper (manual field binding)
+  // offer a known set of source fields instead of free-text. Declaration ONLY —
+  // inbound payloads are NOT validated/rejected against this. Defaults to [].
+  bodySchema Json     @default("[]") @map("body_schema")
   createdAt  DateTime @default(now()) @map("created_at")
   updatedAt  DateTime @updatedAt @map("updated_at")
 

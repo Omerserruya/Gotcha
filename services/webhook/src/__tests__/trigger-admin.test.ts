@@ -48,6 +48,8 @@ const TRIGGER = {
   token: "tok-abc",
   secret: "s3cr3t",
   enabled: true,
+  targetMode: "flow",
+  bodySchema: [{ key: "phone_number", type: "string" }],
 };
 
 describe("WebhookTrigger management API", () => {
@@ -257,6 +259,95 @@ describe("WebhookTrigger management API", () => {
       expect(res.body.data.enabled).toBe(false);
       expect((prisma.webhookTrigger.update as any).mock.calls[0][0].data).toEqual({
         enabled: false,
+      });
+    });
+  });
+
+  describe("declared body schema (bodySchema)", () => {
+    it("GET surfaces the declared body schema for the mapper", async () => {
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(TRIGGER);
+      const res = await request(createTestApp()).get(
+        "/api/webhook-triggers?workflowId=flow-1",
+      );
+      expect(res.status).toBe(200);
+      expect(res.body.data.bodySchema).toEqual([
+        { key: "phone_number", type: "string" },
+      ]);
+    });
+
+    it("defaults bodySchema to [] on create when none is supplied", async () => {
+      (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "flow-1" });
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(null);
+      (prisma.webhookTrigger.create as any).mockImplementation(({ data }: any) => ({
+        id: "trig-new",
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .post("/api/webhook-triggers")
+        .send({ workflowId: "flow-1" });
+      expect(res.status).toBe(201);
+      expect((prisma.webhookTrigger.create as any).mock.calls[0][0].data.bodySchema).toEqual([]);
+      expect(res.body.data.bodySchema).toEqual([]);
+    });
+
+    it("PATCH persists a declared schema, normalizing types and dropping blanks/dupes", async () => {
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(TRIGGER);
+      (prisma.webhookTrigger.update as any).mockImplementation(({ data }: any) => ({
+        ...TRIGGER,
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .patch("/api/webhook-triggers/trig-1")
+        .send({
+          bodySchema: [
+            { key: "  name  ", type: "string" },
+            { key: "age", type: "number" },
+            { key: "vip", type: "bogus" }, // unknown type → "string"
+            { key: "name", type: "boolean" }, // duplicate key dropped
+            { key: "", type: "string" }, // blank key dropped
+          ],
+        });
+      expect(res.status).toBe(200);
+      expect((prisma.webhookTrigger.update as any).mock.calls[0][0].data.bodySchema).toEqual([
+        { key: "name", type: "string" },
+        { key: "age", type: "number" },
+        { key: "vip", type: "string" },
+      ]);
+      expect(res.body.data.bodySchema).toEqual([
+        { key: "name", type: "string" },
+        { key: "age", type: "number" },
+        { key: "vip", type: "string" },
+      ]);
+    });
+
+    it("PATCH 400s when bodySchema is not an array", async () => {
+      const res = await request(createTestApp())
+        .patch("/api/webhook-triggers/trig-1")
+        .send({ bodySchema: "nope" });
+      expect(res.status).toBe(400);
+      expect(prisma.webhookTrigger.update).not.toHaveBeenCalled();
+    });
+
+    it("POST 400s when bodySchema is not an array", async () => {
+      const res = await request(createTestApp())
+        .post("/api/webhook-triggers")
+        .send({ workflowId: "flow-1", bodySchema: { phone: "string" } });
+      expect(res.status).toBe(400);
+      expect(prisma.webhookTrigger.create).not.toHaveBeenCalled();
+    });
+
+    it("PATCH allows bodySchema alone (no enabled/targetMode)", async () => {
+      (prisma.webhookTrigger.findFirst as any).mockResolvedValue(TRIGGER);
+      (prisma.webhookTrigger.update as any).mockImplementation(({ data }: any) => ({
+        ...TRIGGER,
+        ...data,
+      }));
+      const res = await request(createTestApp())
+        .patch("/api/webhook-triggers/trig-1")
+        .send({ bodySchema: [{ key: "text", type: "string" }] });
+      expect(res.status).toBe(200);
+      expect((prisma.webhookTrigger.update as any).mock.calls[0][0].data).toEqual({
+        bodySchema: [{ key: "text", type: "string" }],
       });
     });
   });

@@ -46,6 +46,35 @@ function generateSecret(): string {
   return crypto.randomBytes(24).toString("base64url");
 }
 
+// Declared body-field types the UI offers. Anything else is normalized to
+// "string". Keep in sync with the frontend WebhookFieldType union.
+type WebhookFieldType = "string" | "number" | "boolean";
+const FIELD_TYPES: readonly WebhookFieldType[] = ["string", "number", "boolean"];
+const MAX_BODY_FIELDS = 50;
+
+// Coerce a stored / submitted body schema (Prisma Json column, or request body)
+// into a clean [{ key, type }] array: drops blank keys, de-dupes by key, clamps
+// unknown types to "string" and caps the count. Declaration only — this never
+// rejects, it just sanitizes what the mapper will read.
+function normalizeBodySchema(raw: unknown): { key: string; type: WebhookFieldType }[] {
+  if (!Array.isArray(raw)) return [];
+  const seen = new Set<string>();
+  const out: { key: string; type: WebhookFieldType }[] = [];
+  for (const item of raw) {
+    if (!item || typeof item !== "object") continue;
+    const key = String((item as { key?: unknown }).key ?? "").trim();
+    if (!key || seen.has(key)) continue;
+    const t = (item as { type?: unknown }).type;
+    const type: WebhookFieldType = FIELD_TYPES.includes(t as WebhookFieldType)
+      ? (t as WebhookFieldType)
+      : "string";
+    seen.add(key);
+    out.push({ key, type });
+    if (out.length >= MAX_BODY_FIELDS) break;
+  }
+  return out;
+}
+
 // Shape returned to the UI. `path` is the ingest path; the browser prefixes its
 // own origin to build the full URL (the gateway routes /webhooks to this
 // service on the same host).
@@ -56,6 +85,7 @@ function serialize(t: {
   secret: string;
   enabled: boolean;
   targetMode: string;
+  bodySchema?: unknown;
 }) {
   return {
     id: t.id,
@@ -65,6 +95,8 @@ function serialize(t: {
     enabled: t.enabled,
     // "flow" | "connected" — what the inbound POST runs. See WebhookTrigger model.
     targetMode: t.targetMode === "connected" ? "connected" : "flow",
+    // User-declared body fields the mapper binds from. Declaration only.
+    bodySchema: normalizeBodySchema(t.bodySchema),
     path: `/webhooks/${t.token}`,
   };
 }
@@ -108,6 +140,14 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
     const hasMode = req.body?.targetMode !== undefined;
     const targetMode = req.body?.targetMode === "connected" ? "connected" : "flow";
 
+    // Optional declared body schema. Must be an array if present (declaration
+    // only — sanitized, never used to reject inbound payloads).
+    const hasSchema = req.body?.bodySchema !== undefined;
+    if (hasSchema && !Array.isArray(req.body.bodySchema)) {
+      return res.status(400).json({ error: "bodySchema must be an array" });
+    }
+    const bodySchema = normalizeBodySchema(req.body?.bodySchema);
+
     // The trigger FK-binds to a ChatbotFlow; make sure it exists and belongs to
     // this tenant before minting credentials for it.
     const flow = await prisma.chatbotFlow.findFirst({
@@ -121,13 +161,16 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
       where: { tenantId: req.tenantId!, workflowId },
     });
     if (existing) {
-      // Idempotent create still reconciles the mode if the caller explicitly
-      // passed a different one (keeps the node config and the trigger record in
-      // sync). When no mode was sent, return the existing record untouched.
-      if (hasMode && existing.targetMode !== targetMode) {
+      // Idempotent create still reconciles fields the caller explicitly passed
+      // (keeps the node config and the trigger record in sync). When nothing was
+      // sent, return the existing record untouched.
+      const patch: { targetMode?: string; bodySchema?: typeof bodySchema } = {};
+      if (hasMode && existing.targetMode !== targetMode) patch.targetMode = targetMode;
+      if (hasSchema) patch.bodySchema = bodySchema;
+      if (Object.keys(patch).length > 0) {
         const synced = await prisma.webhookTrigger.update({
           where: { id: existing.id },
-          data: { targetMode },
+          data: patch,
         });
         return res.json({ data: serialize(synced) });
       }
@@ -142,6 +185,7 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
         secret: generateSecret(),
         enabled: true,
         targetMode,
+        bodySchema,
       },
     });
     return res.status(201).json({ data: serialize(created) });
@@ -180,21 +224,27 @@ router.post(
 );
 
 /**
- * PATCH /api/webhook-triggers/:id  { enabled?, targetMode? }
- * Update the trigger's enabled flag and/or its target mode ("flow" |
- * "connected"). At least one field is required. A disabled trigger answers
- * inbound POSTs with 403 (see routes/triggers.ts).
+ * PATCH /api/webhook-triggers/:id  { enabled?, targetMode?, bodySchema? }
+ * Update the trigger's enabled flag, its target mode ("flow" | "connected"),
+ * and/or its declared body schema ([{ key, type }]). At least one field is
+ * required. A disabled trigger answers inbound POSTs with 403 (see
+ * routes/triggers.ts). bodySchema is declaration only — it is not enforced
+ * against inbound payloads.
  */
 router.patch("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
     const hasEnabled = typeof req.body?.enabled === "boolean";
     const hasMode = req.body?.targetMode !== undefined;
-    if (!hasEnabled && !hasMode) {
-      return res.status(400).json({ error: "enabled (boolean) or targetMode is required" });
+    const hasSchema = req.body?.bodySchema !== undefined;
+    if (!hasEnabled && !hasMode && !hasSchema) {
+      return res.status(400).json({ error: "enabled (boolean), targetMode, or bodySchema is required" });
     }
     if (hasMode && req.body.targetMode !== "flow" && req.body.targetMode !== "connected") {
       return res.status(400).json({ error: 'targetMode must be "flow" or "connected"' });
+    }
+    if (hasSchema && !Array.isArray(req.body.bodySchema)) {
+      return res.status(400).json({ error: "bodySchema must be an array" });
     }
     const trigger = await prisma.webhookTrigger.findFirst({
       where: { id, tenantId: req.tenantId! },
@@ -202,9 +252,14 @@ router.patch("/:id", requireRole("ADMIN"), async (req: Request, res: Response) =
     if (!trigger) {
       return res.status(404).json({ error: "Trigger not found" });
     }
-    const data: { enabled?: boolean; targetMode?: string } = {};
+    const data: {
+      enabled?: boolean;
+      targetMode?: string;
+      bodySchema?: { key: string; type: WebhookFieldType }[];
+    } = {};
     if (hasEnabled) data.enabled = req.body.enabled;
     if (hasMode) data.targetMode = req.body.targetMode;
+    if (hasSchema) data.bodySchema = normalizeBodySchema(req.body.bodySchema);
     const updated = await prisma.webhookTrigger.update({
       where: { id: trigger.id },
       data,

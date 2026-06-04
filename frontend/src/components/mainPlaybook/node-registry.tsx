@@ -12,8 +12,10 @@ import {
   regenerateWebhookSecret,
   setWebhookTriggerEnabled,
   setWebhookTriggerMode,
+  setWebhookTriggerBodySchema,
   type WebhookTriggerDto,
   type WebhookTargetMode,
+  type WebhookFieldType,
 } from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 
@@ -991,6 +993,14 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
   const [error, setError] = React.useState<string | null>(null);
   const [copied, setCopied] = React.useState<string | null>(null);
 
+  // Local, editable copy of the declared body fields. Each row carries a stable
+  // local id for React keys; the id is stripped before persisting. Sourced from
+  // the trigger once per trigger (not on every update) so saving our own edits
+  // doesn't clobber an in-progress row — see syncedFor below.
+  type LocalField = { id: string; key: string; type: WebhookFieldType };
+  const [fields, setFields] = React.useState<LocalField[]>([]);
+  const syncedFor = React.useRef<string | null>(null);
+
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const fullUrl = trigger ? `${origin}${trigger.path}` : "";
 
@@ -1093,6 +1103,74 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
     } finally {
       setBusy(false);
     }
+  }
+
+  // Seed the editable rows from a freshly-loaded trigger, but only the first
+  // time we see that trigger id. Our own saves update `trigger` (same id), and
+  // skipping the re-seed there keeps the user's in-progress / blank rows intact.
+  React.useEffect(() => {
+    if (!trigger) {
+      syncedFor.current = null;
+      setFields([]);
+      return;
+    }
+    if (syncedFor.current === trigger.id) return;
+    syncedFor.current = trigger.id;
+    setFields(
+      (trigger.bodySchema || []).map((f, i) => ({ id: `bf_${i}_${f.key}`, key: f.key, type: f.type })),
+    );
+  }, [trigger]);
+
+  // Persist the given rows as the declared schema. Blank keys / dupes are
+  // dropped by the backend; we send the trimmed, keyed rows. Declaration only.
+  async function persistSchema(rows: LocalField[]) {
+    if (!token || !trigger) return;
+    const bodySchema = rows
+      .map((f) => ({ key: f.key.trim(), type: f.type }))
+      .filter((f) => f.key.length > 0);
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setWebhookTriggerBodySchema(token, trigger.id, bodySchema);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't save the expected fields");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addField() {
+    // Add a blank row locally; it persists once the user gives it a key (blur).
+    setFields((cur) => [...cur, { id: `bf_new_${cur.length}_${cur.reduce((n, f) => n + f.key.length, 0)}`, key: "", type: "string" }]);
+  }
+
+  function updateFieldKey(id: string, key: string) {
+    setFields((cur) => cur.map((f) => (f.id === id ? { ...f, key } : f)));
+  }
+
+  function changeFieldType(id: string, type: WebhookFieldType) {
+    setFields((cur) => {
+      const next = cur.map((f) => (f.id === id ? { ...f, type } : f));
+      persistSchema(next);
+      return next;
+    });
+  }
+
+  function removeField(id: string) {
+    setFields((cur) => {
+      const next = cur.filter((f) => f.id !== id);
+      persistSchema(next);
+      return next;
+    });
+  }
+
+  function commitFields() {
+    // Save on blur — only the keyed rows are persisted.
+    setFields((cur) => {
+      persistSchema(cur);
+      return cur;
+    });
   }
 
   return (
@@ -1200,6 +1278,69 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
             <input type="checkbox" checked={trigger.enabled} disabled={busy} onChange={(e) => toggleEnabled(e.target.checked)} className="accent-emerald-500" />
             Enabled {trigger.enabled ? "" : "(disabled — inbound calls return 403)"}
           </label>
+
+          {/* Expected body fields — the user declares the shape of the payload
+              they'll send. These become the known source fields the mapper binds
+              from. Declaration only: inbound payloads are NOT validated against
+              this, and the {{body.*}} reference behavior is unchanged. */}
+          <div className="pt-3 mt-1 border-t border-gray-100 space-y-2">
+            <div>
+              <p className="text-xs font-semibold text-gray-700">Expected body fields</p>
+              <p className="text-[11px] text-gray-400">
+                Declare the fields you&apos;ll send in the request body. These become the source
+                fields for mapping. (Declaration only — payloads aren&apos;t rejected if they differ.)
+              </p>
+            </div>
+
+            {fields.length > 0 ? (
+              <div className="space-y-1.5">
+                {fields.map((f) => (
+                  <div key={f.id} className="flex items-center gap-1.5">
+                    <input
+                      className={inspectorInput + " flex-1 font-mono text-[11px]"}
+                      placeholder="field_name"
+                      aria-label="Field name"
+                      value={f.key}
+                      disabled={busy}
+                      onChange={(e) => updateFieldKey(f.id, e.target.value)}
+                      onBlur={commitFields}
+                    />
+                    <select
+                      className={inspectorInput + " w-24 shrink-0"}
+                      aria-label="Field type"
+                      value={f.type}
+                      disabled={busy}
+                      onChange={(e) => changeFieldType(f.id, e.target.value as WebhookFieldType)}
+                    >
+                      <option value="string">string</option>
+                      <option value="number">number</option>
+                      <option value="boolean">boolean</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeField(f.id)}
+                      disabled={busy}
+                      aria-label="Remove field"
+                      className="shrink-0 text-gray-400 hover:text-rose-500 disabled:opacity-50 px-1.5 py-1 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-400">No fields declared yet.</p>
+            )}
+
+            <button
+              type="button"
+              onClick={addField}
+              disabled={busy}
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+            >
+              + Add field
+            </button>
+          </div>
 
           {/* How to use — self-serve guide for wiring an external caller without
               leaving the canvas. Reads only the trigger above; adds no backend. */}
