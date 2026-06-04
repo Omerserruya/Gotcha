@@ -244,3 +244,95 @@ describe("WebhookTriggerBody — expected body fields editor", () => {
     );
   });
 });
+
+describe("WebhookTriggerBody — field mapper", () => {
+  beforeEach(async () => {
+    const { getWebhookTrigger } = await import("@/lib/api");
+    (getWebhookTrigger as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: {
+        ...trigger,
+        targetMode: "connected",
+        bodySchema: [{ key: "phone_number", type: "string" as const }],
+      },
+    });
+    Object.assign(navigator, { clipboard: { writeText: vi.fn(() => Promise.resolve()) } });
+  });
+
+  // Webhook trigger node "w1" wired to a Send Text node "n2".
+  const graphShared = {
+    flows: [{ id: "flow_1", name: "My Flow" }],
+    nodes: [
+      { id: "w1", type: "webhook_trigger", data: {} },
+      { id: "n2", type: "send_message_text", data: {} },
+    ],
+    edges: [{ id: "e1", source: "w1", target: "n2" }],
+  } as any;
+
+  it("renders a mapper row per connected-node input in connected mode", async () => {
+    render(
+      <Body
+        data={{ workflowId: "flow_1", targetMode: "connected" }}
+        onChange={() => {}}
+        shared={graphShared}
+        nodeId="w1"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Map fields to the connected node")).toBeInTheDocument(),
+    );
+    // send_message_text exposes Recipient + Message text targets.
+    expect(screen.getByLabelText("Map Recipient")).toBeInTheDocument();
+    expect(screen.getByLabelText("Map Message text")).toBeInTheDocument();
+    // The declared body field is offered as a source option (one per target row).
+    expect(screen.getAllByRole("option", { name: "body.phone_number" }).length).toBeGreaterThan(0);
+  });
+
+  it("persists a binding onto the node's fieldMapping when a source is picked", async () => {
+    const onChange = vi.fn();
+    render(
+      <Body
+        data={{ workflowId: "flow_1", targetMode: "connected" }}
+        onChange={onChange}
+        shared={graphShared}
+        nodeId="w1"
+      />,
+    );
+    await waitFor(() => expect(screen.getByLabelText("Map Recipient")).toBeInTheDocument());
+
+    fireEvent.change(screen.getByLabelText("Map Recipient"), {
+      target: { value: "phone_number" },
+    });
+
+    expect(onChange).toHaveBeenCalledWith({
+      fieldMapping: [{ source: "phone_number", target: "recipient" }],
+    });
+  });
+
+  it("prompts to connect a node when the trigger has no outgoing edge", async () => {
+    render(
+      <Body
+        data={{ workflowId: "flow_1", targetMode: "connected" }}
+        onChange={() => {}}
+        shared={{ ...graphShared, edges: [] }}
+        nodeId="w1"
+      />,
+    );
+    await waitFor(() =>
+      expect(screen.getByText("Map fields to the connected node")).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Connect a node to this trigger/)).toBeInTheDocument();
+  });
+
+  it("does not show the mapper in flow mode", async () => {
+    render(
+      <Body
+        data={{ workflowId: "flow_1", targetMode: "flow" }}
+        onChange={() => {}}
+        shared={graphShared}
+        nodeId="w1"
+      />,
+    );
+    await waitFor(() => expect(screen.getByText("How to use")).toBeInTheDocument());
+    expect(screen.queryByText("Map fields to the connected node")).not.toBeInTheDocument();
+  });
+});

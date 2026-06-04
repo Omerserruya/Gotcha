@@ -85,7 +85,7 @@ export function NodeInspector({ node, shared, onChange, onClose, onDelete, onDup
 
       {/* Body */}
       <div className="flex-1 overflow-y-auto px-5 py-4 bg-gray-50">
-        <Body data={data} onChange={patch} shared={shared} />
+        <Body data={data} onChange={patch} shared={shared} nodeId={node.id} />
       </div>
 
       {/* Footer actions */}

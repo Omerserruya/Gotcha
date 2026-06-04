@@ -130,7 +130,7 @@ export async function tryLinkIdentifierFromInbound(args: {
     });
     if (!r.ok) {
       console.warn(`[identity-link] conv=${args.conversationId} auto-link request failed: ${r.error}`);
-      return { linked: false, identifier: id, reason: r.error };
+      return { linked: false, identifier: id ?? undefined, reason: r.error };
     }
     const out = r.data as {
       ok?: boolean;
@@ -142,17 +142,17 @@ export async function tryLinkIdentifierFromInbound(args: {
       candidates?: Array<{ id: string; kind: string }>;
     };
     if (out?.ok && (out.outcome === "linked" || out.outcome === "merged" || out.outcome === "created")) {
-      log(`OK ${id.type}=${id.value} → ${out.outcome} crmContactId=${out.crmContactId} kind=${out.crmObjectKind} vendor=${out.vendor}`);
+      log(`OK ${id?.type}=${id?.value} → ${out.outcome} crmContactId=${out.crmContactId} kind=${out.crmObjectKind} vendor=${out.vendor}`);
       return {
         linked: true,
-        identifier: id,
+        identifier: id ?? undefined,
         outcome: out.outcome,
         crmContactId: out.crmContactId ?? null,
         crmObjectKind: out.crmObjectKind ?? null,
       };
     }
     log(`no-link outcome=${out?.outcome ?? "unknown"} reason=${out?.reason ?? ""}`);
-    return { linked: false, identifier: id, outcome: out?.outcome, reason: out?.reason };
+    return { linked: false, identifier: id ?? undefined, outcome: out?.outcome, reason: out?.reason };
   } catch (err: any) {
     console.warn(`[identity-link] conv=${args.conversationId} threw:`, err?.message);
     return { linked: false, reason: err?.message };

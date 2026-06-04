@@ -321,10 +321,62 @@ async function executeWebhookConnectedNodes(opts: {
     flowScope: "main",
     trace: [],
   };
+  // Manual field mapper (Card 5): bind declared body.* fields onto the first
+  // connected node's inputs before we walk into it. Mutates the in-memory node
+  // copy only — never persisted.
+  applyWebhookFieldMapping(entryNode, nodes, edges);
   // Start at the trigger node itself — walk()'s `webhook_trigger` case enters it
   // and continues to its first outgoing edge, so an unwired trigger halts cleanly
   // with no_outgoing_edge instead of crashing.
   return walk(entryNode.id, nodes, edges, ctx);
+}
+
+// ─── Manual field mapper (Card 5) ──────────────────────────────────
+//
+// The webhook trigger node can carry a user-authored `data.fieldMapping`:
+//   [{ source: "<declared body field>", target: "<input key>" }]
+// where `target` is either a plain input key on the first connected node
+// ("recipient", "text", …) or a template-variable target encoded as
+// "var:<placeholder>" (→ data.variables[placeholder]).
+//
+// We resolve a mapping by writing a `{{body.<source>}}` reference into the
+// target node's data — deliberately reusing the existing interpolation path
+// (interpolate/getByPath) so the runtime substitution and the long-standing
+// `{{body.*}}` reference behavior stay identical. The mapper is just a UI over
+// those references; an author who hand-types `{{body.x}}` gets the same result.
+//
+// Only the FIRST connected node (first outgoing edge of the trigger) is mapped —
+// that is exactly the node the user binds against in the Inspector.
+function applyWebhookFieldMapping(
+  entryNode: GraphNode,
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+): void {
+  const mapping = entryNode.data?.fieldMapping;
+  if (!Array.isArray(mapping) || mapping.length === 0) return;
+  const firstEdge = edges.find((e) => e.source === entryNode.id);
+  if (!firstEdge) return;
+  const target = nodes.find((n) => n.id === firstEdge.target);
+  if (!target) return;
+  target.data = target.data || {};
+  for (const m of mapping) {
+    const source = String(m?.source ?? "").trim();
+    const targetKey = String(m?.target ?? "").trim();
+    if (!source || !targetKey) continue;
+    const ref = `{{body.${source}}}`;
+    if (targetKey.startsWith("var:")) {
+      const varName = targetKey.slice(4).trim();
+      if (!varName) continue;
+      const vars =
+        target.data.variables && typeof target.data.variables === "object"
+          ? { ...target.data.variables }
+          : {};
+      vars[varName] = ref;
+      target.data.variables = vars;
+    } else {
+      target.data[targetKey] = ref;
+    }
+  }
 }
 
 // ─── Internals ───────────────────────────────────────────────

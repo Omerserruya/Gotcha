@@ -28,6 +28,10 @@ export interface SharedData {
   flows?: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
   channels?: { id: string; channel: string; displayName?: string; externalId?: string }[];
+  // Live canvas graph — lets an inspector reason about a node's neighbours
+  // (e.g. the webhook trigger mapper binds onto its first connected node).
+  nodes?: { id: string; type?: string; data?: any }[];
+  edges?: { id: string; source: string; target: string; sourceHandle?: string | null }[];
 }
 
 export type NodeColor =
@@ -57,6 +61,9 @@ export interface NodeRegistryEntry {
     data: any;
     onChange: (patch: Record<string, any>) => void;
     shared?: SharedData;
+    // Id of the node being edited — only bodies that reason about neighbours
+    // (webhook trigger mapper) need it; the rest ignore it.
+    nodeId?: string;
   }>;
   handles: {
     target?: "top" | "left";
@@ -981,11 +988,28 @@ function ScheduleTriggerBody({ data, onChange }: { data: any; onChange: (p: any)
 // WebhookTrigger record (copy / regenerate / enable-disable). The URL/secret
 // state lives on the backend record — never persisted into the canvas JSON —
 // so a rotated secret can't go stale here.
-function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (p: any) => void; shared?: SharedData }) {
+function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onChange: (p: any) => void; shared?: SharedData; nodeId?: string }) {
   const { token } = useAuth();
   const workflowId: string = String(data.workflowId || "").trim();
   const targetMode: WebhookTargetMode = data.targetMode === "connected" ? "connected" : "flow";
   const flows = shared?.flows || [];
+
+  // The first node wired to this trigger — what the mapper binds body fields
+  // onto. Mirrors the runtime's "first outgoing edge" resolution exactly.
+  const firstConnectedNode = React.useMemo(() => {
+    if (!nodeId) return null;
+    const edges = shared?.edges || [];
+    const nodes = shared?.nodes || [];
+    const edge = edges.find((e) => e.source === nodeId);
+    if (!edge) return null;
+    return nodes.find((n) => n.id === edge.target) || null;
+  }, [nodeId, shared?.edges, shared?.nodes]);
+
+  // Persisted mapping lives on the trigger node's own data so it travels with
+  // the canvas (no extra backend column / endpoint). Shape: [{ source, target }].
+  const fieldMapping: { source: string; target: string }[] = Array.isArray(data.fieldMapping)
+    ? data.fieldMapping
+    : [];
 
   const [trigger, setTrigger] = React.useState<WebhookTriggerDto | null>(null);
   const [loading, setLoading] = React.useState(false);
@@ -1342,6 +1366,18 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
             </button>
           </div>
 
+          {/* Field mapper — bind declared body fields onto the first connected
+              node's inputs. Connected mode only: in flow mode the webhook runs a
+              separate flow, so "the first connected node" has no meaning here. */}
+          {targetMode === "connected" ? (
+            <WebhookFieldMapper
+              sources={fields.map((f) => f.key.trim()).filter(Boolean)}
+              targetNode={firstConnectedNode}
+              mapping={fieldMapping}
+              onChange={(next) => onChange({ fieldMapping: next })}
+            />
+          ) : null}
+
           {/* How to use — self-serve guide for wiring an external caller without
               leaving the canvas. Reads only the trigger above; adds no backend. */}
           <div className="pt-3 mt-1 border-t border-gray-100 space-y-2.5">
@@ -1381,6 +1417,120 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
       )}
 
       {error ? <p className="text-[11px] text-rose-500">{error}</p> : null}
+    </div>
+  );
+}
+
+// ─── Webhook field mapper ──────────────────────────────────────────
+// Manual binding of declared body fields → the first connected node's inputs.
+// Auto-mapping by name was explicitly rejected (see card); every binding is a
+// deliberate dropdown choice. Each row is one target input; selecting a source
+// stores { source, target } on the trigger node's `data.fieldMapping`. At
+// runtime (incoming-worker flow-executor) the mapping is applied by injecting
+// `{{body.<source>}}` into the target node, reusing the {{body.*}} path.
+type MapTarget = { key: string; label: string };
+
+function WebhookFieldMapper({
+  sources,
+  targetNode,
+  mapping,
+  onChange,
+}: {
+  sources: string[];
+  targetNode: { id: string; type?: string; data?: any } | null;
+  mapping: { source: string; target: string }[];
+  onChange: (next: { source: string; target: string }[]) => void;
+}) {
+  const { token } = useAuth();
+  const [templates, setTemplates] = React.useState<TemplateRow[]>([]);
+  const isTemplate = targetNode?.type === "send_message_template";
+
+  // Only the template target needs the tenant's templates (to derive the
+  // placeholder keys it can bind). Fetched lazily and only in that case.
+  React.useEffect(() => {
+    if (!token || !isTemplate) return;
+    let cancelled = false;
+    getTemplates(token, { channel: "WHATSAPP", status: "APPROVED", limit: "200" })
+      .then((res) => { if (!cancelled) setTemplates((res.data || []) as TemplateRow[]); })
+      .catch(() => { if (!cancelled) setTemplates([]); });
+    return () => { cancelled = true; };
+  }, [token, isTemplate]);
+
+  const targets: MapTarget[] = React.useMemo(() => {
+    if (!targetNode) return [];
+    if (targetNode.type === "send_message_text") {
+      return [
+        { key: "recipient", label: "Recipient" },
+        { key: "text", label: "Message text" },
+      ];
+    }
+    if (targetNode.type === "send_message_template") {
+      const selected = templates.find((t) => t.id === String(targetNode.data?.templateId || ""));
+      const fromBody = extractPlaceholderKeys(selected?.body);
+      const fromHeader = selected?.headerType === "TEXT" ? extractPlaceholderKeys(selected?.headerContent) : [];
+      const keys: string[] = [];
+      const seen = new Set<string>();
+      for (const k of [...fromHeader, ...fromBody]) {
+        if (!seen.has(k)) { seen.add(k); keys.push(k); }
+      }
+      return [
+        { key: "recipient", label: "Recipient" },
+        ...keys.map((k) => ({ key: `var:${k}`, label: `Template var: ${k}` })),
+      ];
+    }
+    return [];
+  }, [targetNode, templates]);
+
+  function sourceFor(target: string): string {
+    return mapping.find((m) => m.target === target)?.source || "";
+  }
+  function setMap(target: string, source: string) {
+    const next = mapping.filter((m) => m.target !== target);
+    if (source) next.push({ source, target });
+    onChange(next);
+  }
+
+  return (
+    <div className="pt-3 mt-1 border-t border-gray-100 space-y-2">
+      <div>
+        <p className="text-xs font-semibold text-gray-700">Map fields to the connected node</p>
+        <p className="text-[11px] text-gray-400">
+          Bind a declared body field to each input of the first node wired to this trigger —
+          e.g. send to <code className="font-mono">{"{{body.phone_number}}"}</code>.
+        </p>
+      </div>
+
+      {!targetNode ? (
+        <p className="text-[11px] text-gray-400">
+          Connect a node to this trigger&apos;s handle, then map fields onto its inputs.
+        </p>
+      ) : targets.length === 0 ? (
+        <p className="text-[11px] text-gray-400">
+          The connected node has no mappable inputs. Connect a Send Text or WhatsApp Template node.
+        </p>
+      ) : sources.length === 0 ? (
+        <p className="text-[11px] text-gray-400">Declare body fields above to bind them here.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {targets.map((t) => (
+            <div key={t.key} className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-600 w-28 shrink-0 truncate" title={t.label}>{t.label}</span>
+              <span className="text-gray-300 text-xs">←</span>
+              <select
+                className={inspectorInput + " flex-1"}
+                aria-label={`Map ${t.label}`}
+                value={sourceFor(t.key)}
+                onChange={(e) => setMap(t.key, e.target.value)}
+              >
+                <option value="">— not mapped —</option>
+                {sources.map((s) => (
+                  <option key={s} value={s}>{`body.${s}`}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
