@@ -1277,7 +1277,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   }, [setNodes]);
 
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null;
-  const sharedForInspector = useMemo(() => ({ agents, flows, departments, channels }), [agents, flows, departments, channels]);
+  const sharedForInspector = useMemo(() => ({ agents, flows, departments, channels, nodes, edges }), [agents, flows, departments, channels, nodes, edges]);
 
   // ─── Trigger placement ──────────────────────────────────────
   // Triggers ARE rendered on the canvas, but auto-laid-out as a static
