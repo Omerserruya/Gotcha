@@ -489,7 +489,11 @@ async function walk(
       }
 
       case "send_message_text": {
-        await sendText(String(node.data?.text || ""), ctx);
+        // Conversation-bound runs use ctx.sendCtx (unchanged). Context-free
+        // webhook runs carry no sendCtx — resolve an explicit recipient from the
+        // node so the text still dispatches through the existing outbound path.
+        const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(node.data || {}, ctx));
+        await sendText(String(node.data?.text || ""), ctx, sendCtx);
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent" });
         // Optional pause: when the author flipped "Wait for user reply", halt
         // here and resume on next inbound. Resume path (executeMainFlow's
@@ -888,15 +892,71 @@ function evaluateSingle(c: any, ctx: FlowExecCtx): boolean {
 
 // ─── Send helpers ───────────────────────────────────────────
 
-async function sendText(text: string, ctx: FlowExecCtx) {
+// Infer the outbound channel from the shape of an explicit recipient. An "@"
+// marks an email address; an otherwise phone-like value (digits with optional
+// +, spaces, dashes, parens) is treated as WhatsApp — the only channel that
+// carries templates today and the default for plain phone delivery. Returns
+// null when the value matches neither, so the caller skips rather than guessing.
+function inferChannelFromRecipient(recipient: string): string | null {
+  if (recipient.includes("@")) return "EMAIL";
+  if (/^\+?[\d\s().-]{6,}$/.test(recipient)) return "WHATSAPP";
+  return null;
+}
+
+// Build a one-off ChannelSendContext from a send node's explicit recipient, for
+// context-free webhook runs that carry no conversation (and therefore no
+// ctx.sendCtx). The recipient is read from `data.recipient` and interpolated
+// against flow vars so `{{body.phone_number}}` resolves; an optional
+// `data.recipientChannel` overrides channel inference (forward-compat with the
+// mapper UI, Card 5). Mirrors the broadcast/outgoing-worker resolution: pick an
+// active ChannelAccount for the tenant+channel and decrypt its credentials.
+// Returns null when no recipient is configured or no active account backs the
+// channel — callers then no-op exactly as before.
+async function buildExplicitSendCtx(
+  data: Record<string, any>,
+  ctx: FlowExecCtx,
+): Promise<ChannelSendContext | null> {
+  const recipientId = interpolate(String(data.recipient ?? ""), ctx.vars).trim();
+  if (!recipientId) return null;
+  const explicitChannel = String(data.recipientChannel ?? "").trim().toUpperCase();
+  const channel = explicitChannel || inferChannelFromRecipient(recipientId);
+  if (!channel) {
+    console.warn(`[flow.send] skip unresolved_channel recipient=${recipientId.slice(0, 4)}***`);
+    return null;
+  }
+  const account = await prisma.channelAccount.findFirst({
+    where: { tenantId: ctx.tenantId, channel: channel as any, isActive: true },
+  });
+  if (!account) {
+    console.warn(`[flow.send] skip no_channel_account tenant=${ctx.tenantId} channel=${channel}`);
+    return null;
+  }
+  const raw = (account as any).credentials;
+  const creds = typeof raw === "string" ? decryptCredentials(raw) : ((raw as any) || {});
+  return {
+    channel,
+    channelAccountExternalId: account.externalId,
+    credentials: creds as ChannelCredentials,
+    recipientId,
+  };
+}
+
+// `sendCtx` defaults to the conversation-bound context (ctx.sendCtx). Context-free
+// callers (webhook runs with an explicit recipient) pass a one-off context built
+// by buildExplicitSendCtx so the same dispatch + persist path is reused verbatim.
+async function sendText(
+  text: string,
+  ctx: FlowExecCtx,
+  sendCtx: ChannelSendContext | null = ctx.sendCtx,
+) {
   const resolved = interpolate(text, ctx.vars);
-  if (!resolved || !resolved.trim() || !ctx.sendCtx) return;
-  const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
+  if (!resolved || !resolved.trim() || !sendCtx) return;
+  const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
   const extId = await adapter.sendTextMessage(
-    ctx.sendCtx.credentials,
-    ctx.sendCtx.channelAccountExternalId,
-    ctx.sendCtx.recipientId,
+    sendCtx.credentials,
+    sendCtx.channelAccountExternalId,
+    sendCtx.recipientId,
     resolved,
   );
   await persistOutbound(ctx, resolved, "text", extId);
@@ -1070,16 +1130,18 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   // diagnose "I picked a template but nothing happened" without digging into
   // the trace JSON. Keep prefix stable: `[flow.template]`.
   const tag = "[flow.template]";
-  // Context-free runs carry no sendCtx and no conversationId — bail before any
-  // Conversation/Contact lookup (the latter also narrows the type below).
-  if (!ctx.sendCtx || !ctx.conversationId) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
+  // Conversation-bound runs use ctx.sendCtx (unchanged). Context-free webhook
+  // runs carry no sendCtx — resolve an explicit recipient from the node so the
+  // template still dispatches through the existing WhatsApp outbound path.
+  const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(data, ctx));
+  if (!sendCtx) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
   const templateId = String(data.templateId || "").trim();
   if (!templateId) { console.warn(`${tag} skip no_template conv=${ctx.conversationId}`); return "skipped_no_template"; }
-  // Templates are a WhatsApp-only concept — if the conversation is on any
+  // Templates are a WhatsApp-only concept — if the resolved recipient is on any
   // other channel, log and skip rather than crash. Flow author can still
   // pipe the same playbook through multiple channels safely.
-  if (String(ctx.sendCtx.channel).toUpperCase() !== "WHATSAPP") {
-    console.warn(`${tag} skip non_whatsapp channel=${ctx.sendCtx.channel} conv=${ctx.conversationId}`);
+  if (String(sendCtx.channel).toUpperCase() !== "WHATSAPP") {
+    console.warn(`${tag} skip non_whatsapp channel=${sendCtx.channel} conv=${ctx.conversationId}`);
     return "skipped_non_whatsapp";
   }
   const tmpl = await prisma.messageTemplate.findFirst({
@@ -1088,33 +1150,37 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   if (!tmpl) { console.warn(`${tag} skip template_not_found id=${templateId} tenant=${ctx.tenantId}`); return "skipped_template_not_found"; }
   if (tmpl.status !== "APPROVED") { console.warn(`${tag} skip template_not_approved id=${templateId} status=${tmpl.status}`); return "skipped_template_not_approved"; }
 
-  const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
+  const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter || !adapter.sendTemplateMessage) {
-    console.warn(`${tag} skip adapter_unsupported channel=${ctx.sendCtx.channel}`);
+    console.warn(`${tag} skip adapter_unsupported channel=${sendCtx.channel}`);
     return "skipped_adapter_unsupported";
   }
 
   // Look up the Contact backing this conversation so `crm:<field>` tokens
   // (set in the inspector) can resolve. Best-effort — when there's no
   // contact row, crm tokens fall back to the template's declared sample.
-  const conversationRow = await prisma.conversation.findUnique({
-    where: { id: ctx.conversationId },
-    select: { customerExternalId: true, channel: true, customerName: true },
-  });
+  // Context-free runs have no conversation/contact: crm tokens fall back to
+  // the declared sample, while plain `{{body.*}}` values still interpolate.
   let contact: { displayName?: string | null; email?: string | null; phone?: string | null; source?: string | null; metadata?: any } | null = null;
-  if (conversationRow?.customerExternalId) {
-    contact = await prisma.contact.findFirst({
-      where: {
-        tenantId: ctx.tenantId,
-        externalId: conversationRow.customerExternalId,
-      },
-      select: { displayName: true, email: true, phone: true, source: true, metadata: true },
+  if (ctx.conversationId) {
+    const conversationRow = await prisma.conversation.findUnique({
+      where: { id: ctx.conversationId },
+      select: { customerExternalId: true, channel: true, customerName: true },
     });
-  }
-  // Fall back to the conversation's customerName when no Contact exists yet —
-  // keeps simple `crm:displayName` mappings working on first inbound.
-  if (!contact && conversationRow) {
-    contact = { displayName: conversationRow.customerName };
+    if (conversationRow?.customerExternalId) {
+      contact = await prisma.contact.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          externalId: conversationRow.customerExternalId,
+        },
+        select: { displayName: true, email: true, phone: true, source: true, metadata: true },
+      });
+    }
+    // Fall back to the conversation's customerName when no Contact exists yet —
+    // keeps simple `crm:displayName` mappings working on first inbound.
+    if (!contact && conversationRow) {
+      contact = { displayName: conversationRow.customerName };
+    }
   }
 
   const components = buildTemplateComponentsForFlow(
@@ -1125,13 +1191,13 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
     contact,
   );
 
-  console.log(`${tag} attempt name=${tmpl.name} lang=${tmpl.language} to=${ctx.sendCtx.recipientId} components=${components.length}`);
+  console.log(`${tag} attempt name=${tmpl.name} lang=${tmpl.language} to=${sendCtx.recipientId} components=${components.length}`);
   let extId: string | null = null;
   try {
     extId = await adapter.sendTemplateMessage(
-      ctx.sendCtx.credentials,
-      ctx.sendCtx.channelAccountExternalId,
-      ctx.sendCtx.recipientId,
+      sendCtx.credentials,
+      sendCtx.channelAccountExternalId,
+      sendCtx.recipientId,
       tmpl.name,
       tmpl.language || "en",
       components,
