@@ -56,7 +56,12 @@ interface ChannelSendContext {
 
 interface FlowExecCtx {
   tenantId: string;
-  conversationId: string;
+  // Null for context-free runs (webhook triggers — see executeWebhookFlow).
+  // Conversation-bound flows (message / comment triggered) always carry a real
+  // id. Every Conversation read/write below is guarded on this being non-null,
+  // so both paths share one walker without the context-free path ever touching
+  // a Conversation row.
+  conversationId: string | null;
   message: string;
   channel: string; // inbound channel, lowercased for comparisons
   sendCtx: ChannelSendContext | null;
@@ -198,6 +203,73 @@ export async function executeSubFlow(opts: {
   return walk(startId, nodes, edges, ctx);
 }
 
+// ─── Public entry: context-free webhook run ──────────────────
+//
+// Fired by an inbound WebhookTrigger (resolved by token in services/webhook,
+// enqueued as a "webhook-trigger" job, consumed by the incoming worker). There
+// is NO conversation and NO customer: the flow runs purely off the payload.
+//
+// The incoming JSON is exposed as flow variables under `body` (n8n style), so
+// downstream nodes read `{{body.order_id}}`, `{{body.customer.email}}`, etc.
+// via the same interpolation + dotted-path resolver every other node uses.
+//
+// Conversation-bound concerns degrade gracefully: Send* nodes no-op (no
+// sendCtx), pause nodes (Collect Input / Quick Reply / Wait) halt without
+// persisting resume state (there is no thread to resume), and Route / End /
+// customer-data nodes skip their Conversation/Contact writes. Resolving a
+// customer to attach context is a separate future in-flow node (out of scope).
+export async function executeWebhookFlow(opts: {
+  tenantId: string;
+  workflowId: string;
+  payload: unknown;
+}): Promise<FlowExecutionResult> {
+  const flow = await prisma.chatbotFlow.findFirst({
+    where: { id: opts.workflowId, tenantId: opts.tenantId, isActive: true },
+  });
+  if (!flow) return { executed: false, halted: false, trace: [] };
+
+  const nodes = (flow.nodes as unknown as GraphNode[]) || [];
+  const edges = (flow.edges as unknown as GraphEdge[]) || [];
+  if (nodes.length === 0) return { executed: false, halted: false, trace: [] };
+
+  // Entry resolution mirrors executeSubFlow but also honors a dedicated
+  // `webhook_trigger` entry node when present (the trigger-node UI is ticket 4;
+  // walking through one here is forward-compatible and harmless for flows that
+  // still start from a plain `start` node).
+  const entryNode =
+    nodes.find((n) => n.type === "webhook_trigger") ||
+    nodes.find((n) => n.type === "start") ||
+    null;
+  let startId: string | null = null;
+  if (entryNode) {
+    const out = edges.find((e) => e.source === entryNode.id);
+    startId = out?.target ?? entryNode.id;
+  } else {
+    startId = nodes[0]?.id ?? null;
+  }
+  if (!startId) return { executed: false, halted: false, reason: "no_entry", trace: [] };
+
+  // Bookkeeping parity with sub-flow dispatch.
+  await prisma.chatbotFlow
+    .update({ where: { id: flow.id }, data: { runCount: { increment: 1 } } })
+    .catch(() => {});
+
+  const ctx: FlowExecCtx = {
+    tenantId: opts.tenantId,
+    conversationId: null,
+    message: "",
+    channel: "",
+    sendCtx: null,
+    // n8n-style payload exposure. `{{body.<field>}}` resolves through the same
+    // getByPath used for every other variable.
+    vars: { body: opts.payload ?? {} },
+    flowScope: "sub",
+    flowId: flow.id,
+    trace: [],
+  };
+  return walk(startId, nodes, edges, ctx);
+}
+
 // ─── Internals ───────────────────────────────────────────────
 
 async function buildCtx(
@@ -309,13 +381,17 @@ async function walk(
     // or phone — bridges the conversation to the existing CRM record so the
     // FlowCanvas path matches what the autonomous AI agent does via
     // link_customer_identifier. Idempotent at the conversation-service end,
-    // so the universal incoming.worker hook can safely re-fire.
-    void tryLinkIdentifierFromInbound({
-      tenantId: ctx.tenantId,
-      conversationId: ctx.conversationId,
-      text: ctx.message,
-      reason: "flow Collect Input",
-    });
+    // so the universal incoming.worker hook can safely re-fire. Only relevant
+    // to conversation-bound runs — context-free webhook runs never set
+    // resumingCollectInputVar, but guard the id for type-safety regardless.
+    if (ctx.conversationId) {
+      void tryLinkIdentifierFromInbound({
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        text: ctx.message,
+        reason: "flow Collect Input",
+      });
+    }
   }
 
   while (currentId && steps < MAX_STEPS) {
@@ -363,10 +439,12 @@ async function walk(
         // generic branch) continues from the first outgoing edge.
         if (node.data?.waitForReply) {
           await persistVars(ctx);
-          await prisma.conversation.update({
-            where: { id: ctx.conversationId },
-            data: { chatbotNodeId: node.id, handledBy: "flow" },
-          });
+          if (ctx.conversationId) {
+            await prisma.conversation.update({
+              where: { id: ctx.conversationId },
+              data: { chatbotNodeId: node.id, handledBy: "flow" },
+            });
+          }
           ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply" });
           return {
             executed: true,
@@ -421,10 +499,12 @@ async function walk(
         // Pause and remember where we are. Next inbound resumes from here by
         // matching the reply payload against sourceHandle on outgoing edges.
         await persistVars(ctx);
-        await prisma.conversation.update({
-          where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id, handledBy: "flow" },
-        });
+        if (ctx.conversationId) {
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
+          });
+        }
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent_and_paused" });
         return {
           executed: true,
@@ -516,7 +596,8 @@ async function walk(
       // ─── Trigger entries — walk through like `start` ───────────
       case "keyword_trigger":
       case "comment_trigger":
-      case "schedule_trigger": {
+      case "schedule_trigger":
+      case "webhook_trigger": {
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "trigger_enter" });
         currentId = outgoing[0]?.target || null;
         break;
@@ -544,10 +625,12 @@ async function walk(
         const prompt = interpolate(String(node.data?.prompt || ""), ctx.vars);
         if (prompt) await sendText(prompt, ctx);
         await persistVars(ctx);
-        await prisma.conversation.update({
-          where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id, handledBy: "flow" },
-        });
+        if (ctx.conversationId) {
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
+          });
+        }
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "prompted_and_paused" });
         return {
           executed: true, halted: true, reason: "wait_for_reply",
@@ -564,26 +647,30 @@ async function walk(
           unit === "minutes" ? amount * 60_000 :
                                amount * 1000;
         await persistVars(ctx);
-        await prisma.conversation.update({
-          where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id, handledBy: "flow" },
-        });
-        // Enqueue a delayed resume job. The flow-resume worker picks it up
-        // after `delay` ms and calls executeMainFlow/executeSubFlow with
-        // resumeNodeId = this node, which walks from its first outgoing edge.
-        await flowResumeQueue.add(
-          "resume",
-          {
-            tenantId: ctx.tenantId,
-            conversationId: ctx.conversationId,
-            flowKind: ctx.flowScope,
-            flowId: ctx.flowId,
-            resumeNodeId: node.id,
-            channel: ctx.channel,
-            message: "",
-          },
-          { delay: delayMs, removeOnComplete: true, removeOnFail: 100 },
-        );
+        // Context-free runs have no thread to resume — record the halt and stop
+        // rather than scheduling a resume job that could never fire.
+        if (ctx.conversationId) {
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
+          });
+          // Enqueue a delayed resume job. The flow-resume worker picks it up
+          // after `delay` ms and calls executeMainFlow/executeSubFlow with
+          // resumeNodeId = this node, which walks from its first outgoing edge.
+          await flowResumeQueue.add(
+            "resume",
+            {
+              tenantId: ctx.tenantId,
+              conversationId: ctx.conversationId,
+              flowKind: ctx.flowScope,
+              flowId: ctx.flowId,
+              resumeNodeId: node.id,
+              channel: ctx.channel,
+              message: "",
+            },
+            { delay: delayMs, removeOnComplete: true, removeOnFail: 100 },
+          );
+        }
         ctx.trace.push({
           nodeId: node.id, type: node.type, action: "scheduled_resume",
           detail: { delayMs },
@@ -926,7 +1013,9 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   // diagnose "I picked a template but nothing happened" without digging into
   // the trace JSON. Keep prefix stable: `[flow.template]`.
   const tag = "[flow.template]";
-  if (!ctx.sendCtx) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
+  // Context-free runs carry no sendCtx and no conversationId — bail before any
+  // Conversation/Contact lookup (the latter also narrows the type below).
+  if (!ctx.sendCtx || !ctx.conversationId) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
   const templateId = String(data.templateId || "").trim();
   if (!templateId) { console.warn(`${tag} skip no_template conv=${ctx.conversationId}`); return "skipped_no_template"; }
   // Templates are a WhatsApp-only concept — if the conversation is on any
@@ -1021,7 +1110,9 @@ async function persistOutbound(
   extId: string | null,
   metadata?: any,
 ) {
-  if (!ctx.sendCtx) return;
+  // No sendCtx (or no conversation) → nothing to attach an outbound row to.
+  // Context-free runs hit the first branch since they carry neither.
+  if (!ctx.sendCtx || !ctx.conversationId) return;
   const m = await prisma.message.create({
     data: {
       tenantId: ctx.tenantId,
@@ -1050,6 +1141,11 @@ async function dispatchRoute(
   targetId: string | null,
   ctx: FlowExecCtx,
 ): Promise<"AI_AGENT" | "FLOW" | "HUMAN" | "DEPARTMENT"> {
+  // Context-free run: no conversation to assign, hand off, or drive an agent
+  // against. Map the author's intent to its terminal type without side effects.
+  if (!ctx.conversationId) {
+    return routeType === "agent" ? "AI_AGENT" : routeType === "flow" ? "FLOW" : "HUMAN";
+  }
   if (routeType === "agent" && targetId) {
     // Persist the assigned AI agent on the conversation so subsequent inbound
     // messages resume against the same agent without re-routing through the
@@ -1109,6 +1205,9 @@ async function applyEnd(
   kind: "close" | "handoff_human" | "wait_for_reply",
   ctx: FlowExecCtx,
 ) {
+  // Context-free run: no Conversation row to transition. The End node just
+  // terminates the walk.
+  if (!ctx.conversationId) return;
   // The flow has terminated — drop chatbot state so the next inbound is NOT
   // resumed back into the last paused node (which would re-capture every
   // future message into the Collect Input variable and loop the greeting).
@@ -1178,6 +1277,9 @@ function getByPath(obj: any, path: string): any {
  * for read-only walks).
  */
 async function persistVars(ctx: FlowExecCtx): Promise<void> {
+  // Context-free runs (webhook triggers) have no Conversation row to persist
+  // variables to — the store lives only for the duration of the walk.
+  if (!ctx.conversationId) return;
   try {
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
@@ -1256,7 +1358,8 @@ async function updateContact(
   key: string,
   value: string,
 ): Promise<void> {
-  if (!key) return;
+  // No key or no conversation (context-free run) → no Contact to mutate.
+  if (!key || !ctx.conversationId) return;
   const conversation = await prisma.conversation.findFirst({
     where: { id: ctx.conversationId, tenantId: ctx.tenantId },
     select: { customerExternalId: true, channel: true },
@@ -1299,7 +1402,8 @@ async function loadContactFields(
   prefix: string,
 ): Promise<Record<string, any>> {
   const out: Record<string, any> = {};
-  if (fields.length === 0) return out;
+  // No fields requested or no conversation (context-free run) → nothing to load.
+  if (fields.length === 0 || !ctx.conversationId) return out;
   const conversation = await prisma.conversation.findFirst({
     where: { id: ctx.conversationId, tenantId: ctx.tenantId },
     select: { customerExternalId: true, channel: true },
