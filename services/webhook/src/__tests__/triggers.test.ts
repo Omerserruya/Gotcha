@@ -107,9 +107,27 @@ describe("POST /webhooks/:token", () => {
         workflowId: "flow-1",
         tenantId: "tenant-1",
         payload,
+        // Defaults to flow mode when the record predates the field.
+        targetMode: "flow",
       },
       expect.any(Object),
     );
+  });
+
+  it("forwards the trigger's connected target mode on the enqueued job", async () => {
+    (prisma.webhookTrigger.findUnique as any).mockResolvedValue({
+      ...VALID_TRIGGER,
+      targetMode: "connected",
+    });
+
+    const res = await request(createTestApp())
+      .post("/webhooks/tok-abc")
+      .set("x-webhook-secret", "s3cr3t")
+      .send({ any: "thing" });
+
+    expect(res.status).toBe(200);
+    const enqueued = (incomingMessageQueue.add as any).mock.calls[0][1];
+    expect(enqueued.targetMode).toBe("connected");
   });
 
   it("forwards the raw JSON payload to the queue intact", async () => {

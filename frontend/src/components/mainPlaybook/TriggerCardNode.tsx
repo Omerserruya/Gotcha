@@ -229,6 +229,11 @@ function describe(
     }
     case "webhook_trigger": {
       const configured = !!String(d.workflowId || "").trim();
+      const subtitle = !configured
+        ? "Pick a flow to run"
+        : d.targetMode === "connected"
+        ? "Runs connected nodes"
+        : "Inbound HTTP POST";
       return {
         icon: {
           node: (
@@ -240,7 +245,7 @@ function describe(
           fg: "text-emerald-600",
         },
         title: "Webhook",
-        subtitle: configured ? "Inbound HTTP POST" : "Pick a flow to run",
+        subtitle,
       };
     }
     case "voice_trigger:call.incoming":

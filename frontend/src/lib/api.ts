@@ -1605,12 +1605,17 @@ export function autoGenerateFlowCanvas(token: string) {
 // Management API for the Main Playbook's Webhook trigger node. The returned
 // `data` carries { id, workflowId, token, secret, enabled, path }; the browser
 // builds the full URL as `${location.origin}${path}`.
+// "flow" runs the associated ChatbotFlow; "connected" walks the nodes wired to
+// the webhook trigger node on the Main Playbook canvas.
+export type WebhookTargetMode = "flow" | "connected";
+
 export interface WebhookTriggerDto {
   id: string;
   workflowId: string;
   token: string;
   secret: string;
   enabled: boolean;
+  targetMode: WebhookTargetMode;
   path: string;
 }
 
@@ -1621,11 +1626,15 @@ export function getWebhookTrigger(token: string, workflowId: string) {
   );
 }
 
-export function createWebhookTrigger(token: string, workflowId: string) {
+export function createWebhookTrigger(
+  token: string,
+  workflowId: string,
+  targetMode?: WebhookTargetMode,
+) {
   return apiFetch<{ data: WebhookTriggerDto }>("/api/webhook-triggers", {
     token,
     method: "POST",
-    body: JSON.stringify({ workflowId }),
+    body: JSON.stringify(targetMode ? { workflowId, targetMode } : { workflowId }),
   });
 }
 
@@ -1641,6 +1650,14 @@ export function setWebhookTriggerEnabled(token: string, id: string, enabled: boo
     token,
     method: "PATCH",
     body: JSON.stringify({ enabled }),
+  });
+}
+
+export function setWebhookTriggerMode(token: string, id: string, targetMode: WebhookTargetMode) {
+  return apiFetch<{ data: WebhookTriggerDto }>(`/api/webhook-triggers/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ targetMode }),
   });
 }
 
