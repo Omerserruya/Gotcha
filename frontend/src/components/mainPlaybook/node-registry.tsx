@@ -984,10 +984,24 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
   const [loading, setLoading] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
-  const [copied, setCopied] = React.useState<"url" | "secret" | null>(null);
+  const [copied, setCopied] = React.useState<string | null>(null);
 
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const fullUrl = trigger ? `${origin}${trigger.path}` : "";
+
+  // "How to use" examples — built from the trigger the backend already exposes
+  // (no new data is fetched). The secret header name mirrors the inbound route
+  // in services/webhook (POST /webhooks/:token, header `x-webhook-secret`).
+  const SECRET_HEADER = "x-webhook-secret";
+  const samplePayload = `{
+  "email": "jane@example.com",
+  "name": "Jane Doe",
+  "plan": "pro"
+}`;
+  const samplePayloadInline = '{"email":"jane@example.com","name":"Jane Doe","plan":"pro"}';
+  const curlExample = trigger
+    ? `curl -X POST '${fullUrl}' \\\n  -H 'Content-Type: application/json' \\\n  -H '${SECRET_HEADER}: ${trigger.secret}' \\\n  -d '${samplePayloadInline}'`
+    : "";
 
   // Load the existing trigger whenever the linked flow changes.
   React.useEffect(() => {
@@ -1005,7 +1019,7 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
     return () => { cancelled = true; };
   }, [token, workflowId]);
 
-  async function copy(text: string, which: "url" | "secret") {
+  async function copy(text: string, which: string) {
     try {
       await navigator.clipboard.writeText(text);
       setCopied(which);
@@ -1108,9 +1122,41 @@ function WebhookTriggerBody({ data, onChange, shared }: { data: any; onChange: (
             Enabled {trigger.enabled ? "" : "(disabled — inbound calls return 403)"}
           </label>
 
-          <p className="text-[11px] text-gray-400">
-            Read payload fields in the linked flow with <code className="font-mono">{"{{body.field}}"}</code> — e.g. <code className="font-mono">{"{{body.email}}"}</code>.
-          </p>
+          {/* How to use — self-serve guide for wiring an external caller without
+              leaving the canvas. Reads only the trigger above; adds no backend. */}
+          <div className="pt-3 mt-1 border-t border-gray-100 space-y-2.5">
+            <p className="text-xs font-semibold text-gray-700">How to use</p>
+            <p className="text-[11px] text-gray-400">
+              From your external service, send an HTTP <code className="font-mono">POST</code> to the
+              Webhook URL above with the secret header
+              {" "}<code className="font-mono">{SECRET_HEADER}</code> set to your Secret. Requests
+              without a matching secret are rejected (401).
+            </p>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-semibold text-gray-600">curl example</span>
+                <button type="button" onClick={() => copy(curlExample, "curl")} className="shrink-0 text-[11px] font-medium rounded-md px-2 py-1 border border-gray-200 hover:bg-gray-50 transition">
+                  {copied === "curl" ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <pre className="text-[10.5px] font-mono leading-relaxed bg-gray-900 text-gray-100 rounded-lg p-2.5 overflow-x-auto whitespace-pre">{curlExample}</pre>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-semibold text-gray-600">Sample payload</span>
+                <button type="button" onClick={() => copy(samplePayload, "payload")} className="shrink-0 text-[11px] font-medium rounded-md px-2 py-1 border border-gray-200 hover:bg-gray-50 transition">
+                  {copied === "payload" ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <pre className="text-[10.5px] font-mono leading-relaxed bg-gray-50 border border-gray-200 text-gray-700 rounded-lg p-2.5 overflow-x-auto whitespace-pre">{samplePayload}</pre>
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              Reference any payload field downstream with <code className="font-mono">{"{{body.field}}"}</code> — e.g. <code className="font-mono">{"{{body.email}}"}</code> or <code className="font-mono">{"{{body.plan}}"}</code>.
+            </p>
+          </div>
         </>
       )}
 
