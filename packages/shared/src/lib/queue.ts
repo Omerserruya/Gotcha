@@ -73,6 +73,26 @@ export interface IncomingCommentJob {
   };
 }
 
+// Generic inbound webhook trigger. Shares the "incoming-messages" BullMQ queue
+// with the message + comment paths (one worker, discriminated by
+// job.name = "webhook-trigger"). Emitted by services/webhook when an
+// authenticated POST /webhooks/:token arrives. Carries the caller's raw JSON
+// body untouched in `payload` — looking up the customer, running the flow, and
+// variable injection all happen downstream (ticket 3), not at ingest.
+export interface WebhookTriggerJob {
+  triggerId: string;
+  workflowId: string;
+  tenantId: string;
+  payload: unknown;
+  // How the inbound call runs (see WebhookTrigger.targetMode):
+  //   "flow"      → run the associated ChatbotFlow (`workflowId`).
+  //   "connected" → walk the nodes wired to the webhook trigger node on the
+  //                 Main Playbook canvas, context-free.
+  // Optional + defaults to "flow" downstream so jobs enqueued before this field
+  // existed keep the original behavior.
+  targetMode?: "flow" | "connected";
+}
+
 export interface OutgoingMessageJob {
   tenantId: string;
   conversationId: string | null;

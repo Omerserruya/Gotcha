@@ -3,7 +3,20 @@
 import React from "react";
 import { VariableMentionInput } from "./VariableMentionInput";
 import { useAuth } from "@/context/AuthContext";
-import { getChannelPosts, getTemplates, getAudienceSchema } from "@/lib/api";
+import {
+  getChannelPosts,
+  getTemplates,
+  getAudienceSchema,
+  getWebhookTrigger,
+  createWebhookTrigger,
+  regenerateWebhookSecret,
+  setWebhookTriggerEnabled,
+  setWebhookTriggerMode,
+  setWebhookTriggerBodySchema,
+  type WebhookTriggerDto,
+  type WebhookTargetMode,
+  type WebhookFieldType,
+} from "@/lib/api";
 import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 
 // Per-tenant lookups injected by the editor (agents/flows/departments lists for
@@ -15,6 +28,10 @@ export interface SharedData {
   flows?: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
   channels?: { id: string; channel: string; displayName?: string; externalId?: string }[];
+  // Live canvas graph — lets an inspector reason about a node's neighbours
+  // (e.g. the webhook trigger mapper binds onto its first connected node).
+  nodes?: { id: string; type?: string; data?: any }[];
+  edges?: { id: string; source: string; target: string; sourceHandle?: string | null }[];
 }
 
 export type NodeColor =
@@ -44,6 +61,9 @@ export interface NodeRegistryEntry {
     data: any;
     onChange: (patch: Record<string, any>) => void;
     shared?: SharedData;
+    // Id of the node being edited — only bodies that reason about neighbours
+    // (webhook trigger mapper) need it; the rest ignore it.
+    nodeId?: string;
   }>;
   handles: {
     target?: "top" | "left";
@@ -598,6 +618,26 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     Body: ScheduleTriggerBody,
   },
 
+  webhook_trigger: {
+    type: "webhook_trigger", label: "Trigger: Webhook", color: "emerald", icon: ICONS.link, category: "Triggers",
+    handles: { sources: [{ position: "bottom" }] },
+    // targetMode defaults to "flow" — preserves the original separate-flow run.
+    defaultData: () => ({ name: "Webhook", workflowId: "", targetMode: "flow" }),
+    // Connected mode needs no flow pick — it auto-anchors to the node's own id,
+    // so it's always valid. Flow mode still requires a linked flow (the anchor
+    // the WebhookTrigger record is provisioned against).
+    validate: (d) =>
+      d.targetMode === "connected" || String(d.workflowId || "").trim() ? "ok" : "missing",
+    summary: (d, shared) => {
+      if (d.targetMode === "connected") return "Runs: connected nodes";
+      const id = String(d.workflowId || "").trim();
+      if (!id) return "No flow linked yet";
+      const flow = shared?.flows?.find((f) => f.id === id);
+      return `Runs: ${flow?.name || id}`;
+    },
+    Body: WebhookTriggerBody,
+  },
+
   // ── Voice triggers ────────────────────────────────────────────
   // Each entry's `type` is the literal `voice_trigger:<kind>` string the
   // voice-flow-runner matches against. See
@@ -941,6 +981,569 @@ function ScheduleTriggerBody({ data, onChange }: { data: any; onChange: (p: any)
       <Field label="Timezone">
         <input className={inspectorInput} value={data.timezone || "UTC"} onChange={(e) => onChange({ timezone: e.target.value })} placeholder="America/New_York" />
       </Field>
+    </div>
+  );
+}
+
+// Webhook trigger inspector. Lets the author link the node to a flow, then
+// provisions + shows the inbound URL and shared secret for that flow's
+// WebhookTrigger record (copy / regenerate / enable-disable). The URL/secret
+// state lives on the backend record — never persisted into the canvas JSON —
+// so a rotated secret can't go stale here.
+function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onChange: (p: any) => void; shared?: SharedData; nodeId?: string }) {
+  const { token } = useAuth();
+  const workflowId: string = String(data.workflowId || "").trim();
+  const targetMode: WebhookTargetMode = data.targetMode === "connected" ? "connected" : "flow";
+  const flows = shared?.flows || [];
+
+  // The first node wired to this trigger — what the mapper binds body fields
+  // onto. Mirrors the runtime's "first outgoing edge" resolution exactly.
+  const firstConnectedNode = React.useMemo(() => {
+    if (!nodeId) return null;
+    const edges = shared?.edges || [];
+    const nodes = shared?.nodes || [];
+    const edge = edges.find((e) => e.source === nodeId);
+    if (!edge) return null;
+    return nodes.find((n) => n.id === edge.target) || null;
+  }, [nodeId, shared?.edges, shared?.nodes]);
+
+  // Persisted mapping lives on the trigger node's own data so it travels with
+  // the canvas (no extra backend column / endpoint). Shape: [{ source, target }].
+  const fieldMapping: { source: string; target: string }[] = Array.isArray(data.fieldMapping)
+    ? data.fieldMapping
+    : [];
+
+  const [trigger, setTrigger] = React.useState<WebhookTriggerDto | null>(null);
+  const [loading, setLoading] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+  const [error, setError] = React.useState<string | null>(null);
+  const [copied, setCopied] = React.useState<string | null>(null);
+
+  // Local, editable copy of the declared body fields. Each row carries a stable
+  // local id for React keys; the id is stripped before persisting. Sourced from
+  // the trigger once per trigger (not on every update) so saving our own edits
+  // doesn't clobber an in-progress row — see syncedFor below.
+  type LocalField = { id: string; key: string; type: WebhookFieldType };
+  const [fields, setFields] = React.useState<LocalField[]>([]);
+  const syncedFor = React.useRef<string | null>(null);
+
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const fullUrl = trigger ? `${origin}${trigger.path}` : "";
+
+  // "How to use" examples — built from the trigger the backend already exposes
+  // (no new data is fetched). The secret header name mirrors the inbound route
+  // in services/webhook (POST /webhooks/:token, header `x-webhook-secret`).
+  const SECRET_HEADER = "x-webhook-secret";
+  const samplePayload = `{
+  "email": "jane@example.com",
+  "name": "Jane Doe",
+  "plan": "pro"
+}`;
+  const samplePayloadInline = '{"email":"jane@example.com","name":"Jane Doe","plan":"pro"}';
+  const curlExample = trigger
+    ? `curl -X POST '${fullUrl}' \\\n  -H 'Content-Type: application/json' \\\n  -H '${SECRET_HEADER}: ${trigger.secret}' \\\n  -d '${samplePayloadInline}'`
+    : "";
+
+  // Load the existing trigger whenever the linked flow changes.
+  React.useEffect(() => {
+    if (!token || !workflowId) {
+      setTrigger(null);
+      return;
+    }
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    getWebhookTrigger(token, workflowId)
+      .then((r) => { if (!cancelled) setTrigger(r.data); })
+      .catch(() => { if (!cancelled) setError("Couldn't load webhook details"); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [token, workflowId]);
+
+  // Auto-anchor for connected mode: the user no longer picks a flow here — the
+  // trigger anchors to its own canvas node id (used only to provision the URL and
+  // to locate this webhook_trigger node on the Main Playbook). Set it once when
+  // we're in connected mode without an anchor yet. Go-forward only: an existing
+  // anchor (legacy connected triggers that picked a real flow) is left untouched.
+  React.useEffect(() => {
+    if (targetMode === "connected" && !workflowId && nodeId) {
+      onChange({ workflowId: nodeId });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [targetMode, workflowId, nodeId]);
+
+  async function copy(text: string, which: string) {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopied(which);
+      setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
+    } catch {
+      setError("Copy failed — select and copy manually");
+    }
+  }
+
+  async function provision() {
+    if (!token || !workflowId) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await createWebhookTrigger(token, workflowId, targetMode);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't generate the webhook URL");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Switch what the webhook runs. Always persist on the node config; when a
+  // trigger record already exists, mirror the mode to the backend so the
+  // ingest route dispatches correctly without re-provisioning.
+  async function changeMode(next: WebhookTargetMode) {
+    if (next === targetMode) return;
+    onChange({ targetMode: next });
+    if (!token || !trigger || trigger.targetMode === next) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setWebhookTriggerMode(token, trigger.id, next);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't update the run mode");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function regenerate() {
+    if (!token || !trigger) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await regenerateWebhookSecret(token, trigger.id);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't regenerate the secret");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleEnabled(next: boolean) {
+    if (!token || !trigger) return;
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setWebhookTriggerEnabled(token, trigger.id, next);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't update the toggle");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  // Seed the editable rows from a freshly-loaded trigger, but only the first
+  // time we see that trigger id. Our own saves update `trigger` (same id), and
+  // skipping the re-seed there keeps the user's in-progress / blank rows intact.
+  React.useEffect(() => {
+    if (!trigger) {
+      syncedFor.current = null;
+      setFields([]);
+      return;
+    }
+    if (syncedFor.current === trigger.id) return;
+    syncedFor.current = trigger.id;
+    setFields(
+      (trigger.bodySchema || []).map((f, i) => ({ id: `bf_${i}_${f.key}`, key: f.key, type: f.type })),
+    );
+  }, [trigger]);
+
+  // Persist the given rows as the declared schema. Blank keys / dupes are
+  // dropped by the backend; we send the trimmed, keyed rows. Declaration only.
+  async function persistSchema(rows: LocalField[]) {
+    if (!token || !trigger) return;
+    const bodySchema = rows
+      .map((f) => ({ key: f.key.trim(), type: f.type }))
+      .filter((f) => f.key.length > 0);
+    setBusy(true);
+    setError(null);
+    try {
+      const r = await setWebhookTriggerBodySchema(token, trigger.id, bodySchema);
+      setTrigger(r.data);
+    } catch {
+      setError("Couldn't save the expected fields");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  function addField() {
+    // Add a blank row locally; it persists once the user gives it a key (blur).
+    setFields((cur) => [...cur, { id: `bf_new_${cur.length}_${cur.reduce((n, f) => n + f.key.length, 0)}`, key: "", type: "string" }]);
+  }
+
+  function updateFieldKey(id: string, key: string) {
+    setFields((cur) => cur.map((f) => (f.id === id ? { ...f, key } : f)));
+  }
+
+  function changeFieldType(id: string, type: WebhookFieldType) {
+    setFields((cur) => {
+      const next = cur.map((f) => (f.id === id ? { ...f, type } : f));
+      persistSchema(next);
+      return next;
+    });
+  }
+
+  function removeField(id: string) {
+    setFields((cur) => {
+      const next = cur.filter((f) => f.id !== id);
+      persistSchema(next);
+      return next;
+    });
+  }
+
+  function commitFields() {
+    // Save on blur — only the keyed rows are persisted.
+    setFields((cur) => {
+      persistSchema(cur);
+      return cur;
+    });
+  }
+
+  return (
+    <div className="space-y-3">
+      {/* What the webhook runs. Default "flow" preserves the original behavior. */}
+      <Field label="When this webhook fires" hint="Run the nodes wired to this trigger on the canvas, or run a separate flow.">
+        <div className="grid grid-cols-2 gap-1.5">
+          <button
+            type="button"
+            onClick={() => changeMode("connected")}
+            aria-pressed={targetMode === "connected"}
+            aria-label="Run connected nodes"
+            className={[
+              "text-xs font-medium rounded-lg px-2.5 py-2 border transition text-left",
+              targetMode === "connected"
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                : "border-gray-200 text-gray-600 hover:bg-gray-50",
+            ].join(" ")}
+          >
+            Run connected nodes
+            <span className="block text-[10px] font-normal text-gray-400 mt-0.5">Walk the canvas from here</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => changeMode("flow")}
+            aria-pressed={targetMode === "flow"}
+            aria-label="Run another flow"
+            className={[
+              "text-xs font-medium rounded-lg px-2.5 py-2 border transition text-left",
+              targetMode === "flow"
+                ? "border-emerald-500 bg-emerald-50 text-emerald-700"
+                : "border-gray-200 text-gray-600 hover:bg-gray-50",
+            ].join(" ")}
+          >
+            Run another flow
+            <span className="block text-[10px] font-normal text-gray-400 mt-0.5">Run a separate flow</span>
+          </button>
+        </div>
+      </Field>
+
+      {/* Connected mode runs the nodes wired to this trigger — there's no flow to
+          pick, so the selector is hidden and the trigger auto-anchors to its own
+          node id. Flow mode still requires an explicit flow. */}
+      {targetMode === "connected" ? null : (
+        <Field label="Run this flow" hint="The webhook runs this flow when it fires. The flow reads the request body via {{body.*}}.">
+          <select className={inspectorInput} value={workflowId} onChange={(e) => onChange({ workflowId: e.target.value })}>
+            <option value="">Select a flow…</option>
+            {flows.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </Field>
+      )}
+
+      {targetMode === "connected" && workflowId ? (
+        <p className="text-[11px] text-gray-500 bg-emerald-50/60 border border-emerald-100 rounded-lg px-2.5 py-2">
+          Drag from this trigger&apos;s bottom handle to the first node you want to run.
+          Those connected nodes execute in order, reading the request body via <code className="font-mono">{"{{body.*}}"}</code>.
+        </p>
+      ) : null}
+
+      {!workflowId ? (
+        // Connected mode auto-anchors (see effect above) — no flow pick needed,
+        // so this is just the one-tick gap before the anchor is set.
+        targetMode === "connected" ? (
+          <p className="text-xs text-gray-400">Loading webhook…</p>
+        ) : (
+          <p className="text-[11px] text-gray-400">Pick a flow to generate its webhook URL.</p>
+        )
+      ) : loading ? (
+        <p className="text-xs text-gray-400">Loading webhook…</p>
+      ) : !trigger ? (
+        <button
+          type="button"
+          onClick={provision}
+          disabled={busy}
+          className="w-full text-sm font-medium rounded-lg px-3 py-2 bg-emerald-600 text-white hover:bg-emerald-700 disabled:opacity-50 transition"
+        >
+          {busy ? "Generating…" : "Generate webhook URL"}
+        </button>
+      ) : (
+        <>
+          <Field label="Webhook URL" hint="POST your JSON payload here.">
+            <div className="flex items-center gap-1.5">
+              <input readOnly value={fullUrl} className={inspectorInput + " font-mono text-[11px]"} onFocus={(e) => e.currentTarget.select()} />
+              <button type="button" onClick={() => copy(fullUrl, "url")} className="shrink-0 text-xs font-medium rounded-lg px-2.5 py-2 border border-gray-200 hover:bg-gray-50 transition">
+                {copied === "url" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </Field>
+
+          <Field label="Secret" hint="Send as the x-webhook-secret header. Requests without it are rejected (401).">
+            <div className="flex items-center gap-1.5">
+              <input readOnly value={trigger.secret} className={inspectorInput + " font-mono text-[11px]"} onFocus={(e) => e.currentTarget.select()} />
+              <button type="button" onClick={() => copy(trigger.secret, "secret")} className="shrink-0 text-xs font-medium rounded-lg px-2.5 py-2 border border-gray-200 hover:bg-gray-50 transition">
+                {copied === "secret" ? "Copied" : "Copy"}
+              </button>
+            </div>
+          </Field>
+
+          <button type="button" onClick={regenerate} disabled={busy} className="text-xs font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50">
+            Regenerate secret
+          </button>
+
+          <label className="flex items-center gap-2 text-sm text-gray-700 pt-1">
+            <input type="checkbox" checked={trigger.enabled} disabled={busy} onChange={(e) => toggleEnabled(e.target.checked)} className="accent-emerald-500" />
+            Enabled {trigger.enabled ? "" : "(disabled — inbound calls return 403)"}
+          </label>
+
+          {/* Expected body fields — the user declares the shape of the payload
+              they'll send. These become the known source fields the mapper binds
+              from. Declaration only: inbound payloads are NOT validated against
+              this, and the {{body.*}} reference behavior is unchanged. */}
+          <div className="pt-3 mt-1 border-t border-gray-100 space-y-2">
+            <div>
+              <p className="text-xs font-semibold text-gray-700">Expected body fields</p>
+              <p className="text-[11px] text-gray-400">
+                Declare the fields you&apos;ll send in the request body. These become the source
+                fields for mapping. (Declaration only — payloads aren&apos;t rejected if they differ.)
+              </p>
+            </div>
+
+            {fields.length > 0 ? (
+              <div className="space-y-1.5">
+                {fields.map((f) => (
+                  <div key={f.id} className="flex items-center gap-1.5">
+                    <input
+                      className={inspectorInput + " flex-1 font-mono text-[11px]"}
+                      placeholder="field_name"
+                      aria-label="Field name"
+                      value={f.key}
+                      disabled={busy}
+                      onChange={(e) => updateFieldKey(f.id, e.target.value)}
+                      onBlur={commitFields}
+                    />
+                    <select
+                      className={inspectorInput + " w-24 shrink-0"}
+                      aria-label="Field type"
+                      value={f.type}
+                      disabled={busy}
+                      onChange={(e) => changeFieldType(f.id, e.target.value as WebhookFieldType)}
+                    >
+                      <option value="string">string</option>
+                      <option value="number">number</option>
+                      <option value="boolean">boolean</option>
+                    </select>
+                    <button
+                      type="button"
+                      onClick={() => removeField(f.id)}
+                      disabled={busy}
+                      aria-label="Remove field"
+                      className="shrink-0 text-gray-400 hover:text-rose-500 disabled:opacity-50 px-1.5 py-1 text-sm"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-[11px] text-gray-400">No fields declared yet.</p>
+            )}
+
+            <button
+              type="button"
+              onClick={addField}
+              disabled={busy}
+              className="text-xs font-medium text-emerald-600 hover:text-emerald-700 disabled:opacity-50"
+            >
+              + Add field
+            </button>
+          </div>
+
+          {/* Field mapper — bind declared body fields onto the first connected
+              node's inputs. Connected mode only: in flow mode the webhook runs a
+              separate flow, so "the first connected node" has no meaning here. */}
+          {targetMode === "connected" ? (
+            <WebhookFieldMapper
+              sources={fields.map((f) => f.key.trim()).filter(Boolean)}
+              targetNode={firstConnectedNode}
+              mapping={fieldMapping}
+              onChange={(next) => onChange({ fieldMapping: next })}
+            />
+          ) : null}
+
+          {/* How to use — self-serve guide for wiring an external caller without
+              leaving the canvas. Reads only the trigger above; adds no backend. */}
+          <div className="pt-3 mt-1 border-t border-gray-100 space-y-2.5">
+            <p className="text-xs font-semibold text-gray-700">How to use</p>
+            <p className="text-[11px] text-gray-400">
+              From your external service, send an HTTP <code className="font-mono">POST</code> to the
+              Webhook URL above with the secret header
+              {" "}<code className="font-mono">{SECRET_HEADER}</code> set to your Secret. Requests
+              without a matching secret are rejected (401).
+            </p>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-semibold text-gray-600">curl example</span>
+                <button type="button" onClick={() => copy(curlExample, "curl")} className="shrink-0 text-[11px] font-medium rounded-md px-2 py-1 border border-gray-200 hover:bg-gray-50 transition">
+                  {copied === "curl" ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <pre className="text-[10.5px] font-mono leading-relaxed bg-gray-900 text-gray-100 rounded-lg p-2.5 overflow-x-auto whitespace-pre">{curlExample}</pre>
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-[11px] font-semibold text-gray-600">Sample payload</span>
+                <button type="button" onClick={() => copy(samplePayload, "payload")} className="shrink-0 text-[11px] font-medium rounded-md px-2 py-1 border border-gray-200 hover:bg-gray-50 transition">
+                  {copied === "payload" ? "Copied" : "Copy"}
+                </button>
+              </div>
+              <pre className="text-[10.5px] font-mono leading-relaxed bg-gray-50 border border-gray-200 text-gray-700 rounded-lg p-2.5 overflow-x-auto whitespace-pre">{samplePayload}</pre>
+            </div>
+
+            <p className="text-[11px] text-gray-400">
+              Reference any payload field downstream with <code className="font-mono">{"{{body.field}}"}</code> — e.g. <code className="font-mono">{"{{body.email}}"}</code> or <code className="font-mono">{"{{body.plan}}"}</code>.
+            </p>
+          </div>
+        </>
+      )}
+
+      {error ? <p className="text-[11px] text-rose-500">{error}</p> : null}
+    </div>
+  );
+}
+
+// ─── Webhook field mapper ──────────────────────────────────────────
+// Manual binding of declared body fields → the first connected node's inputs.
+// Auto-mapping by name was explicitly rejected (see card); every binding is a
+// deliberate dropdown choice. Each row is one target input; selecting a source
+// stores { source, target } on the trigger node's `data.fieldMapping`. At
+// runtime (incoming-worker flow-executor) the mapping is applied by injecting
+// `{{body.<source>}}` into the target node, reusing the {{body.*}} path.
+type MapTarget = { key: string; label: string };
+
+function WebhookFieldMapper({
+  sources,
+  targetNode,
+  mapping,
+  onChange,
+}: {
+  sources: string[];
+  targetNode: { id: string; type?: string; data?: any } | null;
+  mapping: { source: string; target: string }[];
+  onChange: (next: { source: string; target: string }[]) => void;
+}) {
+  const { token } = useAuth();
+  const [templates, setTemplates] = React.useState<TemplateRow[]>([]);
+  const isTemplate = targetNode?.type === "send_message_template";
+
+  // Only the template target needs the tenant's templates (to derive the
+  // placeholder keys it can bind). Fetched lazily and only in that case.
+  React.useEffect(() => {
+    if (!token || !isTemplate) return;
+    let cancelled = false;
+    getTemplates(token, { channel: "WHATSAPP", status: "APPROVED", limit: "200" })
+      .then((res) => { if (!cancelled) setTemplates((res.data || []) as TemplateRow[]); })
+      .catch(() => { if (!cancelled) setTemplates([]); });
+    return () => { cancelled = true; };
+  }, [token, isTemplate]);
+
+  const targets: MapTarget[] = React.useMemo(() => {
+    if (!targetNode) return [];
+    if (targetNode.type === "send_message_text") {
+      return [
+        { key: "recipient", label: "Recipient" },
+        { key: "text", label: "Message text" },
+      ];
+    }
+    if (targetNode.type === "send_message_template") {
+      const selected = templates.find((t) => t.id === String(targetNode.data?.templateId || ""));
+      const fromBody = extractPlaceholderKeys(selected?.body);
+      const fromHeader = selected?.headerType === "TEXT" ? extractPlaceholderKeys(selected?.headerContent) : [];
+      const keys: string[] = [];
+      const seen = new Set<string>();
+      for (const k of [...fromHeader, ...fromBody]) {
+        if (!seen.has(k)) { seen.add(k); keys.push(k); }
+      }
+      return [
+        { key: "recipient", label: "Recipient" },
+        ...keys.map((k) => ({ key: `var:${k}`, label: `Template var: ${k}` })),
+      ];
+    }
+    return [];
+  }, [targetNode, templates]);
+
+  function sourceFor(target: string): string {
+    return mapping.find((m) => m.target === target)?.source || "";
+  }
+  function setMap(target: string, source: string) {
+    const next = mapping.filter((m) => m.target !== target);
+    if (source) next.push({ source, target });
+    onChange(next);
+  }
+
+  return (
+    <div className="pt-3 mt-1 border-t border-gray-100 space-y-2">
+      <div>
+        <p className="text-xs font-semibold text-gray-700">Map fields to the connected node</p>
+        <p className="text-[11px] text-gray-400">
+          Bind a declared body field to each input of the first node wired to this trigger —
+          e.g. send to <code className="font-mono">{"{{body.phone_number}}"}</code>.
+        </p>
+      </div>
+
+      {!targetNode ? (
+        <p className="text-[11px] text-gray-400">
+          Connect a node to this trigger&apos;s handle, then map fields onto its inputs.
+        </p>
+      ) : targets.length === 0 ? (
+        <p className="text-[11px] text-gray-400">
+          The connected node has no mappable inputs. Connect a Send Text or WhatsApp Template node.
+        </p>
+      ) : sources.length === 0 ? (
+        <p className="text-[11px] text-gray-400">Declare body fields above to bind them here.</p>
+      ) : (
+        <div className="space-y-1.5">
+          {targets.map((t) => (
+            <div key={t.key} className="flex items-center gap-1.5">
+              <span className="text-[11px] text-gray-600 w-28 shrink-0 truncate" title={t.label}>{t.label}</span>
+              <span className="text-gray-300 text-xs">←</span>
+              <select
+                className={inspectorInput + " flex-1"}
+                aria-label={`Map ${t.label}`}
+                value={sourceFor(t.key)}
+                onChange={(e) => setMap(t.key, e.target.value)}
+              >
+                <option value="">— not mapped —</option>
+                {sources.map((s) => (
+                  <option key={s} value={s}>{`body.${s}`}</option>
+                ))}
+              </select>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

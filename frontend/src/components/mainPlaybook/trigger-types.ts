@@ -5,6 +5,9 @@ export const TRIGGER_TYPES = new Set([
   "comment_trigger",
   "keyword_trigger",
   "schedule_trigger",
+  // Generic inbound webhook. Fires the linked workflow when an authenticated
+  // POST hits the trigger's URL (services/webhook ingest → ticket 3 executor).
+  "webhook_trigger",
   // Voice triggers — wired in node-registry under category "Voice Triggers".
   // Match against the live-call event surface published by voice-copilot.
   "voice_trigger:call.incoming",

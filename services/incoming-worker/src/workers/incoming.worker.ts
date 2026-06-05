@@ -3,7 +3,7 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
-import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
+import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
@@ -492,12 +492,48 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   }
 }
 
-// Dispatcher: same queue, two job names. Keeps DM and comment-trigger
-// processing in one worker process — same Redis connection, same DLQ, same
-// concurrency budget — but each job kind has its own handler.
-async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob>): Promise<void> {
+/**
+ * Generic inbound-webhook handler. The webhook service authenticates the call,
+ * resolves the WebhookTrigger by its URL token, and enqueues this job carrying
+ * the raw JSON body. Here we run the linked workflow context-free: no
+ * conversation, no customer — the payload is injected as flow variables under
+ * `body` (n8n style), readable as `{{body.<field>}}` in downstream nodes.
+ */
+async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void> {
+  const { tenantId, workflowId, triggerId, payload, targetMode } = job.data;
+
+  // Mirror the message path's tenant gate — don't run flows for suspended /
+  // inactive tenants.
+  const tenant = await prisma.tenant.findUnique({
+    where: { id: tenantId },
+    select: { status: true },
+  });
+  if (!tenant || tenant.status !== "ACTIVE") {
+    console.log(`[incoming-worker] Skipping webhook trigger for non-active tenant ${tenantId} (status: ${tenant?.status})`);
+    return;
+  }
+
+  const { executeWebhookFlow } = await import("../services/flow-executor.service");
+  const mode = targetMode === "connected" ? "connected" : "flow";
+  const result = await executeWebhookFlow({ tenantId, workflowId, payload, targetMode: mode });
+  console.log(
+    `[incoming-worker] webhook-trigger flow=${workflowId} trigger=${triggerId} mode=${mode} ` +
+      `executed=${result.executed} halted=${result.halted} reason=${result.reason ?? "-"} steps=${result.trace.length}`,
+  );
+}
+
+// Dispatcher: same queue, multiple job names. Keeps DM, comment-trigger, and
+// webhook-trigger processing in one worker process — same Redis connection,
+// same DLQ, same concurrency budget — but each job kind has its own handler.
+// Exported for unit tests that exercise the job-name routing without standing
+// up a real BullMQ worker.
+export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>): Promise<void> {
   if (job.name === "process-comment") {
     await processCommentTrigger(job as Job<IncomingCommentJob>);
+    return;
+  }
+  if (job.name === "webhook-trigger") {
+    await processWebhookTrigger(job as Job<WebhookTriggerJob>);
     return;
   }
   // Default ("process") — DM / message path.
@@ -506,6 +542,6 @@ async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob>): Prom
 
 let worker: any;
 export function startIncomingWorker() {
-  worker = createWorker<IncomingMessageJob | IncomingCommentJob>("incoming-messages", dispatch, 3);
-  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment)");
+  worker = createWorker<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>("incoming-messages", dispatch, 3);
+  console.log("[incoming-worker] Incoming message worker started (handles: process, process-comment, webhook-trigger)");
 }

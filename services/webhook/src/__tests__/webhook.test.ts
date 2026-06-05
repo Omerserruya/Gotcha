@@ -21,6 +21,9 @@ vi.mock("@chatcenter/shared", () => {
     },
     startService: vi.fn(),
     createWorker: vi.fn(),
+    // Pass-through: webhook.ts mounts this as router-level middleware at module
+    // load, so the mock must define it or the whole suite fails to import.
+    crossTenantMiddleware: (_req: any, _res: any, next: any) => next(),
   };
 });
 

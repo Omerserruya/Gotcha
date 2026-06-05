@@ -1601,6 +1601,94 @@ export function autoGenerateFlowCanvas(token: string) {
   return apiFetch<{ data: any }>("/api/flow-canvas/auto-generate", { token, method: "POST" });
 }
 
+// ─── Webhook Triggers ───────────────────────────────────────
+// Management API for the Main Playbook's Webhook trigger node. The returned
+// `data` carries { id, workflowId, token, secret, enabled, path }; the browser
+// builds the full URL as `${location.origin}${path}`.
+// "flow" runs the associated ChatbotFlow; "connected" walks the nodes wired to
+// the webhook trigger node on the Main Playbook canvas.
+export type WebhookTargetMode = "flow" | "connected";
+
+// The declarable type of a single expected body field. Drives the field-type
+// picker in the Webhook trigger Inspector; the mapper (Card 5) reads these to
+// offer real source choices. Keep in sync with the backend WebhookFieldType.
+export type WebhookFieldType = "string" | "number" | "boolean";
+
+// One user-declared field expected in the inbound request body.
+export interface WebhookBodyField {
+  key: string;
+  type: WebhookFieldType;
+}
+
+export interface WebhookTriggerDto {
+  id: string;
+  workflowId: string;
+  token: string;
+  secret: string;
+  enabled: boolean;
+  targetMode: WebhookTargetMode;
+  // User-declared shape of the request body. Source fields for the mapper.
+  // Declaration only — inbound payloads are not validated against it.
+  bodySchema: WebhookBodyField[];
+  path: string;
+}
+
+export function getWebhookTrigger(token: string, workflowId: string) {
+  return apiFetch<{ data: WebhookTriggerDto | null }>(
+    `/api/webhook-triggers?workflowId=${encodeURIComponent(workflowId)}`,
+    { token },
+  );
+}
+
+export function createWebhookTrigger(
+  token: string,
+  workflowId: string,
+  targetMode?: WebhookTargetMode,
+) {
+  return apiFetch<{ data: WebhookTriggerDto }>("/api/webhook-triggers", {
+    token,
+    method: "POST",
+    body: JSON.stringify(targetMode ? { workflowId, targetMode } : { workflowId }),
+  });
+}
+
+export function regenerateWebhookSecret(token: string, id: string) {
+  return apiFetch<{ data: WebhookTriggerDto }>(
+    `/api/webhook-triggers/${id}/regenerate-secret`,
+    { token, method: "POST" },
+  );
+}
+
+export function setWebhookTriggerEnabled(token: string, id: string, enabled: boolean) {
+  return apiFetch<{ data: WebhookTriggerDto }>(`/api/webhook-triggers/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ enabled }),
+  });
+}
+
+export function setWebhookTriggerMode(token: string, id: string, targetMode: WebhookTargetMode) {
+  return apiFetch<{ data: WebhookTriggerDto }>(`/api/webhook-triggers/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ targetMode }),
+  });
+}
+
+// Persist the user-declared body schema (the expected request-body fields the
+// mapper will bind from). Declaration only — not enforced on inbound payloads.
+export function setWebhookTriggerBodySchema(
+  token: string,
+  id: string,
+  bodySchema: WebhookBodyField[],
+) {
+  return apiFetch<{ data: WebhookTriggerDto }>(`/api/webhook-triggers/${id}`, {
+    token,
+    method: "PATCH",
+    body: JSON.stringify({ bodySchema }),
+  });
+}
+
 // ─── Department Tree ────────────────────────────────────────
 
 export function getDepartmentTree(token: string) {

@@ -56,7 +56,12 @@ interface ChannelSendContext {
 
 interface FlowExecCtx {
   tenantId: string;
-  conversationId: string;
+  // Null for context-free runs (webhook triggers — see executeWebhookFlow).
+  // Conversation-bound flows (message / comment triggered) always carry a real
+  // id. Every Conversation read/write below is guarded on this being non-null,
+  // so both paths share one walker without the context-free path ever touching
+  // a Conversation row.
+  conversationId: string | null;
   message: string;
   channel: string; // inbound channel, lowercased for comparisons
   sendCtx: ChannelSendContext | null;
@@ -198,6 +203,182 @@ export async function executeSubFlow(opts: {
   return walk(startId, nodes, edges, ctx);
 }
 
+// ─── Public entry: context-free webhook run ──────────────────
+//
+// Fired by an inbound WebhookTrigger (resolved by token in services/webhook,
+// enqueued as a "webhook-trigger" job, consumed by the incoming worker). There
+// is NO conversation and NO customer: the flow runs purely off the payload.
+//
+// The incoming JSON is exposed as flow variables under `body` (n8n style), so
+// downstream nodes read `{{body.order_id}}`, `{{body.customer.email}}`, etc.
+// via the same interpolation + dotted-path resolver every other node uses.
+//
+// Conversation-bound concerns degrade gracefully: Send* nodes no-op (no
+// sendCtx), pause nodes (Collect Input / Quick Reply / Wait) halt without
+// persisting resume state (there is no thread to resume), and Route / End /
+// customer-data nodes skip their Conversation/Contact writes. Resolving a
+// customer to attach context is a separate future in-flow node (out of scope).
+export async function executeWebhookFlow(opts: {
+  tenantId: string;
+  workflowId: string;
+  payload: unknown;
+  // "flow" (default) runs the associated ChatbotFlow; "connected" walks the
+  // nodes wired to the webhook trigger node on the Main Playbook canvas. The
+  // two paths share walk() — only entry resolution + which graph differs.
+  targetMode?: "flow" | "connected";
+}): Promise<FlowExecutionResult> {
+  if (opts.targetMode === "connected") {
+    return executeWebhookConnectedNodes(opts);
+  }
+
+  const flow = await prisma.chatbotFlow.findFirst({
+    where: { id: opts.workflowId, tenantId: opts.tenantId, isActive: true },
+  });
+  if (!flow) return { executed: false, halted: false, trace: [] };
+
+  const nodes = (flow.nodes as unknown as GraphNode[]) || [];
+  const edges = (flow.edges as unknown as GraphEdge[]) || [];
+  if (nodes.length === 0) return { executed: false, halted: false, trace: [] };
+
+  // Entry resolution mirrors executeSubFlow but also honors a dedicated
+  // `webhook_trigger` entry node when present (the trigger-node UI is ticket 4;
+  // walking through one here is forward-compatible and harmless for flows that
+  // still start from a plain `start` node).
+  const entryNode =
+    nodes.find((n) => n.type === "webhook_trigger") ||
+    nodes.find((n) => n.type === "start") ||
+    null;
+  let startId: string | null = null;
+  if (entryNode) {
+    const out = edges.find((e) => e.source === entryNode.id);
+    startId = out?.target ?? entryNode.id;
+  } else {
+    startId = nodes[0]?.id ?? null;
+  }
+  if (!startId) return { executed: false, halted: false, reason: "no_entry", trace: [] };
+
+  // Bookkeeping parity with sub-flow dispatch.
+  await prisma.chatbotFlow
+    .update({ where: { id: flow.id }, data: { runCount: { increment: 1 } } })
+    .catch(() => {});
+
+  const ctx: FlowExecCtx = {
+    tenantId: opts.tenantId,
+    conversationId: null,
+    message: "",
+    channel: "",
+    sendCtx: null,
+    // n8n-style payload exposure. `{{body.<field>}}` resolves through the same
+    // getByPath used for every other variable.
+    vars: { body: opts.payload ?? {} },
+    flowScope: "sub",
+    flowId: flow.id,
+    trace: [],
+  };
+  return walk(startId, nodes, edges, ctx);
+}
+
+// ─── Public entry: context-free webhook run (connected-nodes mode) ──
+//
+// Sibling of executeWebhookFlow's default path. Instead of running a separate
+// ChatbotFlow, this walks the nodes wired to the webhook trigger node on the
+// tenant's Main Playbook canvas (FlowCanvas) — the same canvas the trigger node
+// lives on. Everything downstream is identical to the flow-mode webhook run:
+// the payload is exposed as `{{body.*}}`, there is no conversation/customer, and
+// every Conversation-bound concern degrades gracefully (Send* no-op, pause nodes
+// halt without persisting resume state, etc).
+//
+// The trigger node is identified by its associated `workflowId` (the same anchor
+// flow-mode uses); we prefer the node whose `data.workflowId` matches, then fall
+// back to any webhook trigger node on the canvas.
+async function executeWebhookConnectedNodes(opts: {
+  tenantId: string;
+  workflowId: string;
+  payload: unknown;
+}): Promise<FlowExecutionResult> {
+  const canvas = await prisma.flowCanvas.findUnique({ where: { tenantId: opts.tenantId } });
+  const nodes = (canvas?.nodes as unknown as GraphNode[]) || [];
+  const edges = (canvas?.edges as unknown as GraphEdge[]) || [];
+  if (!canvas || nodes.length === 0) return { executed: false, halted: false, trace: [] };
+
+  const entryNode =
+    nodes.find(
+      (n) => n.type === "webhook_trigger" && String(n.data?.workflowId || "") === opts.workflowId,
+    ) ||
+    nodes.find((n) => n.type === "webhook_trigger") ||
+    null;
+  if (!entryNode) return { executed: false, halted: false, reason: "no_entry", trace: [] };
+
+  const ctx: FlowExecCtx = {
+    tenantId: opts.tenantId,
+    conversationId: null,
+    message: "",
+    channel: "",
+    sendCtx: null,
+    vars: { body: opts.payload ?? {} },
+    // Main Playbook canvas. Irrelevant for context-free runs (no resume jobs are
+    // scheduled when conversationId is null) but tagged honestly.
+    flowScope: "main",
+    trace: [],
+  };
+  // Manual field mapper (Card 5): bind declared body.* fields onto the first
+  // connected node's inputs before we walk into it. Mutates the in-memory node
+  // copy only — never persisted.
+  applyWebhookFieldMapping(entryNode, nodes, edges);
+  // Start at the trigger node itself — walk()'s `webhook_trigger` case enters it
+  // and continues to its first outgoing edge, so an unwired trigger halts cleanly
+  // with no_outgoing_edge instead of crashing.
+  return walk(entryNode.id, nodes, edges, ctx);
+}
+
+// ─── Manual field mapper (Card 5) ──────────────────────────────────
+//
+// The webhook trigger node can carry a user-authored `data.fieldMapping`:
+//   [{ source: "<declared body field>", target: "<input key>" }]
+// where `target` is either a plain input key on the first connected node
+// ("recipient", "text", …) or a template-variable target encoded as
+// "var:<placeholder>" (→ data.variables[placeholder]).
+//
+// We resolve a mapping by writing a `{{body.<source>}}` reference into the
+// target node's data — deliberately reusing the existing interpolation path
+// (interpolate/getByPath) so the runtime substitution and the long-standing
+// `{{body.*}}` reference behavior stay identical. The mapper is just a UI over
+// those references; an author who hand-types `{{body.x}}` gets the same result.
+//
+// Only the FIRST connected node (first outgoing edge of the trigger) is mapped —
+// that is exactly the node the user binds against in the Inspector.
+function applyWebhookFieldMapping(
+  entryNode: GraphNode,
+  nodes: GraphNode[],
+  edges: GraphEdge[],
+): void {
+  const mapping = entryNode.data?.fieldMapping;
+  if (!Array.isArray(mapping) || mapping.length === 0) return;
+  const firstEdge = edges.find((e) => e.source === entryNode.id);
+  if (!firstEdge) return;
+  const target = nodes.find((n) => n.id === firstEdge.target);
+  if (!target) return;
+  target.data = target.data || {};
+  for (const m of mapping) {
+    const source = String(m?.source ?? "").trim();
+    const targetKey = String(m?.target ?? "").trim();
+    if (!source || !targetKey) continue;
+    const ref = `{{body.${source}}}`;
+    if (targetKey.startsWith("var:")) {
+      const varName = targetKey.slice(4).trim();
+      if (!varName) continue;
+      const vars =
+        target.data.variables && typeof target.data.variables === "object"
+          ? { ...target.data.variables }
+          : {};
+      vars[varName] = ref;
+      target.data.variables = vars;
+    } else {
+      target.data[targetKey] = ref;
+    }
+  }
+}
+
 // ─── Internals ───────────────────────────────────────────────
 
 async function buildCtx(
@@ -309,13 +490,17 @@ async function walk(
     // or phone — bridges the conversation to the existing CRM record so the
     // FlowCanvas path matches what the autonomous AI agent does via
     // link_customer_identifier. Idempotent at the conversation-service end,
-    // so the universal incoming.worker hook can safely re-fire.
-    void tryLinkIdentifierFromInbound({
-      tenantId: ctx.tenantId,
-      conversationId: ctx.conversationId,
-      text: ctx.message,
-      reason: "flow Collect Input",
-    });
+    // so the universal incoming.worker hook can safely re-fire. Only relevant
+    // to conversation-bound runs — context-free webhook runs never set
+    // resumingCollectInputVar, but guard the id for type-safety regardless.
+    if (ctx.conversationId) {
+      void tryLinkIdentifierFromInbound({
+        tenantId: ctx.tenantId,
+        conversationId: ctx.conversationId,
+        text: ctx.message,
+        reason: "flow Collect Input",
+      });
+    }
   }
 
   while (currentId && steps < MAX_STEPS) {
@@ -356,17 +541,23 @@ async function walk(
       }
 
       case "send_message_text": {
-        await sendText(String(node.data?.text || ""), ctx);
+        // Conversation-bound runs use ctx.sendCtx (unchanged). Context-free
+        // webhook runs carry no sendCtx — resolve an explicit recipient from the
+        // node so the text still dispatches through the existing outbound path.
+        const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(node.data || {}, ctx));
+        await sendText(String(node.data?.text || ""), ctx, sendCtx);
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent" });
         // Optional pause: when the author flipped "Wait for user reply", halt
         // here and resume on next inbound. Resume path (executeMainFlow's
         // generic branch) continues from the first outgoing edge.
         if (node.data?.waitForReply) {
           await persistVars(ctx);
-          await prisma.conversation.update({
-            where: { id: ctx.conversationId },
-            data: { chatbotNodeId: node.id, handledBy: "flow" },
-          });
+          if (ctx.conversationId) {
+            await prisma.conversation.update({
+              where: { id: ctx.conversationId },
+              data: { chatbotNodeId: node.id, handledBy: "flow" },
+            });
+          }
           ctx.trace.push({ nodeId: node.id, type: node.type, action: "paused_for_reply" });
           return {
             executed: true,
@@ -421,10 +612,12 @@ async function walk(
         // Pause and remember where we are. Next inbound resumes from here by
         // matching the reply payload against sourceHandle on outgoing edges.
         await persistVars(ctx);
-        await prisma.conversation.update({
-          where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id, handledBy: "flow" },
-        });
+        if (ctx.conversationId) {
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
+          });
+        }
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "sent_and_paused" });
         return {
           executed: true,
@@ -516,7 +709,8 @@ async function walk(
       // ─── Trigger entries — walk through like `start` ───────────
       case "keyword_trigger":
       case "comment_trigger":
-      case "schedule_trigger": {
+      case "schedule_trigger":
+      case "webhook_trigger": {
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "trigger_enter" });
         currentId = outgoing[0]?.target || null;
         break;
@@ -544,10 +738,12 @@ async function walk(
         const prompt = interpolate(String(node.data?.prompt || ""), ctx.vars);
         if (prompt) await sendText(prompt, ctx);
         await persistVars(ctx);
-        await prisma.conversation.update({
-          where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id, handledBy: "flow" },
-        });
+        if (ctx.conversationId) {
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
+          });
+        }
         ctx.trace.push({ nodeId: node.id, type: node.type, action: "prompted_and_paused" });
         return {
           executed: true, halted: true, reason: "wait_for_reply",
@@ -564,26 +760,30 @@ async function walk(
           unit === "minutes" ? amount * 60_000 :
                                amount * 1000;
         await persistVars(ctx);
-        await prisma.conversation.update({
-          where: { id: ctx.conversationId },
-          data: { chatbotNodeId: node.id, handledBy: "flow" },
-        });
-        // Enqueue a delayed resume job. The flow-resume worker picks it up
-        // after `delay` ms and calls executeMainFlow/executeSubFlow with
-        // resumeNodeId = this node, which walks from its first outgoing edge.
-        await flowResumeQueue.add(
-          "resume",
-          {
-            tenantId: ctx.tenantId,
-            conversationId: ctx.conversationId,
-            flowKind: ctx.flowScope,
-            flowId: ctx.flowId,
-            resumeNodeId: node.id,
-            channel: ctx.channel,
-            message: "",
-          },
-          { delay: delayMs, removeOnComplete: true, removeOnFail: 100 },
-        );
+        // Context-free runs have no thread to resume — record the halt and stop
+        // rather than scheduling a resume job that could never fire.
+        if (ctx.conversationId) {
+          await prisma.conversation.update({
+            where: { id: ctx.conversationId },
+            data: { chatbotNodeId: node.id, handledBy: "flow" },
+          });
+          // Enqueue a delayed resume job. The flow-resume worker picks it up
+          // after `delay` ms and calls executeMainFlow/executeSubFlow with
+          // resumeNodeId = this node, which walks from its first outgoing edge.
+          await flowResumeQueue.add(
+            "resume",
+            {
+              tenantId: ctx.tenantId,
+              conversationId: ctx.conversationId,
+              flowKind: ctx.flowScope,
+              flowId: ctx.flowId,
+              resumeNodeId: node.id,
+              channel: ctx.channel,
+              message: "",
+            },
+            { delay: delayMs, removeOnComplete: true, removeOnFail: 100 },
+          );
+        }
         ctx.trace.push({
           nodeId: node.id, type: node.type, action: "scheduled_resume",
           detail: { delayMs },
@@ -744,15 +944,71 @@ function evaluateSingle(c: any, ctx: FlowExecCtx): boolean {
 
 // ─── Send helpers ───────────────────────────────────────────
 
-async function sendText(text: string, ctx: FlowExecCtx) {
+// Infer the outbound channel from the shape of an explicit recipient. An "@"
+// marks an email address; an otherwise phone-like value (digits with optional
+// +, spaces, dashes, parens) is treated as WhatsApp — the only channel that
+// carries templates today and the default for plain phone delivery. Returns
+// null when the value matches neither, so the caller skips rather than guessing.
+function inferChannelFromRecipient(recipient: string): string | null {
+  if (recipient.includes("@")) return "EMAIL";
+  if (/^\+?[\d\s().-]{6,}$/.test(recipient)) return "WHATSAPP";
+  return null;
+}
+
+// Build a one-off ChannelSendContext from a send node's explicit recipient, for
+// context-free webhook runs that carry no conversation (and therefore no
+// ctx.sendCtx). The recipient is read from `data.recipient` and interpolated
+// against flow vars so `{{body.phone_number}}` resolves; an optional
+// `data.recipientChannel` overrides channel inference (forward-compat with the
+// mapper UI, Card 5). Mirrors the broadcast/outgoing-worker resolution: pick an
+// active ChannelAccount for the tenant+channel and decrypt its credentials.
+// Returns null when no recipient is configured or no active account backs the
+// channel — callers then no-op exactly as before.
+async function buildExplicitSendCtx(
+  data: Record<string, any>,
+  ctx: FlowExecCtx,
+): Promise<ChannelSendContext | null> {
+  const recipientId = interpolate(String(data.recipient ?? ""), ctx.vars).trim();
+  if (!recipientId) return null;
+  const explicitChannel = String(data.recipientChannel ?? "").trim().toUpperCase();
+  const channel = explicitChannel || inferChannelFromRecipient(recipientId);
+  if (!channel) {
+    console.warn(`[flow.send] skip unresolved_channel recipient=${recipientId.slice(0, 4)}***`);
+    return null;
+  }
+  const account = await prisma.channelAccount.findFirst({
+    where: { tenantId: ctx.tenantId, channel: channel as any, isActive: true },
+  });
+  if (!account) {
+    console.warn(`[flow.send] skip no_channel_account tenant=${ctx.tenantId} channel=${channel}`);
+    return null;
+  }
+  const raw = (account as any).credentials;
+  const creds = typeof raw === "string" ? decryptCredentials(raw) : ((raw as any) || {});
+  return {
+    channel,
+    channelAccountExternalId: account.externalId,
+    credentials: creds as ChannelCredentials,
+    recipientId,
+  };
+}
+
+// `sendCtx` defaults to the conversation-bound context (ctx.sendCtx). Context-free
+// callers (webhook runs with an explicit recipient) pass a one-off context built
+// by buildExplicitSendCtx so the same dispatch + persist path is reused verbatim.
+async function sendText(
+  text: string,
+  ctx: FlowExecCtx,
+  sendCtx: ChannelSendContext | null = ctx.sendCtx,
+) {
   const resolved = interpolate(text, ctx.vars);
-  if (!resolved || !resolved.trim() || !ctx.sendCtx) return;
-  const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
+  if (!resolved || !resolved.trim() || !sendCtx) return;
+  const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
   const extId = await adapter.sendTextMessage(
-    ctx.sendCtx.credentials,
-    ctx.sendCtx.channelAccountExternalId,
-    ctx.sendCtx.recipientId,
+    sendCtx.credentials,
+    sendCtx.channelAccountExternalId,
+    sendCtx.recipientId,
     resolved,
   );
   await persistOutbound(ctx, resolved, "text", extId);
@@ -926,14 +1182,18 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   // diagnose "I picked a template but nothing happened" without digging into
   // the trace JSON. Keep prefix stable: `[flow.template]`.
   const tag = "[flow.template]";
-  if (!ctx.sendCtx) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
+  // Conversation-bound runs use ctx.sendCtx (unchanged). Context-free webhook
+  // runs carry no sendCtx — resolve an explicit recipient from the node so the
+  // template still dispatches through the existing WhatsApp outbound path.
+  const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(data, ctx));
+  if (!sendCtx) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
   const templateId = String(data.templateId || "").trim();
   if (!templateId) { console.warn(`${tag} skip no_template conv=${ctx.conversationId}`); return "skipped_no_template"; }
-  // Templates are a WhatsApp-only concept — if the conversation is on any
+  // Templates are a WhatsApp-only concept — if the resolved recipient is on any
   // other channel, log and skip rather than crash. Flow author can still
   // pipe the same playbook through multiple channels safely.
-  if (String(ctx.sendCtx.channel).toUpperCase() !== "WHATSAPP") {
-    console.warn(`${tag} skip non_whatsapp channel=${ctx.sendCtx.channel} conv=${ctx.conversationId}`);
+  if (String(sendCtx.channel).toUpperCase() !== "WHATSAPP") {
+    console.warn(`${tag} skip non_whatsapp channel=${sendCtx.channel} conv=${ctx.conversationId}`);
     return "skipped_non_whatsapp";
   }
   const tmpl = await prisma.messageTemplate.findFirst({
@@ -942,33 +1202,37 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   if (!tmpl) { console.warn(`${tag} skip template_not_found id=${templateId} tenant=${ctx.tenantId}`); return "skipped_template_not_found"; }
   if (tmpl.status !== "APPROVED") { console.warn(`${tag} skip template_not_approved id=${templateId} status=${tmpl.status}`); return "skipped_template_not_approved"; }
 
-  const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
+  const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter || !adapter.sendTemplateMessage) {
-    console.warn(`${tag} skip adapter_unsupported channel=${ctx.sendCtx.channel}`);
+    console.warn(`${tag} skip adapter_unsupported channel=${sendCtx.channel}`);
     return "skipped_adapter_unsupported";
   }
 
   // Look up the Contact backing this conversation so `crm:<field>` tokens
   // (set in the inspector) can resolve. Best-effort — when there's no
   // contact row, crm tokens fall back to the template's declared sample.
-  const conversationRow = await prisma.conversation.findUnique({
-    where: { id: ctx.conversationId },
-    select: { customerExternalId: true, channel: true, customerName: true },
-  });
+  // Context-free runs have no conversation/contact: crm tokens fall back to
+  // the declared sample, while plain `{{body.*}}` values still interpolate.
   let contact: { displayName?: string | null; email?: string | null; phone?: string | null; source?: string | null; metadata?: any } | null = null;
-  if (conversationRow?.customerExternalId) {
-    contact = await prisma.contact.findFirst({
-      where: {
-        tenantId: ctx.tenantId,
-        externalId: conversationRow.customerExternalId,
-      },
-      select: { displayName: true, email: true, phone: true, source: true, metadata: true },
+  if (ctx.conversationId) {
+    const conversationRow = await prisma.conversation.findUnique({
+      where: { id: ctx.conversationId },
+      select: { customerExternalId: true, channel: true, customerName: true },
     });
-  }
-  // Fall back to the conversation's customerName when no Contact exists yet —
-  // keeps simple `crm:displayName` mappings working on first inbound.
-  if (!contact && conversationRow) {
-    contact = { displayName: conversationRow.customerName };
+    if (conversationRow?.customerExternalId) {
+      contact = await prisma.contact.findFirst({
+        where: {
+          tenantId: ctx.tenantId,
+          externalId: conversationRow.customerExternalId,
+        },
+        select: { displayName: true, email: true, phone: true, source: true, metadata: true },
+      });
+    }
+    // Fall back to the conversation's customerName when no Contact exists yet —
+    // keeps simple `crm:displayName` mappings working on first inbound.
+    if (!contact && conversationRow) {
+      contact = { displayName: conversationRow.customerName };
+    }
   }
 
   const components = buildTemplateComponentsForFlow(
@@ -979,13 +1243,13 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
     contact,
   );
 
-  console.log(`${tag} attempt name=${tmpl.name} lang=${tmpl.language} to=${ctx.sendCtx.recipientId} components=${components.length}`);
+  console.log(`${tag} attempt name=${tmpl.name} lang=${tmpl.language} to=${sendCtx.recipientId} components=${components.length}`);
   let extId: string | null = null;
   try {
     extId = await adapter.sendTemplateMessage(
-      ctx.sendCtx.credentials,
-      ctx.sendCtx.channelAccountExternalId,
-      ctx.sendCtx.recipientId,
+      sendCtx.credentials,
+      sendCtx.channelAccountExternalId,
+      sendCtx.recipientId,
       tmpl.name,
       tmpl.language || "en",
       components,
@@ -1021,7 +1285,9 @@ async function persistOutbound(
   extId: string | null,
   metadata?: any,
 ) {
-  if (!ctx.sendCtx) return;
+  // No sendCtx (or no conversation) → nothing to attach an outbound row to.
+  // Context-free runs hit the first branch since they carry neither.
+  if (!ctx.sendCtx || !ctx.conversationId) return;
   const m = await prisma.message.create({
     data: {
       tenantId: ctx.tenantId,
@@ -1050,6 +1316,11 @@ async function dispatchRoute(
   targetId: string | null,
   ctx: FlowExecCtx,
 ): Promise<"AI_AGENT" | "FLOW" | "HUMAN" | "DEPARTMENT"> {
+  // Context-free run: no conversation to assign, hand off, or drive an agent
+  // against. Map the author's intent to its terminal type without side effects.
+  if (!ctx.conversationId) {
+    return routeType === "agent" ? "AI_AGENT" : routeType === "flow" ? "FLOW" : "HUMAN";
+  }
   if (routeType === "agent" && targetId) {
     // Persist the assigned AI agent on the conversation so subsequent inbound
     // messages resume against the same agent without re-routing through the
@@ -1109,6 +1380,9 @@ async function applyEnd(
   kind: "close" | "handoff_human" | "wait_for_reply",
   ctx: FlowExecCtx,
 ) {
+  // Context-free run: no Conversation row to transition. The End node just
+  // terminates the walk.
+  if (!ctx.conversationId) return;
   // The flow has terminated — drop chatbot state so the next inbound is NOT
   // resumed back into the last paused node (which would re-capture every
   // future message into the Collect Input variable and loop the greeting).
@@ -1178,6 +1452,9 @@ function getByPath(obj: any, path: string): any {
  * for read-only walks).
  */
 async function persistVars(ctx: FlowExecCtx): Promise<void> {
+  // Context-free runs (webhook triggers) have no Conversation row to persist
+  // variables to — the store lives only for the duration of the walk.
+  if (!ctx.conversationId) return;
   try {
     await prisma.conversation.update({
       where: { id: ctx.conversationId },
@@ -1256,7 +1533,8 @@ async function updateContact(
   key: string,
   value: string,
 ): Promise<void> {
-  if (!key) return;
+  // No key or no conversation (context-free run) → no Contact to mutate.
+  if (!key || !ctx.conversationId) return;
   const conversation = await prisma.conversation.findFirst({
     where: { id: ctx.conversationId, tenantId: ctx.tenantId },
     select: { customerExternalId: true, channel: true },
@@ -1299,7 +1577,8 @@ async function loadContactFields(
   prefix: string,
 ): Promise<Record<string, any>> {
   const out: Record<string, any> = {};
-  if (fields.length === 0) return out;
+  // No fields requested or no conversation (context-free run) → nothing to load.
+  if (fields.length === 0 || !ctx.conversationId) return out;
   const conversation = await prisma.conversation.findFirst({
     where: { id: ctx.conversationId, tenantId: ctx.tenantId },
     select: { customerExternalId: true, channel: true },

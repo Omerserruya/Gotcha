@@ -145,6 +145,7 @@ model Tenant {
   tenantFeatures          TenantFeature[]
   tenantRoles             TenantRole[]
   invites                 TenantInvite[]
+  webhookTriggers         WebhookTrigger[]
 
   @@index([status])
   @@map("tenants")
@@ -554,10 +555,62 @@ model ChatbotFlow {
 
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations Conversation[]
+  // WebhookTrigger.workflowId references a flow here in "flow" mode, but is a
+  // plain (un-FK'd) anchor — see that model — so there is no relation back-ref.
 
   @@index([tenantId, isActive])
   @@index([tenantId, channel, isActive])
   @@map("chatbot_flows")
+}
+
+// ─── Webhook Triggers ────────────────────────────────────────
+//
+// Lets a workflow (ChatbotFlow) be fired by an inbound HTTP call instead of
+// the built-in trigger kinds (channel_entry / comment / keyword / schedule).
+// Foundation for the custom-webhook-as-workflow-trigger feature — pure data
+// model, no route/dispatch logic yet.
+//
+// The webhook runs the flow context-free (no conversation/customer). Customer
+// resolution is a separate in-flow node, out of scope here.
+//
+// Security at this stage = an unguessable URL `token` (unique-indexed for O(1)
+// lookup) plus a basic shared `secret` checked in a request header. No HMAC /
+// IP allowlist yet.
+model WebhookTrigger {
+  id         String   @id @default(cuid())
+  tenantId   String   @map("tenant_id")
+  // Anchor that provisions the URL and identifies this trigger's node on the
+  // Main Playbook canvas. In "flow" mode it is a real ChatbotFlow id (validated
+  // in app code, trigger-admin.ts). In "connected" mode it is the webhook_trigger
+  // node's own canvas id — NOT a ChatbotFlow — so this is a plain (indexed)
+  // string, not an FK relation. See the dropped FK in
+  // migrations/20260604150000_webhook_trigger_drop_flow_fk.
+  workflowId String   @map("workflow_id")
+  token      String   @unique // unguessable path segment that identifies this trigger
+  secret     String // shared secret expected in an inbound request header
+  enabled    Boolean  @default(true)
+  // What the inbound POST runs:
+  //   "flow"      → run the associated ChatbotFlow (`workflowId`) — original behavior.
+  //   "connected" → walk the nodes wired to this webhook trigger node on the
+  //                 Main Playbook canvas (FlowCanvas), context-free.
+  // The `workflowId` stays the anchor in both modes (it provisions the URL and
+  // identifies which canvas node this trigger represents) — but only "flow" mode
+  // requires it to be a real ChatbotFlow; "connected" mode anchors to the
+  // trigger node's own canvas id.
+  targetMode String   @default("flow") @map("target_mode")
+  // User-declared shape of the inbound request body: [{ key, type }] where type
+  // is "string" | "number" | "boolean". Lets the mapper (manual field binding)
+  // offer a known set of source fields instead of free-text. Declaration ONLY —
+  // inbound payloads are NOT validated/rejected against this. Defaults to [].
+  bodySchema Json     @default("[]") @map("body_schema")
+  createdAt  DateTime @default(now()) @map("created_at")
+  updatedAt  DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workflowId])
+  @@map("webhook_triggers")
 }
 
 // ─── Departments ────────────────────────────────────────────

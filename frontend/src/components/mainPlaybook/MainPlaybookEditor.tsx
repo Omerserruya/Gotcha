@@ -67,6 +67,7 @@ const nodeTypes: NodeTypes = {
   comment_trigger: TriggerCardNode,
   keyword_trigger: TriggerCardNode,
   schedule_trigger: TriggerCardNode,
+  webhook_trigger: TriggerCardNode,
   // Voice triggers (7) reuse the same When… card chrome — TriggerCardNode's
   // describe() handles the per-type icon + title + subtitle.
   "voice_trigger:call.incoming": TriggerCardNode,
@@ -156,6 +157,18 @@ export const NODE_PALETTE = [
         icon: (
           <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75" />
+          </svg>
+        ),
+      },
+      {
+        type: "webhook_trigger",
+        label: "Webhook Trigger",
+        desc: "Run a flow from an inbound HTTP POST",
+        color: "emerald", bg: "bg-emerald-50", border: "border-emerald-200", text: "text-emerald-600",
+        iconBg: "bg-emerald-100", hoverBg: "hover:bg-emerald-100", ring: "ring-emerald-300",
+        icon: (
+          <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+            <path strokeLinecap="round" strokeLinejoin="round" d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
           </svg>
         ),
       },
@@ -602,6 +615,11 @@ function getDefaultData(type: string, shared: { agents: any[]; flows: any[]; dep
       return { keywords: [], matchType: "any", caseSensitive: false };
     case "schedule_trigger":
       return { cron: "0 9 * * *", timezone: "UTC" };
+    case "webhook_trigger":
+      // Only the linked workflow is stored on the node; the URL/secret/enabled
+      // state live on the WebhookTrigger record and are fetched live by the
+      // Inspector (so a rotated secret is never stale in the canvas JSON).
+      return { name: "Webhook", workflowId: "" };
     default:
       return {};
   }
@@ -1259,7 +1277,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   }, [setNodes]);
 
   const selectedNode = selectedNodeId ? nodes.find((n) => n.id === selectedNodeId) ?? null : null;
-  const sharedForInspector = useMemo(() => ({ agents, flows, departments, channels }), [agents, flows, departments, channels]);
+  const sharedForInspector = useMemo(() => ({ agents, flows, departments, channels, nodes, edges }), [agents, flows, departments, channels, nodes, edges]);
 
   // ─── Trigger placement ──────────────────────────────────────
   // Triggers ARE rendered on the canvas, but auto-laid-out as a static
@@ -1283,6 +1301,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     { types: ["comment_trigger"], label: "Comments" },
     { types: ["keyword_trigger"], label: "Keywords" },
     { types: ["schedule_trigger"], label: "Schedule" },
+    { types: ["webhook_trigger"], label: "Webhook" },
     {
       types: [
         "voice_trigger:call.incoming",
