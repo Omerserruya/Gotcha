@@ -17,6 +17,8 @@
 import "./stripe.adapter";
 import "./hubspot.adapter";
 import "./shopify.adapter";
+import "./returngo.adapter";
+import "./fireberry.adapter";
 import "./airtable.adapter";
 import "./postgres.adapter";
 import "./mongodb.adapter";

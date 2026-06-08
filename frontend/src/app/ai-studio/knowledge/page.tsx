@@ -580,6 +580,7 @@ export default function KnowledgePage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
+            data-tour="kb-add-source"
             className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

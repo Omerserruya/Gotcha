@@ -132,26 +132,26 @@
     },
     {
       "path": "src/i18n/en.json",
-      "accessCount": 100,
-      "lastAccessed": 1779777740878,
+      "accessCount": 105,
+      "lastAccessed": 1780736009218,
       "type": "directory"
     },
     {
       "path": "src/i18n/he.json",
-      "accessCount": 65,
-      "lastAccessed": 1779777775444,
+      "accessCount": 70,
+      "lastAccessed": 1780736010341,
       "type": "directory"
+    },
+    {
+      "path": "src/app/ai-studio/agents/[id]/page.tsx",
+      "accessCount": 65,
+      "lastAccessed": 1780645411514,
+      "type": "file"
     },
     {
       "path": "src/components/mainPlaybook/MainPlaybookEditor.tsx",
       "accessCount": 61,
       "lastAccessed": 1777281331044,
-      "type": "file"
-    },
-    {
-      "path": "src/app/ai-studio/agents/[id]/page.tsx",
-      "accessCount": 61,
-      "lastAccessed": 1777896817682,
       "type": "file"
     },
     {
@@ -162,8 +162,8 @@
     },
     {
       "path": "src/lib/api.ts",
-      "accessCount": 55,
-      "lastAccessed": 1780251397352,
+      "accessCount": 59,
+      "lastAccessed": 1780662092274,
       "type": "directory"
     },
     {
@@ -239,6 +239,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1780735946514,
+      "type": "file"
+    },
+    {
       "path": "src/components/IntegrationDrawer.tsx",
       "accessCount": 13,
       "lastAccessed": 1777573446715,
@@ -281,9 +287,9 @@
       "type": "file"
     },
     {
-      "path": "src/components/Sidebar.tsx",
+      "path": "src/app/integrations/[slug]/page.tsx",
       "accessCount": 10,
-      "lastAccessed": 1778530122423,
+      "lastAccessed": 1780658595089,
       "type": "file"
     },
     {
@@ -317,6 +323,12 @@
       "type": "directory"
     },
     {
+      "path": "src/app/ai-studio/knowledge/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1780662734484,
+      "type": "file"
+    },
+    {
       "path": "next.config.js",
       "accessCount": 4,
       "lastAccessed": 1779775900816,
@@ -335,21 +347,9 @@
       "type": "file"
     },
     {
-      "path": "src/app/ai-studio/knowledge/page.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1776365300788,
-      "type": "file"
-    },
-    {
       "path": "src/app/ai-studio/marketplace/[slug]/page.tsx",
       "accessCount": 3,
       "lastAccessed": 1776365300920,
-      "type": "file"
-    },
-    {
-      "path": "src/app/integrations/[slug]/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1773508058335,
       "type": "file"
     },
     {

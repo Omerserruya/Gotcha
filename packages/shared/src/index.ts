@@ -148,7 +148,7 @@ export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
-export { requireActiveTenant } from "./middleware/tenant-status";
+export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 
 // Shared CRM client — used by AI tools, outbound, broadcast, and any

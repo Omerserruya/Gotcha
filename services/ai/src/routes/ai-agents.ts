@@ -601,9 +601,11 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
       return;
     }
 
-    // Check if any router rules reference this agent
+    // Check if any router rules reference this agent. Must be tenant-scoped —
+    // the shared TenantGuard rejects any query whose where clause is missing
+    // tenantId (a count without it 500s instead of returning a number).
     const ruleCount = await prisma.routerRule.count({
-      where: { aiAgentId: req.params.id as string, enabled: true },
+      where: { tenantId: req.tenantId! as string, aiAgentId: req.params.id as string, enabled: true },
     });
 
     if (ruleCount > 0) {

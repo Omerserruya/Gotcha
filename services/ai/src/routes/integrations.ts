@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
 import { executeAdapterTool, getAdapter } from "../services/connectors/integration-framework";
+import { invalidateCrmAdapterCache } from "../services/connectors/crm-adapter-resolver";
 
 const router = Router();
 
@@ -64,7 +65,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
         catalogTools: { orderBy: { name: "asc" } },
         tenantConnections: {
           where: { tenantId: req.tenantId! },
-          select: { id: true, status: true, credentials: true, createdAt: true, updatedAt: true },
+          select: { id: true, status: true, credentials: true, config: true, createdAt: true, updatedAt: true },
         },
       },
     });
@@ -355,6 +356,56 @@ router.put("/:slug/credentials", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("Update credentials error:", err);
     res.status(500).json({ error: "Failed to update credentials" });
+  }
+});
+
+// PUT /:slug/crm-source — Opt this integration in/out as the tenant's CRM
+// source of truth. Today only Shopify supports this (it's an ECOMMERCE
+// integration a tenant may elect as their customer system of record). Sets
+// `config.useAsCrm` and invalidates the CRM resolver cache so the next bot
+// turn reads customer context from Shopify instead of any CRM-category
+// integration. Toggling OFF restores the default resolution order — it never
+// disturbs tenants who don't opt in.
+router.put("/:slug/crm-source", async (req: Request, res: Response) => {
+  try {
+    const slug = req.params.slug as string;
+    if (slug !== "shopify") {
+      res.status(400).json({ error: "crm-source toggle is only supported for Shopify today" });
+      return;
+    }
+    const useAsCrm = req.body?.useAsCrm === true;
+
+    const entry = await prisma.integrationCatalog.findUnique({ where: { slug } });
+    if (!entry) {
+      res.status(404).json({ error: "Integration not found" });
+      return;
+    }
+    const ti = await prisma.tenantIntegration.findFirst({
+      where: { tenantId: req.tenantId!, integrationId: entry.id },
+      select: { id: true, status: true, config: true },
+    });
+    if (!ti) {
+      res.status(404).json({ error: "Connect Shopify first" });
+      return;
+    }
+    if (useAsCrm && ti.status !== "CONNECTED") {
+      res.status(409).json({ error: "Shopify must be CONNECTED before using it as your CRM" });
+      return;
+    }
+
+    const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>;
+    cfg.useAsCrm = useAsCrm;
+    const updated = await prisma.tenantIntegration.update({
+      where: { id: ti.id },
+      data: { config: cfg as any },
+      select: { id: true, config: true },
+    });
+    invalidateCrmAdapterCache(req.tenantId!);
+
+    res.json({ data: { id: updated.id, useAsCrm, config: updated.config } });
+  } catch (err) {
+    console.error("crm-source toggle error:", err);
+    res.status(500).json({ error: "Failed to update CRM source" });
   }
 });
 

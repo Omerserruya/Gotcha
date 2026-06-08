@@ -24,6 +24,7 @@ import {
   appendToMemory,
   getAgentMemory,
   memoryToChatMessages,
+  sanitizeHistoryForLLM,
 } from "./agent-memory.service";
 import { buildAgentContext } from "./agent-context.service";
 import type { ClientContext, OperatorContext } from "./agent-context.service";
@@ -96,7 +97,7 @@ export async function runAgent(
   const chatMessages: any[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "system", content: ctxBuilt.block },
-    ...memoryToChatMessages(history),
+    ...sanitizeHistoryForLLM(memoryToChatMessages(history)),
     { role: "user", content: input.message },
   ];
 

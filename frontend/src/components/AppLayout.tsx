@@ -8,7 +8,7 @@ import { Sidebar } from "./Sidebar";
 import { CommandCenterProvider } from "./CommandCenter/CommandCenterProvider";
 import { CommandCenterTrigger } from "./CommandCenter/CommandCenterTrigger";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
-import { GuidedTour } from "./onboarding/GuidedTour";
+import { FeatureGuides } from "./onboarding/FeatureGuides";
 import { getOnboardingStatus } from "@/lib/api";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -127,10 +127,11 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Mobile bottom nav - admin only, hidden on desktop and when chat is open */}
           {!chatOpen && <MobileBottomNav />}
         </div>
-        {/* First-time guided tour overlay — self-activates when the
-            "onboarding.launchTour" flag was set by setup/page.tsx OR
-            when ?tour=1 is in the URL. Renders nothing otherwise. */}
-        <GuidedTour />
+        {/* Persistent first-time guidance layer — shows a per-feature
+            coachmark the first time a user opens Knowledge Base, AI
+            Employees, Workflows, or Settings. Skippable + snoozable, state
+            stored per-user in the DB. Renders nothing otherwise. */}
+        <FeatureGuides />
       </div>
     </CommandCenterProvider>
   );

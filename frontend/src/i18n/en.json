@@ -4,6 +4,7 @@
     "loading": "Loading..."
   },
   "nav": {
+    "home": "Home",
     "conversations": "Inbox",
     "dashboard": "Dashboard",
     "bot": "Bot",
@@ -1505,15 +1506,27 @@
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
     "missions": {
-      "title": "Get set up",
+      "title": "Finish setup",
+      "subtitle": "A few quick steps to take your AI live.",
       "hide": "Hide",
-      "next": "Next",
+      "dismiss": "Dismiss setup checklist",
+      "show": "Finish setup",
+      "next": "Next step",
+      "stepLabel": "Step {n}",
+      "doneLabel": "Done",
       "items": {
         "confirm_business": "Confirm your business",
         "connect_channel": "Connect a channel",
         "send_test_reply": "Send a test reply",
         "review_agent_tone": "Review your AI's tone",
         "invite_teammate": "Invite a teammate"
+      },
+      "descriptions": {
+        "confirm_business": "Tell us what your business does so the AI can speak for you.",
+        "connect_channel": "Link WhatsApp, Instagram, or web chat to start receiving messages.",
+        "send_test_reply": "Send a message and watch your AI reply in real time.",
+        "review_agent_tone": "Make sure your AI sounds the way you want it to.",
+        "invite_teammate": "Bring teammates in to handle conversations alongside your AI."
       }
     }
   },

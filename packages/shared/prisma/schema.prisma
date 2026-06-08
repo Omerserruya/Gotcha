@@ -244,6 +244,10 @@ model User {
   // `Tenant.defaultLocale`". Drives both UI strings and all AI-generated
   // content the agent consumes. ISO-639-1; today: "en" | "he".
   locale                   String?  @map("locale")
+  // Per-feature first-time guidance state for the persistent onboarding
+  // layer. Map of feature key -> "unseen" | "snoozed" | "done", e.g.
+  // {"knowledge":"done","ai-studio":"snoozed"}. NULL = nothing seen yet.
+  onboardingGuides         Json?    @map("onboarding_guides")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @updatedAt @map("updated_at")
 
@@ -696,6 +700,16 @@ model BusinessProfile {
   // Website domain captured during onboarding so we can re-run the AI
   // analysis later (e.g. on a "refresh description" button in settings).
   websiteDomain               String?          @map("website_domain")
+  // Auto-understood during onboarding (website crawl). Country in plain
+  // English (e.g. "Israel"); primaryLanguage as ISO-639-1 mirrors
+  // Tenant.defaultLocale but is kept here for the confirmation card.
+  country                     String?
+  primaryLanguage             String?          @map("primary_language")
+  // The single "system of truth" the tenant connected during onboarding
+  // (slug: "hubspot" | "salesforce" | "zoho_crm" | "shopify"). Display +
+  // gate signal; the live connection state is still read from
+  // TenantIntegration. NULL = not chosen yet.
+  primarySystem               String?          @map("primary_system")
   createdAt                   DateTime         @default(now()) @map("created_at")
   updatedAt                   DateTime         @updatedAt @map("updated_at")
 
@@ -931,6 +945,12 @@ model IntegrationCatalog {
   authSchema      Json                @default("{}") @map("auth_schema")
   configSchema    Json                @default("{}") @map("config_schema")
   isPublished     Boolean             @default(true) @map("is_published")
+  // When true, this integration may be elected as the tenant's CRM source of
+  // truth even though its native `category` is not CRM (e.g. Shopify, an
+  // ECOMMERCE integration a tenant can opt in as their customer system of
+  // record via TenantIntegration.config.useAsCrm). Drives whether it surfaces
+  // in the CRM-locked Settings → Integrations explorer.
+  canActAsCrm     Boolean             @default(false) @map("can_act_as_crm")
   sortOrder       Int                 @default(0) @map("sort_order")
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")

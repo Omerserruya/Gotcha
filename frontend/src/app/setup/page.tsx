@@ -1,38 +1,80 @@
 "use client";
 
-import { FormEvent, Suspense, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+// Onboarding — AI-first, two-gate activation.
+//
+//   GATE 1  "We understood your business like this"  (auto website crawl →
+//           editable confirmation card)
+//   GATE 2  "Connect your main business system"      (ONE source of truth:
+//           HubSpot / Salesforce / Zoho / Shopify → OAuth)
+//
+// Connecting one system IS the activation event. Everything else is
+// non-linear in the Setup Hub afterwards. There is no fixed multi-step
+// wizard beyond these two gates.
+
+import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
   analyzeBusinessDomain,
   completeOnboarding,
-  createInviteLink,
   getOnboardingStatus,
-  inviteTeam,
   saveBusinessProfile,
+  setCoreSystem,
+  initIntegrationOAuth,
+  connectApiKeyIntegration,
+  airtableListBasesOnboarding,
+  airtableListTablesOnboarding,
+  airtableListFieldsOnboarding,
+  saveAirtableMapping,
+  type CoreSystemSlug,
+  type AirtableMeta,
+  type AirtableField,
 } from "@/lib/api";
 
-type Outcome = "reply_faster" | "qualify_leads" | "handle_calls";
+// After setup completes, land in the inbox — onboarding continues via the
+// sidebar mission panel, not a dedicated home page.
+const SETUP_HUB = "/conversations";
 
-const OUTCOMES: Array<{ id: Outcome; titleKey: string; deepLink: string }> = [
-  { id: "reply_faster", titleKey: "setup.outcomes.replyFaster", deepLink: "/conversations" },
-  { id: "qualify_leads", titleKey: "setup.outcomes.qualifyLeads", deepLink: "/conversations" },
-  { id: "handle_calls", titleKey: "setup.outcomes.handleCalls", deepLink: "/channels" },
-];
+type Phase = "loading" | "understanding" | "connect" | "airtable_mapping" | "activating";
 
-const LOCALE_OPTIONS = [
+interface Understanding {
+  name: string;
+  industry: string;
+  country: string;
+  language: string;
+  description: string;
+}
+
+const LANGS = [
   { value: "en", label: "English" },
   { value: "he", label: "עברית" },
+  { value: "ar", label: "العربية" },
 ];
 
-type Phase =
-  | "loading"
-  | "confirm"      // Org name + locale
-  | "domain"       // Ask for domain, AI-analyze, confirm description
-  | "goals"        // Multi-select goals
-  | "invite"       // Team invites (optional)
-  | "activating";
+const SYSTEMS: Array<{
+  slug: CoreSystemSlug;
+  name: string;
+  group: "CRM" | "Store" | "Database";
+  value: [string, string]; // [en, he]
+  logo: string;
+}> = [
+  { slug: "hubspot", name: "HubSpot", group: "CRM", value: ["Your deals & contacts live here", "העסקאות והאנשי-קשר שלכם נמצאים כאן"], logo: "https://cdn.worldvectorlogo.com/logos/hubspot.svg" },
+  { slug: "salesforce", name: "Salesforce", group: "CRM", value: ["Your CRM records live here", "רשומות ה-CRM שלכם נמצאות כאן"], logo: "https://cdn.worldvectorlogo.com/logos/salesforce-2.svg" },
+  { slug: "zoho_crm", name: "Zoho", group: "CRM", value: ["Your contacts & leads live here", "אנשי הקשר והלידים שלכם נמצאים כאן"], logo: "https://cdn.worldvectorlogo.com/logos/zoho-1.svg" },
+  { slug: "fireberry", name: "Fireberry", group: "CRM", value: ["Your accounts & contacts live here", "החשבונות ואנשי הקשר שלכם נמצאים כאן"], logo: "https://www.fireberry.com/favicon.ico" },
+  { slug: "airtable", name: "Airtable", group: "Database", value: ["Your contacts base lives here", "בסיס אנשי הקשר שלכם נמצא כאן"], logo: "https://cdn.worldvectorlogo.com/logos/airtable.svg" },
+  { slug: "shopify", name: "Shopify", group: "Store", value: ["Your orders & customers live here", "ההזמנות והלקוחות שלכם נמצאים כאן"], logo: "https://cdn.worldvectorlogo.com/logos/shopify.svg" },
+];
+
+// Canonical fields the Airtable mapping wizard maps onto the tenant's columns.
+const AIRTABLE_FIELDS: Array<{ key: "email" | "phone" | "display_name" | "stage" | "notes"; required: boolean; label: [string, string]; match: RegExp }> = [
+  { key: "email", required: false, label: ["Email", "אימייל"], match: /e-?mail|מייל|דוא/i },
+  { key: "phone", required: false, label: ["Phone", "טלפון"], match: /phone|tel|mobile|טלפון|נייד/i },
+  { key: "display_name", required: true, label: ["Name", "שם"], match: /name|full.?name|שם/i },
+  { key: "stage", required: false, label: ["Stage / Status", "שלב / סטטוס"], match: /stage|status|שלב|סטטוס/i },
+  { key: "notes", required: false, label: ["Notes column", "עמודת הערות"], match: /note|comment|הערות/i },
+];
 
 export default function SetupPage() {
   return (
@@ -50,232 +92,297 @@ function LoadingScreen() {
   );
 }
 
+function emailDomain(email?: string | null): string {
+  const at = (email || "").split("@")[1] || "";
+  if (!at || ["gmail.com", "yahoo.com", "outlook.com", "hotmail.com", "icloud.com"].includes(at)) return "";
+  return at;
+}
+
 function SetupContent() {
   const { user, token, isLoading } = useAuth();
-  const { t, locale: uiLocale, setLocale } = useI18n();
+  const { locale: uiLocale, setLocale } = useI18n();
+  const he = uiLocale === "he";
   const router = useRouter();
+  const search = useSearchParams();
 
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
 
-  // Step 1: org + locale
-  const [orgName, setOrgName] = useState("");
-  const [chosenLocale, setChosenLocale] = useState<string>(uiLocale || "en");
-  const [savingProfile, setSavingProfile] = useState(false);
-
-  // Step 2: domain + AI suggestion
+  // Gate 1 — understanding
   const [domain, setDomain] = useState("");
-  const [analyzing, setAnalyzing] = useState(false);
-  const [domainTried, setDomainTried] = useState(false);
-  const [suggestion, setSuggestion] = useState<string>("");
-  const [description, setDescription] = useState("");
-  const [editingSuggestion, setEditingSuggestion] = useState(false);
-  const [manualFallback, setManualFallback] = useState(false);
+  const [crawling, setCrawling] = useState(false);
+  const [u, setU] = useState<Understanding>({ name: "", industry: "", country: "", language: uiLocale || "en", description: "" });
+  const [savingProfile, setSavingProfile] = useState(false);
+  const crawledOnce = useRef(false);
 
-  // Step 3: multi-select goals
-  const [goals, setGoals] = useState<Outcome[]>([]);
+  // Gate 2 — connect
+  const [picked, setPicked] = useState<CoreSystemSlug | null>(null);
+  const [shopDomain, setShopDomain] = useState("");
+  const [fireberryToken, setFireberryToken] = useState("");
+  const [connecting, setConnecting] = useState(false);
+  const [skipping, setSkipping] = useState(false);
 
-  // Step 4: invites
-  const [inviteEmails, setInviteEmails] = useState("");
-  const [inviteSending, setInviteSending] = useState(false);
-  const [inviteResults, setInviteResults] = useState<Array<{ email: string; status: string }> | null>(null);
-  const [inviteLink, setInviteLink] = useState<string>("");
-  const [linkCopied, setLinkCopied] = useState(false);
+  // Airtable mapping (post-OAuth) state.
+  const [atBases, setAtBases] = useState<AirtableMeta[]>([]);
+  const [atTables, setAtTables] = useState<AirtableMeta[]>([]);
+  const [atFields, setAtFields] = useState<AirtableField[]>([]);
+  const [atBaseId, setAtBaseId] = useState("");
+  const [atTableId, setAtTableId] = useState("");
+  const [atMap, setAtMap] = useState<Record<string, string>>({});
+  const [atCreateMissing, setAtCreateMissing] = useState(true);
+  const [atBusy, setAtBusy] = useState(false);
 
+  const finalize = useCallback(async (slug: string) => {
+    if (!token) return;
+    setPhase("activating");
+    try {
+      await setCoreSystem(token, slug as CoreSystemSlug).catch(() => { /* best-effort record */ });
+      await completeOnboarding(token);
+      router.replace(SETUP_HUB);
+    } catch (err: any) {
+      setError(err?.message || "Couldn't finish onboarding.");
+      setPhase("connect");
+    }
+  }, [token, router]);
+
+  const runCrawl = useCallback(async (dom: string) => {
+    if (!token || !dom.trim()) return;
+    setCrawling(true);
+    setError("");
+    try {
+      const res = await analyzeBusinessDomain(token, dom.trim(), uiLocale);
+      const data = res.data;
+      if (data.ok && data.understanding) {
+        const un = data.understanding;
+        setU((prev) => ({
+          name: un.name || prev.name,
+          industry: un.industry || prev.industry,
+          country: un.country || prev.country,
+          language: un.language || prev.language,
+          description: un.description || prev.description,
+        }));
+      } else if (data.ok && data.description) {
+        setU((prev) => ({ ...prev, description: data.description! }));
+      }
+    } catch {
+      /* keep card editable for manual entry */
+    } finally {
+      setCrawling(false);
+    }
+  }, [token, uiLocale]);
+
+  // ── Boot ──
   useEffect(() => {
     if (isLoading) return;
-    if (!user || !token) {
-      router.push("/login?redirect=setup");
-      return;
-    }
-    if (user.role !== "ADMIN") {
-      router.push("/conversations");
-      return;
-    }
+    if (!user || !token) { router.push("/login?redirect=setup"); return; }
+    if (user.role !== "ADMIN") { router.push("/conversations"); return; }
 
     getOnboardingStatus(token)
       .then((res) => {
         const data = res.data;
-        if (data.tenant?.status === "ACTIVE") {
-          router.push("/conversations");
+        if (data.tenant?.status === "ACTIVE") { router.replace(SETUP_HUB); return; }
+
+        // Returned from an OAuth round-trip with a system connected → finish.
+        const connectedSlug: string | null = data.coreSystemConnected || null;
+        const stashed = (() => { try { return localStorage.getItem("onboarding.coreSystem"); } catch { return null; } })();
+
+        // Airtable OAuth completed but mapping not saved yet (connectedSlug
+        // stays null until fieldMap exists) → run the mapping wizard.
+        if (search.get("connected") === "airtable" && !connectedSlug) {
+          setPhase("airtable_mapping");
+          loadAirtableBases();
           return;
         }
-        if (data.tenant?.name) setOrgName(data.tenant.name);
-        // The user may also have an email — pre-seed domain guess from it.
-        if (user?.email && !domain) {
-          const at = user.email.split("@")[1];
-          if (at && at !== "gmail.com" && at !== "yahoo.com" && at !== "outlook.com") {
-            setDomain(at);
+
+        if (data.businessProfileCompleted && connectedSlug) {
+          finalize(stashed || connectedSlug);
+          return;
+        }
+
+        // Hydrate Gate 1 from any saved profile.
+        const bp = data.businessProfile;
+        if (bp) {
+          setU({
+            name: bp.organizationName || data.tenant?.name || "",
+            industry: bp.industry && bp.industry !== "Other" ? bp.industry : "",
+            country: bp.country || "",
+            language: bp.primaryLanguage || data.tenant?.defaultLocale || uiLocale || "en",
+            description: bp.businessDescription || "",
+          });
+          if (bp.websiteDomain) setDomain(bp.websiteDomain);
+        } else if (data.tenant?.name) {
+          setU((prev) => ({ ...prev, name: data.tenant.name }));
+        }
+
+        if (data.businessProfileCompleted) {
+          setPhase("connect");
+        } else {
+          setPhase("understanding");
+          // Auto-crawl from the best available domain.
+          const guess = bp?.websiteDomain || emailDomain(user.email);
+          if (guess && !crawledOnce.current) {
+            crawledOnce.current = true;
+            setDomain(guess);
+            runCrawl(guess);
           }
         }
-        // Refreshed past Screen 1? Skip directly to domain step.
-        if (data.businessProfileCompleted) {
-          setPhase("domain");
-        } else {
-          setPhase("confirm");
-        }
       })
-      .catch(() => setPhase("confirm"));
+      .catch(() => setPhase("understanding"));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isLoading, user, token, router]);
+  }, [isLoading, user, token]);
 
-  // ── Step 1: save org name + locale (description filled later) ──
-  async function handleSaveOrg(e: FormEvent) {
-    e.preventDefault();
-    if (!token) return;
-    setError("");
+  async function confirmUnderstanding() {
+    if (!token || !u.name.trim() || !u.description.trim()) return;
     setSavingProfile(true);
-    try {
-      // Persist a minimal profile now — description will be patched in step 2.
-      await saveBusinessProfile(token, {
-        organizationName: orgName.trim(),
-        businessDescription: orgName.trim(), // placeholder; replaced in step 2
-        locale: chosenLocale,
-      });
-      if (chosenLocale !== uiLocale) {
-        await setLocale(chosenLocale as any);
-      }
-      track("onboarding.screen1_completed");
-      setPhase("domain");
-    } catch (err: any) {
-      setError(err.message || t("setup.errSaveProfile"));
-    } finally {
-      setSavingProfile(false);
-    }
-  }
-
-  // ── Step 2: analyze domain → AI suggestion ──
-  async function runDomainAnalysis() {
-    if (!token || !domain.trim()) return;
-    setAnalyzing(true);
     setError("");
-    setSuggestion("");
-    setManualFallback(false);
-    try {
-      const res = await analyzeBusinessDomain(token, domain.trim(), uiLocale);
-      const data = res.data;
-      setDomainTried(true);
-      if (data.ok && data.description) {
-        setSuggestion(data.description);
-        setDescription(data.description);
-        setEditingSuggestion(false);
-      } else {
-        // AI/fetch failed → fall back to manual input.
-        setManualFallback(true);
-      }
-    } catch {
-      setDomainTried(true);
-      setManualFallback(true);
-    } finally {
-      setAnalyzing(false);
-    }
-  }
-
-  async function handleConfirmDescription() {
-    if (!token || !description.trim()) return;
-    setError("");
-    setSavingProfile(true);
     try {
       await saveBusinessProfile(token, {
-        organizationName: orgName.trim(),
-        businessDescription: description.trim(),
+        organizationName: u.name.trim(),
+        businessDescription: u.description.trim(),
+        industry: u.industry.trim() || undefined,
+        country: u.country.trim() || undefined,
+        primaryLanguage: u.language || undefined,
         websiteDomain: domain.trim() || undefined,
-        locale: chosenLocale,
+        locale: u.language || undefined,
       });
-      track("onboarding.domain_confirmed", { fromAi: !manualFallback });
-      setPhase("goals");
+      if (u.language && u.language !== uiLocale) { await setLocale(u.language as any).catch(() => {}); }
+      track("onboarding.business_confirmed");
+      setPhase("connect");
     } catch (err: any) {
-      setError(err.message || t("setup.errSaveProfile"));
+      setError(err?.message || "Couldn't save. Try again.");
     } finally {
       setSavingProfile(false);
     }
   }
 
-  // ── Step 3: multi-select goals ──
-  function toggleGoal(g: Outcome) {
-    setGoals((prev) => (prev.includes(g) ? prev.filter((x) => x !== g) : [...prev, g]));
-  }
-  async function handleSaveGoals() {
-    if (!token || goals.length === 0) return;
+  async function connect(slug: CoreSystemSlug) {
+    if (!token) return;
+    if (slug === "fireberry") { connectFireberry(); return; }
+    if (slug === "shopify" && !shopDomain.trim()) { setPicked("shopify"); return; }
+    setConnecting(true);
     setError("");
-    setSavingProfile(true);
     try {
-      await saveBusinessProfile(token, {
-        organizationName: orgName.trim(),
-        businessDescription: description.trim() || orgName.trim(),
-        businessGoals: goals,
-        websiteDomain: domain.trim() || undefined,
-        locale: chosenLocale,
-      });
-      try {
-        // Stash for MissionPanel + post-onboarding tour focus.
-        localStorage.setItem("onboarding.goals", JSON.stringify(goals));
-      } catch { /* private-mode safe */ }
-      track("onboarding.goals_selected", { goals });
-      setPhase("invite");
+      try { localStorage.setItem("onboarding.coreSystem", slug); } catch { /* */ }
+      // flow:"onboarding" tells the OAuth callback to redirect back to /setup
+      // (not the marketplace) so we resume and finish activation here.
+      const extra = {
+        flow: "onboarding",
+        ...(slug === "shopify" ? { shop: shopDomain.trim() } : {}),
+      };
+      const { url } = await initIntegrationOAuth(token, slug, extra);
+      track("onboarding.core_system_picked", { slug });
+      window.location.href = url; // full OAuth redirect; we resume on /setup return
     } catch (err: any) {
-      setError(err.message || t("setup.errSaveProfile"));
-    } finally {
-      setSavingProfile(false);
+      setError(err?.message || "Couldn't start the connection. Check the system and try again.");
+      setConnecting(false);
     }
   }
 
-  // ── Step 4: invite team ──
-  async function handleSendInvites() {
+  // Fireberry — API-token connect (no OAuth). Paste token → connect → finish.
+  async function connectFireberry() {
     if (!token) return;
-    const emails = inviteEmails
-      .split(/[,\n;\s]+/)
-      .map((e) => e.trim())
-      .filter((e) => /.+@.+\..+/.test(e));
-    if (emails.length === 0) {
-      setError("No valid emails detected — separate with commas or newlines.");
-      return;
-    }
+    if (!fireberryToken.trim()) { setPicked("fireberry"); return; }
+    setConnecting(true);
     setError("");
-    setInviteSending(true);
     try {
-      const res = await inviteTeam(token, emails);
-      setInviteResults(res.data.results);
-      track("onboarding.invites_sent", { count: res.data.results.filter(r => r.status === "sent").length });
+      await connectApiKeyIntegration(token, "fireberry", { tokenid: fireberryToken.trim() });
+      track("onboarding.core_system_picked", { slug: "fireberry" });
+      await finalize("fireberry");
     } catch (err: any) {
-      setError(err.message || "Couldn't send invites.");
+      setError(err?.message || "Couldn't connect Fireberry. Check your token and try again.");
+      setConnecting(false);
+    }
+  }
+
+  // ── Airtable mapping wizard (post-OAuth) ──
+  async function loadAirtableBases() {
+    if (!token) return;
+    setAtBusy(true);
+    setError("");
+    try {
+      const r = await airtableListBasesOnboarding(token);
+      setAtBases(r.data || []);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't load Airtable bases.");
     } finally {
-      setInviteSending(false);
+      setAtBusy(false);
     }
   }
-  async function ensureInviteLink() {
-    if (!token || inviteLink) return;
+
+  async function pickAirtableBase(baseId: string) {
+    setAtBaseId(baseId); setAtTableId(""); setAtTables([]); setAtFields([]); setAtMap({});
+    if (!token || !baseId) return;
+    setAtBusy(true);
     try {
-      const res = await createInviteLink(token);
-      setInviteLink(res.data.url);
-    } catch (err: any) {
-      setError(err.message || "Couldn't generate invite link.");
+      const r = await airtableListTablesOnboarding(token, baseId);
+      setAtTables(r.data || []);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't load tables.");
+    } finally {
+      setAtBusy(false);
     }
   }
-  async function copyInviteLink() {
-    if (!inviteLink) await ensureInviteLink();
-    const url = inviteLink || (await createInviteLink(token!).then((r) => r.data.url).catch(() => ""));
-    if (!url) return;
-    try { await navigator.clipboard.writeText(url); setLinkCopied(true); setTimeout(() => setLinkCopied(false), 1800); } catch { /* clipboard may be blocked */ }
+
+  async function pickAirtableTable(tableId: string) {
+    setAtTableId(tableId); setAtFields([]);
+    if (!token || !atBaseId || !tableId) return;
+    setAtBusy(true);
+    try {
+      const r = await airtableListFieldsOnboarding(token, atBaseId, tableId);
+      const fields = r.data || [];
+      setAtFields(fields);
+      // Auto-suggest the mapping by matching column names; the user confirms.
+      const suggested: Record<string, string> = {};
+      for (const cf of AIRTABLE_FIELDS) {
+        const hit = fields.find((f) => cf.match.test(f.name));
+        if (hit) suggested[cf.key] = hit.name;
+      }
+      setAtMap(suggested);
+    } catch (e: any) {
+      setError(e?.message || "Couldn't load columns.");
+    } finally {
+      setAtBusy(false);
+    }
   }
-  async function handleFinish() {
-    if (!token) return;
+
+  async function saveAirtableMappingAndFinish() {
+    if (!token || !atBaseId || !atTableId) return;
+    if (!atMap.display_name) { setError(he ? "בחרו עמודת שם" : "Pick the Name column"); return; }
+    if (!atMap.email && !atMap.phone) { setError(he ? "בחרו עמודת אימייל או טלפון" : "Pick an Email or Phone column"); return; }
+    setAtBusy(true);
     setError("");
-    setPhase("activating");
     try {
-      await completeOnboarding(token);
-      try {
-        // Flag for the dashboard to launch the guided tour on first arrival.
-        localStorage.setItem("onboarding.launchTour", "1");
-      } catch { /* private-mode safe */ }
-      const target = goals[0]
-        ? OUTCOMES.find((o) => o.id === goals[0])?.deepLink ?? "/conversations"
-        : "/conversations";
-      const qs = goals.length > 0 ? `?outcome=${goals[0]}&tour=1` : "?tour=1";
-      router.replace(`${target}${qs}`);
+      await saveAirtableMapping(token, {
+        baseId: atBaseId,
+        tableId: atTableId,
+        fieldMap: { email: atMap.email, phone: atMap.phone, display_name: atMap.display_name, stage: atMap.stage },
+        notesField: atMap.notes || undefined,
+        createMissing: atCreateMissing,
+      });
+      track("onboarding.core_system_picked", { slug: "airtable" });
+      await finalize("airtable");
+    } catch (e: any) {
+      setError(e?.message || "Couldn't save mapping.");
+      setAtBusy(false);
+    }
+  }
+
+  // "Not now" — finish onboarding without a connected core system. The user
+  // can connect one later from the Setup Hub.
+  async function skipConnect() {
+    if (!token) return;
+    setSkipping(true);
+    setError("");
+    try {
+      try { localStorage.removeItem("onboarding.coreSystem"); } catch { /* */ }
+      track("onboarding.core_system_skipped");
+      setPhase("activating");
+      await completeOnboarding(token, { skipCoreSystem: true });
+      router.replace(SETUP_HUB);
     } catch (err: any) {
-      setError(err.message || t("setup.errActivate"));
-      setPhase("invite");
+      setError(err?.message || "Couldn't finish onboarding.");
+      setPhase("connect");
+      setSkipping(false);
     }
   }
 
@@ -286,7 +393,7 @@ function SetupContent() {
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin w-12 h-12 border-4 border-primary-500 border-t-transparent rounded-full mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-gray-900">{t("setup.preparingWorkspace")}</h2>
+          <h2 className="text-xl font-semibold text-gray-900">{he ? "מכינים את סביבת העבודה…" : "Building your AI workspace…"}</h2>
         </div>
       </div>
     );
@@ -294,322 +401,262 @@ function SetupContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex items-center justify-center px-4 py-8">
-      <div className="max-w-lg w-full">
-        <StepDots phase={phase} />
+      <div className="max-w-xl w-full">
+        <GateDots phase={phase} />
 
-        {error && (
-          <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>
-        )}
+        {error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>}
 
-        {phase === "confirm" && (
-          <form
-            onSubmit={handleSaveOrg}
-            className="bg-white rounded-2xl shadow-lg border border-gray-100 p-7 space-y-5"
-          >
-            <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t("setup.confirmTitle")}</h1>
-              <p className="text-sm text-gray-500 mt-1">{t("setup.confirmSubtitle")}</p>
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("setup.orgName")}</label>
-              <input
-                type="text"
-                value={orgName}
-                onChange={(e) => setOrgName(e.target.value)}
-                required
-                maxLength={200}
-                autoFocus
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
-              />
-            </div>
-
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">{t("setup.language")}</label>
-              <select
-                value={chosenLocale}
-                onChange={(e) => setChosenLocale(e.target.value)}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
-              >
-                {LOCALE_OPTIONS.map((o) => (
-                  <option key={o.value} value={o.value}>{o.label}</option>
-                ))}
-              </select>
-            </div>
-
-            <button
-              type="submit"
-              disabled={savingProfile || !orgName.trim()}
-              className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50 shadow-lg shadow-primary-500/25"
-            >
-              {savingProfile ? t("common.loading") : t("setup.confirmAndContinue")}
-            </button>
-          </form>
-        )}
-
-        {phase === "domain" && (
+        {/* ── GATE 1 — Understanding ── */}
+        {phase === "understanding" && (
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-7 space-y-5">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">
-                {uiLocale === "he" ? "מה האתר שלכם?" : "What's your website?"}
+                {crawling ? (he ? "קוראים את האתר שלכם…" : "Reading your website…") : (he ? "ככה הבנו את העסק שלכם:" : "We understood your business like this:")}
               </h1>
               <p className="text-sm text-gray-500 mt-1">
-                {uiLocale === "he"
-                  ? "ננסה לסכם את העסק שלכם אוטומטית. תוכלו לאשר או לערוך."
-                  : "We'll try to summarize what you do automatically. You can confirm or edit."}
+                {he ? "בדקו, תקנו אם צריך, ואשרו. אפשר לערוך כל שדה." : "Check it, fix anything that's off, and confirm. Every field is editable."}
               </p>
             </div>
 
-            {!suggestion && !manualFallback && (
-              <>
+            {/* Domain row — lets the user retry the crawl on a different domain. */}
+            <div className="flex gap-2">
+              <input
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                placeholder="acme.com"
+                className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
+              />
+              <button
+                type="button"
+                onClick={() => runCrawl(domain)}
+                disabled={crawling || !domain.trim()}
+                className="px-4 py-2.5 bg-gray-900 text-white text-sm font-medium rounded-xl hover:bg-gray-800 transition disabled:opacity-50"
+              >
+                {crawling ? (he ? "סורק…" : "Reading…") : (he ? "סרוק שוב" : "Re-read")}
+              </button>
+            </div>
+
+            <div className={"space-y-3 transition " + (crawling ? "opacity-40 pointer-events-none" : "")}>
+              <Field label={he ? "שם העסק" : "Business name"} value={u.name} onChange={(v) => setU({ ...u, name: v })} required />
+              <Field label={he ? "תחום" : "Industry"} value={u.industry} onChange={(v) => setU({ ...u, industry: v })} placeholder={he ? "למשל: מסחר אלקטרוני / אופנה" : "e.g. E-commerce / Fashion"} />
+              <div className="grid grid-cols-2 gap-3">
+                <Field label={he ? "מדינה" : "Country"} value={u.country} onChange={(v) => setU({ ...u, country: v })} placeholder={he ? "ישראל" : "Israel"} />
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {uiLocale === "he" ? "כתובת אתר" : "Website domain"}
-                  </label>
-                  <div className="flex gap-2">
-                    <input
-                      type="text"
-                      value={domain}
-                      onChange={(e) => setDomain(e.target.value)}
-                      placeholder="acme.com"
-                      autoFocus
-                      className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
-                    />
-                    <button
-                      type="button"
-                      onClick={runDomainAnalysis}
-                      disabled={analyzing || !domain.trim()}
-                      className="px-4 py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-xl transition disabled:opacity-50"
-                    >
-                      {analyzing
-                        ? (uiLocale === "he" ? "סורק..." : "Analyzing…")
-                        : (uiLocale === "he" ? "סרוק" : "Analyze")}
-                    </button>
-                  </div>
-                </div>
-
-                <div className="text-center">
-                  <button
-                    type="button"
-                    onClick={() => { setManualFallback(true); setDomainTried(true); }}
-                    className="text-xs text-gray-400 hover:text-gray-600"
+                  <label className="block text-sm font-medium text-gray-700 mb-1">{he ? "שפה ראשית" : "Primary language"}</label>
+                  <select
+                    value={u.language}
+                    onChange={(e) => setU({ ...u, language: e.target.value })}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
                   >
-                    {uiLocale === "he" ? "אין לי אתר — אכתוב ידנית" : "No website — I'll write it manually"}
-                  </button>
-                </div>
-              </>
-            )}
-
-            {suggestion && !editingSuggestion && (
-              <div className="space-y-4">
-                <div className="rounded-xl border border-violet-200 bg-violet-50/50 p-4">
-                  <div className="text-[11px] font-semibold uppercase tracking-wide text-violet-600 mb-1.5">
-                    {uiLocale === "he" ? "ניסיון לסיכום:" : "AI suggestion:"}
-                  </div>
-                  <p className="text-sm text-gray-800 leading-relaxed">{suggestion}</p>
-                </div>
-                <p className="text-sm text-gray-700 font-medium">
-                  {uiLocale === "he" ? "האם זה באמת מה שאתם עושים?" : "Is this what you actually do?"}
-                </p>
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={handleConfirmDescription}
-                    disabled={savingProfile}
-                    className="flex-1 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50"
-                  >
-                    {savingProfile ? t("common.loading") : (uiLocale === "he" ? "כן, ממשיכים" : "Yes — continue")}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setEditingSuggestion(true)}
-                    className="px-4 py-3 border border-gray-200 text-gray-700 hover:bg-gray-50 text-sm rounded-xl"
-                  >
-                    {uiLocale === "he" ? "ערוך" : "Edit"}
-                  </button>
+                    {LANGS.map((l) => <option key={l.value} value={l.value}>{l.label}</option>)}
+                  </select>
                 </div>
               </div>
-            )}
-
-            {(editingSuggestion || manualFallback) && (
-              <div className="space-y-4">
-                {manualFallback && !suggestion && (
-                  <div className="rounded-xl border border-amber-200 bg-amber-50/60 p-3 text-xs text-amber-800">
-                    {uiLocale === "he"
-                      ? "לא הצלחנו לסרוק את האתר. כתבו בקצרה מה אתם עושים."
-                      : "We couldn't analyze the site. Tell us briefly what you do."}
-                  </div>
-                )}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{he ? "מה אתם עושים" : "What you do"}<span className="text-red-400 ml-1">*</span></label>
                 <textarea
-                  value={description}
-                  onChange={(e) => setDescription(e.target.value)}
+                  value={u.description}
+                  onChange={(e) => setU({ ...u, description: e.target.value })}
                   rows={3}
                   maxLength={2000}
-                  placeholder={t("setup.oneLinePlaceholder")}
+                  placeholder={he ? "תיאור קצר של העסק" : "A short description of the business"}
                   className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm resize-none"
-                  autoFocus
                 />
-                <button
-                  type="button"
-                  onClick={handleConfirmDescription}
-                  disabled={savingProfile || !description.trim()}
-                  className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50"
-                >
-                  {savingProfile ? t("common.loading") : (uiLocale === "he" ? "המשך" : "Continue")}
-                </button>
               </div>
-            )}
+            </div>
+
+            <button
+              type="button"
+              onClick={confirmUnderstanding}
+              disabled={savingProfile || crawling || !u.name.trim() || !u.description.trim()}
+              className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50 shadow-lg shadow-primary-500/25"
+            >
+              {savingProfile ? (he ? "שומר…" : "Saving…") : (he ? "נכון — ממשיכים" : "Looks right →")}
+            </button>
           </div>
         )}
 
-        {phase === "goals" && (
+        {/* ── GATE 2 — Connect core system ── */}
+        {phase === "connect" && (
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-7 space-y-5">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">{t("setup.outcomeTitle")}</h1>
+              <h1 className="text-2xl font-bold text-gray-900">{he ? "חברו את מערכת הליבה שלכם" : "Connect your main business system"}</h1>
               <p className="text-sm text-gray-500 mt-1">
-                {uiLocale === "he"
-                  ? "בחרו את כל מה שרלוונטי — אפשר יותר מאחד."
-                  : "Pick anything that fits — you can choose more than one."}
+                {he ? "זו תהיה מקור האמת של Gotcha על הלקוחות שלכם. בוחרים אחת — את השאר אפשר לחבר אחר כך." : "This becomes Gotcha's source of truth about your customers. Pick one — the rest come later."}
               </p>
             </div>
 
-            <div className="grid gap-3 sm:grid-cols-3">
-              {OUTCOMES.map((o) => {
-                const active = goals.includes(o.id);
+            <div className="grid sm:grid-cols-2 gap-3">
+              {SYSTEMS.map((s) => {
+                const active = picked === s.slug;
                 return (
-                  <button
-                    key={o.id}
-                    type="button"
-                    onClick={() => toggleGoal(o.id)}
-                    className={
-                      "p-4 rounded-xl border text-sm font-medium text-center transition " +
-                      (active
-                        ? "border-primary-400 bg-primary-50 text-primary-700 ring-2 ring-primary-200"
-                        : "border-gray-200 text-gray-800 hover:border-primary-300 hover:bg-primary-50/30")
-                    }
-                  >
-                    <div className="flex flex-col items-center gap-2">
-                      <div className={"w-5 h-5 rounded-md border flex items-center justify-center " + (active ? "bg-primary-500 border-primary-500" : "bg-white border-gray-300")}>
-                        {active && (
-                          <svg className="w-3.5 h-3.5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}>
-                            <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />
-                          </svg>
-                        )}
+                  <div key={s.slug}>
+                    <button
+                      type="button"
+                      onClick={() => setPicked(s.slug)}
+                      className={
+                        "w-full text-left p-4 rounded-2xl border transition " +
+                        (active
+                          ? "border-primary-400 ring-2 ring-primary-200 bg-primary-50/40"
+                          : "border-gray-200 hover:border-primary-300 hover:bg-primary-50/20")
+                      }
+                    >
+                      <div className="flex items-center gap-3 mb-2">
+                        <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 p-1.5 flex items-center justify-center">
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={s.logo} alt={s.name} className="w-full h-full object-contain" />
+                        </div>
+                        <div>
+                          <div className="font-semibold text-gray-900">{s.name}</div>
+                          <div className="text-[10px] uppercase tracking-wide text-gray-400">{s.group}</div>
+                        </div>
                       </div>
-                      <span>{t(o.titleKey)}</span>
-                    </div>
-                  </button>
+                      <p className="text-sm text-gray-600">{s.value[he ? 1 : 0]}</p>
+                    </button>
+
+                    {active && s.slug === "shopify" && (
+                      <input
+                        value={shopDomain}
+                        onChange={(e) => setShopDomain(e.target.value)}
+                        placeholder="my-store.myshopify.com"
+                        className="mt-2 w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none"
+                      />
+                    )}
+
+                    {active && s.slug === "fireberry" && (
+                      <div className="mt-2">
+                        <input
+                          value={fireberryToken}
+                          onChange={(e) => setFireberryToken(e.target.value)}
+                          type="password"
+                          placeholder={he ? "טוקן API (tokenid)" : "API token (tokenid)"}
+                          className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none"
+                        />
+                        <p className="text-[11px] text-gray-400 mt-1">
+                          {he ? "Fireberry ← הגדרות ← אינטגרציה ← API ← הטוקן שלי" : "Fireberry → Settings → Integration → API Forms → My Token"}
+                        </p>
+                      </div>
+                    )}
+
+                    {active && (
+                      <button
+                        type="button"
+                        onClick={() => connect(s.slug)}
+                        disabled={connecting || (s.slug === "shopify" && !shopDomain.trim()) || (s.slug === "fireberry" && !fireberryToken.trim())}
+                        className="mt-2 w-full py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-xl transition disabled:opacity-50"
+                      >
+                        {connecting ? (he ? "מתחבר…" : "Connecting…") : `${he ? "התחבר ל" : "Connect "}${s.name} →`}
+                      </button>
+                    )}
+                  </div>
                 );
               })}
             </div>
 
-            <button
-              type="button"
-              onClick={handleSaveGoals}
-              disabled={savingProfile || goals.length === 0}
-              className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50 shadow-lg shadow-primary-500/25"
-            >
-              {savingProfile ? t("common.loading") : (uiLocale === "he" ? "המשך" : "Continue")}
-            </button>
+            <p className="text-xs text-gray-400 text-center">
+              {he ? "בוחרים מערכת אחת כדי שה-AI יכיר את הלקוחות שלכם. ערוצים ואינטגרציות נוספות — בהמשך, מתוך מרכז ההתקנה." : "Pick one system so the AI knows your customers. Channels and other integrations come later, from the Setup Hub."}
+            </p>
 
-            <p className="text-xs text-gray-400 text-center">{t("setup.outcomeFooter")}</p>
+            <div className="flex items-center justify-between pt-1">
+              <button
+                type="button"
+                onClick={() => { setError(""); setPhase("understanding"); }}
+                disabled={connecting || skipping}
+                className="text-sm font-medium text-gray-500 hover:text-gray-700 transition disabled:opacity-50"
+              >
+                {he ? "→ חזרה" : "← Back"}
+              </button>
+              <button
+                type="button"
+                onClick={skipConnect}
+                disabled={connecting || skipping}
+                className="text-sm font-medium text-gray-500 hover:text-gray-700 transition disabled:opacity-50"
+              >
+                {skipping ? (he ? "מסיים…" : "Finishing…") : (he ? "לא עכשיו — דלג" : "Not now — skip")}
+              </button>
+            </div>
           </div>
         )}
 
-        {phase === "invite" && (
+        {/* ── Airtable mapping (post-OAuth) ── */}
+        {phase === "airtable_mapping" && (
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-7 space-y-5">
             <div>
-              <h1 className="text-2xl font-bold text-gray-900">
-                {uiLocale === "he" ? "להזמין את הצוות?" : "Invite your team"}
-              </h1>
+              <h1 className="text-2xl font-bold text-gray-900">{he ? "מיפוי ה-Airtable שלכם" : "Map your Airtable"}</h1>
               <p className="text-sm text-gray-500 mt-1">
-                {uiLocale === "he"
-                  ? "אופציונלי — תוכלו לדלג ולהזמין מאוחר יותר מההגדרות."
-                  : "Optional — you can skip this and invite from Settings later."}
+                {he ? "בחרו את הבסיס והטבלה של אנשי הקשר, ומפו את העמודות שלכם." : "Pick your contacts base + table, then map your columns."}
               </p>
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                {uiLocale === "he" ? "כתובות אימייל" : "Teammate emails"}
-              </label>
-              <textarea
-                value={inviteEmails}
-                onChange={(e) => setInviteEmails(e.target.value)}
-                rows={3}
-                placeholder={uiLocale === "he"
-                  ? "alice@company.com, bob@company.com"
-                  : "alice@company.com, bob@company.com"}
-                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm resize-none"
-              />
-              <p className="mt-1 text-xs text-gray-400">
-                {uiLocale === "he" ? "הפרידו בפסיקים או שורות חדשות" : "Separate by commas or new lines"}
-              </p>
+              <label className="block text-sm font-medium text-gray-700 mb-1">{he ? "בסיס" : "Base"}</label>
+              <select
+                value={atBaseId}
+                onChange={(e) => pickAirtableBase(e.target.value)}
+                disabled={atBusy}
+                className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none text-sm"
+              >
+                <option value="">{he ? "בחרו בסיס…" : "Select a base…"}</option>
+                {atBases.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              </select>
             </div>
 
-            <button
-              type="button"
-              onClick={handleSendInvites}
-              disabled={inviteSending || !inviteEmails.trim()}
-              className="w-full py-2.5 bg-white border border-primary-200 hover:bg-primary-50 text-primary-700 text-sm font-medium rounded-xl transition disabled:opacity-50"
-            >
-              {inviteSending
-                ? (uiLocale === "he" ? "שולח..." : "Sending…")
-                : (uiLocale === "he" ? "שלח הזמנות במייל" : "Send email invites")}
-            </button>
-
-            {inviteResults && (
-              <div className="rounded-xl border border-gray-100 p-3 space-y-1">
-                {inviteResults.map((r) => (
-                  <div key={r.email} className="flex items-center justify-between text-xs">
-                    <span className="text-gray-700">{r.email}</span>
-                    <span className={
-                      r.status === "sent" ? "text-green-600" :
-                      r.status === "exists" ? "text-amber-600" : "text-red-600"
-                    }>
-                      {r.status === "sent" ? (uiLocale === "he" ? "נשלח" : "Sent") :
-                       r.status === "exists" ? (uiLocale === "he" ? "כבר חבר" : "Already a member") :
-                       (uiLocale === "he" ? "נכשל" : "Failed")}
-                    </span>
-                  </div>
-                ))}
+            {atBaseId && (
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1">{he ? "טבלת אנשי קשר" : "Contacts table"}</label>
+                <select
+                  value={atTableId}
+                  onChange={(e) => pickAirtableTable(e.target.value)}
+                  disabled={atBusy}
+                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none text-sm"
+                >
+                  <option value="">{he ? "בחרו טבלה…" : "Select a table…"}</option>
+                  {atTables.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+                </select>
               </div>
             )}
 
-            <div className="border-t border-gray-100 pt-4 space-y-2">
-              <p className="text-sm font-medium text-gray-700">
-                {uiLocale === "he" ? "או שתף קישור הזמנה:" : "Or share an invite link:"}
-              </p>
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  readOnly
-                  value={inviteLink || (uiLocale === "he" ? "לחצו ליצירה" : "Click to generate")}
-                  onClick={ensureInviteLink}
-                  className="flex-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-xs text-gray-700"
-                />
-                <button
-                  type="button"
-                  onClick={copyInviteLink}
-                  className="px-3 py-2 bg-gray-900 text-white text-xs rounded-xl hover:bg-gray-800 transition"
-                >
-                  {linkCopied
-                    ? (uiLocale === "he" ? "הועתק!" : "Copied!")
-                    : (uiLocale === "he" ? "העתק" : "Copy")}
-                </button>
+            {atTableId && atFields.length > 0 && (
+              <div className="space-y-3">
+                <p className="text-xs text-gray-400">{he ? "מפו לפחות אימייל או טלפון, ושם. הצענו ניחוש — תקנו אם צריך." : "Map at least Email or Phone, plus Name. We pre-filled a guess — fix anything that's off."}</p>
+                {AIRTABLE_FIELDS.map((cf) => (
+                  <div key={cf.key}>
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      {cf.label[he ? 1 : 0]}{cf.required && <span className="text-red-400 ml-1">*</span>}
+                    </label>
+                    <select
+                      value={atMap[cf.key] || ""}
+                      onChange={(e) => setAtMap({ ...atMap, [cf.key]: e.target.value })}
+                      className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none text-sm"
+                    >
+                      <option value="">{he ? "— ללא —" : "— none —"}</option>
+                      {atFields.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)}
+                    </select>
+                  </div>
+                ))}
+                <label className="flex items-center gap-2 text-sm text-gray-600">
+                  <input type="checkbox" checked={atCreateMissing} onChange={(e) => setAtCreateMissing(e.target.checked)} />
+                  {he ? "צרו עבורי עמודות הערות/מזהה אם חסרות" : "Create Notes / ID columns for me if missing"}
+                </label>
               </div>
-              <p className="text-[10px] text-gray-400">
-                {uiLocale === "he" ? "תקף ל-14 ימים" : "Valid for 14 days"}
-              </p>
-            </div>
+            )}
 
-            <div className="flex gap-2 pt-2">
+            <button
+              type="button"
+              onClick={saveAirtableMappingAndFinish}
+              disabled={atBusy || !atTableId}
+              className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50 shadow-lg shadow-primary-500/25"
+            >
+              {atBusy ? (he ? "שומר…" : "Saving…") : (he ? "סיום ←" : "Finish setup →")}
+            </button>
+            <div className="text-center">
               <button
                 type="button"
-                onClick={handleFinish}
-                className="flex-1 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition shadow-lg shadow-primary-500/25"
+                onClick={() => { setError(""); setPhase("connect"); }}
+                disabled={atBusy}
+                className="text-sm font-medium text-gray-500 hover:text-gray-700 transition disabled:opacity-50"
               >
-                {uiLocale === "he" ? "סיים והכנס" : "Finish & enter app"}
+                {he ? "→ חזרה" : "← Back"}
               </button>
             </div>
           </div>
@@ -619,20 +666,28 @@ function SetupContent() {
   );
 }
 
-function StepDots({ phase }: { phase: Phase }) {
-  const steps: Phase[] = ["confirm", "domain", "goals", "invite"];
-  const idx = steps.indexOf(phase);
+function Field({ label, value, onChange, placeholder, required }: { label: string; value: string; onChange: (v: string) => void; placeholder?: string; required?: boolean }) {
+  return (
+    <div>
+      <label className="block text-sm font-medium text-gray-700 mb-1">{label}{required && <span className="text-red-400 ml-1">*</span>}</label>
+      <input
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition text-sm"
+      />
+    </div>
+  );
+}
+
+function GateDots({ phase }: { phase: Phase }) {
+  const gates: Phase[] = ["understanding", "connect"];
+  const idx = gates.indexOf(phase);
   if (idx < 0) return null;
   return (
-    <div className="flex items-center justify-center gap-1.5 mb-5">
-      {steps.map((_, i) => (
-        <div
-          key={i}
-          className={
-            "h-1.5 rounded-full transition-all " +
-            (i < idx ? "bg-primary-500 w-6" : i === idx ? "bg-primary-400 w-8" : "bg-gray-200 w-1.5")
-          }
-        />
+    <div className="flex items-center justify-center gap-2 mb-5">
+      {gates.map((_, i) => (
+        <div key={i} className={"h-1.5 rounded-full transition-all " + (i < idx ? "bg-primary-500 w-8" : i === idx ? "bg-primary-400 w-10" : "bg-gray-200 w-2")} />
       ))}
     </div>
   );
@@ -642,7 +697,5 @@ function track(event: string, props?: Record<string, unknown>) {
   try {
     const w = window as unknown as { analytics?: { track?: (e: string, p?: unknown) => void } };
     w.analytics?.track?.(event, props);
-  } catch {
-    /* analytics is best-effort */
-  }
+  } catch { /* best-effort */ }
 }

@@ -21,6 +21,9 @@ import {
   HubSpotCRMAdapter,
   SalesforceCRMAdapter,
   ZohoCRMAdapter,
+  ShopifyCRMAdapter,
+  FireberryCRMAdapter,
+  AirtableCRMAdapter,
   NoOpCRMAdapter,
 } from "./crm-adapter.impl";
 
@@ -31,6 +34,7 @@ const SLUG_TO_VENDOR: Record<string, CrmVendor> = {
   hubspot: "hubspot",
   salesforce: "salesforce",
   zoho_crm: "zoho",
+  fireberry: "fireberry",
   pipedrive: "pipedrive",
   monday: "monday",
   airtable: "airtable",
@@ -49,6 +53,17 @@ const RESOLUTION_TTL_MS = 30_000;
  * Test-only: clear the cache between integration tests.
  */
 export function __resetCrmAdapterCache(): void { RESOLUTION_CACHE.clear(); }
+
+/**
+ * Invalidate the resolution cache. Call after a tenant changes which CRM is
+ * their source of truth (e.g. flipping the Shopify "use as CRM" toggle) so
+ * the next bot turn resolves the new vendor immediately instead of waiting
+ * out the 30s TTL. Omit `tenantId` to clear everything.
+ */
+export function invalidateCrmAdapterCache(tenantId?: string): void {
+  if (!tenantId) { RESOLUTION_CACHE.clear(); return; }
+  RESOLUTION_CACHE.delete(tenantId);
+}
 
 /**
  * Resolve the CRMAdapter for a tenant. Vendor override skips DB lookup.
@@ -87,6 +102,20 @@ async function resolveFromDb(tenantId: string): Promise<CrmVendor | null> {
     });
     if (!t) return null;
 
+    // 1.5. Shopify-as-CRM opt-in. Shopify is an ECOMMERCE integration, but a
+    //      tenant may elect it as their CRM source of truth by setting
+    //      `config.useAsCrm = true` on the connected Shopify integration
+    //      (Settings → toggle). When set, it WINS over any CRM-category
+    //      integration — the tenant explicitly chose Shopify as the truth.
+    //      When NOT set, behavior is unchanged for everyone else.
+    const shop = await (prisma as any).tenantIntegration.findFirst({
+      where: { tenantId, status: "CONNECTED", integration: { slug: "shopify" } },
+      select: { config: true },
+    });
+    if (shop && (shop.config as any)?.useAsCrm === true) {
+      return "shopify";
+    }
+
     // 2. First CONNECTED TenantIntegration with a CRM slug.
     const ti = await (prisma as any).tenantIntegration.findFirst({
       where: {
@@ -111,11 +140,13 @@ function instantiate(vendor: CrmVendor | null, tenantId: string): CRMAdapter {
     case "hubspot": return new HubSpotCRMAdapter(tenantId);
     case "salesforce": return new SalesforceCRMAdapter(tenantId);
     case "zoho": return new ZohoCRMAdapter(tenantId);
+    case "shopify": return new ShopifyCRMAdapter(tenantId);
+    case "fireberry": return new FireberryCRMAdapter(tenantId);
+    case "airtable": return new AirtableCRMAdapter(tenantId);
     // For unimplemented vendors return NoOpCRMAdapter rather than throwing —
     // callers degrade gracefully (side panel shows "CRM not yet supported").
     case "pipedrive":
     case "monday":
-    case "airtable":
     case "custom_api":
     case "custom_db":
     case null:

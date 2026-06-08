@@ -138,7 +138,11 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
     // When the page is locked to a single category, ignore the local
     // activeCategory state entirely — only that category's items pass.
     const effectiveCat = restrictToCategory ?? activeCategory;
-    const matchCat = effectiveCat === "All" || intg.category === effectiveCat || intg.category?.toUpperCase() === effectiveCat;
+    // An integration flagged `canActAsCrm` (e.g. Shopify, natively ECOMMERCE)
+    // may be elected as the tenant's CRM source of truth, so it also passes the
+    // CRM filter even though its native category differs.
+    const actsAsCrm = effectiveCat === "CRM" && intg.canActAsCrm === true;
+    const matchCat = effectiveCat === "All" || intg.category === effectiveCat || intg.category?.toUpperCase() === effectiveCat || actsAsCrm;
     return matchSearch && matchCat;
   });
 

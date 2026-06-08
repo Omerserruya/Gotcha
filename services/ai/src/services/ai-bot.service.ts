@@ -1095,6 +1095,45 @@ async function generateAIBotReplyInner(
       connectedSlugs.add(s);
       configBySlug.set(s, ti.config || {});
     }
+    // Governance set for adapter tools. Key: `${integrationSlug}:${catalogToolSlug}`.
+    // Built from the SAME guest-list the governed `integration_<slug>` path uses
+    // (AgentToolPermission.isAllowed + TenantTool.isEnabled + CONNECTED +
+    // allowedModes), so the autonomous bot never surfaces an adapter tool the
+    // operator hasn't enabled for THIS agent. Without this, every tool of every
+    // connected integration would leak in regardless of the marketplace toggle.
+    const allowedAdapterTools = new Set<string>();
+    try {
+      const perms = await prisma.agentToolPermission.findMany({
+        where: {
+          tenantId: opts.tenantId,
+          aiAgentId: config.id,
+          isAllowed: true,
+          tenantTool: { isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
+        },
+        include: {
+          tenantTool: {
+            include: {
+              catalogTool: { select: { slug: true, allowedModes: true } },
+              tenantIntegration: { include: { integration: { select: { slug: true } } } },
+            },
+          },
+        },
+      });
+      for (const p of perms as any[]) {
+        const tt = p.tenantTool;
+        const integSlug = tt?.tenantIntegration?.integration?.slug;
+        const toolSlug = tt?.catalogTool?.slug;
+        if (!integSlug || !toolSlug) continue;
+        // AUTO surface: drop ASSIST-only tools. allowedModes default permits all,
+        // so a missing/malformed value is treated as "allowed".
+        const am = tt?.catalogTool?.allowedModes;
+        if (Array.isArray(am) && !am.includes("AUTO")) continue;
+        allowedAdapterTools.add(`${integSlug}:${toolSlug}`);
+      }
+    } catch (err: any) {
+      console.warn("[ai-bot] adapter tool permission load failed:", err?.message);
+    }
+
     // Slugs whose adapter tools accept a `table`/`collection` arg and benefit
     // from a tenant-curated table list with per-table notes appended to the
     // tool description (so the AI knows what each table is and when to use it).
@@ -1128,6 +1167,12 @@ async function generateAIBotReplyInner(
             }).join("\n")
           : "";
       for (const def of adapter.tools()) {
+        // Governance gate (parity with the governed `integration_<slug>` path):
+        // surface this tool ONLY if it is enabled for the tenant AND allowed for
+        // THIS agent. `def.name` is `<provider>.<toolSlug>`; the catalog tool
+        // slug is the part after the dot.
+        const toolSlug = def.name.includes(".") ? def.name.slice(def.name.indexOf(".") + 1) : def.name;
+        if (!allowedAdapterTools.has(`${catalogSlug}:${toolSlug}`)) continue;
         tools.push({
           type: "function",
           function: {

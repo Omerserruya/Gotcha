@@ -16,7 +16,7 @@
 
 // ─── Vendor + entity model ──────────────────────────────────
 
-export type CrmVendor = "hubspot" | "salesforce" | "zoho" | "pipedrive" | "monday" | "airtable" | "custom_api" | "custom_db";
+export type CrmVendor = "hubspot" | "salesforce" | "zoho" | "shopify" | "fireberry" | "pipedrive" | "monday" | "airtable" | "custom_api" | "custom_db";
 
 export type CrmObjectKind = "contact" | "lead" | "person_account" | "organization_member" | "company";
 
@@ -427,6 +427,51 @@ export const DEFAULT_CAPABILITIES: Record<CrmVendor, CrmAdapterCapabilities> = {
     task_supported: true,
     ticket_supported: true,
   },
+  shopify: {
+    // Shopify's "customer" maps onto our canonical "contact". There is no
+    // lead lifecycle — a shopper is a customer the moment they exist.
+    entity_kinds_supported: ["contact"],
+    default_entity_kind_for_inbound: "contact",
+    // The customer record has a single free-text `note` field plus order
+    // history — we project notes/interactions onto it. No first-class
+    // task/ticket objects in core Shopify.
+    activity_kinds_supported: ["note"],
+    activity_update_in_place: true, // we PUT the customer.note field in place
+    lead_to_contact_conversion_event: false,
+    webhook_subscription: "app_level",
+    idempotency_via_custom_field: true, // customer metafields carry our markers
+    search_by_identifier: ["phone", "email"],
+    version_token_field: "updated_at",
+    rate_limit_per_minute: 40, // Shopify REST: 2 req/s sustained (bucket of 40)
+    merge_supported: false,
+    split_supported: false,
+    task_supported: false,
+    ticket_supported: false,
+  },
+  fireberry: {
+    // Fireberry (formerly Powerlink) — Israeli CRM. Customer entity is the
+    // Account object (objecttype 1); Contacts/Leads also exist. Field/object
+    // names are tenant-customizable, so the adapter resolves them from config
+    // with these defaults. Auth is a static API token (`tokenid` header) —
+    // no OAuth — so no token refresh.
+    entity_kinds_supported: ["contact", "lead", "company"],
+    default_entity_kind_for_inbound: "contact",
+    // We project notes onto a configurable text field (default `description`),
+    // mirroring Shopify's single-note-field model. Tasks/tickets exist in
+    // Fireberry but aren't wired yet — declare false until implemented.
+    activity_kinds_supported: ["note"],
+    activity_update_in_place: true,
+    lead_to_contact_conversion_event: false,
+    webhook_subscription: "polling_only",
+    idempotency_via_custom_field: true,
+    search_by_identifier: ["phone", "email"],
+    version_token_field: "modifiedon",
+    rate_limit_per_minute: 60,
+    merge_supported: false,
+    split_supported: false,
+    task_supported: false,
+    ticket_supported: false,
+  },
   pipedrive: {
     entity_kinds_supported: ["contact", "organization_member"],
     default_entity_kind_for_inbound: "contact",
@@ -476,7 +521,6 @@ export const DEFAULT_CAPABILITIES: Record<CrmVendor, CrmAdapterCapabilities> = {
     split_supported: false,
     task_supported: false,
     ticket_supported: false,
-    is_stub: true,
   },
   custom_api: {
     entity_kinds_supported: ["contact"],

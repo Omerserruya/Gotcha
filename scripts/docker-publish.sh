@@ -106,6 +106,30 @@ done
 if [ -z "${SERVICES:-}" ] || [[ ",$SERVICES," == *,gateway,* ]] || [[ ",$SERVICES," == *,frontend,* ]]; then
   if [ "${SKIP_FRONTEND_BUILD:-0}" != "1" ]; then
     echo "── frontend static export (host build) ──────────"
+    # NEXT_PUBLIC_* are frozen into the static bundle at build time. The gateway
+    # image is ALWAYS a production artifact (dev runs Next.js from
+    # docker-compose.yml), so source prod values from an env file by default
+    # instead of trusting whatever happens to be in the ambient shell — baking
+    # dev URLs into the prod bundle here causes CORS failures in prod.
+    # Override with FRONTEND_ENV=<file>, or FRONTEND_ENV= to skip sourcing.
+    # Load ONLY NEXT_PUBLIC_* assignments — never `source` the file: it holds
+    # secrets with spaces (e.g. SMTP_PASS app-passwords) that the shell would
+    # try to execute, and `set -e` would abort the build.
+    FRONTEND_ENV="${FRONTEND_ENV-.env.prod}"
+    if [ -n "$FRONTEND_ENV" ]; then
+      if [ -f "$FRONTEND_ENV" ]; then
+        echo "   loading NEXT_PUBLIC_* from: $FRONTEND_ENV"
+        while IFS= read -r _line || [ -n "$_line" ]; do
+          case "$_line" in
+            NEXT_PUBLIC_*=*) export "${_line%%=*}=${_line#*=}" ;;
+          esac
+        done < "$FRONTEND_ENV"
+      else
+        echo "   WARNING: FRONTEND_ENV='$FRONTEND_ENV' not found — using ambient shell vars" >&2
+      fi
+    fi
+    : "${NEXT_PUBLIC_API_URL:?NEXT_PUBLIC_API_URL is empty — refusing to bake a frontend with no API URL (set it in $FRONTEND_ENV or the shell)}"
+    echo "   NEXT_PUBLIC_API_URL=${NEXT_PUBLIC_API_URL}"
     (
       cd frontend
       [ -d node_modules ] || npm install

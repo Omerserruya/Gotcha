@@ -76,6 +76,39 @@ export async function getAgentMemory(opts: {
     .reverse();
 }
 
+/**
+ * Like getAgentMemory, but scoped to a SINGLE session id (not all of an
+ * operator's history). The AI-Employee Builder reuses the SystemAgentMessage
+ * table for its turn-by-turn transcript, but its threads must NOT bleed into
+ * the Command Center copilot's (userId, tenantId) history — each builder draft
+ * is its own conversation keyed by `sessionId`. Ordered ASC (oldest→newest).
+ */
+export async function getSessionMemory(opts: {
+  tenantId: string;
+  userId: string;
+  sessionId: string;
+  limit?: number;
+}): Promise<AgentMemoryMessage[]> {
+  const rows = await (prisma as any).systemAgentMessage.findMany({
+    where: { tenantId: opts.tenantId, userId: opts.userId, sessionId: opts.sessionId },
+    orderBy: { createdAt: "desc" },
+    take: opts.limit ?? 60,
+  });
+
+  return rows
+    .map((r: any) => ({
+      id: r.id,
+      role: r.role as SystemAgentRole,
+      content: r.content,
+      toolCalls: r.toolCalls ?? null,
+      toolCallId: r.toolCallId ?? null,
+      toolName: r.toolName ?? null,
+      metadata: r.metadata ?? null,
+      createdAt: r.createdAt,
+    }))
+    .reverse();
+}
+
 export async function appendToMemory(input: AppendMemoryInput): Promise<AgentMemoryMessage> {
   const row = await (prisma as any).systemAgentMessage.create({
     data: {
@@ -125,6 +158,52 @@ export function memoryToChatMessages(messages: AgentMemoryMessage[]): any[] {
     }
     return { role: m.role, content: m.content };
   });
+}
+
+/**
+ * Make a reconstructed history safe to send to the LLM's tool-calling API.
+ *
+ * Memory is loaded as a bounded window (last N rows), so the window can begin
+ * mid-tool-exchange — e.g. its first row is a `tool` message whose preceding
+ * `assistant`+`tool_calls` got cut off. OpenAI then rejects the whole request
+ * with "messages with role 'tool' must be a response to a preceding message
+ * with 'tool_calls'". It equally rejects an `assistant`+`tool_calls` whose
+ * tool responses are missing.
+ *
+ * This enforces both invariants:
+ *   • every `tool` message immediately follows an `assistant` whose
+ *     `tool_calls` include its `tool_call_id`, and
+ *   • every `assistant`+`tool_calls` is immediately followed by a `tool`
+ *     response for each call id.
+ * Incomplete exchanges are dropped wholesale (better to lose a partial turn
+ * than 400 the entire request). Plain user/assistant/system turns pass through.
+ */
+export function sanitizeHistoryForLLM(messages: any[]): any[] {
+  const out: any[] = [];
+  for (let i = 0; i < messages.length; i++) {
+    const m = messages[i];
+    if (m.role === "assistant" && Array.isArray(m.tool_calls) && m.tool_calls.length > 0) {
+      const ids = new Set(m.tool_calls.map((tc: any) => tc.id));
+      const responses: any[] = [];
+      let j = i + 1;
+      while (j < messages.length && messages[j].role === "tool" && ids.has(messages[j].tool_call_id)) {
+        responses.push(messages[j]);
+        j++;
+      }
+      const answered = new Set(responses.map((r) => r.tool_call_id));
+      if (answered.size === ids.size) {
+        out.push(m, ...responses);
+      }
+      // else: incomplete exchange — drop the assistant turn + any partial responses.
+      i = j - 1;
+    } else if (m.role === "tool") {
+      // Orphan tool message (its assistant turn isn't in the window) — skip.
+      continue;
+    } else {
+      out.push(m);
+    }
+  }
+  return out;
 }
 
 /**

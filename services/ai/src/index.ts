@@ -16,6 +16,7 @@ import customDbAdminRoutes from "./routes/custom-db-admin";
 import connectorsAdminRoutes from "./routes/connectors-admin";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
+import aiAgentBuilderRoutes from "./routes/ai-agent-builder";
 import aiSkillsRoutes from "./routes/ai-skills";
 import routerRuleRoutes from "./routes/router-rules";
 import flowCanvasRoutes from "./routes/flow-canvas";
@@ -88,6 +89,9 @@ app.use("/api", customApiAdminRoutes);
 app.use("/api", customDbAdminRoutes);
 app.use("/api", connectorsAdminRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
+// Mount the builder BEFORE ai-agents so its routes (/builder/*) resolve
+// before ai-agents' `GET /:id` could shadow them.
+app.use("/api/ai-agents/builder", aiAgentBuilderRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
 app.use("/api/ai-skills", aiSkillsRoutes);
 app.use("/api/router-rules", routerRuleRoutes);

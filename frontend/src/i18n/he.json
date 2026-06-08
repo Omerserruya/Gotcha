@@ -4,6 +4,7 @@
     "loading": "טוען..."
   },
   "nav": {
+    "home": "בית",
     "conversations": "תיבת דואר",
     "dashboard": "לוח בקרה",
     "bot": "בוט",
@@ -1506,15 +1507,27 @@
   "onboarding": {
     "channelsBanner": "בחרו WhatsApp, אינסטגרם או אימייל כדי לחבר את הערוץ הראשון.",
     "missions": {
-      "title": "להתחיל",
+      "title": "השלמת ההגדרה",
+      "subtitle": "כמה צעדים קצרים כדי להעלות את ה-AI לאוויר.",
       "hide": "הסתר",
-      "next": "הבא",
+      "dismiss": "סגירת רשימת ההגדרה",
+      "show": "השלמת ההגדרה",
+      "next": "הצעד הבא",
+      "stepLabel": "צעד {n}",
+      "doneLabel": "הושלם",
       "items": {
         "confirm_business": "אישור פרטי העסק",
         "connect_channel": "חיבור ערוץ",
         "send_test_reply": "שליחת תגובת בדיקה",
         "review_agent_tone": "סקירת הטון של ה-AI",
         "invite_teammate": "הזמנת חבר צוות"
+      },
+      "descriptions": {
+        "confirm_business": "ספרו לנו מה העסק שלכם עושה כדי שה-AI ידבר בשמכם.",
+        "connect_channel": "חברו וואטסאפ, אינסטגרם או צ'אט באתר כדי להתחיל לקבל הודעות.",
+        "send_test_reply": "שלחו הודעה וצפו ב-AI עונה בזמן אמת.",
+        "review_agent_tone": "ודאו שה-AI נשמע בדיוק כפי שאתם רוצים.",
+        "invite_teammate": "הוסיפו חברי צוות שיטפלו בשיחות לצד ה-AI."
       }
     }
   },

@@ -176,6 +176,164 @@ export function clearAgentMemory(token: string) {
   return req<{ removed: number }>("POST", "/api/agent/clear", token);
 }
 
+// ─── AI Employee Builder (dynamic creation agent) ───────────
+//
+// Replaces the old static creation wizard. The builder interviews the admin
+// and assembles one AIAgent config via tool-calls. The DRAFT row's id IS the
+// session id; each turn streams tokens + draft updates over SSE.
+
+export interface BuilderDraftSnapshot {
+  id: string;
+  name: string;
+  role: string;
+  status: string;
+  companyOverview: string | null;
+  goal: string | null;
+  successCriteria: string | null;
+  tone: string;
+  style: Record<string, boolean>;
+  languages: Record<string, boolean>;
+  persona: Record<string, unknown> | null;
+  escalationRules: Array<{ label?: string; enabled?: boolean }>;
+  escalationMessage: string;
+  conversationFlow: Array<{ action?: string; details?: string }>;
+  customGuardrails: string[];
+  channels: string[];
+  funnel: { id: string; funnelId: string; stageCount: number } | null;
+  knowledge: Array<{ id: string; name: string }>;
+  tools: Array<{ tenantToolId: string; name: string; integration: string }>;
+}
+
+export type BuilderSSEEvent =
+  | { type: "ready"; sessionId: string }
+  | { type: "token"; text: string }
+  | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
+  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string }
+  | { type: "draft_update"; draft: BuilderDraftSnapshot }
+  | { type: "round_end"; round: number; hadToolCalls: boolean }
+  | { type: "finalized"; draft: BuilderDraftSnapshot; ready: boolean; missing: string[] }
+  | { type: "done"; usage: unknown; rounds: number }
+  | { type: "error"; message: string }
+  | { type: "close" };
+
+export function builderStart(token: string, departmentId?: string | null, locale?: string) {
+  return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string } }>(
+    "POST",
+    "/api/ai-agents/builder/start",
+    token,
+    { departmentId: departmentId ?? null, locale },
+  );
+}
+
+export function builderGetDraft(token: string, agentId: string) {
+  return req<{ data: { draft: BuilderDraftSnapshot; ready: boolean; missing: string[] } }>(
+    "GET",
+    `/api/ai-agents/builder/${agentId}/draft`,
+    token,
+  );
+}
+
+// Knowledge + tool options for the builder's checkbox-card UI.
+export interface BuilderOptionTool { tenantToolId: string; name: string; integration: string; risk: string; attached: boolean }
+export interface BuilderOptionKb { id: string; name: string; attached: boolean }
+export function builderGetOptions(token: string, agentId: string) {
+  return req<{ data: { tools: BuilderOptionTool[]; knowledgeBases: BuilderOptionKb[] } }>(
+    "GET",
+    `/api/ai-agents/builder/${agentId}/options`,
+    token,
+  );
+}
+export function builderToggleTool(token: string, agentId: string, tenantToolId: string, attach: boolean) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/tool`,
+    token,
+    { tenantToolId, attach },
+  );
+}
+export function builderToggleKnowledge(token: string, agentId: string, knowledgeBaseId: string, attach: boolean) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/knowledge`,
+    token,
+    { knowledgeBaseId, attach },
+  );
+}
+
+// ─── Readiness Test ─────────────────────────────────────────
+export type ReadinessCoverage = "full" | "partial" | "none";
+export interface ReadinessQuestion {
+  question: string;
+  coverage: ReadinessCoverage;
+  reason: string;
+  gapType: "knowledge" | "tool" | "data" | "none";
+}
+export interface ReadinessRecommendation {
+  type: "add_knowledge" | "connect_tool" | "add_business_data" | "add_faq" | "create_workflow" | "other";
+  title: string;
+  detail: string;
+}
+export interface ReadinessReport {
+  score: number;
+  totals: { full: number; partial: number; none: number; total: number };
+  questions: ReadinessQuestion[];
+  recommendations: ReadinessRecommendation[];
+  generatedAt: string;
+}
+export function builderReadinessTest(token: string, agentId: string, locale?: string) {
+  return req<{ data: ReadinessReport }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/readiness-test`,
+    token,
+    { locale },
+  );
+}
+
+export async function builderRunStream(
+  token: string,
+  input: { agentId: string; message: string; locale?: string },
+  onEvent: (ev: BuilderSSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/ai-agents/builder/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    onEvent({ type: "error", message: text || `builder run failed (${res.status})` });
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) >= 0) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      if (!frame.trim() || frame.startsWith(":")) continue;
+      const dataLines = frame
+        .split("\n")
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).trim());
+      if (dataLines.length === 0) continue;
+      try {
+        onEvent(JSON.parse(dataLines.join("\n")) as BuilderSSEEvent);
+      } catch {
+        // skip malformed frame
+      }
+    }
+  }
+}
+
 // ─── F4 bot-surface approvals (new) ────────────────────────
 // These target the NEW conversation-service /api/approvals route
 // (not the legacy action-planner one) and power the in-inbox

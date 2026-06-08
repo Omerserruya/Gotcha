@@ -127,6 +127,34 @@ const AirtableAdapter: ProviderAdapter = {
         throw new Error(`unknown_airtable_tool:${toolName}`);
     }
   },
+
+  // OAuth2 token refresh (Airtable access tokens are short-lived; refresh
+  // tokens rotate on use). PAT connections have no refreshToken and never
+  // reach here — the framework only refreshes when expiresAt is set + passed.
+  async refreshTokens(credentials) {
+    const clientId = process.env.AIRTABLE_CLIENT_ID;
+    const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
+    if (!clientId || !credentials.refreshToken) throw new Error("airtable_refresh_not_configured");
+    const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+    if (clientSecret) headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+    const body = new URLSearchParams({
+      grant_type: "refresh_token",
+      refresh_token: credentials.refreshToken,
+      client_id: clientId,
+    });
+    const res = await fetch("https://airtable.com/oauth2/v1/token", { method: "POST", headers, body: body.toString() });
+    if (!res.ok) {
+      const t = await res.text().catch(() => "");
+      throw new Error(`airtable_refresh_${res.status}: ${t.slice(0, 200)}`);
+    }
+    const j: any = await res.json();
+    return {
+      accessToken: j.access_token,
+      refreshToken: j.refresh_token,
+      expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000) : undefined,
+      scope: j.scope,
+    };
+  },
 };
 
 async function airtable(pat: string, method: string, url: string, body?: unknown): Promise<unknown> {
@@ -153,9 +181,27 @@ export async function airtableListBases(pat: string): Promise<Array<{ id: string
   return (r.bases || []).map((b: any) => ({ id: b.id, name: b.name }));
 }
 
-export async function airtableListTables(pat: string, baseId: string): Promise<Array<{ id: string; name: string }>> {
-  const r: any = await airtable(pat, "GET", `https://api.airtable.com/v0/meta/bases/${baseId}/tables`);
+export async function airtableListTables(token: string, baseId: string): Promise<Array<{ id: string; name: string }>> {
+  const r: any = await airtable(token, "GET", `https://api.airtable.com/v0/meta/bases/${baseId}/tables`);
   return (r.tables || []).map((t: any) => ({ id: t.id, name: t.name }));
+}
+
+/** List the columns of a specific table — powers the mapping UI. */
+export async function airtableListFields(token: string, baseId: string, tableId: string): Promise<Array<{ id: string; name: string; type: string }>> {
+  const r: any = await airtable(token, "GET", `https://api.airtable.com/v0/meta/bases/${baseId}/tables`);
+  const table = (r.tables || []).find((t: any) => t.id === tableId || t.name === tableId);
+  return (table?.fields || []).map((f: any) => ({ id: f.id, name: f.name, type: f.type }));
+}
+
+/**
+ * Create a column on a table. Requires the OAuth token to carry the
+ * `schema.bases:write` scope. Used to auto-create the notes / idempotency
+ * columns we own (never the tenant's identifier columns). `type` is an
+ * Airtable field type, e.g. "multilineText" or "singleLineText".
+ */
+export async function airtableCreateField(token: string, baseId: string, tableId: string, name: string, type = "multilineText"): Promise<{ id: string; name: string; type: string }> {
+  const r: any = await airtable(token, "POST", `https://api.airtable.com/v0/meta/bases/${baseId}/tables/${tableId}/fields`, { name, type });
+  return { id: r.id, name: r.name, type: r.type };
 }
 
 registerAdapter(AirtableAdapter);

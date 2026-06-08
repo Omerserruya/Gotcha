@@ -437,6 +437,25 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # AI Employee builder — /run streams via SSE and /readiness-test is a
+        # single long LLM call. Longest-prefix match overrides /api/ai-agents:
+        # buffering off + 600s timeout so neither is cut off by nginx's 60s
+        # default. (Knowledge file uploads in the wizard also pass here.)
+        location /api/ai-agents/builder {
+            limit_req zone=api burst=20 nodelay;
+            client_max_body_size 12m;
+            proxy_pass http://ai_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/ai-agents {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -485,6 +504,23 @@ http {
         location /api/ai-debug {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # AI Employee runtime — POST /api/agent/run streams via SSE. Disable
+        # buffering, keep the connection alive, and raise the read timeout so
+        # long-running tool loops aren't cut off by nginx.
+        location /api/agent {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -713,6 +749,35 @@ http {
 
         location ~ ^/t/([^/]+)/api/agent-scores(.*)$ {
             proxy_pass http://ai_service/api/agent-scores$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # AI Employee runtime, tenant-scoped (SSE — see /api/agent above).
+        location ~ ^/t/([^/]+)/api/agent(.*)$ {
+            proxy_pass http://ai_service/api/agent$2$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # AI Employee builder, tenant-scoped (SSE + long readiness POST).
+        location ~ ^/t/([^/]+)/api/ai-agents/builder(.*)$ {
+            proxy_pass http://ai_service/api/ai-agents/builder$2$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            client_max_body_size 12m;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

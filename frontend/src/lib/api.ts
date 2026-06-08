@@ -775,9 +775,12 @@ export function saveBusinessProfile(token: string, data: {
   // typed so we can re-run the analysis later from settings.
   businessGoals?: string[];
   websiteDomain?: string;
-  // Legacy fields — kept optional so callers outside the 2-screen flow
-  // (e.g. settings) can still patch them; onboarding ignores them.
+  // Onboarding refactor — structured understanding confirmed in Gate 1.
   industry?: string;
+  country?: string;
+  primaryLanguage?: string;
+  // Legacy fields — kept optional so callers outside the flow
+  // (e.g. settings) can still patch them; onboarding ignores them.
   businessPriority?: string;
   estimatedDailyConversations?: number;
   numberOfAgents?: number;
@@ -787,16 +790,94 @@ export function saveBusinessProfile(token: string, data: {
   });
 }
 
-// Onboarding v2 — analyze a domain to AI-suggest a business description.
+// Onboarding refactor — analyze a domain to AI-understand the business.
+export interface BusinessUnderstanding {
+  name: string;
+  industry: string;
+  country: string;
+  language: string;
+  description: string;
+}
 export interface AnalyzeDomainResult {
   ok: boolean;
   domain?: string;
   description?: string;
+  understanding?: BusinessUnderstanding;
   reason?: "invalid_domain" | "fetch_failed" | "ai_unavailable" | "no_summary";
 }
 export function analyzeBusinessDomain(token: string, domain: string, locale?: string) {
   return apiFetch<{ data: AnalyzeDomainResult }>("/api/onboarding/analyze-domain", {
     token, method: "POST", body: JSON.stringify({ domain, locale }),
+  });
+}
+
+// Onboarding refactor — record the chosen system of truth (Gate 2).
+export type CoreSystemSlug = "hubspot" | "salesforce" | "zoho_crm" | "shopify" | "fireberry" | "airtable";
+export function setCoreSystem(token: string, slug: CoreSystemSlug) {
+  return apiFetch<{ data: { primarySystem: string; connectedSlug: string | null; connected: boolean } }>(
+    "/api/onboarding/core-system",
+    { token, method: "POST", body: JSON.stringify({ slug }) },
+  );
+}
+
+// API-key style connect (Fireberry tokenid, and other API_KEY integrations).
+export function connectApiKeyIntegration(token: string, slug: string, credentials: Record<string, string>, config?: Record<string, unknown>) {
+  return apiFetch<{ ok: boolean }>(`/api/connectors/${slug}/connect`, {
+    token, method: "POST", body: JSON.stringify({ credentials, config: config || {} }),
+  });
+}
+
+// ─── Airtable as CRM source — base/table/column mapping (post-OAuth) ──
+export type AirtableMeta = { id: string; name: string };
+export type AirtableField = { id: string; name: string; type: string };
+export function airtableListBasesOnboarding(token: string) {
+  return apiFetch<{ data: AirtableMeta[] }>("/api/connectors/airtable/oauth/bases", { token });
+}
+export function airtableListTablesOnboarding(token: string, baseId: string) {
+  return apiFetch<{ data: AirtableMeta[] }>(`/api/connectors/airtable/oauth/tables?baseId=${encodeURIComponent(baseId)}`, { token });
+}
+export function airtableListFieldsOnboarding(token: string, baseId: string, tableId: string) {
+  return apiFetch<{ data: AirtableField[] }>(`/api/connectors/airtable/oauth/fields?baseId=${encodeURIComponent(baseId)}&tableId=${encodeURIComponent(tableId)}`, { token });
+}
+export interface AirtableMappingPayload {
+  baseId: string;
+  tableId: string;
+  fieldMap: { email?: string; phone?: string; display_name?: string; stage?: string };
+  notesField?: string;
+  idempotencyField?: string;
+  createMissing?: boolean;
+}
+export function saveAirtableMapping(token: string, payload: AirtableMappingPayload) {
+  return apiFetch<{ data: { id: string; config: Record<string, unknown> } | null; warning?: string }>(
+    "/api/connectors/airtable/mapping",
+    { token, method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+// Setup Hub — non-linear setup map tiles + done flags.
+export type SetupTileId = "knowledge_base" | "ai_employees" | "workflows" | "settings" | "channels" | "integrations";
+export interface SetupTile {
+  id: SetupTileId;
+  done: boolean;
+  deepLink: string;
+  stage: "core" | "later";
+  meta?: { slug?: string | null };
+}
+export function getSetupMap(token: string) {
+  return apiFetch<{ data: { tiles: SetupTile[]; sourceSystem: string | null; sourceConnected: boolean; completedCount: number; totalCount: number } }>(
+    "/api/onboarding/setup-map",
+    { token },
+  );
+}
+
+// Persistent guidance layer — per-feature first-time state.
+export type GuideState = "unseen" | "snoozed" | "done";
+export function getOnboardingGuides(token: string) {
+  return apiFetch<{ data: { guides: Record<string, GuideState> } }>("/api/onboarding/guides", { token });
+}
+export function patchOnboardingGuide(token: string, feature: string, state: GuideState) {
+  return apiFetch<{ data: { guides: Record<string, GuideState> } }>("/api/onboarding/guides", {
+    token, method: "PATCH", body: JSON.stringify({ feature, state }),
   });
 }
 
@@ -862,9 +943,10 @@ export function getOnboardingDepartments(token: string) {
   return apiFetch<{ data: any[] }>("/api/onboarding/departments", { token });
 }
 
-export function completeOnboarding(token: string) {
+export function completeOnboarding(token: string, opts?: { skipCoreSystem?: boolean }) {
   return apiFetch<{ data: any }>("/api/onboarding/complete", {
     token, method: "POST",
+    body: JSON.stringify({ skipCoreSystem: opts?.skipCoreSystem === true }),
   });
 }
 
@@ -1149,6 +1231,17 @@ export function getIntegrationTools(token: string, slug: string, opts?: { aiAgen
 export function toggleIntegrationTool(token: string, slug: string, toolSlug: string, isEnabled: boolean) {
   return apiFetch<{ data: any }>(`/api/integrations/${slug}/tools/${toolSlug}`, {
     token, method: "PUT", body: JSON.stringify({ isEnabled }),
+  });
+}
+
+/**
+ * Opt an integration in/out as the tenant's CRM source of truth. Today only
+ * Shopify supports this — when on, the bot reads customer context (and writes
+ * notes/tags) from Shopify instead of any CRM-category integration.
+ */
+export function setIntegrationCrmSource(token: string, slug: string, useAsCrm: boolean) {
+  return apiFetch<{ data: { id: string; useAsCrm: boolean } }>(`/api/integrations/${slug}/crm-source`, {
+    token, method: "PUT", body: JSON.stringify({ useAsCrm }),
   });
 }
 

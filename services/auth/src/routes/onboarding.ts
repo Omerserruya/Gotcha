@@ -260,7 +260,7 @@ router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response):
   try {
     const tenant = await prisma.tenant.findUnique({
       where: { id: req.tenantId! },
-      select: { id: true, name: true, slug: true, status: true },
+      select: { id: true, name: true, slug: true, status: true, defaultLocale: true },
     });
 
     if (!tenant) {
@@ -284,11 +284,26 @@ router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response):
       where: { tenantId: req.tenantId! },
     });
 
+    const coreSystemConnected = await connectedCoreSystem(req.tenantId!);
+
     res.json({
       data: {
-        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, status: tenant.status },
+        tenant: { id: tenant.id, name: tenant.name, slug: tenant.slug, status: tenant.status, defaultLocale: (tenant as any).defaultLocale },
         onboarding: onboarding || { currentStep: "BUSINESS_PROFILE", completedAt: null },
         businessProfileCompleted: !!businessProfile,
+        // Structured understanding so Gate 1 can re-hydrate on refresh.
+        businessProfile: businessProfile
+          ? {
+              organizationName: businessProfile.organizationName,
+              businessDescription: businessProfile.businessDescription,
+              industry: businessProfile.industry,
+              country: (businessProfile as any).country ?? null,
+              primaryLanguage: (businessProfile as any).primaryLanguage ?? null,
+              primarySystem: (businessProfile as any).primarySystem ?? null,
+              websiteDomain: businessProfile.websiteDomain ?? null,
+            }
+          : null,
+        coreSystemConnected,
         departmentsConfigured: departments.length,
         aiAgentsConfigured: aiAgentCount,
       },
@@ -315,6 +330,11 @@ const businessProfileSchema = z.object({
   // works against this endpoint.
   businessGoals: z.array(z.string().min(1).max(64)).max(6).optional(),
   websiteDomain: z.string().max(255).optional(),
+  // Onboarding refactor — structured business understanding confirmed by
+  // the user on the single "We understood your business" card.
+  industry: z.string().max(120).optional(),
+  country: z.string().max(120).optional(),
+  primaryLanguage: z.string().max(10).optional(),
 });
 
 router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileSchema), async (req: Request, res: Response): Promise<void> => {
@@ -334,12 +354,15 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
       return;
     }
 
-    const { organizationName, businessDescription, locale, businessGoals, websiteDomain } = req.body as {
+    const { organizationName, businessDescription, locale, businessGoals, websiteDomain, industry, country, primaryLanguage } = req.body as {
       organizationName: string;
       businessDescription: string;
       locale?: string;
       businessGoals?: string[];
       websiteDomain?: string;
+      industry?: string;
+      country?: string;
+      primaryLanguage?: string;
     };
 
     const existing = await prisma.businessProfile.findUnique({
@@ -347,11 +370,20 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
       select: { industry: true, businessPriority: true, estimatedDailyConversations: true, numberOfAgents: true },
     });
 
+    // Structured-understanding fields only overwrite when a non-empty value
+    // is supplied, so a later partial save never wipes a confirmed value.
+    const understandingPatch = {
+      ...(industry && industry.trim() ? { industry: industry.trim() } : {}),
+      ...(country && country.trim() ? { country: country.trim() } : {}),
+      ...(primaryLanguage && primaryLanguage.trim() ? { primaryLanguage: primaryLanguage.trim() } : {}),
+    };
+
     const profile = await prisma.businessProfile.upsert({
       where: { tenantId: req.tenantId! },
       update: {
         organizationName,
         businessDescription,
+        ...understandingPatch,
         ...(businessGoals !== undefined ? { businessGoals } : {}),
         ...(websiteDomain !== undefined ? { websiteDomain } : {}),
       },
@@ -359,10 +391,12 @@ router.post("/business-profile", requireRole("ADMIN"), validate(businessProfileS
         tenantId: req.tenantId!,
         organizationName,
         businessDescription,
-        industry: existing?.industry ?? "Other",
+        industry: (industry && industry.trim()) || existing?.industry || "Other",
         businessPriority: existing?.businessPriority ?? "FAST_RESPONSE",
         estimatedDailyConversations: existing?.estimatedDailyConversations ?? 100,
         numberOfAgents: existing?.numberOfAgents ?? 5,
+        ...(country && country.trim() ? { country: country.trim() } : {}),
+        ...(primaryLanguage && primaryLanguage.trim() ? { primaryLanguage: primaryLanguage.trim() } : {}),
         ...(businessGoals !== undefined ? { businessGoals } : {}),
         ...(websiteDomain !== undefined ? { websiteDomain } : {}),
       },
@@ -655,6 +689,20 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       return;
     }
 
+    // Onboarding refactor — the activation gate. Normally exactly ONE "system
+    // of truth" (CRM or Shopify) is connected to finish onboarding. The user
+    // may also explicitly skip ("not now") — they can connect it later from
+    // the Setup Hub. Anything else stays non-linear in the Setup Hub.
+    const skipCoreSystem = req.body?.skipCoreSystem === true;
+    const coreSystem = await connectedCoreSystem(req.tenantId!);
+    if (!coreSystem && !skipCoreSystem) {
+      res.status(400).json({
+        error: "core_system_required",
+        message: "Connect your main business system (HubSpot, Salesforce, Zoho, Fireberry, Airtable, or Shopify) to finish onboarding.",
+      });
+      return;
+    }
+
     // Auto-create a single "General" department if the tenant has none.
     // Keeps the AI generator happy without forcing the user through a
     // wizard step they don't need on day one.
@@ -871,6 +919,148 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
   }
 });
 
+// ─── Core System (source of truth) + Setup Hub map + guides ──
+//
+// The onboarding refactor makes ONE "system of truth" the activation event.
+// These slugs match the IntegrationCatalog rows + OAuth routes in the AI
+// service (note Zoho's catalog slug is `zoho_crm`).
+
+const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"] as const;
+
+/** Returns the slug of the first CONNECTED + usable core system, or null.
+ *  Airtable is only "usable" once its column mapping is saved (a CONNECTED
+ *  Airtable with no fieldMap is mid-setup, not a working source of truth). */
+async function connectedCoreSystem(tenantId: string): Promise<string | null> {
+  const rows = await (prisma as any).tenantIntegration.findMany({
+    where: { tenantId, status: "CONNECTED", integration: { slug: { in: CORE_SYSTEM_SLUGS as unknown as string[] } } },
+    include: { integration: true },
+    orderBy: { createdAt: "asc" },
+  });
+  for (const ti of rows) {
+    const slug = ti?.integration?.slug as string | undefined;
+    if (!slug) continue;
+    if (slug === "airtable") {
+      const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as any;
+      const fm = cfg.fieldMap;
+      if (!fm || !(fm.email || fm.phone) || !fm.display_name) continue; // unmapped → not usable yet
+    }
+    return slug;
+  }
+  return null;
+}
+
+// POST /core-system — record the chosen system of truth. For Shopify we flip
+// `config.useAsCrm` so the CRM resolver treats it as the source of truth
+// (mirrors the AI service's /integrations/shopify/crm-source toggle).
+const coreSystemSchema = z.object({
+  slug: z.enum(CORE_SYSTEM_SLUGS),
+});
+router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { slug } = req.body as { slug: string };
+    await prisma.businessProfile.updateMany({
+      where: { tenantId: req.tenantId! },
+      data: { primarySystem: slug },
+    });
+    if (slug === "shopify") {
+      const ti = await (prisma as any).tenantIntegration.findFirst({
+        where: { tenantId: req.tenantId!, integration: { slug: "shopify" } },
+        select: { id: true, config: true },
+      });
+      if (ti) {
+        const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>;
+        cfg.useAsCrm = true;
+        await (prisma as any).tenantIntegration.update({ where: { id: ti.id }, data: { config: cfg } });
+      }
+    }
+    const connected = await connectedCoreSystem(req.tenantId!);
+    res.json({ data: { primarySystem: slug, connectedSlug: connected, connected: connected === slug } });
+  } catch (err) {
+    console.error("Set core system error:", err);
+    res.status(500).json({ error: "Failed to set core system" });
+  }
+});
+
+// GET /setup-map — the non-linear Setup Hub tiles + done flags, derived from
+// real product signals (no manual check-offs). Tiles tagged stage:"later"
+// (Channels, extra Integrations) are shown but excluded from the headline
+// progress count.
+router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.tenantId!;
+    const [coreSlug, kbCount, aiAgent, flowCount, userCount, channel, connectedIntegrations, profile] = await Promise.all([
+      connectedCoreSystem(tenantId),
+      prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
+      prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } }).catch(() => null),
+      (prisma as any).chatbotFlow?.count?.({ where: { tenantId } }).catch?.(() => 0) ?? Promise.resolve(0),
+      prisma.user.count({ where: { tenantId, isActive: true } }),
+      prisma.channelAccount.findFirst({ where: { tenantId, connectionStatus: "CONNECTED" }, select: { id: true } }).catch(() => null),
+      (prisma as any).tenantIntegration.count({ where: { tenantId, status: "CONNECTED" } }).catch(() => 0),
+      prisma.businessProfile.findUnique({ where: { tenantId }, select: { primarySystem: true } }).catch(() => null),
+    ]);
+
+    // Tiles match the Setup Hub spec: Knowledge Base, AI Employees,
+    // Workflows, Settings (core, counted) + Integrations, Channels (later,
+    // shown but not counted). The chosen source-of-truth is surfaced
+    // separately as `sourceSystem` + reflected in the Integrations tile.
+    const tiles = [
+      { id: "knowledge_base", done: (kbCount || 0) > 0, deepLink: "/ai-studio/knowledge", stage: "core" as const },
+      { id: "ai_employees", done: !!aiAgent, deepLink: "/ai-studio", stage: "core" as const },
+      { id: "workflows", done: (flowCount || 0) > 0, deepLink: "/ai-studio", stage: "core" as const },
+      { id: "settings", done: userCount > 1, deepLink: "/settings", stage: "core" as const },
+      { id: "integrations", done: !!coreSlug, deepLink: "/integrations", stage: "later" as const, meta: { slug: coreSlug || profile?.primarySystem || null } },
+      { id: "channels", done: !!channel, deepLink: "/channels", stage: "later" as const },
+    ];
+    const core = tiles.filter((t) => t.stage === "core");
+    res.json({
+      data: {
+        tiles,
+        sourceSystem: coreSlug || profile?.primarySystem || null,
+        sourceConnected: !!coreSlug,
+        completedCount: core.filter((t) => t.done).length,
+        totalCount: core.length,
+      },
+    });
+  } catch (err) {
+    console.error("Get setup-map error:", err);
+    res.status(500).json({ error: "Failed to get setup map" });
+  }
+});
+
+// GET/PATCH /guides — per-user first-time guidance state for the persistent
+// onboarding layer. Available to ALL roles (agents get guidance too), so no
+// requireRole gate. State machine per feature: unseen -> snoozed | done.
+router.get("/guides", async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId as string | undefined;
+    if (!userId) { res.status(401).json({ error: "no user" }); return; }
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { onboardingGuides: true } });
+    res.json({ data: { guides: (u?.onboardingGuides as Record<string, string>) || {} } });
+  } catch (err) {
+    console.error("Get guides error:", err);
+    res.status(500).json({ error: "Failed to get guides" });
+  }
+});
+
+const guidePatchSchema = z.object({
+  feature: z.string().min(1).max(64),
+  state: z.enum(["unseen", "snoozed", "done"]),
+});
+router.patch("/guides", validate(guidePatchSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const userId = (req as any).user?.userId as string | undefined;
+    if (!userId) { res.status(401).json({ error: "no user" }); return; }
+    const { feature, state } = req.body as { feature: string; state: string };
+    const u = await prisma.user.findUnique({ where: { id: userId }, select: { onboardingGuides: true } });
+    const guides = { ...((u?.onboardingGuides as Record<string, string>) || {}), [feature]: state };
+    await prisma.user.update({ where: { id: userId }, data: { onboardingGuides: guides } });
+    res.json({ data: { guides } });
+  } catch (err) {
+    console.error("Patch guide error:", err);
+    res.status(500).json({ error: "Failed to update guide" });
+  }
+});
+
 // ─── Domain Analysis (Onboarding v2 — AI-suggested description) ──
 //
 // Fetches the user's homepage and asks the LLM to produce a one-sentence
@@ -958,17 +1148,27 @@ router.post("/analyze-domain", requireRole("ADMIN"), validate(analyzeDomainSchem
 
     const lang = LOCALE_NAMES[locale] || "English";
     const model = process.env.ONBOARDING_CHAT_MODEL || "gpt-4o-mini";
-    let suggestion: string | null = null;
+    let understanding: {
+      name: string; industry: string; country: string; language: string; description: string;
+    } | null = null;
     try {
       const response = await client.chat.completions.create({
         model,
-        temperature: 0.3,
-        max_tokens: 160,
+        temperature: 0.2,
+        max_tokens: 320,
         response_format: { type: "json_object" },
         messages: [
           {
             role: "system",
-            content: `You analyze a business homepage and produce a one-sentence summary of WHAT THE BUSINESS DOES, written in ${lang}. Respond ONLY with JSON: {"description": "..."}. The description must be 1-2 sentences, plain text, no emojis, no marketing fluff, no mention of the homepage or the analysis. If you cannot tell what the business does, set description to an empty string.`,
+            content: `You analyze a business homepage and extract a structured profile of the business. Respond ONLY with JSON of this exact shape:
+{"name":"","industry":"","country":"","language":"","description":""}
+Rules:
+- "name": the business / brand name. Plain text.
+- "industry": a short industry label (e.g. "E-commerce / Fashion", "SaaS", "Law firm"). 1-4 words.
+- "country": the country the business primarily operates in, in English (e.g. "Israel", "United States"). Best guess from language, TLD, addresses, currency. Empty string if unknown.
+- "language": the primary language of the site as an ISO-639-1 code ("en", "he", "ar", ...).
+- "description": 1-2 sentences in ${lang} describing WHAT THE BUSINESS DOES. No emojis, no marketing fluff, no mention of the homepage or this analysis.
+Set any field you cannot determine to an empty string. Do not invent specifics.`,
           },
           {
             role: "user",
@@ -990,20 +1190,31 @@ router.post("/analyze-domain", requireRole("ADMIN"), validate(analyzeDomainSchem
 
       const content = response.choices[0]?.message?.content;
       if (content) {
-        const parsed = JSON.parse(content);
-        const desc = typeof parsed.description === "string" ? parsed.description.trim() : "";
-        if (desc.length >= 10) suggestion = desc;
+        const p = JSON.parse(content);
+        const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
+        const desc = str(p.description);
+        if (desc.length >= 10) {
+          understanding = {
+            name: str(p.name),
+            industry: str(p.industry),
+            country: str(p.country),
+            language: str(p.language) || locale,
+            description: desc,
+          };
+        }
       }
     } catch (err: any) {
       console.warn("[Onboarding] Domain analysis LLM failed:", err?.message);
     }
 
-    if (!suggestion) {
+    if (!understanding) {
       res.json({ data: { ok: false, reason: "no_summary", domain: origin } });
       return;
     }
 
-    res.json({ data: { ok: true, domain: origin, description: suggestion } });
+    // `description` kept at top level for backward compatibility with older
+    // callers; the structured fields are the new surface.
+    res.json({ data: { ok: true, domain: origin, description: understanding.description, understanding } });
   } catch (err) {
     console.error("Analyze domain error:", err);
     res.status(500).json({ error: "Failed to analyze domain" });

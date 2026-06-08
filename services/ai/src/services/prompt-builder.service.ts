@@ -55,6 +55,10 @@ import { sanitizeUntrusted } from "./prompt-sanitizer.service";
 
 const PROMPTS_DIR = path.resolve(__dirname, "../prompts");
 const GUARDRAILS = readPrompt("guardrails.md");
+// Platform-wide "be a real person" behavior layer. Replaces the old
+// per-agent tone/style config — humanlike behavior is now governed centrally
+// here, not by toggles. Rendered once in BLOCK 1 (per-agent, cache-stable).
+const PERSONALITY = readPrompt("personality.md");
 // Language-specific style skills. Loaded once at module init and appended
 // to BLOCK 2 (per-conversation) only when the detected locale matches —
 // keeps BLOCK 1 (per-agent) byte-stable and reuses BLOCK 2's existing
@@ -221,6 +225,10 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
 function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
   const parts: string[] = [];
   push(parts, buildIdentity(opts, strategy));
+  // Personality skill — the platform-wide humanlike-behavior layer. Sits
+  // directly under Identity so "who you are" is immediately followed by
+  // "how you behave". Customer-facing modes only.
+  if (opts.behaviorState.mode !== "generator" && PERSONALITY) push(parts, PERSONALITY);
   push(parts, buildAgentPlaybooksStatic(opts));
   push(parts, buildGuardrailsBase(opts));
   if (parts.length === 0) return null;
@@ -472,21 +480,11 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     }
   }
 
-  const tones = (a.tone || "").split(",").map((s) => s.trim()).filter(Boolean);
-  if (tones.length) lines.push(`Voice: ${tones.join(", ")}.`);
-
-  const toneCfg = asRecord(a.toneConfig);
-  if (toneCfg) {
-    const toneLines: string[] = [];
-    if (toneCfg.formalityLevel) toneLines.push(`formality=${toneCfg.formalityLevel}`);
-    if (toneCfg.empathyLevel) toneLines.push(`empathy=${toneCfg.empathyLevel}`);
-    if (toneCfg.assertiveness) toneLines.push(`assertiveness=${toneCfg.assertiveness}`);
-    if (toneCfg.brandAlignment) toneLines.push(`brand=${toneCfg.brandAlignment}`);
-    if (toneLines.length) lines.push(`Tone: ${toneLines.join(", ")}.`);
-  }
-
-  // Tone intensity is BehaviorState-driven — rendered in the per-turn block,
-  // NOT here, so Identity stays byte-stable across turns.
+  // Voice / Tone / Style are no longer per-agent config — humanlike behavior
+  // is governed centrally by the Personality skill (prompts/personality.md),
+  // rendered once in the per-agent block. Only per-turn tone INTENSITY remains
+  // BehaviorState-driven (rendered in the per-turn block), so Identity stays
+  // byte-stable across turns.
 
   const persona = asRecord(a.persona);
   if (persona) {
@@ -511,11 +509,8 @@ function buildIdentity(opts: BuildPromptOpts, _strategy: StrategyContract): stri
     }
   }
 
-  const styleBullets = renderStyleBullets(a.style);
-  if (styleBullets.length) {
-    lines.push("Style:");
-    lines.push(...styleBullets);
-  }
+  // Style bullets (emoji / brevity / first-name / proactivity) removed — these
+  // are now part of the central Personality skill, not per-agent toggles.
 
   return lines.length > 1 ? lines.join("\n") : null;
 }
@@ -1211,7 +1206,7 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
   lines.push("");
   lines.push("## Capability boundary — DO NOT lie about what you can do");
   if (capabilityWhitelist.length > 0) {
-    lines.push("**Tools you can ACTUALLY call this turn:**");
+    lines.push("**Tools you can ACTUALLY call this turn — these are your available next moves. Pick the one that best advances the customer's goal; prefer acting over asking when you already have what you need:**");
     for (const fn of capabilityWhitelist) lines.push(`- \`${fn}\``);
   } else {
     lines.push("**No tools are exposed this turn.** Do not promise any tool-driven action.");

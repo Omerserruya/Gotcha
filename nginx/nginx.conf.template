@@ -430,6 +430,24 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # AI Employee builder — /run streams via SSE and /readiness-test is a
+        # single long LLM call. Longest-prefix override of /api/ai-agents:
+        # buffering off + 600s timeout so neither is cut off by nginx.
+        location /api/ai-agents/builder {
+            limit_req zone=api burst=20 nodelay;
+            client_max_body_size 12m;
+            proxy_pass http://ai_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/ai-agents {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -723,6 +741,22 @@ http {
 
         location ~ ^/t/([^/]+)/api/agent-scores(.*)$ {
             proxy_pass http://ai_service/api/agent-scores$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # AI Employee builder, tenant-scoped (SSE + long readiness POST). Must
+        # precede the generic ai-agents regex below — first match wins.
+        location ~ ^/t/([^/]+)/api/ai-agents/builder(.*)$ {
+            proxy_pass http://ai_service/api/ai-agents/builder$2$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            client_max_body_size 12m;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

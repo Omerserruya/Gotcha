@@ -531,8 +531,10 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   if (opts.followup !== false) {
     tools.push(SCHEDULE_FOLLOWUP_TOOL as any);
     tools.push(SCHEDULE_FOLLOWUP_TEMPLATE_TOOL as any);
-    tools.push(CREATE_TASK_TOOL as any);
   }
+  // create_task is NOT a built-in: it's a CRM action and should be surfaced
+  // as an integration tool (AgentToolPermission), not auto-included here.
+  // The schema + dispatcher are kept so a connected CRM can expose it.
   if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
