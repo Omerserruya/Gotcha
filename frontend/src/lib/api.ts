@@ -797,6 +797,8 @@ export interface BusinessUnderstanding {
   country: string;
   language: string;
   description: string;
+  /** Best-matching Industry Intelligence Pack slug, or "" if none. */
+  packSlug?: string;
 }
 export interface AnalyzeDomainResult {
   ok: boolean;

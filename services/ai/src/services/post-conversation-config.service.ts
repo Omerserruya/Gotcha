@@ -148,6 +148,16 @@ export async function setPostConversationConfig(
  * into the LLM prompt. Always includes the canonical fields the
  * built-in summarizer understands, plus whatever custom keys the tenant
  * declared.
+ *
+ * TODO(ci-phase2): this is the READ site to cut over to the FieldDefinition
+ * registry. Customer Intelligence V2 made `FieldDefinition` the canonical,
+ * scope-aware field store (see intelligence-registry.service.ts), but Phase 1
+ * deliberately left this legacy `summaryFields` read path untouched to avoid a
+ * summarizer regression. Until Phase 2 cuts over, `summaryFields` and
+ * `FieldDefinition` are two stores — they don't currently fight (packs/Fields
+ * Builder write only to FieldDefinition), but this overlap MUST be closed.
+ * Migration plan: docs/customer-intelligence-summaryfields-migration.md
+ * Rationale: docs/architecture/adr/0001-customer-intelligence-phase1.md
  */
 export async function getSummarizerAllowedFields(tenantId: string): Promise<string[]> {
   const cfg = await getPostConversationConfig(tenantId);

@@ -770,6 +770,92 @@ async function main() {
   }
   console.log(`Action contracts: ${ACTION_CONTRACTS.map((c) => c.trigger).join(", ")}`);
 
+  // ─── Industry Intelligence Packs (V2 — system, shared) ───────
+  // Each pack `fields` entry is a scope-tagged template cloned into
+  // per-tenant FieldDefinition rows when applied. scope/type are lowercase
+  // here and normalized to the Prisma enums by the apply route.
+  // See docs/customer-intelligence-domain-model.md §4.4.
+  type PackField = {
+    key: string;
+    label: string;
+    type: "text" | "number" | "boolean" | "enum" | "date";
+    scope: "customer" | "opportunity" | "conversation";
+    options?: string[];
+    required?: boolean;
+  };
+  const SYSTEM_PACKS: { slug: string; name: string; fields: PackField[] }[] = [
+    {
+      slug: "event_hall",
+      name: "Event Hall",
+      fields: [
+        { key: "event_type", label: "Event Type", type: "enum", scope: "opportunity", options: ["wedding", "bar_mitzvah", "bat_mitzvah", "brit", "corporate", "other"] },
+        { key: "event_date", label: "Event Date", type: "text", scope: "opportunity" },
+        { key: "event_time", label: "Event Time", type: "text", scope: "opportunity" },
+        { key: "guest_count", label: "Guest Count", type: "number", scope: "opportunity", required: true },
+        { key: "budget", label: "Budget", type: "number", scope: "opportunity" },
+        { key: "kosher_level", label: "Kosher Level", type: "enum", scope: "opportunity", options: ["regular", "mehadrin", "badatz"] },
+        { key: "outdoor_ceremony", label: "Outdoor Ceremony", type: "boolean", scope: "opportunity" },
+        { key: "parking_required", label: "Parking Required", type: "boolean", scope: "opportunity" },
+        { key: "special_requests", label: "Special Requests", type: "text", scope: "opportunity" },
+        { key: "bride_name", label: "Bride Name", type: "text", scope: "opportunity" },
+        { key: "groom_name", label: "Groom Name", type: "text", scope: "opportunity" },
+      ],
+    },
+    {
+      slug: "real_estate",
+      name: "Real Estate",
+      fields: [
+        { key: "property_type", label: "Property Type", type: "enum", scope: "opportunity", options: ["apartment", "house", "penthouse", "commercial", "land"] },
+        { key: "rooms", label: "Rooms", type: "number", scope: "opportunity" },
+        { key: "budget", label: "Budget", type: "number", scope: "opportunity" },
+        { key: "location", label: "Location", type: "text", scope: "opportunity" },
+        { key: "move_date", label: "Move Date", type: "text", scope: "opportunity" },
+        { key: "mortgage_required", label: "Mortgage Required", type: "boolean", scope: "opportunity" },
+      ],
+    },
+    {
+      slug: "recruiting",
+      name: "Recruiting",
+      fields: [
+        { key: "desired_position", label: "Desired Position", type: "text", scope: "opportunity" },
+        { key: "expected_salary", label: "Expected Salary", type: "number", scope: "opportunity" },
+        { key: "availability", label: "Availability", type: "text", scope: "opportunity" },
+        { key: "experience_years", label: "Years of Experience", type: "number", scope: "customer" },
+        { key: "security_clearance", label: "Security Clearance", type: "boolean", scope: "customer" },
+      ],
+    },
+    {
+      slug: "ecommerce",
+      name: "E-commerce",
+      fields: [
+        { key: "order_number", label: "Order Number", type: "text", scope: "opportunity" },
+        { key: "order_status", label: "Order Status", type: "enum", scope: "opportunity", options: ["pending", "shipped", "delivered", "returned", "cancelled"] },
+        { key: "product", label: "Product", type: "text", scope: "opportunity" },
+        { key: "refund_requested", label: "Refund Requested", type: "boolean", scope: "opportunity" },
+        { key: "shipping_issue", label: "Shipping Issue", type: "boolean", scope: "opportunity" },
+        { key: "delivery_date", label: "Delivery Date", type: "text", scope: "opportunity" },
+      ],
+    },
+  ];
+  for (const pack of SYSTEM_PACKS) {
+    // tenantId is null for system packs; the (tenantId, slug) unique index
+    // treats NULLs as distinct, so use findFirst + update/create for idempotency.
+    const existing = await prisma.intelligencePack.findFirst({
+      where: { tenantId: null, slug: pack.slug },
+    });
+    if (existing) {
+      await prisma.intelligencePack.update({
+        where: { id: existing.id },
+        data: { name: pack.name, fields: pack.fields as any, isSystem: true },
+      });
+    } else {
+      await prisma.intelligencePack.create({
+        data: { tenantId: null, slug: pack.slug, name: pack.name, fields: pack.fields as any, isSystem: true },
+      });
+    }
+  }
+  console.log(`Industry packs: ${SYSTEM_PACKS.map((p) => p.slug).join(", ")}`);
+
   // ─── Done ───────────────────────────────────────────────────
   console.log("\n✅ Seed complete!\n");
   console.log("Login credentials:");

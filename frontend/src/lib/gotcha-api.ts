@@ -551,3 +551,73 @@ export function updateToolPermission(
 ) {
   return req("PUT", `/api/tool-permissions/${encodeURIComponent(toolName)}`, token, patch);
 }
+
+// ─── Customer Intelligence V2 — Industry Packs + Field Registry ──
+
+export type FieldScope = "customer" | "opportunity" | "conversation";
+export type FieldTypeName = "text" | "number" | "boolean" | "enum" | "date" | "entity_ref";
+export type FieldOriginName = "pack" | "custom" | "discovered";
+
+export interface FieldDefinition {
+  id: string;
+  key: string;
+  label: string;
+  description?: string | null;
+  type: FieldTypeName;
+  scope: FieldScope;
+  options: string[];
+  required: boolean;
+  stageRelevance: string[];
+  aiExtract: boolean;
+  syncToCrm: boolean;
+  crmFieldMap?: Record<string, unknown> | null;
+  origin: FieldOriginName;
+  packSlug?: string | null;
+}
+
+export interface PackFieldTemplate {
+  key: string;
+  label: string;
+  type: FieldTypeName;
+  scope: FieldScope;
+  options?: string[];
+  required?: boolean;
+}
+
+export interface IntelligencePack {
+  id: string;
+  slug: string;
+  name: string;
+  version: number;
+  isSystem: boolean;
+  fields: PackFieldTemplate[];
+}
+
+export type FieldDefinitionInput = Partial<Omit<FieldDefinition, "id" | "origin">>;
+
+export function listIndustryPacks(token: string) {
+  return req<{ ok: boolean; packs: IntelligencePack[] }>("GET", "/api/industry-packs", token);
+}
+
+export function applyIndustryPack(token: string, slug: string) {
+  return req<{ ok: boolean; applied: string[]; skipped: string[]; pack: IntelligencePack }>(
+    "POST", "/api/industry-packs/apply", token, { slug },
+  );
+}
+
+export function listFieldDefinitions(token: string, scope?: FieldScope) {
+  const q = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+  return req<{ ok: boolean; fields: FieldDefinition[] }>("GET", `/api/field-definitions${q}`, token);
+}
+
+export function createFieldDefinition(token: string, input: FieldDefinitionInput) {
+  return req<{ ok: boolean; field: FieldDefinition }>("POST", "/api/field-definitions", token, input);
+}
+
+export function updateFieldDefinition(token: string, id: string, patch: FieldDefinitionInput) {
+  return req<{ ok: boolean; field: FieldDefinition }>("PUT", `/api/field-definitions/${encodeURIComponent(id)}`, token, patch);
+}
+
+export function deleteFieldDefinition(token: string, id: string) {
+  return req<{ ok: boolean }>("DELETE", `/api/field-definitions/${encodeURIComponent(id)}`, token);
+}

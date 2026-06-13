@@ -710,6 +710,10 @@ model BusinessProfile {
   // gate signal; the live connection state is still read from
   // TenantIntegration. NULL = not chosen yet.
   primarySystem               String?          @map("primary_system")
+  // Industry Intelligence Pack matched during onboarding (slug, e.g.
+  // "event_hall"). Applying a pack clones its scoped FieldDefinitions to the
+  // tenant. NULL = generic / not chosen.
+  packSlug                    String?          @map("pack_slug")
   createdAt                   DateTime         @default(now()) @map("created_at")
   updatedAt                   DateTime         @updatedAt @map("updated_at")
 
@@ -2921,4 +2925,201 @@ model UserFeatureGrant {
   @@unique([userId, feature])
   @@index([userId])
   @@map("user_feature_grants")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Customer Intelligence (V2 domain model) — Phase 1 foundation.
+// See docs/customer-intelligence-domain-model.md.
+//
+// Three intelligence scopes with distinct ownership + lifecycle:
+//   CUSTOMER     — durable, per-identity facts (CustomerProfile)
+//   OPPORTUNITY  — per-deal facts (Opportunity), N per customer
+//   CONVERSATION — per-interaction (existing ConversationIntelligence)
+//
+// FieldDefinition is the scope-aware schema registry (evolves the flat
+// PostConversationConfig.summaryFields). IntelligencePack bundles field
+// templates per vertical. IntelligenceFact is the append-only provenance
+// log; entity `facts` JSON is the denormalized read snapshot.
+// ─────────────────────────────────────────────────────────────
+
+enum IntelligenceScope {
+  CUSTOMER
+  OPPORTUNITY
+  CONVERSATION
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  ENUM
+  DATE
+  ENTITY_REF
+}
+
+enum FactSource {
+  MANUAL
+  CRM_INBOUND
+  LLM_CLOSE
+  LLM_LIVE
+  RULE
+  DERIVED
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+  ABANDONED
+  ARCHIVED
+}
+
+enum FieldOrigin {
+  PACK
+  CUSTOM
+  DISCOVERED
+}
+
+// Durable, language-neutral per-identity customer record. The identity spine
+// mirrors CustomerBrief (which becomes a prose projection of this). One row
+// per resolved identity per tenant.
+model CustomerProfile {
+  id            String  @id @default(cuid())
+  tenantId      String  @map("tenant_id")
+  identityKey   String  @map("identity_key")
+  personId      String? @map("person_id")
+  contactId     String? @map("contact_id")
+  crmContactId  String? @map("crm_contact_id")
+  crmObjectKind String? @map("crm_object_kind")
+
+  displayName String? @map("display_name")
+  phone       String?
+  email       String?
+
+  // Denormalized snapshot of durable CUSTOMER-scope facts: { fieldKey: value }.
+  // Source of truth for history/provenance is IntelligenceFact.
+  facts             Json @default("{}")
+  // BEL trust/friction/relationship signals (behavioral).
+  behavioralSignals Json @default("{}") @map("behavioral_signals")
+
+  firstSeenAt DateTime? @map("first_seen_at")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  opportunities Opportunity[]
+
+  @@unique([tenantId, identityKey])
+  @@index([tenantId])
+  @@index([tenantId, crmContactId])
+  @@map("customer_profiles")
+}
+
+// Per-deal intelligence. The home for "industry pack" facts (event_date,
+// guest_count, budget, …). A customer may have many, concurrent or sequential.
+model Opportunity {
+  id                String            @id @default(cuid())
+  tenantId          String            @map("tenant_id")
+  customerProfileId String            @map("customer_profile_id")
+  type              String // pack slug, e.g. "event_hall"
+  packId            String?           @map("pack_id")
+  title             String?
+  stage             String? // references a TenantFunnel/FunnelStage id
+  status            OpportunityStatus @default(OPEN)
+  estimatedValue    Float?            @map("estimated_value")
+  nextAction        String?           @map("next_action")
+
+  // Denormalized snapshot of OPPORTUNITY-scope facts: { fieldKey: value }.
+  facts Json @default("{}")
+  // Cross-entity edges (implicit graph): decision_maker, proposed_entity, …
+  relationships Json @default("{}")
+
+  openedAt       DateTime  @default(now()) @map("opened_at")
+  closedAt       DateTime? @map("closed_at")
+  lastActivityAt DateTime? @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, customerProfileId])
+  @@index([tenantId, status])
+  @@map("opportunities")
+}
+
+// A named, versioned bundle of FieldDefinition templates for a vertical.
+// `tenantId == null` => system pack (shared, shippable). Applying a pack
+// clones its `fields` template into per-tenant FieldDefinition rows.
+model IntelligencePack {
+  id           String   @id @default(cuid())
+  tenantId     String?  @map("tenant_id") // null = system pack
+  slug         String
+  name         String
+  version      Int      @default(1)
+  // SummaryFieldDef[]-shaped template, each entry scope-tagged.
+  fields       Json     @default("[]")
+  defaultRules Json     @default("{}") @map("default_rules")
+  isSystem     Boolean  @default(false) @map("is_system")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([isSystem])
+  @@map("intelligence_packs")
+}
+
+// Per-tenant active schema registry. Each field declares the SCOPE it owns
+// (customer/opportunity/conversation) — the core anti-overwrite mechanic.
+model FieldDefinition {
+  id          String            @id @default(cuid())
+  tenantId    String            @map("tenant_id")
+  key         String // stable snake_case
+  label       String
+  description String?
+  type        FieldType         @default(TEXT)
+  scope       IntelligenceScope @default(OPPORTUNITY)
+  options     Json              @default("[]") // enum values
+  required    Boolean           @default(false)
+  // Stages where the field is expected (Missing-Info engine).
+  stageRelevance Json    @default("[]") @map("stage_relevance")
+  aiExtract      Boolean @default(true) @map("ai_extract")
+  syncToCrm      Boolean @default(true) @map("sync_to_crm")
+  crmFieldMap    Json?   @map("crm_field_map")
+  origin         FieldOrigin @default(CUSTOM)
+  packSlug       String?     @map("pack_slug")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([tenantId, scope])
+  @@map("field_definitions")
+}
+
+// Append-only provenance log. One row per observation of a field. Never
+// deleted — superseded. The entity `facts` snapshot is a fold of this under
+// the merge policy (manual-wins, confidence+recency, absence!=deletion).
+model IntelligenceFact {
+  id         String            @id @default(cuid())
+  tenantId   String            @map("tenant_id")
+  entityType IntelligenceScope // CUSTOMER | OPPORTUNITY | CONVERSATION
+  entityId   String            @map("entity_id")
+  fieldKey   String            @map("field_key")
+  value      Json
+  confidence Float             @default(1)
+  source     FactSource
+  observedAt DateTime          @default(now()) @map("observed_at")
+
+  conversationId String?   @map("conversation_id")
+  validUntil     DateTime? @map("valid_until")
+  supersededById String?   @map("superseded_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, entityType, entityId, fieldKey])
+  @@map("intelligence_facts")
 }

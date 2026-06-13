@@ -1148,8 +1148,12 @@ router.post("/analyze-domain", requireRole("ADMIN"), validate(analyzeDomainSchem
 
     const lang = LOCALE_NAMES[locale] || "English";
     const model = process.env.ONBOARDING_CHAT_MODEL || "gpt-4o-mini";
+    // Industry Intelligence Pack slugs the classifier may match (Customer
+    // Intelligence V2). Must stay in sync with the system packs seeded in
+    // packages/shared/prisma/seed.ts.
+    const PACK_SLUGS = ["event_hall", "real_estate", "recruiting", "ecommerce"];
     let understanding: {
-      name: string; industry: string; country: string; language: string; description: string;
+      name: string; industry: string; country: string; language: string; description: string; packSlug: string;
     } | null = null;
     try {
       const response = await client.chat.completions.create({
@@ -1161,13 +1165,14 @@ router.post("/analyze-domain", requireRole("ADMIN"), validate(analyzeDomainSchem
           {
             role: "system",
             content: `You analyze a business homepage and extract a structured profile of the business. Respond ONLY with JSON of this exact shape:
-{"name":"","industry":"","country":"","language":"","description":""}
+{"name":"","industry":"","country":"","language":"","description":"","packSlug":""}
 Rules:
 - "name": the business / brand name. Plain text.
 - "industry": a short industry label (e.g. "E-commerce / Fashion", "SaaS", "Law firm"). 1-4 words.
 - "country": the country the business primarily operates in, in English (e.g. "Israel", "United States"). Best guess from language, TLD, addresses, currency. Empty string if unknown.
 - "language": the primary language of the site as an ISO-639-1 code ("en", "he", "ar", ...).
 - "description": 1-2 sentences in ${lang} describing WHAT THE BUSINESS DOES. No emojis, no marketing fluff, no mention of the homepage or this analysis.
+- "packSlug": the best-matching customer-intelligence pack for this business, EXACTLY one of: "event_hall" (wedding/event venues & halls), "real_estate" (property sales/rental/brokerage), "recruiting" (staffing/HR/job placement), "ecommerce" (online retail / order fulfillment). Use "" if none clearly fits — do not force a match.
 Set any field you cannot determine to an empty string. Do not invent specifics.`,
           },
           {
@@ -1194,12 +1199,14 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
         const str = (v: unknown) => (typeof v === "string" ? v.trim() : "");
         const desc = str(p.description);
         if (desc.length >= 10) {
+          const rawSlug = str(p.packSlug);
           understanding = {
             name: str(p.name),
             industry: str(p.industry),
             country: str(p.country),
             language: str(p.language) || locale,
             description: desc,
+            packSlug: PACK_SLUGS.includes(rawSlug) ? rawSlug : "",
           };
         }
       }

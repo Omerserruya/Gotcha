@@ -31,6 +31,16 @@ import {
   type AirtableMeta,
   type AirtableField,
 } from "@/lib/api";
+import { applyIndustryPack } from "@/lib/gotcha-api";
+
+// Industry Intelligence Pack labels (Customer Intelligence V2). Keep in sync
+// with the system packs seeded in packages/shared/prisma/seed.ts.
+const PACK_LABELS: Record<string, string> = {
+  event_hall: "Event Hall",
+  real_estate: "Real Estate",
+  recruiting: "Recruiting",
+  ecommerce: "E-commerce",
+};
 
 // After setup completes, land in the inbox — onboarding continues via the
 // sidebar mission panel, not a dedicated home page.
@@ -114,6 +124,10 @@ function SetupContent() {
   const [u, setU] = useState<Understanding>({ name: "", industry: "", country: "", language: uiLocale || "en", description: "" });
   const [savingProfile, setSavingProfile] = useState(false);
   const crawledOnce = useRef(false);
+  // Industry Intelligence Pack detected by the classifier (Customer
+  // Intelligence V2). Skippable — `loadPack` defaults on when a pack matches.
+  const [detectedPack, setDetectedPack] = useState("");
+  const [loadPack, setLoadPack] = useState(true);
 
   // Gate 2 — connect
   const [picked, setPicked] = useState<CoreSystemSlug | null>(null);
@@ -161,6 +175,10 @@ function SetupContent() {
           language: un.language || prev.language,
           description: un.description || prev.description,
         }));
+        if (un.packSlug && PACK_LABELS[un.packSlug]) {
+          setDetectedPack(un.packSlug);
+          setLoadPack(true);
+        }
       } else if (data.ok && data.description) {
         setU((prev) => ({ ...prev, description: data.description! }));
       }
@@ -246,6 +264,13 @@ function SetupContent() {
         locale: u.language || undefined,
       });
       if (u.language && u.language !== uiLocale) { await setLocale(u.language as any).catch(() => {}); }
+      // Load the detected Industry Intelligence Pack (skippable). Best-effort —
+      // a failure here must not block onboarding; packs can be applied later
+      // from Settings → Intelligence Fields.
+      if (detectedPack && loadPack) {
+        await applyIndustryPack(token, detectedPack).catch(() => { /* non-blocking */ });
+        track("onboarding.pack_applied", { slug: detectedPack });
+      }
       track("onboarding.business_confirmed");
       setPhase("connect");
     } catch (err: any) {
@@ -464,6 +489,35 @@ function SetupContent() {
                 />
               </div>
             </div>
+
+            {/* Detected Industry Intelligence Pack — skippable. */}
+            {detectedPack && PACK_LABELS[detectedPack] && (
+              <label
+                className={
+                  "flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition " +
+                  (loadPack ? "border-primary-300 bg-primary-50/40" : "border-gray-200 bg-gray-50")
+                }
+              >
+                <input
+                  type="checkbox"
+                  checked={loadPack}
+                  onChange={(e) => setLoadPack(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 accent-primary-500"
+                />
+                <span className="text-sm">
+                  <span className="font-medium text-gray-900">
+                    {he
+                      ? `לטעון את חבילת המודיעין «${PACK_LABELS[detectedPack]}»?`
+                      : `Load the ${PACK_LABELS[detectedPack]} intelligence pack?`}
+                  </span>
+                  <span className="block text-gray-500 mt-0.5">
+                    {he
+                      ? "שדות מובנים לתחום שלכם. אפשר לערוך בכל עת בהגדרות → שדות מודיעין."
+                      : "Industry-specific fields we'll track for you. Editable anytime in Settings → Intelligence Fields."}
+                  </span>
+                </span>
+              </label>
+            )}
 
             <button
               type="button"
