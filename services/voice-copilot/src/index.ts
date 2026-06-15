@@ -13,14 +13,14 @@ async function main(): Promise<void> {
   });
 
   process.on("SIGTERM", async () => {
-    logger.info("SIGTERM received — draining");
+    logger.info("SIGTERM received - draining");
     await shutdown();
     logger.info("voice-copilot stopped");
     process.exit(0);
   });
 
   process.on("SIGINT", async () => {
-    logger.info("SIGINT received — stopping");
+    logger.info("SIGINT received - stopping");
     await shutdown();
     process.exit(0);
   });

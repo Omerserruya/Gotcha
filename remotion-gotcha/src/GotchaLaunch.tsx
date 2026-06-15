@@ -15,7 +15,7 @@ import {DotGrid} from './components/DotGrid';
 loadFont('normal', {weights: ['400', '500', '600', '700', '900']});
 
 // ───────────────────────────────────────────────────────────
-// Scene 1 — HOOK (0–6s) — Pain roulette
+// Scene 1 - HOOK (0–6s) - Pain roulette
 // ───────────────────────────────────────────────────────────
 const HookScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -101,7 +101,7 @@ const HookScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 2 — SHIFT (6–10s) — Pure dark, no gray midpoint
+// Scene 2 - SHIFT (6–10s) - Pure dark, no gray midpoint
 // ───────────────────────────────────────────────────────────
 const ShiftScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -162,7 +162,7 @@ const ShiftScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 3 — AI CHAT (10–24s) — 420f — centered card + resolution beat
+// Scene 3 - AI CHAT (10–24s) - 420f - centered card + resolution beat
 // ───────────────────────────────────────────────────────────
 type MsgRole = 'user' | 'ai';
 const ChatScene: React.FC = () => {
@@ -182,7 +182,7 @@ const ChatScene: React.FC = () => {
   const inOp = interpolate(frame, [0, 15], [0, 1], {extrapolateRight: 'clamp'});
   const outOp = interpolate(frame, [405, 420], [1, 0], {extrapolateRight: 'clamp'});
 
-  // Active intent — latest matching msg whose intent is active
+  // Active intent - latest matching msg whose intent is active
   const activeIntent = [...msgs]
     .reverse()
     .find((m) => m.intent && frame >= m.at && frame < m.at + 70);
@@ -299,7 +299,7 @@ const ChatScene: React.FC = () => {
         </div>
       </div>
 
-      {/* Intent badge — BELOW card, centered, large */}
+      {/* Intent badge - BELOW card, centered, large */}
       {intentOp > 0.01 && (
         <div
           key={intentKey}
@@ -341,7 +341,7 @@ const ChatScene: React.FC = () => {
         </div>
       )}
 
-      {/* Resolution pill — climax beat */}
+      {/* Resolution pill - climax beat */}
       {frame >= resolveStart && (
         <AbsoluteFill
           style={{alignItems: 'center', justifyContent: 'center', pointerEvents: 'none'}}
@@ -370,7 +370,7 @@ const ChatScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 4 — BRIDGE (24–28s) — "Every message is an opportunity."
+// Scene 4 - BRIDGE (24–28s) - "Every message is an opportunity."
 // ───────────────────────────────────────────────────────────
 const BridgeSlide: React.FC = () => {
   const frame = useCurrentFrame();
@@ -437,7 +437,7 @@ const BridgeSlide: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 5 — ACTION LAYER (Demo 2)
+// Scene 5 - ACTION LAYER (Demo 2)
 // ───────────────────────────────────────────────────────────
 const ActionScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -512,7 +512,7 @@ const ActionScene: React.FC = () => {
             fontSize: 14,
           }}
         >
-          Great — I'll create a follow-up and notify sales.
+          Great - I'll create a follow-up and notify sales.
         </div>
       </div>
 
@@ -646,7 +646,7 @@ const ActionScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 6 — LIVE COPILOT — label pinned, bigger text, bigger cards
+// Scene 6 - LIVE COPILOT - label pinned, bigger text, bigger cards
 // ───────────────────────────────────────────────────────────
 const CopilotScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -667,7 +667,7 @@ const CopilotScene: React.FC = () => {
   const cards = [
     {label: 'CONVERSATION SUMMARIZED', detail: '3 topics · 6 messages', at: 225},
     {label: 'NEXT STEP', detail: 'Follow-up tomorrow 10:00', at: 240},
-    {label: 'OPPORTUNITY', detail: 'Upsell detected — Pro plan', at: 255},
+    {label: 'OPPORTUNITY', detail: 'Upsell detected - Pro plan', at: 255},
   ];
 
   return (
@@ -694,7 +694,7 @@ const CopilotScene: React.FC = () => {
         }}
       />
 
-      {/* PINNED LABEL — scene root, never moves */}
+      {/* PINNED LABEL - scene root, never moves */}
       <div
         style={{
           position: 'absolute',
@@ -709,7 +709,7 @@ const CopilotScene: React.FC = () => {
         ● GOTCHA COPILOT · THINKING
       </div>
 
-      {/* LEFT: thinking stream — larger text */}
+      {/* LEFT: thinking stream - larger text */}
       <div
         style={{
           position: 'absolute',
@@ -847,7 +847,7 @@ const CopilotScene: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom summary cards — larger */}
+      {/* Bottom summary cards - larger */}
       <div
         style={{
           position: 'absolute',
@@ -914,7 +914,7 @@ const CopilotScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 7 — LIVE CALL INTRO — 3s setup
+// Scene 7 - LIVE CALL INTRO - 3s setup
 // ───────────────────────────────────────────────────────────
 const LiveCallIntro: React.FC = () => {
   const frame = useCurrentFrame();
@@ -988,7 +988,7 @@ const LiveCallIntro: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 8 — LIVE CALL (untouched core)
+// Scene 8 - LIVE CALL (untouched core)
 // ───────────────────────────────────────────────────────────
 const CallScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -1002,7 +1002,7 @@ const CallScene: React.FC = () => {
     {text: 'Customer tone: frustrated', color: C.red, at: 20},
     {text: 'Suggest empathy response', color: C.indigoSoft, at: 50},
     {text: 'Offer retention discount', color: C.amber, at: 85},
-    {text: 'Wait — don\'t interrupt', color: C.green, at: 120},
+    {text: 'Wait - don\'t interrupt', color: C.green, at: 120},
   ];
   const buttons = [
     {label: 'Send suggestion', at: 155},
@@ -1180,7 +1180,7 @@ const CallScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 9 — COMMAND CENTER — 300f, paced with drama
+// Scene 9 - COMMAND CENTER - 300f, paced with drama
 // ───────────────────────────────────────────────────────────
 const CommandScene: React.FC = () => {
   const frame = useCurrentFrame();
@@ -1226,7 +1226,7 @@ const CommandScene: React.FC = () => {
   const pipelineStart = 120;
   const pipelineLabels = ['CRM', 'Segment', 'Workflow', 'Broadcast'];
 
-  // Execution events — staggered 30f
+  // Execution events - staggered 30f
   const events = [
     {label: 'Audience built', at: 185},
     {label: 'Workflow activated', at: 215},
@@ -1412,7 +1412,7 @@ const CommandScene: React.FC = () => {
 };
 
 // ───────────────────────────────────────────────────────────
-// Scene 10 — OUTRO — 180f, 3 phases, logo reveal
+// Scene 10 - OUTRO - 180f, 3 phases, logo reveal
 // ───────────────────────────────────────────────────────────
 const EndingScene: React.FC = () => {
   const frame = useCurrentFrame();

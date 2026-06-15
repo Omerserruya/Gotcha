@@ -11,20 +11,20 @@ import { trustWeights } from "./trust/trust-weights.service";
 import type { CueOutcomeKind } from "./trust/cue-outcomes.repo";
 
 /**
- * Cue Projector — turns the LLM's ConversationStateFrame into the cues the
+ * Cue Projector - turns the LLM's ConversationStateFrame into the cues the
  * rep actually sees.
  *
  * Responsibilities (deterministic, in order):
  *   1. Synthesize candidate cues from:
  *      - frame.missingFields    (LLM-observed gaps)
- *      - goalSchemas[currentGoal] (system-required next-step prompts —
+ *      - goalSchemas[currentGoal] (system-required next-step prompts -
  *        adds cues the LLM forgot; this is the gap-1 fix)
  *      - frame.suggestedActions (coaching nudges)
  *      - frame.risks            (compliance / churn signals)
  *   2. Map urgency → lane (pulse/direction/strategy)
  *   3. Apply trust weight: rawScore × weightFor(cueKind, cueText)
  *   4. Drop below lane threshold
- *   5. Dedup by (cueKind, dedupKey) — second cue is suppressed while the
+ *   5. Dedup by (cueKind, dedupKey) - second cue is suppressed while the
  *      first is still live (TTL not expired AND not yet outcome-released)
  *   6. Rate-limit: ≥4s between surfaces per call, ≤8/min per call
  *   7. Accepted/rejected cues are suppressed for the rest of the call
@@ -75,7 +75,7 @@ interface CallProjectorState {
   surfacesInWindow: number[];                  // ms timestamps of last surfaces
   liveByDedup: Map<string, ProjectedCue>;      // active (TTL not expired) dedup map
   suppressedForCall: Set<string>;              // dedupKeys accepted or rejected this call
-  observedFilled: Set<LeadField>;              // fields known answered — see absorbFrame
+  observedFilled: Set<LeadField>;              // fields known answered - see absorbFrame
   /**
    * Fields the LLM has emitted as required=true at some point in the call.
    * Tracked separately so we can apply the "previously asked, now silent =
@@ -104,7 +104,7 @@ export class CueProjector {
     const goal = goalStateMachine.advance(frame.conversationId, leadView);
 
     // Sort by score desc so when the rate-limit only allows one cue per
-    // turn, it goes to the most important one — not whichever happened to
+    // turn, it goes to the most important one - not whichever happened to
     // be first in the candidates array.
     const candidates = this.candidates(frame, goal, leadView)
       .sort((a, b) => b.score - a.score);
@@ -141,7 +141,7 @@ export class CueProjector {
   /**
    * Returns the set of LeadFields the projector currently considers filled
    * for this call. Used by the live runner to render an "ALREADY ANSWERED
-   * — DO NOT RE-ASK" block into the next prompt so the LLM stops
+   * - DO NOT RE-ASK" block into the next prompt so the LLM stops
    * re-emitting missingFields for things the rep has already heard.
    */
   getObservedFilled(conversationId: string): LeadField[] {
@@ -150,7 +150,7 @@ export class CueProjector {
     return [...st.observedFilled];
   }
 
-  /** Test-only — inspect internal state without exposing the Map. */
+  /** Test-only - inspect internal state without exposing the Map. */
   _stateForTest(conversationId: string): CallProjectorState | undefined {
     return this.state.get(conversationId);
   }
@@ -184,7 +184,7 @@ export class CueProjector {
    *
    *  2. Field WAS previously emitted with `required: true` but is ABSENT
    *     from THIS frame's missingFields → filled (the LLM had been asking
-   *     about it, then stopped — the practical interpretation is that the
+   *     about it, then stopped - the practical interpretation is that the
    *     customer answered). This is the heuristic that fixes the "bot
    *     re-asks the same question two turns later" bug.
    *

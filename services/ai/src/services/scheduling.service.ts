@@ -56,9 +56,9 @@ export interface SchedulingPolicy {
   bufferBeforeMinutes: number;
   /** Minutes of buffer required AFTER every meeting. */
   bufferAfterMinutes: number;
-  /** Minimum notice in hours — cannot book sooner than this. */
+  /** Minimum notice in hours - cannot book sooner than this. */
   minNoticeHours: number;
-  /** Maximum horizon in days — cannot book further than this. */
+  /** Maximum horizon in days - cannot book further than this. */
   maxHorizonDays: number;
   /** Slot grid resolution in minutes (e.g. 15 → :00, :15, :30, :45). */
   slotResolutionMinutes: number;
@@ -85,11 +85,11 @@ export interface ResolveAvailabilityOpts {
   meetingType: MeetingType;
   /** Busy intervals from the agent's calendar(s). */
   busy: BusyInterval[];
-  /** "Now" — injected for determinism (tests). */
+  /** "Now" - injected for determinism (tests). */
   nowMs: number;
   /** Customer-suggested time, ISO 8601. Omit to request proposed slots. */
   requestedAtIso?: string;
-  /** Customer timezone (IANA). For invite display only — math is in UTC. */
+  /** Customer timezone (IANA). For invite display only - math is in UTC. */
   customerTimezone?: string;
   /** How many alternatives to propose when requested is invalid OR omitted. */
   proposeCount?: number;
@@ -182,7 +182,7 @@ function validateSlot(startMs: number, opts: ResolveAvailabilityOpts): InvalidRe
   const { policy, meetingType, busy, nowMs } = opts;
   const endMs = startMs + meetingType.durationMinutes * 60_000;
 
-  // Min-notice / max-horizon are absolute time checks — not timezone-dependent.
+  // Min-notice / max-horizon are absolute time checks - not timezone-dependent.
   const minNoticeMs = policy.minNoticeHours * 3600_000;
   if (startMs < nowMs + minNoticeMs) return "min_notice_violated";
   const maxHorizonMs = policy.maxHorizonDays * 24 * 3600_000;
@@ -231,7 +231,7 @@ function enumerateValidSlots(opts: ResolveAvailabilityOpts, count: number): Arra
   let cursor = ceilToStep(startFromMs, stepMs);
   const out: Array<{ startMs: number; endMs: number }> = [];
 
-  // Hard cap on iteration count — guards against pathological inputs.
+  // Hard cap on iteration count - guards against pathological inputs.
   const HARD_CAP = 5000;
   let iterations = 0;
   while (cursor < endByMs && out.length < count && iterations < HARD_CAP) {
@@ -296,7 +296,7 @@ interface WallClockParts {
 
 function wallClockParts(ms: number, timezone: string): WallClockParts {
   // Intl returns the formatted parts in the given timezone deterministically.
-  // We use 'en-US' just to fix the locale — values are extracted by `type`.
+  // We use 'en-US' just to fix the locale - values are extracted by `type`.
   const fmt = new Intl.DateTimeFormat("en-US", {
     timeZone: timezone,
     weekday: "short",

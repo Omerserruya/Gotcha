@@ -6,17 +6,17 @@
 // of messages, multiple `fetchAI()` calls hit the backend in quick
 // succession. Each starts a full LLM round inside `suggestResponse()`
 // which rebuilds `chatMessages` from scratch and pays the full system
-// prompt cost — even when the AbortController on the client kills the
+// prompt cost - even when the AbortController on the client kills the
 // HTTP response, the backend has already burned tokens.
 //
 // Measured impact in dev DB: ~60% of "excess" rounds beyond 2 in P95
 // copilot sessions are FE-refire restarts of identical work.
 //
 // This module provides two cooperating guards:
-//   1. CONCURRENCY GUARD — per-conversation in-flight Promise. A new
+//   1. CONCURRENCY GUARD - per-conversation in-flight Promise. A new
 //      request for a conversation already being processed attaches to
 //      the existing Promise instead of starting a new one.
-//   2. IDEMPOTENCY GUARD — per-requestInstanceId cache. If the same
+//   2. IDEMPOTENCY GUARD - per-requestInstanceId cache. If the same
 //      `requestInstanceId` arrives twice (network retry, react double-
 //      fire, etc.), the second one returns the first's result.
 //
@@ -30,7 +30,7 @@ export type DedupReason = "primary" | "attached" | "idempotent";
 export interface DedupOutcome<T> {
   result: T;
   reason: DedupReason;
-  // For observability — wall-clock latency the caller waited for.
+  // For observability - wall-clock latency the caller waited for.
   waitedMs: number;
 }
 
@@ -46,7 +46,7 @@ interface IdempotentEntry<T> {
   expiresAt: number;
 }
 
-// 60s TTL on idempotency cache — long enough to survive a retry storm,
+// 60s TTL on idempotency cache - long enough to survive a retry storm,
 // short enough that fresh requests with the same instanceId after the
 // burst are handled correctly. The frontend re-generates the id per
 // `fetchAI()` invocation, so collisions across distinct triggers are
@@ -74,12 +74,12 @@ function ensurePruner() {
 }
 
 interface RunDedupedArgs<T> {
-  // Concurrency key — typically the conversationId.
+  // Concurrency key - typically the conversationId.
   key: string;
-  // Optional idempotency key — the client-supplied requestInstanceId.
+  // Optional idempotency key - the client-supplied requestInstanceId.
   // When provided and seen recently, the cached result is returned.
   requestInstanceId?: string;
-  // The actual work — invoked once per dedup'd group of callers.
+  // The actual work - invoked once per dedup'd group of callers.
   fn: () => Promise<T>;
 }
 
@@ -103,7 +103,7 @@ export async function runDeduped<T>({ key, requestInstanceId, fn }: RunDedupedAr
   ensurePruner();
   const startedAt = Date.now();
 
-  // 1. Idempotency cache hit — return immediately.
+  // 1. Idempotency cache hit - return immediately.
   if (requestInstanceId) {
     const cached = idempotent.get(requestInstanceId) as IdempotentEntry<T> | undefined;
     if (cached && cached.expiresAt > startedAt) {
@@ -111,7 +111,7 @@ export async function runDeduped<T>({ key, requestInstanceId, fn }: RunDedupedAr
     }
   }
 
-  // 2. Concurrency attach — there's already an in-flight call for this key.
+  // 2. Concurrency attach - there's already an in-flight call for this key.
   const existing = inflight.get(key) as InflightEntry<T> | undefined;
   if (existing) {
     if (requestInstanceId) existing.requestInstanceIds.add(requestInstanceId);
@@ -119,7 +119,7 @@ export async function runDeduped<T>({ key, requestInstanceId, fn }: RunDedupedAr
     return { result, reason: "attached", waitedMs: Date.now() - startedAt };
   }
 
-  // 3. Primary path — start, register, run, cleanup.
+  // 3. Primary path - start, register, run, cleanup.
   const requestInstanceIds = new Set<string>();
   if (requestInstanceId) requestInstanceIds.add(requestInstanceId);
 
@@ -145,7 +145,7 @@ export async function runDeduped<T>({ key, requestInstanceId, fn }: RunDedupedAr
   }
 }
 
-// Test-only — clear all state. Not exported via index; used by unit tests.
+// Test-only - clear all state. Not exported via index; used by unit tests.
 export function __resetCopilotDedupForTests() {
   inflight.clear();
   idempotent.clear();

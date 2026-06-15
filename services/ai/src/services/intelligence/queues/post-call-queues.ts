@@ -39,7 +39,7 @@ export function getPostCallAnalyzeQueue(): Queue {
 }
 
 /**
- * Defaults — exponential backoff for transient Redis/DB hiccups; 100 most
+ * Defaults - exponential backoff for transient Redis/DB hiccups; 100 most
  * recent failures retained for on-call inspection. Same shape as the
  * notifications dispatcher's `DEFAULT_NOTIF_JOB_OPTS`.
  */
@@ -50,7 +50,7 @@ export const DEFAULT_POST_CALL_JOB_OPTS: JobsOptions = {
   backoff: { type: "exponential", delay: 5_000 },
 };
 
-/** Test seam — replace the lazily-instantiated queue with a stub. */
+/** Test seam - replace the lazily-instantiated queue with a stub. */
 export function __setQAQueueForTests(q: Queue | null): void {
   _qaQueue = q;
 }
@@ -62,14 +62,14 @@ export function __setAnalyzeQueueForTests(q: Queue | null): void {
 export interface PostCallQAJobData {
   conversationId: string;
   tenantId: string;
-  /** Optional — present iff the trigger originated from a voice call. */
+  /** Optional - present iff the trigger originated from a voice call. */
   callSid?: string;
   /** Tenant-pinnable rubric version. Phase 5 V1 uses a single version. */
   rubricVersion?: string;
 }
 
 /**
- * Phase 6 — Mode B (async post-call) job.
+ * Phase 6 - Mode B (async post-call) job.
  *
  * Two source kinds: pasted utterances or a recording URL. The worker
  * constructs the appropriate TranscriptSource and drives runAsyncAnalysis.

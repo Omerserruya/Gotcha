@@ -24,6 +24,21 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
 const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 
+// Instagram API with Instagram Login (direct IG Business connect - no Facebook Page).
+// These are the *Instagram* app credentials from the Meta App Dashboard
+// ("Instagram API setup with Instagram login"), which differ from META_APP_ID/SECRET.
+// INSTAGRAM_OAUTH_REDIRECT_URI must be registered under that product; falls back to
+// the shared OAuth callback when unset.
+// Falls back to the Meta app credentials - when Instagram Login is added to the
+// SAME Meta app, the dashboard shows the same app id/secret, so no duplication needed.
+const INSTAGRAM_APP_ID = process.env.INSTAGRAM_APP_ID || META_APP_ID;
+const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || META_APP_SECRET;
+const INSTAGRAM_OAUTH_REDIRECT_URI = process.env.INSTAGRAM_OAUTH_REDIRECT_URI || OAUTH_REDIRECT_URI;
+// graph.instagram.com (Instagram Login) does NOT accept a version-prefixed path
+// for these edges (/me, /access_token, /me/subscribed_apps) - a versioned path is
+// treated as an unknown node and returns "Unsupported request". Must be unversioned.
+const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
+
 // Google (Gmail) OAuth
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "";
@@ -55,7 +70,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     });
     if (hasChannelRule) return;
 
-    // Email rules go first — shift all existing rules down by 1
+    // Email rules go first - shift all existing rules down by 1
     await prisma.$transaction(
       existingRules.map((r) =>
         prisma.routerRule.update({
@@ -68,7 +83,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     await prisma.routerRule.create({
       data: {
         tenantId,
-        name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} — ${displayName}`,
+        name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} - ${displayName}`,
         position: 1,
         conditions: [{ type: "channel", operator: "equals", value: channel.toLowerCase() }],
         logic: "AND",
@@ -136,7 +151,7 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
 //
 // Returns a normalized list of the page's own posts so flow authors can
 // select which post a Comment Trigger should listen on, instead of pasting
-// raw IDs. Group posts intentionally NOT supported — the Meta Groups API
+// raw IDs. Group posts intentionally NOT supported - the Meta Groups API
 // was deprecated April 2024; for those, the trigger UI exposes a manual
 // post-URL paste field that the runtime later matches via the page webhook.
 //
@@ -354,7 +369,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
       }
 
       // Check if already connected. findUnique on the (channel, externalId)
-      // compound unique index — TenantGuard exempts single-row lookups by
+      // compound unique index - TenantGuard exempts single-row lookups by
       // unique key, so this works whether the row belongs to us or another
       // tenant; we still gate on existing.tenantId before mutating.
       const existing = await prisma.channelAccount.findUnique({
@@ -555,8 +570,12 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     }
 
     // Validate platform-specific config
-    if (["messenger", "instagram", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
+    if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
       res.status(500).json({ error: "OAuth not configured. META_APP_ID and OAUTH_REDIRECT_URI are required." });
+      return;
+    }
+    if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) {
+      res.status(500).json({ error: "Instagram OAuth not configured. INSTAGRAM_APP_ID and INSTAGRAM_OAUTH_REDIRECT_URI are required." });
       return;
     }
     if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) {
@@ -630,10 +649,21 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
         "users:read",
       ].join(",");
       oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
+    } else if (platform === "instagram") {
+      // Instagram API with Instagram Login - connects an Instagram professional
+      // (Business/Creator) account DIRECTLY. The consent screen is Instagram-only;
+      // there is no Facebook Page picker because no Page is involved. Scopes are
+      // comma-separated, business-prefixed.
+      const igScopes = [
+        "instagram_business_basic",
+        "instagram_business_manage_messages",
+        "instagram_business_manage_comments",
+      ].join(",");
+      oauthUrl = `https://www.instagram.com/oauth/authorize?client_id=${INSTAGRAM_APP_ID}&redirect_uri=${encodeURIComponent(INSTAGRAM_OAUTH_REDIRECT_URI)}&response_type=code&scope=${encodeURIComponent(igScopes)}&state=${encodeURIComponent(state)}`;
     } else {
+      // Messenger (Facebook Login for Pages)
       const scopes: Record<string, string> = {
         messenger: "pages_show_list,pages_messaging,pages_manage_metadata,pages_read_engagement",
-        instagram: "pages_show_list,instagram_basic,instagram_manage_messages,instagram_manage_comments,pages_manage_metadata,pages_read_engagement",
       };
       oauthUrl = `https://www.facebook.com/v25.0/dialog/oauth?client_id=${META_APP_ID}&redirect_uri=${encodeURIComponent(OAUTH_REDIRECT_URI)}&state=${encodeURIComponent(state)}&scope=${scopes[platform]}`;
     }
@@ -679,6 +709,9 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
 
     let accessToken: string;
     let tokenExpiresAt: Date;
+    // Instagram-Login: the IG professional account ID (user_id) returned by the
+    // token exchange, carried into the storage branch below.
+    let igLoginUserId = "";
 
     if (platform === "whatsapp") {
       // WhatsApp Embedded Signup: exchange code for business token
@@ -716,8 +749,8 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       accessToken = token;
       tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
       console.log("[WA-CALLBACK] Business token obtained successfully");
-    } else if (platform === "messenger" || platform === "instagram") {
-      // Messenger/Instagram: standard OAuth token exchange
+    } else if (platform === "messenger") {
+      // Messenger: standard Facebook OAuth token exchange
       const tokenResponse = await axios.get(`${FB_API_URL}/oauth/access_token`, {
         params: {
           client_id: META_APP_ID,
@@ -744,6 +777,58 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         expiresIn = longLivedResponse.data.expires_in || 5184000;
       } catch (exchangeErr: any) {
         console.warn("Long-lived token exchange failed:", exchangeErr.response?.data?.error?.message);
+      }
+      accessToken = longLivedToken;
+      tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
+    } else if (platform === "instagram") {
+      // Instagram Login token exchange (two steps, against Instagram's own hosts).
+      // Step 1: short-lived token + the IG professional account id (user_id).
+      const form = new URLSearchParams();
+      form.append("client_id", INSTAGRAM_APP_ID);
+      form.append("client_secret", INSTAGRAM_APP_SECRET);
+      form.append("grant_type", "authorization_code");
+      form.append("redirect_uri", INSTAGRAM_OAUTH_REDIRECT_URI);
+      form.append("code", code as string);
+
+      let shortLivedToken: string | undefined;
+      try {
+        const tokenResponse = await axios.post(
+          "https://api.instagram.com/oauth/access_token",
+          form,
+          { headers: { "Content-Type": "application/x-www-form-urlencoded" } }
+        );
+        shortLivedToken = tokenResponse.data?.access_token;
+        igLoginUserId = String(tokenResponse.data?.user_id || "");
+        console.log("[INSTAGRAM-CALLBACK] token-exchange response:", JSON.stringify({
+          user_id: tokenResponse.data?.user_id,
+          permissions: tokenResponse.data?.permissions,
+          token_len: (tokenResponse.data?.access_token || "").length,
+          token_head: (tokenResponse.data?.access_token || "").slice(0, 6),
+        }));
+      } catch (igErr: any) {
+        console.error("[INSTAGRAM-CALLBACK] Token exchange failed:", igErr.response?.data || igErr.message);
+      }
+
+      if (!shortLivedToken) {
+        res.redirect(`${frontendUrl}/channels?error=token_exchange_failed`);
+        return;
+      }
+
+      // Step 2: exchange the short-lived (1h) token for a long-lived (~60d) one.
+      let longLivedToken = shortLivedToken;
+      let expiresIn = 5184000;
+      try {
+        const longLivedResponse = await axios.get(`${IG_API_URL}/access_token`, {
+          params: {
+            grant_type: "ig_exchange_token",
+            client_secret: INSTAGRAM_APP_SECRET,
+            access_token: shortLivedToken,
+          },
+        });
+        longLivedToken = longLivedResponse.data?.access_token || shortLivedToken;
+        expiresIn = longLivedResponse.data?.expires_in || 5184000;
+      } catch (exchangeErr: any) {
+        console.warn("[INSTAGRAM-CALLBACK] Long-lived token exchange failed:", exchangeErr.response?.data?.error?.message);
       }
       accessToken = longLivedToken;
       tokenExpiresAt = new Date(Date.now() + expiresIn * 1000);
@@ -928,7 +1013,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         }
 
         // Subscribe page to webhooks. `feed` delivers comment + post events
-        // for the FB page — required for the Comment Trigger to fire.
+        // for the FB page - required for the Comment Trigger to fire.
         // `message_reactions` delivers reactions to inbound messages.
         try {
           const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
@@ -997,180 +1082,99 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         connectedAccounts.push(pageName);
       }
     } else if (platform === "instagram") {
-      // ─── INSTAGRAM ──────────────────────────────────────
-      const igPagesResponse = await axios.get(`${FB_API_URL}/me/accounts`, {
-        params: { access_token: accessToken, fields: "id,name,access_token,instagram_business_account" },
-      });
-      let pages: any[] = igPagesResponse.data?.data || [];
-      console.log("[INSTAGRAM-CALLBACK] /me/accounts returned", pages.length, "pages");
+      // ─── INSTAGRAM (Instagram API with Instagram Login) ──
+      // No Facebook Page involved: the IG professional account is connected
+      // directly, the token is an IG-user token (graph.instagram.com host),
+      // and webhooks are subscribed on the IG account itself.
 
-      // If empty, fall back to debug_token (Facebook Login for Business)
-      if (pages.length === 0) {
-        console.log("[INSTAGRAM-CALLBACK] /me/accounts empty, trying debug_token to discover pages...");
-        try {
-          const debugResponse = await axios.get(`${FB_API_URL}/debug_token`, {
-            params: { input_token: accessToken },
-            headers: { Authorization: `Bearer ${META_APP_ID}|${META_APP_SECRET}` },
-          });
-          const granularScopes = debugResponse.data?.data?.granular_scopes || [];
-          console.log("[INSTAGRAM-CALLBACK] debug_token granular_scopes:", JSON.stringify(granularScopes));
-
-          const pageIdSet = new Set<string>();
-          for (const scope of granularScopes) {
-            if (scope.target_ids && Array.isArray(scope.target_ids)) {
-              for (const id of scope.target_ids) pageIdSet.add(id);
-            }
-          }
-          const discoveredPageIds = Array.from(pageIdSet);
-          console.log("[INSTAGRAM-CALLBACK] Discovered page IDs:", discoveredPageIds);
-
-          for (const pageId of discoveredPageIds) {
-            try {
-              const pageResp = await axios.get(`${FB_API_URL}/${pageId}`, {
-                params: { fields: "id,name,access_token,instagram_business_account", access_token: accessToken },
-              });
-              if (pageResp.data?.id) {
-                pages.push(pageResp.data);
-              }
-            } catch (pageErr: any) {
-              console.warn(`[INSTAGRAM-CALLBACK] Failed to fetch page ${pageId}:`, pageErr.response?.data?.error?.message);
-            }
-          }
-          console.log("[INSTAGRAM-CALLBACK] Resolved", pages.length, "pages from debug_token");
-        } catch (debugErr: any) {
-          console.warn("[INSTAGRAM-CALLBACK] debug_token failed:", debugErr.response?.data?.error?.message);
-        }
+      // Resolve the IG professional account id + username from the token.
+      let igBusinessId = igLoginUserId;
+      let igUsername = "";
+      try {
+        const profileResp = await axios.get(`${IG_API_URL}/me`, {
+          params: { fields: "user_id,username", access_token: accessToken },
+        });
+        igBusinessId = String(profileResp.data?.user_id || igLoginUserId);
+        igUsername = profileResp.data?.username || igBusinessId;
+      } catch (profileErr: any) {
+        console.warn("[INSTAGRAM-CALLBACK] Profile fetch failed:", profileErr.response?.data?.error?.message);
+        igUsername = igBusinessId;
       }
 
-      if (pages.length === 0) {
-        console.error("[INSTAGRAM-CALLBACK] No pages found via /me/accounts or debug_token");
-        res.redirect(`${frontendUrl}/channels?error=no_pages`);
+      if (!igBusinessId) {
+        console.error("[INSTAGRAM-CALLBACK] No IG account id resolved from token");
+        res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);
         return;
       }
 
-      for (const page of pages) {
-        const pageId = page.id;
-        const pageAccessToken = page.access_token;
-        const pageName = page.name || pageId;
-
-        // Get Instagram Business Account linked to this page
-        let igResponse;
-        try {
-          igResponse = await axios.get(`${FB_API_URL}/${pageId}`, {
-            params: {
-              fields: "instagram_business_account",
-              access_token: pageAccessToken,
-            },
-          });
-        } catch {
-          continue; // Page has no IG business account
-        }
-
-        const igBusinessId = igResponse.data?.instagram_business_account?.id;
-        if (!igBusinessId) continue;
-
-        // Get Instagram username
-        let igUsername = "";
-        try {
-          const igProfileResponse = await axios.get(`${FB_API_URL}/${igBusinessId}`, {
-            params: { fields: "username,name", access_token: pageAccessToken },
-          });
-          igUsername = igProfileResponse.data?.username || igProfileResponse.data?.name || igBusinessId;
-        } catch {
-          igUsername = igBusinessId;
-        }
-
-        // Subscribe the linked Page to your app. This is the gate that
-        // lets Meta deliver IG Messaging events for the linked IG account.
-        // Only Page-level field names are valid here (`comments` is an
-        // IG-level field; it flows via the app-level instagram webhook).
-        try {
-          const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
-            params: {
-              subscribed_fields: "messages,messaging_postbacks,message_reads",
-              access_token: pageAccessToken,
-            },
-          });
-          console.log(`[INSTAGRAM-CALLBACK] Page ${pageId} subscribed_apps result:`, pageSubResp.data);
-        } catch (subErr: any) {
-          console.error(`[INSTAGRAM-CALLBACK] Page subscription FAILED for ${pageId}:`, subErr.response?.data || subErr.message);
-        }
-
-        // Subscribe app to Instagram webhooks (required for receiving DMs)
-        const WEBHOOK_URL = process.env.WEBHOOK_URL || process.env.OAUTH_REDIRECT_URI?.replace("/api/channels/oauth/callback", "/api/webhook") || "";
-        const WEBHOOK_VERIFY_TOKEN = process.env.WHATSAPP_WEBHOOK_VERIFY_TOKEN || "";
-        if (!WEBHOOK_URL || !WEBHOOK_VERIFY_TOKEN) {
-          console.error("[INSTAGRAM-CALLBACK] SKIPPING app-level webhook subscription! WEBHOOK_URL=" + (WEBHOOK_URL || "(empty)") + ", WEBHOOK_VERIFY_TOKEN=" + (WEBHOOK_VERIFY_TOKEN ? "(set)" : "(empty)") + ". Instagram DMs will NOT be received. Set WEBHOOK_URL and WHATSAPP_WEBHOOK_VERIFY_TOKEN env vars.");
-        }
-        if (WEBHOOK_URL && WEBHOOK_VERIFY_TOKEN) {
-          try {
-            await axios.post(`${FB_API_URL}/${META_APP_ID}/subscriptions`, null, {
-              params: {
-                object: "instagram",
-                callback_url: WEBHOOK_URL,
-                verify_token: WEBHOOK_VERIFY_TOKEN,
-                fields: "messages,messaging_postbacks,comments,message_reactions",
-                access_token: `${META_APP_ID}|${META_APP_SECRET}`,
-              },
-            });
-            console.log("[INSTAGRAM-CALLBACK] App-level Instagram webhook subscription created");
-          } catch (appSubErr: any) {
-            console.warn("[INSTAGRAM-CALLBACK] App-level subscription warning:", appSubErr.response?.data?.error?.message);
-          }
-        }
-
-        // Unique-key lookup on (channel, externalId) — see Messenger.
-        const existing = await prisma.channelAccount.findUnique({
-          where: { channel_externalId: { channel: "INSTAGRAM", externalId: igBusinessId } },
+      // Subscribe THIS Instagram account to the app's webhooks. With Instagram
+      // Login the subscription is per-account (no Page), via /me/subscribed_apps.
+      // The webhook callback URL + verify token are configured under the
+      // Instagram product in the Meta App Dashboard, not via API.
+      try {
+        const subResp = await axios.post(`${IG_API_URL}/me/subscribed_apps`, null, {
+          params: {
+            subscribed_fields: "messages,messaging_postbacks,comments,message_reactions",
+            access_token: accessToken,
+          },
         });
-
-        if (existing && existing.tenantId !== tenantId) {
-          console.warn(`Instagram account ${igBusinessId} already connected to another tenant`);
-          continue;
-        }
-
-        const credentials = encryptCredentials({
-          accessToken: pageAccessToken,
-          pageId,
-          igBusinessId,
-          igUsername,
-        });
-
-        if (existing) {
-          await prisma.channelAccount.update({
-            where: { id: existing.id },
-            data: {
-              credentials,
-              connectionStatus: "CONNECTED",
-              connectedAt: new Date(),
-              connectedBy: userId,
-              tokenExpiresAt,
-              isActive: true,
-              lastError: null,
-              displayName: `@${igUsername}`,
-            },
-          });
-        } else {
-          await prisma.channelAccount.create({
-            data: {
-              tenantId,
-              channel: "INSTAGRAM",
-              externalId: igBusinessId,
-              displayName: `@${igUsername}`,
-              credentials,
-              connectionStatus: "CONNECTED",
-              connectedAt: new Date(),
-              connectedBy: userId,
-              tokenExpiresAt,
-              isActive: true,
-              platformMeta: { pageId, pageName },
-            },
-          });
-        }
-
-        await redis.del(`channel_account:INSTAGRAM:${igBusinessId}`);
-        connectedAccounts.push(`@${igUsername}`);
+        console.log(`[INSTAGRAM-CALLBACK] IG ${igBusinessId} subscribed_apps result:`, subResp.data);
+      } catch (subErr: any) {
+        console.error(`[INSTAGRAM-CALLBACK] IG subscription FAILED for ${igBusinessId}:`, subErr.response?.data || subErr.message);
       }
+
+      // Unique-key lookup on (channel, externalId) - see Messenger.
+      const existing = await prisma.channelAccount.findUnique({
+        where: { channel_externalId: { channel: "INSTAGRAM", externalId: igBusinessId } },
+      });
+
+      if (existing && existing.tenantId !== tenantId) {
+        console.warn(`Instagram account ${igBusinessId} already connected to another tenant`);
+        res.redirect(`${frontendUrl}/channels?error=already_connected`);
+        return;
+      }
+
+      const credentials = encryptCredentials({
+        accessToken,        // IG-user token; used against graph.instagram.com
+        igBusinessId,
+        igUsername,
+        igLogin: true,      // adapter switches host based on this flag
+      });
+
+      if (existing) {
+        await prisma.channelAccount.update({
+          where: { id: existing.id },
+          data: {
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            lastError: null,
+            displayName: `@${igUsername}`,
+          },
+        });
+      } else {
+        await prisma.channelAccount.create({
+          data: {
+            tenantId,
+            channel: "INSTAGRAM",
+            externalId: igBusinessId,
+            displayName: `@${igUsername}`,
+            credentials,
+            connectionStatus: "CONNECTED",
+            connectedAt: new Date(),
+            connectedBy: userId,
+            tokenExpiresAt,
+            isActive: true,
+            platformMeta: { igLogin: true },
+          },
+        });
+      }
+
+      await redis.del(`channel_account:INSTAGRAM:${igBusinessId}`);
+      connectedAccounts.push(`@${igUsername}`);
 
       if (connectedAccounts.length === 0) {
         res.redirect(`${frontendUrl}/channels?error=no_instagram_account`);

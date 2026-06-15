@@ -3,7 +3,7 @@
  *
  * Exercises the pure mapping from the legacy resolver output to the
  * worker-shaped snapshot. DB-coupled `resolvePipelineContext` is covered
- * by integration tests elsewhere — here we lock the data shape so a
+ * by integration tests elsewhere - here we lock the data shape so a
  * resolver refactor can't silently drift the worker's pipeline section.
  */
 

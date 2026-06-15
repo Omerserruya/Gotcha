@@ -34,7 +34,7 @@ export function getNotificationsEmailQueue(): Queue {
   return _notificationsEmailQueue;
 }
 
-// Defaults — exponential backoff so transient SMTP/Redis hiccups don't
+// Defaults - exponential backoff so transient SMTP/Redis hiccups don't
 // poison the queue. removeOnComplete bounds Redis memory; failures stay
 // for 100 jobs so on-call can inspect a recent batch.
 export const DEFAULT_NOTIF_JOB_OPTS: JobsOptions = {

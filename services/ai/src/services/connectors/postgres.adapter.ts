@@ -1,7 +1,7 @@
 /**
- * Postgres adapter — production-grade with table-level permissions.
+ * Postgres adapter - production-grade with table-level permissions.
  *
- * Auth: API key style — credentials hold a Postgres connection string.
+ * Auth: API key style - credentials hold a Postgres connection string.
  * Tenants connect a database via the marketplace; we never accept the
  * connection string from the LLM.
  *
@@ -14,13 +14,13 @@
  *     readOnlySearchPath?: string // optional: SET search_path TO ... before query
  *   }
  *
- * Tools — each ENFORCES the allowlist + parameterizes values to prevent
+ * Tools - each ENFORCES the allowlist + parameterizes values to prevent
  * SQL injection. Identifier quoting uses double-quote escaping.
  *
- *   - postgres.query_table   — SELECT * FROM <table> [WHERE …] LIMIT N
- *   - postgres.get_row       — SELECT * FROM <table> WHERE pk = $1 LIMIT 1
- *   - postgres.insert_row    — INSERT INTO <table>(…) VALUES (…) RETURNING *
- *   - postgres.update_row    — UPDATE <table> SET … WHERE pk = $1 RETURNING *
+ *   - postgres.query_table   - SELECT * FROM <table> [WHERE …] LIMIT N
+ *   - postgres.get_row       - SELECT * FROM <table> WHERE pk = $1 LIMIT 1
+ *   - postgres.insert_row    - INSERT INTO <table>(…) VALUES (…) RETURNING *
+ *   - postgres.update_row    - UPDATE <table> SET … WHERE pk = $1 RETURNING *
  *
  * Connection pooling: a single pg.Pool per (tenantIntegrationId), cached.
  */
@@ -47,14 +47,14 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "postgres.query_table",
     description: "SELECT rows from a whitelisted table with optional equality filters.",
-    whenToUse: "You need rows matching a simple condition — e.g. orders for a customer email.",
-    whenNotToUse: "You need joins or aggregations — those aren't supported here for safety.",
+    whenToUse: "You need rows matching a simple condition - e.g. orders for a customer email.",
+    whenNotToUse: "You need joins or aggregations - those aren't supported here for safety.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {
       type: "object",
       properties: {
-        table: { type: "string", description: "Whitelisted table name (no schema dot — schema lives in config.search_path)." },
+        table: { type: "string", description: "Whitelisted table name (no schema dot - schema lives in config.search_path)." },
         where: {
           type: "object",
           description: "Map of column → value, ANDed together. Values are parameterized.",
@@ -229,7 +229,7 @@ async function getPool(key: string, connStr: string): Promise<any> {
 }
 
 /**
- * Double-quote identifier escape — Postgres canonical form. The whitelist
+ * Double-quote identifier escape - Postgres canonical form. The whitelist
  * checks already prevent attacker-controlled identifiers from reaching SQL,
  * but this is the second line of defense.
  */

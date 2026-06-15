@@ -1,6 +1,6 @@
 #!/bin/bash
 # Cloud-init bootstrap for the ChatCenter single-EC2 box (Ubuntu 22.04 ARM).
-# Idempotent — safe to re-run by hand. Logs to /var/log/cloud-init-output.log.
+# Idempotent - safe to re-run by hand. Logs to /var/log/cloud-init-output.log.
 #
 # What this does:
 #   1. Base packages (Docker, docker-compose plugin, AWS CLI, jq)
@@ -9,7 +9,7 @@
 #   4. 2GB swap (cheap safety net on a t4g.large)
 #   5. /opt/chatcenter app dir + nightly backup cron skeleton
 #
-# What this does NOT do (intentional — keeps Terraform decoupled from app):
+# What this does NOT do (intentional - keeps Terraform decoupled from app):
 #   - Clone the repo
 #   - Write .env files
 #   - Start docker compose
@@ -103,7 +103,7 @@ fi
 install -d -o ubuntu -g ubuntu /opt/chatcenter
 install -d -o ubuntu -g ubuntu /opt/chatcenter/backups
 
-# Backup script — runs nightly via cron. Reads env from /opt/chatcenter/.env
+# Backup script - runs nightly via cron. Reads env from /opt/chatcenter/.env
 # (which YOU create after deploying the app) for Postgres credentials.
 cat >/usr/local/bin/chatcenter-backup.sh <<EOF
 #!/bin/bash

@@ -81,7 +81,12 @@ export function ChannelEntryNode({ data }: NodeProps) {
   const platformName = data.platformName || PLATFORM_NAMES[channelType] || channelType;
 
   return (
-    <div className={`bg-white rounded-2xl shadow-lg ${colors.glow} border-2 ${colors.border} min-w-[220px] max-w-[260px] transition-all hover:shadow-xl hover:scale-[1.02]`}>
+    <div className={`relative bg-white rounded-2xl shadow-lg ${colors.glow} border-2 ${colors.border} min-w-[220px] max-w-[260px] transition-all hover:shadow-xl hover:scale-[1.02] ${data.__highlight ? "ring-4 ring-violet-400 ring-offset-2 animate-pulse" : ""}`}>
+      {data.__highlight && (
+        <span className="absolute -top-2 -right-2 z-10 px-2 py-0.5 rounded-full bg-violet-600 text-white text-[10px] font-semibold shadow-md whitespace-nowrap">
+          Just connected →
+        </span>
+      )}
       {/* Gradient header with large icon */}
       <div className={`bg-gradient-to-r ${colors.gradient} text-white px-4 py-3 rounded-t-[14px] flex items-center gap-3`}>
         <div className="w-9 h-9 rounded-xl bg-white/20 backdrop-blur-sm flex items-center justify-center shadow-inner">

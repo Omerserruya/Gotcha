@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * AI Bot / Tool Policy integration tests — verifies three critical flows:
+ * AI Bot / Tool Policy integration tests - verifies three critical flows:
  *
  * 1. Tool gate decisions: ALLOW / DENY / REQUIRE_APPROVAL based on
  *    tenant permissions and high-risk defaults
@@ -93,7 +93,7 @@ function okResponse(body: unknown, status = 200) {
 // that executeAction calls. Direct unit tests for the real
 // evaluateToolGate belong in the shared package.
 
-describe("evaluateToolGate — via executeAction integration", () => {
+describe("evaluateToolGate - via executeAction integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchMock.mockReset();
@@ -182,7 +182,7 @@ describe("evaluateToolGate — via executeAction integration", () => {
 // Verifies that executeAction respects gate decisions (DENY,
 // REQUIRE_APPROVAL) via the mocked evaluateToolGate.
 
-describe("executeAction — tool gate HITL integration", () => {
+describe("executeAction - tool gate HITL integration", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchMock.mockReset();
@@ -257,9 +257,9 @@ describe("executeAction — tool gate HITL integration", () => {
   });
 });
 
-// ─── 3. Tool Execution — executeAction ──────────────────────
+// ─── 3. Tool Execution - executeAction ──────────────────────
 
-describe("executeAction — tool dispatch works", () => {
+describe("executeAction - tool dispatch works", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     fetchMock.mockReset();

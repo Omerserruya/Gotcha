@@ -2,10 +2,10 @@ import type { ConversationStateFrame } from "@chatcenter/shared";
 import type { TranscriptAnalyzer, AnalysisContext } from "./types";
 
 /**
- * Phase 5 (Mode A QA) — heuristic playbook-compliance scorer.
+ * Phase 5 (Mode A QA) - heuristic playbook-compliance scorer.
  *
  * Operates on the persisted CallAnalysis.frames array, NOT on raw transcript
- * — this is the architectural reason Mode A is cheap (no re-summarization,
+ * - this is the architectural reason Mode A is cheap (no re-summarization,
  * no re-intent classification). The Phase 3 LiveAnalysisRunner already paid
  * for those during the call.
  *
@@ -17,7 +17,7 @@ import type { TranscriptAnalyzer, AnalysisContext } from "./types";
  *
  * A future polish pass can add an LLM-augmented rubric (PostCallPromptAssembler
  * + structured output) that looks at the actual transcript. The contract here
- * stays stable — analyzers always return `{score, findings, ...}`.
+ * stays stable - analyzers always return `{score, findings, ...}`.
  */
 
 export interface PlaybookComplianceInput {
@@ -86,7 +86,7 @@ export class PlaybookCompliance
     ) as string[];
 
     // 3. Deviation: regression detection (a known stage repeats AFTER a
-    //    later stage in canonical order — sign of confusion or drift).
+    //    later stage in canonical order - sign of confusion or drift).
     const canonRank = new Map(CANONICAL_STAGES.map((s, i) => [s, i] as const));
     let lastSeenRank = -1;
     const deviations: PlaybookComplianceOutput["deviations"] = [];
@@ -106,7 +106,7 @@ export class PlaybookCompliance
     }
 
     // 4. Score: stage coverage weight (60%) + linear progression (40%).
-    //    Canonical 7 stages — coverage is min(covered, 7) / 7.
+    //    Canonical 7 stages - coverage is min(covered, 7) / 7.
     const coverage = Math.min(stagesCovered.length, CANONICAL_STAGES.length) /
       CANONICAL_STAGES.length;
     const linearity =

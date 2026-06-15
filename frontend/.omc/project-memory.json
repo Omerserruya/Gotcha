@@ -126,32 +126,32 @@
   "hotPaths": [
     {
       "path": "src/components/landing/MessageFlowSection.tsx",
-      "accessCount": 115,
-      "lastAccessed": 1774623983633,
+      "accessCount": 116,
+      "lastAccessed": 1781509324113,
       "type": "file"
     },
     {
       "path": "src/i18n/en.json",
-      "accessCount": 100,
-      "lastAccessed": 1779777740878,
+      "accessCount": 115,
+      "lastAccessed": 1781518515639,
       "type": "directory"
     },
     {
       "path": "src/i18n/he.json",
-      "accessCount": 65,
-      "lastAccessed": 1779777775444,
+      "accessCount": 78,
+      "lastAccessed": 1781518533013,
       "type": "directory"
+    },
+    {
+      "path": "src/app/ai-studio/agents/[id]/page.tsx",
+      "accessCount": 65,
+      "lastAccessed": 1780645411514,
+      "type": "file"
     },
     {
       "path": "src/components/mainPlaybook/MainPlaybookEditor.tsx",
       "accessCount": 61,
       "lastAccessed": 1777281331044,
-      "type": "file"
-    },
-    {
-      "path": "src/app/ai-studio/agents/[id]/page.tsx",
-      "accessCount": 61,
-      "lastAccessed": 1777896817682,
       "type": "file"
     },
     {
@@ -162,8 +162,8 @@
     },
     {
       "path": "src/lib/api.ts",
-      "accessCount": 55,
-      "lastAccessed": 1780251397352,
+      "accessCount": 61,
+      "lastAccessed": 1781518438294,
       "type": "directory"
     },
     {
@@ -174,8 +174,8 @@
     },
     {
       "path": "src/components/landing/LandingPage.tsx",
-      "accessCount": 44,
-      "lastAccessed": 1774624070116,
+      "accessCount": 50,
+      "lastAccessed": 1781518768458,
       "type": "file"
     },
     {
@@ -198,8 +198,8 @@
     },
     {
       "path": "src/components/landing/SolutionsSection.tsx",
-      "accessCount": 28,
-      "lastAccessed": 1774624051685,
+      "accessCount": 30,
+      "lastAccessed": 1781517227799,
       "type": "file"
     },
     {
@@ -209,15 +209,15 @@
       "type": "file"
     },
     {
-      "path": "src/app/ai-studio/router/page.tsx",
-      "accessCount": 21,
-      "lastAccessed": 1776890780311,
+      "path": "src/app/globals.css",
+      "accessCount": 24,
+      "lastAccessed": 1781510155552,
       "type": "file"
     },
     {
-      "path": "src/app/globals.css",
-      "accessCount": 20,
-      "lastAccessed": 1779115595657,
+      "path": "src/app/ai-studio/router/page.tsx",
+      "accessCount": 21,
+      "lastAccessed": 1776890780311,
       "type": "file"
     },
     {
@@ -239,6 +239,18 @@
       "type": "file"
     },
     {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1780735946514,
+      "type": "file"
+    },
+    {
+      "path": "src/components/landing/FeaturesSection.tsx",
+      "accessCount": 15,
+      "lastAccessed": 1781516735533,
+      "type": "file"
+    },
+    {
       "path": "src/components/IntegrationDrawer.tsx",
       "accessCount": 13,
       "lastAccessed": 1777573446715,
@@ -255,12 +267,6 @@
       "accessCount": 12,
       "lastAccessed": 1779775820990,
       "type": "directory"
-    },
-    {
-      "path": "src/components/landing/FeaturesSection.tsx",
-      "accessCount": 11,
-      "lastAccessed": 1774624045497,
-      "type": "file"
     },
     {
       "path": "src/app/agents/page.tsx",
@@ -281,9 +287,9 @@
       "type": "file"
     },
     {
-      "path": "src/components/Sidebar.tsx",
+      "path": "src/app/integrations/[slug]/page.tsx",
       "accessCount": 10,
-      "lastAccessed": 1778530122423,
+      "lastAccessed": 1780658595089,
       "type": "file"
     },
     {
@@ -317,6 +323,12 @@
       "type": "directory"
     },
     {
+      "path": "src/app/ai-studio/knowledge/page.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1780662734484,
+      "type": "file"
+    },
+    {
       "path": "next.config.js",
       "accessCount": 4,
       "lastAccessed": 1779775900816,
@@ -335,21 +347,9 @@
       "type": "file"
     },
     {
-      "path": "src/app/ai-studio/knowledge/page.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1776365300788,
-      "type": "file"
-    },
-    {
       "path": "src/app/ai-studio/marketplace/[slug]/page.tsx",
       "accessCount": 3,
       "lastAccessed": 1776365300920,
-      "type": "file"
-    },
-    {
-      "path": "src/app/integrations/[slug]/page.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1773508058335,
       "type": "file"
     },
     {

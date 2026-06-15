@@ -9,7 +9,7 @@ import { NODE_REGISTRY, COLOR_TOKENS, SharedData } from "./node-registry";
 // edited. Canvas cards are read-only summaries (see CollapsedNode.tsx).
 //
 // Edits flow through `onChange(id, patch)` so React Flow state stays the
-// source of truth — no direct data-object mutation.
+// source of truth - no direct data-object mutation.
 
 interface Props {
   node: Node | null;
@@ -122,7 +122,7 @@ export function NodeInspector({ node, shared, onChange, onClose, onDelete, onDup
 function PanelShell({ open, onClose, children }: { open: boolean; onClose: () => void; children: React.ReactNode }) {
   return (
     <>
-      {/* Click-outside catcher (transparent — we don't dim the canvas) */}
+      {/* Click-outside catcher (transparent - we don't dim the canvas) */}
       <div className="fixed inset-0 z-30" onClick={onClose} />
       <aside
         onClick={(e) => e.stopPropagation()}

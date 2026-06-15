@@ -6,7 +6,7 @@
  * via the standard close() service path so the rest of the system (post-call
  * pipeline, CRM sync, UI inbox) sees the same shape it sees for chat closes.
  *
- * This is the backend safety net for the close-on-hangup behavior — the
+ * This is the backend safety net for the close-on-hangup behavior - the
  * frontend optimistically calls /api/conversations/:id/close in the workspace
  * page, but browser-closed / dropped / server-killed paths still need a
  * close, and that's what this subscriber catches.

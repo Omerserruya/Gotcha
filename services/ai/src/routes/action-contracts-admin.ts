@@ -1,5 +1,5 @@
 /**
- * Action Contract admin routes — CRUD over `ActionContract`.
+ * Action Contract admin routes - CRUD over `ActionContract`.
  *
  *   GET    /action-contracts
  *   GET    /action-contracts/:id
@@ -17,7 +17,7 @@ import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole }
 import { invalidateActionContractsCache } from "../services/action-contracts.repo";
 
 const router = Router();
-// Path-scoped — see funnel-admin.ts for the rationale (router-level use()
+// Path-scoped - see funnel-admin.ts for the rationale (router-level use()
 // without a path filter runs for every request hitting siblings under /api).
 router.use("/action-contracts", authenticate, resolveTenant, requireActiveTenant());
 

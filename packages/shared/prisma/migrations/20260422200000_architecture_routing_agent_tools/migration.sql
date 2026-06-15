@@ -47,7 +47,7 @@ ALTER TABLE "ai_agents"
 -- "customer angry" (LLM-judged). Split the deterministic ones into gates;
 -- leave escalation_rules in place for now (LLM-judged half still rendered
 -- in the prompt by prompt-assembler). Each row gets a single-element array
--- — no aggregation needed, since max_autonomous_messages is row-scoped.
+-- - no aggregation needed, since max_autonomous_messages is row-scoped.
 UPDATE "ai_agents"
 SET "escalation_gates" = jsonb_build_array(
   jsonb_build_object(

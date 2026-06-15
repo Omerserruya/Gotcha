@@ -185,7 +185,7 @@ function sendFrame(ws: ReturnType<typeof makeFakeWs>, frame: unknown) {
 // Tests: upgrade path
 // ---------------------------------------------------------------------------
 
-describe("attachTwilioHandler — upgrade path", () => {
+describe("attachTwilioHandler - upgrade path", () => {
   it("accepts a valid upgrade and calls handleUpgrade", async () => {
     const httpServer = new EventEmitter() as http.Server;
     const { deps, wss } = buildDeps();
@@ -237,7 +237,7 @@ describe("attachTwilioHandler — upgrade path", () => {
 // Tests: connection behavior
 // ---------------------------------------------------------------------------
 
-describe("attachTwilioHandler — connection handling", () => {
+describe("attachTwilioHandler - connection handling", () => {
   it("closes with 1013 and increments voiceOverload when at capacity", async () => {
     const httpServer = new EventEmitter() as http.Server;
     const { deps, wss, metrics } = buildDeps({ maxConcurrent: 0 });
@@ -444,7 +444,7 @@ describe("attachTwilioHandler — connection handling", () => {
     const { deps, wss, metrics } = buildDeps({ store, sessionFactory });
     attachTwilioHandler(httpServer, deps);
 
-    // First connection — creates session and registers in liveSessionMap
+    // First connection - creates session and registers in liveSessionMap
     const ws1 = makeFakeWs();
     triggerConnection(wss, ws1, "tenant-1");
     await new Promise((r) => setImmediate(r));

@@ -18,13 +18,13 @@ Rules:
   turns from this Command Center session, treat the new input as a CONTINUATION.
   - If the assistant's previous turn asked for specific information (an email, a
     phone number, an audience tag, a schedule time, etc.) and this input supplies
-    it, set mode="execution" — the user is filling in what you already asked for.
+    it, set mode="execution" - the user is filling in what you already asked for.
   - If the prior turn proposed a plan and the user is now confirming it
     ("yes do it", "go ahead", "כן תבצע"), set mode="execution" so the planner
     can re-emit the same plan.
   - If the prior turn proposed a plan and the user is asking to change it
-    ("change the time to 10am", "make it softer"), set mode="execution" — the
+    ("change the time to 10am", "make it softer"), set mode="execution" - the
     planner will revise.
 - When answering a plain question in chat mode, be proactive: if you know an
   action is available that would answer the question, suggest it in `answer`
-  (e.g. "I can draft that reply for you — just say the word").
+  (e.g. "I can draft that reply for you - just say the word").

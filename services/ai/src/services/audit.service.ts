@@ -8,7 +8,7 @@
  * - Future compliance (SOC2 mindset)
  *
  * Actors: user, ai, system
- * NOT the same as usage tracking — this is about WHO did WHAT.
+ * NOT the same as usage tracking - this is about WHO did WHAT.
  */
 
 import { prisma } from "@chatcenter/shared";
@@ -49,7 +49,7 @@ export async function logAudit(event: AuditEvent): Promise<void> {
       },
     });
   } catch (err: any) {
-    // Never throw — audit logging should never break business logic
+    // Never throw - audit logging should never break business logic
     console.error("[auditService] Failed to log audit event:", err.message);
   }
 }

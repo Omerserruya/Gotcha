@@ -1,18 +1,18 @@
 /**
- * Voice sessions API (Phase 1 — Live Call CoPilot).
+ * Voice sessions API (Phase 1 - Live Call CoPilot).
  *
  * Endpoints (all gated by `tenant.voiceCopilotEnabled`):
- *   GET    /api/voice-sessions/active           — RINGING + live for tenant
- *   GET    /api/voice-sessions/:id              — single session
- *   GET    /api/voice-sessions/:id/transcript   — paged voice messages
- *   GET    /api/voice-sessions/:id/context      — CRM enrichment block
- *   POST   /api/voice-sessions/:id/answer       — atomic claim
- *   POST   /api/voice-sessions/:id/decline      — RINGING → MISSED
- *   POST   /api/voice-sessions/:id/hangup       — live → ENDED
+ *   GET    /api/voice-sessions/active           - RINGING + live for tenant
+ *   GET    /api/voice-sessions/:id              - single session
+ *   GET    /api/voice-sessions/:id/transcript   - paged voice messages
+ *   GET    /api/voice-sessions/:id/context      - CRM enrichment block
+ *   POST   /api/voice-sessions/:id/answer       - atomic claim
+ *   POST   /api/voice-sessions/:id/decline      - RINGING → MISSED
+ *   POST   /api/voice-sessions/:id/hangup       - live → ENDED
  *
  * All routes require an authenticated agent in the same tenant as the
  * session. Tenants where `voiceCopilotEnabled = false` (every existing
- * production tenant by default) get a 404 — looks like the feature
+ * production tenant by default) get a 404 - looks like the feature
  * doesn't exist, which is intentional during the rollout window.
  */
 import { Router, Request, Response, NextFunction } from "express";
@@ -34,7 +34,7 @@ import { getHistoryByCustomerExternalId } from "../services/conversation.service
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
-// Feature-flag gate — short-circuits to 404 for non-enabled tenants.
+// Feature-flag gate - short-circuits to 404 for non-enabled tenants.
 async function voiceCopilotGate(req: Request, res: Response, next: NextFunction): Promise<void> {
   try {
     const tenant = await prisma.tenant.findUnique({
@@ -94,7 +94,7 @@ router.get("/active", async (req: Request, res: Response) => {
 // ─── GET /missed ──────────────────────────────────────────────
 // Recent MISSED inbound calls for the agent's tenant. Enriched with the
 // matching Contact row (if any) so the UI can render a name + tags
-// without an extra round trip. Limited to inbound — outbound MISSED
+// without an extra round trip. Limited to inbound - outbound MISSED
 // rows are a Twilio quirk (caller-decline) and don't belong in this
 // inbox view.
 router.get("/missed", async (req: Request, res: Response) => {
@@ -105,7 +105,7 @@ router.get("/missed", async (req: Request, res: Response) => {
         tenantId: req.tenantId!,
         state: "MISSED",
         direction: "inbound",
-        // Server-side handled flag — set when an outbound to the same
+        // Server-side handled flag - set when an outbound to the same
         // customerNumber went ACTIVE, or by an explicit dismiss POST.
         // Keeps the inbox cleared once the loop is closed, even when
         // the callback came from the WhatsApp template button.
@@ -146,7 +146,7 @@ router.get("/missed", async (req: Request, res: Response) => {
 // missed session, then proxies to voice-copilot's /callbacks/initiate
 // endpoint with the channel's outboundMode policy applied. IN_PLATFORM
 // mode is unsupported here (the agent would need to dial from the
-// browser-side dialer — return a 409 so the UI can guide them).
+// browser-side dialer - return a 409 so the UI can guide them).
 router.post("/missed/:id/callback", async (req: Request, res: Response) => {
   try {
     const session = await loadSessionForTenant(String(req.params.id), req.tenantId!);
@@ -212,7 +212,7 @@ router.post("/missed/:id/callback", async (req: Request, res: Response) => {
 // ─── POST /missed/:id/handle ───────────────────────────────────
 // Explicit "Mark as handled" from the inbox UI. Stamps `handledAt` on
 // every MISSED inbound session for the same (tenant, customerNumber)
-// — same cascade semantics as the auto-handle on ACTIVE. Idempotent.
+// - same cascade semantics as the auto-handle on ACTIVE. Idempotent.
 router.post("/missed/:id/handle", async (req: Request, res: Response) => {
   try {
     const session = await loadSessionForTenant(String(req.params.id), req.tenantId!);
@@ -256,7 +256,7 @@ router.get("/missed/:id/detail", async (req: Request, res: Response) => {
       return;
     }
 
-    // Contact lookup — prefer the linked customerId, fall back to phone match.
+    // Contact lookup - prefer the linked customerId, fall back to phone match.
     // Skip merged-into shells so we always return the surviving row.
     const contact = session.customerId
       ? await prisma.contact.findFirst({
@@ -277,7 +277,7 @@ router.get("/missed/:id/detail", async (req: Request, res: Response) => {
         : null;
 
     // CustomerBrief lookup uses dedicated columns rather than the identityKey
-    // string — the writer keys briefs as `person:` > `crm:` > `contact:`,
+    // string - the writer keys briefs as `person:` > `crm:` > `contact:`,
     // so a string-match on `contact:<id>` misses any CRM-linked customer.
     // The OR-on-columns mirrors how the AI service itself reads the row.
     const briefFilters: Array<Record<string, string>> = [];
@@ -295,7 +295,7 @@ router.get("/missed/:id/detail", async (req: Request, res: Response) => {
           },
         });
 
-    // Recent conversations across ALL channels — delegate to the canonical
+    // Recent conversations across ALL channels - delegate to the canonical
     // cross-channel sibling walk used by the chat right-panel "Context"
     // tab. It handles the cases a naive (channel, externalId) match misses:
     //   • Instagram PSIDs / Messenger PSIDs (no phone in externalId)
@@ -412,7 +412,7 @@ router.get("/:id/transcript", async (req: Request, res: Response) => {
 // ─── GET /:id/context ──────────────────────────────────────────
 // CRM enrichment for the right-panel cards. Returns prior conversations,
 // any persisted summaries, and the contact record (if matched on phone).
-// Heavy CRM lookups (lead_search/contact_search) are NOT triggered here —
+// Heavy CRM lookups (lead_search/contact_search) are NOT triggered here -
 // the AI service handles those at call-start via its existing prefetch.
 router.get("/:id/context", async (req: Request, res: Response) => {
   try {
@@ -436,7 +436,7 @@ router.get("/:id/context", async (req: Request, res: Response) => {
       // Mirror the cross-channel walker used by /missed/:id/detail (above)
       // so the panel surfaces ALL channels for the same person:
       //   1. Seed with phone variants (E.164 + bare digits).
-      //   2. Hand each seed to getHistoryByCustomerExternalId — that helper
+      //   2. Hand each seed to getHistoryByCustomerExternalId - that helper
       //      walks Contact.personId, CRM mapping (metadata.crmContactId),
       //      and CRM sibling-channel fields (gotcha_psid_*, gotcha_messenger_id_*)
       //      to collect every external id belonging to the same person.
@@ -542,7 +542,7 @@ router.post("/:id/decline", async (req: Request, res: Response) => {
     }
     // Decline transitions the DB row, but the customer leg is still ringing
     // on Twilio's side until we tell the provider to hang up. Fire-and-forget
-    // — if the upstream hangup fails we've still successfully declined for
+    // - if the upstream hangup fails we've still successfully declined for
     // the agent. The voice-copilot endpoint is idempotent.
     void terminateUpstreamCall(session.id, "declined");
     res.json({ data: result.session });
@@ -561,7 +561,7 @@ router.post("/:id/hangup", async (req: Request, res: Response) => {
       return;
     }
     const agentId = req.user!.userId;
-    // Only the assigned agent (or an admin) can hang up — prevents
+    // Only the assigned agent (or an admin) can hang up - prevents
     // accidental ends from a stale tab in another window.
     if (session.assignedAgentId && session.assignedAgentId !== agentId && req.user!.role !== "ADMIN") {
       res.status(403).json({ error: "not_owner" });
@@ -580,7 +580,7 @@ router.post("/:id/hangup", async (req: Request, res: Response) => {
       res.status(409).json({ error: result.reason });
       return;
     }
-    // Drop the upstream provider leg too — DB state alone doesn't end the
+    // Drop the upstream provider leg too - DB state alone doesn't end the
     // call for the customer. Especially important when the agent hangs up
     // before the conference fully bridged (current === "RINGING"), since
     // no `endConferenceOnExit` event fires to clean up Twilio's end.
@@ -760,14 +760,14 @@ router.post("/start-outbound", async (req: Request, res: Response) => {
     const mode = channel.voiceChannel.outboundMode;
     if (mode === "IN_PLATFORM") {
       // Tell the frontend it can proceed with the browser SDK. No
-      // session row is pre-created — /twiml/outbound creates it when
+      // session row is pre-created - /twiml/outbound creates it when
       // Twilio hits us back with the agent leg.
       res.json({ data: { mode: "IN_PLATFORM" } });
       return;
     }
 
     // AGENT_FIRST: forward to voice-copilot. We DON'T pass an agentId
-    // override — /callbacks/initiate falls back to the channel's
+    // override - /callbacks/initiate falls back to the channel's
     // `defaultAgent`, which is the configured target for outbound on
     // this channel. (Missed-call callbacks pass agentId explicitly when
     // a non-default agent is the one returning the call.)
@@ -776,7 +776,7 @@ router.post("/start-outbound", async (req: Request, res: Response) => {
     // in this tenant. The IN_PLATFORM flow relies on the frontend
     // generating a fresh UUID and having /twiml/outbound create the
     // Conversation row when Twilio hits back. For AGENT_FIRST the
-    // create happens INSIDE /callbacks/initiate — so a non-existing id
+    // create happens INSIDE /callbacks/initiate - so a non-existing id
     // becomes a FK violation. When the provided id is unknown we drop
     // it and let voice-copilot mint a new one.
     let forwardedConversationId: string | undefined = undefined;
@@ -799,7 +799,7 @@ router.post("/start-outbound", async (req: Request, res: Response) => {
           customerNumber: to,
           // No agentId override: ring the channel's defaultAgent (the
           // routing-page selection). To ring "me" instead, the UI would
-          // need a separate explicit toggle — not the default behavior.
+          // need a separate explicit toggle - not the default behavior.
           conversationId: forwardedConversationId,
           label: notes ? `outbound:${notes.slice(0, 40)}` : "outbound",
         }),
@@ -808,10 +808,10 @@ router.post("/start-outbound", async (req: Request, res: Response) => {
       if (!upstream.ok) {
         // Surface the upstream's `error` code as the top-level error so
         // the UI's standard error-toast can show it. The known codes:
-        //   agent_phone_not_configured   — caller has no phone on profile
-        //   caller_id_not_configured     — channel has no caller ID
-        //   no_active_channel            — provider can't be resolved
-        //   outbound_mode_not_agent_first — race: channel toggled mid-flight
+        //   agent_phone_not_configured   - caller has no phone on profile
+        //   caller_id_not_configured     - channel has no caller ID
+        //   no_active_channel            - provider can't be resolved
+        //   outbound_mode_not_agent_first - race: channel toggled mid-flight
         let detail: Record<string, unknown> = {};
         try { detail = JSON.parse(text || "{}") as Record<string, unknown>; } catch { /* */ }
         const upstreamError = typeof detail.error === "string" ? detail.error : null;
@@ -892,7 +892,7 @@ router.post("/:id/participants/:participantId/hold", async (req: Request, res: R
     const hold = Boolean((req.body as { hold?: unknown })?.hold);
     if (!participantId) { res.status(400).json({ error: "participantId_required" }); return; }
 
-    // Tenant scope check — never let an agent toggle hold on a participant
+    // Tenant scope check - never let an agent toggle hold on a participant
     // that belongs to a different tenant's session.
     const participant = await prisma.voiceSessionParticipant.findUnique({
       where: { id: participantId },
@@ -982,7 +982,7 @@ router.post("/presence/heartbeat", async (req: Request, res: Response) => {
 
 /**
  * Tell the voice-copilot service to terminate the upstream provider leg for
- * this session. Fire-and-forget — failures are logged but never block the
+ * this session. Fire-and-forget - failures are logged but never block the
  * agent-facing response. The voice-copilot endpoint is idempotent.
  *
  * Why this lives here instead of on the provider directly: this service has

@@ -1,14 +1,14 @@
 "use client";
 
 /**
- * Living orb for the Command Center. Pure CSS/SVG — no external deps.
+ * Living orb for the Command Center. Pure CSS/SVG - no external deps.
  *
  * States map to the modal's glow state:
- *   idle      — soft indigo/violet breathing, slow
- *   thinking  — faster multi-hue pulse, subtle spin
- *   ready     — emerald glow
- *   approval  — amber glow
- *   error     — rose glow
+ *   idle      - soft indigo/violet breathing, slow
+ *   thinking  - faster multi-hue pulse, subtle spin
+ *   ready     - emerald glow
+ *   approval  - amber glow
+ *   error     - rose glow
  *
  * Size is fixed at 40px so it sits flush with the modal's single-line input.
  */

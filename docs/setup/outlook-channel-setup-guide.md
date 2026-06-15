@@ -1,9 +1,9 @@
-# Outlook Channel Setup Guide — Microsoft OAuth2 + Graph API Integration
+# Outlook Channel Setup Guide - Microsoft OAuth2 + Graph API Integration
 
 > **Last updated:** March 2026
 > **Assumes:** You have access to the Azure Portal and a domain with HTTPS.
 
-This guide walks you through configuring Microsoft Entra ID (Azure AD) so that tenants can connect **Outlook** email accounts directly from the GOTCHA UI — enabling send/receive email via Microsoft Graph API with OAuth2 authentication.
+This guide walks you through configuring Microsoft Entra ID (Azure AD) so that tenants can connect **Outlook** email accounts directly from the GOTCHA UI - enabling send/receive email via Microsoft Graph API with OAuth2 authentication.
 
 ---
 
@@ -103,7 +103,7 @@ After registration, you'll see the **Overview** page. Copy these values:
 | **Expires** | **24 months** (recommended) or **Custom** |
 
 5. Click **Add**
-6. **Immediately copy the Value** (not the Secret ID) — it's only shown once!
+6. **Immediately copy the Value** (not the Secret ID) - it's only shown once!
 
 | Field | Environment Variable |
 |-------|---------------------|
@@ -197,7 +197,7 @@ When a subscription is created, Microsoft sends a **validation request**:
 | Property | Value |
 |----------|-------|
 | **Maximum expiration** | 3 days (4,230 minutes) for mail resources |
-| **Auto-renewal** | Not automatic — must be renewed before expiration |
+| **Auto-renewal** | Not automatic - must be renewed before expiration |
 | **Created by** | GOTCHA OAuth callback (automatic) |
 
 > **Important:** Microsoft Graph subscriptions expire after **3 days maximum**. You need a background job to renew them.
@@ -232,10 +232,10 @@ MICROSOFT_CLIENT_ID=your-application-client-id
 # Client Secret Value (from Azure → App registrations → Certificates & secrets)
 MICROSOFT_CLIENT_SECRET=your-client-secret-value
 
-# OAuth callback URL — must EXACTLY match the Redirect URI in Azure
+# OAuth callback URL - must EXACTLY match the Redirect URI in Azure
 MICROSOFT_OAUTH_REDIRECT_URI=https://yourdomain.com/api/channels/oauth/callback
 
-# Tenant ID — use "common" for multi-tenant, or your specific tenant ID
+# Tenant ID - use "common" for multi-tenant, or your specific tenant ID
 MICROSOFT_TENANT_ID=common
 
 # Webhook URL for receiving incoming email notifications
@@ -354,9 +354,9 @@ docker compose logs incoming-worker -f
 
 ### Microsoft's Debug Tools
 
-- **Graph Explorer:** [developer.microsoft.com/en-us/graph/graph-explorer](https://developer.microsoft.com/en-us/graph/graph-explorer) — test Graph API calls with your tokens
-- **JWT Decoder:** [jwt.ms](https://jwt.ms) — decode and inspect access tokens
-- **Azure Portal → App registrations → Your app → Logs** — check sign-in and audit logs
+- **Graph Explorer:** [developer.microsoft.com/en-us/graph/graph-explorer](https://developer.microsoft.com/en-us/graph/graph-explorer) - test Graph API calls with your tokens
+- **JWT Decoder:** [jwt.ms](https://jwt.ms) - decode and inspect access tokens
+- **Azure Portal → App registrations → Your app → Logs** - check sign-in and audit logs
 - **Test Subscription Endpoint:**
   ```bash
   curl -X POST "https://yourdomain.com/api/webhook/outlook?validationToken=test_token_123"

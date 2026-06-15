@@ -1,5 +1,5 @@
 /**
- * CRM OAuth routes — currently Zoho, extensible to Salesforce / HubSpot.
+ * CRM OAuth routes - currently Zoho, extensible to Salesforce / HubSpot.
  *
  * Mounted at /api/integrations BEFORE the authenticated `integrationRoutes`
  * router, so the public /callback path is not caught by the admin auth gate.
@@ -11,10 +11,10 @@
  *                                        302-redirects to the frontend.
  *
  * State JWT carries {tenantId, integrationSlug, userId} and is the only
- * trust anchor on the callback — so the callback is safe to leave public.
+ * trust anchor on the callback - so the callback is safe to leave public.
  */
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 import {
   exchangeZohoCode,
@@ -32,7 +32,7 @@ router.get(
   "/oauth/zoho_crm/init",
   authenticate,
   resolveTenant,
-  requireActiveTenant(),
+  requireOnboardingOrActiveTenant(),
   requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.ZOHO_CLIENT_ID;
@@ -42,8 +42,9 @@ router.get(
       return;
     }
 
+    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
     const state = jwt.sign(
-      { tenantId: req.tenantId, integrationSlug: "zoho_crm", userId: (req as any).userId },
+      { tenantId: req.tenantId, integrationSlug: "zoho_crm", userId: (req as any).userId, flow },
       JWT_SECRET,
       { expiresIn: "10m" },
     );
@@ -77,7 +78,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    let payload: { tenantId: string; integrationSlug: string; userId?: string };
+    let payload: { tenantId: string; integrationSlug: string; userId?: string; flow?: string };
     try {
       payload = jwt.verify(state as string, JWT_SECRET) as any;
     } catch {
@@ -106,7 +107,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       scope: tokens.scope,
     };
 
-    // api_domain is per-user (region-specific) — persist on config.baseUrl so
+    // api_domain is per-user (region-specific) - persist on config.baseUrl so
     // tool-execution.service.ts can prefix relative endpoints correctly.
     const configPayload = {
       baseUrl: (tokens.api_domain || "https://www.zohoapis.com").replace(/\/$/, ""),
@@ -182,7 +183,13 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       });
     }
 
-    res.redirect(`${frontendUrl}/integrations?connected=${payload.integrationSlug}`);
+    // During onboarding, return to /setup so the boot logic detects the
+    // connected core system and finishes activation; otherwise integrations.
+    res.redirect(
+      payload.flow === "onboarding"
+        ? `${frontendUrl}/setup?connected=${payload.integrationSlug}`
+        : `${frontendUrl}/integrations?connected=${payload.integrationSlug}`,
+    );
   } catch (err: any) {
     console.error("[Zoho OAuth] Callback error:", err?.message ?? err);
     res.redirect(`${frontendUrl}/integrations?error=oauth_callback_failed`);

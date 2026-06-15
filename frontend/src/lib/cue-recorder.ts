@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Cue Recorder — captures everything the live copilot did during a call so
+ * Cue Recorder - captures everything the live copilot did during a call so
  * the replay page can reconstruct it after hangup.
  *
  * Source: socket events (`voice.transcript`, `voice.frame.updated`,
@@ -13,7 +13,7 @@
  * sessions to keep storage bounded (~5MB ceiling worst case).
  *
  * No backend dependency. Replay quality matches what was actually
- * delivered to the rep — if the cue never made it to the socket, it
+ * delivered to the rep - if the cue never made it to the socket, it
  * never made it to the recorder.
  */
 
@@ -72,13 +72,13 @@ function writeLive(sessionId: string, events: TimelineEvent[]): void {
   try {
     sessionStorage.setItem(SS_KEY(sessionId), JSON.stringify(events));
   } catch {
-    /* quota — drop oldest 25%, retry */
+    /* quota - drop oldest 25%, retry */
     const trimmed = events.slice(Math.floor(events.length * 0.25));
     try {
       sessionStorage.setItem(SS_KEY(sessionId), JSON.stringify(trimmed));
       memBuffers.set(sessionId, trimmed);
     } catch {
-      /* give up — recorder is best-effort */
+      /* give up - recorder is best-effort */
     }
   }
 }
@@ -118,7 +118,7 @@ export function createRecorder(sessionId: string): RecorderHandle {
     push(kind, data) {
       const buf = bufferFor(sessionId);
       buf.push({ t: Date.now(), kind, data });
-      // Throttle writes — sessionStorage every 20 events is plenty.
+      // Throttle writes - sessionStorage every 20 events is plenty.
       if (buf.length % 20 === 0) writeLive(sessionId, buf);
     },
     flush() {
@@ -145,7 +145,7 @@ export function listReplays(): string[] {
 }
 
 /**
- * React hook — call from VoiceCallContext (or any per-call provider). Wires
+ * React hook - call from VoiceCallContext (or any per-call provider). Wires
  * socket events into the recorder for the duration of `sessionId`. Returns
  * a `recordOutcome` helper to log the rep's cue actions into the same
  * timeline (so replay shows accept/dismiss alongside the cue itself).

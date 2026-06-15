@@ -11,7 +11,7 @@
  *
  * Mirrors the SMTP transport pattern already used in
  *   services/auth/src/services/notification.service.ts
- * — same env vars (SMTP_HOST/PORT/USER/PASS/FROM), same lazy singleton
+ * - same env vars (SMTP_HOST/PORT/USER/PASS/FROM), same lazy singleton
  * transporter, same stub fallback.
  */
 
@@ -43,7 +43,7 @@ function getTransporter(): Transporter {
   const pass = process.env.SMTP_PASS;
   if (!host || !user || !pass) {
     // Dev/test stub. The auth service uses the same fallback so we stay consistent.
-    console.warn("[notifications.email] SMTP not configured — using log-only stub");
+    console.warn("[notifications.email] SMTP not configured - using log-only stub");
     _transporter = {
       sendMail: async (m: any) => {
         console.log(`[notifications.email STUB] to=${m.to} subject="${m.subject}"`);
@@ -79,14 +79,14 @@ async function checkRateLimit(userId: string): Promise<{ allowed: boolean; retry
     }
     return { allowed: true, retryAfterMs: 0 };
   } catch (err: any) {
-    // Fail open — better to over-deliver than to drop on a Redis hiccup.
+    // Fail open - better to over-deliver than to drop on a Redis hiccup.
     console.warn("[notifications.email] rate-limit redis failed:", err?.message);
     return { allowed: true, retryAfterMs: 0 };
   }
 }
 
 function renderHtml(body: string, link?: string): string {
-  // Absolutize relative dashboard paths — mail clients have no base URL,
+  // Absolutize relative dashboard paths - mail clients have no base URL,
   // so a bare "/approvals" becomes "http://approvals/" when clicked.
   const baseUrl = (process.env.FRONTEND_URL || "").replace(/\/$/, "");
   const fullLink = link && !/^https?:\/\//i.test(link) ? `${baseUrl}${link}` : link;
@@ -133,7 +133,7 @@ export function startNotificationsEmailWorker(): Worker<EmailJobData> {
       const rl = await checkRateLimit(d.userId);
       if (!rl.allowed) {
         // Re-enqueue with delay so we don't burn attempts. BullMQ counts a
-        // throw as an attempt — adding a delayed copy keeps the original
+        // throw as an attempt - adding a delayed copy keeps the original
         // attempt counter intact.
         const { getNotificationsEmailQueue, DEFAULT_NOTIF_JOB_OPTS } = await import("./queues");
         await getNotificationsEmailQueue().add("send-email", d, {

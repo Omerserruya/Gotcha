@@ -30,12 +30,14 @@ async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Prom
 
 export function submitWaitlistEntry(data: {
   firstName: string;
-  email: string;
+  email?: string;
   phone?: string;
-  role: string;
-  companySize: string;
+  company?: string;
+  role?: string;
+  companySize?: string;
   companyDomain?: string;
   frustration?: string;
+  source?: string;
 }) {
   return apiFetch<{ data: { id: string } }>("/api/waitlist", {
     method: "POST",
@@ -318,7 +320,7 @@ export function getChannels(token: string) {
   return apiFetch<{ data: any[] }>("/api/channels", { token });
 }
 
-// Recent posts for a Facebook/Instagram channel — used by the Comment
+// Recent posts for a Facebook/Instagram channel - used by the Comment
 // Trigger inspector to let users pick a post by clicking instead of
 // pasting an ID. Group posts are not supported (Meta Groups API was
 // deprecated April 2024); the inspector exposes a manual URL field for
@@ -548,7 +550,7 @@ export function getAISuggestions(
   conversationId: string,
   locale?: string,
   signal?: AbortSignal,
-  // Per-invocation idempotency key — the backend dedup layer collapses
+  // Per-invocation idempotency key - the backend dedup layer collapses
   // repeated requests with the same id into one execution and short-
   // circuits retries. Callers SHOULD generate a fresh id per
   // user-meaningful trigger (new inbound message, manual refresh click)
@@ -617,7 +619,7 @@ export function getTenantSettings(token: string) {
     data: {
       defaultCountryCode: string;
       supportedCountries: Array<{ code: string; callingCode: string }>;
-      // Phase 1 — Live Call CoPilot feature flags. Optional for back-compat
+      // Phase 1 - Live Call CoPilot feature flags. Optional for back-compat
       // with older API revisions that don't ship them yet.
       voiceCopilotEnabled?: boolean;
       voiceInboxUiEnabled?: boolean;
@@ -771,13 +773,16 @@ export function saveBusinessProfile(token: string, data: {
   organizationName: string;
   businessDescription: string;
   locale?: string;
-  // Onboarding v2 — multi-select goals + the original domain the user
+  // Onboarding v2 - multi-select goals + the original domain the user
   // typed so we can re-run the analysis later from settings.
   businessGoals?: string[];
   websiteDomain?: string;
-  // Legacy fields — kept optional so callers outside the 2-screen flow
-  // (e.g. settings) can still patch them; onboarding ignores them.
+  // Onboarding refactor - structured understanding confirmed in Gate 1.
   industry?: string;
+  country?: string;
+  primaryLanguage?: string;
+  // Legacy fields - kept optional so callers outside the flow
+  // (e.g. settings) can still patch them; onboarding ignores them.
   businessPriority?: string;
   estimatedDailyConversations?: number;
   numberOfAgents?: number;
@@ -787,11 +792,21 @@ export function saveBusinessProfile(token: string, data: {
   });
 }
 
-// Onboarding v2 — analyze a domain to AI-suggest a business description.
+// Onboarding refactor - analyze a domain to AI-understand the business.
+export interface BusinessUnderstanding {
+  name: string;
+  industry: string;
+  country: string;
+  language: string;
+  description: string;
+  /** Best-matching Industry Intelligence Pack slug, or "" if none. */
+  packSlug?: string;
+}
 export interface AnalyzeDomainResult {
   ok: boolean;
   domain?: string;
   description?: string;
+  understanding?: BusinessUnderstanding;
   reason?: "invalid_domain" | "fetch_failed" | "ai_unavailable" | "no_summary";
 }
 export function analyzeBusinessDomain(token: string, domain: string, locale?: string) {
@@ -800,7 +815,77 @@ export function analyzeBusinessDomain(token: string, domain: string, locale?: st
   });
 }
 
-// Onboarding v2 — invite teammates by email (magic-link based).
+// Onboarding refactor - record the chosen system of truth (Gate 2).
+export type CoreSystemSlug = "hubspot" | "salesforce" | "zoho_crm" | "shopify" | "fireberry" | "airtable";
+export function setCoreSystem(token: string, slug: CoreSystemSlug) {
+  return apiFetch<{ data: { primarySystem: string; connectedSlug: string | null; connected: boolean } }>(
+    "/api/onboarding/core-system",
+    { token, method: "POST", body: JSON.stringify({ slug }) },
+  );
+}
+
+// API-key style connect (Fireberry tokenid, and other API_KEY integrations).
+export function connectApiKeyIntegration(token: string, slug: string, credentials: Record<string, string>, config?: Record<string, unknown>) {
+  return apiFetch<{ ok: boolean }>(`/api/connectors/${slug}/connect`, {
+    token, method: "POST", body: JSON.stringify({ credentials, config: config || {} }),
+  });
+}
+
+// ─── Airtable as CRM source - base/table/column mapping (post-OAuth) ──
+export type AirtableMeta = { id: string; name: string };
+export type AirtableField = { id: string; name: string; type: string };
+export function airtableListBasesOnboarding(token: string) {
+  return apiFetch<{ data: AirtableMeta[] }>("/api/connectors/airtable/oauth/bases", { token });
+}
+export function airtableListTablesOnboarding(token: string, baseId: string) {
+  return apiFetch<{ data: AirtableMeta[] }>(`/api/connectors/airtable/oauth/tables?baseId=${encodeURIComponent(baseId)}`, { token });
+}
+export function airtableListFieldsOnboarding(token: string, baseId: string, tableId: string) {
+  return apiFetch<{ data: AirtableField[] }>(`/api/connectors/airtable/oauth/fields?baseId=${encodeURIComponent(baseId)}&tableId=${encodeURIComponent(tableId)}`, { token });
+}
+export interface AirtableMappingPayload {
+  baseId: string;
+  tableId: string;
+  fieldMap: { email?: string; phone?: string; display_name?: string; stage?: string };
+  notesField?: string;
+  idempotencyField?: string;
+  createMissing?: boolean;
+}
+export function saveAirtableMapping(token: string, payload: AirtableMappingPayload) {
+  return apiFetch<{ data: { id: string; config: Record<string, unknown> } | null; warning?: string }>(
+    "/api/connectors/airtable/mapping",
+    { token, method: "POST", body: JSON.stringify(payload) },
+  );
+}
+
+// Setup Hub - non-linear setup map tiles + done flags.
+export type SetupTileId = "knowledge_base" | "ai_employees" | "workflows" | "settings" | "channels" | "integrations";
+export interface SetupTile {
+  id: SetupTileId;
+  done: boolean;
+  deepLink: string;
+  stage: "core" | "later";
+  meta?: { slug?: string | null };
+}
+export function getSetupMap(token: string) {
+  return apiFetch<{ data: { tiles: SetupTile[]; sourceSystem: string | null; sourceConnected: boolean; completedCount: number; totalCount: number } }>(
+    "/api/onboarding/setup-map",
+    { token },
+  );
+}
+
+// Persistent guidance layer - per-feature first-time state.
+export type GuideState = "unseen" | "snoozed" | "done";
+export function getOnboardingGuides(token: string) {
+  return apiFetch<{ data: { guides: Record<string, GuideState> } }>("/api/onboarding/guides", { token });
+}
+export function patchOnboardingGuide(token: string, feature: string, state: GuideState) {
+  return apiFetch<{ data: { guides: Record<string, GuideState> } }>("/api/onboarding/guides", {
+    token, method: "PATCH", body: JSON.stringify({ feature, state }),
+  });
+}
+
+// Onboarding v2 - invite teammates by email (magic-link based).
 export interface InviteTeamResult {
   email: string;
   status: "sent" | "exists" | "failed";
@@ -812,19 +897,19 @@ export function inviteTeam(token: string, emails: string[], role?: "ADMIN" | "AG
   });
 }
 
-// Onboarding v2 — generate a shareable tenant invite link.
+// Onboarding v2 - generate a shareable tenant invite link.
 export function createInviteLink(token: string, role?: "ADMIN" | "AGENT") {
   return apiFetch<{ data: { url: string; token: string; expiresAt: string } }>("/api/onboarding/invite-link", {
     token, method: "POST", body: JSON.stringify({ role: role || "AGENT" }),
   });
 }
 
-// Public — fetch invite details by token (used by /join page).
+// Public - fetch invite details by token (used by /join page).
 export function getPublicInvite(inviteToken: string) {
   return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string; requiresPassword: boolean } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
 }
 
-// Public — accept an invite (creates the user / sets their password).
+// Public - accept an invite (creates the user / sets their password).
 export function acceptPublicInvite(payload: { token: string; name: string; email?: string; password: string }) {
   return apiFetch<{ data: { ok: true; tenantId: string } }>("/api/public/onboarding/invite/accept", {
     method: "POST", body: JSON.stringify(payload),
@@ -832,11 +917,10 @@ export function acceptPublicInvite(payload: { token: string; name: string; email
 }
 
 export type OnboardingMissionId =
-  | "confirm_business"
+  | "knowledge_base"
+  | "ai_employees"
   | "connect_channel"
-  | "send_test_reply"
-  | "review_agent_tone"
-  | "invite_teammate";
+  | "workflows";
 
 export interface OnboardingMission {
   id: OnboardingMissionId;
@@ -862,9 +946,10 @@ export function getOnboardingDepartments(token: string) {
   return apiFetch<{ data: any[] }>("/api/onboarding/departments", { token });
 }
 
-export function completeOnboarding(token: string) {
+export function completeOnboarding(token: string, opts?: { skipCoreSystem?: boolean }) {
   return apiFetch<{ data: any }>("/api/onboarding/complete", {
     token, method: "POST",
+    body: JSON.stringify({ skipCoreSystem: opts?.skipCoreSystem === true }),
   });
 }
 
@@ -1153,9 +1238,20 @@ export function toggleIntegrationTool(token: string, slug: string, toolSlug: str
 }
 
 /**
+ * Opt an integration in/out as the tenant's CRM source of truth. Today only
+ * Shopify supports this - when on, the bot reads customer context (and writes
+ * notes/tags) from Shopify instead of any CRM-category integration.
+ */
+export function setIntegrationCrmSource(token: string, slug: string, useAsCrm: boolean) {
+  return apiFetch<{ data: { id: string; useAsCrm: boolean } }>(`/api/integrations/${slug}/crm-source`, {
+    token, method: "PUT", body: JSON.stringify({ useAsCrm }),
+  });
+}
+
+/**
  * Toggle a single tool for one AI agent. Writes `AgentToolPermission`.
  * Use after `toggleIntegrationTool` so the underlying `TenantTool` is
- * also enabled — both layers must be true for the bot to see the tool.
+ * also enabled - both layers must be true for the bot to see the tool.
  */
 export function toggleAgentTool(
   token: string,
@@ -1183,7 +1279,7 @@ export function toggleAgentTool(
  * `extraParams` and they'll be forwarded as a query string. Empty values are
  * filtered so the backend can apply its own defaults.
  *
- * Returns the provider's authorize URL — caller should window.location = url.
+ * Returns the provider's authorize URL - caller should window.location = url.
  */
 // ─── Custom API tools ────────────────────────────────────────────
 //
@@ -1628,7 +1724,7 @@ export interface WebhookTriggerDto {
   enabled: boolean;
   targetMode: WebhookTargetMode;
   // User-declared shape of the request body. Source fields for the mapper.
-  // Declaration only — inbound payloads are not validated against it.
+  // Declaration only - inbound payloads are not validated against it.
   bodySchema: WebhookBodyField[];
   path: string;
 }
@@ -1676,7 +1772,7 @@ export function setWebhookTriggerMode(token: string, id: string, targetMode: Web
 }
 
 // Persist the user-declared body schema (the expected request-body fields the
-// mapper will bind from). Declaration only — not enforced on inbound payloads.
+// mapper will bind from). Declaration only - not enforced on inbound payloads.
 export function setWebhookTriggerBodySchema(
   token: string,
   id: string,
@@ -1730,7 +1826,7 @@ export function getUsageLogs(token: string, params?: { limit?: number; offset?: 
   return apiFetch<{ data: any[]; total: number }>(`/api/usage/logs${qs}`, { token });
 }
 
-// ─── Voice Sessions (Phase 1 — Live Call CoPilot) ───────────
+// ─── Voice Sessions (Phase 1 - Live Call CoPilot) ───────────
 //
 // Tenant-wide RINGING + live VoiceCallSession snapshot. All endpoints
 // 404 unless tenant.voiceCopilotEnabled is true (per backend gate in
@@ -1935,9 +2031,9 @@ export function getPricingTrends(token: string, days?: number) {
   return apiFetch<{ data: PricingTrends }>(`/api/system/pricing/trends${qs}`, { token });
 }
 
-// ─── Voice Channels (Phase 2 — Twilio onboarding) ───────────
+// ─── Voice Channels (Phase 2 - Twilio onboarding) ───────────
 //
-// Tenant-owned Twilio accounts (BYO). `authToken` is write-only — the
+// Tenant-owned Twilio accounts (BYO). `authToken` is write-only - the
 // backend never echoes it back; `accountSidFingerprint` is the truncated
 // SID for display.
 
@@ -2011,13 +2107,13 @@ export interface CopilotConfig {
   questions: CopilotQuestion[];
   dataFields: CopilotDataField[];
   /**
-   * TenantFunnel.id (cuid) — pins this voice channel to a specific funnel
+   * TenantFunnel.id (cuid) - pins this voice channel to a specific funnel
    * for stage resolution. Overrides the department-scoped funnel lookup.
    * Lets a tenant run different pipelines per phone number.
    */
   funnelId?: string;
   /**
-   * AIAgent.id — the AI Employee that drives call-pilot turns on this
+   * AIAgent.id - the AI Employee that drives call-pilot turns on this
    * channel. Same employee record used for chat/copilot; mode=callpilot
    * is selected at call time. Phase 6 migrates this to a real FK on
    * `voice_channels.ai_agent_id`.
@@ -2124,7 +2220,7 @@ export interface VoiceChannelRouting {
   /**
    * Inbound: opt-in hard cap on how long an unanswered call rings before
    * the platform hangs up and marks it MISSED. Null = no auto-hangup
-   * (legacy behavior — the call rings until Twilio's own timeout or
+   * (legacy behavior - the call rings until Twilio's own timeout or
    * the customer hangs up).
    */
   autoHangupSeconds: number | null;
@@ -2140,7 +2236,7 @@ export interface VoiceChannelRouting {
   /**
    * When `outboundMode = AGENT_FIRST`, controls whether the UI opens
    * the workspace page on click-to-call. Default true. Set false for
-   * "fire and forget" — agent walks away from the computer, mobile rings.
+   * "fire and forget" - agent walks away from the computer, mobile rings.
    */
   openWorkspaceOnAgentFirst: boolean;
 }
@@ -2453,7 +2549,7 @@ export interface UserFeatureGrantRow {
   updatedBy: string | null;
 }
 
-// SYSTEM_ADMIN — feature registry + tenant feature toggles
+// SYSTEM_ADMIN - feature registry + tenant feature toggles
 
 export function getFeatureRegistry(token: string) {
   return apiFetch<{ data: FeatureMetadata[] }>("/api/system/features", { token });
@@ -2478,7 +2574,7 @@ export function updateSystemTenantFeature(
   );
 }
 
-// Tenant ADMIN — roles + grants
+// Tenant ADMIN - roles + grants
 
 export function getMyFeatures(token: string) {
   return apiFetch<{ data: { features: string[]; role: string } }>(

@@ -1,11 +1,11 @@
 /**
- * AI Bot routes — autonomous mode reply generation.
+ * AI Bot routes - autonomous mode reply generation.
  *
  * Internal-only: protected by the same `X-Internal-Key` shared secret as
  * /api/ai-assist/intent. Called by the incoming-worker which holds all
  * channel-side effects (sending the reply, persisting messages, escalating
  * the conversation). This service never sends WhatsApp / Instagram
- * messages on its own — it just computes the next AI move.
+ * messages on its own - it just computes the next AI move.
  */
 
 import { Router, Request, Response, NextFunction } from "express";

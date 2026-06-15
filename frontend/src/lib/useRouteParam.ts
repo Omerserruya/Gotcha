@@ -7,7 +7,7 @@ import { useParams, usePathname } from "next/navigation";
  *
  * Our [id]/[slug] routes prerender a single "_" placeholder
  * (layout.tsx: `generateStaticParams() => [{ id: "_" }]`), so on the deployed
- * static site `useParams()` yields the literal "_" instead of the real value —
+ * static site `useParams()` yields the literal "_" instead of the real value -
  * which made pages fetch `/api/.../_` and 404. We fall back to the live URL's
  * last path segment, which is always the dynamic segment for these leaf routes.
  * In dev (non-export / real params) `useParams()` is correct and used as-is.

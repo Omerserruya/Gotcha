@@ -98,7 +98,7 @@ export default function TestChatModal({ isOpen, onClose, agentId, agentName, ava
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 text-sm">{agentName}</h3>
-            <p className="text-[11px] text-gray-400">Test Mode — Autonomous</p>
+            <p className="text-[11px] text-gray-400">Test Mode - Autonomous</p>
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-200">

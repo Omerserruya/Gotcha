@@ -111,7 +111,7 @@ export async function listFiles(
     // Root of a shared drive
     query = `'${driveId}' in parents and trashed=false and ${mimeFilter}`;
   } else {
-    // My Drive root — show only top-level items
+    // My Drive root - show only top-level items
     query = `'root' in parents and trashed=false and ${mimeFilter}`;
   }
 
@@ -200,7 +200,7 @@ export async function syncFiles(
       if (!metaRes.ok) continue;
       const fileMeta: any = await metaRes.json();
 
-      // Skip folders — recurse into them
+      // Skip folders - recurse into them
       if (fileMeta.mimeType === "application/vnd.google-apps.folder") {
         const children = await listFiles(integration, fileId);
         const childIds = children

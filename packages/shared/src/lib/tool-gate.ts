@@ -1,19 +1,19 @@
 /**
- * Unified tool policy gate — `evaluatePolicies()`.
+ * Unified tool policy gate - `evaluatePolicies()`.
  *
  * The single entry point every tool invocation flows through. HITL is a
  * TENANT-LEVEL concern: the tenant toggle is authoritative.
  *
- *   1. CatalogTool.hitlPolicy / SYSTEM_TOOL_POLICIES — the SEED for new tenants
- *   2. TenantTool.configOverrides.hitlPolicy / TenantToolPermission — AUTHORITATIVE
- *   3. AgentToolPermission.isAllowed — controls *access* to the tool (not HITL)
+ *   1. CatalogTool.hitlPolicy / SYSTEM_TOOL_POLICIES - the SEED for new tenants
+ *   2. TenantTool.configOverrides.hitlPolicy / TenantToolPermission - AUTHORITATIVE
+ *   3. AgentToolPermission.isAllowed - controls *access* to the tool (not HITL)
  *
  * When a tenant override is set (a row exists or `configOverrides.hitlPolicy`
- * is populated), that override DECIDES the gate — it can both loosen and
+ * is populated), that override DECIDES the gate - it can both loosen and
  * tighten the catalog default. When no override is set, the catalog default
  * applies.
  *
- * Per-agent `requireApproval` is intentionally NOT consulted here — HITL is
+ * Per-agent `requireApproval` is intentionally NOT consulted here - HITL is
  * not a per-agent decision. The agent-level permission row is read only to
  * confirm the agent has access (`isAllowed`).
  *
@@ -62,14 +62,14 @@ export interface PolicyResult {
 // via TenantToolPermission rows.
 
 const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
-  // Low-risk / context tools — always allowed.
+  // Low-risk / context tools - always allowed.
   link_customer_identifier:    { mode: "never" },
   escalate_to_human:           { mode: "never" },
   close_conversation:          { mode: "never" },
   tag_contact:                 { mode: "never" },
   generate_followup:           { mode: "never" },
 
-  // Write-side / external-facing — require approval by default.
+  // Write-side / external-facing - require approval by default.
   send_message:                { mode: "always" },
   create_broadcast:            { mode: "always" },
   schedule_broadcast:          { mode: "always" },
@@ -113,7 +113,7 @@ export async function evaluatePolicies(opts: {
     //   - "<provider>.<tool>"                            (adapter-framework dispatch,
     //                                                     e.g. "stripe.refund_payment")
     //
-    // Adapter names MUST be disambiguated by integration.slug — multiple
+    // Adapter names MUST be disambiguated by integration.slug - multiple
     // integrations expose the same tool slug (refund_payment, get_order,
     // search_customers, …). A slug-only lookup picks the first match and
     // applies the wrong HITL policy → unsafe gate decisions.
@@ -160,7 +160,7 @@ export async function evaluatePolicies(opts: {
   // The tenant toggle decides the gate in BOTH directions: a row that exists
   // and is set to requiresApproval=false explicitly opts the tool OUT of
   // approval, even if the catalog default is "always". Absence of a row means
-  // "no explicit override" — fall through to catalog default.
+  // "no explicit override" - fall through to catalog default.
   let tenant: HitlPolicy | null = null;
   if (tenantToolId) {
     const overrides = await (prisma as any).tenantTool?.findUnique?.({
@@ -171,7 +171,7 @@ export async function evaluatePolicies(opts: {
     const overrideHitl = (overrides?.configOverrides as any)?.hitlPolicy as HitlPolicy | undefined;
     if (overrideHitl) tenant = overrideHitl;
   } else {
-    // Static tool — TenantToolPermission row is the explicit override.
+    // Static tool - TenantToolPermission row is the explicit override.
     const row = await (prisma as any).tenantToolPermission?.findUnique?.({
       where: { tenantId_toolName: { tenantId: opts.tenantId, toolName: opts.toolName } },
     }).catch(() => null);
@@ -198,7 +198,7 @@ export async function evaluatePolicies(opts: {
 
   // Layer 3: agent access (NOT a HITL decision).
   // Per-agent rows govern WHICH tools an agent may call. They do NOT influence
-  // approval gating — HITL lives at the tenant level only.
+  // approval gating - HITL lives at the tenant level only.
   if (opts.aiAgentId && tenantToolId) {
     const grant = await (prisma as any).agentToolPermission?.findFirst?.({
       where: { tenantId: opts.tenantId, aiAgentId: opts.aiAgentId, tenantToolId },
@@ -234,7 +234,7 @@ export async function evaluatePolicies(opts: {
       },
     };
   }
-  // on_condition — evaluate against args
+  // on_condition - evaluate against args
   const hit = evaluateCondition(effective.condition, opts.args);
   if (hit) {
     return {
@@ -257,7 +257,7 @@ export async function evaluatePolicies(opts: {
 //
 // HITL is a tenant-level decision. When the tenant has set an explicit policy
 // (a TenantToolPermission row exists, or TenantTool.configOverrides.hitlPolicy
-// is populated), that policy decides the gate — including loosening a catalog
+// is populated), that policy decides the gate - including loosening a catalog
 // "always" floor down to "never". Without an explicit tenant override, we
 // fall back to the catalog default, which seeds new tenants with safe values.
 
@@ -287,7 +287,7 @@ function composeAuthoritative(
 
 // ─── Simple CEL-lite condition evaluator ────────────────────
 // Supports: `args.amount > 100`, `args.currency == 'USD'`, `contains(args.tags, 'vip')`.
-// Deliberately tiny — no external dependency. Expand later if needed.
+// Deliberately tiny - no external dependency. Expand later if needed.
 
 function evaluateCondition(condition: string | undefined, args: unknown): boolean {
   if (!condition) return false;

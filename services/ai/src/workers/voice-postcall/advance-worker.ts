@@ -29,17 +29,17 @@ import { recordStageTransition } from "../../services/stage-transition-audit.ser
 import { syncCloseToCrm } from "../../routes/crm-panel";
 
 /**
- * Phase 1 — Live Call CoPilot post-call pipeline worker.
+ * Phase 1 - Live Call CoPilot post-call pipeline worker.
  *
  * Drives a `VoiceCallPostProcessing` row through the canonical stages:
  *   PENDING → TRANSCRIPT_FINALIZED → SUMMARIZED → ACTION_ITEMS_EXTRACTED
  *   → CRM_WRITTEN → FOLLOWUP_GENERATED → FINALIZED
  *
- * Each stage is idempotent — re-running on the same session is safe. On
+ * Each stage is idempotent - re-running on the same session is safe. On
  * exception, increments `attempts`, captures `lastError`, and re-enqueues
  * with exponential backoff up to 3 attempts (then marks `FAILED`).
  *
- * Concurrency 3 — the pipeline is bounded by external IO (LLM, CRM) rather
+ * Concurrency 3 - the pipeline is bounded by external IO (LLM, CRM) rather
  * than CPU; this keeps a small fleet busy without thrashing.
  */
 
@@ -100,7 +100,7 @@ function mergedMeta(existing: unknown, patch: Record<string, unknown>): Record<s
 // ─── Stage handlers ────────────────────────────────────────────
 
 async function handleTranscriptFinalized(_ctx: AdvanceContext): Promise<Record<string, unknown> | null> {
-  // Marker stage — transcript writes are owned by voice-copilot's
+  // Marker stage - transcript writes are owned by voice-copilot's
   // PersistenceSink during the live call. Nothing to do here in Phase 1.
   return null;
 }
@@ -128,10 +128,10 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
     getPostConversationConfig(ctx.tenantId),
     loadExistingActionItems({ tenantId: ctx.tenantId, conversationId: ctx.conversationId }),
     // System language drives the voice-call summary copy. Voice post-
-    // processing runs from a worker with no user context — use the
+    // processing runs from a worker with no user context - use the
     // tenant default. Falls back to "en" inside summarizePostConversation.
     resolveEffectiveLocale({ tenantId: ctx.tenantId }).catch(() => null),
-    // Active pipeline stage for THIS customer — feeds stage-aware exit
+    // Active pipeline stage for THIS customer - feeds stage-aware exit
     // criteria + transition suggestion into the summarizer. Null when
     // there's no funnel configured (the LLM is then told to keep
     // stage_transition_suggestion = null).
@@ -193,7 +193,7 @@ async function handleSummarized(ctx: AdvanceContext): Promise<Record<string, unk
   });
 
   // Mirror to Conversation.aiSummary so the workspace cards see it without
-  // needing to join through CallAnalysis. Only when non-empty — we never
+  // needing to join through CallAnalysis. Only when non-empty - we never
   // wipe a previously-good summary.
   if (structured.summary) {
     await prisma.conversation.update({
@@ -345,7 +345,7 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
   }
 
   // Build the sparse field patch. Add `status` only when status_change is
-  // present — it rides on the same update call.
+  // present - it rides on the same update call.
   const fields: Record<string, unknown> = { ...structured.crm_patch };
   if (structured.status_change) {
     fields["status"] = structured.status_change.to;
@@ -373,7 +373,7 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
     return { crmWriteSkipped: "no-fields", stage: stageOutcome.summary };
   }
 
-  // Kind-aware vendor write — Leads vs Contacts route to the right module.
+  // Kind-aware vendor write - Leads vs Contacts route to the right module.
   // Falls back to a timeline note when the adapter can't patch the kind.
   const vendorResult = await applyCrmPatchKindAware({
     tenantId: ctx.tenantId,
@@ -383,7 +383,7 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
   });
 
   // ALSO patch the GOTCHA-side mirror Contact (this is what the local Contact
-  // table holds — separate from the vendor row). Skipped when there's no
+  // table holds - separate from the vendor row). Skipped when there's no
   // local Contact row.
   const contactId = await findContactId(ctx);
   let localResult: { ok?: boolean; skipReason?: string; error?: string } = {};
@@ -400,7 +400,7 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
     localResult = { ok: r.ok, skipReason: r.skipReason, error: r.error };
   }
 
-  // Multi-contact attribution — copy the same patch onto any ADDED legs
+  // Multi-contact attribution - copy the same patch onto any ADDED legs
   // that resolved to a known Contact. This is the "log it on the second
   // customer too" branch: if a 3rd party joined the call and they were
   // already in CRM, the same summary fields apply to them. Skipped when
@@ -414,7 +414,7 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
 
   // Commit the stage-transition audit row exactly once. For AUTO this
   // records whether the vendor write succeeded; for REVIEW_TASK it
-  // records the intent + the block reasons. Best-effort — failures
+  // records the intent + the block reasons. Best-effort - failures
   // never break the post-call pipeline.
   await stageOutcome.commit({
     ok: !!vendorResult.ok,
@@ -444,7 +444,7 @@ async function handleCrmWritten(ctx: AdvanceContext): Promise<Record<string, unk
 
 /**
  * Conservative threshold. The LLM is told this in the prompt, and the
- * advance-worker enforces it independently — confidence below this AND/OR
+ * advance-worker enforces it independently - confidence below this AND/OR
  * missing evidence routes to a human-review CRM task.
  */
 const STAGE_AUTOADVANCE_THRESHOLD = 0.75;
@@ -455,7 +455,7 @@ interface StageTransitionOutcome {
   /** A "Review stage change" CRM task was created for human approval. */
   taskCreated?: boolean;
   /**
-   * Pending audit payload — committed AFTER the vendor write so we can
+   * Pending audit payload - committed AFTER the vendor write so we can
    * record whether the write actually succeeded. Caller is responsible
    * for invoking `commit()` exactly once.
    */
@@ -724,7 +724,7 @@ async function handleFollowupGenerated(ctx: AdvanceContext): Promise<Record<stri
   }
 
   // Dedup against any PENDING ScheduledMessage already queued for this
-  // conversation — the copilot/bot may have called schedule_followup
+  // conversation - the copilot/bot may have called schedule_followup
   // mid-call (e.g. caller said "תחזרו אליי מחר"). Re-scheduling here would
   // send two follow-ups.
   const hasPending = await hasPendingFollowupForConversation({
@@ -790,7 +790,7 @@ async function hasPendingFollowupForConversation(args: {
 async function handleFinalized(ctx: AdvanceContext): Promise<Record<string, unknown> | null> {
   // Project the finalized voice call as a CRM activity note (duration,
   // message count, summary, sentiment). Mirrors what post-chat does at end
-  // of chat — without this, voice calls never produce a CRM "call log"
+  // of chat - without this, voice calls never produce a CRM "call log"
   // entry the rep can scan later. syncCloseToCrm is idempotent (5-min
   // dedup), so retries don't double-post.
   const crmNote = await syncCloseToCrm(ctx.tenantId, ctx.conversationId)
@@ -877,7 +877,7 @@ export async function advanceVoicePostCall(sessionId: string): Promise<void> {
       // Best-effort: a failure MUST NOT mark the pipeline as failed.
       // System language drives the brief text. Voice post-processing
       // runs from a worker, so we use the tenant default (no user). Best-
-      // effort — null falls back to "en" inside the generator.
+      // effort - null falls back to "en" inside the generator.
       const briefLocaleInfo = await resolveEffectiveLocale({
         tenantId: ctx.tenantId,
       }).catch(() => null);
@@ -932,7 +932,7 @@ export function startVoicePostCallAdvanceWorker(): Worker<VoicePostCallJobData> 
     async (job: Job<VoicePostCallJobData>) => {
       const data = job.data;
       if (!data?.sessionId) {
-        console.warn("[voice-postcall.worker] malformed job payload — skipped", job.id);
+        console.warn("[voice-postcall.worker] malformed job payload - skipped", job.id);
         return;
       }
       await advanceVoicePostCall(data.sessionId);

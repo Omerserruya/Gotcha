@@ -8,8 +8,8 @@
 import { describe, it, expect } from "vitest";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 
-describe("Issue 1 — closure posture", () => {
-  it("BARE 'תודה' alone does NOT close (customer may continue) — relies on idle worker or bot-led close-ack flow", () => {
+describe("Issue 1 - closure posture", () => {
+  it("BARE 'תודה' alone does NOT close (customer may continue) - relies on idle worker or bot-led close-ack flow", () => {
     const state = computeBehaviorState({
       mode: "agent",
       identity: { hasContact: true, contactLifecycle: "customer", priorConversationCount: 0,
@@ -127,7 +127,7 @@ describe("Issue 1 — closure posture", () => {
   });
 });
 
-describe("Issue 1c — Hebrew infinitive defer markers (live test gap)", () => {
+describe("Issue 1c - Hebrew infinitive defer markers (live test gap)", () => {
   it("'תקשיב תוכל לחזור אלי מחר?' → needs_followup (was open before the fix)", () => {
     const state = computeBehaviorState({
       mode: "agent",
@@ -168,11 +168,11 @@ describe("Issue 1c — Hebrew infinitive defer markers (live test gap)", () => {
   });
 });
 
-describe("Issue 2 — post-conversation summarizer rendering existing action items", () => {
+describe("Issue 2 - post-conversation summarizer rendering existing action items", () => {
   it("prompt renders existing tasks + pending follow-ups + intent-dedup instruction", async () => {
     // Import lazily so vitest doesn't try to wire up the prisma side at module load.
     const mod = await import("../services/post-conversation-summarizer.service");
-    // The rendering helper is internal — assert behavior through the public surface
+    // The rendering helper is internal - assert behavior through the public surface
     // by checking that buildSystemPrompt's inputs are reflected. Since buildSystemPrompt
     // is not exported, we verify the SHAPE of ExistingActionItems via the loader's type.
     const { loadExistingActionItems } = await import("../services/existing-action-items.service");

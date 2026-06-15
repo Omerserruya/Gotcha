@@ -51,7 +51,7 @@ CREATE TABLE "department_tool_permissions" (
     CONSTRAINT "department_tool_permissions_pkey" PRIMARY KEY ("id")
 );
 
--- AlterTable: tool_definitions — add integration_id
+-- AlterTable: tool_definitions - add integration_id
 ALTER TABLE "tool_definitions" ADD COLUMN "integration_id" TEXT;
 
 -- CreateIndex: integrations

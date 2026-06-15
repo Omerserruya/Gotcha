@@ -1,4 +1,4 @@
-# Instance role — grants the box: write backups to S3, read SSM secrets,
+# Instance role - grants the box: write backups to S3, read SSM secrets,
 # push CloudWatch metrics, and SSM Session Manager access (so you can shell
 # in without opening port 22).
 
@@ -29,11 +29,11 @@ resource "aws_iam_role_policy_attachment" "cw_agent" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
-# NOTE: no ECR policy here — registry is Docker Hub, not ECR. The EC2
+# NOTE: no ECR policy here - registry is Docker Hub, not ECR. The EC2
 # authenticates to Docker Hub via `docker login` at bootstrap time, using
 # credentials pulled from SSM Parameter Store.
 
-# Custom: scoped S3 + SSM-read access. NOT the wildcard managed policies —
+# Custom: scoped S3 + SSM-read access. NOT the wildcard managed policies -
 # this box should only see its own backup bucket + its own SSM namespace.
 data "aws_iam_policy_document" "instance_inline" {
   statement {

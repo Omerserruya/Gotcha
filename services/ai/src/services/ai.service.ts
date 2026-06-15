@@ -26,7 +26,7 @@ export interface AIRequestParams {
     type?: string; // "suggestion" | "chat" | "summary" | "classification" | "onboarding"
     /**
      * Hash of the cached system prefix (SYSTEM_CORE + SESSION_PROFILE).
-     * Logged with usage so we can detect prefix drift within a session —
+     * Logged with usage so we can detect prefix drift within a session -
      * if this changes mid-session, the OpenAI prefix cache is invalidated.
      */
     systemPromptHash?: string;
@@ -34,7 +34,7 @@ export interface AIRequestParams {
   };
   /**
    * Stable identifier for the conversation/call. Passed to OpenAI as the
-   * `user` parameter so requests within a session route consistently —
+   * `user` parameter so requests within a session route consistently -
    * this is a prerequisite for OpenAI's automatic prompt-prefix caching
    * (https://platform.openai.com/docs/guides/prompt-caching).
    */
@@ -47,7 +47,7 @@ export interface AIRequestParams {
   toolChoice?: any;
   /**
    * Cancellation signal. When aborted, the underlying fetch to OpenAI is
-   * cancelled — the SDK throws `APIUserAbortError`. Used by the per-turn
+   * cancelled - the SDK throws `APIUserAbortError`. Used by the per-turn
    * cancellation registry (`turn-cancellation.service`) so a newer customer
    * message can drop the in-flight LLM call instead of letting both
    * complete and replying twice.
@@ -128,7 +128,7 @@ function getClient(): OpenAI {
 //
 // Spec assertion contract: for a given sessionId, the system MUST keep the
 // system-prompt prefix byte-identical across calls. If it drifts, the
-// prefix cache breaks silently — that's a system design violation and the
+// prefix cache breaks silently - that's a system design violation and the
 // caller needs to see it. We capture a SHA-256 of the first system message
 // here and compare on every subsequent call with the same sessionId.
 //
@@ -154,7 +154,7 @@ function recordAndAssertPrefix(
   const existing = SESSION_PREFIX_CACHE.get(sessionId);
   if (!existing) {
     if (SESSION_PREFIX_CACHE.size >= SESSION_PREFIX_CACHE_MAX) {
-      // Drop the oldest entry — Map preserves insertion order.
+      // Drop the oldest entry - Map preserves insertion order.
       const firstKey = SESSION_PREFIX_CACHE.keys().next().value;
       if (firstKey !== undefined) SESSION_PREFIX_CACHE.delete(firstKey);
     }
@@ -165,7 +165,7 @@ function recordAndAssertPrefix(
   existing.callCount += 1;
   if (existing.hash !== hash) {
     console.warn(
-      `[aiService] CACHE PREFIX DRIFT — sessionId=${sessionId} ` +
+      `[aiService] CACHE PREFIX DRIFT - sessionId=${sessionId} ` +
       `had hash=${existing.hash} (call #${existing.callCount - 1}) but now hash=${hash}. ` +
       `Prefix cache broken from this call onward. Check that the system prompt's per-agent + per-conv blocks render byte-identical across turns.`,
     );
@@ -232,7 +232,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   // Spec assertion #2: once we're past the first call for a session AND the
   // prefix hash didn't drift, we expect cached_tokens > 0. A miss here means
   // either (a) under 1024 prompt tokens (cache minimum) or (b) the OpenAI
-  // backend evicted the prefix (~5min TTL). Logged as warn — not an error,
+  // backend evicted the prefix (~5min TTL). Logged as warn - not an error,
   // because both conditions are legitimate, but operators need to see it.
   if (
     params.sessionId &&
@@ -242,7 +242,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     cachedTokens === 0
   ) {
     console.warn(
-      `[aiService] expected cache hit but cached_tokens=0 — sessionId=${params.sessionId} ` +
+      `[aiService] expected cache hit but cached_tokens=0 - sessionId=${params.sessionId} ` +
       `hash=${prefixAssertion.hash} promptTokens=${usage.input_tokens}. ` +
       `Likely cause: prompt prefix < 1024 tokens, or >5min since last call (cache TTL).`,
     );
@@ -337,7 +337,7 @@ export async function generateEmbedding(params: EmbeddingRequestParams): Promise
 //
 // Used by the System Copilot (Command Center) so tokens reach the operator's
 // UI as they're generated. Maintains the same audit + usage-tracking
-// contracts as `generateResponse` — the totals just land at the END of the
+// contracts as `generateResponse` - the totals just land at the END of the
 // stream, after we've consumed all chunks.
 
 export interface AIStreamEvent {

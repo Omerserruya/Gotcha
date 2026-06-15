@@ -17,7 +17,7 @@ The corrected design:
   read-only until the call sites stop reading them, then dropped)
 - The `call_playbook` → funnel fold (Phase 2b codemod) is a separate
   effort and continues unchanged
-- **Nothing about `AIAgent` is dropped** — `description`, `systemPrompt`,
+- **Nothing about `AIAgent` is dropped** - `description`, `systemPrompt`,
   `tone`, etc. all stay; the unified worker reads them via the cutover
   shim (`workerConfigFromAgent`)
 
@@ -41,9 +41,9 @@ The corrected design:
 The unified AI Worker (`services/ai/src/worker/`) supports both paths
 already via `cutover-shim.ts`:
 
-- `workerConfigFromAgent(agent, mode, skillIds)` — canonical, used when
+- `workerConfigFromAgent(agent, mode, skillIds)` - canonical, used when
   `voice_channels.ai_agent_id` is populated
-- `workerConfigFromLegacy(agent, channelConfig, ...)` — transitional,
+- `workerConfigFromLegacy(agent, channelConfig, ...)` - transitional,
   used while a voice channel still has only `copilot_config`
 
 Running this migration is safe at any point, but the value lands when
@@ -55,14 +55,14 @@ the voice call sites (`live-analysis-runner.ts`,
 
 Before moving this migration into `prisma/migrations/`:
 
-- [ ] Phase 5 cutover for `callpilot` site flipped — the live runner
+- [ ] Phase 5 cutover for `callpilot` site flipped - the live runner
       reads the AIAgent reference when present
 - [ ] Admin UI surfaces "Voice channels using this employee" on the
       AIAgent editor page (Phase 7 design doc)
-- [ ] Backfill script dry-run report inspected — operator approves
+- [ ] Backfill script dry-run report inspected - operator approves
       auto-link decisions per tenant
 - [ ] Rollback plan: the new FK is nullable + `ON DELETE SET NULL`, and
-      the `copilot_config` column is retained as the fallback — so
+      the `copilot_config` column is retained as the fallback - so
       reverting is a one-line code change (call site reads
       `copilot_config` again), no data loss
 

@@ -1,5 +1,5 @@
 /**
- * Memory tools — AI-callable surface for customer state + history.
+ * Memory tools - AI-callable surface for customer state + history.
  *
  * Five tools wired into the existing OpenAI-function-calling format:
  *
@@ -21,7 +21,7 @@
  *                                scheduled.worker.ts in this same change.)
  *
  * Every WRITE tool dedupes via a deterministic key on the ScheduledMessage
- * row — two AI calls with the same conversationId + body + minute-truncated
+ * row - two AI calls with the same conversationId + body + minute-truncated
  * runAt collapse to one job.
  *
  * Read tools never block: CRM unreachable → empty arrays + reason flag.
@@ -231,7 +231,7 @@ async function searchCustomerHistoryTool(args: Record<string, unknown>, ctx: Mem
   const sibConvIds = sibConvs.map((c: any) => c.id);
   if (sibConvIds.length === 0) return { ok: true, data: { hits: [] } };
 
-  // Keyword search across messages (Postgres ILIKE for now — pg_trgm + Qdrant
+  // Keyword search across messages (Postgres ILIKE for now - pg_trgm + Qdrant
   // come in a later phase; ILIKE is fine for the first cut).
   const escaped = query.replace(/[%_]/g, "\\$&");
   const matches = await (prisma as any).message.findMany({
@@ -331,7 +331,7 @@ async function scheduleFlowTriggerTool(args: Record<string, unknown>, ctx: Memor
   const conv = await loadConvOrFail(conversationId, ctx.tenantId);
   if (!conv) return { ok: false, reason: "conversation_not_found" };
 
-  // Verify flow belongs to tenant + is active before scheduling — cheap
+  // Verify flow belongs to tenant + is active before scheduling - cheap
   // guardrail against typos / cross-tenant ids.
   const flow = await (prisma as any).chatbotFlow.findFirst({
     where: { id: flowId, tenantId: ctx.tenantId, isActive: true },

@@ -1,6 +1,6 @@
-# GOTCHA AI Architecture — Implementation Package
+# GOTCHA AI Architecture - Implementation Package
 
-Status: **LOCKED — 2026-04-22.** All architectural decisions frozen. No further design discussion.
+Status: **LOCKED - 2026-04-22.** All architectural decisions frozen. No further design discussion.
 
 This directory is the single source of truth for the AI Agent orchestration platform. Engineering implements directly from these files.
 
@@ -8,7 +8,7 @@ This directory is the single source of truth for the AI Agent orchestration plat
 
 | File | Scope |
 |---|---|
-| [`01-final-schema.md`](./01-final-schema.md) | Prisma schema — the entire new + migrated shape |
+| [`01-final-schema.md`](./01-final-schema.md) | Prisma schema - the entire new + migrated shape |
 | [`02-migration-plan.md`](./02-migration-plan.md) | Ordered, downtime-safe rollout plan (8 phases) |
 | [`03-execution-engine.md`](./03-execution-engine.md) | `executeAgentTurn` contract, tool dispatch, HITL, routing |
 | [`04-service-boundaries.md`](./04-service-boundaries.md) | Service boundaries + interaction diagram |
@@ -34,6 +34,6 @@ This directory is the single source of truth for the AI Agent orchestration plat
 
 ## Out of scope for this spec
 
-- Long-term agent memory (defer — use "context assembly" language instead)
+- Long-term agent memory (defer - use "context assembly" language instead)
 - Voice Co-Pilot rename (separate PR)
 - Cost/budget caps (follow-up)

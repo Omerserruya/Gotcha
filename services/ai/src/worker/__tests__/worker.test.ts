@@ -2,12 +2,12 @@
  * AIWorker top-level orchestration tests.
  *
  * Exercises the contract that matters at the call site:
- *   - open() is idempotent — second open for same sessionId returns the
+ *   - open() is idempotent - second open for same sessionId returns the
  *     same prefix bytes
  *   - buildMessages prepends SYSTEM_CORE + SESSION_PROFILE in that order
  *   - allowedTools is the post-policy decision
  *
- * Does NOT call OpenAI — generate()/stream() are integration territory.
+ * Does NOT call OpenAI - generate()/stream() are integration territory.
  */
 
 import { describe, it, expect, beforeEach } from "vitest";
@@ -51,7 +51,7 @@ describe("AIWorker", () => {
     __clearSeenForTests();
   });
 
-  it("open() is idempotent — same sessionId → same fingerprint hash", () => {
+  it("open() is idempotent - same sessionId → same fingerprint hash", () => {
     const a = AIWorker.open({ sessionId: "sess-1", config: baseConfig, profile: baseProfile });
     const b = AIWorker.open({ sessionId: "sess-1", config: baseConfig, profile: baseProfile });
     expect(a.fingerprintHash).toBe(b.fingerprintHash);

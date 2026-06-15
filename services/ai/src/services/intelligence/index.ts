@@ -1,5 +1,5 @@
 /**
- * Conversation Intelligence Engine — Layer 2.
+ * Conversation Intelligence Engine - Layer 2.
  *
  * Owns every analysis primitive, prompt assembler, memory write/read, and
  * structured-output schema. Does NOT own WS connections, STT, or tool

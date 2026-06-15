@@ -3,10 +3,10 @@ import { getRedis, type TranscriptUtterance } from "@chatcenter/shared";
 /**
  * Two-tier conversation memory backing the live analysis runner.
  *
- *   Tier A — verbatim sliding window of the most recent utterances.
+ *   Tier A - verbatim sliding window of the most recent utterances.
  *            Drives Intent / Sentiment / Risk / Missing-field extraction.
  *
- *   Tier B — rolling 200-token summary of everything BEFORE Tier A.
+ *   Tier B - rolling 200-token summary of everything BEFORE Tier A.
  *            Updated by the side summarizer on a slower cadence (Phase 3
  *            ships the storage; the summarizer cadence runs every 30s in
  *            the runner).
@@ -62,7 +62,7 @@ export class ConversationMemory {
       }
       if (typeof b === "string") m.tierBSummary = b;
     } catch {
-      /* fail open — empty memory */
+      /* fail open - empty memory */
     }
     return m;
   }
@@ -100,7 +100,7 @@ export class ConversationMemory {
 
   /**
    * Persist Tier A and Tier B to Redis with refreshed TTL.
-   * Skipped silently if Redis is unavailable — the durable CallAnalysis
+   * Skipped silently if Redis is unavailable - the durable CallAnalysis
    * mirror is the source of truth on cache miss.
    */
   async flush(): Promise<void> {
@@ -119,7 +119,7 @@ export class ConversationMemory {
       ]);
       this.dirty = false;
     } catch {
-      /* swallow — caller already proceeded */
+      /* swallow - caller already proceeded */
     }
   }
 }

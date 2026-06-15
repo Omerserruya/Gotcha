@@ -56,7 +56,7 @@ data "aws_ami" "ubuntu_arm" {
 
 # ── Security group ────────────────────────────────────────────────────
 # Outbound: open (Cloudflare Tunnel + Meta/Twilio/OpenAI calls).
-# Inbound: SSH only if explicitly allowed. No 80/443 — Cloudflare Tunnel
+# Inbound: SSH only if explicitly allowed. No 80/443 - Cloudflare Tunnel
 # is the public entrypoint, dialing OUT from the box.
 
 resource "aws_security_group" "instance" {

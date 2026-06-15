@@ -18,7 +18,7 @@ vi.mock("@chatcenter/shared", () => ({
   resolveContactByChannelId: vi.fn(),
 }));
 
-// Sibling handlers the dispatcher can route to — stub so we can assert routing
+// Sibling handlers the dispatcher can route to - stub so we can assert routing
 // without executing the heavy message / flow paths.
 vi.mock("../services/comment-trigger.service", () => ({
   processCommentTrigger: vi.fn(),
@@ -32,7 +32,7 @@ const WEBHOOK_JOB = {
   data: { triggerId: "tr1", workflowId: "w1", tenantId: "t1", payload: { order_id: 7 } },
 } as any;
 
-describe("incoming worker dispatch — webhook-trigger routing", () => {
+describe("incoming worker dispatch - webhook-trigger routing", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     executeWebhookFlow.mockResolvedValue({ executed: true, halted: true, trace: [] });

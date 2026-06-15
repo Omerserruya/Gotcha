@@ -180,7 +180,7 @@ export function FeaturesSection({ tenantId, onMessage }: Props) {
                         {!f.configured && (
                           <span
                             className="text-[10px] text-gray-400"
-                            title="Inheriting metadata default — no DB row yet"
+                            title="Inheriting metadata default - no DB row yet"
                           >
                             (default)
                           </span>

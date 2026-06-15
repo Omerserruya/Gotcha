@@ -35,7 +35,7 @@ resource "aws_instance" "app" {
   iam_instance_profile   = aws_iam_instance_profile.instance.name
   key_name               = local.effective_key_name
 
-  # Hibernation off — t4g doesn't support it on the cheap tier anyway.
+  # Hibernation off - t4g doesn't support it on the cheap tier anyway.
   monitoring = false # detailed CW metrics cost extra; basic is enough at this scale
 
   root_block_device {
@@ -72,7 +72,7 @@ resource "aws_instance" "app" {
   }
 }
 
-# Static IP — only matters if you stop using Cloudflare Tunnel. Free while
+# Static IP - only matters if you stop using Cloudflare Tunnel. Free while
 # attached to a running instance. Detached EIPs cost ~$3.60/mo, so detach
 # or release if you stop the instance long-term. Off by default since the
 # typical setup here uses Cloudflare Tunnel (outbound, no inbound IP needed).

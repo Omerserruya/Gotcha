@@ -5,7 +5,7 @@ import { getAgentOverview } from "../services/agent-performance.service";
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
-// GET / — get scores for all agents (admin)
+// GET / - get scores for all agents (admin)
 router.get("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const { from, to, agentId } = req.query;
@@ -27,7 +27,7 @@ router.get("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
   }
 });
 
-// GET /:agentId — get overview for specific agent
+// GET /:agentId - get overview for specific agent
 router.get("/:agentId", async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId as string;
@@ -56,7 +56,7 @@ router.get("/:agentId", async (req: Request, res: Response) => {
   }
 });
 
-// GET /:agentId/history — get score history
+// GET /:agentId/history - get score history
 router.get("/:agentId/history", async (req: Request, res: Response) => {
   try {
     const agentId = req.params.agentId as string;

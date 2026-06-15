@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 
 /**
- * Phase 1 — verify the action-executor performs REAL HTTP dispatch for
+ * Phase 1 - verify the action-executor performs REAL HTTP dispatch for
  * the tools that were previously faked with `{ queued: true }`.
  *
  * Tests mock `global.fetch` and assert the request shape AND that a
@@ -63,7 +63,7 @@ function errResponse(body: unknown, status: number) {
   } as any;
 }
 
-describe("action-executor — real HTTP dispatch (phase 1)", () => {
+describe("action-executor - real HTTP dispatch (phase 1)", () => {
   beforeEach(() => {
     fetchMock.mockReset();
     vi.clearAllMocks();
@@ -97,7 +97,7 @@ describe("action-executor — real HTTP dispatch (phase 1)", () => {
     expect((r.output as any).data.id).toBe("b1");
   });
 
-  it("create_broadcast surfaces upstream 4xx as { ok:false } — no fake success", async () => {
+  it("create_broadcast surfaces upstream 4xx as { ok:false } - no fake success", async () => {
     fetchMock.mockResolvedValueOnce(errResponse({ error: "channelAccountId is required" }, 400));
     const r = await executeAction(
       "t1",

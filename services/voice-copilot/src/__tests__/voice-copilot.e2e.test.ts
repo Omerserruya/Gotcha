@@ -26,14 +26,14 @@ import type { Redis } from "ioredis";
 import type { Metrics } from "../metrics/metrics";
 
 // ---------------------------------------------------------------------------
-// Module-level shared Redis instance — replaced per-test via the ref below.
+// Module-level shared Redis instance - replaced per-test via the ref below.
 // The vi.mock factory captures a reference to this object so any test that
 // replaces sharedRedisRef.current gets the updated instance.
 // ---------------------------------------------------------------------------
 const sharedRedisRef: { current: Redis | null } = { current: null };
 
 vi.mock("@chatcenter/shared", () => {
-  // Stub middleware that just calls next() — only used by /api/voice-copilot/live
+  // Stub middleware that just calls next() - only used by /api/voice-copilot/live
   // which is not exercised in this e2e test.
   const passThrough = (_req: any, _res: any, next: any) => next();
   const requireRole = () => passThrough;
@@ -55,7 +55,7 @@ vi.mock("@chatcenter/shared", () => {
 });
 
 // ---------------------------------------------------------------------------
-// InMemoryRedis — full mock implementing every command used by session-store
+// InMemoryRedis - full mock implementing every command used by session-store
 // + dispatcher pipeline
 // ---------------------------------------------------------------------------
 function makeInMemoryRedis(): Redis {
@@ -435,7 +435,7 @@ function buildHarness(): TestHarness {
     new StubSTTProvider({
       seed: cfg.seed ?? 42,
       phraseList: ["hello", "yes", "okay"],
-      partialIntervalMs: 999_999, // effectively never — no partials emitted
+      partialIntervalMs: 999_999, // effectively never - no partials emitted
       finalIntervalMs: 200,       // tick 1 at 200ms emits a final
       clock,
     });
@@ -503,7 +503,7 @@ function buildHarness(): TestHarness {
 
   const builtApp = createApp(overrides);
 
-  // Wire: secureHmac always passes — inject via TwilioHandlerDeps override.
+  // Wire: secureHmac always passes - inject via TwilioHandlerDeps override.
   // createApp calls attachTwilioHandler internally. The only way to bypass HMAC
   // in e2e is to pass secureHmac override through createApp. Since createApp
   // doesn't expose that option, we test by listening on the raw server and
@@ -735,7 +735,7 @@ describe("voice-copilot e2e", () => {
     const postsBeforeRetry = posts.length;
 
     // Enqueue duplicate items via the dispatcher directly (same tenantId+conversationId+speaker+seq
-    // that was already dispatched — NX will fail for those keys)
+    // that was already dispatched - NX will fail for those keys)
     for (const post of posts.slice(0, postsAfterFirst)) {
       for (const msg of post.body.messages) {
         dispatcher.enqueue({ tenantId: TENANT, conversationId: CONV, message: msg });
@@ -777,7 +777,7 @@ describe("voice-copilot e2e", () => {
     await new Promise((r) => setTimeout(r, 20));
     clock.advance(10); // ringing → active
 
-    // Now flood 500 inbound frames — queue capacity is 200 so 300+ must drop
+    // Now flood 500 inbound frames - queue capacity is 200 so 300+ must drop
     for (let i = 0; i < 500; i++) {
       send(ws, mediaFrame(STREAM_SID, i + 100, "inbound_track"));
     }
@@ -816,7 +816,7 @@ describe("voice-copilot e2e", () => {
     send(ws1, mediaFrame(STREAM_SID_1, 2, "inbound_track"));
     await new Promise((r) => setTimeout(r, 30));
 
-    // Abruptly close ws1 — grace timer will start; clock at 0 so it won't fire
+    // Abruptly close ws1 - grace timer will start; clock at 0 so it won't fire
     const ws1Closed = new Promise<void>((resolve) => ws1.on("close", resolve));
     ws1.terminate();
     await ws1Closed;
@@ -867,7 +867,7 @@ describe("voice-copilot e2e", () => {
     // Wait for start frame to be processed (session created + STT stream started)
     await new Promise((r) => setTimeout(r, 40));
 
-    // Send inbound frames — each call push() on the STT stream
+    // Send inbound frames - each call push() on the STT stream
     for (let i = 0; i < 5; i++) {
       send(ws, mediaFrame(STREAM_SID, i + 2, "inbound_track"));
     }
@@ -934,7 +934,7 @@ describe("voice-copilot e2e", () => {
     // Count posts right after stop
     const postsAtStop = posts.length;
 
-    // Send more frames after stop — they should be ignored (session ended)
+    // Send more frames after stop - they should be ignored (session ended)
     for (let i = 0; i < 5; i++) {
       send(ws, mediaFrame(STREAM_SID, i + 100, "inbound_track"));
     }
@@ -975,7 +975,7 @@ describe("voice-copilot e2e", () => {
         callSid: "CA_CROSS",
         tracks: ["inbound_track"],
         customParameters: {
-          tenantId: "tenant_OTHER",  // mismatch — path is tenant_e2e
+          tenantId: "tenant_OTHER",  // mismatch - path is tenant_e2e
           conversationId: "conv-cross",
         },
       },

@@ -189,7 +189,7 @@ export async function fetchNewMessages(
 
   if (!historyRes.ok) {
     const err = await historyRes.json().catch(() => ({})) as Record<string, any>;
-    // 404 means historyId is too old — caller should reset
+    // 404 means historyId is too old - caller should reset
     console.error("[Gmail] History fetch error:", historyRes.status, err);
     return { messages: [], newHistoryId: lastHistoryId };
   }

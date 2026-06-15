@@ -1,13 +1,13 @@
 /**
  * Custom DB Query tool runtime.
  *
- *   - listCustomDbQueryTools(tenantId)   — for the bot's tool surface
- *   - executeCustomDbQueryTool({...})    — called by the dispatcher when the
+ *   - listCustomDbQueryTools(tenantId)   - for the bot's tool surface
+ *   - executeCustomDbQueryTool({...})    - called by the dispatcher when the
  *     LLM picks a tool whose name is `custom_db.<slug>`
  *
  * Security model:
  *   - The query template is pre-defined by the admin. The AI only fills in
- *     parameter values — it never composes SQL or Mongo filters from scratch.
+ *     parameter values - it never composes SQL or Mongo filters from scratch.
  *   - For Postgres/MySQL, params bind via the driver's positional placeholder
  *     mechanism (`$1, $2…` for pg, `?` for mysql2). No string concatenation.
  *   - For MongoDB, the template is a JSON object with `{{paramName}}`
@@ -245,7 +245,7 @@ function orderedParams(tool: any, args: Record<string, unknown>): unknown[] {
 
 /**
  * Walk a Mongo query/update document and replace any string of the form
- * `{{paramName}}` with the typed value from args. Recursive — handles nested
+ * `{{paramName}}` with the typed value from args. Recursive - handles nested
  * objects + arrays.
  */
 function substituteMongo(node: any, args: Record<string, unknown>): any {

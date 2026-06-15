@@ -1,5 +1,5 @@
 /**
- * Conference control endpoints — whisper / consult / cold-transfer.
+ * Conference control endpoints - whisper / consult / cold-transfer.
  *
  * All internal-only, `X-Internal-Key` guarded. Called by the conversation
  * service after authenticating the agent.
@@ -7,7 +7,7 @@
  *   POST /sessions/:id/customer-hold   { hold: boolean }
  *     Toggles "hold music" on the customer's leg without ending the
  *     conference. While held, the customer hears Twilio's hold sound and
- *     can't hear the agent + 3rd party — i.e. whisper / consult mode.
+ *     can't hear the agent + 3rd party - i.e. whisper / consult mode.
  *
  *   POST /sessions/:id/agent-leave
  *     Drops the agent's leg from the conference. Used for cold transfer
@@ -147,7 +147,7 @@ export function createVoiceConferenceControlRouter(opts: {
       return;
     }
     // For outbound the agent leg is meta.agentCallSid. For inbound the
-    // agent is whichever leg ISN'T the customer — we can derive it from
+    // agent is whichever leg ISN'T the customer - we can derive it from
     // meta.agentCallSid (set when the inbound /twiml/outbound join arrived).
     const agentCallSid = meta.agentCallSid;
     if (!agentCallSid) {

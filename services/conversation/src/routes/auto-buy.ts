@@ -11,14 +11,14 @@ import {
 } from "@chatcenter/shared";
 
 /**
- * Auto-Buy — stub endpoint demonstrating the two-layer permission gate.
+ * Auto-Buy - stub endpoint demonstrating the two-layer permission gate.
  *
  * The route is open to any authenticated user IF:
  *   1. The tenant has FEATURES.AUTO_BUY enabled (SYSTEM_ADMIN toggle), AND
  *   2. The user has feature access through ADMIN role, a TenantRole grant,
  *      or a UserFeatureGrant override (tenant-admin managed).
  *
- * Real auto-buy business logic is out of scope here — this proves the gate
+ * Real auto-buy business logic is out of scope here - this proves the gate
  * works end-to-end and documents the mounting pattern for new features.
  */
 
@@ -54,7 +54,7 @@ router.post(
   },
 );
 
-// Tenant-level status check (no user-level gate — any authenticated user
+// Tenant-level status check (no user-level gate - any authenticated user
 // can see whether the feature is available to the org, even if they can't
 // personally place orders). Useful for the frontend to hide/show UI.
 router.get(

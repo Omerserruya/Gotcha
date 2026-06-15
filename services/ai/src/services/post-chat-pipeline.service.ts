@@ -1,5 +1,5 @@
 /**
- * Post-chat pipeline — one-shot end-of-conversation processor for text
+ * Post-chat pipeline - one-shot end-of-conversation processor for text
  * channels (WhatsApp, Messenger, Webchat, ...).
  *
  * Triggered by the `conversation:closed` event when a non-voice conversation
@@ -28,6 +28,7 @@ import {
 import { applyPostConversationRules } from "./post-conversation-rule-engine.service";
 import { applyCrmPatchKindAware, createCrmTaskKindAware, getCrmIdentity } from "./post-conversation-crm.service";
 import { loadExistingActionItems } from "./existing-action-items.service";
+import { ingestConversationFacts } from "./intelligence-ingest.service";
 
 export async function runPostChatPipeline(params: {
   tenantId: string;
@@ -43,7 +44,7 @@ export async function runPostChatPipeline(params: {
 }> {
   const notes: string[] = [];
 
-  // 0. Guard — don't run twice on the same conversation.
+  // 0. Guard - don't run twice on the same conversation.
   const existing = await prisma.callAnalysis.findUnique({
     where: { conversationId: params.conversationId },
     select: { meta: true, finalSummary: true },
@@ -62,7 +63,7 @@ export async function runPostChatPipeline(params: {
     getPostConversationConfig(params.tenantId),
     loadExistingActionItems({ tenantId: params.tenantId, conversationId: params.conversationId }),
     // System language drives the AI summary copy. Post-chat runs in a
-    // background subscriber with no user context — use the tenant default.
+    // background subscriber with no user context - use the tenant default.
     resolveEffectiveLocale({ tenantId: params.tenantId }).catch(() => null),
   ]);
   const raw = await summarizePostConversation({
@@ -129,10 +130,43 @@ export async function runPostChatPipeline(params: {
   let tasksCreated = 0;
   let followupScheduled = false;
 
+  // 3b. Customer Intelligence V2 ingest (Phase 2) - route the extracted
+  //     fields into the scope-aware model (CustomerProfile / Opportunity /
+  //     IntelligenceFact) under the merge policy. ADDITIVE + best-effort: a
+  //     failure here must never affect the legacy CRM/task path below.
+  let oppScopedKeys = new Set<string>();
+  try {
+    const extracted = Object.entries(structured.crm_patch).map(([key, value]) => ({ key, value }));
+    if (extracted.length > 0) {
+      const ing = await ingestConversationFacts({
+        tenantId: params.tenantId,
+        conversationId: params.conversationId,
+        fields: extracted,
+        source: "llm_close",
+      });
+      notes.push(`intel:${ing.ok ? `w${ing.written}/o${ing.opportunityId ? 1 : 0}` : ing.reason}`);
+    }
+    // Opportunity-scoped fields belong on the CRM *deal* (P5), not the contact.
+    // Keep them OUT of the contact patch so we don't repeat V1's "everything on
+    // the contact" mistake. Customer-scoped + built-in fields still flow to CRM.
+    const oppDefs = await (prisma as any).fieldDefinition.findMany({
+      where: { tenantId: params.tenantId, scope: "OPPORTUNITY" },
+      select: { key: true },
+    });
+    oppScopedKeys = new Set(oppDefs.map((d: { key: string }) => d.key));
+  } catch (err: any) {
+    notes.push(`intel:err:${err?.message ?? "unknown"}`);
+  }
+
   // 4. Sparse CRM patch (only mentioned_fields are present, by construction).
   //    Kind-aware: Leads vs Contacts route to the right vendor module; falls
   //    back to a timeline note if the adapter can't patch the kind.
-  const fields: Record<string, unknown> = { ...structured.crm_patch };
+  //    Opportunity-scoped intelligence fields are excluded (they sync to the
+  //    CRM deal in P5, not the contact).
+  const fields: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(structured.crm_patch)) {
+    if (!oppScopedKeys.has(k)) fields[k] = v;
+  }
   if (structured.status_change) fields["status"] = structured.status_change.to;
   if (Object.keys(fields).length > 0) {
     const vendorRes = await applyCrmPatchKindAware({
@@ -160,7 +194,7 @@ export async function runPostChatPipeline(params: {
     notes.push("crm:no-fields");
   }
 
-  // 5. CRM tasks per suggested_task — kind-aware path first; falls back to
+  // 5. CRM tasks per suggested_task - kind-aware path first; falls back to
   //    the legacy contact-only create_task when the vendor adapter can't
   //    create tasks (e.g. NoOp). Identity resolved once, reused for all.
   //
@@ -185,7 +219,7 @@ export async function runPostChatPipeline(params: {
       notes.push(`task:${vendor.kind}:ok`);
       continue;
     }
-    // Vendor declined — try legacy contact-only path so the GOTCHA-side
+    // Vendor declined - try legacy contact-only path so the GOTCHA-side
     // mirror still gets the task.
     if (contactId) {
       const action: PlannedAction = {
@@ -211,10 +245,10 @@ export async function runPostChatPipeline(params: {
     }
   }
 
-  // 6. Follow-up — dedup against any PENDING ScheduledMessage already queued
+  // 6. Follow-up - dedup against any PENDING ScheduledMessage already queued
   //    for this contact. The bot may have called schedule_followup mid-turn
   //    (e.g. customer said "תחזרו אליי מחר"), in which case there's already
-  //    a row waiting for the scheduled-messages worker — re-scheduling here
+  //    a row waiting for the scheduled-messages worker - re-scheduling here
   //    would send the customer two follow-ups.
   if (contactId && structured.suggested_followup) {
     const hasPending = await hasPendingFollowupForConversation({

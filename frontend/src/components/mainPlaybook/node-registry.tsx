@@ -21,14 +21,14 @@ import ChannelAccountPicker from "@/components/ChannelAccountPicker";
 
 // Per-tenant lookups injected by the editor (agents/flows/departments lists for
 // dropdowns). Optional; only some node types use it. The `channels` shape
-// matches what GET /api/channels returns — the column is `channel` (an enum
+// matches what GET /api/channels returns - the column is `channel` (an enum
 // like MESSENGER / INSTAGRAM / WHATSAPP), NOT `type`.
 export interface SharedData {
   agents?: { id: string; name: string }[];
   flows?: { id: string; name: string }[];
   departments?: { id: string; name: string }[];
   channels?: { id: string; channel: string; displayName?: string; externalId?: string }[];
-  // Live canvas graph — lets an inspector reason about a node's neighbours
+  // Live canvas graph - lets an inspector reason about a node's neighbours
   // (e.g. the webhook trigger mapper binds onto its first connected node).
   nodes?: { id: string; type?: string; data?: any }[];
   edges?: { id: string; source: string; target: string; sourceHandle?: string | null }[];
@@ -61,7 +61,7 @@ export interface NodeRegistryEntry {
     data: any;
     onChange: (patch: Record<string, any>) => void;
     shared?: SharedData;
-    // Id of the node being edited — only bodies that reason about neighbours
+    // Id of the node being edited - only bodies that reason about neighbours
     // (webhook trigger mapper) need it; the rest ignore it.
     nodeId?: string;
   }>;
@@ -76,7 +76,7 @@ export interface NodeRegistryEntry {
 }
 
 // ─── Tailwind color tokens ───────────────────────────────────────
-// Keep canvas + inspector visually consistent — every node in this color
+// Keep canvas + inspector visually consistent - every node in this color
 // palette resolves through this map.
 export const COLOR_TOKENS: Record<NodeColor, {
   ringSoft: string; border: string; gradient: string; handle: string;
@@ -151,7 +151,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
 
   // ── Triggers ──────────────────────────────────────────────────────
   // Channel-specific entry. Renders on canvas via the dedicated
-  // ChannelEntryNode (gradient header) — this registry entry only drives
+  // ChannelEntryNode (gradient header) - this registry entry only drives
   // the side-panel Inspector + palette. Useful for sub-flows that should
   // only fire on a specific channel (e.g. Instagram-only).
   channel_entry: {
@@ -178,7 +178,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
       }));
       return (
         <div className="space-y-3">
-          <Field label="Channel" hint={list.length === 0 ? "Connect a channel in Settings → Channels first." : "Pick a specific connected channel — this entry fires only on that account."}>
+          <Field label="Channel" hint={list.length === 0 ? "Connect a channel in Settings → Channels first." : "Pick a specific connected channel - this entry fires only on that account."}>
             <ChannelAccountPicker
               accounts={accounts}
               value={data.channelId || ""}
@@ -338,7 +338,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   send_message_quick_reply: {
     type: "send_message_quick_reply", label: "Send Quick Reply", color: "teal", icon: ICONS.reply, category: "Messages",
     handles: { target: "top", sources: [{ position: "bottom" }] },
-    // One exit per reply — handle id matches the lowercased payload so the
+    // One exit per reply - handle id matches the lowercased payload so the
     // runtime (flow-executor) can route by `sourceHandle === payload`.
     getSources: (d) => {
       const replies = Array.isArray(d.replies) ? d.replies : [];
@@ -398,7 +398,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
     ),
   },
 
-  // WhatsApp template send — only WABA channels accept templates. Used to
+  // WhatsApp template send - only WABA channels accept templates. Used to
   // (re-)open a 24h customer-service window from inside a flow. Variables
   // are stored as { key → value } where each value is plain text with
   // optional `{{var}}` mentions (resolved against the flow's runtime vars).
@@ -425,7 +425,7 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   // visible to everyone on the post. Pairs naturally with comment_trigger.
   // Two modes: static text (with {{vars}}), or AI Agent (drafts a reply
   // from the inbound comment text, with optional fallback if the LLM
-  // returns nothing). Doesn't change PSID — flow can still drop into a DM
+  // returns nothing). Doesn't change PSID - flow can still drop into a DM
   // afterwards via send_message_*.
   send_comment_reply: {
     type: "send_comment_reply", label: "Reply to Comment", color: "emerald", icon: ICONS.reply, category: "Messages",
@@ -621,9 +621,9 @@ export const NODE_REGISTRY: Record<string, NodeRegistryEntry> = {
   webhook_trigger: {
     type: "webhook_trigger", label: "Trigger: Webhook", color: "emerald", icon: ICONS.link, category: "Triggers",
     handles: { sources: [{ position: "bottom" }] },
-    // targetMode defaults to "flow" — preserves the original separate-flow run.
+    // targetMode defaults to "flow" - preserves the original separate-flow run.
     defaultData: () => ({ name: "Webhook", workflowId: "", targetMode: "flow" }),
-    // Connected mode needs no flow pick — it auto-anchors to the node's own id,
+    // Connected mode needs no flow pick - it auto-anchors to the node's own id,
     // so it's always valid. Flow mode still requires a linked flow (the anchor
     // the WebhookTrigger record is provisioned against).
     validate: (d) =>
@@ -988,7 +988,7 @@ function ScheduleTriggerBody({ data, onChange }: { data: any; onChange: (p: any)
 // Webhook trigger inspector. Lets the author link the node to a flow, then
 // provisions + shows the inbound URL and shared secret for that flow's
 // WebhookTrigger record (copy / regenerate / enable-disable). The URL/secret
-// state lives on the backend record — never persisted into the canvas JSON —
+// state lives on the backend record - never persisted into the canvas JSON -
 // so a rotated secret can't go stale here.
 function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onChange: (p: any) => void; shared?: SharedData; nodeId?: string }) {
   const { token } = useAuth();
@@ -996,7 +996,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
   const targetMode: WebhookTargetMode = data.targetMode === "connected" ? "connected" : "flow";
   const flows = shared?.flows || [];
 
-  // The first node wired to this trigger — what the mapper binds body fields
+  // The first node wired to this trigger - what the mapper binds body fields
   // onto. Mirrors the runtime's "first outgoing edge" resolution exactly.
   const firstConnectedNode = React.useMemo(() => {
     if (!nodeId) return null;
@@ -1022,7 +1022,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
   // Local, editable copy of the declared body fields. Each row carries a stable
   // local id for React keys; the id is stripped before persisting. Sourced from
   // the trigger once per trigger (not on every update) so saving our own edits
-  // doesn't clobber an in-progress row — see syncedFor below.
+  // doesn't clobber an in-progress row - see syncedFor below.
   type LocalField = { id: string; key: string; type: WebhookFieldType };
   const [fields, setFields] = React.useState<LocalField[]>([]);
   const syncedFor = React.useRef<string | null>(null);
@@ -1030,7 +1030,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const fullUrl = trigger ? `${origin}${trigger.path}` : "";
 
-  // "How to use" examples — built from the trigger the backend already exposes
+  // "How to use" examples - built from the trigger the backend already exposes
   // (no new data is fetched). The secret header name mirrors the inbound route
   // in services/webhook (POST /webhooks/:token, header `x-webhook-secret`).
   const SECRET_HEADER = "x-webhook-secret";
@@ -1060,7 +1060,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
     return () => { cancelled = true; };
   }, [token, workflowId]);
 
-  // Auto-anchor for connected mode: the user no longer picks a flow here — the
+  // Auto-anchor for connected mode: the user no longer picks a flow here - the
   // trigger anchors to its own canvas node id (used only to provision the URL and
   // to locate this webhook_trigger node on the Main Playbook). Set it once when
   // we're in connected mode without an anchor yet. Go-forward only: an existing
@@ -1078,7 +1078,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
       setCopied(which);
       setTimeout(() => setCopied((c) => (c === which ? null : c)), 1500);
     } catch {
-      setError("Copy failed — select and copy manually");
+      setError("Copy failed - select and copy manually");
     }
   }
 
@@ -1204,7 +1204,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
   }
 
   function commitFields() {
-    // Save on blur — only the keyed rows are persisted.
+    // Save on blur - only the keyed rows are persisted.
     setFields((cur) => {
       persistSchema(cur);
       return cur;
@@ -1249,7 +1249,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
         </div>
       </Field>
 
-      {/* Connected mode runs the nodes wired to this trigger — there's no flow to
+      {/* Connected mode runs the nodes wired to this trigger - there's no flow to
           pick, so the selector is hidden and the trigger auto-anchors to its own
           node id. Flow mode still requires an explicit flow. */}
       {targetMode === "connected" ? null : (
@@ -1269,7 +1269,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
       ) : null}
 
       {!workflowId ? (
-        // Connected mode auto-anchors (see effect above) — no flow pick needed,
+        // Connected mode auto-anchors (see effect above) - no flow pick needed,
         // so this is just the one-tick gap before the anchor is set.
         targetMode === "connected" ? (
           <p className="text-xs text-gray-400">Loading webhook…</p>
@@ -1313,10 +1313,10 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
 
           <label className="flex items-center gap-2 text-sm text-gray-700 pt-1">
             <input type="checkbox" checked={trigger.enabled} disabled={busy} onChange={(e) => toggleEnabled(e.target.checked)} className="accent-emerald-500" />
-            Enabled {trigger.enabled ? "" : "(disabled — inbound calls return 403)"}
+            Enabled {trigger.enabled ? "" : "(disabled - inbound calls return 403)"}
           </label>
 
-          {/* Expected body fields — the user declares the shape of the payload
+          {/* Expected body fields - the user declares the shape of the payload
               they'll send. These become the known source fields the mapper binds
               from. Declaration only: inbound payloads are NOT validated against
               this, and the {{body.*}} reference behavior is unchanged. */}
@@ -1325,7 +1325,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
               <p className="text-xs font-semibold text-gray-700">Expected body fields</p>
               <p className="text-[11px] text-gray-400">
                 Declare the fields you&apos;ll send in the request body. These become the source
-                fields for mapping. (Declaration only — payloads aren&apos;t rejected if they differ.)
+                fields for mapping. (Declaration only - payloads aren&apos;t rejected if they differ.)
               </p>
             </div>
 
@@ -1379,7 +1379,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
             </button>
           </div>
 
-          {/* Field mapper — bind declared body fields onto the first connected
+          {/* Field mapper - bind declared body fields onto the first connected
               node's inputs. Connected mode only: in flow mode the webhook runs a
               separate flow, so "the first connected node" has no meaning here. */}
           {targetMode === "connected" ? (
@@ -1391,7 +1391,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
             />
           ) : null}
 
-          {/* How to use — self-serve guide for wiring an external caller without
+          {/* How to use - self-serve guide for wiring an external caller without
               leaving the canvas. Reads only the trigger above; adds no backend. */}
           <div className="pt-3 mt-1 border-t border-gray-100 space-y-2.5">
             <p className="text-xs font-semibold text-gray-700">How to use</p>
@@ -1423,7 +1423,7 @@ function WebhookTriggerBody({ data, onChange, shared, nodeId }: { data: any; onC
             </div>
 
             <p className="text-[11px] text-gray-400">
-              Reference any payload field downstream with <code className="font-mono">{"{{body.field}}"}</code> — e.g. <code className="font-mono">{"{{body.email}}"}</code> or <code className="font-mono">{"{{body.plan}}"}</code>.
+              Reference any payload field downstream with <code className="font-mono">{"{{body.field}}"}</code> - e.g. <code className="font-mono">{"{{body.email}}"}</code> or <code className="font-mono">{"{{body.plan}}"}</code>.
             </p>
           </div>
         </>
@@ -1508,7 +1508,7 @@ function WebhookFieldMapper({
       <div>
         <p className="text-xs font-semibold text-gray-700">Map fields to the connected node</p>
         <p className="text-[11px] text-gray-400">
-          Bind a declared body field to each input of the first node wired to this trigger —
+          Bind a declared body field to each input of the first node wired to this trigger -
           e.g. send to <code className="font-mono">{"{{body.phone_number}}"}</code>.
         </p>
       </div>
@@ -1535,7 +1535,7 @@ function WebhookFieldMapper({
                 value={sourceFor(t.key)}
                 onChange={(e) => setMap(t.key, e.target.value)}
               >
-                <option value="">— not mapped —</option>
+                <option value="">- not mapped -</option>
                 {sources.map((s) => (
                   <option key={s} value={s}>{`body.${s}`}</option>
                 ))}
@@ -1574,8 +1574,8 @@ function RouteTargetBody({ data, onChange, shared }: { data: any; onChange: (p: 
 
 // ─── Reply to Comment body ───────────────────────────────────────
 // Two modes share one card via a tab toggle:
-//   text — author writes a literal reply (with {{vars}} interpolation)
-//   ai   — author picks an AI Agent; runtime calls generateOneShotReply
+//   text - author writes a literal reply (with {{vars}} interpolation)
+//   ai   - author picks an AI Agent; runtime calls generateOneShotReply
 //          on the inbound comment text. Fallback text is sent when the
 //          LLM returns nothing so the run never goes silent.
 function SendCommentReplyBody({ data, onChange, shared }: { data: any; onChange: (p: any) => void; shared?: SharedData }) {
@@ -1603,7 +1603,7 @@ function SendCommentReplyBody({ data, onChange, shared }: { data: any; onChange:
               {(shared?.agents || []).map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
             </select>
           </Field>
-          <Field label="Fallback text (optional)" hint="Sent when the AI returns nothing — keeps the flow from going silent.">
+          <Field label="Fallback text (optional)" hint="Sent when the AI returns nothing - keeps the flow from going silent.">
             <VariableMentionInput
               value={data.fallbackText || ""}
               onChange={(v) => onChange({ fallbackText: v })}
@@ -1628,9 +1628,9 @@ function SendCommentReplyBody({ data, onChange, shared }: { data: any; onChange:
 
 // ─── Comment Trigger body ────────────────────────────────────────
 // Two ways to point the trigger at a post:
-//   1. "My Page" tab — select a connected FB/IG channel, click "Load posts",
+//   1. "My Page" tab - select a connected FB/IG channel, click "Load posts",
 //      pick from the recent-posts list returned by GET /api/channels/:id/posts.
-//   2. "Group post" tab — paste the public URL; we extract the post ID
+//   2. "Group post" tab - paste the public URL; we extract the post ID
 //      from common Meta URL shapes. Group browsing is intentionally NOT
 //      supported because Meta deprecated the Groups API in April 2024.
 function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (p: any) => void; shared?: SharedData }) {
@@ -1645,7 +1645,7 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
   const [groupUrl, setGroupUrl] = React.useState<string>(data.postPermalink || "");
   const { token } = useAuth();
 
-  // Auto-fetch when a channel is selected — saves a click and matches the
+  // Auto-fetch when a channel is selected - saves a click and matches the
   // user's expectation that the dropdown drives everything.
   React.useEffect(() => {
     if (data.channelId && token && source === "page") void loadPosts();
@@ -1686,7 +1686,7 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
 
   return (
     <div className="space-y-3">
-      {/* Post source tabs — platform is derived from the selected channel,
+      {/* Post source tabs - platform is derived from the selected channel,
           so the only choice the author makes is page vs. group. */}
       <div className="flex rounded-lg border border-gray-200 overflow-hidden">
         <button onClick={() => onChange({ postSource: "page" })} className={`flex-1 py-2 text-xs font-semibold transition ${source === "page" ? "bg-gray-900 text-white" : "bg-gray-50 text-gray-500 hover:bg-gray-100"}`}>My Page</button>
@@ -1725,7 +1725,7 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
                   {p.thumbnailUrl ? (
                     <img src={p.thumbnailUrl} alt="" className="w-12 h-12 rounded object-cover shrink-0 bg-gray-100" />
                   ) : (
-                    <div className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-300 shrink-0">—</div>
+                    <div className="w-12 h-12 rounded bg-gray-100 flex items-center justify-center text-gray-300 shrink-0">-</div>
                   )}
                   <div className="flex-1 min-w-0">
                     <p className="text-xs text-gray-700 line-clamp-2">{p.caption || <span className="text-gray-400 italic">(no caption)</span>}</p>
@@ -1742,7 +1742,7 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
         </>
       ) : (
         <>
-          <Field label="Post URL" hint="Paste the FB group post URL — we'll extract the ID. Group posts use the page webhook for matching.">
+          <Field label="Post URL" hint="Paste the FB group post URL - we'll extract the ID. Group posts use the page webhook for matching.">
             <input
               className={inspectorInput}
               value={groupUrl}
@@ -1753,12 +1753,12 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
           {data.postId ? (
             <p className="text-[11px] text-gray-500">Extracted ID: <span className="font-mono">{data.postId}</span></p>
           ) : groupUrl ? (
-            <p className="text-[11px] text-amber-600">Couldn't extract a post ID from that URL — make sure it's a direct post link.</p>
+            <p className="text-[11px] text-amber-600">Couldn't extract a post ID from that URL - make sure it's a direct post link.</p>
           ) : null}
         </>
       )}
 
-      <Field label="Keyword filters (comma-sep)" hint="Optional — only fire when the comment contains one of these.">
+      <Field label="Keyword filters (comma-sep)" hint="Optional - only fire when the comment contains one of these.">
         <input className={inspectorInput} value={joinKw(data.keywords)} onChange={(e) => onChange({ keywords: e.target.value.split(",").map((s) => s.trim()).filter(Boolean) })} />
       </Field>
 
@@ -1775,7 +1775,7 @@ function CommentTriggerBody({ data, onChange, shared }: { data: any; onChange: (
 // extracts `{{placeholder}}` keys from the template body + header text and
 // renders one VariableMentionInput per placeholder; values are stored under
 // `data.variables[key]`. Header media URL is exposed separately when the
-// template uses an IMAGE/VIDEO/DOCUMENT header — it overrides the template's
+// template uses an IMAGE/VIDEO/DOCUMENT header - it overrides the template's
 // example URL at send time.
 //
 // Mirrors broadcasts: the runtime executor calls the same WhatsApp adapter
@@ -1848,7 +1848,7 @@ function SendMessageTemplateBody({ data, onChange }: { data: any; onChange: (p: 
   }, [token]);
 
   // Pull tenant CRM schema (both leads + contacts) once, merge unique fields.
-  // Failures are silent — the picker still ships the common alias list above.
+  // Failures are silent - the picker still ships the common alias list above.
   React.useEffect(() => {
     if (!token) return;
     let cancelled = false;
@@ -1940,7 +1940,7 @@ function SendMessageTemplateBody({ data, onChange }: { data: any; onChange: (p: 
         </div>
       ) : null}
 
-      {/* Header media URL — same Static/CRM picker pattern as the variables
+      {/* Header media URL - same Static/CRM picker pattern as the variables
           below, so authors can pull the live image/PDF/video URL from a
           contact field (e.g. invoice_pdf_url) instead of hard-coding one. */}
       {selected && hasMediaHeader ? (
@@ -2039,7 +2039,7 @@ function SendMessageTemplateBody({ data, onChange }: { data: any; onChange: (p: 
   );
 }
 
-// Shared CRM-field <select> — common aliases on top, full tenant schema below.
+// Shared CRM-field <select> - common aliases on top, full tenant schema below.
 // Used for both header media and per-variable mapping so the picker UX stays
 // identical across the inspector.
 function CrmFieldPicker({

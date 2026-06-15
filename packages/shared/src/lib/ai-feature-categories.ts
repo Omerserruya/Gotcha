@@ -6,7 +6,7 @@
  * admin view we need to roll those raw labels into the customer-facing
  * product surfaces: Autonomous Agent, Co-pilot, Call-pilot, etc.
  *
- * Single source of truth — backend (raw SQL CASE) and frontend (display
+ * Single source of truth - backend (raw SQL CASE) and frontend (display
  * labels) both derive from this list.
  */
 
@@ -34,7 +34,7 @@ export interface AiFeatureCategoryDef {
   /**
    * Whether the category is priced on a per-conversation basis (one charge per
    * customer thread, regardless of LLM round-trips). When false the natural
-   * unit is the call (per-turn) — e.g. embeddings or one-shot classifications.
+   * unit is the call (per-turn) - e.g. embeddings or one-shot classifications.
    */
   perConversation: boolean;
 }
@@ -59,7 +59,7 @@ export const AI_FEATURE_CATEGORIES: AiFeatureCategoryDef[] = [
   {
     key: "call_pilot",
     label: "Call-pilot (Voice)",
-    description: "Live voice copilot during calls (AI tokens only — excludes STT/TTS).",
+    description: "Live voice copilot during calls (AI tokens only - excludes STT/TTS).",
     color: "rose",
     features: ["voice_copilot", "voice_assist", "voice_summary"],
     prefixes: ["voice_"],
@@ -149,7 +149,7 @@ export function categoryLabel(category: AiFeatureCategory): string {
 /**
  * Postgres SQL fragment that classifies a row's `feature` column into one of
  * the categories above. Kept in this file so backend SQL and frontend display
- * stay in sync — change the list above, both sides update.
+ * stay in sync - change the list above, both sides update.
  */
 export function categorySqlCase(featureColumn = "feature"): string {
   const whens: string[] = [];

@@ -5,7 +5,7 @@ import {
   type MemoryInputMessage,
 } from "../services/conversation-memory.service";
 
-describe("ConversationMemory — buildConversationMemory", () => {
+describe("ConversationMemory - buildConversationMemory", () => {
   it("extracts team size, channel, timezone from inbound text", () => {
     const messages: MemoryInputMessage[] = [
       { direction: "INBOUND", body: "We're a team of 12 people on WhatsApp, EST timezone" },
@@ -73,7 +73,7 @@ describe("ConversationMemory — buildConversationMemory", () => {
   });
 });
 
-describe("ConversationMemory — renderMemoryBlock", () => {
+describe("ConversationMemory - renderMemoryBlock", () => {
   it("renders only present facts and includes ground-truth instruction", () => {
     const messages: MemoryInputMessage[] = [
       { direction: "INBOUND", body: "We're 8 employees, on Telegram" },

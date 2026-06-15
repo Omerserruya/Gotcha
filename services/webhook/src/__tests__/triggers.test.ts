@@ -10,7 +10,7 @@ vi.mock("@chatcenter/shared", () => {
   return {
     prisma: mockPrisma,
     incomingMessageQueue: { add: vi.fn().mockResolvedValue(undefined) },
-    // Pass-through middleware in tests — the real one toggles the Prisma
+    // Pass-through middleware in tests - the real one toggles the Prisma
     // tenant-guard, which is irrelevant against the mocked client.
     crossTenantMiddleware: (_req: any, _res: any, next: any) => next(),
   };

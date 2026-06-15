@@ -1,8 +1,8 @@
 /**
- * Agent presence write helpers (Phase 1 — Live Call CoPilot).
+ * Agent presence write helpers (Phase 1 - Live Call CoPilot).
  *
  * Wraps the AgentPresence model with simple upsert semantics. Reads are
- * intentionally NOT exposed here — services that need presence reads
+ * intentionally NOT exposed here - services that need presence reads
  * query prisma.agentPresence directly with their own selects.
  *
  * Concurrency model: presence is per-agent (PK = agentId), so a single

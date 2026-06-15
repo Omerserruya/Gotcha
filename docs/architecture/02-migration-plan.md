@@ -1,4 +1,4 @@
-# 02 — Migration Plan
+# 02 - Migration Plan
 
 Zero-downtime rollout. Each phase is independently deployable, reversible, and guarded. No phase requires a coordinated service restart across all containers.
 
@@ -8,7 +8,7 @@ Phases 0–3 are additive (schema expansion + dual-write). Phases 4–7 flip rea
 
 ---
 
-## Phase 0 — Pre-flight (no DB change)
+## Phase 0 - Pre-flight (no DB change)
 
 Owner: `packages/shared`
 
@@ -16,13 +16,13 @@ Owner: `packages/shared`
 - [ ] Tag a release (`arch-lock-v1`).
 - [ ] Add `ARCHITECTURE_PHASE=0` env var to every service (observability only).
 - [ ] Instrument existing `RouterRule` evaluation to log `priority` value in use (so we see if anyone's relying on it post-rollout).
-- [ ] Instrument `CopilotConfig` reads — log every caller for Phase 3 cleanup audit.
+- [ ] Instrument `CopilotConfig` reads - log every caller for Phase 3 cleanup audit.
 
 Rollback: none required (no code change that affects behavior).
 
 ---
 
-## Phase 1 — Additive schema (forward-compatible, no drops yet)
+## Phase 1 - Additive schema (forward-compatible, no drops yet)
 
 Single Prisma migration. All columns added as nullable or with safe defaults.
 
@@ -77,7 +77,7 @@ ALTER TABLE conversations
 ALTER TABLE approval_requests
   ADD COLUMN policy_snapshot jsonb NOT NULL DEFAULT '{}';
 
--- 7. NEW tables (shadow — not yet used)
+-- 7. NEW tables (shadow - not yet used)
 CREATE TABLE ai_agent_prompt_versions (
   id              text PRIMARY KEY,
   tenant_id       text NOT NULL,
@@ -93,7 +93,7 @@ CREATE INDEX ON ai_agent_prompt_versions (tenant_id, ai_agent_id);
 CREATE TABLE agent_turn_logs (...);
 CREATE TABLE proposed_tool_calls (...);
 
--- Routines: CREATE as NEW table — do NOT rename chatbot_flows yet.
+-- Routines: CREATE as NEW table - do NOT rename chatbot_flows yet.
 -- We'll dual-write in phase 2, swap readers in phase 4, drop chatbot_flows in phase 8.
 CREATE TABLE routines (
   id                text PRIMARY KEY,
@@ -112,13 +112,13 @@ CREATE TABLE routines (
 CREATE INDEX ON routines (tenant_id, flow_type, is_active);
 ```
 
-**Deployment:** Single Prisma `migrate deploy`. No service restart required — readers still use old shape.
+**Deployment:** Single Prisma `migrate deploy`. No service restart required - readers still use old shape.
 
 Rollback: `DROP` all new columns + new tables. No data loss.
 
 ---
 
-## Phase 2 — Dual-write (read old, write both)
+## Phase 2 - Dual-write (read old, write both)
 
 Owner: `services/ai`
 
@@ -130,7 +130,7 @@ For every write path that touches deprecated state, also write the new shape:
 
 2. **ChatbotFlow writes** (flow builder save):
    - Mirror to `routines` with `flowType="MAIN"` and same nodes JSON.
-   - Log any node type that isn't in the new allowlist — lint-only, don't block.
+   - Log any node type that isn't in the new allowlist - lint-only, don't block.
 
 3. **TenantToolPermission writes**:
    - Mirror to `TenantTool.configOverrides.hitlPolicy` using strictest-wins composition.
@@ -150,7 +150,7 @@ Rollback: revert the code; new-shape rows remain orphaned but harmless.
 
 ---
 
-## Phase 3 — Backfill (one-shot job)
+## Phase 3 - Backfill (one-shot job)
 
 Owner: ops / scripts team
 
@@ -173,7 +173,7 @@ For every tenant:
    - **Tenant-level default** → upsert `AIAgent` with `name="Default Assistant"`, `capabilities={auto:false, assist:true}`, `departmentId=null`.
    - **Per-department overrides** → upsert `AIAgent` with the department ID. Populate suggestion fields from the config.
 3. Set `Tenant.defaultAgentId = <tenant-level default agent id>`.
-4. Preserve existing `AIAgent` rows — only create agents for tenants that had a `CopilotConfig` but no matching agent.
+4. Preserve existing `AIAgent` rows - only create agents for tenants that had a `CopilotConfig` but no matching agent.
 
 ### 3b. `chatbotflows-to-routines`
 
@@ -209,11 +209,11 @@ For every tenant:
 
 **Acceptance:** all scripts complete with `warnings=0` or a triaged warnings list.
 
-Rollback: the backfill is additive — rerun is safe.
+Rollback: the backfill is additive - rerun is safe.
 
 ---
 
-## Phase 4 — Flip readers to new shape (behind feature flag)
+## Phase 4 - Flip readers to new shape (behind feature flag)
 
 Owner: `services/ai`, `services/incoming-worker`, `services/conversation`, `frontend`
 
@@ -232,7 +232,7 @@ Rollback: flip `ARCHITECTURE_READ_NEW=false`. Deprecated tables are still live.
 
 ---
 
-## Phase 5 — Lint-only routine enforcement (48-72h observation window)
+## Phase 5 - Lint-only routine enforcement (48-72h observation window)
 
 Owner: `services/ai` + flow builder UI
 
@@ -248,7 +248,7 @@ Rollback: trivially disable the validator.
 
 ---
 
-## Phase 6 — Stop dual-writes
+## Phase 6 - Stop dual-writes
 
 Owner: `services/ai`
 
@@ -258,23 +258,23 @@ Once Phase 4 is at 100% and Phase 5 is clean:
 2. Deprecated tables stop receiving new rows.
 3. Services log a one-line warning if ever written to via raw SQL (should never happen; flag for audit).
 
-Rollback window closes here. If reverting is needed after this, do so by restoring a backup — not by switching flags.
+Rollback window closes here. If reverting is needed after this, do so by restoring a backup - not by switching flags.
 
 ---
 
-## Phase 7 — Hard routine enforcement
+## Phase 7 - Hard routine enforcement
 
 Owner: `services/ai` + flow builder UI
 
 1. Save-time validator returns `400` on non-compliant nodes.
-2. Engine refuses to execute non-compliant nodes — returns an auto-escalation to human with reason `"routine_node_type_not_supported"` and logs the offending flow id.
+2. Engine refuses to execute non-compliant nodes - returns an auto-escalation to human with reason `"routine_node_type_not_supported"` and logs the offending flow id.
 3. Support runbook: how to rewrite an old flow into the new allowed node set (link from the error surface).
 
 Rollback: not supported.
 
 ---
 
-## Phase 8 — Drop deprecated tables + columns
+## Phase 8 - Drop deprecated tables + columns
 
 Owner: `packages/shared`
 
@@ -318,7 +318,7 @@ Any one NO = halt, fix, re-test. Do not advance the next tenant cohort.
 
 | Phase | Length | Dependencies |
 |---|---|---|
-| 0 | 1 | — |
+| 0 | 1 | - |
 | 1 | 1 | 0 |
 | 2 | 3 (code + review) | 1 deployed |
 | 3 | 1 (off-hours run) | 2 stable |

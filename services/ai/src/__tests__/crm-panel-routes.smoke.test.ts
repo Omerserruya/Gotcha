@@ -50,7 +50,7 @@ vi.mock("@chatcenter/shared", () => ({
     next();
   },
   resolveTenant: (req: any, _res: any, next: any) => { req.tenantId = mocks.tenantId; next(); },
-  // Factory that returns the middleware — matches the real shared signature.
+  // Factory that returns the middleware - matches the real shared signature.
   requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
   requireRole: () => (_req: any, _res: any, next: any) => next(),
   encryptCredentials: (x: any) => x,
@@ -149,10 +149,10 @@ beforeEach(() => {
   __resetCrmAdapterCache();
   vi.clearAllMocks();
   restoreFetch();
-  // Tenant row is the gate in resolveFromDb — must return a row or the resolver
+  // Tenant row is the gate in resolveFromDb - must return a row or the resolver
   // short-circuits to NoOpCRMAdapter.
   mocks.prismaMock.tenant.findUnique.mockResolvedValue({ id: mocks.tenantId });
-  // analyzeConversation default — most tests don't care; sync-close tests override.
+  // analyzeConversation default - most tests don't care; sync-close tests override.
   mocks.analyzeConversationMock.mockResolvedValue(undefined);
 });
 
@@ -323,7 +323,7 @@ describe("POST /api/crm/conversation/:id/sync-close", () => {
     expect(res.status).toBe(200);
     expect(res.body.data).toMatchObject({ synced: true, vendor: "zoho", crm_activity_id: "note_close" });
     const body = captured.data[0].Note_Content as string;
-    expect(captured.data[0].Note_Title).toBe("GOTCHA — WHATSAPP inbound");
+    expect(captured.data[0].Note_Title).toBe("GOTCHA - WHATSAPP inbound");
     expect(body).toContain("Duration: 5m 0s");
     expect(body).toContain("Messages: 8");
     expect(body).toContain("Summary:");

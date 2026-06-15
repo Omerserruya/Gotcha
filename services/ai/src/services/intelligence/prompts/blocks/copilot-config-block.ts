@@ -35,7 +35,7 @@ function formatLanguage(code: string | undefined): string | null {
 export interface StageContextForPrompt {
   /** Tenant-facing stage label (shown in CRM, dashboards). */
   label: string;
-  /** Stage identifier — included so the LLM can reference it in evidence. */
+  /** Stage identifier - included so the LLM can reference it in evidence. */
   id: string;
   /** Optional next stage to advance to; surfaced so the LLM aims forward. */
   nextLabel?: string | null;
@@ -51,7 +51,7 @@ export function copilotConfigBlock(
 
   const parts: string[] = [];
 
-  // Language + persona — channel-level only.
+  // Language + persona - channel-level only.
   const langName = formatLanguage(config?.language);
   if (langName) {
     parts.push(
@@ -63,14 +63,14 @@ export function copilotConfigBlock(
     parts.push(`PERSONA: ${config.persona.trim()}`);
   }
 
-  // ── Stage context — when present, becomes the spine of this block ──
+  // ── Stage context - when present, becomes the spine of this block ──
   if (stage) {
     const lines: string[] = [
       `ACTIVE PIPELINE STAGE: ${stage.label} (${stage.id})`,
     ];
     if (stage.nextLabel) {
       lines.push(
-        `NEXT STAGE: ${stage.nextLabel} — every cue/suggestion should move the conversation toward advancing here.`,
+        `NEXT STAGE: ${stage.nextLabel} - every cue/suggestion should move the conversation toward advancing here.`,
       );
     }
     if (stage.copilot?.goal && stage.copilot.goal.trim()) {
@@ -97,7 +97,7 @@ export function copilotConfigBlock(
     }
     parts.push(lines.join("\n"));
   } else if (config?.goals && config.goals.trim()) {
-    // No stage active — fall back to channel-level goals.
+    // No stage active - fall back to channel-level goals.
     parts.push(`CALL GOALS: ${config.goals.trim()}`);
   }
 

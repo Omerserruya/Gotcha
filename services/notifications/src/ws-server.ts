@@ -33,7 +33,7 @@ export function startNotificationWsServer(httpServer: HttpServer): void {
 
   httpServer.on("upgrade", (req: IncomingMessage, socket: Duplex, head: Buffer) => {
     if (!req.url || !req.url.startsWith("/ws")) {
-      // Not for us — let other listeners handle, or close.
+      // Not for us - let other listeners handle, or close.
       // No other ws listeners on this server, so reject.
       socket.destroy();
       return;
@@ -60,9 +60,9 @@ export function startNotificationWsServer(httpServer: HttpServer): void {
       clients.add(client);
 
       ws.on("close", () => clients.delete(client));
-      ws.on("error", () => { /* swallow — close fires next */ });
+      ws.on("error", () => { /* swallow - close fires next */ });
 
-      // Optional hello — keeps proxies happy and lets the client confirm.
+      // Optional hello - keeps proxies happy and lets the client confirm.
       try {
         ws.send(JSON.stringify({ type: "hello", data: { userId, tenantId } }));
       } catch { /* ignore */ }

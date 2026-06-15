@@ -1,25 +1,25 @@
 /**
- * HubSpot adapter — production-grade.
+ * HubSpot adapter - production-grade.
  *
  * Auth: OAuth 2.0 (refresh-token flow). Tokens expire in 30 minutes;
  * the framework refreshes within the buffer.
  *
  * Tools (top usage from HubSpot's Sales Hub patterns):
- *   - hubspot.create_contact     — upsert by email (avoids duplicates)
- *   - hubspot.update_contact     — patch fields on a contact
- *   - hubspot.get_contact        — read by id or email
- *   - hubspot.search_contacts    — fuzzy search by email/name/phone
- *   - hubspot.log_activity       — note/email/call engagement
- *   - hubspot.create_deal        — open a deal in a pipeline
+ *   - hubspot.create_contact     - upsert by email (avoids duplicates)
+ *   - hubspot.update_contact     - patch fields on a contact
+ *   - hubspot.get_contact        - read by id or email
+ *   - hubspot.search_contacts    - fuzzy search by email/name/phone
+ *   - hubspot.log_activity       - note/email/call engagement
+ *   - hubspot.create_deal        - open a deal in a pipeline
  *
- * Leads (Sales Hub Enterprise — uses the dedicated /crm/v3/objects/leads endpoint):
- *   - hubspot.create_lead        — new pre-Contact lead (SDR workflow)
- *   - hubspot.update_lead        — patch lead properties
- *   - hubspot.get_lead           — read by id
- *   - hubspot.search_leads       — search by query string
+ * Leads (Sales Hub Enterprise - uses the dedicated /crm/v3/objects/leads endpoint):
+ *   - hubspot.create_lead        - new pre-Contact lead (SDR workflow)
+ *   - hubspot.update_lead        - patch lead properties
+ *   - hubspot.get_lead           - read by id
+ *   - hubspot.search_leads       - search by query string
  *
  * For tenants on Pro/Starter (no Leads object), use create_contact with
- * `source` — that contact's lifecyclestage starts as "lead" by default.
+ * `source` - that contact's lifecyclestage starts as "lead" by default.
  */
 
 import {
@@ -36,11 +36,11 @@ const TOOLS: ToolDefinition[] = [
     name: "hubspot.create_contact",
     description: "Create or upsert a HubSpot contact by email.",
     whenToUse: "You captured a new lead's email and you want them in CRM. Idempotent on email.",
-    whenNotToUse: "You don't have an email — HubSpot requires it for the upsert path.",
+    whenNotToUse: "You don't have an email - HubSpot requires it for the upsert path.",
     category: "WRITE",
     riskLevel: "LOW",
     sideEffects: "Adds or updates a record in HubSpot Contacts.",
-    idempotencyNotes: "Upsert keyed on email — same email never creates a duplicate.",
+    idempotencyNotes: "Upsert keyed on email - same email never creates a duplicate.",
     parameters: {
       type: "object",
       properties: {
@@ -92,7 +92,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        query: { type: "string", description: "Search term — email, phone, or name fragment." },
+        query: { type: "string", description: "Search term - email, phone, or name fragment." },
         limit: { type: "number", description: "Default 10, max 100." },
       },
       required: ["query"],
@@ -137,7 +137,7 @@ const TOOLS: ToolDefinition[] = [
     name: "hubspot.create_lead",
     description: "Create a HubSpot Lead (Sales Hub Enterprise pre-Contact object).",
     whenToUse: "Tenant uses HubSpot Leads for SDR qualification before promoting to a Contact.",
-    whenNotToUse: "Tenant is on Pro/Starter (no Leads object). Use hubspot.create_contact instead — that 403s otherwise.",
+    whenNotToUse: "Tenant is on Pro/Starter (no Leads object). Use hubspot.create_contact instead - that 403s otherwise.",
     category: "WRITE",
     riskLevel: "LOW",
     sideEffects: "Adds a Lead record to the Sales Hub leads workspace.",
@@ -149,7 +149,7 @@ const TOOLS: ToolDefinition[] = [
         company_id: { type: "string", description: "Optional Company id to associate." },
         properties: {
           type: "object",
-          description: "Free-form HubSpot lead properties — e.g. { hs_lead_label: 'qualified', hs_pipeline_stage: '...' }.",
+          description: "Free-form HubSpot lead properties - e.g. { hs_lead_label: 'qualified', hs_pipeline_stage: '...' }.",
         },
       },
       required: ["hs_lead_name"],
@@ -226,7 +226,7 @@ const TOOLS: ToolDefinition[] = [
         query: { type: "string" },
         filterGroups: {
           type: "array",
-          description: "HubSpot filterGroups — each group's filters are AND'd; groups themselves are OR'd.",
+          description: "HubSpot filterGroups - each group's filters are AND'd; groups themselves are OR'd.",
         },
         limit: { type: "number", description: "Default 100, max 200." },
       },
@@ -376,7 +376,7 @@ const HubSpotAdapter: ProviderAdapter = {
         return (r as any).results || [];
       }
       case "describe_fields": {
-        // HubSpot Properties API — returns { results: [{ name, label, type, fieldType, options[], ... }] }.
+        // HubSpot Properties API - returns { results: [{ name, label, type, fieldType, options[], ... }] }.
         // Object must be lowercase per HubSpot's REST conventions.
         const obj = String(args.object || "contacts").toLowerCase();
         if (obj !== "contacts" && obj !== "leads") {

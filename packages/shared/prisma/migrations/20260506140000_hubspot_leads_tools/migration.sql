@@ -1,6 +1,6 @@
 -- HubSpot Leads tools (Sales Hub Enterprise dedicated /crm/v3/objects/leads).
 -- Adapter: services/ai/src/services/connectors/hubspot.adapter.ts
--- Tenants on Pro/Starter will see these in the marketplace too — calls 403
+-- Tenants on Pro/Starter will see these in the marketplace too - calls 403
 -- gracefully (the LLM gets ok:false and pivots to create_contact).
 
 INSERT INTO "catalog_tools" ("id", "slug", "integration_id", "name", "description", "category", "risk_level", "is_default", "sort_order", "method", "created_at") VALUES

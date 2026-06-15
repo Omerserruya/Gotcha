@@ -9,13 +9,13 @@
  *
  * This module produces a small, deterministic, auditable memory snapshot
  * the prompt builder injects under [Context]. It is NOT a replacement for
- * the message history — it is a *summary* anchored to extracted facts.
+ * the message history - it is a *summary* anchored to extracted facts.
  *
  * Design rules:
  *   - Pure extraction over the message history. No LLM call here.
  *   - Closed schemas: facts have a fixed set of slots; intents and outcomes
  *     come from the same enums BEL uses.
- *   - The renderer emits a compact, fact-shaped block — no prose. Prose
+ *   - The renderer emits a compact, fact-shaped block - no prose. Prose
  *     summaries drift; this stays anchored to the transcript.
  *   - BEL stays the only decision layer. Memory is *context*, not policy.
  *
@@ -84,7 +84,7 @@ export interface MemoryInputMessage {
 
 export interface BuildMemoryOpts {
   messages: MemoryInputMessage[];
-  /** Last linked email/phone — passed in by caller (CRM record). */
+  /** Last linked email/phone - passed in by caller (CRM record). */
   knownEmail?: string;
   knownPhone?: string;
 }
@@ -121,13 +121,13 @@ export function buildConversationMemory(opts: BuildMemoryOpts): ConversationMemo
     const body = (m.body || "").trim();
     if (!body) continue;
 
-    // BEL/runtime-tagged metadata wins — explicit > heuristic.
+    // BEL/runtime-tagged metadata wins - explicit > heuristic.
     if (m.metadata?.intent && !intents.includes(m.metadata.intent)) intents.push(m.metadata.intent);
     if (m.metadata?.outcome) lastOutcome = m.metadata.outcome;
 
     if (m.direction !== "INBOUND") continue;
 
-    // Heuristic facts — first occurrence wins (oldest).
+    // Heuristic facts - first occurrence wins (oldest).
     if (!facts.teamSize) {
       const ts = body.match(TEAM_SIZE_RE);
       if (ts) facts.teamSize = ts[1];
@@ -143,11 +143,11 @@ export function buildConversationMemory(opts: BuildMemoryOpts): ConversationMemo
 
     const lower = body.toLowerCase();
 
-    // Heuristic intents — record only if metadata didn't already say.
+    // Heuristic intents - record only if metadata didn't already say.
     if (!m.metadata?.intent) {
       if (containsAny(lower, OBJECTION_MARKERS)) {
         if (!intents.includes("objection")) intents.push("objection");
-        // First objection wins — later "but" matches are weaker signals.
+        // First objection wins - later "but" matches are weaker signals.
         if (!facts.lastObjection) facts.lastObjection = capLen(body, 140);
       }
       if (containsAny(lower, DEFER_MARKERS)) {
@@ -158,7 +158,7 @@ export function buildConversationMemory(opts: BuildMemoryOpts): ConversationMemo
       }
     }
 
-    // \b boundaries don't work for Hebrew — match without them on the Hebrew side.
+    // \b boundaries don't work for Hebrew - match without them on the Hebrew side.
     if (
       !facts.statedNeed &&
       (/\b(i need|i want|i'm looking for)\b/i.test(body) ||

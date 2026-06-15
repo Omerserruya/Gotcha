@@ -2,8 +2,8 @@
  * Identifier extraction + identity-link helper for the incoming-worker.
  *
  * Used by:
- *   - `flow-executor.service.ts` — when a Collect Input captures a value
- *   - `incoming.worker.ts` — universal hook on every persisted INBOUND
+ *   - `flow-executor.service.ts` - when a Collect Input captures a value
+ *   - `incoming.worker.ts` - universal hook on every persisted INBOUND
  *     message so the same logic fires for chats handled by a human agent
  *     (co-pilot mode) where the bot/flow doesn't run
  *
@@ -12,7 +12,7 @@
  * and resolve to the existing CRM Contact / Lead.
  *
  * The link itself is a thin POST to `/api/identity/link` on the conversation
- * service — that endpoint owns idempotency (messageId + identifier), rate
+ * service - that endpoint owns idempotency (messageId + identifier), rate
  * limits, and the "suggest vs. attach" decision when the identifier
  * already belongs to another contact in the same tenant.
  */
@@ -104,7 +104,7 @@ export async function tryLinkIdentifierFromInbound(args: {
 
     // For phone-derived channels (WhatsApp / SMS / voice) the conversation's
     // customerExternalId IS the customer's phone. Trigger auto-link even
-    // when the body has no identifier — `linkOrCreateCrmContact` has a
+    // when the body has no identifier - `linkOrCreateCrmContact` has a
     // fall-through that uses the channel external_id as the phone hint.
     const conversation = await prisma.conversation.findUnique({
       where: { id: args.conversationId },

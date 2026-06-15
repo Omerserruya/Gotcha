@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AI-generated customer brief card — voice-workspace edition.
+ * AI-generated customer brief card - voice-workspace edition.
  *
  * Mirrors the chat-side AISummaryCard (see components/conversations/CRMPanel.tsx)
  * so the same persistent cross-conversation brief that the chat agent sees is

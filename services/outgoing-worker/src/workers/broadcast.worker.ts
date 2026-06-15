@@ -48,7 +48,7 @@ function buildTemplateComponents(
     if (raw != null && String(raw).length > 0) return String(raw);
     const sample = sampleByKey.get(key);
     if (sample) return sample;
-    // Meta rejects empty parameter text — substitute a single dash so the
+    // Meta rejects empty parameter text - substitute a single dash so the
     // message ships rather than the whole broadcast halting.
     return "-";
   };
@@ -59,14 +59,14 @@ function buildTemplateComponents(
     const allNumeric = keys.every((k) => /^\d+$/.test(k));
     const componentType = scope === "header" ? "header" : "body";
     if (allNumeric) {
-      // Positional ({{1}}, {{2}}) — order parameters by numeric key.
+      // Positional ({{1}}, {{2}}) - order parameters by numeric key.
       const sorted = [...keys].sort((a, b) => Number(a) - Number(b));
       return {
         type: componentType,
         parameters: sorted.map((k) => ({ type: "text", text: valueFor(k) })),
       };
     }
-    // Named params (newer Meta format) — every parameter MUST carry parameter_name.
+    // Named params (newer Meta format) - every parameter MUST carry parameter_name.
     return {
       type: componentType,
       parameters: keys.map((k) => ({ type: "text", parameter_name: k, text: valueFor(k) })),
@@ -80,7 +80,7 @@ function buildTemplateComponents(
     tmpl.headerType === "IMAGE" || tmpl.headerType === "VIDEO" || tmpl.headerType === "DOCUMENT"
   ) {
     // Per-campaign override (`headerMediaOverride`) wins over the template
-    // example URL — that's the value the operator entered in the wizard.
+    // example URL - that's the value the operator entered in the wizard.
     const liveUrl = (headerMediaOverride && headerMediaOverride.trim()) || tmpl.headerContent;
     if (liveUrl) {
       const mediaType = tmpl.headerType.toLowerCase() as "image" | "video" | "document";
@@ -106,7 +106,7 @@ async function processBroadcastMessage(job: any) {
 
   const broadcast = await prisma.broadcast.findUnique({ where: { id: broadcastId } });
   if (!broadcast || broadcast.status === "CANCELLED" || broadcast.status === "FAILED") {
-    // Broadcast halted — mark this recipient skipped and bail.
+    // Broadcast halted - mark this recipient skipped and bail.
     await prisma.broadcastRecipient.update({
       where: { id: recipientId },
       data: { status: "skipped", error: `Broadcast ${broadcast?.status ?? "missing"}` },
@@ -272,7 +272,7 @@ export async function checkBroadcastCompletion(broadcastId: string) {
   if (!broadcast || broadcast.status !== "SENDING") return;
 
   // Count terminal recipient statuses (sent + failed + skipped) rather than
-  // comparing to totalRecipients directly — keeps the check correct if the
+  // comparing to totalRecipients directly - keeps the check correct if the
   // broadcast gets new recipients added mid-send.
   const terminalCount = await prisma.broadcastRecipient.count({
     where: {

@@ -1,7 +1,7 @@
 import { z } from "zod";
 
 /**
- * AI Worker — unified configuration for chat, co-pilot, call-pilot, and
+ * AI Worker - unified configuration for chat, co-pilot, call-pilot, and
  * autonomous-bot AI execution.
  *
  * Replaces the per-mode prompt assemblers (LivePromptAssembler,
@@ -11,7 +11,7 @@ import { z } from "zod";
  * prompt assembled from a worker MUST be byte-stable for its sessionId so
  * OpenAI's automatic prefix cache hits on every turn after the first.
  *
- * Phase 0: types only. No runtime behavior yet — call sites still use the
+ * Phase 0: types only. No runtime behavior yet - call sites still use the
  * legacy assemblers. Phase 4 introduces the session registry that holds
  * live worker instances.
  */
@@ -37,7 +37,7 @@ export const AISkillSchema = z.object({
   kind: AISkillKindSchema,
   /** Human-readable identifier; not surfaced to the LLM directly. */
   name: z.string().min(1),
-  /** Bumped when content changes — invalidates session caches keyed on hash. */
+  /** Bumped when content changes - invalidates session caches keyed on hash. */
   version: z.string().min(1),
   /** The prompt fragment this skill injects into SYSTEM_CORE. */
   content: z.string(),
@@ -75,7 +75,7 @@ export type AIWorkerGuardrails = z.infer<typeof AIWorkerGuardrailsSchema>;
  * Persisted shape of an AI Worker. Stored on the (forthcoming) AIWorker
  * Prisma model. Replaces AIAgent.
  *
- * Note: `description` is intentionally absent — it was the legacy
+ * Note: `description` is intentionally absent - it was the legacy
  * human-authored summary field on AIAgent. Per refactor brief, descriptions
  * are LLM-generated on demand or inferred from the worker config registry.
  */
@@ -87,7 +87,7 @@ export const AIWorkerConfigSchema = z.object({
   mode: AIWorkerModeSchema,
   /** Ordered list of skill IDs to compose into SYSTEM_CORE. */
   skillIds: z.array(z.string()).default([]),
-  /** TenantFunnel id — pipeline source of truth. Nullable for non-funnel workers. */
+  /** TenantFunnel id - pipeline source of truth. Nullable for non-funnel workers. */
   funnelId: z.string().nullable().default(null),
   guardrails: AIWorkerGuardrailsSchema,
   /** Knowledge base ids the worker may retrieve from (via search_kb tool). */
@@ -102,11 +102,11 @@ export type AIWorkerConfig = z.infer<typeof AIWorkerConfigSchema>;
 
 /**
  * Snapshot of customer/conversation context captured ONCE at session start.
- * Injected as the SECOND system message — stable bytes for the session's
+ * Injected as the SECOND system message - stable bytes for the session's
  * lifetime so it joins the cached prefix.
  *
  * Late-breaking updates (new CRM data, fresh KB hits) must NOT mutate this
- * — they flow in via tool-result messages instead.
+ * - they flow in via tool-result messages instead.
  */
 export const AIWorkerSessionProfileSchema = z.object({
   sessionId: z.string().min(1),

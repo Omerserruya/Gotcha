@@ -4,6 +4,7 @@
     "loading": "Loading..."
   },
   "nav": {
+    "home": "Home",
     "conversations": "Inbox",
     "dashboard": "Dashboard",
     "bot": "Bot",
@@ -284,7 +285,7 @@
       "deals": "Deals",
       "tickets": "Tickets",
       "noItems": "No items.",
-      "noChannelIds": "No channel identifiers linked yet — the CRM record has no gotcha_* fields populated.",
+      "noChannelIds": "No channel identifiers linked yet - the CRM record has no gotcha_* fields populated.",
       "otherFields": "Other CRM fields",
       "linkedChannels": "Linked channels"
     },
@@ -513,6 +514,9 @@
     "confirmDisconnect": "Are you sure you want to disconnect this channel? Incoming messages will no longer be received.",
     "disconnected": "Channel disconnected",
     "connected": "Channel connected successfully",
+    "routingCtaTitle": "Channel connected - set up what happens to its messages",
+    "routingCtaSub": "Route it to an AI employee, a team, or a subflow.",
+    "routingCtaButton": "Set up routing",
     "connectionFailed": "Connection failed. Please try again.",
     "noPages": "No Facebook Pages found. Make sure you manage at least one page.",
     "noInstagram": "No Instagram Business Account found. Link your Instagram to a Facebook Page first.",
@@ -616,7 +620,7 @@
     "contextOnly": "Context Only",
     "contextOnlyDesc": "AI provides summary and text tips without insert buttons",
     "chat": "AI Chat",
-    "chatDesc": "Agents can ask the AI anything — queries, lookups, and analysis using knowledge base and tools"
+    "chatDesc": "Agents can ask the AI anything - queries, lookups, and analysis using knowledge base and tools"
   },
   "history": {
     "title": "Chat",
@@ -723,7 +727,7 @@
         "deleteButton": "Disable channel",
         "deleting": "Disabling…",
         "deleteConfirm": "This will disable the channel and completely stop receiving calls. Continue?",
-        "outboundProvisioningFailed": "Outbound dialing isn't fully configured — inbound calls still work.",
+        "outboundProvisioningFailed": "Outbound dialing isn't fully configured - inbound calls still work.",
         "retryProvisioning": "Retry provisioning"
       },
       "wizard": {
@@ -731,18 +735,18 @@
         "step1Title": "Connect a new voice channel",
         "step1Subtitle": "Connect your Twilio account to receive and make calls through GOTCHA.",
         "step1BYOTitle": "Twilio account details",
-        "step1BYOSubtitle": "Paste your Twilio Account SID and Auth Token — we'll set up the rest automatically.",
+        "step1BYOSubtitle": "Paste your Twilio Account SID and Auth Token - we'll set up the rest automatically.",
         "step1BYOAutoSetup": "We'll create the API Key and TwiML App for you.",
         "step1BYOWhereToFind": "Where to find these in the Twilio console →",
         "step1BYOSubmit": "Continue to number discovery",
         "step1BYOSubmitting": "Connecting to Twilio…",
         "step1BYOFriendlyName": "Display name",
-        "step1BYOFriendlyNameHelp": "For internal identification only — e.g. 'GOTCHA Israel'.",
+        "step1BYOFriendlyNameHelp": "For internal identification only - e.g. 'GOTCHA Israel'.",
         "step1BYOAccountSid": "Account SID",
         "step1BYOAccountSidHelp": "Console → Account → API keys & tokens. Starts with AC followed by 32 hex characters.",
         "step1BYOAccountSidError": "Account SID must start with AC and contain 32 hex characters",
         "step1BYOAuthToken": "Auth Token",
-        "step1BYOAuthTokenHelp": "Console → Account → API keys & tokens. Never shown again — encrypted and stored server-side.",
+        "step1BYOAuthTokenHelp": "Console → Account → API keys & tokens. Never shown again - encrypted and stored server-side.",
         "step1BYOSecretShow": "Show",
         "step1BYOSecretHide": "Hide",
         "step2Title": "Select numbers to activate",
@@ -831,17 +835,17 @@
         "modeForwardHint": "Call is redirected straight to the chosen agent's mobile. No copilot, no recording.",
         "agentLabel": "Who picks up",
         "agentHint": "First person to be alerted when a call comes in.",
-        "agentPlaceholder": "— Ring everyone in the tenant —",
+        "agentPlaceholder": "- Ring everyone in the tenant -",
         "ringTimeoutLabel": "Ring time before fallback",
         "ringTimeoutHint": "How long to ring that person before the call broadcasts to the fallback group.",
         "fallbackDeptLabel": "If no one answers, also ring",
         "fallbackDeptHint": "Department whose members get the call after the ring time.",
-        "fallbackDeptAll": "— Everyone in the tenant —",
+        "fallbackDeptAll": "- Everyone in the tenant -",
         "autoHangupLabel": "Auto-hangup unanswered calls",
         "autoHangupHint": "When enabled, the call is cut off after this many seconds and shows up in the missed-calls inbox.",
         "autoHangupEnable": "Hang up after",
         "forwardMissingAgent": "Pick a person to forward to before saving.",
-        "forwardMissingPhone": "That person has no phone number on their profile — forwarded calls won't ring until you set one."
+        "forwardMissingPhone": "That person has no phone number on their profile - forwarded calls won't ring until you set one."
       },
       "outbound": {
         "title": "When you call customers",
@@ -852,18 +856,18 @@
         "modeAgentFirstHint": "Platform rings the chosen agent's mobile first; once they pick up, it dials the customer and connects you. Useful when the agent is away from the computer.",
         "agentLabel": "Whose mobile rings",
         "agentHint": "Who gets called first. You can pick a different person than the inbound agent.",
-        "agentPlaceholder": "— Pick an agent —",
-        "agentInheritsInbound": "— Same as inbound ({name}) —",
+        "agentPlaceholder": "- Pick an agent -",
+        "agentInheritsInbound": "- Same as inbound ({name}) -",
         "fallbackHint": "Leave blank to use the inbound agent ({name}).",
         "agentFirstMissingAgent": "Pick whose mobile should ring (or set an inbound agent).",
-        "agentFirstMissingPhone": "That person has no phone number on their profile — agent-first outbound will fail until you set one.",
+        "agentFirstMissingPhone": "That person has no phone number on their profile - agent-first outbound will fail until you set one.",
         "openWorkspaceLabel": "Open the call workspace in the browser",
-        "openWorkspaceHint": "When off, clicking call just rings the agent's mobile and stays on the current page — no UI opens. Recording, transcription and summary still run."
+        "openWorkspaceHint": "When off, clicking call just rings the agent's mobile and stays on the current page - no UI opens. Recording, transcription and summary still run."
       }
     },
     "voiceCopilotConfig": {
       "title": "Copilot configuration",
-      "subtitle": "Configure how the Live Call Copilot behaves for calls on this channel — language, goals, required questions and data collection fields.",
+      "subtitle": "Configure how the Live Call Copilot behaves for calls on this channel - language, goals, required questions and data collection fields.",
       "loading": "Loading…",
       "saved": "Saved",
       "save": "Save",
@@ -871,7 +875,7 @@
       "cancel": "Cancel",
       "backToChannel": "Back to channel",
       "languageLabel": "Output language",
-      "languageHint": "Language used for the copilot's suggestions, missing-data prompts, and summary. The customer can speak any language — this only controls what the rep sees.",
+      "languageHint": "Language used for the copilot's suggestions, missing-data prompts, and summary. The customer can speak any language - this only controls what the rep sees.",
       "personaLabel": "Persona",
       "personaHint": "Short tone descriptor, e.g. \"Friendly but professional\". Applied to the copilot's suggested actions and coaching lines.",
       "personaPlaceholder": "Friendly but professional",
@@ -961,7 +965,7 @@
       "errorSave": "Failed to save policy",
       "financial": "Financial",
       "maxDiscountLabel": "Max discount the AI can offer without approval",
-      "maxDiscountHint": "Percentage — e.g. 10 means any discount over 10% pauses for human approval.",
+      "maxDiscountHint": "Percentage - e.g. 10 means any discount over 10% pauses for human approval.",
       "refundsApprovalLabel": "Refunds require human approval",
       "refundsApprovalHint": "When enabled, any AI-proposed refund pauses and routes to the approval queue.",
       "escalationTitle": "Escalation triggers",
@@ -1088,7 +1092,7 @@
       "noConnectedChannels": "No connected channels",
       "metaStatus": "Meta status",
       "metaDraftHint": "This template hasn't been submitted to Meta yet.",
-      "metaPendingHint": "Submitted to Meta — awaiting approval.",
+      "metaPendingHint": "Submitted to Meta - awaiting approval.",
       "metaRejectedHint": "Rejected by Meta. Adjust the content and resubmit.",
       "resubmitToMeta": "Resubmit to Meta",
       "submitMetaSuccess": "Submitted to Meta",
@@ -1123,7 +1127,7 @@
       "fieldChannelAccount": "Channel Account ID",
       "fieldTemplate": "Template (optional)",
       "fieldBody": "Message Body",
-      "noTemplate": "No template — use custom body",
+      "noTemplate": "No template - use custom body",
       "channelAccountPlaceholder": "Leave blank for default",
       "bodyPlaceholder": "Your campaign message...",
       "stepBasicInfo": "Basic Info",
@@ -1174,10 +1178,10 @@
       "estimatedCost": "Est. Cost",
       "warnings": "Warnings",
       "invalidReasons": "Invalid Details",
-      "cannotSend": "Cannot send — resolve issues above",
+      "cannotSend": "Cannot send - resolve issues above",
       "readyToSend": "Ready to send",
       "fieldFlow": "Trigger Flow (optional)",
-      "noFlow": "No flow — send message only",
+      "noFlow": "No flow - send message only",
       "fieldLastInteraction": "Last Interaction After",
       "fieldInactiveDays": "Inactive Days",
       "fieldSource": "Source / Campaign",
@@ -1186,7 +1190,7 @@
       "fieldHasTag": "Has Tag",
       "excludeOptedOut": "Exclude opted-out contacts",
       "segmentDesc": "Build a filter to target specific contacts from your CRM",
-      "segmentEmpty": "No rules yet — add a rule to filter contacts",
+      "segmentEmpty": "No rules yet - add a rule to filter contacts",
       "segmentValue": "Value",
       "segmentEstimate": "Matching contacts will be calculated at send time",
       "importDesc": "Paste phone numbers or contact IDs, one per line, or upload a CSV file",
@@ -1200,7 +1204,7 @@
       "validateEstCost": "Estimated Cost",
       "validateWarnings": "Warnings",
       "validateInvalidReasons": "Invalid Details",
-      "validateCannotSend": "Cannot send — resolve issues above",
+      "validateCannotSend": "Cannot send - resolve issues above",
       "validateNoData": "Run validation to check recipients before sending",
       "scheduleTitle": "Scheduling",
       "scheduleAt": "Send At",
@@ -1228,7 +1232,7 @@
       "wizardAudience": "Audience",
       "wizardSchedule": "Schedule & send",
       "composeSubtitle": "Pick the channel, template, and message",
-      "audienceSubtitle": "Who should receive this — search, segment, paste, or everyone",
+      "audienceSubtitle": "Who should receive this - search, segment, paste, or everyone",
       "scheduleSubtitle": "Send now or pick a time",
       "modeSmart": "Find & filter",
       "modePick": "Pick people",
@@ -1239,13 +1243,13 @@
       "modeImportDesc": "Paste phone numbers or IDs, one per line",
       "modeEveryoneDesc": "Every reachable contact on the chosen channel",
       "pickSearchPlaceholder": "Search by name, phone, or email…",
-      "pickEmpty": "No matches — try a different name, email, or phone",
+      "pickEmpty": "No matches - try a different name, email, or phone",
       "pickFromCrm": "from CRM",
       "pickFromLocal": "saved",
       "chipsLabel": "Specific people",
       "chipsRemove": "Remove",
       "rulesLabel": "Filter rules",
-      "rulesEmpty": "No rules yet — add one to filter by attribute",
+      "rulesEmpty": "No rules yet - add one to filter by attribute",
       "rulesAddRule": "Add rule",
       "rulesGroupAll": "AND",
       "rulesGroupAny": "OR",
@@ -1258,10 +1262,10 @@
       "crmBannerLoading": "Loading your CRM schema…",
       "crmBannerNotConnected": "Connect a CRM to filter by lead/contact attributes",
       "crmBannerConnect": "Connect now",
-      "crmBannerScopeMissing": "{provider} is connected, but its field schema isn't loading — reconnect to grant the CRM read scope.",
+      "crmBannerScopeMissing": "{provider} is connected, but its field schema isn't loading - reconnect to grant the CRM read scope.",
       "crmBannerReconnect": "Reconnect",
       "crmBannerConnected": "Filters powered by your {provider} schema",
-      "crmBannerFieldsAvailable": "{count} CRM fields available — Lead Source, Stage, Industry, custom fields…",
+      "crmBannerFieldsAvailable": "{count} CRM fields available - Lead Source, Stage, Industry, custom fields…",
       "moduleSelectorLabel": "Filter from {provider}:",
       "moduleLeads": "Leads",
       "moduleContacts": "Contacts",
@@ -1273,7 +1277,7 @@
       "varsPickField": "Select field…",
       "findHeading": "Add people directly",
       "findHelp": "Search your saved contacts by name, email, or phone",
-      "findHelpCrm": "Search saved contacts and {provider} leads/contacts by name, email, or phone — click to add",
+      "findHelpCrm": "Search saved contacts and {provider} leads/contacts by name, email, or phone - click to add",
       "findSearchPlaceholder": "Search by name, email, or phone…",
       "findSearchPlaceholderCrm": "Search local contacts and {provider} leads & contacts…",
       "findSearching": "Searching…",
@@ -1305,7 +1309,7 @@
       "opLabelAfter": "after",
       "valueDaysPlaceholder": "Number of days",
       "liveCountReady": "{count} people will receive this",
-      "liveCountZero": "No matches yet — adjust rules or add people",
+      "liveCountZero": "No matches yet - adjust rules or add people",
       "liveCountLoading": "Calculating…",
       "liveCountEverybody": "Everyone on {channel} ({count})",
       "liveCountReason": "Why this count",
@@ -1364,7 +1368,7 @@
       "importPlaceholder": "Paste IDs, one per line...",
       "importCount": "recipients parsed",
       "fieldTemplate": "Template (optional)",
-      "noTemplate": "No template — type message",
+      "noTemplate": "No template - type message",
       "fieldFlow": "Trigger Flow",
       "noFlow": "No flow",
       "fieldLastInteraction": "Last Interaction After",
@@ -1381,7 +1385,7 @@
       "segmentValuePlaceholder": "Value...",
       "bodyPlaceholder": "Type your message...",
       "selectTemplate": "Select a template (optional)",
-      "noConnectedChannels": "No connected channels — connect one in Settings",
+      "noConnectedChannels": "No connected channels - connect one in Settings",
       "errorRecipientRequired": "Recipient is required",
       "errorBodyRequired": "Message body is required",
       "triggerFlow": "Trigger Flow"
@@ -1393,7 +1397,7 @@
       "searchPlaceholder": "Name, phone, or email",
       "phone": "Phone number",
       "notes": "Notes (optional)",
-      "notesPlaceholder": "Why you're calling — visible to the AI co-pilot during the call.",
+      "notesPlaceholder": "Why you're calling - visible to the AI co-pilot during the call.",
       "noName": "(no name)",
       "selected": "Selected",
       "initializing": "Voice is initializing. If this stays, your Twilio credentials may not be configured yet.",
@@ -1404,7 +1408,7 @@
       "errNotReady": "Voice is not ready yet. Check Twilio configuration.",
       "errAlreadyOn": "Already on a call.",
       "errFailed": "Failed to place call",
-      "agentFirstDialed": "Calling your mobile — pick up to be bridged to the customer.",
+      "agentFirstDialed": "Calling your mobile - pick up to be bridged to the customer.",
       "you": "You",
       "customer": "Customer",
       "connecting": "Connecting…",
@@ -1412,7 +1416,7 @@
       "ended": "Call ended",
       "failed": "Call failed",
       "copilot": "Co-pilot",
-      "copilotListening": "Listening — hints appear after the customer speaks.",
+      "copilotListening": "Listening - hints appear after the customer speaks.",
       "suggestion": "Suggestion",
       "mute": "Mute",
       "unmute": "Unmute",
@@ -1505,15 +1509,25 @@
   "onboarding": {
     "channelsBanner": "Pick WhatsApp, Instagram, or Email to connect your first channel.",
     "missions": {
-      "title": "Get set up",
+      "title": "Finish setup",
+      "subtitle": "A few quick steps to take your AI live.",
       "hide": "Hide",
-      "next": "Next",
+      "dismiss": "Dismiss setup checklist",
+      "show": "Finish setup",
+      "next": "Next step",
+      "stepLabel": "Step {n}",
+      "doneLabel": "Done",
       "items": {
-        "confirm_business": "Confirm your business",
+        "knowledge_base": "Connect a knowledge base",
+        "ai_employees": "Set up your AI Employee",
         "connect_channel": "Connect a channel",
-        "send_test_reply": "Send a test reply",
-        "review_agent_tone": "Review your AI's tone",
-        "invite_teammate": "Invite a teammate"
+        "workflows": "Set up your workflow"
+      },
+      "descriptions": {
+        "knowledge_base": "Add docs, FAQs, or a website so your AI can answer accurately.",
+        "ai_employees": "Create and configure the AI Employee that will handle conversations.",
+        "connect_channel": "Link WhatsApp, Instagram, or web chat to start receiving messages.",
+        "workflows": "Wire channels to your AI Employee, teams, and subflows in the main workflow."
       }
     }
   },
@@ -1521,13 +1535,13 @@
     "title": "Organization Setup",
     "subtitle": "Complete the setup to activate your workspace",
     "confirmTitle": "Confirm your business",
-    "confirmSubtitle": "Just the basics — we'll fine-tune the rest from inside the app.",
+    "confirmSubtitle": "Just the basics - we'll fine-tune the rest from inside the app.",
     "language": "Language",
     "oneLineWhatYouDo": "In one line, what do you do?",
     "oneLinePlaceholder": "e.g. We sell handmade leather bags online",
     "confirmAndContinue": "Confirm and continue",
     "outcomeTitle": "What should we help you do first?",
-    "outcomeSubtitle": "Pick one — you can do all three later.",
+    "outcomeSubtitle": "Pick one - you can do all three later.",
     "outcomeFooter": "You can switch focus anytime from the sidebar.",
     "preparingWorkspace": "Setting up your workspace…",
     "errSaveProfile": "Couldn't save business profile.",
@@ -1686,39 +1700,63 @@
       "getStarted": "Get Early Access"
     },
     "hero": {
-      "badge": "AI for your agents — not instead of them",
-      "title1": "The OS for Customer Communication",
-      "title2": "AI that empowers your agents - and turns every conversation into a growth engine.",
-      "subtitle": "Most platforms replace your team with chatbots. GOTCHA gives every agent an AI co-pilot - one inbox, every channel, full context.",
+      "badge": "AI for your agents - not instead of them",
+      "title1": "Building the Future of Customer Communication",
+      "title2": "AI that reduces workload, empowers your team, and learns every customer.",
+      "subtitle": "GOTCHA turns every conversation into customer intelligence - helping businesses automate routine interactions, guide agents in real time, and deliver personalized experiences that feel human at every touchpoint.",
       "cta": "Get Early Access",
       "ctaSecondary": "See How It Works",
       "trustedBy": "Works with your channels",
       "channelsLabel": "Every channel. One platform.",
       "channelsTitle": "Connect wherever your customers are",
-      "channelsSubtitle": "No matter where customers reach out — everything flows into one inbox. Simple setup, no code, no hassle."
+      "channelsSubtitle": "Simple setup, no code, no hassle.",
+      "metaBadge": "Official Meta-approved Tech Provider",
+      "integrationsLabel": "And it syncs with every CRM & tool you already use"
+    },
+    "story": {
+      "label": "A day with GOTCHA",
+      "headline": "Your customer is never alone",
+      "headlineAgent": "- and neither is your agent.",
+      "scene1Title": "Everything in one place",
+      "scene1Sub": "WhatsApp, Instagram, Messenger, email, web and calls - one unified inbox.",
+      "scene2Title": "It starts with a message",
+      "scene2Sub": "A new DM lands - and the lead is captured into your CRM automatically.",
+      "scene3Title": "AI detects intent instantly",
+      "scene3Sub": "Intent, sentiment and priority recognized the moment a message arrives.",
+      "scene4Title": "AI Employees take action",
+      "scene4Sub": "Your AI acts on behalf of the business - looks up the order, starts the exchange, sends tracking.",
+      "scene5Title": "Full context for your team",
+      "scene5Sub": "Hand off to a human with the complete customer picture in one view.",
+      "scene6Title": "An AI co-pilot for every agent",
+      "scene6Sub": "Suggested replies and next-best actions - one click to apply.",
+      "scene7Title": "Even on calls",
+      "scene7Sub": "AI Call-Pilot guides live phone conversations in real time.",
+      "scene8Title": "Seamless back office",
+      "scene8Sub": "Summarized, stored in your CRM, intelligence enriched, tasks and follow-ups created - automatically.",
+      "closing": "Every conversation → customer intelligence."
     },
     "features": {
       "label": "How It Works",
       "chaosText": "6 platforms. 58 unread. 0 overview.",
       "chaosDesc": "Your team switches tabs 200 times a day. Customers repeat themselves. Context vanishes between apps.",
       "convergeText": "What if they all came together?",
-      "convergeDesc": "Every message from every channel — one list, one screen, zero tab-switching.",
+      "convergeDesc": "Every message from every channel - one list, one screen, zero tab-switching.",
       "botText": "The bot handles first contact.",
-      "botDesc": "Greets, qualifies, and routes. When it gets real — seamless handover to your best agent.",
+      "botDesc": "Greets, qualifies, and routes. When it gets real - seamless handover to your best agent.",
       "resolveText": "One inbox. Total clarity.",
-      "resolveDesc": "All your conversations in one place. Every platform, every message — nothing falls through the cracks.",
+      "resolveDesc": "All your conversations in one place. Every platform, every message - nothing falls through the cracks.",
       "copilotText": "AI that works with your agents. Not without them.",
       "copilotDesc": "It reads the full conversation, understands the customer, pulls from your knowledge base, and writes the perfect reply. Your agent just clicks send.",
       "copilotLabel": "AI Co-Pilot",
       "copilotSuggestion1": "Based on order #4812, the shipment arrives Thursday. Want me to share tracking?",
-      "copilotSuggestion2": "Customer seems frustrated — suggest empathetic opening + resolution.",
+      "copilotSuggestion2": "Customer seems frustrated - suggest empathetic opening + resolution.",
       "copilotInsert": "Insert reply",
       "botGreeting": "Hi! How can I help you today?",
       "customerMsg": "I need to return order #4812",
       "botReply": "Let me connect you with an agent right away!",
       "botDivider": "Bot transferred to agent queue",
       "agentJoined": "Sarah joined the conversation",
-      "agentReply": "Hi! I'm looking at your order right now — give me just a moment.",
+      "agentReply": "Hi! I'm looking at your order right now - give me just a moment.",
       "myActive": "My Active",
       "queue": "Queue",
       "contextSummary": "Return request for order #4812. Customer purchased 3 days ago."
@@ -1726,13 +1764,13 @@
     "flow": {
       "label": "How It Works",
       "stage1Text": "Customers reach out from every channel",
-      "stage1Desc": "WhatsApp, Instagram, Email, Chat, Slack — messages pour in from everywhere, all at once.",
+      "stage1Desc": "WhatsApp, Instagram, Email, Chat, Slack - messages pour in from everywhere, all at once.",
       "stage2Text": "The bot intelligently classifies and routes",
-      "stage2Desc": "Smart Bot reads intent, qualifies the request, and routes it to the right agent — instantly.",
+      "stage2Desc": "Smart Bot reads intent, qualifies the request, and routes it to the right agent - instantly.",
       "stage3Text": "Copilot drafts replies in real-time",
       "stage3Desc": "It reads the conversation, pulls from your knowledge base, and suggests the perfect response. Your agent just clicks send.",
       "stage4Text": "Every conversation becomes insight",
-      "stage4Desc": "The system summarizes, tags, and feeds learnings back into the knowledge base — making every future conversation smarter.",
+      "stage4Desc": "The system summarizes, tags, and feeds learnings back into the knowledge base - making every future conversation smarter.",
       "smartBot": "Smart Bot",
       "complete": "Complete",
       "incoming": "Incoming",
@@ -1747,7 +1785,7 @@
       "intentPriority": "Priority",
       "chatMsg1": "Hi, I need to return order #4812",
       "chatMsg2": "I received the wrong size",
-      "chatMsg3": "I see your order — checking return options now",
+      "chatMsg3": "I see your order - checking return options now",
       "chatMsg4": "I can arrange a free return pickup for tomorrow. Would that work?",
       "chatMsg5": "Yes, that would be great!",
       "chatMsg6": "Done! Confirmation email with pickup details is on its way.",
@@ -1756,7 +1794,7 @@
       "copilotSubtitle": "Business Intelligence",
       "thinkStep1": "Analyzing conversation...",
       "thinkStep2": "Intent: Product return (wrong size)",
-      "thinkStep3": "Order #4812 — T-shirt XL, shipped Mar 12",
+      "thinkStep3": "Order #4812 - T-shirt XL, shipped Mar 12",
       "thinkStep4": "Policy: Free returns within 30 days ✓",
       "thinkStep5": "Best action: Arrange pickup + label",
       "thinkStep6": "Drafting optimal reply...",
@@ -1798,7 +1836,7 @@
       "subtitle": "Four steps. No code. No consultants.",
       "step1": {
         "title": "Connect your channels",
-        "desc": "Link WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — one setup flow, done in minutes."
+        "desc": "Link WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack - one setup flow, done in minutes."
       },
       "step2": {
         "title": "Feed the AI your knowledge",
@@ -1814,49 +1852,48 @@
       }
     },
     "productFeatures": {
-      "label": "Platform",
+      "label": "Features",
       "title": "One AI system that runs your entire customer operation",
-      "subtitle": "Not a list of features — a living system that understands every conversation, learns from every interaction, and actively helps your team perform better.",
+      "subtitle": "Not a list of features - a living system that understands every conversation, learns from every interaction, and actively helps your team perform better.",
       "cards": {
+        "aiEmployee": {
+          "title": "AI Employee",
+          "hint": "It doesn't just chat - it takes action",
+          "desc": "Your AI Employee understands each request and acts on it end-to-end - looking up orders, starting exchanges, sending tracking, and updating your systems. You decide how far it goes on its own, from suggest-only to fully autonomous.",
+          "bullets": [
+            "Takes real actions on your systems - not just replies",
+            "You set the autonomy level: suggest, approve, or auto",
+            "Looks up orders, starts exchanges, sends tracking"
+          ]
+        },
         "copilot": {
-          "title": "AI Copilot",
-          "hint": "Your AI partner across every conversation and call",
-          "desc": "AI Copilot sits beside your team everywhere — live chats, email threads, voice calls, and social comments. It suggests replies, auto-responds to comments, opens conversations with leads, and coaches agents during live calls in real-time.",
+          "title": "AI Co-Pilot & Call-Pilot",
+          "hint": "An AI partner beside every agent - in chat and on calls",
+          "desc": "Co-Pilot drafts replies and next-best actions in live chats and email, while Call-Pilot guides agents on live phone calls in real time - surfacing context, suggestions, and sentiment as the conversation happens.",
           "bullets": [
-            "Real-time coaching during live voice calls",
-            "Auto-reply to social comments and DMs",
-            "Proactively opens chats with new leads",
-            "Context-aware suggestions across every channel"
+            "Pre-drafted replies + ready-to-fire actions",
+            "Live guidance on voice calls - Call-Pilot",
+            "Real-time sentiment & next-best-action"
           ]
         },
-        "inbox": {
-          "title": "Omnichannel Inbox",
-          "hint": "Every channel, every message — one screen",
-          "desc": "WhatsApp, Instagram, Messenger, Gmail, Outlook, Slack — all flowing into a single unified inbox. Smart routing sends each conversation to the right agent, and full history follows every customer across channels.",
+        "intelligence": {
+          "title": "Customer 360 Intelligence",
+          "hint": "The full customer picture, in one view",
+          "desc": "Every conversation enriches a single customer profile - lifetime value, orders, sentiment, tags and history across every channel. Your team and your AI always know exactly who they're talking to and how to treat them.",
           "bullets": [
-            "6+ channels unified in one view",
-            "Smart routing by skill, load, and priority",
-            "Full cross-channel conversation history"
+            "One unified profile across every channel",
+            "LTV, orders, sentiment & tags at a glance",
+            "Auto-enriched after every conversation"
           ]
         },
-        "insights": {
-          "title": "Customer Intelligence",
-          "hint": "AI that learns your customers and knows how to treat them",
-          "desc": "Every interaction teaches the system more about each customer — their preferences, sentiment patterns, purchase history, and communication style. Your team gets live context cards that show exactly how to approach every conversation.",
+        "omnichannel": {
+          "title": "Omnichannel",
+          "hint": "Every channel, every message - one inbox",
+          "desc": "WhatsApp, Instagram, Messenger, email, web chat and phone calls all flow into a single unified inbox with smart routing, so every conversation reaches the right place with full history attached.",
           "bullets": [
-            "AI builds a profile from every interaction",
-            "Sentiment and intent detection in real-time",
-            "Personalized handling recommendations per customer"
-          ]
-        },
-        "knowledge": {
-          "title": "Connected Knowledge Base",
-          "hint": "Your company's brain, available in every conversation",
-          "desc": "Upload docs, FAQs, and product info — AI instantly uses them to draft replies, answer questions, and train your bots. The knowledge base learns from every resolved conversation and gets smarter over time.",
-          "bullets": [
-            "Auto-suggests relevant articles in chat",
-            "Powers bot answers and copilot suggestions",
-            "Learns and improves from resolved tickets"
+            "WhatsApp, Instagram, Messenger, email, web & calls",
+            "Smart routing by skill, load & priority",
+            "Full cross-channel history per customer"
           ]
         }
       }
@@ -1867,7 +1904,7 @@
       "subtitle": "One platform. Every team. AI that adapts to how you work.",
       "ops": {
         "title": "Customer Operations",
-        "desc": "Manage all customer conversations from one unified inbox. Route messages to the right agents, automate repetitive tasks, and keep SLAs on track — all with AI that gets smarter with every interaction.",
+        "desc": "Manage all customer conversations from one unified inbox. Route messages to the right agents, automate repetitive tasks, and keep SLAs on track - all with AI that gets smarter with every interaction.",
         "features": [
           "Omnichannel inbox",
           "Smart routing & SLA tracking",
@@ -1876,7 +1913,7 @@
       },
       "sales": {
         "title": "Sales",
-        "desc": "Engage leads the moment they reach out — on any channel. AI qualifies prospects, suggests follow-ups, and gives your sales team the context they need to close faster.",
+        "desc": "Engage leads the moment they reach out - on any channel. AI qualifies prospects, suggests follow-ups, and gives your sales team the context they need to close faster.",
         "features": [
           "Instant lead engagement",
           "AI qualification & scoring",
@@ -1894,7 +1931,7 @@
       },
       "social": {
         "title": "Social Engagement",
-        "desc": "Instagram DMs, Facebook comments, WhatsApp — every social touchpoint becomes a managed conversation with real-time sentiment analysis and AI-powered responses.",
+        "desc": "Instagram DMs, Facebook comments, WhatsApp - every social touchpoint becomes a managed conversation with real-time sentiment analysis and AI-powered responses.",
         "features": [
           "All social channels in one inbox",
           "Real-time sentiment detection",
@@ -1908,30 +1945,56 @@
       "items": [
         {
           "q": "What exactly is GOTCHA?",
-          "a": "A single inbox for all your customer messaging — WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — with an AI co-pilot that makes your agents faster and sharper. Not a chatbot that replaces them."
+          "a": "One AI-powered platform for all your customer communication. It unifies every channel into a single inbox and adds an AI Employee and Co-Pilot that don't just chat - they take real actions and turn every conversation into customer intelligence in your CRM."
+        },
+        {
+          "q": "Does the AI actually take actions, or is it just a chatbot?",
+          "a": "It takes real actions. The AI Employee understands a request and handles it end-to-end - looking up the order, starting an exchange, sending tracking, updating your CRM - not just sending canned replies."
+        },
+        {
+          "q": "Will it replace my human agents?",
+          "a": "No. It handles the routine and hands off to a human the moment it matters - with the full customer context in one view. The Co-Pilot then makes your agents faster, and Call-Pilot guides them live on phone calls."
         },
         {
           "q": "Which channels does it support?",
-          "a": "WhatsApp, Facebook Messenger, Instagram DMs, Gmail, Outlook, and Slack. Every channel your customers use — in one place."
+          "a": "WhatsApp, Instagram, Messenger, email, web chat and Slack - plus phone calls, where AI Call-Pilot guides your agents live. Every channel in one unified inbox, with full cross-channel history per customer."
         },
         {
-          "q": "What does the AI co-pilot actually do?",
-          "a": "It reads incoming messages, pulls relevant info from your knowledge base, and suggests replies your agents can send with one click. Think autocomplete, but for customer support."
+          "q": "How much control do I have over what the AI does?",
+          "a": "Full control. You set the autonomy level per action - from suggest-only, to ask-me-first (human-in-the-loop), to fully autonomous. Sensitive actions like refunds or discounts can always require approval."
+        },
+        {
+          "q": "Does it connect to my CRM and tools?",
+          "a": "Yes. Conversations are summarized and synced to your CRM/ERP, the customer profile is enriched automatically, and tasks and follow-ups are created for you - no copy-paste."
         },
         {
           "q": "How fast can we get started?",
-          "a": "Most teams go live in under 15 minutes. Connect channels, upload your knowledge base, invite your team — done."
+          "a": "Fast. Connect your channels, add your knowledge base, and invite your team - most teams are live the same day."
         },
         {
           "q": "Is our data safe?",
-          "a": "Encrypted in transit and at rest. We don't sell or share your data. Ever."
+          "a": "Encrypted in transit and at rest, with role-based access and strict per-tenant isolation. We never sell or share your data."
         }
       ]
     },
     "cta": {
-      "title": "Great support is human. Now it's AI-powered too.",
-      "subtitle": "Give your agents the co-pilot they deserve. One inbox, every channel, zero guesswork.",
-      "button": "Get Early Access"
+      "title": "Be first to put your AI Employee to work",
+      "subtitle": "Leave your details and we'll set you up with early access — no credit card, no commitment.",
+      "button": "Get Early Access",
+      "form": {
+        "namePlaceholder": "Your name",
+        "phonePlaceholder": "Phone number",
+        "industryPlaceholder": "Select your industry",
+        "submit": "Get Early Access",
+        "submitting": "Sending…",
+        "successTitle": "You're on the list! 🎉",
+        "successMsg": "We'll reach out shortly to get you set up.",
+        "privacy": "We'll only use your details to set up your early access.",
+        "errName": "Please enter your name.",
+        "errPhone": "Please enter a valid phone number.",
+        "errAlready": "You're already on the waitlist.",
+        "errGeneric": "Something went wrong. Please try again."
+      }
     },
     "footer": {
       "product": "Product",
@@ -2243,10 +2306,10 @@
     "wizard": {
       "title": "Create AI Employee",
       "subtitle": "Let's set up your new AI team member. Answer a few questions and we'll configure everything for you.",
-      "q1Name": "What should this AI employee be called? Give it a name that fits your brand — like \"Maya\" or \"Support Bot\".",
+      "q1Name": "What should this AI employee be called? Give it a name that fits your brand - like \"Maya\" or \"Support Bot\".",
       "q2Responsibility": "What should this AI employee be responsible for? For example: answering customer questions, handling returns, booking appointments, qualifying leads...",
-      "q3Channels": "Where should it interact with customers? For example: WhatsApp, Instagram, Email, Webchat — you can pick multiple.",
-      "q4Communication": "How should it communicate? Describe the tone and style — professional, friendly, casual, empathetic? Should it use emojis? Keep replies short or detailed?",
+      "q3Channels": "Where should it interact with customers? For example: WhatsApp, Instagram, Email, Webchat - you can pick multiple.",
+      "q4Communication": "How should it communicate? Describe the tone and style - professional, friendly, casual, empathetic? Should it use emojis? Keep replies short or detailed?",
       "q5Escalation": "When should it involve a human agent? For example: when a customer is angry, asks a complex question, requests a refund, or explicitly asks for a person.",
       "q6AiDisclosure": "Should customers know they're talking to AI? Should the bot introduce itself as AI, or behave as a regular team member?",
       "q7Extra": "Any special instructions or knowledge it should have? For example: specific company policies, product details, things it should never say, or FAQ topics.",
@@ -2473,7 +2536,7 @@
     },
     "router": {
       "title": "Assignment Rules",
-      "subtitle": "Rules evaluated top to bottom — first match wins",
+      "subtitle": "Rules evaluated top to bottom - first match wins",
       "addRule": "+ Add Rule",
       "rule": "Rule",
       "condition": "Condition",
@@ -2484,7 +2547,7 @@
       "backToStudio": "Back to AI Studio",
       "infoBanner": "Rules are evaluated top to bottom. The first matching rule wins. The default rule at the bottom catches everything that doesn't match.",
       "rulesTitle": "Assignment Rules",
-      "rulesSubtitle": "Priority-ordered — drag to reorder",
+      "rulesSubtitle": "Priority-ordered - drag to reorder",
       "ruleCol": "Rule",
       "routeToCol": "Assign To",
       "onCol": "On",
@@ -2492,7 +2555,7 @@
       "howItWorksTitle": "How Assignment Works",
       "how1": "A new message arrives from any channel (WhatsApp, Instagram, Web Chat).",
       "how2": "Each rule is checked from top to bottom. The first rule that matches the conversation wins.",
-      "how3": "The conversation is assigned to the right team member — an AI Employee, a Playbook, or a Human Agent."
+      "how3": "The conversation is assigned to the right team member - an AI Employee, a Playbook, or a Human Agent."
     },
     "knowledge": {
       "title": "Knowledge Sources",
@@ -2576,7 +2639,7 @@
     "plan": "Plan",
     "step": "Step",
     "risk": "Risk",
-    "requiresApproval": "⚠ Contains high-risk steps — executing requires approval.",
+    "requiresApproval": "⚠ Contains high-risk steps - executing requires approval.",
     "dryRunPreview": "Dry-run preview",
     "reset": "Reset",
     "execute": "Execute",
@@ -2683,7 +2746,7 @@
   "voice": {
     "missedCalls": {
       "title": "Missed calls",
-      "subtitle": "Inbound calls that weren't answered. Tap call back to return — when the channel is set to ring agents' mobiles, the platform calls you first, then bridges the customer.",
+      "subtitle": "Inbound calls that weren't answered. Tap call back to return - when the channel is set to ring agents' mobiles, the platform calls you first, then bridges the customer.",
       "loading": "Loading…",
       "refreshing": "Refreshing…",
       "refresh": "Refresh",
@@ -2692,7 +2755,7 @@
       "openConversation": "Open conversation",
       "callBack": "Call back",
       "callingBack": "Calling…",
-      "callbackStarted": "Calling your phone — pick up to be bridged with the customer.",
+      "callbackStarted": "Calling your phone - pick up to be bridged with the customer.",
       "callbackFailed": "Couldn't start the callback. Try again or call manually.",
       "outboundInPlatformHint": "This channel uses the browser dialer for outbound. Open the conversation and call from there.",
       "dialerNotReady": "Browser dialer isn't ready yet. Reload the page and try again.",
@@ -2715,7 +2778,7 @@
       "briefToneLabel": "Tone",
       "briefMoodLabel": "Mood",
       "briefMeta": "Based on {n} conversation(s), updated {when}",
-      "noBrief": "No customer brief yet — this is the first interaction.",
+      "noBrief": "No customer brief yet - this is the first interaction.",
       "noCrm": "No CRM details on file.",
       "noConversations": "No prior conversations.",
       "loadingDetail": "Loading…",
@@ -2762,9 +2825,9 @@
         "hangupButton": "Hang up"
       },
       "declined": {
-        "noAnswer": "Customer didn't answer — closing.",
-        "busy": "Customer line was busy — closing.",
-        "failed": "Call couldn't be completed — closing."
+        "noAnswer": "Customer didn't answer - closing.",
+        "busy": "Customer line was busy - closing.",
+        "failed": "Call couldn't be completed - closing."
       },
       "spelling": {
         "heard": "Heard:",
@@ -2807,7 +2870,7 @@
       "cards": {
         "copilot": {
           "title": "Co-pilot suggestions",
-          "listening": "Listening — hints appear after the customer speaks."
+          "listening": "Listening - hints appear after the customer speaks."
         },
         "customer": {
           "title": "Customer",
@@ -2900,7 +2963,7 @@
     "running": "Running…",
     "approveAndRun": "Approve & run",
     "confirmReject": "Confirm reject",
-    "rejectReasonPlaceholder": "Why are you rejecting? (required — used to craft the bot's fallback reply)",
+    "rejectReasonPlaceholder": "Why are you rejecting? (required - used to craft the bot's fallback reply)",
     "note": "Note",
     "errLoad": "Failed to load approvals",
     "errApprove": "Approve failed",
@@ -2927,7 +2990,7 @@
   },
   "postConvSettings": {
     "title": "Post-Conversation Schema",
-    "subtitle": "What the AI extracts when a call ends or a chat closes — and what it does next.",
+    "subtitle": "What the AI extracts when a call ends or a chat closes - and what it does next.",
     "save": "Save changes",
     "saving": "Saving…",
     "saved": "Saved",
@@ -2936,7 +2999,7 @@
     "saveFailed": "Failed to save",
     "summary": {
       "title": "Summary fields",
-      "subtitle": "CRM slots the AI should fill if discussed. Only fields mentioned in the conversation are written — prior values are preserved.",
+      "subtitle": "CRM slots the AI should fill if discussed. Only fields mentioned in the conversation are written - prior values are preserved.",
       "empty": "No custom fields yet.",
       "keyPlaceholder": "key (e.g. budget)",
       "labelPlaceholder": "Label",
@@ -2962,7 +3025,7 @@
     },
     "crmRules": {
       "title": "CRM rules",
-      "subtitle": "When the AI detects an intent, patch specific CRM fields. Sparse — only the fields you list here are written.",
+      "subtitle": "When the AI detects an intent, patch specific CRM fields. Sparse - only the fields you list here are written.",
       "empty": "No CRM rules yet.",
       "whenIntent": "When intent =",
       "intentPlaceholder": "e.g. ready_to_buy",
@@ -3030,7 +3093,7 @@
       "stageGoalPlaceholder": "e.g. Qualify budget and timeline; secure a demo for next week.",
       "nextStage": "Next stage on advance",
       "nextStageHint": "Stage to advance to when exit criteria are met. Leave blank to use the first outgoing transition.",
-      "deriveFromTransitions": "— derive from transitions —",
+      "deriveFromTransitions": "- derive from transitions -",
       "addStage": "+ Add stage",
       "newStage": "New stage",
       "removeStageConfirm": "Remove this stage?",
@@ -3045,7 +3108,7 @@
       "dataFields": {
         "title": "Required data fields",
         "add": "+ Add",
-        "hint": "Fill either column — the other is auto-derived on save (label slugifies to field key; field key humanizes to label).",
+        "hint": "Fill either column - the other is auto-derived on save (label slugifies to field key; field key humanizes to label).",
         "empty": "No fields configured.",
         "fieldPlaceholder": "field_key",
         "labelPlaceholder": "Rep-facing label",
@@ -3070,10 +3133,10 @@
     "instructions": {
       "title": "How to use",
       "intro": "Suggestions appear here as the customer speaks. Use ↑/↓ to focus a cue, Enter to accept, Esc to dismiss.",
-      "tierJunior": "Junior tier — pulse, direction, and strategy lanes all visible.",
-      "tierMid": "Mid tier — balanced lanes with moderate cooldown.",
-      "tierSenior": "Senior tier — whisper mode, pulse only.",
-      "listening": "Listening — hints appear after the customer speaks."
+      "tierJunior": "Junior tier - pulse, direction, and strategy lanes all visible.",
+      "tierMid": "Mid tier - balanced lanes with moderate cooldown.",
+      "tierSenior": "Senior tier - whisper mode, pulse only.",
+      "listening": "Listening - hints appear after the customer speaks."
     },
     "cues": {
       "noCues": "No coaching cues right now.",
@@ -3086,7 +3149,7 @@
       "notUseful": "Not useful · Esc",
       "tierJuniorDesc": "More cues, all lanes, animations on",
       "tierMidDesc": "Default",
-      "tierSeniorDesc": "Whisper mode — pulse only"
+      "tierSeniorDesc": "Whisper mode - pulse only"
     }
   }
 }

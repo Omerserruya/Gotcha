@@ -1,12 +1,12 @@
 /**
- * Funnel admin routes — CRUD over `TenantFunnel`.
+ * Funnel admin routes - CRUD over `TenantFunnel`.
  *
  *   GET    /funnels?departmentId=...
  *   GET    /funnels/:id
  *   POST   /funnels
  *   PATCH  /funnels/:id
  *   DELETE /funnels/:id
- *   POST   /funnels/:id/activate    — sets isActive=true and deactivates siblings in same departmentId
+ *   POST   /funnels/:id/activate    - sets isActive=true and deactivates siblings in same departmentId
  *
  * The cache in funnel-config.repo.ts is invalidated on writes so BEL picks
  * up changes within one request. ADMIN role required.
@@ -18,7 +18,7 @@ import { invalidateFunnelCache } from "../services/funnel-config.repo";
 
 const router = Router();
 
-// Scope the auth chain to /funnels/* only — without the path filter, this
+// Scope the auth chain to /funnels/* only - without the path filter, this
 // router-level middleware fires for ANY request that hits the parent /api
 // mount (including unrelated /api/connectors/* etc.) and 401-blocks them
 // before their own router can handle the route.
@@ -64,7 +64,7 @@ router.post("/funnels", requireRole("ADMIN"), async (req: Request, res: Response
     res.status(400).json({ error: "stages must be a non-empty array" });
     return;
   }
-  // departmentId is optional — null means tenant default.
+  // departmentId is optional - null means tenant default.
   const departmentId = b.departmentId != null ? String(b.departmentId) : null;
   try {
     const row = await (prisma as any).tenantFunnel.create({
@@ -114,7 +114,7 @@ router.patch("/funnels/:id", requireRole("ADMIN"), async (req: Request, res: Res
   }
 });
 
-// ─── Activate (idempotent — drops sibling actives in same departmentId) ──
+// ─── Activate (idempotent - drops sibling actives in same departmentId) ──
 
 router.post("/funnels/:id/activate", requireRole("ADMIN"), async (req: Request, res: Response) => {
   const target = await (prisma as any).tenantFunnel.findFirst({

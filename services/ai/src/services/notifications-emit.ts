@@ -4,10 +4,10 @@
  *
  * Same public API (`tryEmit`, `emitEvent`, `SystemEventType`, `EmitEventInput`)
  * that AI hot paths used to import from `./notifications/event-emitter.service`
- * — so callers (ai-bot.service.ts) only need a path swap.
+ * - so callers (ai-bot.service.ts) only need a path swap.
  *
  * The queue name and Redis URL must match services/notifications/src/services/queues.ts.
- * BullMQ queues are just Redis keys — multiple producers across services are fine.
+ * BullMQ queues are just Redis keys - multiple producers across services are fine.
  */
 import { randomUUID } from "crypto";
 import { Queue, type JobsOptions } from "bullmq";

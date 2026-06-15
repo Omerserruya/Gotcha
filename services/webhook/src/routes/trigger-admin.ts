@@ -13,7 +13,7 @@ import {
  *
  * Separate from the public ingest route (routes/triggers.ts): that one is
  * unauthenticated and resolves the tenant from the unguessable path `token`.
- * This router is the opposite — it is JWT-authenticated and tenant-scoped, and
+ * This router is the opposite - it is JWT-authenticated and tenant-scoped, and
  * is what the Main Playbook's Webhook trigger node talks to from the browser to
  * provision / inspect / rotate / toggle a trigger for a given workflow.
  *
@@ -23,12 +23,12 @@ import {
  * associated ChatbotFlow (so `workflowId` must be a real flow the tenant owns);
  * "connected" walks the nodes wired to the webhook trigger node on the Main
  * Playbook canvas (see executeWebhookFlow) and the anchor is simply the trigger
- * node's own canvas id — no flow pick required. There is at most ONE trigger per
+ * node's own canvas id - no flow pick required. There is at most ONE trigger per
  * (tenant, workflow); create is idempotent and returns the existing record
  * (reconciling its mode if the caller passes a different one).
  *
  * Mounted at /api/webhook-triggers (the gateway's /api/webhook prefix already
- * proxies this path to the webhook service — no nginx change needed).
+ * proxies this path to the webhook service - no nginx change needed).
  */
 const router = Router();
 
@@ -56,7 +56,7 @@ const MAX_BODY_FIELDS = 50;
 
 // Coerce a stored / submitted body schema (Prisma Json column, or request body)
 // into a clean [{ key, type }] array: drops blank keys, de-dupes by key, clamps
-// unknown types to "string" and caps the count. Declaration only — this never
+// unknown types to "string" and caps the count. Declaration only - this never
 // rejects, it just sanitizes what the mapper will read.
 function normalizeBodySchema(raw: unknown): { key: string; type: WebhookFieldType }[] {
   if (!Array.isArray(raw)) return [];
@@ -95,7 +95,7 @@ function serialize(t: {
     token: t.token,
     secret: t.secret,
     enabled: t.enabled,
-    // "flow" | "connected" — what the inbound POST runs. See WebhookTrigger model.
+    // "flow" | "connected" - what the inbound POST runs. See WebhookTrigger model.
     targetMode: t.targetMode === "connected" ? "connected" : "flow",
     // User-declared body fields the mapper binds from. Declaration only.
     bodySchema: normalizeBodySchema(t.bodySchema),
@@ -135,7 +135,7 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
     if (!workflowId) {
       return res.status(400).json({ error: "workflowId is required" });
     }
-    // Optional at create — defaults to the original flow behavior. Anything
+    // Optional at create - defaults to the original flow behavior. Anything
     // other than "connected" is normalized to "flow". `hasMode` distinguishes
     // "caller omitted it" (don't reconcile an existing record) from "caller
     // explicitly chose flow".
@@ -143,7 +143,7 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
     const targetMode = req.body?.targetMode === "connected" ? "connected" : "flow";
 
     // Optional declared body schema. Must be an array if present (declaration
-    // only — sanitized, never used to reject inbound payloads).
+    // only - sanitized, never used to reject inbound payloads).
     const hasSchema = req.body?.bodySchema !== undefined;
     if (hasSchema && !Array.isArray(req.body.bodySchema)) {
       return res.status(400).json({ error: "bodySchema must be an array" });
@@ -151,11 +151,11 @@ router.post("/", requireRole("ADMIN"), async (req: Request, res: Response) => {
     const bodySchema = normalizeBodySchema(req.body?.bodySchema);
 
     // Flow mode runs a separate ChatbotFlow, so the `workflowId` the user picked
-    // must be a real flow the tenant owns — validate it before minting
+    // must be a real flow the tenant owns - validate it before minting
     // credentials. Connected mode is different: there is no "flow to run", the
     // `workflowId` is only an auto-anchor (the trigger node's own canvas id) used
     // to locate the webhook_trigger node on the Main Playbook. Don't force a flow
-    // pick there and skip the flow-exists check. (Go-forward only — existing
+    // pick there and skip the flow-exists check. (Go-forward only - existing
     // connected triggers that still carry a real flow id keep working.)
     if (targetMode !== "connected") {
       const flow = await prisma.chatbotFlow.findFirst({
@@ -237,7 +237,7 @@ router.post(
  * Update the trigger's enabled flag, its target mode ("flow" | "connected"),
  * and/or its declared body schema ([{ key, type }]). At least one field is
  * required. A disabled trigger answers inbound POSTs with 403 (see
- * routes/triggers.ts). bodySchema is declaration only — it is not enforced
+ * routes/triggers.ts). bodySchema is declaration only - it is not enforced
  * against inbound payloads.
  */
 router.patch("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {

@@ -2,12 +2,12 @@
  * Smoke test for the copilot request-dedup layer.
  *
  * Exercises the three code paths of `runDeduped`:
- *   1. "primary"   — first request runs fn
- *   2. "attached"  — concurrent requests with same key share one fn run
- *   3. "idempotent" — same requestInstanceId returns cached result
+ *   1. "primary"   - first request runs fn
+ *   2. "attached"  - concurrent requests with same key share one fn run
+ *   3. "idempotent" - same requestInstanceId returns cached result
  *
  * Plus failure-mode invariants:
- *   4. Rejected fn does NOT poison the slot — next call runs fresh
+ *   4. Rejected fn does NOT poison the slot - next call runs fresh
  *   5. Pruner does not blow up after many idempotency entries
  *
  * Run inside the ai container after rebuild:
@@ -29,7 +29,7 @@ const results: Row[] = [];
 function record(name: string, pass: boolean, detail = ""): void {
   results.push({ name, pass, detail });
   const tag = pass ? "\x1b[32mPASS\x1b[0m" : "\x1b[31mFAIL\x1b[0m";
-  console.log(`${tag}  ${name}${detail ? "  — " + detail : ""}`);
+  console.log(`${tag}  ${name}${detail ? "  - " + detail : ""}`);
 }
 
 async function sleep(ms: number) {
@@ -91,7 +91,7 @@ async function main() {
       requestInstanceId: "ri-C",
       fn: async () => { called++; return "value-C"; },
     });
-    // Same instance id, totally different fn — must NOT run.
+    // Same instance id, totally different fn - must NOT run.
     const out2 = await runDeduped({
       key: "conv:3",
       requestInstanceId: "ri-C",

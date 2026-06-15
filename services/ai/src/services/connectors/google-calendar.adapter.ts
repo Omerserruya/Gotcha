@@ -13,7 +13,7 @@
  *     the CalendarAccount status=BROKEN so the tool surface drops the tool.
  *
  * The adapter is deliberately small. The constraints layer (resolveAvailability)
- * does all the policy thinking — this file is just a network shim.
+ * does all the policy thinking - this file is just a network shim.
  */
 
 import { prisma, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
@@ -37,7 +37,7 @@ interface StoredCredentials {
 }
 
 export interface GoogleCalendarAdapterOpts {
-  /** CalendarAccount.id — used to load + persist credentials. */
+  /** CalendarAccount.id - used to load + persist credentials. */
   calendarAccountId: string;
 }
 

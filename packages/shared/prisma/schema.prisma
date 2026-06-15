@@ -84,7 +84,7 @@ model Tenant {
   // outbound pipeline. Default "IL" matches the launch market.
   defaultCountryCode String @default("IL") @map("default_country_code")
 
-  // System language — applies to the dashboard UI, AI-generated content
+  // System language - applies to the dashboard UI, AI-generated content
   // (customer briefs, conversation summaries, voice-copilot insights,
   // post-call QA), and CRM-side LLM writes. Per-agent overrides live on
   // `User.locale` so an agent can pick their own UI/AI language without
@@ -96,16 +96,16 @@ model Tenant {
   botType              BotType? @map("bot_type")
   firstTakeCareEnabled Boolean  @default(false) @map("first_take_care_enabled")
 
-  // Live Call CoPilot — Phase 1 feature flags (all default off; existing
+  // Live Call CoPilot - Phase 1 feature flags (all default off; existing
   // tenants behave byte-identical to today until SYSTEM_ADMIN flips these).
-  //   voiceCopilotEnabled  — master kill switch for every new Phase-1 path
-  //   voiceInboxUiEnabled  — renders LiveCallsSection + banner + active-call bar
-  //   voiceIncomingEnabled — accepts inbound webhooks for tenant's BYO channels
+  //   voiceCopilotEnabled  - master kill switch for every new Phase-1 path
+  //   voiceInboxUiEnabled  - renders LiveCallsSection + banner + active-call bar
+  //   voiceIncomingEnabled - accepts inbound webhooks for tenant's BYO channels
   voiceCopilotEnabled  Boolean @default(false) @map("voice_copilot_enabled")
   voiceInboxUiEnabled  Boolean @default(false) @map("voice_inbox_ui_enabled")
   voiceIncomingEnabled Boolean @default(false) @map("voice_incoming_enabled")
 
-  // Routing fallback ladder — used when no RouterRule matches an inbound.
+  // Routing fallback ladder - used when no RouterRule matches an inbound.
   // Resolution order: defaultAgentId → defaultRoutineId → defaultDepartmentId → unassigned.
   defaultAgentId      String? @map("default_agent_id")
   defaultRoutineId    String? @map("default_routine_id")
@@ -244,6 +244,10 @@ model User {
   // `Tenant.defaultLocale`". Drives both UI strings and all AI-generated
   // content the agent consumes. ISO-639-1; today: "en" | "he".
   locale                   String?  @map("locale")
+  // Per-feature first-time guidance state for the persistent onboarding
+  // layer. Map of feature key -> "unseen" | "snoozed" | "done", e.g.
+  // {"knowledge":"done","ai-studio":"snoozed"}. NULL = nothing seen yet.
+  onboardingGuides         Json?    @map("onboarding_guides")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @updatedAt @map("updated_at")
 
@@ -255,7 +259,7 @@ model User {
   defaultVoiceChannels VoiceChannel[]    @relation("VoiceChannelDefaultAgent")
   // Voice channels where this user is the AGENT_FIRST outbound target
   // (separate from the inbound default agent so outbound can route to a
-  // different person — e.g. sales rep for outbound, support rep for inbound).
+  // different person - e.g. sales rep for outbound, support rep for inbound).
   agentFirstVoiceChannels VoiceChannel[] @relation("VoiceChannelAgentFirstAgent")
   roleAssignments         UserRoleAssignment[]
   featureGrants           UserFeatureGrant[]
@@ -298,7 +302,7 @@ model Conversation {
   flowVariables      Json?              @map("flow_variables")
   // Comment→DM bridge expiry. Set when a comment-trigger flow promotes itself
   // into a paused conversation (private-reply DM sent, awaiting the user's
-  // reply). If the user doesn't reply within 24h, the bridge is dead — Meta
+  // reply). If the user doesn't reply within 24h, the bridge is dead - Meta
   // disallows further DMs in that thread (one-DM-per-comment policy). On
   // expiry the conversation is closed and the chatbot state cleared. Cleared
   // when the user replies within the window (the conversation graduates to a
@@ -310,7 +314,7 @@ model Conversation {
   reminderSentAt     DateTime?          @map("reminder_sent_at")
   closedAt           DateTime?          @map("closed_at")
   aiSummary          String?            @map("ai_summary")
-  // Detected language of the conversation thread — set once from the
+  // Detected language of the conversation thread - set once from the
   // first inbound message (heuristic + LLM fallback). Drives the
   // language of suggested-reply drafts and any other "match the
   // customer's language" content. System-language settings (tenant /
@@ -429,7 +433,7 @@ model AIAgent {
   behavioral Json? // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
 
   // First-class goal + success criteria. Always rendered into the system
-  // prompt by buildGoals() — so non-funnel agents (Support, Research)
+  // prompt by buildGoals() - so non-funnel agents (Support, Research)
   // have meaningful per-agent goal text. For Sales/SDR/Recruiting these
   // STACK with the funnel stage's goal; for Support/Research they ARE
   // the goal. Required at save time for Support/Research/Billing/Custom;
@@ -442,15 +446,15 @@ model AIAgent {
   maxAutonomousMinutes  Int    @default(15) @map("max_autonomous_minutes")
   confidenceThreshold   Float  @default(0.6) @map("confidence_threshold")
   escalationMessage     String @default("Let me connect you with a team member who can help further.") @map("escalation_message")
-  conversationFlow      Json?  @map("conversation_flow") // [{ step, action, details }] — autonomous mode conversation flow
-  customGuardrails      Json?  @map("custom_guardrails") // string[] — user-defined guardrails appended to static ones
+  conversationFlow      Json?  @map("conversation_flow") // [{ step, action, details }] - autonomous mode conversation flow
+  customGuardrails      Json?  @map("custom_guardrails") // string[] - user-defined guardrails appended to static ones
 
-  // Mode capabilities — which runtime modes this agent may run in.
+  // Mode capabilities - which runtime modes this agent may run in.
   // { auto: bool, assist: bool }. Both default true.
   capabilities Json @default("{\"auto\":true,\"assist\":true}") @map("capabilities")
 
-  // Behavioral anchors — guidance, NOT executable logic.
-  // [{ id, condition, intent, guidance }] — rendered into the system prompt.
+  // Behavioral anchors - guidance, NOT executable logic.
+  // [{ id, condition, intent, guidance }] - rendered into the system prompt.
   behavioralAnchors Json @default("[]") @map("behavioral_anchors")
 
   // Deterministic escalation gates (LLM-independent triggers).
@@ -556,7 +560,7 @@ model ChatbotFlow {
   tenant        Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations Conversation[]
   // WebhookTrigger.workflowId references a flow here in "flow" mode, but is a
-  // plain (un-FK'd) anchor — see that model — so there is no relation back-ref.
+  // plain (un-FK'd) anchor - see that model - so there is no relation back-ref.
 
   @@index([tenantId, isActive])
   @@index([tenantId, channel, isActive])
@@ -567,7 +571,7 @@ model ChatbotFlow {
 //
 // Lets a workflow (ChatbotFlow) be fired by an inbound HTTP call instead of
 // the built-in trigger kinds (channel_entry / comment / keyword / schedule).
-// Foundation for the custom-webhook-as-workflow-trigger feature — pure data
+// Foundation for the custom-webhook-as-workflow-trigger feature - pure data
 // model, no route/dispatch logic yet.
 //
 // The webhook runs the flow context-free (no conversation/customer). Customer
@@ -582,7 +586,7 @@ model WebhookTrigger {
   // Anchor that provisions the URL and identifies this trigger's node on the
   // Main Playbook canvas. In "flow" mode it is a real ChatbotFlow id (validated
   // in app code, trigger-admin.ts). In "connected" mode it is the webhook_trigger
-  // node's own canvas id — NOT a ChatbotFlow — so this is a plain (indexed)
+  // node's own canvas id - NOT a ChatbotFlow - so this is a plain (indexed)
   // string, not an FK relation. See the dropped FK in
   // migrations/20260604150000_webhook_trigger_drop_flow_fk.
   workflowId String   @map("workflow_id")
@@ -590,17 +594,17 @@ model WebhookTrigger {
   secret     String // shared secret expected in an inbound request header
   enabled    Boolean  @default(true)
   // What the inbound POST runs:
-  //   "flow"      → run the associated ChatbotFlow (`workflowId`) — original behavior.
+  //   "flow"      → run the associated ChatbotFlow (`workflowId`) - original behavior.
   //   "connected" → walk the nodes wired to this webhook trigger node on the
   //                 Main Playbook canvas (FlowCanvas), context-free.
   // The `workflowId` stays the anchor in both modes (it provisions the URL and
-  // identifies which canvas node this trigger represents) — but only "flow" mode
+  // identifies which canvas node this trigger represents) - but only "flow" mode
   // requires it to be a real ChatbotFlow; "connected" mode anchors to the
   // trigger node's own canvas id.
   targetMode String   @default("flow") @map("target_mode")
   // User-declared shape of the inbound request body: [{ key, type }] where type
   // is "string" | "number" | "boolean". Lets the mapper (manual field binding)
-  // offer a known set of source fields instead of free-text. Declaration ONLY —
+  // offer a known set of source fields instead of free-text. Declaration ONLY -
   // inbound payloads are NOT validated/rejected against this. Defaults to [].
   bodySchema Json     @default("[]") @map("body_schema")
   createdAt  DateTime @default(now()) @map("created_at")
@@ -689,13 +693,27 @@ model BusinessProfile {
   businessPriority            BusinessPriority @map("business_priority")
   estimatedDailyConversations Int              @map("estimated_daily_conversations")
   numberOfAgents              Int              @map("number_of_agents")
-  // Multi-select goals captured during onboarding v2 — array of slugs like
+  // Multi-select goals captured during onboarding v2 - array of slugs like
   // ["reply_faster", "qualify_leads", "handle_calls"]. Drives the post-
   // onboarding home screen, mission ordering, and the guided tour focus.
   businessGoals               Json?            @map("business_goals")
   // Website domain captured during onboarding so we can re-run the AI
   // analysis later (e.g. on a "refresh description" button in settings).
   websiteDomain               String?          @map("website_domain")
+  // Auto-understood during onboarding (website crawl). Country in plain
+  // English (e.g. "Israel"); primaryLanguage as ISO-639-1 mirrors
+  // Tenant.defaultLocale but is kept here for the confirmation card.
+  country                     String?
+  primaryLanguage             String?          @map("primary_language")
+  // The single "system of truth" the tenant connected during onboarding
+  // (slug: "hubspot" | "salesforce" | "zoho_crm" | "shopify"). Display +
+  // gate signal; the live connection state is still read from
+  // TenantIntegration. NULL = not chosen yet.
+  primarySystem               String?          @map("primary_system")
+  // Industry Intelligence Pack matched during onboarding (slug, e.g.
+  // "event_hall"). Applying a pack clones its scoped FieldDefinitions to the
+  // tenant. NULL = generic / not chosen.
+  packSlug                    String?          @map("pack_slug")
   createdAt                   DateTime         @default(now()) @map("created_at")
   updatedAt                   DateTime         @updatedAt @map("updated_at")
 
@@ -705,7 +723,7 @@ model BusinessProfile {
 }
 
 // ─── Tenant Invitations ─────────────────────────────────────
-// Minimal invitation model — used both for the onboarding "invite
+// Minimal invitation model - used both for the onboarding "invite
 // teammate by email" step and for the shareable tenant invite link.
 // `email` is nullable so the same model handles both: filled = direct
 // invite (email-targeted), null = open-link invite anyone can accept.
@@ -931,6 +949,12 @@ model IntegrationCatalog {
   authSchema      Json                @default("{}") @map("auth_schema")
   configSchema    Json                @default("{}") @map("config_schema")
   isPublished     Boolean             @default(true) @map("is_published")
+  // When true, this integration may be elected as the tenant's CRM source of
+  // truth even though its native `category` is not CRM (e.g. Shopify, an
+  // ECOMMERCE integration a tenant can opt in as their customer system of
+  // record via TenantIntegration.config.useAsCrm). Drives whether it surfaces
+  // in the CRM-locked Settings → Integrations explorer.
+  canActAsCrm     Boolean             @default(false) @map("can_act_as_crm")
   sortOrder       Int                 @default(0) @map("sort_order")
   createdAt       DateTime            @default(now()) @map("created_at")
   updatedAt       DateTime            @updatedAt @map("updated_at")
@@ -965,7 +989,7 @@ model CatalogTool {
   name          String
   description   String
 
-  // NEW — complete tool contract for the LLM tool-surface.
+  // NEW - complete tool contract for the LLM tool-surface.
   // `whenToUse` is human-written guidance that the prompt renders alongside
   // `description`. `exampleUsage` gives the LLM a worked example so it can
   // infer call shapes without relying only on description heuristics.
@@ -976,7 +1000,7 @@ model CatalogTool {
   // Default: both. Examples of AUTO-only: send_message, close_conversation.
   allowedModes Json @default("[\"AUTO\",\"ASSIST\"]") @map("allowed_modes")
 
-  // HITL policy — this is the SEED for new tenants. The tenant override
+  // HITL policy - this is the SEED for new tenants. The tenant override
   // (TenantTool.configOverrides.hitlPolicy or TenantToolPermission row) is
   // AUTHORITATIVE: it can both tighten and loosen this default. Per-agent
   // permissions only govern access (isAllowed), not HITL. Shape:
@@ -992,7 +1016,7 @@ model CatalogTool {
   retryBackoffMs          Int  @default(1000) @map("retry_backoff_ms")
   circuitBreakerThreshold Int? @map("circuit_breaker_threshold")
 
-  // Schema version for the inputSchema — bumped when args shape changes;
+  // Schema version for the inputSchema - bumped when args shape changes;
   // forces prompt regeneration on agents referencing this tool.
   schemaVersion Int @default(1) @map("schema_version")
 
@@ -1076,7 +1100,7 @@ model TenantTool {
 // integration tools (catalog). A single row per (tenantId, toolName)
 // lets tenants:
 //   - Disable individual tools entirely (enabled=false)
-//   - Force HITL approval per tool (requiresApproval=true) — even when
+//   - Force HITL approval per tool (requiresApproval=true) - even when
 //     the tool is normally low-risk
 //   - Configure approver role + notification channels + expiry
 //   - Allow the approver to modify params before running
@@ -1088,7 +1112,7 @@ model TenantToolPermission {
   tenantId          String   @map("tenant_id")
   toolName          String   @map("tool_name") // "send_message" | "integration.hubspot.create_deal" | ...
   enabled           Boolean  @default(true)
-  // HITL config — when true, actions using this tool pause and create
+  // HITL config - when true, actions using this tool pause and create
   // an ApprovalRequest; the bot conversation is held until a human
   // decides. See memory/bug_f4_approval_wrong_surface.md.
   requiresApproval  Boolean  @default(false) @map("requires_approval")
@@ -1112,7 +1136,7 @@ model TenantToolPermission {
 // PolicyRule). The conversation is paused until a human resolves it.
 //
 // Key architectural note: this is NOT for Command Center approvals.
-// Command Center actions are human-initiated by construction — the
+// Command Center actions are human-initiated by construction - the
 // guardrails there are dry-run preview + confirmation modal, not a
 // separate queue. ApprovalRequest is exclusively for the bot path.
 //
@@ -1130,7 +1154,7 @@ model ApprovalRequest {
   params         Json // the full PlannedAction.params the bot wanted to run
   summary        String // one-sentence human-facing: "Cancel order #12345 and refund $89.50"
   reason         String // bot's own reasoning: "Customer requested cancellation within 24h window"
-  policyRuleId   String?        @map("policy_rule_id") // which rule fired (nullable — could be simple HITL flag)
+  policyRuleId   String?        @map("policy_rule_id") // which rule fired (nullable - could be simple HITL flag)
   policyRuleName String?        @map("policy_rule_name") // denormalized for display even if rule deleted
   riskLevel      String         @default("medium") @map("risk_level") // low | medium | high
   riskTags       Json           @default("[]") @map("risk_tags") // ["HIGH","IRREVERSIBLE","FINANCIAL"]
@@ -1172,7 +1196,7 @@ model AgentToolPermission {
   requireApproval Boolean  @default(false) @map("require_approval")
 
   // Per-agent tool SEMANTICS (Tier 2). Override what the tool MEANS to
-  // THIS agent — e.g. the same `create_task` is "schedule SDR callback"
+  // THIS agent - e.g. the same `create_task` is "schedule SDR callback"
   // for a Sales agent and "create support ticket" for a Support agent.
   // Rendered into the OpenAI function.description by composeToolDescription
   // so the LLM picks tools by per-agent intent, not platform-global text.
@@ -1310,7 +1334,7 @@ model NotificationLog {
 // rules for which SystemEvents trigger notifications, who receives them,
 // and through which channels. Postgres NULLS-DISTINCT semantics on the
 // (tenantId, departmentId, eventType) tuple are enforced via two partial
-// indexes — one for the NULL departmentId case (tenant default) and one
+// indexes - one for the NULL departmentId case (tenant default) and one
 // for explicit department scope. Mirrors the trick used in the
 // `tenant_funnels` table (see 20260507200000_funnel_per_department).
 
@@ -1321,11 +1345,11 @@ model NotificationPreference {
   departmentId String?  @map("department_id")
   eventType    String   @map("event_type")
   enabled      Boolean  @default(true)
-  /// CEL-lite — array of { field, op, value } objects.
+  /// CEL-lite - array of { field, op, value } objects.
   conditions   Json?
   /// { type: "tenant_owner" | "department_manager" | "users", userIds?: string[] }
   recipients   Json
-  /// string[] — ["email", "in_app", ...]. Adding new channels (slack, sms) is purely
+  /// string[] - ["email", "in_app", ...]. Adding new channels (slack, sms) is purely
   /// a dispatcher switch; no schema migration needed.
   channels     Json     @default("[\"email\",\"in_app\"]")
   /// CRITICAL | HIGH | MEDIUM | LOW
@@ -1336,11 +1360,11 @@ model NotificationPreference {
   tenant     Tenant      @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   department Department? @relation(fields: [departmentId], references: [id], onDelete: SetNull)
 
-  // NOTE: The (tenantId, departmentId, eventType) uniqueness — including the
-  // NULL-departmentId case — is enforced via two partial unique indexes
+  // NOTE: The (tenantId, departmentId, eventType) uniqueness - including the
+  // NULL-departmentId case - is enforced via two partial unique indexes
   // declared in the migration SQL (Postgres-14 safe). Prisma's schema-level
   // @@unique can't express the partial-index condition, so it's omitted here
-  // intentionally — the DB still rejects duplicates at write-time.
+  // intentionally - the DB still rejects duplicates at write-time.
   @@index([tenantId, eventType])
   @@map("notification_preferences")
 }
@@ -1397,7 +1421,7 @@ model Contact {
   personId          String?     @map("person_id")
   // Soft-merge pointer: when set, this row has been merged into mergedIntoId.
   // The row is kept (not deleted) so incoming webhook lookups by
-  // (tenantId, channel, externalId) still resolve — `resolveContactByChannelId`
+  // (tenantId, channel, externalId) still resolve - `resolveContactByChannelId`
   // follows the pointer to the surviving target. Replaces the old
   // hard-delete path that created "ghost" contacts after merges.
   mergedIntoId      String?     @map("merged_into_id")
@@ -1423,7 +1447,7 @@ model Contact {
 // AI-proposed or system-proposed links between contacts. A suggestion is
 // created when an identifier (email/phone) extracted from one contact is
 // already attached to a different contact in the same tenant. Merging is
-// a separate, explicit, approval-gated operation — this table is the
+// a separate, explicit, approval-gated operation - this table is the
 // pending queue feeding that decision. Never auto-merged on insert.
 
 enum IdentityLinkStatus {
@@ -1527,7 +1551,7 @@ model Broadcast {
   // recipient instead of the template's example URL.
   headerMediaUrl   String?         @map("header_media_url")
   flowId           String?         @map("flow_id") // trigger flow for each recipient
-  // Audience definition (manual chips / filter rules / everyone) — resolved at send time.
+  // Audience definition (manual chips / filter rules / everyone) - resolved at send time.
   audience         Json?
   status           BroadcastStatus @default(DRAFT)
   scheduledAt      DateTime?       @map("scheduled_at")
@@ -1567,7 +1591,7 @@ model BroadcastRecipient {
   // Per-recipient resolved template variable values, snapshotted at
   // materialize time. Resolved from Broadcast.variables (a mapping spec
   // like {"1": {source:"crm", field:"First_Name"}}) against the
-  // recipient's CRM record. Worker reads this verbatim — no CRM call
+  // recipient's CRM record. Worker reads this verbatim - no CRM call
   // at send time.
   variables   Json?
   messageId   String?   @map("message_id") // outgoing message ID after send
@@ -1636,7 +1660,7 @@ model UsageLog {
   type             String // "ai_tokens" | "message_sent" | "tool_call" | "automation_run"
   quantity         Int
   tokensEquivalent Int      @map("tokens_equivalent")
-  // AI-specific denormalized columns — populated when type="ai_tokens" so the
+  // AI-specific denormalized columns - populated when type="ai_tokens" so the
   // Platform Usage admin view can aggregate by model/feature and price the
   // prompt/completion split accurately without hitting the metadata JSON.
   feature          String? // "chat" | "suggestion" | "summary" | "classification" | "embedding" | "action_plan" | "intent_classify" | "onboarding" | "followup" | "ai_bot" | "knowledge_retrieval"
@@ -1780,7 +1804,7 @@ model SystemAgentMessage {
   @@map("system_agent_messages")
 }
 
-// ─── Calendar Accounts (Task 3 — schedule_meeting) ───────────
+// ─── Calendar Accounts (Task 3 - schedule_meeting) ───────────
 //
 // One row per (tenant × AI agent × calendar provider) connection. Stores
 // OAuth credentials encrypted at rest using `encryptCredentials` from
@@ -1815,7 +1839,7 @@ model CalendarAccount {
   externalAccountId String                @map("external_account_id")
   /// Optional explicit calendar to write to (Google secondary calendars).
   defaultCalendarId String?               @map("default_calendar_id")
-  /// Provider account email — for display + audit.
+  /// Provider account email - for display + audit.
   accountEmail      String?               @map("account_email")
   /// When access token expires; adapter refreshes 60s before.
   tokenExpiresAt    DateTime?             @map("token_expires_at")
@@ -1831,7 +1855,7 @@ model CalendarAccount {
   @@map("calendar_accounts")
 }
 
-// ─── Meeting Types (Task 3 — scheduling policy per meeting kind) ─
+// ─── Meeting Types (Task 3 - scheduling policy per meeting kind) ─
 //
 // One row per tenant-defined meeting kind ("discovery_call", "demo",
 // "consultation", ...). Hydrates `SchedulingPolicy` for the constraints
@@ -1870,11 +1894,11 @@ model MeetingType {
   @@map("meeting_types")
 }
 
-// ─── Tenant Funnel (Task 2 — configurable funnel + playbooks) ─
+// ─── Tenant Funnel (Task 2 - configurable funnel + playbooks) ─
 //
 // Tenant-shaped overlay on top of the platform's closed BEL primitives.
 // One row per (tenantId × departmentId × funnelId). NULL departmentId means
-// "tenant default" — applies to all departments that have no explicit funnel.
+// "tenant default" - applies to all departments that have no explicit funnel.
 // The BEL loads ONE active funnel per (tenantId × departmentId), preferring
 // a department-scoped row and falling back to the tenant-default (NULL) row.
 model TenantFunnel {
@@ -1884,15 +1908,15 @@ model TenantFunnel {
   /// NULL = tenant default (applies when no department-specific funnel exists).
   departmentId      String?  @map("department_id")
   isActive          Boolean  @default(true) @map("is_active")
-  /// FunnelStage[] — see funnel-config.service.ts. Each stage may carry
+  /// FunnelStage[] - see funnel-config.service.ts. Each stage may carry
   /// `crmValue` (vendor stage mapping) and `copilot` (per-stage goal,
   /// required questions, required data fields, exit criteria, nextStageId).
   stages            Json
   /// FunnelTransition[]
   transitions       Json     @default("[]")
-  /// StrategyOverride[] — optional.
+  /// StrategyOverride[] - optional.
   strategyOverrides Json?    @map("strategy_overrides")
-  /// PlaybookOverride[] — optional.
+  /// PlaybookOverride[] - optional.
   playbookOverrides Json?    @map("playbook_overrides")
   createdAt         DateTime @default(now()) @map("created_at")
   updatedAt         DateTime @updatedAt @map("updated_at")
@@ -1916,7 +1940,7 @@ model TenantFunnel {
 ///     the transition was NOT applied. Kept for funnel velocity analytics
 ///     ("how often does the bot need a human?").
 ///
-/// vendor_write_ok records whether the CRM patch succeeded — for MANUAL
+/// vendor_write_ok records whether the CRM patch succeeded - for MANUAL
 /// and AUTO sources we attempt the vendor write; for REVIEW_TASK it's
 /// always false (no write attempted).
 model StageTransition {
@@ -1925,7 +1949,7 @@ model StageTransition {
   conversationId   String   @map("conversation_id")
   contactId        String?  @map("contact_id")
   /// Funnel id at the time of the transition. Captured for historical
-  /// accuracy — the funnel may be edited later.
+  /// accuracy - the funnel may be edited later.
   funnelId         String   @map("funnel_id")
   /// Stage ids (within `tenant_funnels.stages`). Free-form strings so
   /// renames don't break the audit.
@@ -1933,10 +1957,10 @@ model StageTransition {
   fromStageLabel   String?  @map("from_stage_label")
   toStageId        String   @map("to_stage_id")
   toStageLabel     String?  @map("to_stage_label")
-  /// AUTO | MANUAL | REVIEW_TASK — string column so adding sources later
+  /// AUTO | MANUAL | REVIEW_TASK - string column so adding sources later
   /// doesn't require an enum migration.
   source           String
-  /// 0..1 — null for MANUAL where confidence isn't computed.
+  /// 0..1 - null for MANUAL where confidence isn't computed.
   confidence       Float?
   /// Free-text justification (rep-supplied for MANUAL; LLM-supplied for AUTO/REVIEW_TASK).
   reason           String?
@@ -1966,7 +1990,7 @@ model StageTransition {
 // ─── Action Contracts (deterministic tool-chain enforcement) ───
 //
 // Tenant-defined business rules of the form: "when trigger X fires, call
-// these tools — no skipping, optionally in this order, optionally blocking
+// these tools - no skipping, optionally in this order, optionally blocking
 // the entire conversation until completion."
 //
 // Enforcement happens at the BEL: matching contracts inject their tool
@@ -1975,18 +1999,18 @@ model StageTransition {
 // completion across turns so partial progress survives multi-turn flows.
 //
 // executionMode:
-//   "ALL_REQUIRED" — all tools must execute this conversation, any order
-//   "SEQUENCE"     — tools must execute in the listed order; out-of-order
+//   "ALL_REQUIRED" - all tools must execute this conversation, any order
+//   "SEQUENCE"     - tools must execute in the listed order; out-of-order
 //                    calls fail validation
-//   "AT_LEAST_ONE" — any single tool from requiredTools satisfies the contract
+//   "AT_LEAST_ONE" - any single tool from requiredTools satisfies the contract
 model ActionContract {
   id            String   @id @default(cuid())
   tenantId      String   @map("tenant_id")
-  /// Business trigger label — matched against deriveTriggeredActions()
+  /// Business trigger label - matched against deriveTriggeredActions()
   /// output. Standard values: "refund", "booking", "close_conversation",
   /// "follow_up". Custom strings allowed for tenant-specific events.
   trigger       String
-  /// JSON array of { name: string } — the tool function names that must
+  /// JSON array of { name: string } - the tool function names that must
   /// execute. The dispatcher matches by name against the actual tool calls.
   requiredTools Json     @map("required_tools")
   /// "ALL_REQUIRED" | "SEQUENCE" | "AT_LEAST_ONE"
@@ -1997,7 +2021,7 @@ model ActionContract {
   /// When true, the bot CANNOT reply until the contract is fulfilled.
   /// allowedActions is restricted to only the contract's tools.
   blocking      Boolean  @default(true)
-  /// When false, the contract is dormant — kept for audit but not enforced.
+  /// When false, the contract is dormant - kept for audit but not enforced.
   isActive      Boolean  @default(true) @map("is_active")
   createdAt     DateTime @default(now()) @map("created_at")
   updatedAt     DateTime @updatedAt @map("updated_at")
@@ -2012,7 +2036,7 @@ model ActionContract {
 // One row per (conversationId × contractId). Tracks which required tools
 // have already been called so the contract can complete across multiple
 // turns. Cleared when the contract is fully satisfied (or the conversation
-// is closed without completion — either way, audit trail lives in
+// is closed without completion - either way, audit trail lives in
 // ai.bot_turn logs).
 model ActionContractProgress {
   id             String    @id @default(cuid())
@@ -2023,7 +2047,7 @@ model ActionContractProgress {
   completedTools Json      @default("[]") @map("completed_tools")
   /// Index of the next required tool when executionMode = SEQUENCE.
   nextStepIndex  Int       @default(0) @map("next_step_index")
-  /// Set when a tool returned awaiting_approval — contract is paused.
+  /// Set when a tool returned awaiting_approval - contract is paused.
   pausedReason   String?   @map("paused_reason")
   /// Set on completion. When non-null, the row is essentially historical.
   fulfilledAt    DateTime? @map("fulfilled_at")
@@ -2044,15 +2068,15 @@ model ActionContractProgress {
 //
 // Auth modes (auth.kind):
 //   "none"
-//   "bearer"   — Authorization: Bearer <token>   (token in encrypted creds)
-//   "api_key"  — header or query param with the configured key name
-//   "basic"    — Basic auth user:pass
+//   "bearer"   - Authorization: Bearer <token>   (token in encrypted creds)
+//   "api_key"  - header or query param with the configured key name
+//   "basic"    - Basic auth user:pass
 //
 // `parameters` is the OpenAI function-calling schema the LLM sees.
 // `urlTemplate` and `bodyTemplate` may contain `{{name}}` placeholders
 // resolved from args + a small helper namespace (e.g. {{tenantId}}).
 //
-// Domain whitelist enforcement happens at dispatch time — the request URL
+// Domain whitelist enforcement happens at dispatch time - the request URL
 // must resolve to a host in `allowedHosts` for the tool to fire. This is
 // the OWASP-style guardrail against SSRF + accidental exfiltration.
 model CustomApiTool {
@@ -2084,16 +2108,16 @@ model CustomApiTool {
   /// Parameter schema in OpenAI function-calling shape.
   /// { type:"object", properties:{...}, required:[...] }
   parameters     Json     @default("{\"type\":\"object\",\"properties\":{},\"required\":[]}")
-  /// Body template — string with {{placeholders}} or null for no body.
+  /// Body template - string with {{placeholders}} or null for no body.
   bodyTemplate   String?  @map("body_template") @db.Text
-  /// Optional response mapping — JSONPath-like dotted paths summarized for the LLM.
-  /// e.g. ["data.id", "data.amount"] — adapter returns just these fields when set.
+  /// Optional response mapping - JSONPath-like dotted paths summarized for the LLM.
+  /// e.g. ["data.id", "data.amount"] - adapter returns just these fields when set.
   responseFields Json?    @map("response_fields")
-  /// Domain whitelist — exact host match enforced at dispatch.
+  /// Domain whitelist - exact host match enforced at dispatch.
   allowedHosts   Json     @default("[]") @map("allowed_hosts")
-  /// "READ" | "WRITE" | "DELETE" | "ACTION" — drives permission filtering.
+  /// "READ" | "WRITE" | "DELETE" | "ACTION" - drives permission filtering.
   category       String   @default("READ")
-  /// "LOW" | "MEDIUM" | "HIGH" — HIGH-risk auto-requires approval.
+  /// "LOW" | "MEDIUM" | "HIGH" - HIGH-risk auto-requires approval.
   riskLevel      String   @default("MEDIUM") @map("risk_level")
   /// Soft-disable without deleting.
   isActive       Boolean  @default(true) @map("is_active")
@@ -2111,14 +2135,14 @@ model CustomApiTool {
 //
 // Per-tenant pre-canned SQL/Mongo queries the AI can call as
 // `custom_db.<slug>`. Safer than generic `postgres.query_table` because the
-// admin defines the exact shape — the AI only fills in named params that match
+// admin defines the exact shape - the AI only fills in named params that match
 // `parameterSchema`. No raw SQL is ever assembled at runtime: the template is
 // passed verbatim to the driver with `$1, $2…` (Postgres) / positional `?`
 // (MySQL) / typed Mongo filter (MongoDB).
 model CustomDbQueryTool {
   id              String   @id @default(cuid())
   tenantId        String   @map("tenant_id")
-  /// One of: "postgresql" | "aws_rds" | "mongodb" — must match a CONNECTED
+  /// One of: "postgresql" | "aws_rds" | "mongodb" - must match a CONNECTED
   /// integration on this tenant.
   providerSlug    String   @map("provider_slug")
   /// Tool slug surfaced as `custom_db.<slug>`. Unique per tenant.
@@ -2128,14 +2152,14 @@ model CustomDbQueryTool {
   whenToUse       String   @map("when_to_use")
   whenNotToUse    String?  @map("when_not_to_use") @db.Text
   /// The query body. For Postgres/MySQL: SQL with `$1, $2…` (or `?` MySQL)
-  /// placeholders. For MongoDB: a JSON object — `collection`, `op`
+  /// placeholders. For MongoDB: a JSON object - `collection`, `op`
   /// ("find"|"findOne"|"insertOne"|"updateOne"|"deleteOne"), `filter`,
-  /// `update`, `doc` — fields can be `{{paramName}}` for substitution.
+  /// `update`, `doc` - fields can be `{{paramName}}` for substitution.
   queryTemplate   String   @map("query_template") @db.Text
-  /// Parameter schema in OpenAI function-calling shape — describes the
+  /// Parameter schema in OpenAI function-calling shape - describes the
   /// args the AI must fill. Order matters for SQL `$1, $2…`.
   parameterSchema Json     @default("{\"type\":\"object\",\"properties\":{},\"required\":[]}") @map("parameter_schema")
-  /// Param order — array of property names matching the SQL placeholders'
+  /// Param order - array of property names matching the SQL placeholders'
   /// numeric order. e.g. ["customer_email", "since"] → $1=email, $2=since.
   parameterOrder  Json     @default("[]") @map("parameter_order")
   /// "READ" | "WRITE" | "DELETE" | "ACTION".
@@ -2187,12 +2211,12 @@ model VoiceCallSession {
   // string semantics. New writers populate BOTH columns during the 2-week
   // dual-write window; readers may rely on whichever is preferred.
   channelId       String?    @map("channel_id")
-  state           CallState? // typed FSM state — see translator in voice-copilot/state
+  state           CallState? // typed FSM state - see translator in voice-copilot/state
   stateHistory    Json       @default("[]") @map("state_history") // [{state, at, reason}]
   assignedAgentId String?    @map("assigned_agent_id")
   claimedAt       DateTime?  @map("claimed_at")
   // For MISSED inbound sessions: stamped when the agent has actually
-  // dealt with the missed call — either by clicking "Mark as handled"
+  // dealt with the missed call - either by clicking "Mark as handled"
   // in the inbox, or implicitly when a successful callback to the same
   // customerNumber reaches ACTIVE. The /missed query filters these out,
   // so they stop nagging the inbox once the loop is closed. Cascades
@@ -2411,7 +2435,7 @@ model ToolExecutionRequest {
   @@map("tool_execution_requests")
 }
 
-// ─── QA Score (Phase 2 — Mode A output) ────────────────────────
+// ─── QA Score (Phase 2 - Mode A output) ────────────────────────
 //
 // Mode A walks persisted CallAnalysis.frames and scores them against
 // playbook compliance, coaching opportunities, and risk. refLiveFrameVersions
@@ -2425,7 +2449,7 @@ model QAScore {
   playbookComplianceScore Float    @map("playbook_compliance_score")
   coachingScore           Float    @map("coaching_score")
   riskScore               Float    @map("risk_score")
-  /// Finding[] — {kind, refUtteranceIds, note}
+  /// Finding[] - {kind, refUtteranceIds, note}
   findings                Json     @default("[]")
   refLiveFrameVersions    Int[]    @map("ref_live_frame_versions")
   scoredAt                DateTime @default(now()) @map("scored_at")
@@ -2437,7 +2461,7 @@ model QAScore {
   @@map("qa_scores")
 }
 
-// ─── Live Call CoPilot — Phase 1 ────────────────────────────────
+// ─── Live Call CoPilot - Phase 1 ────────────────────────────────
 //
 // All models below are net-new and additive. No existing reader/writer is
 // required to consult them. Existing voice (shared-Twilio) tenants ignore
@@ -2457,9 +2481,9 @@ enum CommunicationChannelStatus {
 }
 
 // How a voice channel answers inbound calls.
-//   IN_PLATFORM      — Twilio bridges into a conference + media stream so
+//   IN_PLATFORM      - Twilio bridges into a conference + media stream so
 //                      the agent answers in-browser with Live Call Copilot.
-//   FORWARD_TO_AGENT — TwiML simply <Dial>s the channel's defaultAgent's
+//   FORWARD_TO_AGENT - TwiML simply <Dial>s the channel's defaultAgent's
 //                      `phoneNumber` (e.g. their mobile). No conference,
 //                      no copilot. Used when the agent is on the road.
 enum VoiceInboundMode {
@@ -2468,10 +2492,10 @@ enum VoiceInboundMode {
 }
 
 // How a voice channel places outbound calls.
-//   IN_PLATFORM       — Agent's browser places the call via the Voice SDK,
+//   IN_PLATFORM       - Agent's browser places the call via the Voice SDK,
 //                       Twilio fires /outbound TwiML, customer is dialed
 //                       into the conference. Default; current behavior.
-//   AGENT_FIRST       — Twilio REST first dials the default agent's
+//   AGENT_FIRST       - Twilio REST first dials the default agent's
 //                       phoneNumber. Their TwiML answer joins them into
 //                       a conference; the customer is then dialed and
 //                       bridged. Used when the agent works off a mobile
@@ -2587,9 +2611,9 @@ model VoiceChannel {
   autoHangupSeconds Int? @map("auto_hangup_seconds")
 
   // How inbound calls are answered:
-  //   IN_PLATFORM       — Twilio media stream + browser-side answer with
+  //   IN_PLATFORM       - Twilio media stream + browser-side answer with
   //                       Live Call Copilot (default; current behavior).
-  //   FORWARD_TO_AGENT  — TwiML directly <Dial>s defaultAgent.phoneNumber.
+  //   FORWARD_TO_AGENT  - TwiML directly <Dial>s defaultAgent.phoneNumber.
   //                       No conference, no media stream, no copilot. If
   //                       the agent's mobile doesn't pick up, the session
   //                       is recorded as MISSED and the WABA missed-call
@@ -2612,13 +2636,13 @@ model VoiceChannel {
 
   // When `outboundMode = AGENT_FIRST`, this controls whether the
   // workspace page opens in the browser. Default ON (current behavior).
-  // OFF is for "fire and forget" outbound — the agent clicks call, the
+  // OFF is for "fire and forget" outbound - the agent clicks call, the
   // mobile rings, no UI needed; useful when the agent isn't at the
   // computer. Recording / transcription / summary still happen.
   openWorkspaceOnAgentFirst Boolean @default(true) @map("open_workspace_on_agent_first")
 
   // Phase 6: AI Employee assigned to this voice channel as a first-class
-  // FK. Drives call-pilot turns (mode=callpilot) — same AIAgent that runs
+  // FK. Drives call-pilot turns (mode=callpilot) - same AIAgent that runs
   // the tenant's chat/copilot turns. Migrated out of the copilotConfig
   // JSONB blob; the JSONB field is retained for backwards-compat reads
   // for one release window, then dropped.
@@ -2726,7 +2750,7 @@ model VoiceCallActionItem {
 //
 // One row per (tenantId, identityKey, locale). identityKey is a derived
 // stable key: "person:<id>" | "crm:<vendor>:<id>" | "contact:<id>". Multiple
-// keys can exist for the same human until the identity layers converge — the
+// keys can exist for the same human until the identity layers converge - the
 // writer always picks the strongest available (person > crm > contact).
 //
 // Locale stored explicitly so a tenant with Hebrew + English agents gets one
@@ -2749,14 +2773,14 @@ model CustomerBrief {
   // Short "things to keep in mind RIGHT NOW" phrases (≤5 items).
   signals           Json     @default("[]")
 
-  // Behavioral tags — nullable so the LLM can omit when it lacks signal.
+  // Behavioral tags - nullable so the LLM can omit when it lacks signal.
   tone              String?
   mood              String?
   // Free-form list of recommended behaviors for THIS customer (e.g.
   // "lead with empathy", "skip small talk", "confirm next step in writing").
   recommendedBehaviors Json  @default("[]") @map("recommended_behaviors")
 
-  // Provenance — what the brief is summarizing.
+  // Provenance - what the brief is summarizing.
   channels          Json     @default("[]")
   conversationCount Int      @default(0) @map("conversation_count")
   lastSourceChannel String?  @map("last_source_channel")
@@ -2802,8 +2826,8 @@ model CopilotCueOutcome {
 // ─── Feature Permissions ─────────────────────────────────────
 //
 // Two-layer model:
-//   1. TenantFeature      — SYSTEM_ADMIN says "this tenant can use feature X"
-//   2. TenantRole + grants — tenant ADMIN says "this user/role can use feature X"
+//   1. TenantFeature      - SYSTEM_ADMIN says "this tenant can use feature X"
+//   2. TenantRole + grants - tenant ADMIN says "this user/role can use feature X"
 //
 // Feature keys are defined in code at packages/shared/src/lib/features.ts
 // (FEATURES const). The DB stores them as opaque strings so adding a feature
@@ -2901,4 +2925,201 @@ model UserFeatureGrant {
   @@unique([userId, feature])
   @@index([userId])
   @@map("user_feature_grants")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Customer Intelligence (V2 domain model) - Phase 1 foundation.
+// See docs/customer-intelligence-domain-model.md.
+//
+// Three intelligence scopes with distinct ownership + lifecycle:
+//   CUSTOMER     - durable, per-identity facts (CustomerProfile)
+//   OPPORTUNITY  - per-deal facts (Opportunity), N per customer
+//   CONVERSATION - per-interaction (existing ConversationIntelligence)
+//
+// FieldDefinition is the scope-aware schema registry (evolves the flat
+// PostConversationConfig.summaryFields). IntelligencePack bundles field
+// templates per vertical. IntelligenceFact is the append-only provenance
+// log; entity `facts` JSON is the denormalized read snapshot.
+// ─────────────────────────────────────────────────────────────
+
+enum IntelligenceScope {
+  CUSTOMER
+  OPPORTUNITY
+  CONVERSATION
+}
+
+enum FieldType {
+  TEXT
+  NUMBER
+  BOOLEAN
+  ENUM
+  DATE
+  ENTITY_REF
+}
+
+enum FactSource {
+  MANUAL
+  CRM_INBOUND
+  LLM_CLOSE
+  LLM_LIVE
+  RULE
+  DERIVED
+}
+
+enum OpportunityStatus {
+  OPEN
+  WON
+  LOST
+  ABANDONED
+  ARCHIVED
+}
+
+enum FieldOrigin {
+  PACK
+  CUSTOM
+  DISCOVERED
+}
+
+// Durable, language-neutral per-identity customer record. The identity spine
+// mirrors CustomerBrief (which becomes a prose projection of this). One row
+// per resolved identity per tenant.
+model CustomerProfile {
+  id            String  @id @default(cuid())
+  tenantId      String  @map("tenant_id")
+  identityKey   String  @map("identity_key")
+  personId      String? @map("person_id")
+  contactId     String? @map("contact_id")
+  crmContactId  String? @map("crm_contact_id")
+  crmObjectKind String? @map("crm_object_kind")
+
+  displayName String? @map("display_name")
+  phone       String?
+  email       String?
+
+  // Denormalized snapshot of durable CUSTOMER-scope facts: { fieldKey: value }.
+  // Source of truth for history/provenance is IntelligenceFact.
+  facts             Json @default("{}")
+  // BEL trust/friction/relationship signals (behavioral).
+  behavioralSignals Json @default("{}") @map("behavioral_signals")
+
+  firstSeenAt DateTime? @map("first_seen_at")
+  lastSeenAt  DateTime? @map("last_seen_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  opportunities Opportunity[]
+
+  @@unique([tenantId, identityKey])
+  @@index([tenantId])
+  @@index([tenantId, crmContactId])
+  @@map("customer_profiles")
+}
+
+// Per-deal intelligence. The home for "industry pack" facts (event_date,
+// guest_count, budget, …). A customer may have many, concurrent or sequential.
+model Opportunity {
+  id                String            @id @default(cuid())
+  tenantId          String            @map("tenant_id")
+  customerProfileId String            @map("customer_profile_id")
+  type              String // pack slug, e.g. "event_hall"
+  packId            String?           @map("pack_id")
+  title             String?
+  stage             String? // references a TenantFunnel/FunnelStage id
+  status            OpportunityStatus @default(OPEN)
+  estimatedValue    Float?            @map("estimated_value")
+  nextAction        String?           @map("next_action")
+
+  // Denormalized snapshot of OPPORTUNITY-scope facts: { fieldKey: value }.
+  facts Json @default("{}")
+  // Cross-entity edges (implicit graph): decision_maker, proposed_entity, …
+  relationships Json @default("{}")
+
+  openedAt       DateTime  @default(now()) @map("opened_at")
+  closedAt       DateTime? @map("closed_at")
+  lastActivityAt DateTime? @map("last_activity_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  customerProfile CustomerProfile @relation(fields: [customerProfileId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, customerProfileId])
+  @@index([tenantId, status])
+  @@map("opportunities")
+}
+
+// A named, versioned bundle of FieldDefinition templates for a vertical.
+// `tenantId == null` => system pack (shared, shippable). Applying a pack
+// clones its `fields` template into per-tenant FieldDefinition rows.
+model IntelligencePack {
+  id           String   @id @default(cuid())
+  tenantId     String?  @map("tenant_id") // null = system pack
+  slug         String
+  name         String
+  version      Int      @default(1)
+  // SummaryFieldDef[]-shaped template, each entry scope-tagged.
+  fields       Json     @default("[]")
+  defaultRules Json     @default("{}") @map("default_rules")
+  isSystem     Boolean  @default(false) @map("is_system")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, slug])
+  @@index([isSystem])
+  @@map("intelligence_packs")
+}
+
+// Per-tenant active schema registry. Each field declares the SCOPE it owns
+// (customer/opportunity/conversation) - the core anti-overwrite mechanic.
+model FieldDefinition {
+  id          String            @id @default(cuid())
+  tenantId    String            @map("tenant_id")
+  key         String // stable snake_case
+  label       String
+  description String?
+  type        FieldType         @default(TEXT)
+  scope       IntelligenceScope @default(OPPORTUNITY)
+  options     Json              @default("[]") // enum values
+  required    Boolean           @default(false)
+  // Stages where the field is expected (Missing-Info engine).
+  stageRelevance Json    @default("[]") @map("stage_relevance")
+  aiExtract      Boolean @default(true) @map("ai_extract")
+  syncToCrm      Boolean @default(true) @map("sync_to_crm")
+  crmFieldMap    Json?   @map("crm_field_map")
+  origin         FieldOrigin @default(CUSTOM)
+  packSlug       String?     @map("pack_slug")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, key])
+  @@index([tenantId])
+  @@index([tenantId, scope])
+  @@map("field_definitions")
+}
+
+// Append-only provenance log. One row per observation of a field. Never
+// deleted - superseded. The entity `facts` snapshot is a fold of this under
+// the merge policy (manual-wins, confidence+recency, absence!=deletion).
+model IntelligenceFact {
+  id         String            @id @default(cuid())
+  tenantId   String            @map("tenant_id")
+  entityType IntelligenceScope @map("entity_type") // CUSTOMER | OPPORTUNITY | CONVERSATION
+  entityId   String            @map("entity_id")
+  fieldKey   String            @map("field_key")
+  value      Json
+  confidence Float             @default(1)
+  source     FactSource
+  observedAt DateTime          @default(now()) @map("observed_at")
+
+  conversationId String?   @map("conversation_id")
+  validUntil     DateTime? @map("valid_until")
+  supersededById String?   @map("superseded_by_id")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId])
+  @@index([tenantId, entityType, entityId])
+  @@index([tenantId, entityType, entityId, fieldKey])
+  @@map("intelligence_facts")
 }

@@ -9,7 +9,7 @@ import { runAsyncAnalysis } from "./async-runner";
 /**
  * Phase 6 BullMQ worker for the post-call-analyze queue (Mode B).
  *
- * Same shape as the Mode A QA worker — concurrency 5, structured failure
+ * Same shape as the Mode A QA worker - concurrency 5, structured failure
  * handling. Non-actionable failures (Whisper unconfigured, malformed
  * payload) log but don't throw; transient failures bubble for BullMQ to
  * retry.
@@ -25,7 +25,7 @@ export function startPostCallAnalyzeWorker(): Worker<PostCallAnalyzeJobData> {
       const data = job.data;
       if (!data || !data.conversationId || !data.tenantId || !data.source) {
         console.warn(
-          "[post-call.analyze] malformed job payload — skipped",
+          "[post-call.analyze] malformed job payload - skipped",
           job.id,
         );
         return;

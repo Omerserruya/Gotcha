@@ -1,4 +1,4 @@
-# GOTCHA — Complete Product Knowledge Base
+# GOTCHA - Complete Product Knowledge Base
 
 **Version:** 2.0
 **Last Updated:** April 2026
@@ -7,31 +7,31 @@
 
 ## 1. What Is GOTCHA?
 
-GOTCHA is the operating system for customer communication. It brings every customer conversation — from WhatsApp, Instagram, Facebook Messenger, Gmail, Outlook, Slack, and Web Chat — into a single unified inbox, and layers AI across every touchpoint: responding, routing, executing actions, and continuously learning.
+GOTCHA is the operating system for customer communication. It brings every customer conversation - from WhatsApp, Instagram, Facebook Messenger, Gmail, Outlook, Slack, and Web Chat - into a single unified inbox, and layers AI across every touchpoint: responding, routing, executing actions, and continuously learning.
 
-GOTCHA is not just a communication platform — it is a system where conversations become actions, and actions drive business outcomes.
+GOTCHA is not just a communication platform - it is a system where conversations become actions, and actions drive business outcomes.
 
-Where traditional platforms stop at messaging, GOTCHA goes further. The AI doesn't just suggest replies — it takes action. It updates CRM records, triggers workflows, segments audiences, and optimizes performance — all from a single conversational interface. Users can ask questions, execute operations, and build automations using natural language. No dashboards to navigate. No rules to configure manually. Just describe what you need, and GOTCHA makes it happen.
+Where traditional platforms stop at messaging, GOTCHA goes further. The AI doesn't just suggest replies - it takes action. It updates CRM records, triggers workflows, segments audiences, and optimizes performance - all from a single conversational interface. Users can ask questions, execute operations, and build automations using natural language. No dashboards to navigate. No rules to configure manually. Just describe what you need, and GOTCHA makes it happen.
 
-GOTCHA is **not** a chatbot that replaces human agents. It is an AI-augmented execution layer that empowers human agents with real-time suggestions, automated routing, instant access to the company's knowledge base, and the ability to act on business data — so they can focus on what matters most: the customer.
+GOTCHA is **not** a chatbot that replaces human agents. It is an AI-augmented execution layer that empowers human agents with real-time suggestions, automated routing, instant access to the company's knowledge base, and the ability to act on business data - so they can focus on what matters most: the customer.
 
 **Website:** https://gotcha.co.il
 
-**Tagline:** "The OS for Customer Communication — AI that empowers your agents and turns every conversation into a growth engine."
+**Tagline:** "The OS for Customer Communication - AI that empowers your agents and turns every conversation into a growth engine."
 
 ---
 
 ## 2. Core Philosophy
 
-Most customer communication platforms try to replace human agents with chatbots. GOTCHA takes the opposite approach — and goes much further than a traditional inbox.
+Most customer communication platforms try to replace human agents with chatbots. GOTCHA takes the opposite approach - and goes much further than a traditional inbox.
 
-- **AI works with agents, not instead of them.** The AI co-pilot reads conversations, understands context, and suggests replies — but the human always has the final say.
-- **Conversations are execution triggers.** A message isn't just a message — it's a signal. GOTCHA treats every conversation as an opportunity to detect intent, take action, and drive outcomes.
-- **From data to action, instantly.** Instead of navigating dashboards and exporting CSVs, users ask questions in natural language and get answers — or trigger actions — immediately.
+- **AI works with agents, not instead of them.** The AI co-pilot reads conversations, understands context, and suggests replies - but the human always has the final say.
+- **Conversations are execution triggers.** A message isn't just a message - it's a signal. GOTCHA treats every conversation as an opportunity to detect intent, take action, and drive outcomes.
+- **From data to action, instantly.** Instead of navigating dashboards and exporting CSVs, users ask questions in natural language and get answers - or trigger actions - immediately.
 - **One inbox, every channel.** No more switching between 6 different apps. Every message from every platform flows into one screen.
-- **Full context, always.** Customer history, sentiment, intent, and past interactions follow every conversation — across channels and over time.
+- **Full context, always.** Customer history, sentiment, intent, and past interactions follow every conversation - across channels and over time.
 - **No code, no consultants.** Everything is configurable through a visual interface or natural language. Most teams go live in under 15 minutes.
-- **The system gets smarter over time.** Every interaction feeds back into the platform — improving suggestions, optimizing timing, and surfacing insights automatically.
+- **The system gets smarter over time.** Every interaction feeds back into the platform - improving suggestions, optimizing timing, and surfacing insights automatically.
 
 ---
 
@@ -68,22 +68,22 @@ The heart of GOTCHA. Every message from every connected channel appears in a sin
 - **All active conversations** across all channels in one view
 - **Channel indicators** showing where each conversation originated (WhatsApp icon, Instagram icon, etc.)
 - **Smart routing** that sends each conversation to the right agent based on skill, workload, priority, and department
-- **Full cross-channel history** — if a customer messaged on WhatsApp last week and emails today, the agent sees both
-- **Conversation status** — Open, Pending, Resolved, or Closed
-- **Assignment controls** — claim from queue, transfer between agents or departments
-- **Real-time updates** via WebSocket — new messages appear instantly without refreshing
+- **Full cross-channel history** - if a customer messaged on WhatsApp last week and emails today, the agent sees both
+- **Conversation status** - Open, Pending, Resolved, or Closed
+- **Assignment controls** - claim from queue, transfer between agents or departments
+- **Real-time updates** via WebSocket - new messages appear instantly without refreshing
 
 ### 4.2 AI Co-Pilot
 
-The AI Co-Pilot is an intelligent assistant that sits beside every agent during every conversation. It does not respond to customers directly — instead, it helps the human agent respond better and faster.
+The AI Co-Pilot is an intelligent assistant that sits beside every agent during every conversation. It does not respond to customers directly - instead, it helps the human agent respond better and faster.
 
 **What the Co-Pilot does:**
 
 - **Suggests replies:** Reads the full conversation context, pulls relevant information from the knowledge base, and drafts a suggested reply the agent can send with one click.
-- **Summarizes conversations:** Generates automatic summaries of ongoing and completed conversations — what happened, what was resolved, and what's pending.
+- **Summarizes conversations:** Generates automatic summaries of ongoing and completed conversations - what happened, what was resolved, and what's pending.
 - **Detects intent:** Classifies the customer's intent in real-time (e.g., "return request," "pricing inquiry," "complaint").
-- **Detects sentiment:** Identifies whether the customer is satisfied, frustrated, neutral, or angry — and alerts the agent when tone shifts.
-- **Provides context cards:** Shows relevant customer information — purchase history, previous interactions, tags, and notes — in a sidebar panel.
+- **Detects sentiment:** Identifies whether the customer is satisfied, frustrated, neutral, or angry - and alerts the agent when tone shifts.
+- **Provides context cards:** Shows relevant customer information - purchase history, previous interactions, tags, and notes - in a sidebar panel.
 - **Learns from the knowledge base:** Uses uploaded documents, FAQs, and product information to ground its suggestions in accurate, company-specific information.
 
 **How it works technically:**
@@ -97,13 +97,13 @@ The Co-Pilot uses OpenAI large language models combined with Retrieval-Augmented
 
 ### 4.3 AI Command Agent
 
-The AI Command Agent is a natural language interface that lets admins and agents interact with the entire platform through conversation — no menus, no dashboards, no manual configuration.
+The AI Command Agent is a natural language interface that lets admins and agents interact with the entire platform through conversation - no menus, no dashboards, no manual configuration.
 
-Instead of clicking through pages to find data, build segments, or create automations, users simply describe what they need. The AI Command Agent understands the request, determines the right action, and executes it — or presents results — immediately.
+Instead of clicking through pages to find data, build segments, or create automations, users simply describe what they need. The AI Command Agent understands the request, determines the right action, and executes it - or presents results - immediately.
 
 **Three core capabilities:**
 
-**1. Ask — Business Intelligence via Conversation**
+**1. Ask - Business Intelligence via Conversation**
 
 Query any business metric using natural language. The AI translates the question into the appropriate data lookup and returns a clear, formatted answer.
 
@@ -113,7 +113,7 @@ Examples:
 - *"Which department has the highest resolution rate?"* → Returns a ranked summary with percentages.
 - *"Show me all unresolved conversations from VIP customers"* → Returns a filtered conversation list.
 
-**2. Act — Execute Operations Instantly**
+**2. Act - Execute Operations Instantly**
 
 Trigger actions directly from a natural language command. The system validates the action, shows a preview, and executes upon confirmation.
 
@@ -123,7 +123,7 @@ Examples:
 - *"Assign all open Instagram conversations to Sarah"* → Reassigns conversations immediately.
 - *"Update the CRM status for lead #4521 to 'qualified'"* → Executes the HubSpot update.
 
-**3. Automate — Build Workflows with Words**
+**3. Automate - Build Workflows with Words**
 
 Create conversation flows and automations by describing the desired behavior. The system generates the flow structure, presents it for review, and deploys on approval.
 
@@ -134,7 +134,7 @@ Examples:
 
 **Why this matters:**
 
-The AI Command Agent replaces the need for separate dashboards, manual segmentation tools, and rule-based automation builders. A single conversational interface gives every user — regardless of technical skill — the power to understand, act on, and automate their business operations.
+The AI Command Agent replaces the need for separate dashboards, manual segmentation tools, and rule-based automation builders. A single conversational interface gives every user - regardless of technical skill - the power to understand, act on, and automate their business operations.
 
 ### 4.4 AI Studio
 
@@ -146,18 +146,18 @@ AI Studio is the unified workspace where businesses configure all AI behavior fr
 
 Agents are AI personas that represent specific roles in the business. Each agent has:
 
-- **Name and role** (e.g., "Maya — Support Agent," "David — Sales Agent")
-- **Personality settings** — tone (professional, friendly, casual, formal), language, style preferences
-- **Assigned tools** — what the agent can do (look up orders, check shipments, process refunds)
-- **Linked knowledge sources** — which documents and FAQs the agent can reference
-- **Escalation rules** — when to hand off to a human (customer asks for a human, anger detected, after N failed attempts, high-value transaction)
-- **Channel assignments** — which channels this agent is active on
+- **Name and role** (e.g., "Maya - Support Agent," "David - Sales Agent")
+- **Personality settings** - tone (professional, friendly, casual, formal), language, style preferences
+- **Assigned tools** - what the agent can do (look up orders, check shipments, process refunds)
+- **Linked knowledge sources** - which documents and FAQs the agent can reference
+- **Escalation rules** - when to hand off to a human (customer asks for a human, anger detected, after N failed attempts, high-value transaction)
+- **Channel assignments** - which channels this agent is active on
 
 Agents are configured through a **form-based interface** (not raw prompts), making it accessible to non-technical users. Every agent has a **test simulator** for previewing behavior before deployment.
 
 #### 4.4.2 Conversation Flow Builder
 
-A visual drag-and-drop flow builder for creating structured conversation paths. Flows combine fixed logic with AI intelligence — perfect for scenarios that need structure but also flexibility.
+A visual drag-and-drop flow builder for creating structured conversation paths. Flows combine fixed logic with AI intelligence - perfect for scenarios that need structure but also flexibility.
 
 **Use cases:** Welcome sequences, lead qualification, order status checks, appointment booking, feedback collection, FAQ routing.
 
@@ -186,12 +186,12 @@ Example prompt:
 > "Send a welcome message, wait 1 hour, ask if the customer needs help, if they say yes route to support agent, if no send a satisfaction survey and close the conversation."
 
 The system:
-1. **Parses the intent** — identifies each step, condition, and branch
-2. **Generates the flow structure** — creates the correct nodes, connections, and logic
-3. **Renders a visual preview** — shows the flow on the canvas for review
-4. **Allows refinement via follow-up prompts** — "Add a 30-minute timeout after the question" or "Change the wait to 2 hours"
+1. **Parses the intent** - identifies each step, condition, and branch
+2. **Generates the flow structure** - creates the correct nodes, connections, and logic
+3. **Renders a visual preview** - shows the flow on the canvas for review
+4. **Allows refinement via follow-up prompts** - "Add a 30-minute timeout after the question" or "Change the wait to 2 hours"
 
-This means non-technical users can build sophisticated automations by simply describing what they want. The visual builder and prompt-based creation work together — create with words, fine-tune visually, or vice versa.
+This means non-technical users can build sophisticated automations by simply describing what they want. The visual builder and prompt-based creation work together - create with words, fine-tune visually, or vice versa.
 
 #### 4.4.3 AI Router
 
@@ -229,14 +229,14 @@ Example routing table:
 
 #### 4.4.4 Knowledge Sources
 
-The Knowledge Base is the company's brain — a centralized repository of information that powers the AI Co-Pilot, AI Agents, and conversation flows.
+The Knowledge Base is the company's brain - a centralized repository of information that powers the AI Co-Pilot, AI Agents, and conversation flows.
 
 **Supported source types:**
 
 | Source | Description |
 |--------|-------------|
 | **File Upload** | Upload PDF, DOCX, Markdown, or TXT files. Documents are automatically parsed, chunked, and embedded for semantic search. Max 10 MB per file. |
-| **Text / FAQ** | Paste text directly — product descriptions, policies, frequently asked questions. |
+| **Text / FAQ** | Paste text directly - product descriptions, policies, frequently asked questions. |
 | **URL** | Provide a web URL. GOTCHA fetches and indexes the content. |
 | **Confluence** | OAuth integration with Atlassian Confluence. Browse spaces and pages, select content to sync. |
 | **Google Drive** | OAuth integration with Google Drive. Browse and sync documents directly from Drive. |
@@ -257,9 +257,9 @@ The Knowledge Base is the company's brain — a centralized repository of inform
 
 #### 4.4.5 AI Actions Engine (Tools & Integrations)
 
-The AI Actions Engine is the execution layer that connects GOTCHA to external systems — and gives the AI the ability to not just respond, but **act**.
+The AI Actions Engine is the execution layer that connects GOTCHA to external systems - and gives the AI the ability to not just respond, but **act**.
 
-When an AI Agent or Flow encounters a situation that requires action — looking up an order, updating a CRM record, or triggering an external workflow — the Actions Engine handles it. This transforms GOTCHA from a messaging platform into a system that gets things done.
+When an AI Agent or Flow encounters a situation that requires action - looking up an order, updating a CRM record, or triggering an external workflow - the Actions Engine handles it. This transforms GOTCHA from a messaging platform into a system that gets things done.
 
 **What the AI can execute:**
 
@@ -287,7 +287,7 @@ Every action executed by the AI goes through a structured pipeline:
 - **Validation:** The system verifies that the action is well-formed and the required data is available before execution.
 - **Approval gates:** High-risk or high-impact actions (e.g., processing a refund, sending a broadcast to 500+ contacts) can be configured to require human approval before execution. The system shows a preview of what will happen and waits for confirmation.
 - **Logging and auditability:** Every action is logged with a timestamp, the triggering event, the executing agent, and the outcome. This creates a full audit trail for compliance and debugging.
-- **Measurability:** Action outcomes are tracked — delivery rates for messages, success rates for API calls, conversion rates for automated follow-ups — feeding into the analytics and optimization loop.
+- **Measurability:** Action outcomes are tracked - delivery rates for messages, success rates for API calls, conversion rates for automated follow-ups - feeding into the analytics and optimization loop.
 
 Tools can be assigned to specific agents, and high-risk actions (like processing refunds) display warning labels so businesses can control which agents have access to sensitive operations.
 
@@ -350,7 +350,7 @@ Conversations that have been inactive for a configurable period are automaticall
 
 ### 6.5 Smart Bot (First Contact)
 
-The bot handles initial customer contact — greeting, qualifying intent, and routing to the right agent or flow. When the conversation needs a human touch, it performs a seamless handover.
+The bot handles initial customer contact - greeting, qualifying intent, and routing to the right agent or flow. When the conversation needs a human touch, it performs a seamless handover.
 
 ### 6.6 Event-Driven Automation
 
@@ -371,10 +371,10 @@ GOTCHA's automation engine is built on an event-driven architecture. Instead of 
 | **Business Hours Changed** | Operating hours start or end | Switch between live agents and after-hours AI, update auto-reply |
 
 **What events can trigger:**
-- **Flows** — start a specific conversation flow (e.g., post-purchase follow-up when payment completes)
-- **Actions** — execute a single operation (e.g., send a message, update a CRM field)
-- **Routing decisions** — change how conversations are assigned (e.g., reroute when SLA is breached)
-- **Notifications** — alert team members or external systems
+- **Flows** - start a specific conversation flow (e.g., post-purchase follow-up when payment completes)
+- **Actions** - execute a single operation (e.g., send a message, update a CRM field)
+- **Routing decisions** - change how conversations are assigned (e.g., reroute when SLA is breached)
+- **Notifications** - alert team members or external systems
 
 Events can be combined with conditions to create precise automations: "When a conversation is resolved AND the customer tag is 'enterprise' AND the sentiment was negative → create a follow-up task for the account manager."
 
@@ -399,14 +399,14 @@ Events can be combined with conditions to create precise automations: "When a co
 ### 7.3 Customer Intelligence
 
 Every interaction teaches the system more about each customer:
-- **Sentiment tracking** — monitors emotional tone across conversations
-- **Intent patterns** — identifies recurring topics and needs
-- **Conversation summaries** — auto-generated after each interaction
-- **Tags and labels** — automatically applied based on conversation content
+- **Sentiment tracking** - monitors emotional tone across conversations
+- **Intent patterns** - identifies recurring topics and needs
+- **Conversation summaries** - auto-generated after each interaction
+- **Tags and labels** - automatically applied based on conversation content
 
 ### 7.4 Conversational Analytics
 
-Beyond traditional dashboards, GOTCHA lets users query business data using natural language — directly from the AI Command Agent or any interface within the platform.
+Beyond traditional dashboards, GOTCHA lets users query business data using natural language - directly from the AI Command Agent or any interface within the platform.
 
 Instead of navigating to a reports page, filtering by date, and exporting a CSV, users simply ask:
 
@@ -420,13 +420,13 @@ Instead of navigating to a reports page, filtering by date, and exporting a CSV,
 
 **How it works:**
 - The AI interprets the natural language question and maps it to the appropriate data query
-- Results are returned in a clear, formatted response — with numbers, comparisons, and context
+- Results are returned in a clear, formatted response - with numbers, comparisons, and context
 - Follow-up questions refine the results: *"Break that down by department"* or *"Show me the last 30 days instead"*
-- No training required — if a user can describe what they want to know, the system can answer it
+- No training required - if a user can describe what they want to know, the system can answer it
 
 ### 7.5 Dynamic Audience Segmentation
 
-GOTCHA builds customer audiences dynamically based on real-time data — not static lists. Segments update automatically as customer behavior and attributes change.
+GOTCHA builds customer audiences dynamically based on real-time data - not static lists. Segments update automatically as customer behavior and attributes change.
 
 **Audiences can be built from:**
 
@@ -440,38 +440,38 @@ GOTCHA builds customer audiences dynamically based on real-time data — not sta
 | **Language** | Preferred communication language |
 
 **Used for:**
-- **Broadcasts** — send targeted messages to specific segments (e.g., "All VIP customers who haven't purchased in 30 days")
-- **Campaigns** — multi-step messaging sequences targeting a defined audience
-- **Automations** — trigger flows or actions when a customer enters or exits a segment
-- **Reporting** — filter analytics by audience for deeper insights
+- **Broadcasts** - send targeted messages to specific segments (e.g., "All VIP customers who haven't purchased in 30 days")
+- **Campaigns** - multi-step messaging sequences targeting a defined audience
+- **Automations** - trigger flows or actions when a customer enters or exits a segment
+- **Reporting** - filter analytics by audience for deeper insights
 
 **Segment examples:**
 - "Customers who contacted support more than 3 times this month" → Proactive outreach candidates
 - "Leads from Instagram who haven't responded in 7 days" → Re-engagement campaign
 - "High-value customers with negative sentiment in their last conversation" → Priority follow-up
 
-Segments are always live — they reflect the current state of the data, not a snapshot from when the segment was created.
+Segments are always live - they reflect the current state of the data, not a snapshot from when the segment was created.
 
 ---
 
 ## 8. Action Approval System
 
-When AI executes actions that have significant impact — broadcasting to hundreds of customers, processing refunds, or modifying CRM data in bulk — GOTCHA enforces a structured approval flow to prevent unintended consequences.
+When AI executes actions that have significant impact - broadcasting to hundreds of customers, processing refunds, or modifying CRM data in bulk - GOTCHA enforces a structured approval flow to prevent unintended consequences.
 
 **How it works:**
 
-1. **The AI prepares the action** — whether triggered by a user command, a flow, or an automated rule.
-2. **Preview is generated** — the system shows exactly what will happen:
+1. **The AI prepares the action** - whether triggered by a user command, a flow, or an automated rule.
+2. **Preview is generated** - the system shows exactly what will happen:
    - For messages: the message content, the target audience, and the audience size
    - For CRM updates: the fields being changed, the affected records, and current vs. new values
    - For bulk operations: the total scope and a sample of affected items
-3. **The user reviews** — the preview screen includes:
+3. **The user reviews** - the preview screen includes:
    - A clear summary of the action
    - The number of affected customers or records
    - An "Edit" option to modify before executing
    - An "Approve" button to proceed
    - A "Cancel" button to abort
-4. **Execution and logging** — once approved, the action executes and is logged with the approver's identity, timestamp, and full action details.
+4. **Execution and logging** - once approved, the action executes and is logged with the approver's identity, timestamp, and full action details.
 
 **Configurable approval thresholds:**
 
@@ -481,13 +481,13 @@ Businesses can define when approval is required:
 - CRM modifications affecting more than X records
 - Any action flagged as "high-risk" in the tool configuration
 
-Low-risk, routine actions (single message sends, individual CRM lookups) execute immediately without requiring approval — keeping the experience fast while protecting against costly mistakes.
+Low-risk, routine actions (single message sends, individual CRM lookups) execute immediately without requiring approval - keeping the experience fast while protecting against costly mistakes.
 
 ---
 
 ## 9. Continuous Optimization Loop
 
-GOTCHA doesn't just execute — it learns. The platform continuously monitors the performance of messages, flows, and AI interactions, and surfaces actionable insights to help businesses improve over time.
+GOTCHA doesn't just execute - it learns. The platform continuously monitors the performance of messages, flows, and AI interactions, and surfaces actionable insights to help businesses improve over time.
 
 **What the system tracks:**
 
@@ -501,18 +501,18 @@ GOTCHA doesn't just execute — it learns. The platform continuously monitors th
 
 **How optimization works:**
 
-1. **Performance tracking** — every message, flow step, and AI interaction is measured against outcome metrics.
-2. **Pattern detection** — the system identifies what works and what doesn't. It spots drop-offs in flows, underperforming message templates, and timing patterns.
-3. **Insight surfacing** — actionable recommendations are presented to admins:
+1. **Performance tracking** - every message, flow step, and AI interaction is measured against outcome metrics.
+2. **Pattern detection** - the system identifies what works and what doesn't. It spots drop-offs in flows, underperforming message templates, and timing patterns.
+3. **Insight surfacing** - actionable recommendations are presented to admins:
    - *"Messages sent within 10 minutes of first contact have an 18% higher response rate than those sent after 1 hour."*
    - *"Step 3 of your lead qualification flow has a 40% drop-off rate. Consider simplifying the question."*
    - *"The Support Agent resolves billing questions 25% faster than the General Agent. Consider routing billing inquiries directly."*
-4. **Suggested actions** — the system doesn't just report problems, it proposes solutions:
+4. **Suggested actions** - the system doesn't just report problems, it proposes solutions:
    - "Adjust the wait time in your follow-up flow from 48 hours to 24 hours"
    - "Add a quick-reply option at the drop-off point"
    - "Create a dedicated billing agent with specialized knowledge"
 
-The optimization loop runs continuously — every resolved conversation makes the next one better.
+The optimization loop runs continuously - every resolved conversation makes the next one better.
 
 ---
 
@@ -536,7 +536,7 @@ Customers message you from anywhere. Your team replies from one place with AI-po
 
 - **Encryption:** All data is encrypted in transit (TLS) and at rest
 - **Authentication:** JWT-based authentication with bcrypt password hashing
-- **Multi-tenancy:** Complete data isolation between tenants — each business's data is fully separated
+- **Multi-tenancy:** Complete data isolation between tenants - each business's data is fully separated
 - **Channel credentials:** Stored encrypted using a dedicated encryption key
 - **Role-based access:** Granular permissions ensure agents only see what they need
 - **Action audit trail:** Every AI-executed action is logged with actor, timestamp, trigger, and outcome
@@ -561,18 +561,18 @@ GOTCHA is built as a modern **microservices** platform with an **event-driven ar
 | **Deployment** | Docker Compose, Nginx reverse proxy |
 
 **Core services:**
-- **Auth Service** — user authentication, JWT management, onboarding
-- **Conversation Service** — conversation lifecycle, message storage, department management
-- **Webhook Service** — receives incoming messages from channels (WhatsApp, Messenger, Instagram)
-- **AI Service** — knowledge management, embedding generation, AI agent config, routing logic, prompt assembly, command interpretation, and action execution
-- **Chatbot Service** — bot flow execution and message routing
-- **Analytics Service** — event tracking, usage metrics, and conversational query engine
-- **Incoming Worker** — processes inbound messages, triggers AI and routing, emits system events
-- **Outgoing Worker** — delivers outbound messages to the correct channel
+- **Auth Service** - user authentication, JWT management, onboarding
+- **Conversation Service** - conversation lifecycle, message storage, department management
+- **Webhook Service** - receives incoming messages from channels (WhatsApp, Messenger, Instagram)
+- **AI Service** - knowledge management, embedding generation, AI agent config, routing logic, prompt assembly, command interpretation, and action execution
+- **Chatbot Service** - bot flow execution and message routing
+- **Analytics Service** - event tracking, usage metrics, and conversational query engine
+- **Incoming Worker** - processes inbound messages, triggers AI and routing, emits system events
+- **Outgoing Worker** - delivers outbound messages to the correct channel
 
 **Event-driven backbone:**
 
-The platform is built on an event-driven architecture where every significant action — a new message, a conversation transfer, a lead creation, a payment confirmation — emits a system event. These events flow through a centralized event bus (Redis pub/sub + BullMQ) and can trigger any combination of flows, actions, routing decisions, and notifications. This architecture ensures that the system is reactive, scalable, and extensible — new automations can be added by simply listening for existing events.
+The platform is built on an event-driven architecture where every significant action - a new message, a conversation transfer, a lead creation, a payment confirmation - emits a system event. These events flow through a centralized event bus (Redis pub/sub + BullMQ) and can trigger any combination of flows, actions, routing decisions, and notifications. This architecture ensures that the system is reactive, scalable, and extensible - new automations can be added by simply listening for existing events.
 
 ---
 
@@ -589,25 +589,25 @@ AI agents can be configured to respond in any language supported by the underlyi
 ## 14. Frequently Asked Questions
 
 **Q: What exactly is GOTCHA?**
-A: GOTCHA is the operating system for customer communication. It's a single inbox for all your messaging channels — WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack — with AI that doesn't just help you reply, but takes action: routing conversations, executing workflows, querying business data, and optimizing performance. It's a conversational interface to your entire business operation.
+A: GOTCHA is the operating system for customer communication. It's a single inbox for all your messaging channels - WhatsApp, Messenger, Instagram, Gmail, Outlook, Slack - with AI that doesn't just help you reply, but takes action: routing conversations, executing workflows, querying business data, and optimizing performance. It's a conversational interface to your entire business operation.
 
 **Q: Which channels does it support?**
-A: WhatsApp, Facebook Messenger, Instagram DMs, Gmail, Outlook, Slack, and Web Chat. Every channel your customers use — in one place.
+A: WhatsApp, Facebook Messenger, Instagram DMs, Gmail, Outlook, Slack, and Web Chat. Every channel your customers use - in one place.
 
 **Q: What does the AI co-pilot actually do?**
-A: It reads incoming messages, pulls relevant info from your knowledge base, and suggests replies your agents can send with one click. It also detects sentiment, classifies intent, summarizes conversations, and provides real-time context about the customer. Think autocomplete, but for customer support — with full business intelligence.
+A: It reads incoming messages, pulls relevant info from your knowledge base, and suggests replies your agents can send with one click. It also detects sentiment, classifies intent, summarizes conversations, and provides real-time context about the customer. Think autocomplete, but for customer support - with full business intelligence.
 
 **Q: Can the AI take actions, not just suggest replies?**
 A: Yes. GOTCHA's AI can send messages, update CRM records, trigger workflows, create tasks, and call external APIs. High-impact actions require human approval. Routine actions execute automatically. Everything is logged and auditable.
 
 **Q: Can I build automations without coding?**
-A: Yes, in two ways. The visual Flow Builder lets you drag and drop nodes to create conversation paths. Or you can describe the flow in plain language — "send welcome message, wait 24 hours, send follow-up, assign to agent" — and the system builds it for you.
+A: Yes, in two ways. The visual Flow Builder lets you drag and drop nodes to create conversation paths. Or you can describe the flow in plain language - "send welcome message, wait 24 hours, send follow-up, assign to agent" - and the system builds it for you.
 
 **Q: Can I ask questions about my business data?**
 A: Yes. Instead of navigating dashboards, you can ask questions like "How many conversations were resolved today?" or "Which agent performs best this week?" and get instant, formatted answers.
 
 **Q: How fast can we get started?**
-A: Most teams go live in under 15 minutes. Connect channels, upload your knowledge base, invite your team — done.
+A: Most teams go live in under 15 minutes. Connect channels, upload your knowledge base, invite your team - done.
 
 **Q: Is our data safe?**
 A: Encrypted in transit and at rest. Every AI action is logged and auditable. We don't sell or share your data. Ever.
@@ -622,35 +622,35 @@ A: GOTCHA integrates with Shopify (order management), HubSpot (CRM), Confluence 
 A: Yes. The full interface supports English and Hebrew with RTL layout. AI agents can respond in any language.
 
 **Q: What happens after business hours?**
-A: You configure after-hours behavior — automatic replies, routing to an AI agent, queueing for the next business day, or triggering a specific conversation flow.
+A: You configure after-hours behavior - automatic replies, routing to an AI agent, queueing for the next business day, or triggering a specific conversation flow.
 
 **Q: How does the AI learn about my business?**
-A: You upload your documents, FAQs, and product information to the Knowledge Base. The AI uses semantic search to find relevant information and ground its responses in your actual company knowledge — not generic answers. Over time, the system also learns from conversation outcomes to improve its suggestions.
+A: You upload your documents, FAQs, and product information to the Knowledge Base. The AI uses semantic search to find relevant information and ground its responses in your actual company knowledge - not generic answers. Over time, the system also learns from conversation outcomes to improve its suggestions.
 
 **Q: Can I control what the AI says and does?**
-A: Yes. AI Agents are configured through structured forms — you set the tone, personality, allowed actions, escalation rules, and knowledge sources. You can set guardrails and restrictions on what the AI should never say or do. High-impact actions require approval before execution.
+A: Yes. AI Agents are configured through structured forms - you set the tone, personality, allowed actions, escalation rules, and knowledge sources. You can set guardrails and restrictions on what the AI should never say or do. High-impact actions require approval before execution.
 
 **Q: Is GOTCHA a chatbot?**
-A: No. GOTCHA is a conversational business operating system. While it includes bot capabilities (conversation flows, automated routing, AI agents), its core purpose is broader — it's the execution layer between your business and your customers. The AI co-pilot augments human agents, the command agent lets you operate your business through conversation, and the automation engine turns events into outcomes.
+A: No. GOTCHA is a conversational business operating system. While it includes bot capabilities (conversation flows, automated routing, AI agents), its core purpose is broader - it's the execution layer between your business and your customers. The AI co-pilot augments human agents, the command agent lets you operate your business through conversation, and the automation engine turns events into outcomes.
 
 **Q: How does GOTCHA get smarter over time?**
-A: The continuous optimization loop tracks the performance of every message, flow, and interaction. It identifies patterns — what works, what drops off, what converts — and surfaces actionable insights. You get recommendations like "Messages sent within 10 minutes perform 18% better" and suggested fixes for underperforming flows.
+A: The continuous optimization loop tracks the performance of every message, flow, and interaction. It identifies patterns - what works, what drops off, what converts - and surfaces actionable insights. You get recommendations like "Messages sent within 10 minutes perform 18% better" and suggested fixes for underperforming flows.
 
 ---
 
 ## 15. Solutions by Team
 
 ### Customer Operations
-Manage all customer conversations from one unified inbox. Route messages to the right agents, automate repetitive tasks, and keep SLAs on track — all with AI that gets smarter with every interaction. Use the AI Command Agent to query operational metrics and trigger actions without leaving the conversation view.
+Manage all customer conversations from one unified inbox. Route messages to the right agents, automate repetitive tasks, and keep SLAs on track - all with AI that gets smarter with every interaction. Use the AI Command Agent to query operational metrics and trigger actions without leaving the conversation view.
 
 ### Sales
-Engage leads the moment they reach out — on any channel. AI qualifies prospects, suggests follow-ups, and gives your sales team the context they need to close faster. Dynamic audience segmentation identifies re-engagement opportunities. Natural language commands let sales managers ask "How many leads closed this week?" and get instant answers.
+Engage leads the moment they reach out - on any channel. AI qualifies prospects, suggests follow-ups, and gives your sales team the context they need to close faster. Dynamic audience segmentation identifies re-engagement opportunities. Natural language commands let sales managers ask "How many leads closed this week?" and get instant answers.
 
 ### Support
 Resolve issues faster with AI that understands your product. Copilot drafts replies from your knowledge base, bots handle FAQs, and agents focus on what matters most. The optimization loop identifies recurring issues and suggests knowledge base updates. Event-driven automation triggers post-resolution surveys and follow-ups automatically.
 
 ### Social Engagement
-Instagram DMs, Facebook comments, WhatsApp — every social touchpoint becomes a managed conversation with real-time sentiment analysis and AI-powered responses. Broadcast to segments built from social engagement data. Track which social channels generate the most leads with conversational analytics.
+Instagram DMs, Facebook comments, WhatsApp - every social touchpoint becomes a managed conversation with real-time sentiment analysis and AI-powered responses. Broadcast to segments built from social engagement data. Track which social channels generate the most leads with conversational analytics.
 
 ---
 
@@ -661,7 +661,7 @@ Instagram DMs, Facebook comments, WhatsApp — every social touchpoint becomes a
 | **AI Co-Pilot** | The AI assistant that suggests replies and provides context to human agents during conversations |
 | **AI Agent** | A configured AI persona with specific personality, tools, knowledge, and escalation rules |
 | **AI Command Agent** | A natural language interface for querying data, executing actions, and building automations through conversation |
-| **AI Actions Engine** | The execution layer that enables AI to perform operations — send messages, update CRMs, trigger workflows, and call external APIs |
+| **AI Actions Engine** | The execution layer that enables AI to perform operations - send messages, update CRMs, trigger workflows, and call external APIs |
 | **AI Router** | The intelligent system that evaluates incoming messages and routes them to the right handler |
 | **AI Studio** | The unified configuration workspace for all AI behavior |
 | **Action Approval** | A safety mechanism requiring human confirmation before high-impact AI actions execute |
@@ -671,12 +671,12 @@ Instagram DMs, Facebook comments, WhatsApp — every social touchpoint becomes a
 | **Dynamic Audience Segment** | A live customer group that updates automatically based on real-time CRM data, behavior, tags, and conversation history |
 | **Event-Driven Architecture** | A system design where actions are triggered by real-time events (new message, lead created, payment completed) rather than schedules or manual input |
 | **Knowledge Base (KB)** | A collection of documents, FAQs, and information that the AI uses to ground its responses |
-| **RAG** | Retrieval-Augmented Generation — the technique of retrieving relevant knowledge before generating AI responses |
+| **RAG** | Retrieval-Augmented Generation - the technique of retrieving relevant knowledge before generating AI responses |
 | **Embedding** | A numerical vector representation of text, used for semantic similarity search |
 | **Tenant** | A single business/organization using the GOTCHA platform (multi-tenant architecture) |
 | **Department** | An organizational unit within a tenant (e.g., Sales, Support, Billing) |
 | **Escalation** | The process of transferring a conversation from an AI agent to a human agent |
-| **SLA** | Service Level Agreement — target response and resolution times |
+| **SLA** | Service Level Agreement - target response and resolution times |
 | **Round-Robin** | An assignment strategy that distributes conversations evenly across available agents |
 | **Claim Queue** | A shared queue where agents manually pick up conversations |
 | **Omnichannel** | The ability to manage conversations across multiple messaging platforms from a single interface |

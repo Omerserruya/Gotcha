@@ -1,5 +1,5 @@
 /**
- * Scheduler admin routes — meeting types + calendar account status.
+ * Scheduler admin routes - meeting types + calendar account status.
  *
  * Used by the dashboard's Scheduler settings page:
  *   GET    /meeting-types?aiAgentId=...
@@ -9,7 +9,7 @@
  *   GET    /calendar-accounts?aiAgentId=...
  *
  * All endpoints require ADMIN role and an active tenant. Tokens are NEVER
- * returned to the client — only the connection status, provider, and
+ * returned to the client - only the connection status, provider, and
  * account email for display.
  */
 

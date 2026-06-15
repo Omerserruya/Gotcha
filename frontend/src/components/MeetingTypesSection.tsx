@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Meeting Types editor — embedded inside the marketplace integration page
+ * Meeting Types editor - embedded inside the marketplace integration page
  * for calendar providers (google_calendar, calendly).
  *
  * Tenant-scoped: meeting types live at the tenant level, not per AI agent.
@@ -233,7 +233,7 @@ function Editor(props: {
                       <input type="time" value={row.start}
                         onChange={(e) => setDayTime(i, "start", e.target.value)}
                         className="border rounded px-1 py-0.5" />
-                      <span>—</span>
+                      <span>-</span>
                       <input type="time" value={row.end}
                         onChange={(e) => setDayTime(i, "end", e.target.value)}
                         className="border rounded px-1 py-0.5" />

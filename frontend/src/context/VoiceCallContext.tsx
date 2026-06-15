@@ -45,7 +45,7 @@ export interface CopilotSuggestion {
  * Local mirror of the canonical `ConversationStateFrame` schema in
  * `packages/shared/src/schemas/conversation-frame.ts`. Phase 3 keeps the
  * frontend off the shared workspace import to avoid a Next.js transpile
- * change. Phase 4 should promote this to a direct shared import — keep
+ * change. Phase 4 should promote this to a direct shared import - keep
  * shapes in sync until then.
  */
 export interface ConversationStateFrame {
@@ -82,7 +82,7 @@ interface VoiceCallContextType {
   error: string | null;
   isReady: boolean;
   isMuted: boolean;
-  /** Finals only — one entry per completed utterance, in arrival order. */
+  /** Finals only - one entry per completed utterance, in arrival order. */
   committedTranscripts: CommittedUtterance[];
   /** The live "building" text for each speaker, overwritten on every partial. */
   currentUtterance: { agent: string; customer: string };
@@ -130,14 +130,14 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
   const [copilotSuggestions, setCopilotSuggestions] = useState<CopilotSuggestion[]>([]);
   const [latestFrame, setLatestFrame] = useState<ConversationStateFrame | null>(null);
   const [isMuted, setIsMuted] = useState(false);
-  /** True after a 503/no_active_voice_channel response — halts retry until re-armed. */
+  /** True after a 503/no_active_voice_channel response - halts retry until re-armed. */
   const [noActiveChannel, setNoActiveChannel] = useState(false);
 
   const deviceRef = useRef<Device | null>(null);
   const twilioTokenRef = useRef<string | null>(null);
   const activeCallRef = useRef<Call | null>(null);
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  /** Timestamp (ms) of the last failed token attempt — used for the focus re-arm heuristic. */
+  /** Timestamp (ms) of the last failed token attempt - used for the focus re-arm heuristic. */
   const lastTokenAttemptRef = useRef<number>(0);
   // Kept in sync with call?.conversationId so the socket handler (which closes
   // over a single `call` snapshot) can filter tenant-wide broadcasts down to
@@ -160,7 +160,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
   // Subscribe to live transcripts over Socket.IO. Conversation service bridges
   // any `voice.transcript` event published by voice-copilot to `tenant:{id}` rooms.
-  // Resubscribe when the auth token arrives — AuthContext connects the socket
+  // Resubscribe when the auth token arrives - AuthContext connects the socket
   // lazily after login, so a mount-time subscription would attach to a null socket.
   useEffect(() => {
     if (!token) return;
@@ -183,7 +183,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       }
     };
 
-    // Server-side call-ended fallback — if voice-copilot ends the session
+    // Server-side call-ended fallback - if voice-copilot ends the session
     // (stop frame, reaper, STT overload), catch it here so the UI doesn't
     // hang waiting for Twilio's client-side disconnect event. Also clear
     // any lingering live interims so the UI settles on committed finals.
@@ -193,7 +193,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       setCurrentUtterance({ agent: "", customer: "" });
     };
 
-    // AI copilot suggestions — fired by ai-service after each customer final
+    // AI copilot suggestions - fired by ai-service after each customer final
     // (debounced 1500ms). Expected payload: { conversationId, suggestions: [...] }.
     // publishEvent broadcasts to the entire tenant room, so filter down to
     // the conversation this agent is actively on.
@@ -205,7 +205,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
     // Phase 3: structured ConversationStateFrame from the intelligence engine.
     // Replaces the chat-shaped suggestions array on the new path. Reduced by
-    // monotonic `version` — late frames are dropped. Coexists with the
+    // monotonic `version` - late frames are dropped. Coexists with the
     // legacy suggestionsHandler during Phase 3.
     const frameHandler = (data: any) => {
       if (!data || !data.frame || typeof data.frame !== "object") return;
@@ -217,7 +217,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
       // Bridge: populate the copilot suggestion list from the frame's
       // `suggestedActions[]`. The legacy `voice.copilot.suggestions` event
       // is no longer published by the live runner, so without this bridge
-      // the live-call UI shows "Listening — hints appear after the customer speaks."
+      // the live-call UI shows "Listening - hints appear after the customer speaks."
       // forever even though the backend is producing perfectly good frames.
       if (Array.isArray(frame.suggestedActions) && frame.suggestedActions.length > 0) {
         const mapped: CopilotSuggestion[] = frame.suggestedActions.slice(0, 5).map((a, i) => ({
@@ -288,18 +288,18 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     }, 500);
   }, [stopTimer]);
 
-  // Fetch the Twilio AccessToken up-front — but DO NOT construct the Device
+  // Fetch the Twilio AccessToken up-front - but DO NOT construct the Device
   // until the user clicks Call. Chrome blocks AudioContext.start() outside
   // a user gesture, which silently produces one-way audio.
   //
   // Guards:
   //  1. Skip entirely if voiceCopilotEnabled is false (or still loading).
-  //  2. Skip entirely if hasActiveVoiceChannel is false — the tenant hasn't
+  //  2. Skip entirely if hasActiveVoiceChannel is false - the tenant hasn't
   //     onboarded any Twilio channel yet, so the token endpoint will 503
   //     `no_active_voice_channel`. Save the round-trip. The flag flips back
   //     to true via the wizard's "voice-channel:activated" event, which
   //     invalidates the flags cache and re-runs this effect.
-  //  3. Skip if noActiveChannel is true — a previous attempt got a
+  //  3. Skip if noActiveChannel is true - a previous attempt got a
   //     503/no_active_voice_channel response. Re-arm via the
   //     "voice-channel:activated" event or window.focus (>30 s heuristic).
   useEffect(() => {
@@ -342,7 +342,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
           if (res.status === 503 && body.error === "no_active_voice_channel") {
             if (!cancelled) {
               // eslint-disable-next-line no-console
-              console.warn("[voice] no active voice channel configured — token fetch suppressed until channel is activated.");
+              console.warn("[voice] no active voice channel configured - token fetch suppressed until channel is activated.");
               setNoActiveChannel(true);
               setIsReady(false);
             }
@@ -366,7 +366,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
       stopTimer();
-      // CRITICAL — do NOT destroy the device while a call is live. This
+      // CRITICAL - do NOT destroy the device while a call is live. This
       // cleanup runs on every dep change (e.g., voiceFlags settling from
       // loading=true to loading=false right after the agent clicks Call),
       // and an unconditional destroy() kills the in-flight Twilio Voice
@@ -453,7 +453,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
     // Channel outboundMode gate. The server decides whether this call
     // uses the browser SDK (IN_PLATFORM) or rings the agent's mobile
     // first (AGENT_FIRST). For AGENT_FIRST we skip device.connect()
-    // entirely — the agent talks via their phone, not the browser.
+    // entirely - the agent talks via their phone, not the browser.
     let gateMode: "IN_PLATFORM" | "AGENT_FIRST" = "IN_PLATFORM";
     let agentFirstSessionId: string | null = null;
     let agentFirstOpenWorkspace = true;
@@ -479,7 +479,7 @@ export function VoiceCallProvider({ children }: { children: React.ReactNode }) {
 
     if (gateMode === "AGENT_FIRST") {
       // The platform is REST-dialing the agent's mobile right now.
-      // The browser is NOT participating in this call — don't open
+      // The browser is NOT participating in this call - don't open
       // the Twilio Device, don't change call state. Whether to open
       // the workspace page is the per-channel toggle (openWorkspace).
       return {

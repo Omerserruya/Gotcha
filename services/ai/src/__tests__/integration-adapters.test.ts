@@ -7,7 +7,7 @@
  *   - publishes a complete ToolDefinition (description, whenToUse, params)
  *   - uses a slug.tool naming convention so the dispatcher can route
  *
- * These tests are pure registry checks — no network or DB.
+ * These tests are pure registry checks - no network or DB.
  */
 
 import { describe, it, expect } from "vitest";
@@ -21,7 +21,7 @@ describe("integration adapter registry", () => {
     "airtable",
     "postgres",
     "mongodb",
-    // wix + square temporarily disabled — re-add when adapters are
+    // wix + square temporarily disabled - re-add when adapters are
     // re-registered in services/ai/src/services/connectors/index.ts.
     "woocommerce",
     "paypal",
@@ -93,7 +93,7 @@ describe("integration adapter registry", () => {
           (tool.sideEffects && tool.sideEffects.length > 0) ||
           (tool.idempotencyNotes && tool.idempotencyNotes.length > 0) ||
           tool.whenNotToUse;
-        // Not a hard fail — soft expectation surfaced as informational
+        // Not a hard fail - soft expectation surfaced as informational
         if (!hasGuardrail) {
           // eslint-disable-next-line no-console
           console.warn(`[integration-adapters] ${tool.name} has no sideEffects/idempotency/whenNotToUse guidance`);

@@ -16,7 +16,7 @@ import type { NormalizedInboundMessage, NormalizedStatusUpdate } from "@chatcent
 
 const router = Router();
 
-// Inbound webhooks arrive without a user JWT — the tenant is derived by
+// Inbound webhooks arrive without a user JWT - the tenant is derived by
 // looking up the target ChannelAccount across all tenants. That lookup
 // is a legitimate cross-tenant query; enable the Prisma tenant-guard
 // opt-out for this entire router. Safe because these endpoints verify
@@ -73,7 +73,7 @@ router.post("/", async (req: Request, res: Response) => {
           }
         }
       }
-    } catch { /* observability only — never crash the webhook on a logging miss */ }
+    } catch { /* observability only - never crash the webhook on a logging miss */ }
 
     // Step 1: Detect which platform sent this webhook
     const adapter = detectInboundAdapter(body);
@@ -327,7 +327,7 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
 
   if (message) {
     // Persist Meta's failure reason when present so the operator can see
-    // *why* — empty error_message after a FAILED webhook is unhelpful.
+    // *why* - empty error_message after a FAILED webhook is unhelpful.
     await prisma.message.update({
       where: { id: message.id },
       data: {
@@ -481,7 +481,7 @@ router.post("/gmail", async (req: Request, res: Response) => {
     const lastHistoryId = platformMeta.lastHistoryId?.toString();
 
     if (!lastHistoryId) {
-      // No lastHistoryId stored yet — store current one and skip
+      // No lastHistoryId stored yet - store current one and skip
       console.log(`[WEBHOOK] Gmail: no lastHistoryId, storing ${pubsubHistoryId}`);
       await prisma.channelAccount.update({
         where: { id: channelAccountId },

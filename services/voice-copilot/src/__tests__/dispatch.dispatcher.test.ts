@@ -26,7 +26,7 @@ function makeMockRedis(): Redis {
         const [key, val, ...rest] = args as [string, string, ...unknown[]];
         const hasNx = rest.includes("NX");
         if (hasNx && store.has(key)) {
-          results.push([null, null]); // NX failed — already exists
+          results.push([null, null]); // NX failed - already exists
         } else {
           store.set(key, String(val));
           results.push([null, "OK"]);
@@ -195,7 +195,7 @@ describe("Dispatcher", () => {
       clock.advance(100);
       await new Promise((r) => setTimeout(r, 0)); // yield for async flush
 
-      // enqueue same item again — Redis NX will return null
+      // enqueue same item again - Redis NX will return null
       dispatcher.enqueue(makeItem(1));
       clock.advance(100);
       await new Promise((r) => setTimeout(r, 0));
@@ -233,7 +233,7 @@ describe("Dispatcher", () => {
       const deps = buildDeps({ client, batchMax: 3 });
       const dispatcher = new Dispatcher(deps);
 
-      // Add 3 items — should flush immediately without clock advance
+      // Add 3 items - should flush immediately without clock advance
       dispatcher.enqueue(makeItem(20));
       dispatcher.enqueue(makeItem(21));
       dispatcher.enqueue(makeItem(22));
@@ -399,7 +399,7 @@ describe("Dispatcher", () => {
       dispatcher.enqueue(makeItem(60));
       dispatcher.enqueue(makeItem(61));
 
-      // Do NOT advance clock — flushSession should flush without timer
+      // Do NOT advance clock - flushSession should flush without timer
       await dispatcher.flushSession("t1", "c1");
 
       expect(calls).toHaveLength(1);

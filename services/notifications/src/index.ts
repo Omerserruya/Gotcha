@@ -13,7 +13,7 @@ const app = createServiceApp(config);
 app.use("/api", notificationsRoutes);
 app.use("/api", notificationPreferencesAdminRoutes);
 
-// Notification engine workers — disable via NOTIFICATIONS_ENABLED=false.
+// Notification engine workers - disable via NOTIFICATIONS_ENABLED=false.
 const notificationsEnabled = (process.env.NOTIFICATIONS_ENABLED ?? "true").toLowerCase() !== "false";
 if (notificationsEnabled) {
   try {
@@ -27,7 +27,7 @@ if (notificationsEnabled) {
 
 // We need the underlying http.Server so we can attach a WS upgrade handler.
 // createServiceApp returns the express app only; startService wraps it with
-// app.listen — bypassing it lets us own the http.Server lifecycle.
+// app.listen - bypassing it lets us own the http.Server lifecycle.
 const server = http.createServer(app);
 startNotificationWsServer(server);
 

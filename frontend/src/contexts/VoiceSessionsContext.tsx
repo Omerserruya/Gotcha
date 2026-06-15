@@ -23,7 +23,7 @@ import {
 interface VoiceSessionsContextValue {
   ringing: VoiceCallSession[];
   /**
-   * Phase 1 single-active-call invariant. At most one session — the one
+   * Phase 1 single-active-call invariant. At most one session - the one
    * claimed by the current agent. Out-of-tenant or other-agent live
    * sessions are deliberately filtered out so the global call bar can
    * only ever represent THIS user's call.
@@ -66,7 +66,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
   const voiceFlags = useVoiceFlags();
   const [sessions, setSessions] = useState<VoiceCallSession[]>([]);
   const [loading, setLoading] = useState(true);
-  // The socket handler closes over a single `user.id` snapshot — mirror it
+  // The socket handler closes over a single `user.id` snapshot - mirror it
   // into a ref so the singleton-live filter always sees the current agent.
   const userIdRef = useRef<string | undefined>(user?.id);
   useEffect(() => {
@@ -83,7 +83,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
       const res = await getActiveVoiceSessions(token);
       setSessions(res.data || []);
     } catch (err: unknown) {
-      // 404 = tenant flag off — empty out and stop trying.
+      // 404 = tenant flag off - empty out and stop trying.
       const message = err instanceof Error ? err.message : "";
       if (message.includes("404") || /not_found/i.test(message)) {
         setSessions([]);
@@ -119,7 +119,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
 
   // Subscribe to tenant-room voice events. The conversation service bridges
   // every cross-service event to `tenant:{id}` rooms via subscribeToEvents,
-  // so we hang off the existing AuthContext socket — DO NOT create another.
+  // so we hang off the existing AuthContext socket - DO NOT create another.
   // Skipped entirely when voiceCopilotEnabled is false to avoid noisy 404s.
   useEffect(() => {
     if (!token || voiceFlags.loading || !voiceFlags.voiceCopilotEnabled) return;
@@ -148,8 +148,8 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
       setSessions((prev) => prev.filter((s) => s.id !== id));
     };
 
-    // voice.incoming.ringing — payload: { session: VoiceCallSession }
-    // voice.session.created — same shape, fired by /twiml/outbound when the
+    // voice.incoming.ringing - payload: { session: VoiceCallSession }
+    // voice.session.created - same shape, fired by /twiml/outbound when the
     // outbound session row is created. Reuses the same upsert path.
     const ringingHandler = (data: unknown) => {
       const d = data as { session?: VoiceCallSession } | VoiceCallSession;
@@ -160,8 +160,8 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
     };
 
     // Resolve a sessionId from whatever identifier the publisher gave us.
-    // voice-copilot emits events keyed by conversationId/callSid — not by
-    // VoiceCallSession.id — so we have to look the local row up ourselves.
+    // voice-copilot emits events keyed by conversationId/callSid - not by
+    // VoiceCallSession.id - so we have to look the local row up ourselves.
     const findSessionId = (
       d: { sessionId?: string; id?: string; conversationId?: string; callSid?: string },
       list: VoiceCallSession[],
@@ -181,7 +181,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
 
     const TERMINAL_LOWER = new Set(["ended", "failed", "missed"]);
 
-    // voice.session.state — payload: { sessionId, state, session?: VoiceCallSession }
+    // voice.session.state - payload: { sessionId, state, session?: VoiceCallSession }
     const stateHandler = (data: unknown) => {
       const d = data as { sessionId?: string; session?: VoiceCallSession };
       if (d?.session && d.session.id) {
@@ -189,12 +189,12 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
         return;
       }
       if (d?.sessionId) {
-        // No session body — refetch the snapshot to stay correct.
+        // No session body - refetch the snapshot to stay correct.
         reconcile();
       }
     };
 
-    // voice.session.state_changed — voice-copilot's transition event. Payload:
+    // voice.session.state_changed - voice-copilot's transition event. Payload:
     // { conversationId, from, to, ts }. When `to` is terminal we drop locally
     // (matching by conversationId/callSid); otherwise we reconcile so the
     // server-truth state replaces ours.
@@ -212,13 +212,13 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
           if (!id) return prev;
           return prev.filter((s) => s.id !== id);
         }
-        // Non-terminal transition without a session body — fetch fresh data.
+        // Non-terminal transition without a session body - fetch fresh data.
         reconcile();
         return prev;
       });
     };
 
-    // voice.session.ended — voice-copilot publishes { conversationId, callSid,
+    // voice.session.ended - voice-copilot publishes { conversationId, callSid,
     // reason, ts }; the older shape carries { sessionId }. Resolve either to a
     // local row and drop it. If we can't identify it, reconcile as a fallback.
     const endedHandler = (data: unknown) => {
@@ -231,7 +231,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
       setSessions((prev) => {
         const id = findSessionId(d, prev);
         if (id) return prev.filter((s) => s.id !== id);
-        // Unknown identifier — refetch the snapshot so we don't keep a stale
+        // Unknown identifier - refetch the snapshot so we don't keep a stale
         // ringing/active session on the screen forever.
         reconcile();
         return prev;
@@ -334,7 +334,7 @@ export function VoiceSessionsProvider({ children }: { children: React.ReactNode 
         ringing.push(s);
       } else if (isLive(s)) {
         allLive.push(s);
-        // Phase 1 singleton — only surface THIS agent's live session as
+        // Phase 1 singleton - only surface THIS agent's live session as
         // the global "live" call. Other agents' sessions still appear in
         // LiveCallsSection but are NOT the singleton ActiveCallBar.
         if (s.assignedAgentId && s.assignedAgentId === userIdRef.current) {

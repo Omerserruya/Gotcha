@@ -1,5 +1,5 @@
 /**
- * Re-export — voice-session-store lives in @chatcenter/shared. Kept here as
+ * Re-export - voice-session-store lives in @chatcenter/shared. Kept here as
  * a stable import path for voice-copilot internal modules.
  */
 export {

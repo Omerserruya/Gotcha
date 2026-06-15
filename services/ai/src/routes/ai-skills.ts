@@ -4,7 +4,7 @@
  * Returns the system's registered skills (operational / language /
  * execution) so the AI Employee wizard can render real options instead
  * of hardcoded labels. The skills registry self-populates at module load
- * via the side-effect import below — importing this route is what
+ * via the side-effect import below - importing this route is what
  * guarantees the registry is live in the running ai service.
  */
 

@@ -1,5 +1,5 @@
 /**
- * Integration framework — shared adapter contract + helpers.
+ * Integration framework - shared adapter contract + helpers.
  *
  * Every concrete provider adapter (Stripe, HubSpot, Shopify, Airtable, etc.)
  * implements this interface. The dispatcher resolves the adapter for a
@@ -16,15 +16,15 @@ export interface ToolDefinition {
   name: string;
   /** What the tool does, plain English. */
   description: string;
-  /** "Use this tool when …" — informs the model's selection. */
+  /** "Use this tool when …" - informs the model's selection. */
   whenToUse: string;
-  /** "Do NOT call this tool when …" — guardrails. */
+  /** "Do NOT call this tool when …" - guardrails. */
   whenNotToUse?: string;
   /** OpenAI function-calling parameters schema. */
   parameters: Record<string, unknown>;
-  /** Free-text description of side effects (e.g. "creates a refund — irreversible"). */
+  /** Free-text description of side effects (e.g. "creates a refund - irreversible"). */
   sideEffects?: string;
-  /** Free-text idempotency notes (e.g. "uses (charge_id, amount) as key — safe to retry"). */
+  /** Free-text idempotency notes (e.g. "uses (charge_id, amount) as key - safe to retry"). */
   idempotencyNotes?: string;
   /** "READ" | "WRITE" | "DELETE" | "ACTION". Drives permission filtering. */
   category: "READ" | "WRITE" | "DELETE" | "ACTION";
@@ -34,7 +34,7 @@ export interface ToolDefinition {
 
 export interface AdapterContext {
   tenantId: string;
-  /** TenantIntegration row id — caller resolves this from slug. */
+  /** TenantIntegration row id - caller resolves this from slug. */
   tenantIntegrationId: string;
   /** Optional conversation/contact for audit + idempotency keys. */
   conversationId?: string;
@@ -44,14 +44,14 @@ export interface AdapterContext {
 export interface ProviderAdapter {
   /** Catalog slug, e.g. "stripe". */
   readonly slug: string;
-  /** List the tools this adapter exposes. Static — same shape for every tenant. */
+  /** List the tools this adapter exposes. Static - same shape for every tenant. */
   tools(): ToolDefinition[];
   /**
    * Execute a tool call. The framework guarantees:
    *   - tenant integration is CONNECTED
    *   - credentials are decrypted + accessToken is fresh (auto-refreshed if OAuth)
    *   - args are validated against the tool's parameters schema (best-effort)
-   * The adapter returns a result the LLM can read. Errors throw — the dispatcher
+   * The adapter returns a result the LLM can read. Errors throw - the dispatcher
    * catches and surfaces a structured failure to the model.
    */
   execute(opts: {
@@ -63,7 +63,7 @@ export interface ProviderAdapter {
   }): Promise<unknown>;
   /**
    * (Optional) Refresh OAuth tokens. Called by the framework when accessToken
-   * is expired. Returns the new credentials blob — framework persists it.
+   * is expired. Returns the new credentials blob - framework persists it.
    */
   refreshTokens?(credentials: Record<string, any>): Promise<{
     accessToken: string;
@@ -117,7 +117,7 @@ export async function loadConnection(opts: { tenantId: string; slug: string }): 
 
 /**
  * Persist updated credentials for an integration. Encrypts before write.
- * Use this from refreshTokens flows — never write plaintext credentials.
+ * Use this from refreshTokens flows - never write plaintext credentials.
  */
 export async function persistCredentials(opts: {
   tenantIntegrationId: string;
@@ -189,7 +189,7 @@ export async function ensureFreshToken(opts: {
 //
 // In-process token-bucket per (tenantId, providerSlug). Prevents runaway
 // loops + protects tenant quotas. Defaults are deliberately generous (one
-// call per second sustained, burst of 10) — provider 429s are still surfaced
+// call per second sustained, burst of 10) - provider 429s are still surfaced
 // to the LLM as ok:false for it to back off.
 //
 // For multi-instance deployments this should move to Redis; today the bot
@@ -311,7 +311,7 @@ export async function executeAdapterTool(opts: {
     return { ok: false, reason: `unknown_tool:${opts.toolFunctionName}` };
   }
 
-  // Rate limit BEFORE loading the connection — denial is cheap.
+  // Rate limit BEFORE loading the connection - denial is cheap.
   const rl = checkRateLimit(opts.tenantId, slug);
   if (!rl.allowed) {
     const reason = `rate_limited:${slug}:retry_after_ms=${rl.retryAfterMs}`;
@@ -391,7 +391,7 @@ export function idempotencyKey(opts: {
   args: Record<string, unknown>;
 }): string {
   const stable = JSON.stringify(stableSort(opts.args));
-  // Cheap hash — good enough for provider idempotency keys.
+  // Cheap hash - good enough for provider idempotency keys.
   let h = 0;
   const input = `${opts.tenantId}:${opts.conversationId ?? "noconv"}:${opts.toolName}:${stable}`;
   for (let i = 0; i < input.length; i++) h = ((h << 5) - h + input.charCodeAt(i)) | 0;

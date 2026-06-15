@@ -1,5 +1,5 @@
 /**
- * Custom DB query tool admin — CRUD + test.
+ * Custom DB query tool admin - CRUD + test.
  *
  *   GET    /custom-db-tools
  *   POST   /custom-db-tools

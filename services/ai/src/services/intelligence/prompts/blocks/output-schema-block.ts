@@ -11,7 +11,7 @@
  * mode without changing this prompt block.
  */
 export function outputSchemaBlock(): string {
-  return `OUTPUT SCHEMA — emit a SINGLE JSON object with these fields, exactly:
+  return `OUTPUT SCHEMA - emit a SINGLE JSON object with these fields, exactly:
 
 {
   "intent": {
@@ -54,7 +54,7 @@ export function outputSchemaBlock(): string {
 }
 
 Rules:
-- "summary" is ALWAYS null in this turn — the rolling summary is owned by a
+- "summary" is ALWAYS null in this turn - the rolling summary is owned by a
   separate side-summarizer; you must not write to it.
 - Empty arrays are valid: missingFields, suggestedActions, proposedTools, risks.
 - Use the latest utterance to bias intent; smooth confidence with the window.

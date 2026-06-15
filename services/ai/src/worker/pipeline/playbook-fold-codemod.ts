@@ -11,7 +11,7 @@
  *                                           { field, label: field, required: true })
  *   CallPlaybookStage.exitCriteria      → FunnelStage.copilot.exitCriteria.positiveSignals[0]
  *                                          (the NL string lands as a single positive marker)
- *   CallPlaybookStage.description       → DROPPED (per refactor brief — descriptions
+ *   CallPlaybookStage.description       → DROPPED (per refactor brief - descriptions
  *                                          are LLM-derived or read off skill metadata)
  *   CallPlaybookStage.prompts           → DROPPED (legacy per-stage prompt hints
  *                                          superseded by the unified worker)
@@ -23,7 +23,7 @@
  *   - We look up `TenantFunnel` rows for the same tenant
  *   - First active funnel (lowest createdAt) wins
  *   - If no funnel exists, we report it as "no-target" (the codemod does
- *     NOT synthesize a new funnel — that's an explicit author decision)
+ *     NOT synthesize a new funnel - that's an explicit author decision)
  *
  * Stage matching within a funnel:
  *   - Funnel stages and playbook stages are aligned by ordinal position
@@ -77,7 +77,7 @@ interface TenantReport {
 export async function runPlaybookFoldCodemod(opts: {
   mode: CodemodMode;
   tenantId?: string;
-  /** When omitted with no tenantId, returns immediately — refuse to run blind. */
+  /** When omitted with no tenantId, returns immediately - refuse to run blind. */
   all?: boolean;
 }): Promise<TenantReport[]> {
   if (!opts.tenantId && !opts.all) {
@@ -126,7 +126,7 @@ export async function runPlaybookFoldCodemod(opts: {
       };
 
       if (!targetFunnel) {
-        pbReport.notes.push("No active TenantFunnel — skipped. Create a funnel first.");
+        pbReport.notes.push("No active TenantFunnel - skipped. Create a funnel first.");
         tenantReport.playbooks.push(pbReport);
         continue;
       }
@@ -183,7 +183,7 @@ export async function runPlaybookFoldCodemod(opts: {
           },
         };
 
-        // Idempotency check — if nothing changed, skip the write but still
+        // Idempotency check - if nothing changed, skip the write but still
         // record the report so re-runs are observable.
         const noOp =
           addedRequiredFields.length === 0 && addedPositiveSignals.length === 0;
@@ -238,7 +238,7 @@ async function main() {
   const reports = await runPlaybookFoldCodemod({ mode, tenantId, all });
   for (const tr of reports) {
     console.log(`\n=== tenant ${tr.tenantId} ===`);
-    if (tr.noFunnelFound) console.log("  ⚠ no active TenantFunnel — skipped");
+    if (tr.noFunnelFound) console.log("  ⚠ no active TenantFunnel - skipped");
     for (const pb of tr.playbooks) {
       console.log(`  playbook "${pb.playbookName}" (${pb.playbookId})`);
       console.log(`    -> funnel ${pb.funnelMatchId ?? "(none)"}`);

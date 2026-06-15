@@ -11,7 +11,7 @@ interface Props {
 }
 
 /**
- * F2.3 / F2.4 — Minimal AI Command Bar.
+ * F2.3 / F2.4 - Minimal AI Command Bar.
  *
  * A thin functional prototype: user types a natural-language request,
  * the bar shows the plan (dry-run) and lets them Execute it for real.
@@ -83,7 +83,7 @@ export default function AICommandBar({ token, placeholder, contextScope, onExecu
           <ul>
             {plan.steps.map((s: PlannedAction, i: number) => (
               <li key={i}>
-                <code>{s.tool}</code> — {s.reason} <em>({s.riskLevel})</em>
+                <code>{s.tool}</code> - {s.reason} <em>({s.riskLevel})</em>
               </li>
             ))}
           </ul>

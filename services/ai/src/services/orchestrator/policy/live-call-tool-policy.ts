@@ -21,7 +21,7 @@ export class LiveCallToolPolicy {
 
     // Live mode never auto-executes mutating tools. Defense in depth: the
     // live LLM call also has an empty `tools` parameter, so the model
-    // can't emit tool calls at all — only proposals via structured output.
+    // can't emit tool calls at all - only proposals via structured output.
     if (tool.mutating && mode === "live") {
       return {
         outcome: "propose-and-await-approval",
@@ -48,7 +48,7 @@ export class LiveCallToolPolicy {
           reason: "chat tool flagged requiresApproval",
         };
       }
-      // The chat user is reviewing each turn before the assistant sends — the
+      // The chat user is reviewing each turn before the assistant sends - the
       // existing UX is the implicit approval gate for non-flagged mutating tools.
       return { outcome: "auto-execute", reason: "chat tool, no explicit approval required" };
     }
@@ -58,7 +58,7 @@ export class LiveCallToolPolicy {
     if (mode === "post-call") {
       return {
         outcome: "propose-and-await-approval",
-        reason: "post-call mutating action — default safe (propose)",
+        reason: "post-call mutating action - default safe (propose)",
       };
     }
 

@@ -81,7 +81,7 @@ interface Department {
 // ─── Per-rule state ────────────────────────────────────────────
 // One UI rule maps to one NotificationPreference row. Multiple rules per
 // (event, department) are allowed since the unique constraint was dropped
-// in migration 20260507400000 — that's how per-recipient channel routing
+// in migration 20260507400000 - that's how per-recipient channel routing
 // works (e.g. rule 1: User A → email+in_app; rule 2: User B → in_app).
 interface RowState {
   prefId: string | null;
@@ -205,7 +205,7 @@ export default function NotificationsSettingsPage() {
   function addRule(eventType: string) {
     setRules((prev) => ({
       ...prev,
-      // New rule starts enabled — the user clicked "Add" so they meant it.
+      // New rule starts enabled - the user clicked "Add" so they meant it.
       // dirty=true so the Save button lights up immediately.
       [eventType]: [...(prev[eventType] || []), { ...buildDefaultRow(true), dirty: true }],
     }));
@@ -220,7 +220,7 @@ export default function NotificationsSettingsPage() {
       try {
         await deleteNotificationPreference(token, target.prefId);
       } catch {
-        // swallow — leave UI in sync below regardless
+        // swallow - leave UI in sync below regardless
       }
     }
 

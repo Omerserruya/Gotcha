@@ -1,28 +1,29 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
-import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, generateAIEmployeeConfig, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
+import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
 import { listFunnelSummaries, type FunnelSummary } from "@/lib/api-funnel";
 import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
 import TestChatModal from "@/components/TestChatModal";
-// FunnelSection import removed — funnels are now managed at /settings/funnels.
+// FunnelSection import removed - funnels are now managed at /settings/funnels.
 // The agent is funnel-guided at runtime via resolveActiveStage; there is no
 // per-agent funnel override config to edit on this page.
 import ActionContractsSection from "@/components/ActionContractsSection";
+import AgentBuilder from "./AgentBuilder";
 
 // ─── Types ────────────────────────────────────────────────────
-type Tone = "professional" | "friendly" | "casual" | "formal";
+// (Tone type removed - personality is governed by the platform skill now.)
 type AgentRole = "customer_support" | "sales" | "sdr" | "recruiting" | "booking" | "billing" | "research" | "custom";
 
 // Roles for which a funnel binding is REQUIRED at save time (server
-// enforces this too — see services/ai/src/routes/ai-agents.ts).
+// enforces this too - see services/ai/src/routes/ai-agents.ts).
 const FUNNEL_REQUIRED_ROLES: AgentRole[] = ["sales", "sdr", "recruiting"];
 function roleRequiresFunnel(role: AgentRole | string): boolean {
   return (FUNNEL_REQUIRED_ROLES as string[]).includes(String(role));
@@ -46,7 +47,7 @@ interface Tool {
   // Per-agent semantics (Tier 2). Both optional; null = use catalog defaults.
   description?: string;  // what this tool means FOR THIS AGENT
   usageRule?: string;    // when/how to use FOR THIS AGENT
-  expanded?: boolean;    // local UI state — show the per-agent editor
+  expanded?: boolean;    // local UI state - show the per-agent editor
 }
 
 interface KnowledgeSource {
@@ -76,7 +77,7 @@ interface ConversationFlowStep {
 interface AgentFormData {
   name: string;
   role: AgentRole;
-  // description field removed per spec — agent identity is fully
+  // description field removed per spec - agent identity is fully
   // expressed through structured fields (role, persona, identity,
   // behavioralAnchors, etc.). Free-text description was bypassing
   // the structured-prompt contract.
@@ -104,6 +105,10 @@ interface AgentFormData {
   status: "active" | "draft" | "paused";
   conversationFlow: ConversationFlowStep[];
   customGuardrails: string[];
+  // Full persona JSON ({ gender, traits, brand_archetype, … }). Kept whole so a
+  // brand_archetype edit doesn't wipe gender/traits set elsewhere - the PATCH
+  // route replaces the whole persona object.
+  persona: Record<string, unknown>;
 }
 
 // ─── Constants ─────────────────────────────────────────────────
@@ -198,7 +203,17 @@ function mapApiToForm(agent: any): AgentFormData {
     status: ((agent.status || "DRAFT").toLowerCase()) as "active" | "draft" | "paused",
     conversationFlow: Array.isArray(agent.conversationFlow) ? agent.conversationFlow : [],
     customGuardrails: Array.isArray(agent.customGuardrails) ? agent.customGuardrails : [],
+    persona: parsePersona(agent.persona),
   };
+}
+
+function parsePersona(persona: any): Record<string, unknown> {
+  if (!persona) return {};
+  if (typeof persona === "string") {
+    try { const p = JSON.parse(persona); return p && typeof p === "object" ? p : {}; }
+    catch { return {}; }
+  }
+  return typeof persona === "object" ? persona : {};
 }
 
 const NEW_AGENT_DEFAULT: AgentFormData = {
@@ -233,7 +248,18 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   status: "draft",
   conversationFlow: [],
   customGuardrails: [],
+  persona: {},
 };
+
+// Brand Voice archetypes - keys MUST match services/ai/src/services/brand-archetypes.ts.
+// "" = no strong flavor (renderer resolves it to the neutral default).
+const BRAND_ARCHETYPE_OPTIONS: { value: string; en: string; he: string }[] = [
+  { value: "", en: "Neutral / Professional (default)", he: "ניטרלי / מקצועי (ברירת מחדל)" },
+  { value: "trusted_advisor", en: "Trusted Advisor - measured, credible, no hype", he: "יועץ מהימן - שקול, אמין, בלי הייפ" },
+  { value: "high_energy_coach", en: "High-Energy Coach - short, fast, motivating", he: "מאמן אנרגטי - קצר, מהיר, מניע לפעולה" },
+  { value: "luxury_concierge", en: "Luxury Concierge - refined, formal, deliberate", he: "קונסיירז' יוקרתי - מעודן, רשמי, מדוד" },
+  { value: "beauty_consultant", en: "Beauty Consultant - warm, intimate, expressive", he: "יועצת יופי - חמה, אישית, אקספרסיבית" },
+];
 
 // ─── Small shared components ───────────────────────────────────
 function SectionCard({ title, subtitle, children }: { title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode }) {
@@ -302,7 +328,7 @@ function StatusDot({ status }: { status: "synced" | "syncing" | "error" }) {
 export default function AgentEditorPage() {
   const id = useDynamicParam();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { token } = useAuth();
 
   const isNew = id === "new";
@@ -324,119 +350,6 @@ export default function AgentEditorPage() {
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
 
-  // ─── Creation Wizard State ──────────────────────────────────
-  const [wizardComplete, setWizardComplete] = useState(false);
-  const [wizardStep, setWizardStep] = useState(0);
-  const [wizardAnswers, setWizardAnswers] = useState<Record<string, string>>({});
-  const [wizardGenerating, setWizardGenerating] = useState(false);
-  const [wizardInput, setWizardInput] = useState("");
-
-  const wizardChatRef = useRef<HTMLDivElement>(null);
-
-  // Wizard questions — aligned with the post-refactor architecture.
-  //
-  // Dropped from the legacy 9-question flow:
-  //   • "responsibility" — fed into AIAgent.description, which was removed
-  //     per spec. The agent's responsibility is now expressed through the
-  //     structured Identity block + Behavioral anchors.
-  //   • "aiDisclosure"   — conflicts with the new copilot voice rules
-  //     ("NEVER reveal you are an AI"). Identity-disclosure rules belong
-  //     in Custom guardrails when an operator explicitly wants them.
-  //   • "extra"          — free-text dump that bypassed structured fields.
-  //
-  // Future UX cleanup (not in this batch): replace the conversational
-  // Q&A shell with a stepped form. Add an explicit Skills picker step
-  // pulling from listAISkills(). Add a Funnel-guidance info step.
-  const WIZARD_QUESTIONS = [
-    { key: "name", question: t("aiStudio.wizard.q1Name") },
-    { key: "channels", question: t("aiStudio.wizard.q3Channels") },
-    { key: "communication", question: t("aiStudio.wizard.q4Communication") },
-    { key: "escalation", question: t("aiStudio.wizard.q5Escalation") },
-    { key: "conversationFlow", question: t("aiStudio.wizard.q8ConversationFlow") },
-    { key: "guardrails", question: t("aiStudio.wizard.q9Guardrails") },
-  ];
-
-  // Auto-scroll wizard chat
-  useEffect(() => {
-    if (wizardChatRef.current) {
-      wizardChatRef.current.scrollTop = wizardChatRef.current.scrollHeight;
-    }
-  }, [wizardStep, wizardAnswers, wizardGenerating]);
-
-  function handleWizardAnswer() {
-    if (!wizardInput.trim()) return;
-    const currentQ = WIZARD_QUESTIONS[wizardStep];
-    const newAnswers = { ...wizardAnswers, [currentQ.key]: wizardInput.trim() };
-    setWizardAnswers(newAnswers);
-    setWizardInput("");
-
-    if (wizardStep < WIZARD_QUESTIONS.length - 1) {
-      setWizardStep(wizardStep + 1);
-    } else {
-      // All questions answered — generate config
-      finishWizard(newAnswers);
-    }
-  }
-
-  function handleWizardSkip() {
-    if (wizardStep < WIZARD_QUESTIONS.length - 1) {
-      setWizardStep(wizardStep + 1);
-    } else {
-      finishWizard(wizardAnswers);
-    }
-  }
-
-  async function finishWizard(answers: Record<string, string>) {
-    setWizardGenerating(true);
-    try {
-      if (token) {
-        const res = await generateAIEmployeeConfig(token, { answers });
-        if (res.data) {
-          // Map generated config back to form
-          const generated = res.data;
-          const patchData: Partial<AgentFormData> = {
-            name: generated.name || answers.name || "",
-            role: generated.role || "custom",
-            tone: generated.tone || "friendly",
-            channels: {
-              whatsapp: (answers.channels || "").toLowerCase().includes("whatsapp"),
-              instagram: (answers.channels || "").toLowerCase().includes("instagram"),
-              webchat: (answers.channels || "").toLowerCase().includes("web"),
-            },
-          };
-
-          // Parse conversation flow from wizard answer
-          if (answers.conversationFlow) {
-            const steps = answers.conversationFlow
-              .split(/[,\n]/)
-              .map(s => s.trim())
-              .filter(Boolean)
-              .map((action, i) => ({ id: `cf_${Date.now()}_${i}`, action, details: "" }));
-            if (steps.length > 0) patchData.conversationFlow = steps;
-          }
-
-          // Parse custom guardrails from wizard answer
-          if (answers.guardrails) {
-            const rules = answers.guardrails
-              .split(/[,\n]/)
-              .map(s => s.trim())
-              .filter(Boolean);
-            if (rules.length > 0) patchData.customGuardrails = rules;
-          }
-
-          patch(patchData);
-        }
-      }
-    } catch (err) {
-      console.error("Wizard generation failed:", err);
-      // Still allow manual editing even if generation fails
-      if (answers.name) patch({ name: answers.name });
-    } finally {
-      setWizardGenerating(false);
-      setWizardComplete(true);
-    }
-  }
-
   useEffect(() => {
     if (isNew || !token) return;
     setLoading(true);
@@ -449,7 +362,7 @@ export default function AgentEditorPage() {
       })
       .catch((err: any) => {
         console.error("Failed to load agent:", err);
-        // Surface 404 / 500 instead of silently bouncing — the redirect
+        // Surface 404 / 500 instead of silently bouncing - the redirect
         // was hiding a real backend error (P2022 on missing columns)
         // from operators trying to debug prod.
         const msg = err?.message || err?.error || "Failed to load AI Employee.";
@@ -520,6 +433,7 @@ export default function AgentEditorPage() {
         status: form.status.toUpperCase(),
         conversationFlow: form.conversationFlow.length > 0 ? form.conversationFlow : null,
         customGuardrails: form.customGuardrails.length > 0 ? form.customGuardrails : null,
+        persona: Object.keys(form.persona).length > 0 ? form.persona : null,
         toolIds,
         tools,
         knowledgeBaseIds,
@@ -652,133 +566,15 @@ export default function AgentEditorPage() {
     );
   }
 
-  // ─── Creation Wizard (chat-like onboarding) ─────────────────
-  if (isNew && !wizardComplete) {
+  // ─── Dynamic AI Employee Builder (replaces the static wizard) ──
+  // A goal-driven agent interviews the admin and assembles the whole
+  // AIAgent config via tool-calls, with a live draft preview. On finish
+  // it routes to this same editor (the DRAFT row, prefilled) to review
+  // and Save.
+  if (isNew) {
     return (
       <AppLayout>
-        <div className="flex flex-col h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
-          {/* Fixed header */}
-          <div className="shrink-0 p-3 md:p-6 pb-0">
-            <button
-              onClick={() => router.push("/ai-studio")}
-              className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-4 transition"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" />
-              </svg>
-              {t("aiStudio.agents.editor.backToStudio")}
-            </button>
-
-            <div className="max-w-2xl mx-auto text-center mb-4">
-              <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white mx-auto mb-3 shadow-lg">
-                <svg className="w-7 h-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
-                  <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                </svg>
-              </div>
-              <h1 className="text-xl font-bold text-gray-900">{t("aiStudio.wizard.title")}</h1>
-              <p className="text-sm text-gray-400 mt-0.5">{t("aiStudio.wizard.subtitle")}</p>
-              {/* Progress indicator */}
-              <div className="flex items-center gap-1.5 mt-3 justify-center">
-                {WIZARD_QUESTIONS.map((_, i) => (
-                  <div
-                    key={i}
-                    className={clsx(
-                      "h-1.5 rounded-full transition-all",
-                      i < wizardStep ? "bg-violet-500 w-6" : i === wizardStep ? "bg-violet-400 w-4" : "bg-gray-200 w-1.5"
-                    )}
-                  />
-                ))}
-              </div>
-            </div>
-          </div>
-
-          {/* Scrollable chat area */}
-          <div ref={wizardChatRef} className="flex-1 overflow-y-auto px-3 md:px-6">
-            <div className="max-w-2xl mx-auto space-y-4 pb-4">
-              {WIZARD_QUESTIONS.slice(0, wizardStep + 1).map((q, i) => (
-                <div key={q.key}>
-                  {/* AI question bubble */}
-                  <div className="flex items-start gap-3 mb-3">
-                    <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white shrink-0 mt-0.5">
-                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                        <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                      </svg>
-                    </div>
-                    <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm max-w-md">
-                      <p className="text-sm text-gray-800">{q.question}</p>
-                    </div>
-                  </div>
-                  {/* User answer bubble */}
-                  {wizardAnswers[q.key] && (
-                    <div className="flex justify-end mb-2">
-                      <div className="bg-violet-600 text-white rounded-2xl rounded-tr-sm px-4 py-3 max-w-md">
-                        <p className="text-sm">{wizardAnswers[q.key]}</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-
-              {/* Generating indicator */}
-              {wizardGenerating && (
-                <div className="flex items-start gap-3">
-                  <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white shrink-0">
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" />
-                    </svg>
-                  </div>
-                  <div className="bg-white border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 shadow-sm">
-                    <div className="flex items-center gap-2">
-                      <div className="w-4 h-4 border-2 border-violet-300 border-t-violet-600 rounded-full animate-spin" />
-                      <p className="text-sm text-gray-500">{t("aiStudio.wizard.generating")}</p>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-          </div>
-
-          {/* Fixed input area */}
-          {!wizardGenerating && (
-            <div className="shrink-0 px-3 md:px-6 py-3 border-t border-gray-100 bg-white">
-              <div className="max-w-2xl mx-auto">
-                <div className="flex gap-2">
-                  <input
-                    type="text"
-                    value={wizardInput}
-                    onChange={(e) => setWizardInput(e.target.value)}
-                    onKeyDown={(e) => { if (e.key === "Enter") handleWizardAnswer(); }}
-                    placeholder={t("aiStudio.wizard.inputPlaceholder")}
-                    autoFocus
-                    data-tour="wizard-input"
-                    className="flex-1 px-4 py-3 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
-                  />
-                  <button
-                    onClick={handleWizardAnswer}
-                    disabled={!wizardInput.trim()}
-                    className="px-4 py-3 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm disabled:opacity-40"
-                  >
-                    {t("common.send")}
-                  </button>
-                  <button
-                    onClick={handleWizardSkip}
-                    className="px-3 py-3 text-gray-400 hover:text-gray-600 text-sm transition"
-                  >
-                    {t("aiStudio.wizard.skip")}
-                  </button>
-                </div>
-                <div className="text-center mt-2">
-                  <button
-                    onClick={() => setWizardComplete(true)}
-                    className="text-xs text-gray-400 hover:text-gray-600 transition"
-                  >
-                    {t("aiStudio.wizard.skipAll")}
-                  </button>
-                </div>
-              </div>
-            </div>
-          )}
-        </div>
+        <AgentBuilder token={token || ""} onCancel={() => router.push("/ai-studio")} />
       </AppLayout>
     );
   }
@@ -916,12 +712,12 @@ export default function AgentEditorPage() {
               </select>
               <p className="text-xs text-gray-400 mt-1">
                 {roleRequiresFunnel(form.role)
-                  ? "Pipeline role — funnel binding is required below."
-                  : "Outcome role — goal text is required below."}
+                  ? "Pipeline role - funnel binding is required below."
+                  : "Outcome role - goal text is required below."}
               </p>
             </div>
 
-            {/* Goal — always rendered into the system prompt. Required for
+            {/* Goal - always rendered into the system prompt. Required for
                 non-funnel roles, optional but recommended for funnel roles. */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -942,7 +738,7 @@ export default function AgentEditorPage() {
               </p>
             </div>
 
-            {/* Success criteria — measurable conditions that indicate "done". */}
+            {/* Success criteria - measurable conditions that indicate "done". */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Success criteria
@@ -977,74 +773,45 @@ export default function AgentEditorPage() {
               <p className="text-xs text-gray-400 mt-1">{t("aiStudio.agents.editor.setup.departmentHint")}</p>
             </div>
 
-            {/* description textarea removed — the agent's identity is fully
+            {/* description textarea removed - the agent's identity is fully
                 expressed through Personality (tone/style), Identity object,
                 Behavioral anchors, and Custom guardrails below. Free-text
                 description was bypassing the structured-prompt contract. */}
           </SectionCard>
 
-          {/* ── Section 2: Personality ── */}
-          <SectionCard
-            title={t("aiStudio.agents.editor.personality.title")}
-            subtitle={t("aiStudio.agents.editor.personality.subtitle")}
-          >
-            {/* Tone (multi-select) */}
-            <div className="mb-5">
-              <p className="text-sm font-medium text-gray-700 mb-2">
-                {t("aiStudio.agents.editor.personality.tone")}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                {(["professional", "friendly", "casual", "formal"] as Tone[]).map((tone) => {
-                  const tones = (form.tone || "").split(",").map(s => s.trim()).filter(Boolean);
-                  const isSelected = tones.includes(tone);
-                  return (
-                    <button
-                      key={tone}
-                      type="button"
-                      onClick={() => {
-                        const updated = isSelected
-                          ? tones.filter(t => t !== tone)
-                          : [...tones, tone];
-                        patch({ tone: updated.join(",") || "professional" });
-                      }}
-                      className={clsx(
-                        "py-2 px-3 rounded-xl text-sm font-medium border transition capitalize",
-                        isSelected
-                          ? "bg-violet-50 border-violet-300 text-violet-700"
-                          : "bg-gray-50 border-gray-200 text-gray-600 hover:border-gray-300"
-                      )}
-                    >
-                      {t(`aiStudio.agents.editor.personality.tone_${tone}`)}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+          {/* Personality (tone + style) section removed - humanlike behavior
+              is now governed centrally by the platform Personality skill
+              (services/ai/src/prompts/personality.md), not per-agent toggles.
+              The tone/style fields remain on the record for back-compat but are
+              no longer edited here and no longer affect the prompt.
 
-            {/* Style toggles */}
-            <div>
-              <p className="text-sm font-medium text-gray-700 mb-3">
-                {t("aiStudio.agents.editor.personality.style")}
-              </p>
-              <div className="space-y-3">
-                {(
-                  [
-                    { key: "useEmojis", label: t("aiStudio.agents.editor.personality.styleEmojis") },
-                    { key: "concise", label: t("aiStudio.agents.editor.personality.styleConcise") },
-                    { key: "useFirstName", label: t("aiStudio.agents.editor.personality.styleFirstName") },
-                    { key: "proactive", label: t("aiStudio.agents.editor.personality.styleProactive") },
-                  ] as const
-                ).map(({ key, label }) => (
-                  <div key={key} className="flex items-center justify-between gap-4">
-                    <span className="text-sm text-gray-700">{label}</span>
-                    <Toggle
-                      checked={form.style[key]}
-                      onChange={(v) => patch({ style: { ...form.style, [key]: v } })}
-                    />
-                  </div>
-                ))}
-              </div>
-            </div>
+              Brand Voice IS the sanctioned per-agent voice dial: it shapes HOW
+              the employee sounds (pace/warmth/vocabulary), layered on top of the
+              central Personality skill - it never changes WHAT it does. */}
+          <SectionCard
+            title={locale === "he" ? "קול המותג" : "Brand Voice"}
+            subtitle={
+              locale === "he"
+                ? "ארכיטיפ שמעצב איך העובד נשמע - קצב, חום ואוצר מילים. נשען על מנגנון האישיות המרכזי, לא מחליף אותו."
+                : "An archetype that shapes how this employee sounds - pace, warmth, vocabulary. Layered on the central Personality skill; it never overrides strategy or guardrails."
+            }
+          >
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              {locale === "he" ? "ארכיטיפ" : "Archetype"}
+            </label>
+            <select
+              value={typeof form.persona.brand_archetype === "string" ? form.persona.brand_archetype : ""}
+              onChange={(e) =>
+                patch({ persona: { ...form.persona, brand_archetype: e.target.value } })
+              }
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+            >
+              {BRAND_ARCHETYPE_OPTIONS.map((opt) => (
+                <option key={opt.value || "neutral"} value={opt.value}>
+                  {locale === "he" ? opt.he : opt.en}
+                </option>
+              ))}
+            </select>
           </SectionCard>
 
           {/* ── Section 3: Skills (Tools) ── */}
@@ -1121,7 +888,7 @@ export default function AgentEditorPage() {
                               onChange={(e) => patch({
                                 tools: form.tools.map((tt) => tt.id === tool.id ? { ...tt, description: e.target.value } : tt)
                               })}
-                              placeholder="What this tool means FOR THIS AGENT. E.g. &quot;Schedule a follow-up call with the SDR team — not used for customer support tickets.&quot;"
+                              placeholder="What this tool means FOR THIS AGENT. E.g. &quot;Schedule a follow-up call with the SDR team - not used for customer support tickets.&quot;"
                               rows={2}
                               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition resize-none"
                             />
@@ -1216,7 +983,7 @@ export default function AgentEditorPage() {
           </SectionCard>
 
           {/* ── Section 5: Funnel binding ──
-              The agent IS funnel-guided at runtime — `resolveActiveStage`
+              The agent IS funnel-guided at runtime - `resolveActiveStage`
               runs on every turn (chat + voice) and injects the current
               stage's goal, required questions, data fields, and exit
               criteria into the prompt. Picker below pins a specific
@@ -1233,7 +1000,7 @@ export default function AgentEditorPage() {
             }
             subtitle={
               roleRequiresFunnel(form.role)
-                ? "Pipeline this AI employee runs — REQUIRED for this role."
+                ? "Pipeline this AI employee runs - REQUIRED for this role."
                 : "Pipeline this AI employee runs. Blank = use the department/tenant default."
             }
           >
@@ -1249,14 +1016,14 @@ export default function AgentEditorPage() {
             >
               <option value="">
                 {roleRequiresFunnel(form.role)
-                  ? "— Select a funnel (required) —"
+                  ? "- Select a funnel (required) -"
                   : "Use department / tenant default"}
               </option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.funnelId}
                   {f.departmentId ? "" : " (tenant default)"}
-                  {f.isActive ? "" : " — inactive"}
+                  {f.isActive ? "" : " - inactive"}
                   {" · "}{f.stageCount} stages
                 </option>
               ))}
@@ -1277,7 +1044,7 @@ export default function AgentEditorPage() {
           {/* ── Section 6: Action Contracts (deterministic tool chains) ── */}
           <SectionCard
             title="Action Contracts"
-            subtitle="When a business action fires, the bot is forced to call specific tools — no skipping, no reordering."
+            subtitle="When a business action fires, the bot is forced to call specific tools - no skipping, no reordering."
           >
             <ActionContractsSection />
           </SectionCard>
@@ -1547,7 +1314,7 @@ export default function AgentEditorPage() {
         </div>
       </div>
 
-      {/* Integration Drawer (inline — no navigation) */}
+      {/* Integration Drawer (inline - no navigation) */}
       <IntegrationDrawer
         isOpen={showSkillsPanel}
         aiAgentId={id !== "new" ? id : undefined}
@@ -1555,7 +1322,7 @@ export default function AgentEditorPage() {
           setShowSkillsPanel(false);
           // Refresh both the marketplace list (drawer UI) AND this agent's
           // tool list. The Skills section under the agent is scoped to
-          // AgentToolPermission — NOT to every tenant-enabled tool — so we
+          // AgentToolPermission - NOT to every tenant-enabled tool - so we
           // re-read the agent from the backend rather than rebuilding from
           // the marketplace response (which would wipe per-agent grants
           // on the next save).
@@ -1582,7 +1349,7 @@ export default function AgentEditorPage() {
         }}
       />
 
-      {/* Knowledge Drawer (inline — no navigation) */}
+      {/* Knowledge Drawer (inline - no navigation) */}
       <KnowledgeDrawer
         isOpen={showKnowledgePanel}
         onClose={() => setShowKnowledgePanel(false)}

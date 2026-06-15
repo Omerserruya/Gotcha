@@ -5,10 +5,11 @@ import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getMarketplaceIntegrations } from "@/lib/api";
+import { INTEGRATION_LOGOS } from "@/lib/integration-logos";
 import clsx from "clsx";
 
 /**
- * Tenant-scoped integrations explorer. Layout-agnostic — render inside
+ * Tenant-scoped integrations explorer. Layout-agnostic - render inside
  * AppLayout (top-level marketplace) or SettingsLayout (Settings →
  * Integrations). Both surfaces hit the SAME `/api/integrations` endpoint
  * and reflect the SAME `tenant_integrations` rows: connecting from one
@@ -32,36 +33,6 @@ const CATEGORY_COLORS: Record<string, string> = {
   PROJECT_MANAGEMENT: "bg-indigo-100 text-indigo-700",
   DATABASE: "bg-slate-100 text-slate-700",
   CUSTOM: "bg-violet-100 text-violet-700",
-};
-
-const INTEGRATION_LOGOS: Record<string, string> = {
-  shopify: "https://cdn.worldvectorlogo.com/logos/shopify.svg",
-  woocommerce: "https://cdn.worldvectorlogo.com/logos/woocommerce.svg",
-  bigcommerce: "https://cdn.worldvectorlogo.com/logos/bigcommerce-1.svg",
-  magento: "https://cdn.worldvectorlogo.com/logos/magento.svg",
-  wix: "https://cdn.worldvectorlogo.com/logos/wix.svg",
-  shippo: "https://cdn.prod.website-files.com/64700b7f349828a5b8dc81ab/6720117f8561f9ad587b820e_AD_4nXewExxEHFrSDaVcyUsSBCZxMRLDfuZ3SYABIbGEikcH_3jFJsGRLXAAkPSeRsqBtlQ-tY89qW1qtX3rzZQ_qmt7hzOrNLQHdu2BOyIeEjIYliByLM5FwYgB0IMD-K46n9wKX6NFbKRsmT845rfmGYcGhQ5X.gif",
-  easyship: "https://cdn.shopify.com/app-store/listing_images/7857972f1c70c4384cd3d0e61c5284c1/icon/CLPUja--4IMDEAE=.png",
-  shipstation: "https://www.shipstation.com/wp-content/uploads/2024/10/ShipStation-BlogLaunch-Logo-2-1024x427.png",
-  aftership: "https://aftership.ghost.io/content/images/2023/01/YouTube-avatar-2.png",
-  stripe: "https://cdn.worldvectorlogo.com/logos/stripe-4.svg",
-  paypal: "https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-200px.png",
-  square: "https://messenger-assets.qualified.com/uploads/7ujZqmvzoStw2DuEbeUvSkS2tNDMnum1bcHPM/c55336256d47abdd4b160b28e0535a57ccebff58605da5199d39e3af3b55fe3d.png",
-  hubspot: "https://cdn.worldvectorlogo.com/logos/hubspot.svg",
-  salesforce: "https://cdn.worldvectorlogo.com/logos/salesforce-2.svg",
-  pipedrive: "https://cdn.worldvectorlogo.com/logos/pipedrive.svg",
-  zoho_crm: "https://cdn.worldvectorlogo.com/logos/zoho-1.svg",
-  zendesk: "https://cdn.worldvectorlogo.com/logos/zendesk.svg",
-  intercom: "https://cdn.worldvectorlogo.com/logos/intercom-2.svg",
-  monday: "https://cdn.worldvectorlogo.com/logos/monday-1.svg",
-  google_calendar: "https://fonts.gstatic.com/s/i/productlogos/calendar_2020q4/v13/192px.svg",
-  calendly: "https://calendly.com/media/favicon/icon-144x144.png",
-  slack: "https://cdn.worldvectorlogo.com/logos/slack-new-logo.svg",
-  google_analytics: "https://cdn.worldvectorlogo.com/logos/google-analytics-4.svg",
-  postgresql: "https://cdn.worldvectorlogo.com/logos/postgresql.svg",
-  mongodb: "https://cdn.worldvectorlogo.com/logos/mongodb-icon-1.svg",
-  aws_rds: "https://cdn.worldvectorlogo.com/logos/aws-rds.svg",
-  mongo_atlas: "https://cdn.worldvectorlogo.com/logos/mongodb-icon-1.svg",
 };
 
 const AUTH_TYPE_STYLES: Record<string, string> = {
@@ -89,7 +60,7 @@ export interface IntegrationsExplorerProps {
   title?: string;
   /** Optional category prefilter (e.g. "CRM" to show only CRMs). */
   initialCategory?: string;
-  /** When set, lock the explorer to a single category — the category
+  /** When set, lock the explorer to a single category - the category
    *  filter chips are hidden and the underlying list is filtered server-
    *  side at the rendering layer. Used by Settings → Integrations to
    *  show only CRM integrations and avoid surfacing the full marketplace
@@ -118,7 +89,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
             id: "virtual_custom_api",
             slug: "custom_api",
             name: "Custom API",
-            description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+            description: "Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
             category: "CUSTOM",
             authType: "CUSTOM",
             isPublished: true,
@@ -136,9 +107,13 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
       intg.name?.toLowerCase().includes(search.toLowerCase()) ||
       intg.description?.toLowerCase().includes(search.toLowerCase());
     // When the page is locked to a single category, ignore the local
-    // activeCategory state entirely — only that category's items pass.
+    // activeCategory state entirely - only that category's items pass.
     const effectiveCat = restrictToCategory ?? activeCategory;
-    const matchCat = effectiveCat === "All" || intg.category === effectiveCat || intg.category?.toUpperCase() === effectiveCat;
+    // An integration flagged `canActAsCrm` (e.g. Shopify, natively ECOMMERCE)
+    // may be elected as the tenant's CRM source of truth, so it also passes the
+    // CRM filter even though its native category differs.
+    const actsAsCrm = effectiveCat === "CRM" && intg.canActAsCrm === true;
+    const matchCat = effectiveCat === "All" || intg.category === effectiveCat || intg.category?.toUpperCase() === effectiveCat || actsAsCrm;
     return matchSearch && matchCat;
   });
 

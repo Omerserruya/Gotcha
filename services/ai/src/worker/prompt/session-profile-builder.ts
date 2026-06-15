@@ -8,7 +8,7 @@
  *   - The same SYSTEM_CORE can serve many sessions; only the profile
  *     differs. Keeping them separate lets us cache SYSTEM_CORE across
  *     workers and SESSION_PROFILE per session.
- *   - It also makes the fingerprint debug output easier to read — you
+ *   - It also makes the fingerprint debug output easier to read - you
  *     can see at a glance which half changed when drift is reported.
  *
  * NO TIMESTAMPS in the rendered output. Including capturedAt would mean
@@ -21,7 +21,7 @@ import type { AIWorkerSessionProfile } from "@chatcenter/shared";
 export function buildSessionProfile(profile: AIWorkerSessionProfile): string {
   const sections: string[] = ["# Session Context"];
 
-  // Customer block — only fields with values render, so two customers
+  // Customer block - only fields with values render, so two customers
   // with the same shape produce the same bytes.
   const customer = profile.customer ?? {};
   const customerLines: string[] = [];
@@ -34,12 +34,12 @@ export function buildSessionProfile(profile: AIWorkerSessionProfile): string {
     sections.push(["## Customer", ...customerLines].join("\n"));
   }
 
-  // Conversation reference — minimal, never includes timestamps.
+  // Conversation reference - minimal, never includes timestamps.
   if (profile.conversationId) {
     sections.push(`## Conversation\nID: ${profile.conversationId}`);
   }
 
-  // Pipeline snapshot — same fields the pipeline_transitions skill reads,
+  // Pipeline snapshot - same fields the pipeline_transitions skill reads,
   // duplicated here as ground truth at the top of the prompt. The skill
   // section explains POLICY; this block is the DATA.
   const p = profile.pipeline ?? {};
@@ -53,7 +53,7 @@ export function buildSessionProfile(profile: AIWorkerSessionProfile): string {
     sections.push(lines.join("\n"));
   }
 
-  // Behaviour snapshot — the frozen BEL output. Worker-level overlay
+  // Behaviour snapshot - the frozen BEL output. Worker-level overlay
   // language ("how aggressively to push") lives here so a per-turn
   // recompute can't drift the cached prefix.
   const b = profile.behavior ?? {};

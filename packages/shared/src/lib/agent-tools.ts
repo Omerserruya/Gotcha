@@ -1,5 +1,5 @@
 /**
- * Agent Tools — shared OpenAI function-calling schemas + dispatcher.
+ * Agent Tools - shared OpenAI function-calling schemas + dispatcher.
  *
  * Both the autonomous customer-reply path (incoming-worker/ai-bot) and the
  * agent-assist path (ai service/openai.provider) pass these schemas into
@@ -25,7 +25,7 @@ export interface AgentToolContext {
    * customer). When set to "copilot" (human agent is in the loop), the
    * dispatcher diverts gate REQUIRE_APPROVAL decisions to a
    * `proposeQuickAction` side effect instead of creating an
-   * ApprovalRequest — the human agent in the inbox decides whether to
+   * ApprovalRequest - the human agent in the inbox decides whether to
    * fire the action from the suggestions panel.
    */
   mode?: "agent" | "copilot";
@@ -102,14 +102,14 @@ export type ScheduleMeetingResult =
        * the customer's language.
        */
       userMessage?: { he: string; en: string };
-      /** The slot the model originally tried to book — for audit. */
+      /** The slot the model originally tried to book - for audit. */
       requestedSlotIso?: string;
     }
   | { ok: false; verdict: "PROPOSE"; proposedSlotsIso: string[] }
   | { ok: false; reason: string };
 
 export interface AgentToolSideEffect {
-  /** escalate_to_human was requested — caller must hand off to human. */
+  /** escalate_to_human was requested - caller must hand off to human. */
   escalate?: {
     reason: string;
     priority?: "low" | "medium" | "high";
@@ -180,7 +180,7 @@ export const LINK_IDENTIFIER_TOOL = {
         value: {
           type: "string",
           description:
-            "The literal identifier the customer wrote. Copy it verbatim — do not normalize, format, or guess.",
+            "The literal identifier the customer wrote. Copy it verbatim - do not normalize, format, or guess.",
         },
         ownership_evidence: {
           type: "string",
@@ -194,7 +194,7 @@ export const LINK_IDENTIFIER_TOOL = {
         confidence: {
           type: "number",
           description:
-            "0.9 = direct answer to your question. 0.85 = self-referential phrase. 0.7 = implicit. Below 0.7 — do not call.",
+            "0.9 = direct answer to your question. 0.85 = self-referential phrase. 0.7 = implicit. Below 0.7 - do not call.",
         },
       },
       required: ["type", "value", "ownership_evidence", "confidence"],
@@ -235,13 +235,13 @@ export const SCHEDULE_FOLLOWUP_TOOL = {
       "Schedule a future outbound message to the customer (WhatsApp). Use when the customer needs more time to think, " +
       "asked for info to be sent later, or you want to re-engage after a deferral. The message body MUST be in the " +
       "customer's language and ready to send as-is.\n\n" +
-      "🚫 HARD RULES — break these and the follow-up will be wrong:\n" +
+      "🚫 HARD RULES - break these and the follow-up will be wrong:\n" +
       "  • You MUST have an EXPLICIT timing signal from the customer in THIS conversation before calling this tool. " +
       "Acceptable signals: a concrete duration (\"in 2 hours\", \"tomorrow\", \"next week\"), a specific day/time " +
       "(\"Sunday morning\"), or an explicit deferral with a window (\"call me back later today\", \"ping me in a couple of days\").\n" +
       "  • A vague \"I'm busy\" / \"not now\" / \"let me think\" is NOT a timing signal. In that case you MUST first " +
-      "reply with a question in the customer's language — e.g. \"Sure — when would be a good time to reach out again? " +
-      "Later today, tomorrow, or sometime next week?\" — and DO NOT call schedule_followup this turn.\n" +
+      "reply with a question in the customer's language - e.g. \"Sure - when would be a good time to reach out again? " +
+      "Later today, tomorrow, or sometime next week?\" - and DO NOT call schedule_followup this turn.\n" +
       "  • Never invent a follow-up time. Never default to an arbitrary delay (e.g. 2h, 1d) the customer did not agree to.\n" +
       "  • Confirm the chosen time back to the customer in the SAME turn the tool runs, so they know what to expect.",
     parameters: {
@@ -259,19 +259,19 @@ export const SCHEDULE_FOLLOWUP_TOOL = {
         message: {
           type: "string",
           description:
-            "The text that will be delivered to the customer AT THE SCHEDULED TIME — not now. " +
+            "The text that will be delivered to the customer AT THE SCHEDULED TIME - not now. " +
             "Write it as if YOU are reaching back out to them in the future. The customer will read this " +
             "WHEN they get it (e.g. tomorrow morning), so use future-arrival tone, NOT present-promise tone.\n\n" +
             "✅ GOOD examples (read these out loud as if it's tomorrow at 8am):\n" +
-            "  • \"היי עומר! חוזר אליך כפי שסיכמנו — רוצה להמשיך מאיפה שעצרנו?\"\n" +
-            "  • \"Hi Omer! Following up as promised — ready to continue where we left off?\"\n" +
+            "  • \"היי עומר! חוזר אליך כפי שסיכמנו - רוצה להמשיך מאיפה שעצרנו?\"\n" +
+            "  • \"Hi Omer! Following up as promised - ready to continue where we left off?\"\n" +
             "  • \"בוקר טוב! מתקשר אליך כמו שסיכמנו אתמול. מתי נוח לדבר?\"\n\n" +
             "❌ BAD examples (these only make sense said NOW, not at the future delivery time):\n" +
-            "  • \"אני אחזור אליך מחר ב-8 בבוקר כפי שביקשת\" — at 8am tomorrow this is nonsense.\n" +
-            "  • \"I'll get back to you tomorrow at 10am as you requested\" — wrong tense for the future delivery.\n" +
-            "  • \"Just confirming I'll follow up later\" — the customer is reading it AT the follow-up time.\n\n" +
+            "  • \"אני אחזור אליך מחר ב-8 בבוקר כפי שביקשת\" - at 8am tomorrow this is nonsense.\n" +
+            "  • \"I'll get back to you tomorrow at 10am as you requested\" - wrong tense for the future delivery.\n" +
+            "  • \"Just confirming I'll follow up later\" - the customer is reading it AT the follow-up time.\n\n" +
             "The customer's confirmation that you HEARD them (e.g. \"מעולה! אחזור אליך מחר ב-8 👍\") is the " +
-            "TURN reply you send NOW, AFTER the tool call succeeds — see STEP 4 of the follow-up flow. " +
+            "TURN reply you send NOW, AFTER the tool call succeeds - see STEP 4 of the follow-up flow. " +
             "It is NOT the value of this parameter.",
         },
         reason: {
@@ -286,7 +286,7 @@ export const SCHEDULE_FOLLOWUP_TOOL = {
 };
 
 /**
- * Schedule a TEMPLATE follow-up — for sends that fall OUTSIDE the WhatsApp
+ * Schedule a TEMPLATE follow-up - for sends that fall OUTSIDE the WhatsApp
  * 24h customer-service window (or any other re-engagement window). The
  * underlying ScheduledMessage row is created with messageType=template;
  * the scheduled-message worker hydrates the template body + variables and
@@ -302,8 +302,8 @@ export const SCHEDULE_FOLLOWUP_TEMPLATE_TOOL = {
       "Schedule a future TEMPLATE message to the customer. Use this when the send time is OUTSIDE the WhatsApp " +
       "24h customer-service window (a free-text message would be silently dropped). Also use when re-engaging " +
       "via WhatsApp from a different originating channel. The template_name MUST be one the operator has " +
-      "registered + approved on Meta — refer to the list in the # Context block.\n\n" +
-      "🚫 HARD RULES — break these and the follow-up will be wrong:\n" +
+      "registered + approved on Meta - refer to the list in the # Context block.\n\n" +
+      "🚫 HARD RULES - break these and the follow-up will be wrong:\n" +
       "  • You MUST have an EXPLICIT timing signal from the customer in THIS conversation. Vague non-answers " +
       "(\"I'm busy\", \"not now\", \"maybe later\") do NOT count. If timing is unclear, reply with a question in " +
       "the customer's language asking when to follow up, and DO NOT call this tool this turn.\n" +
@@ -385,29 +385,29 @@ export const SCHEDULE_MEETING_TOOL = {
     name: "schedule_meeting",
     description:
       "Book a meeting on the assigned agent's calendar. The system enforces working hours, " +
-      "buffers, minimum-notice, max-horizon, and existing busy slots — DO NOT assume the time " +
+      "buffers, minimum-notice, max-horizon, and existing busy slots - DO NOT assume the time " +
       "you propose is free, the server validates and may reject.\n" +
       "BEFORE calling this tool you MUST do TWO things in order:\n\n" +
-      "STEP A — CRM identity reconciliation (silent, no narration):\n" +
+      "STEP A - CRM identity reconciliation (silent, no narration):\n" +
       "  • Look up the customer in CRM by their phone first (the conversation's `senderId` / phone is the " +
       "primary channel identifier). Use whatever CRM lookup tool is available (e.g. `integration.zoho_crm.search_lead`, " +
       "`integration.hubspot.get_contact`, etc.).\n" +
       "  • If the customer is FOUND and the on-file email differs from one they just stated this turn → confirm " +
-      "with the customer in their language: \"I have you on file as old@x.com — should I send the invite there, " +
+      "with the customer in their language: \"I have you on file as old@x.com - should I send the invite there, " +
       "or use new@x.com?\". Do not proceed until they choose.\n" +
       "  • If the customer is FOUND with no conflict → call `link_customer_identifier` for any new identifier " +
       "they stated (high confidence), then `update_record` to keep the lead fresh.\n" +
       "  • If the customer is NOT FOUND → after gathering essentials below, call `create_lead` (silent) " +
       "with their phone + email + name. The booking happens RIGHT AFTER the lead exists.\n\n" +
-      "STEP B — gather meeting essentials in conversation (unless the customer already volunteered them):\n" +
+      "STEP B - gather meeting essentials in conversation (unless the customer already volunteered them):\n" +
       "  1. Time the customer prefers (date + hour + their timezone if non-obvious).\n" +
-      "  2. Whether anyone else should be invited (additional guest emails) — explicitly ask if not stated.\n" +
-      "  3. Topic / agenda — one short line, so the calendar event title + notes are useful.\n" +
+      "  2. Whether anyone else should be invited (additional guest emails) - explicitly ask if not stated.\n" +
+      "  3. Topic / agenda - one short line, so the calendar event title + notes are useful.\n" +
       "  4. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n" +
       "Ask one question per turn until you have these.\n\n" +
-      "🚫 HARD RULES — break these and the booking will be wrong:\n" +
+      "🚫 HARD RULES - break these and the booking will be wrong:\n" +
       "  • If the customer's last inbound did NOT include an explicit time (e.g. \"Tuesday at 11\"), " +
-      "you MUST reply with a question (e.g. \"Sure — what day/time works for you?\") and NOT call " +
+      "you MUST reply with a question (e.g. \"Sure - what day/time works for you?\") and NOT call " +
       "schedule_meeting this turn.\n" +
       "  • If the customer has not been asked about additional guests in THIS conversation, you MUST " +
       "ask before calling schedule_meeting.\n" +
@@ -421,7 +421,7 @@ export const SCHEDULE_MEETING_TOOL = {
       "Failure modes:\n" +
       "  - verdict='INVALID' with reason='slot_taken' means another booking landed in the same " +
       "window between validation and creation. DO NOT confirm the meeting. The result includes " +
-      "`userMessage.he` / `userMessage.en` — relay that line verbatim in the customer's language, " +
+      "`userMessage.he` / `userMessage.en` - relay that line verbatim in the customer's language, " +
       "then offer the slots in `proposedSlotsIso`.",
     parameters: {
       type: "object",
@@ -458,11 +458,11 @@ export const SCHEDULE_MEETING_TOOL = {
           items: { type: "string" },
           description:
             "Extra attendee emails the customer asked you to invite (their teammates, manager, etc.). " +
-            "Empty array if none — but you MUST have asked the customer first; do not assume.",
+            "Empty array if none - but you MUST have asked the customer first; do not assume.",
         },
         notes: {
           type: "string",
-          description: "Short note to attach to the calendar event (one sentence) — typically the topic / agenda the customer stated.",
+          description: "Short note to attach to the calendar event (one sentence) - typically the topic / agenda the customer stated.",
         },
       },
       required: ["duration_minutes", "meeting_type"],
@@ -506,7 +506,7 @@ export interface BuildAgentToolsOptions {
   /** Schedule-followup tool (Task 4). Default on for autonomous mode. */
   followup?: boolean;
   /**
-   * schedule_meeting tool (Task 3). Default OFF — only enable when the
+   * schedule_meeting tool (Task 3). Default OFF - only enable when the
    * tenant has at least one calendar integration connected and a
    * `MeetingType` configured. Surfacing the tool with no backend wired
    * causes the model to confidently propose times it can't actually book.
@@ -516,7 +516,7 @@ export interface BuildAgentToolsOptions {
   extra?: Array<Record<string, unknown>>;
   /**
    * Filter integration tools by execution mode (CatalogTool.allowedModes).
-   * "AUTO" — autonomous bot. "ASSIST" — copilot (human in the loop).
+   * "AUTO" - autonomous bot. "ASSIST" - copilot (human in the loop).
    * Tools whose allowedModes array does not include this mode are dropped.
    * Omit to include every tool the agent has permission for.
    */
@@ -531,8 +531,10 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   if (opts.followup !== false) {
     tools.push(SCHEDULE_FOLLOWUP_TOOL as any);
     tools.push(SCHEDULE_FOLLOWUP_TEMPLATE_TOOL as any);
-    tools.push(CREATE_TASK_TOOL as any);
   }
+  // create_task is NOT a built-in: it's a CRM action and should be surfaced
+  // as an integration tool (AgentToolPermission), not auto-included here.
+  // The schema + dispatcher are kept so a connected CRM can expose it.
   if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
@@ -628,7 +630,7 @@ export async function buildAgentToolsForAIAgent(
  *   - `whenToUse` if present (the operator-authored selection rule),
  *   - one worked example from `exampleUsage` if present.
  *
- * This is what gates "should I call this tool right now?" — putting the
+ * This is what gates "should I call this tool right now?" - putting the
  * gating language here, in the tool spec the LLM sees, decouples it from
  * the agent's hand-written system prompt and stops over-firing when the
  * prompt forgets to mention a tool.
@@ -646,7 +648,7 @@ function composeToolDescription(
   },
 ): string {
   const parts: string[] = [];
-  // Per-agent description, when present, REPLACES the catalog description —
+  // Per-agent description, when present, REPLACES the catalog description -
   // an operator who wrote a per-agent meaning ("For THIS agent: send a
   // follow-up SMS, not an email") is making an authoritative override.
   // Catalog description is kept as a fallback when no override exists.
@@ -657,7 +659,7 @@ function composeToolDescription(
   parts.push(baseDesc);
 
   // Catalog-level whenToUse is the platform-wide rule. Per-agent
-  // usageRule STACKS on top — both render, so a Sales agent's "only
+  // usageRule STACKS on top - both render, so a Sales agent's "only
   // after budget confirmed" rule is added alongside the catalog's
   // generic guidance. If the operator wants to fully override, they
   // can blank out the catalog rule via tenant config.
@@ -755,7 +757,7 @@ export async function dispatchToolCall(
   //
   // The two tools hardcoded here today (link_customer_identifier,
   // escalate_to_human) are low-risk by default so this is a no-op for
-  // them — but it means ANY new tool added to this dispatcher is
+  // them - but it means ANY new tool added to this dispatcher is
   // automatically gated through the same code path. That's the whole
   // point: replace scattered ad-hoc checks with one entry point.
   try {
@@ -776,7 +778,7 @@ export async function dispatchToolCall(
     if (gate.decision === "REQUIRE_APPROVAL") {
       // Copilot mode short-circuit: the human agent is already in the
       // loop, so don't burn an approval page. Hand the proposed call back
-      // to the route as a quick action — the agent fires it from the
+      // to the route as a quick action - the agent fires it from the
       // suggestions panel if they want it.
       if (ctx.mode === "copilot") {
         return {
@@ -804,14 +806,14 @@ export async function dispatchToolCall(
           }),
         };
       }
-      // Dedupe — if an approval for this same tool is already pending on
+      // Dedupe - if an approval for this same tool is already pending on
       // this conversation, reuse it. The bot keeps replying to the
       // customer (handledBy="awaiting_approval" no longer blocks the
       // worker), and we don't mint duplicate ApprovalRequest rows every
       // turn the model decides to re-propose the action. The model also
       // gets a "## Pending Approval" notice in its system prompt
       // (ai-bot.service.ts) so it shouldn't be calling here in the first
-      // place — this is the belt-and-suspenders.
+      // place - this is the belt-and-suspenders.
       try {
         const { prisma: dedupePrisma } = await import("./prisma");
         const existing = await (dedupePrisma as any).approvalRequest.findFirst({
@@ -846,7 +848,7 @@ export async function dispatchToolCall(
           };
         }
       } catch (err: any) {
-        // Lookup failure must not break the gate — fall through and
+        // Lookup failure must not break the gate - fall through and
         // create a fresh approval. Worst case: a duplicate row.
         console.warn("[agent-tools] pending-approval dedupe lookup failed:", err?.message);
       }
@@ -860,7 +862,7 @@ export async function dispatchToolCall(
         summary: summarizeToolCall(name, args),
         reason: gate.reason,
         // riskLevel here is a display field on the ApprovalRequest row, not a
-        // gating signal — the gate decision lives in tool-gate.ts. Tag as
+        // gating signal - the gate decision lives in tool-gate.ts. Tag as
         // "approval_required" so the inbox UI groups it correctly.
         riskLevel: "high",
         riskTags: ["REQUIRES_APPROVAL"],
@@ -887,7 +889,7 @@ export async function dispatchToolCall(
       };
     }
   } catch (err: any) {
-    // Gate failures must NOT silently allow — fail closed.
+    // Gate failures must NOT silently allow - fail closed.
     console.error("[agent-tools] gate evaluation failed:", err?.message);
     return {
       toolCallId: toolCall.id,
@@ -1024,7 +1026,7 @@ export async function dispatchToolCall(
       }
       if (!scheduledAt) scheduledAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
-      // Dedupe on (conversationId, reason) — don't double-schedule.
+      // Dedupe on (conversationId, reason) - don't double-schedule.
       const reason = String(args.reason || "ai_followup");
       const existing = await (prisma as any).scheduledMessage.findFirst({
         where: {
@@ -1103,7 +1105,7 @@ export async function dispatchToolCall(
       }
       const language = typeof args.language === "string" && args.language ? args.language : undefined;
 
-      // Resolve the template — must be tenant-scoped, approved/active. Try
+      // Resolve the template - must be tenant-scoped, approved/active. Try
       // exact (channel + language) first, then fall back to looser matches.
       const tpl = await (prisma as any).messageTemplate.findFirst({
         where: {
@@ -1224,16 +1226,16 @@ export async function dispatchToolCall(
     }
   }
 
-  // ── Integration tools — dispatched via the AI service's execute endpoint ──
+  // ── Integration tools - dispatched via the AI service's execute endpoint ──
   // Tool name shape: `integration.<catalogToolSlug>`. We resolve the slug
   // back to a TenantTool row for this tenant, then POST to ai's
   // /api/ai-assist/:conversationId/tools/execute which handles the HTTP
   // call to the third-party API (Zoho/HubSpot/etc.) plus credentials,
   // audit, and usage tracking.
-  // OpenAI function names must match ^[a-zA-Z0-9_-]+$ — dots are rejected —
+  // OpenAI function names must match ^[a-zA-Z0-9_-]+$ - dots are rejected -
   // so we use underscore as the prefix separator. The catalog slug itself
   // (after the first underscore) is already in snake_case per our seed.
-  // Custom API tools — `custom.<slug>` resolves to a tenant-defined HTTP call.
+  // Custom API tools - `custom.<slug>` resolves to a tenant-defined HTTP call.
   if (name?.startsWith("custom.") && ctx.runCustomApiTool) {
     const slug = name.slice("custom.".length);
     try {
@@ -1247,7 +1249,7 @@ export async function dispatchToolCall(
     }
   }
 
-  // Custom DB query tool — `custom_db.<slug>` (must come before the generic
+  // Custom DB query tool - `custom_db.<slug>` (must come before the generic
   // adapter routing because both patterns have a single dot).
   if (name?.startsWith("custom_db.") && ctx.runCustomDbTool) {
     try {
@@ -1261,7 +1263,7 @@ export async function dispatchToolCall(
     }
   }
 
-  // Adapter framework — `<provider>.<tool>` (e.g. "stripe.refund_payment").
+  // Adapter framework - `<provider>.<tool>` (e.g. "stripe.refund_payment").
   if (name && /^[a-z][a-z0-9_]*\.[a-z][a-z0-9_]*$/.test(name) && ctx.runAdapterTool) {
     try {
       const result = await ctx.runAdapterTool({ toolFunctionName: name, args });
@@ -1360,7 +1362,7 @@ function parseISO8601Duration(input: string): number | null {
 
 /**
  * Lightweight human-readable summary of a tool call for the approval
- * card. Stays a plain string — no LLM call, no localization, no fancy
+ * card. Stays a plain string - no LLM call, no localization, no fancy
  * formatting. The rich card in the inbox renders richer UI from the
  * raw (tool, params); this is just the "one-sentence first line"
  * fallback for lists and notifications.

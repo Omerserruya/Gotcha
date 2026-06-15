@@ -1,4 +1,4 @@
--- Onboarding v2 — adds multi-select goals to BusinessProfile and a
+-- Onboarding v2 - adds multi-select goals to BusinessProfile and a
 -- minimal TenantInvite model for the new "invite teammates" step.
 --
 -- Idempotent (IF NOT EXISTS) so it is safe to re-run on environments

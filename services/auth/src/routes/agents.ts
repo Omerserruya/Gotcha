@@ -71,7 +71,7 @@ router.post("/", requireRole("ADMIN"), validate(createAgentSchema), async (req: 
 const updateAgentSchema = z.object({
   name: z.string().min(1).optional(),
   isActive: z.boolean().optional(),
-  // E.164 personal mobile. Allow null to clear. Loose validation here —
+  // E.164 personal mobile. Allow null to clear. Loose validation here -
   // strict format enforcement happens in the frontend + voice-copilot's
   // normalizePhone().
   phoneNumber: z.string().nullable().optional(),
@@ -494,7 +494,7 @@ router.get("/settings/bot-config", requireRole("ADMIN"), async (req: Request, re
   }
 });
 
-// Legacy copilot/first-take-care settings — now managed via AI Employees in AI Studio
+// Legacy copilot/first-take-care settings - now managed via AI Employees in AI Studio
 router.get("/settings/copilot", requireRole("ADMIN"), async (_req: Request, res: Response) => {
   res.status(410).json({ error: "Deprecated. AI configuration is now managed via AI Employees in AI Studio." });
 });
@@ -514,7 +514,7 @@ router.put("/settings/first-take-care", requireRole("ADMIN"), async (_req: Reque
 // ─── System language ──────────────────────────────────────────
 // Three endpoints in one file: read the effective locale (anyone),
 // set the per-agent override (anyone), set the tenant default (admin).
-// The "effective" value follows the resolver precedence — agent
+// The "effective" value follows the resolver precedence - agent
 // override > tenant default > "en" fallback.
 
 const localeSchema = z.object({

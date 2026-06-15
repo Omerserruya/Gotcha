@@ -15,7 +15,7 @@ import { prisma, type ConversationStateFrame } from "@chatcenter/shared";
  */
 export class CallAnalysisStore {
   /**
-   * Idempotent — creates the row if missing, otherwise no-op.
+   * Idempotent - creates the row if missing, otherwise no-op.
    * Call once per call when the runner spins up.
    */
   static async ensure(args: {

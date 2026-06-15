@@ -7,6 +7,7 @@ import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow } from "@/lib/api";
+import { INTEGRATION_LOGOS, logoForIntegration } from "@/lib/integration-logos";
 import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
 
@@ -22,7 +23,7 @@ function isTab(value: string | null): value is Tab {
 // Real connected tools come from the /api/integrations response
 // (shape: [{name, slug, tenantConnection:{status}, catalogTools:[{name, riskLevel, tenantTool:{isEnabled}}]}]).
 // The hardcoded MOCK_TOOLS list that used to live here has been replaced with
-// live data — see the "connectedIntegrations" derivation inside SkillsTab.
+// live data - see the "connectedIntegrations" derivation inside SkillsTab.
 
 // ─── Stat card ────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, color }: {
@@ -187,7 +188,7 @@ function TeamTab({ t }: { t: (key: string) => string }) {
           );
         })}
 
-        {/* New member placeholder — always first when no agents */}
+        {/* New member placeholder - always first when no agents */}
         <Link
           href="/ai-studio/agents/new"
           data-tour="create-ai-employee-empty"
@@ -231,7 +232,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
   const router = useRouter();
   const [flows, setFlows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // Main Playbook node count — surfaces actual flow-canvas content rather
+  // Main Playbook node count - surfaces actual flow-canvas content rather
   // than the legacy RouterRule count (those are a separate, sibling system).
   // Excludes the synthetic `trigger_section_header` decorations.
   const [mainPlaybookNodeCount, setMainPlaybookNodeCount] = useState(0);
@@ -476,7 +477,7 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
           </div>
         ) : knowledgeBases.map((src, i) => {
           const status = src.status?.toLowerCase() || "synced";
-          const lastSync = src.updatedAt ? new Date(src.updatedAt).toLocaleDateString() : "—";
+          const lastSync = src.updatedAt ? new Date(src.updatedAt).toLocaleDateString() : "-";
           return (
           <div
             key={src.id}
@@ -532,35 +533,8 @@ const MARKETPLACE_CATEGORY_COLORS: Record<string, string> = {
   CUSTOM: "bg-violet-100 text-violet-700",
 };
 
-const MARKETPLACE_LOGOS: Record<string, string> = {
-  shopify: "https://cdn.worldvectorlogo.com/logos/shopify.svg",
-  woocommerce: "https://cdn.worldvectorlogo.com/logos/woocommerce.svg",
-  bigcommerce: "https://cdn.worldvectorlogo.com/logos/bigcommerce-1.svg",
-  magento: "https://cdn.worldvectorlogo.com/logos/magento.svg",
-  wix: "https://cdn.worldvectorlogo.com/logos/wix.svg",
-  shippo: "https://cdn.prod.website-files.com/64700b7f349828a5b8dc81ab/6720117f8561f9ad587b820e_AD_4nXewExxEHFrSDaVcyUsSBCZxMRLDfuZ3SYABIbGEikcH_3jFJsGRLXAAkPSeRsqBtlQ-tY89qW1qtX3rzZQ_qmt7hzOrNLQHdu2BOyIeEjIYliByLM5FwYgB0IMD-K46n9wKX6NFbKRsmT845rfmGYcGhQ5X.gif",
-  easyship: "https://cdn.shopify.com/app-store/listing_images/7857972f1c70c4384cd3d0e61c5284c1/icon/CLPUja--4IMDEAE=.png",
-  shipstation: "https://www.shipstation.com/wp-content/uploads/2024/10/ShipStation-BlogLaunch-Logo-2-1024x427.png",
-  aftership: "https://aftership.ghost.io/content/images/2023/01/YouTube-avatar-2.png",
-  stripe: "https://cdn.worldvectorlogo.com/logos/stripe-4.svg",
-  paypal: "https://www.paypalobjects.com/webstatic/mktg/Logo/pp-logo-200px.png",
-  square: "https://messenger-assets.qualified.com/uploads/7ujZqmvzoStw2DuEbeUvSkS2tNDMnum1bcHPM/c55336256d47abdd4b160b28e0535a57ccebff58605da5199d39e3af3b55fe3d.png",
-  hubspot: "https://cdn.worldvectorlogo.com/logos/hubspot.svg",
-  salesforce: "https://cdn.worldvectorlogo.com/logos/salesforce-2.svg",
-  pipedrive: "https://cdn.worldvectorlogo.com/logos/pipedrive.svg",
-  zoho_crm: "https://cdn.worldvectorlogo.com/logos/zoho-1.svg",
-  zendesk: "https://cdn.worldvectorlogo.com/logos/zendesk.svg",
-  intercom: "https://cdn.worldvectorlogo.com/logos/intercom-2.svg",
-  monday: "https://cdn.worldvectorlogo.com/logos/monday-1.svg",
-  google_calendar: "https://fonts.gstatic.com/s/i/productlogos/calendar_2020q4/v13/192px.svg",
-  calendly: "https://calendly.com/media/favicon/icon-144x144.png",
-  slack: "https://cdn.worldvectorlogo.com/logos/slack-new-logo.svg",
-  google_analytics: "https://cdn.worldvectorlogo.com/logos/google-analytics-4.svg",
-  postgresql: "https://cdn.worldvectorlogo.com/logos/postgresql.svg",
-  mongodb: "https://cdn.worldvectorlogo.com/logos/mongodb-icon-1.svg",
-  aws_rds: "https://cdn.worldvectorlogo.com/logos/aws-rds.svg",
-  mongo_atlas: "https://cdn.worldvectorlogo.com/logos/mongodb-icon-1.svg",
-};
+// Shared logo map (includes airtable/fireberry/returngo). See @/lib/integration-logos.
+const MARKETPLACE_LOGOS = INTEGRATION_LOGOS;
 
 const MARKETPLACE_LOGO_COLORS = [
   "bg-blue-500", "bg-purple-500", "bg-green-500", "bg-orange-500",
@@ -580,6 +554,23 @@ const AUTH_TYPE_STYLES: Record<string, string> = {
 };
 
 type SkillsSubView = "connected" | "marketplace";
+
+// Integration logo with graceful fallback to a first-letter badge when there's
+// no known logo (or the image fails to load). Resolves by slug or display name.
+function IntegrationLogo({ name, slug, className }: { name: string; slug?: string; className?: string }) {
+  const [broken, setBroken] = useState(false);
+  const url = logoForIntegration(slug || name);
+  return (
+    <div className={clsx("rounded-lg bg-white border border-gray-100 flex items-center justify-center shadow-sm overflow-hidden shrink-0", className)}>
+      {url && !broken ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={url} alt="" onError={() => setBroken(true)} className="w-2/3 h-2/3 object-contain" />
+      ) : (
+        <span className="text-xs font-bold text-gray-600">{(name || "?").charAt(0).toUpperCase()}</span>
+      )}
+    </div>
+  );
+}
 
 function SkillsTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
@@ -601,7 +592,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
             id: "virtual_custom_api",
             slug: "custom_api",
             name: "Custom API",
-            description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+            description: "Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
             category: "CUSTOM",
             authType: "CUSTOM",
             isPublished: true,
@@ -663,7 +654,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
 
       {subView === "connected" ? (
         <>
-          {/* Connected tools — derived from real marketplace data */}
+          {/* Connected tools - derived from real marketplace data */}
           {(() => {
             const connected = integrations
               .filter((intg: any) => intg.tenantConnection?.status === "CONNECTED")
@@ -693,9 +684,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
                 {connected.map((intg) => (
                   <div key={intg.slug} className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
                     <div className="flex items-center gap-3 px-5 py-3.5 border-b border-gray-50 bg-gray-50/40">
-                      <div className="w-8 h-8 rounded-lg bg-white border border-gray-100 flex items-center justify-center text-xs font-bold text-gray-600 shadow-sm">
-                        {intg.name.charAt(0)}
-                      </div>
+                      <IntegrationLogo name={intg.name} slug={intg.slug} className="w-8 h-8" />
                       <span className="font-semibold text-gray-800">{intg.name}</span>
                       <StatusBadge status="connected" />
                     </div>

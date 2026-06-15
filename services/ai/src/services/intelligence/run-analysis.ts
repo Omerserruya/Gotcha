@@ -9,7 +9,7 @@ import { LiveAnalysisRunner } from "./live-analysis-runner";
  * Phase 3 lights up the live path: a TranscriptSource of mode "live" runs
  * through LiveAnalysisRunner and emits a stream of ConversationStateFrames
  * via the bus. The async iterable returned by this function is currently
- * a placeholder — Phase 3 callers do not iterate it, they `start` the
+ * a placeholder - Phase 3 callers do not iterate it, they `start` the
  * runner via the integration hook in voice-assist.service.ts.
  *
  * Phase 5 (Mode A QA) and Phase 6 (Mode B async) will branch on
@@ -18,7 +18,7 @@ import { LiveAnalysisRunner } from "./live-analysis-runner";
 export async function* runAnalysis(
   source: TranscriptSource,
   ctx: AnalysisContext & {
-    /** Required for live mode — the call SID drives the LiveStreamingSource. */
+    /** Required for live mode - the call SID drives the LiveStreamingSource. */
     callSid?: string;
     agentId?: string;
     playbookStageId?: string;

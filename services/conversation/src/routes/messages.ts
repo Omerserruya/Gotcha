@@ -53,7 +53,7 @@ router.post("/:conversationId/messages", validate(sendMessageSchema), async (req
       res.status(400).json({ error: "Channel not configured for this tenant" }); return;
     }
 
-    // WEBCHAT: just save the message — the widget polls for new messages
+    // WEBCHAT: just save the message - the widget polls for new messages
     if (channel === "WEBCHAT") {
       const message = await messageService.create({
         tenantId: req.tenantId!,

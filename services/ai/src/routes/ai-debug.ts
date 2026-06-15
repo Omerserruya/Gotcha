@@ -2,13 +2,13 @@
  * AI prompt debug route.
  *
  * Returns the FULL final payload that would be sent to the LLM for a given
- * AI Employee in either /assist (copilot) or /agent (autonomous) mode —
+ * AI Employee in either /assist (copilot) or /agent (autonomous) mode -
  * system prompt, tool definitions, conversation transcript, and KB context.
  * Use this when "the AI sucks" to see exactly what the model is reading.
  *
  * Auth (either):
- *   1. `X-Debug-Key: <env AI_DEBUG_KEY>` — long-lived backend ops key.
- *   2. `Authorization: Bearer <jit>` — single-use, short-TTL token minted
+ *   1. `X-Debug-Key: <env AI_DEBUG_KEY>` - long-lived backend ops key.
+ *   2. `Authorization: Bearer <jit>` - single-use, short-TTL token minted
  *      via `POST /api/ai-debug/jit` (SYSTEM_ADMIN only).
  *
  * The JIT store is in-process memory. The ai service runs as a single
@@ -115,7 +115,7 @@ router.post("/jit", authenticate, requireSystemAdmin(), (req: Request, res: Resp
 });
 
 // ─── Mode renderers ─────────────────────────────────────────
-// Both modes call `buildAgentPrompt` from prompt-builder.service — the
+// Both modes call `buildAgentPrompt` from prompt-builder.service - the
 // same builder production uses on `/api/ai-bot/reply` and the copilot
 // suggestions / chat paths.
 
@@ -184,13 +184,13 @@ async function renderAgentMode(opts: {
     },
   });
 
-  // Use the unified prompt builder — same path production uses, with full slots.
+  // Use the unified prompt builder - same path production uses, with full slots.
   const systemPrompt = buildAgentPrompt({
     behaviorState,
     agent: {
       name: config.name,
       role: config.role,
-      // description removed per spec — see prompt-builder AgentRecord.
+      // description removed per spec - see prompt-builder AgentRecord.
       tone: config.tone,
       style: config.style,
       identity: config.identity,
@@ -327,7 +327,7 @@ async function renderAssistMode(opts: {
     history = msgs.reverse() as any;
   }
 
-  // Compute BehaviorState first — KB gate is then BEL-controlled.
+  // Compute BehaviorState first - KB gate is then BEL-controlled.
   const lastInbound = [...history].reverse().find((m) => m.direction === "INBOUND" && m.body?.trim());
   const kbProbe = (opts.message || lastInbound?.body || "").trim();
 
@@ -379,7 +379,7 @@ async function renderAssistMode(opts: {
   // Output instruction sourced from BEL (NOT agent.copilotMode at debug time).
   messages.push({ role: "user", content: renderOutputContractInstruction(behaviorState.outputContract) });
 
-  // Tool surface — same construction the provider's suggestResponse uses
+  // Tool surface - same construction the provider's suggestResponse uses
   // (submit_suggestions terminator + ASSIST-filtered integration tools +
   // identity-link if a contact resolves).
   const SUBMIT_SUGGESTIONS_TOOL = {
@@ -467,7 +467,7 @@ router.get("/prompt", debugAuth, async (req: Request, res: Response) => {
     const conversationId = req.query.conversationId ? String(req.query.conversationId) : undefined;
     const message = req.query.message ? String(req.query.message) : undefined;
 
-    // JIT scope (when used) takes precedence — caller cannot leak across tenants.
+    // JIT scope (when used) takes precedence - caller cannot leak across tenants.
     const tenantId = req.debugAuth?.scope.tenantId || tenantIdParam;
     const agentId = req.debugAuth?.scope.agentId || agentIdParam;
     if (!tenantId) {

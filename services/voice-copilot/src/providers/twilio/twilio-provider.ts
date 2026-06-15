@@ -1,8 +1,8 @@
 /**
- * TwilioProvider — concrete VoiceProvider backed by Twilio Voice.
+ * TwilioProvider - concrete VoiceProvider backed by Twilio Voice.
  *
  * Per-tenant: every instance is built from decrypted DB credentials by
- * `resolve-provider.ts`. There is no env-credentialed shared instance —
+ * `resolve-provider.ts`. There is no env-credentialed shared instance -
  * a tenant without an ACTIVE voice channel is not callable.
  *
  * Methods that depend on a credential the channel didn't supply (e.g.
@@ -195,7 +195,7 @@ export class TwilioProvider implements VoiceProvider {
       );
     } catch (err: any) {
       const code = err?.status ?? err?.code;
-      // Conference / participant may have already ended — treat as no-op.
+      // Conference / participant may have already ended - treat as no-op.
       if (code === 404 || code === 20404) {
         this.logger.warn(
           { conferenceSid: input.conferenceSid, callSid: input.callSid, code },
@@ -217,7 +217,7 @@ export class TwilioProvider implements VoiceProvider {
     try {
       // Twilio: marking a call "completed" forces the provider side to hang
       // up immediately. If the call leg is already over (status=completed,
-      // failed, no-answer, busy, canceled) Twilio returns a 4xx — swallow
+      // failed, no-answer, busy, canceled) Twilio returns a 4xx - swallow
       // it so the caller can treat endCall as idempotent.
       await client.calls(input.callSid).update({ status: "completed" });
       this.logger.info({ callSid: input.callSid }, "twilio-provider: endCall ok");

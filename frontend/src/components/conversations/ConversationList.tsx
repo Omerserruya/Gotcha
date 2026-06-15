@@ -64,7 +64,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Initial state MUST match the static build (empty/defaults) or React
-  // hydration throws #425/#418/#423 and unmounts the tree — see I18nContext
+  // hydration throws #425/#418/#423 and unmounts the tree - see I18nContext
   // for the same pattern. localStorage is hydrated in a useEffect below.
   const [lastReadMap, setLastReadMap] = useState<Record<string, string>>({});
   const [slaConfig, setSlaConfig] = useState<{ enabled: boolean; slaMinutes: number; warningThreshold: number } | null>(null);
@@ -371,7 +371,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
             )}
           </div>
 
-          {/* Channel icon filters — always visible */}
+          {/* Channel icon filters - always visible */}
           <div className="flex items-center gap-1 mt-2.5">
             <button
               onClick={() => setChannelFilter("")}
@@ -406,7 +406,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                 <Image src={ch.logo} alt={ch.label} width={18} height={18} className="rounded-sm" />
               </button>
             ))}
-            {/* Webchat filter (no icon file — inline SVG) */}
+            {/* Webchat filter (no icon file - inline SVG) */}
             <button
               onClick={() => setChannelFilter(channelFilter === "WEBCHAT" ? "" : "WEBCHAT")}
               title="Web Chat"
@@ -460,7 +460,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
 
       {/* List */}
       <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pt-2 space-y-2" ref={listRef}>
-        {/* Phase 1 — Live voice calls. Renders null unless tenant has
+        {/* Phase 1 - Live voice calls. Renders null unless tenant has
             `voiceInboxUiEnabled = true` AND there is at least one RINGING
             or live session, so non-voice tenants see today's inbox. */}
         <LiveCallsSection />

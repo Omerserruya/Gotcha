@@ -50,12 +50,28 @@ const THEMES: Record<Team, { descBg: string; descText: string; demoBg: string; a
   },
 };
 
-/* ───── Mockup Visuals ───── */
+// RTL-aware chat-bubble tail corners.
+const inTail = (he: boolean) => (he ? "rounded-tr-sm" : "rounded-tl-sm");
+const outTail = (he: boolean) => (he ? "rounded-bl-sm" : "rounded-br-sm");
 
-function OpsMockup() {
+/* ───── Mockup Visuals (localized + RTL-aware) ───── */
+
+function OpsMockup({ he }: { he: boolean }) {
+  const list = he
+    ? [
+        { name: "שרה מ.", msg: "איפה ההזמנה שלי?", ch: "/icons/wa.png", unread: true },
+        { name: "דוד כ.", msg: "צריך החזר כספי", ch: "/icons/gm.png", unread: true },
+        { name: "ליסה ר.", msg: "תודה על העזרה!", ch: "/icons/ins.png", unread: false },
+        { name: "תום ב.", msg: "אינטגרציית API", ch: "/icons/slk.png", unread: false },
+      ]
+    : [
+        { name: "Sarah M.", msg: "Where is my order?", ch: "/icons/wa.png", unread: true },
+        { name: "David K.", msg: "Need a refund", ch: "/icons/gm.png", unread: true },
+        { name: "Lisa R.", msg: "Thanks for helping!", ch: "/icons/ins.png", unread: false },
+        { name: "Tom B.", msg: "API integration", ch: "/icons/slk.png", unread: false },
+      ];
   return (
     <div className="w-full h-full bg-white/80 rounded-xl overflow-hidden flex text-[11px] shadow-sm">
-      {/* Sidebar - hidden on mobile */}
       <div className="hidden sm:flex w-9 bg-white border-e border-gray-100 flex-col items-center py-3 gap-2.5">
         <div className="w-5 h-5 rounded-md bg-violet-500/10" />
         <div className="w-5 h-5 rounded-md bg-violet-500 flex items-center justify-center">
@@ -64,15 +80,9 @@ function OpsMockup() {
         <div className="w-5 h-5 rounded-md bg-gray-100" />
         <div className="w-5 h-5 rounded-md bg-gray-100" />
       </div>
-      {/* Conversation list - hidden on small mobile */}
       <div className="hidden sm:block w-[130px] bg-white border-e border-gray-100 p-2 space-y-1">
-        <div className="text-[8px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">Inbox</div>
-        {[
-          { name: "Sarah M.", msg: "Where is my order?", ch: "/icons/wa.png", unread: true },
-          { name: "David K.", msg: "Need a refund", ch: "/icons/gm.png", unread: true },
-          { name: "Lisa R.", msg: "Thanks for helping!", ch: "/icons/ins.png", unread: false },
-          { name: "Tom B.", msg: "API integration", ch: "/icons/slk.png", unread: false },
-        ].map((c, i) => (
+        <div className="text-[8px] font-semibold text-gray-400 uppercase tracking-wider px-1 mb-1.5">{he ? "תיבה נכנסת" : "Inbox"}</div>
+        {list.map((c, i) => (
           <div key={i} className={`flex items-start gap-1.5 rounded-lg px-1.5 py-1 ${i === 0 ? "bg-violet-50 border border-violet-100" : ""}`}>
             <div className="w-5 h-5 rounded-full bg-gradient-to-br from-gray-200 to-gray-300 flex-shrink-0 flex items-center justify-center text-[7px] font-bold text-gray-500">{c.name[0]}</div>
             <div className="flex-1 min-w-0">
@@ -86,25 +96,24 @@ function OpsMockup() {
           </div>
         ))}
       </div>
-      {/* Chat */}
       <div className="flex-1 flex flex-col">
         <div className="px-2.5 py-1.5 border-b border-gray-100 flex items-center gap-1.5 bg-white">
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-200 to-emerald-300 flex items-center justify-center text-[7px] font-bold text-emerald-700">S</div>
-          <span className="text-[9px] font-semibold text-gray-800">Sarah M.</span>
-          <span className="ms-auto text-[7px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">SLA: 2m</span>
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-emerald-200 to-emerald-300 flex items-center justify-center text-[7px] font-bold text-emerald-700">{he ? "ש" : "S"}</div>
+          <span className="text-[9px] font-semibold text-gray-800">{he ? "שרה מ." : "Sarah M."}</span>
+          <span className="ms-auto text-[7px] px-1.5 py-0.5 rounded bg-amber-50 text-amber-600 font-medium">{he ? "SLA: 2 דק׳" : "SLA: 2m"}</span>
         </div>
         <div className="flex-1 p-2.5 space-y-1.5 flex flex-col justify-end">
-          <div className="self-start max-w-[75%] bg-gray-50 border border-gray-100 rounded-xl rounded-tl-sm px-2 py-1">
-            <p className="text-[9px] text-gray-700">Where is my order? #4812</p>
+          <div className={`self-start max-w-[75%] bg-gray-50 border border-gray-100 rounded-xl ${inTail(he)} px-2 py-1`}>
+            <p className="text-[9px] text-gray-700">{he ? "איפה ההזמנה שלי? #4812" : "Where is my order? #4812"}</p>
           </div>
-          <div className="self-end max-w-[75%] bg-violet-500 rounded-xl rounded-br-sm px-2 py-1">
-            <p className="text-[9px] text-white">Let me check that for you! 🔍</p>
+          <div className={`self-end max-w-[75%] bg-violet-500 rounded-xl ${outTail(he)} px-2 py-1`}>
+            <p className="text-[9px] text-white">{he ? "בודק את זה עבורך! 🔍" : "Let me check that for you! 🔍"}</p>
           </div>
           <div className="flex items-center gap-1 self-start">
             <div className="w-3.5 h-3.5 rounded-full bg-violet-100 flex items-center justify-center">
               <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-violet-500"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" /></svg>
             </div>
-            <span className="text-[8px] text-violet-500 font-medium">AI routed to shipping</span>
+            <span className="text-[8px] text-violet-500 font-medium">{he ? "ה-AI ניתב למשלוחים" : "AI routed to shipping"}</span>
           </div>
         </div>
       </div>
@@ -112,52 +121,51 @@ function OpsMockup() {
   );
 }
 
-function SalesMockup() {
+function SalesMockup({ he }: { he: boolean }) {
   return (
     <div className="w-full h-full bg-white/80 rounded-xl overflow-hidden flex text-[11px] shadow-sm">
       <div className="flex-1 flex flex-col">
         <div className="px-2.5 py-1.5 border-b border-gray-100 bg-white flex items-center gap-1.5">
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-200 to-blue-300 flex items-center justify-center text-[7px] font-bold text-blue-700">J</div>
-          <span className="text-[9px] font-semibold text-gray-800">James Wilson</span>
-          <span className="ms-auto text-[7px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-semibold border border-emerald-100">Hot Lead</span>
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-blue-200 to-blue-300 flex items-center justify-center text-[7px] font-bold text-blue-700">{he ? "ג׳" : "J"}</div>
+          <span className="text-[9px] font-semibold text-gray-800">{he ? "ג׳יימס וילסון" : "James Wilson"}</span>
+          <span className="ms-auto text-[7px] px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 font-semibold border border-emerald-100">{he ? "ליד חם" : "Hot Lead"}</span>
         </div>
         <div className="flex-1 p-2.5 space-y-1.5 flex flex-col justify-end">
-          <div className="self-start max-w-[80%] bg-gray-50 border border-gray-100 rounded-xl rounded-tl-sm px-2 py-1">
-            <p className="text-[9px] text-gray-700">What&apos;s the pricing for a 50-person team?</p>
+          <div className={`self-start max-w-[80%] bg-gray-50 border border-gray-100 rounded-xl ${inTail(he)} px-2 py-1`}>
+            <p className="text-[9px] text-gray-700">{he ? "מה המחיר לצוות של 50 אנשים?" : "What's the pricing for a 50-person team?"}</p>
           </div>
-          <div className="self-start max-w-[80%] bg-gray-50 border border-gray-100 rounded-xl rounded-tl-sm px-2 py-1">
-            <p className="text-[9px] text-gray-700">We&apos;re switching from Zendesk</p>
+          <div className={`self-start max-w-[80%] bg-gray-50 border border-gray-100 rounded-xl ${inTail(he)} px-2 py-1`}>
+            <p className="text-[9px] text-gray-700">{he ? "אנחנו עוברים מ-Zendesk" : "We're switching from Zendesk"}</p>
           </div>
           <div className="border border-emerald-200 bg-emerald-50/50 rounded-xl px-2 py-1.5 space-y-1">
             <div className="flex items-center gap-1">
               <svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-emerald-500"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" /></svg>
-              <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-wider">AI Copilot</span>
+              <span className="text-[8px] font-bold text-emerald-600 uppercase tracking-wider">{he ? "קופיילוט AI" : "AI Copilot"}</span>
               <span className="text-[8px] text-emerald-500 font-mono ms-auto">96%</span>
             </div>
-            <p className="text-[9px] text-gray-600 leading-relaxed">&ldquo;For 50 users, our Growth plan is $29/seat/mo. Want a quick demo Thursday?&rdquo;</p>
-            <button className="text-[8px] font-semibold text-white bg-emerald-500 rounded-md px-2.5 py-0.5">Send</button>
+            <p className="text-[9px] text-gray-600 leading-relaxed">{he ? "״ל-50 משתמשים, תוכנית Growth היא $29 למשתמש לחודש. רוצה דמו ביום ה׳?״" : "“For 50 users, our Growth plan is $29/seat/mo. Want a quick demo Thursday?”"}</p>
+            <button className="text-[8px] font-semibold text-white bg-emerald-500 rounded-md px-2.5 py-0.5">{he ? "שלח" : "Send"}</button>
           </div>
         </div>
       </div>
-      {/* Context sidebar - hidden on mobile */}
       <div className="hidden sm:block w-[110px] bg-white border-s border-gray-100 p-2 space-y-2.5">
         <div>
-          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Lead Score</span>
+          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "ציון ליד" : "Lead Score"}</span>
           <div className="flex items-center gap-1 mt-0.5">
             <div className="flex-1 h-1 rounded-full bg-gray-100 overflow-hidden"><div className="h-full w-[85%] rounded-full bg-emerald-500" /></div>
             <span className="text-[9px] font-mono font-semibold text-emerald-600">85</span>
           </div>
         </div>
         <div>
-          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Company</span>
+          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "חברה" : "Company"}</span>
           <p className="text-[9px] text-gray-700 mt-0.5">TechFlow Inc.</p>
-          <p className="text-[8px] text-gray-400">50 employees</p>
+          <p className="text-[8px] text-gray-400">{he ? "50 עובדים" : "50 employees"}</p>
         </div>
         <div>
-          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Intent</span>
+          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "כוונה" : "Intent"}</span>
           <div className="flex flex-wrap gap-0.5 mt-0.5">
-            <span className="text-[7px] px-1 py-0.5 rounded bg-blue-50 text-blue-600">Pricing</span>
-            <span className="text-[7px] px-1 py-0.5 rounded bg-amber-50 text-amber-600">Switch</span>
+            <span className="text-[7px] px-1 py-0.5 rounded bg-blue-50 text-blue-600">{he ? "תמחור" : "Pricing"}</span>
+            <span className="text-[7px] px-1 py-0.5 rounded bg-amber-50 text-amber-600">{he ? "מעבר" : "Switch"}</span>
           </div>
         </div>
       </div>
@@ -165,67 +173,66 @@ function SalesMockup() {
   );
 }
 
-function SupportMockup() {
+function SupportMockup({ he }: { he: boolean }) {
   return (
     <div className="w-full h-full bg-white/80 rounded-xl overflow-hidden flex text-[11px] shadow-sm">
       <div className="flex-1 flex flex-col">
         <div className="px-2.5 py-1.5 border-b border-gray-100 bg-white flex items-center gap-1.5">
-          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-200 to-orange-300 flex items-center justify-center text-[7px] font-bold text-orange-700">A</div>
-          <span className="text-[9px] font-semibold text-gray-800">Alex Chen</span>
-          <span className="ms-auto text-[7px] px-1.5 py-0.5 rounded bg-red-50 text-red-500 font-medium">High</span>
+          <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-200 to-orange-300 flex items-center justify-center text-[7px] font-bold text-orange-700">{he ? "א" : "A"}</div>
+          <span className="text-[9px] font-semibold text-gray-800">{he ? "אלכס צ׳ן" : "Alex Chen"}</span>
+          <span className="ms-auto text-[7px] px-1.5 py-0.5 rounded bg-red-50 text-red-500 font-medium">{he ? "גבוהה" : "High"}</span>
         </div>
         <div className="flex-1 p-2.5 space-y-1.5 flex flex-col justify-end">
-          <div className="self-start max-w-[80%] bg-gray-50 border border-gray-100 rounded-xl rounded-tl-sm px-2 py-1">
-            <p className="text-[9px] text-gray-700">Can&apos;t connect WhatsApp. Getting permissions error.</p>
+          <div className={`self-start max-w-[80%] bg-gray-50 border border-gray-100 rounded-xl ${inTail(he)} px-2 py-1`}>
+            <p className="text-[9px] text-gray-700">{he ? "לא מצליח לחבר וואטסאפ. מקבל שגיאת הרשאות." : "Can't connect WhatsApp. Getting permissions error."}</p>
           </div>
           <div className="border border-amber-200 bg-amber-50/40 rounded-lg px-2 py-1 flex items-start gap-1">
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="text-amber-500 mt-0.5 flex-shrink-0"><path d="M12 6.042A8.967 8.967 0 0 0 6 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 0 1 6 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 0 1 6-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0 0 18 18a8.967 8.967 0 0 0-6 2.292m0-14.25v14.25" /></svg>
             <div>
-              <span className="text-[8px] font-bold text-amber-600 uppercase">KB Match</span>
-              <p className="text-[8px] text-gray-500">WA Troubleshooting — 94%</p>
+              <span className="text-[8px] font-bold text-amber-600 uppercase">{he ? "התאמת ידע" : "KB Match"}</span>
+              <p className="text-[8px] text-gray-500">{he ? "פתרון תקלות WA - 94%" : "WA Troubleshooting - 94%"}</p>
             </div>
           </div>
-          <div className="self-end max-w-[85%] bg-blue-500 rounded-xl rounded-br-sm px-2 py-1">
-            <p className="text-[9px] text-white">Go to Business Settings → WhatsApp → enable &quot;manage&quot;. Here&apos;s the guide: [link]</p>
+          <div className={`self-end max-w-[85%] bg-blue-500 rounded-xl ${outTail(he)} px-2 py-1`}>
+            <p className="text-[9px] text-white">{he ? "עבור להגדרות עסק ← וואטסאפ ← הפעל ״ניהול״. הנה המדריך: [קישור]" : "Go to Business Settings → WhatsApp → enable “manage”. Here's the guide: [link]"}</p>
           </div>
           <div className="flex items-center gap-1 self-end">
             <svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-blue-400"><path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" /></svg>
-            <span className="text-[8px] text-gray-400">AI reply from KB</span>
+            <span className="text-[8px] text-gray-400">{he ? "תשובת AI מבסיס הידע" : "AI reply from KB"}</span>
           </div>
         </div>
       </div>
       <div className="w-[110px] bg-white border-s border-gray-100 p-2 space-y-2.5">
         <div>
-          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Sentiment</span>
+          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "סנטימנט" : "Sentiment"}</span>
           <div className="flex items-center gap-1 mt-0.5">
             <span className="text-xs">😤</span>
-            <span className="text-[9px] text-red-500 font-medium">Frustrated</span>
+            <span className="text-[9px] text-red-500 font-medium">{he ? "מתוסכל" : "Frustrated"}</span>
           </div>
         </div>
         <div>
-          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Topic</span>
+          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "נושא" : "Topic"}</span>
           <div className="flex flex-wrap gap-0.5 mt-0.5">
-            <span className="text-[7px] px-1 py-0.5 rounded bg-purple-50 text-purple-600">Integration</span>
+            <span className="text-[7px] px-1 py-0.5 rounded bg-purple-50 text-purple-600">{he ? "אינטגרציה" : "Integration"}</span>
           </div>
         </div>
         <div>
-          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Similar</span>
-          <p className="text-[8px] text-gray-400 mt-0.5">#4801 — WA perms</p>
+          <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "דומה" : "Similar"}</span>
+          <p className="text-[8px] text-gray-400 mt-0.5">{he ? "#4801 - הרשאות WA" : "#4801 - WA perms"}</p>
         </div>
         <div>
-          <span className="text-[7px] font-bold text-emerald-500 font-medium">First Contact ✓</span>
+          <span className="text-[7px] font-bold text-emerald-500 font-medium">{he ? "נפתר בפנייה ראשונה ✓" : "First Contact ✓"}</span>
         </div>
       </div>
     </div>
   );
 }
 
-function SocialMockup() {
+function SocialMockup({ he }: { he: boolean }) {
   return (
     <div className="w-full h-full bg-white/80 rounded-xl overflow-hidden flex flex-col text-[11px] shadow-sm">
-      {/* Header with channel pills */}
       <div className="px-2.5 py-1.5 border-b border-gray-100 flex items-center gap-1.5 bg-white">
-        <span className="text-[9px] font-semibold text-gray-600">Social Inbox</span>
+        <span className="text-[9px] font-semibold text-gray-600">{he ? "תיבה חברתית" : "Social Inbox"}</span>
         <div className="flex gap-1 ms-auto">
           {["/icons/ins.png", "/icons/wa.png", "/icons/msn.png"].map((ch, i) => (
             <div key={i} className={`w-4.5 h-4.5 rounded-md flex items-center justify-center ${i === 0 ? "bg-pink-50 border border-pink-100" : "bg-gray-50 border border-gray-100"}`}>
@@ -235,58 +242,56 @@ function SocialMockup() {
         </div>
       </div>
       <div className="flex-1 flex">
-        {/* Messages */}
         <div className="flex-1 p-2 space-y-1.5 flex flex-col justify-end">
           <div className="bg-gradient-to-r from-pink-50/60 to-white border border-pink-100/40 rounded-xl px-2 py-1.5">
             <div className="flex items-center gap-1 mb-0.5">
               <img src="/icons/ins.png" alt="" className="w-2.5 h-2.5" />
               <span className="text-[8px] font-medium text-gray-700">@emma.style</span>
-              <span className="text-[7px] text-gray-400 ms-auto">2m</span>
+              <span className="text-[7px] text-gray-400 ms-auto">{he ? "2 דק׳" : "2m"}</span>
             </div>
-            <p className="text-[8px] text-gray-600">Love your product! Ship to Canada? 🇨🇦</p>
+            <p className="text-[8px] text-gray-600">{he ? "אוהבת את המוצר! שולחים לקנדה? 🇨🇦" : "Love your product! Ship to Canada? 🇨🇦"}</p>
             <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-[7px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600">😊 Positive</span>
-              <span className="text-[7px] px-1 py-0.5 rounded bg-blue-50 text-blue-600">Auto-reply ready</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600">{he ? "😊 חיובי" : "😊 Positive"}</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-blue-50 text-blue-600">{he ? "תשובה אוטומטית מוכנה" : "Auto-reply ready"}</span>
             </div>
           </div>
           <div className="bg-gradient-to-r from-emerald-50/60 to-white border border-emerald-100/40 rounded-xl px-2 py-1.5">
             <div className="flex items-center gap-1 mb-0.5">
               <img src="/icons/wa.png" alt="" className="w-2.5 h-2.5" />
               <span className="text-[8px] font-medium text-gray-700">+1 555-0142</span>
-              <span className="text-[7px] text-red-400 ms-auto font-medium">Urgent</span>
+              <span className="text-[7px] text-red-400 ms-auto font-medium">{he ? "דחוף" : "Urgent"}</span>
             </div>
-            <p className="text-[8px] text-gray-600">Waiting 20 min for a response!</p>
+            <p className="text-[8px] text-gray-600">{he ? "ממתין 20 דק׳ לתשובה!" : "Waiting 20 min for a response!"}</p>
             <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-[7px] px-1 py-0.5 rounded bg-red-50 text-red-600">😤 Frustrated</span>
-              <span className="text-[7px] px-1 py-0.5 rounded bg-amber-50 text-amber-600">Escalate?</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-red-50 text-red-600">{he ? "😤 מתוסכל" : "😤 Frustrated"}</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-amber-50 text-amber-600">{he ? "להסלים?" : "Escalate?"}</span>
             </div>
           </div>
           <div className="bg-gradient-to-r from-blue-50/60 to-white border border-blue-100/40 rounded-xl px-2 py-1.5">
             <div className="flex items-center gap-1 mb-0.5">
               <img src="/icons/msn.png" alt="" className="w-2.5 h-2.5" />
-              <span className="text-[8px] font-medium text-gray-700">Mike J.</span>
-              <span className="text-[7px] text-gray-400 ms-auto">5m</span>
+              <span className="text-[8px] font-medium text-gray-700">{he ? "מייק ג׳." : "Mike J."}</span>
+              <span className="text-[7px] text-gray-400 ms-auto">{he ? "5 דק׳" : "5m"}</span>
             </div>
-            <p className="text-[8px] text-gray-600">What are your hours?</p>
+            <p className="text-[8px] text-gray-600">{he ? "מה שעות הפעילות?" : "What are your hours?"}</p>
             <div className="flex items-center gap-1.5 mt-1">
-              <span className="text-[7px] px-1 py-0.5 rounded bg-gray-50 text-gray-500">🤔 Neutral</span>
-              <span className="text-[7px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600">✓ Bot handled</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-gray-50 text-gray-500">{he ? "🤔 ניטרלי" : "🤔 Neutral"}</span>
+              <span className="text-[7px] px-1 py-0.5 rounded bg-emerald-50 text-emerald-600">{he ? "✓ טופל ע״י בוט" : "✓ Bot handled"}</span>
             </div>
           </div>
         </div>
-        {/* Insights - hidden on mobile */}
         <div className="hidden sm:block w-[95px] border-s border-gray-100 bg-gray-50/50 p-2 space-y-2">
           <div>
-            <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Live</span>
+            <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "חי" : "Live"}</span>
             <div className="mt-1 space-y-0.5">
-              <div className="flex justify-between"><span className="text-[7px] text-gray-500">Active</span><span className="text-[8px] font-semibold text-gray-700">12</span></div>
-              <div className="flex justify-between"><span className="text-[7px] text-gray-500">Waiting</span><span className="text-[8px] font-semibold text-amber-500">4</span></div>
-              <div className="flex justify-between"><span className="text-[7px] text-gray-500">Bot</span><span className="text-[8px] font-semibold text-emerald-500">8</span></div>
+              <div className="flex justify-between"><span className="text-[7px] text-gray-500">{he ? "פעיל" : "Active"}</span><span className="text-[8px] font-semibold text-gray-700">12</span></div>
+              <div className="flex justify-between"><span className="text-[7px] text-gray-500">{he ? "ממתין" : "Waiting"}</span><span className="text-[8px] font-semibold text-amber-500">4</span></div>
+              <div className="flex justify-between"><span className="text-[7px] text-gray-500">{he ? "בוט" : "Bot"}</span><span className="text-[8px] font-semibold text-emerald-500">8</span></div>
             </div>
           </div>
           <div className="h-px bg-gray-200/60" />
           <div>
-            <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">Sentiment</span>
+            <span className="text-[7px] font-bold text-gray-400 uppercase tracking-wider">{he ? "סנטימנט" : "Sentiment"}</span>
             <div className="mt-1 space-y-0.5">
               <div className="flex items-center gap-1"><div className="flex-1 h-1 rounded-full bg-gray-100"><div className="h-full w-[65%] rounded-full bg-emerald-400" /></div><span className="text-[6px] text-gray-400">65%</span></div>
               <div className="flex items-center gap-1"><div className="flex-1 h-1 rounded-full bg-gray-100"><div className="h-full w-[20%] rounded-full bg-gray-300" /></div><span className="text-[6px] text-gray-400">20%</span></div>
@@ -299,7 +304,7 @@ function SocialMockup() {
   );
 }
 
-const MOCKUPS: Record<Team, () => JSX.Element> = {
+const MOCKUPS: Record<Team, (props: { he: boolean }) => JSX.Element> = {
   ops: OpsMockup,
   sales: SalesMockup,
   support: SupportMockup,
@@ -341,6 +346,7 @@ const TAB_ACTIVE_COLORS: Record<Team, string> = {
 
 export default function SolutionsSection({
   t,
+  isRtl = false,
 }: {
   t: (key: string) => string;
   isRtl?: boolean;
@@ -354,7 +360,6 @@ export default function SolutionsSection({
 
   return (
     <section className="relative py-20 sm:py-36 px-4 sm:px-12 lg:px-20 bg-white overflow-hidden">
-      {/* Hero-style gradient spots */}
       <div className="pointer-events-none absolute inset-0">
         <div className="absolute -top-32 -left-32 w-[400px] sm:w-[600px] h-[400px] sm:h-[600px] rounded-full opacity-[0.04]" style={{ background: "radial-gradient(circle, #9b59b6 0%, #7c3aed 40%, transparent 70%)", filter: "blur(80px)" }} />
         <div className="absolute top-1/4 -right-40 w-[400px] sm:w-[650px] h-[400px] sm:h-[650px] rounded-full opacity-[0.035]" style={{ background: "radial-gradient(circle, #06b6d4 0%, #3b82f6 40%, transparent 70%)", filter: "blur(90px)" }} />
@@ -395,7 +400,7 @@ export default function SolutionsSection({
           </div>
         </div>
 
-        {/* Ticket-style card: description | demo — touching with rounded edges */}
+        {/* Ticket-style card: description | demo */}
         <div key={active} className="flex flex-col lg:flex-row items-stretch rounded-2xl overflow-hidden shadow-lg animate-[fadeSlideIn_0.3s_ease-out]">
           {/* Description container */}
           <div className={`${theme.descBg} ${theme.descText} p-8 sm:p-10 lg:p-12 flex flex-col justify-center lg:w-[42%] lg:rounded-e-2xl`}>
@@ -426,7 +431,7 @@ export default function SolutionsSection({
           {/* Demo container */}
           <div className={`${theme.demoBg} p-4 sm:p-8 lg:p-10 flex items-center justify-center lg:w-[58%] lg:rounded-s-2xl`}>
             <div className="w-full h-[220px] sm:h-[320px]">
-              <Mockup />
+              <Mockup he={isRtl} />
             </div>
           </div>
         </div>

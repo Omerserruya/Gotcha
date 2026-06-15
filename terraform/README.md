@@ -1,4 +1,4 @@
-# ChatCenter — AWS Terraform (Single EC2, Phase 1)
+# ChatCenter - AWS Terraform (Single EC2, Phase 1)
 
 Lean, single-EC2 deployment for 5–7 tenants. ~$45/mo after 30 days of on-demand pricing.
 
@@ -12,7 +12,7 @@ Lean, single-EC2 deployment for 5–7 tenants. ~$45/mo after 30 days of on-deman
 | S3 backups bucket | Nightly pg_dump + uploads tarball, lifecycle to IA at 30d, expire at 90d |
 | DLM policy | Daily EBS snapshots, 7-day retention |
 | 3 CloudWatch alarms | CPU > 70%, disk > 80%, status check failed |
-| (Optional) Elastic IP | Off by default — Cloudflare Tunnel doesn't need it |
+| (Optional) Elastic IP | Off by default - Cloudflare Tunnel doesn't need it |
 
 ## What this does NOT do (intentional)
 
@@ -20,7 +20,7 @@ Lean, single-EC2 deployment for 5–7 tenants. ~$45/mo after 30 days of on-deman
 - Doesn't write `.env`
 - Doesn't start `docker compose`
 - Doesn't register the Cloudflare tunnel
-- Doesn't create SSM secret values (manual — keeps secrets out of TF state)
+- Doesn't create SSM secret values (manual - keeps secrets out of TF state)
 
 You do those by hand after the box is up (see "After apply" below).
 
@@ -47,16 +47,16 @@ terraform apply
 
 Apply takes ~3 min. Outputs include the instance ID, the S3 bucket name, and the `aws ssm` command to shell in.
 
-## After apply — wire up the app
+## After apply - wire up the app
 
-### 1. Shell into the box — three options
+### 1. Shell into the box - three options
 
-#### Option A — SSH with your local key (recommended for daily use)
+#### Option A - SSH with your local key (recommended for daily use)
 
 In `terraform.tfvars`:
 ```hcl
 ssh_public_key_path = "~/.ssh/id_ed25519.pub"  # whatever public key you have
-allowed_ssh_cidrs   = ["1.2.3.4/32"]           # your current IP — `curl -4 ifconfig.me`
+allowed_ssh_cidrs   = ["1.2.3.4/32"]           # your current IP - `curl -4 ifconfig.me`
 ```
 
 `terraform apply`, then:
@@ -74,7 +74,7 @@ ssh-keygen -t ed25519 -C "you@example.com"
 # ~/.ssh/id_ed25519.pub
 ```
 
-#### Option B — SSM Session Manager (zero open ports, no key needed)
+#### Option B - SSM Session Manager (zero open ports, no key needed)
 
 The instance role already grants SSM access. From your laptop:
 ```bash
@@ -90,7 +90,7 @@ sudo -u ubuntu -i
 Use this when you don't want to manage SSH keys, leave port 22 open, or
 share access across teammates without distributing keys.
 
-#### Option C — Reuse an existing AWS key pair
+#### Option C - Reuse an existing AWS key pair
 
 If you already created a key pair in the AWS Console, set `key_pair_name`
 in `terraform.tfvars` and skip `ssh_public_key_path`.
@@ -164,7 +164,7 @@ cloudflared tunnel login              # opens browser-auth URL
 cloudflared tunnel create prod
 cloudflared tunnel route dns prod app.yourdomain.com
 
-# (Optional) dedicated subdomain for Twilio Media Streams — skips nginx,
+# (Optional) dedicated subdomain for Twilio Media Streams - skips nginx,
 # lower latency:
 cloudflared tunnel route dns prod voice.yourdomain.com
 

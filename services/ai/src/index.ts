@@ -16,6 +16,7 @@ import customDbAdminRoutes from "./routes/custom-db-admin";
 import connectorsAdminRoutes from "./routes/connectors-admin";
 import agentScoreRoutes from "./routes/agent-scores";
 import aiAgentRoutes from "./routes/ai-agents";
+import aiAgentBuilderRoutes from "./routes/ai-agent-builder";
 import aiSkillsRoutes from "./routes/ai-skills";
 import routerRuleRoutes from "./routes/router-rules";
 import flowCanvasRoutes from "./routes/flow-canvas";
@@ -28,6 +29,9 @@ import aiBotRoutes from "./routes/ai-bot";
 import agentRoutes from "./routes/agent";
 import crmPanelRoutes from "./routes/crm-panel";
 import postConversationConfigRoutes from "./routes/post-conversation-config";
+import industryPacksRoutes from "./routes/industry-packs";
+import fieldDefinitionsRoutes from "./routes/field-definitions";
+import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
@@ -61,7 +65,7 @@ if (process.env.OPENAI_API_KEY) {
   ));
   console.log("AI provider: OpenAI initialized (model: %s)", process.env.OPENAI_DEFAULT_MODEL || "gpt-4o-mini");
 } else {
-  console.warn("AI provider: No OPENAI_API_KEY set — using stub provider");
+  console.warn("AI provider: No OPENAI_API_KEY set - using stub provider");
 }
 
 const config = { name: "ai-service", port: parseInt(process.env.PORT || "4006", 10) };
@@ -72,11 +76,11 @@ app.use("/api/knowledge-bases", knowledgeRoutes);
 app.use("/api/knowledge", knowledgeOauthRoutes);
 app.use("/api/system-chat", systemChatRoutes);
 app.use("/api/tools", toolRoutes);
-// CRM OAuth (Zoho) must mount BEFORE integrationRoutes — the latter applies
+// CRM OAuth (Zoho) must mount BEFORE integrationRoutes - the latter applies
 // `authenticate` to its entire router, which would reject Zoho's unauthenticated
 // /callback redirect. Public routes here validate a JWT state param instead.
 app.use("/api/integrations", crmOauthRoutes);
-// Calendar OAuth — same rationale as crmOauthRoutes: callback runs without
+// Calendar OAuth - same rationale as crmOauthRoutes: callback runs without
 // the dashboard's bearer token, so it must mount before integrationRoutes.
 app.use("/api/integrations", calendarOauthRoutes);
 app.use("/api/integrations", integrationRoutes);
@@ -88,6 +92,9 @@ app.use("/api", customApiAdminRoutes);
 app.use("/api", customDbAdminRoutes);
 app.use("/api", connectorsAdminRoutes);
 app.use("/api/agent-scores", agentScoreRoutes);
+// Mount the builder BEFORE ai-agents so its routes (/builder/*) resolve
+// before ai-agents' `GET /:id` could shadow them.
+app.use("/api/ai-agents/builder", aiAgentBuilderRoutes);
 app.use("/api/ai-agents", aiAgentRoutes);
 app.use("/api/ai-skills", aiSkillsRoutes);
 app.use("/api/router-rules", routerRuleRoutes);
@@ -101,6 +108,9 @@ app.use("/api/ai-bot", aiBotRoutes);
 app.use("/api/agent", agentRoutes);
 app.use("/api/crm", crmPanelRoutes);
 app.use("/api/post-conversation-config", postConversationConfigRoutes);
+app.use("/api/industry-packs", industryPacksRoutes);
+app.use("/api/field-definitions", fieldDefinitionsRoutes);
+app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
 app.use("/api/copilot", copilotOutcomesRoutes);
@@ -119,12 +129,14 @@ app.use("/api", postCallRoutes);
 import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
 import { startVoicePostCallWorker } from "./workers/voice-postcall";
 import { startPostChatSubscriber } from "./workers/post-chat/subscriber";
+import { startIntelligenceLiveSubscriber } from "./workers/intelligence-live/subscriber";
 startVoiceCopilotSubscriber();
 startVoicePostCallWorker();
 startPostChatSubscriber();
+startIntelligenceLiveSubscriber();
 startLiveRunnerSupervisor();
 
-// Voice-flow runner — bridges live-call events into ChatbotFlow rows with
+// Voice-flow runner - bridges live-call events into ChatbotFlow rows with
 // channel=VOICE so admins manage call automations alongside chat flows.
 // See services/ai/src/services/voice-flow/voice-flow-runner.ts.
 import { startVoiceFlowRunner } from "./services/voice-flow/voice-flow-runner";
@@ -132,7 +144,7 @@ startVoiceFlowRunner();
 
 // Phase 5: Post-Call Mode A QA. Trigger enqueues a QA job on every
 // voice.session.ended; worker scores against persisted CallAnalysis.frames,
-// writes a QAScore row, emits qa.scored. Independent of the live path —
+// writes a QAScore row, emits qa.scored. Independent of the live path -
 // can fail without affecting active calls.
 startPostCallQAWorker();
 startPostCallQATrigger();

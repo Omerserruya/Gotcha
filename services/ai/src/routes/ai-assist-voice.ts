@@ -68,7 +68,7 @@ router.post("/", internalAuth, async (req: Request, res: Response) => {
   await handleVoiceStream(parsed.data, (req as any).tenantId as string, req.headers, res);
 });
 
-// ─── /voice/start — agent-initiated outbound call context ──────
+// ─── /voice/start - agent-initiated outbound call context ──────
 // User-authenticated. Records the call intent + notes so the co-pilot has
 // context before any STT transcripts arrive.
 
@@ -97,7 +97,7 @@ router.post(
     try {
       // Ensure a Conversation row exists (tenant-scoped) so voice transcript
       // dispatch from voice-copilot can find it. Voice conversations are
-      // created on-demand here — there's no inbound webhook for outbound calls.
+      // created on-demand here - there's no inbound webhook for outbound calls.
       const existing = await prisma.conversation.findFirst({
         where: { id: conversationId, tenantId: req.tenantId! },
         select: { id: true },

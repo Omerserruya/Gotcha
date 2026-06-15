@@ -25,6 +25,7 @@ const settingsNav: SettingsNavItem[] = [
   { href: "/settings/usage", labelKey: "nav.usage", icon: UsageIcon },
   { href: "/settings/policy", labelKey: "settings.nav.policy", icon: PolicyIcon },
   { href: "/settings/post-conversation", label: "Post-Conversation", icon: PolicyIcon },
+  { href: "/settings/intelligence-fields", label: "Intelligence Fields", icon: IntelligenceIcon },
   { href: "/settings/tools", labelKey: "settings.nav.tools", icon: ToolsIcon },
   { href: "/settings/voice-channels", labelKey: "settings.nav.voiceChannels", icon: VoiceChannelsIcon, voiceOnly: true },
   { href: "/settings/funnels", label: "Pipeline funnels", icon: FunnelIcon },
@@ -49,7 +50,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <AppLayout>
       <div className="flex h-[calc(100vh-16px)] md:gap-2 md:p-2">
-        {/* Settings sidebar — hidden on mobile, shown on md+ */}
+        {/* Settings sidebar - hidden on mobile, shown on md+ */}
         <aside className="hidden md:flex w-[220px] flex-col bg-white rounded-2xl shadow-subtle overflow-hidden shrink-0">
           <div className="px-4 py-3 bg-gray-50/50">
             <h2 className="text-sm font-semibold text-gray-900">{t("nav.settings")}</h2>
@@ -204,6 +205,14 @@ function FunnelIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M3 4.5h18l-7 9v6l-4 2v-8L3 4.5z" />
+    </svg>
+  );
+}
+
+function IntelligenceIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
     </svg>
   );
 }

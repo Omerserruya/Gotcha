@@ -1,25 +1,25 @@
 /**
  * Flow Canvas graph executor.
  *
- * Walks the node/edge graph saved by the Main Playbook editor (FlowCanvas) — or
+ * Walks the node/edge graph saved by the Main Playbook editor (FlowCanvas) - or
  * by the Sub-flow editor (ChatbotFlow.nodes/edges). The executor does exactly
  * what the graph says: every edge is followed literally, every node's behavior
  * is defined in one place, and there is no "rule fallback" path that bypasses
  * the canvas.
  *
  * Supported node types (shared between Main Playbook and Sub-flow):
- *   - channel_entry        — main-flow entry; matched by inbound channel
- *   - start                — sub-flow entry (or main-flow with no channel_entry)
- *   - condition_group      — branches on "true" / "false" handle
- *   - send_message_text    — outbound text
- *   - send_message_interactive — outbound text with CTA link appended
- *   - send_message_quick_reply — outbound interactive with reply buttons; pauses
- *   - send_message_image   — outbound image by URL (+ caption)
- *   - send_message_file    — outbound document by URL (+ filename, caption)
- *   - send_message_template — outbound WABA template (WhatsApp only); re-opens 24h window
- *   - route_target         — dispatch: AI agent / sub-flow / human / department
- *   - default_fallback     — same as route_target but visually distinct
- *   - end                  — terminate: close / handoff_human / wait_for_reply
+ *   - channel_entry        - main-flow entry; matched by inbound channel
+ *   - start                - sub-flow entry (or main-flow with no channel_entry)
+ *   - condition_group      - branches on "true" / "false" handle
+ *   - send_message_text    - outbound text
+ *   - send_message_interactive - outbound text with CTA link appended
+ *   - send_message_quick_reply - outbound interactive with reply buttons; pauses
+ *   - send_message_image   - outbound image by URL (+ caption)
+ *   - send_message_file    - outbound document by URL (+ filename, caption)
+ *   - send_message_template - outbound WABA template (WhatsApp only); re-opens 24h window
+ *   - route_target         - dispatch: AI agent / sub-flow / human / department
+ *   - default_fallback     - same as route_target but visually distinct
+ *   - end                  - terminate: close / handoff_human / wait_for_reply
  *
  * When no FlowCanvas exists for a tenant, the caller falls back to the legacy
  * RouterRule-list evaluator in routing.service.ts. That is the only escape hatch.
@@ -56,7 +56,7 @@ interface ChannelSendContext {
 
 interface FlowExecCtx {
   tenantId: string;
-  // Null for context-free runs (webhook triggers — see executeWebhookFlow).
+  // Null for context-free runs (webhook triggers - see executeWebhookFlow).
   // Conversation-bound flows (message / comment triggered) always carry a real
   // id. Every Conversation read/write below is guarded on this being non-null,
   // so both paths share one walker without the context-free path ever touching
@@ -72,7 +72,7 @@ interface FlowExecCtx {
   vars: Record<string, any>;
   // When this walk came from executeSubFlow's resumeNodeId path, the current
   // inbound message carries the user's reply to a paused Collect Input. We
-  // store it into the named variable and then continue — see walk().
+  // store it into the named variable and then continue - see walk().
   resumingCollectInputVar?: string | null;
   // Scope tag used for flow-resume jobs (Wait node). "main" = FlowCanvas;
   // "sub" = ChatbotFlow row identified by `flowId`.
@@ -134,7 +134,7 @@ export async function executeMainFlow(opts: {
         const selected = out.find((e) => String(e.sourceHandle || "").toLowerCase() === payload) || out[0];
         startId = selected?.target ?? null;
       } else {
-        // Generic resume (Wait, etc) — continue from first outgoing edge.
+        // Generic resume (Wait, etc) - continue from first outgoing edge.
         const out = edges.find((e) => e.source === paused.id);
         startId = out?.target ?? null;
       }
@@ -224,7 +224,7 @@ export async function executeWebhookFlow(opts: {
   payload: unknown;
   // "flow" (default) runs the associated ChatbotFlow; "connected" walks the
   // nodes wired to the webhook trigger node on the Main Playbook canvas. The
-  // two paths share walk() — only entry resolution + which graph differs.
+  // two paths share walk() - only entry resolution + which graph differs.
   targetMode?: "flow" | "connected";
 }): Promise<FlowExecutionResult> {
   if (opts.targetMode === "connected") {
@@ -282,7 +282,7 @@ export async function executeWebhookFlow(opts: {
 //
 // Sibling of executeWebhookFlow's default path. Instead of running a separate
 // ChatbotFlow, this walks the nodes wired to the webhook trigger node on the
-// tenant's Main Playbook canvas (FlowCanvas) — the same canvas the trigger node
+// tenant's Main Playbook canvas (FlowCanvas) - the same canvas the trigger node
 // lives on. Everything downstream is identical to the flow-mode webhook run:
 // the payload is exposed as `{{body.*}}`, there is no conversation/customer, and
 // every Conversation-bound concern degrades gracefully (Send* no-op, pause nodes
@@ -323,9 +323,9 @@ async function executeWebhookConnectedNodes(opts: {
   };
   // Manual field mapper (Card 5): bind declared body.* fields onto the first
   // connected node's inputs before we walk into it. Mutates the in-memory node
-  // copy only — never persisted.
+  // copy only - never persisted.
   applyWebhookFieldMapping(entryNode, nodes, edges);
-  // Start at the trigger node itself — walk()'s `webhook_trigger` case enters it
+  // Start at the trigger node itself - walk()'s `webhook_trigger` case enters it
   // and continues to its first outgoing edge, so an unwired trigger halts cleanly
   // with no_outgoing_edge instead of crashing.
   return walk(entryNode.id, nodes, edges, ctx);
@@ -340,12 +340,12 @@ async function executeWebhookConnectedNodes(opts: {
 // "var:<placeholder>" (→ data.variables[placeholder]).
 //
 // We resolve a mapping by writing a `{{body.<source>}}` reference into the
-// target node's data — deliberately reusing the existing interpolation path
+// target node's data - deliberately reusing the existing interpolation path
 // (interpolate/getByPath) so the runtime substitution and the long-standing
 // `{{body.*}}` reference behavior stay identical. The mapper is just a UI over
 // those references; an author who hand-types `{{body.x}}` gets the same result.
 //
-// Only the FIRST connected node (first outgoing edge of the trigger) is mapped —
+// Only the FIRST connected node (first outgoing edge of the trigger) is mapped -
 // that is exactly the node the user binds against in the Inspector.
 function applyWebhookFieldMapping(
   entryNode: GraphNode,
@@ -432,7 +432,7 @@ function pickMainFlowEntry(nodes: GraphNode[], channel: string, message?: string
   const wanted = channel.toLowerCase();
   const msg = (message || "").toLowerCase();
 
-  // 1) Keyword trigger that matches this inbound wins — bypasses channel entry.
+  // 1) Keyword trigger that matches this inbound wins - bypasses channel entry.
   //    Lets authors wire "menu", "help", "start over" flows that fire no matter
   //    where the conversation currently is.
   const keywordTriggers = nodes.filter((n) => n.type === "keyword_trigger");
@@ -460,7 +460,7 @@ function pickMainFlowEntry(nodes: GraphNode[], channel: string, message?: string
   // 3) Any channel_entry (covers flows authored without channel-binding)
   const anyChannel = nodes.find((n) => n.type === "channel_entry");
   if (anyChannel) return anyChannel;
-  // 4) A Start node — rare for the main flow, but supported
+  // 4) A Start node - rare for the main flow, but supported
   return nodes.find((n) => n.type === "start") || null;
 }
 
@@ -487,11 +487,11 @@ async function walk(
       detail: { variable: ctx.resumingCollectInputVar, value: ctx.message },
     });
     // Fire-and-forget identity linking when the captured value is an email
-    // or phone — bridges the conversation to the existing CRM record so the
+    // or phone - bridges the conversation to the existing CRM record so the
     // FlowCanvas path matches what the autonomous AI agent does via
     // link_customer_identifier. Idempotent at the conversation-service end,
     // so the universal incoming.worker hook can safely re-fire. Only relevant
-    // to conversation-bound runs — context-free webhook runs never set
+    // to conversation-bound runs - context-free webhook runs never set
     // resumingCollectInputVar, but guard the id for type-safety regardless.
     if (ctx.conversationId) {
       void tryLinkIdentifierFromInbound({
@@ -542,7 +542,7 @@ async function walk(
 
       case "send_message_text": {
         // Conversation-bound runs use ctx.sendCtx (unchanged). Context-free
-        // webhook runs carry no sendCtx — resolve an explicit recipient from the
+        // webhook runs carry no sendCtx - resolve an explicit recipient from the
         // node so the text still dispatches through the existing outbound path.
         const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(node.data || {}, ctx));
         await sendText(String(node.data?.text || ""), ctx, sendCtx);
@@ -658,7 +658,7 @@ async function walk(
         // Looks the template up by id, builds Meta `components` from the
         // author-supplied variable map (with {{var}} interpolation against
         // ctx.vars), and dispatches via the WhatsApp adapter. Non-WhatsApp
-        // conversations fall through with a trace entry — flows mixing
+        // conversations fall through with a trace entry - flows mixing
         // channels won't crash.
         const result = await sendTemplate(node.data || {}, ctx);
         ctx.trace.push({ nodeId: node.id, type: node.type, action: result });
@@ -706,7 +706,7 @@ async function walk(
         };
       }
 
-      // ─── Trigger entries — walk through like `start` ───────────
+      // ─── Trigger entries - walk through like `start` ───────────
       case "keyword_trigger":
       case "comment_trigger":
       case "schedule_trigger":
@@ -716,7 +716,7 @@ async function walk(
         break;
       }
 
-      // ─── Set Variable — programmatic assignment ────────────────
+      // ─── Set Variable - programmatic assignment ────────────────
       case "set_variable": {
         const name = String(node.data?.variable || "").trim();
         if (name) {
@@ -733,7 +733,7 @@ async function walk(
         break;
       }
 
-      // ─── Collect Input — send prompt, pause, resume with reply ─
+      // ─── Collect Input - send prompt, pause, resume with reply ─
       case "collect_input": {
         const prompt = interpolate(String(node.data?.prompt || ""), ctx.vars);
         if (prompt) await sendText(prompt, ctx);
@@ -751,7 +751,7 @@ async function walk(
         };
       }
 
-      // ─── Wait / Delay — schedule delayed resume, halt ──────────
+      // ─── Wait / Delay - schedule delayed resume, halt ──────────
       case "wait": {
         const amount = Math.max(1, Number(node.data?.amount ?? 1));
         const unit = String(node.data?.unit || "seconds");
@@ -760,7 +760,7 @@ async function walk(
           unit === "minutes" ? amount * 60_000 :
                                amount * 1000;
         await persistVars(ctx);
-        // Context-free runs have no thread to resume — record the halt and stop
+        // Context-free runs have no thread to resume - record the halt and stop
         // rather than scheduling a resume job that could never fire.
         if (ctx.conversationId) {
           await prisma.conversation.update({
@@ -794,7 +794,7 @@ async function walk(
         };
       }
 
-      // ─── HTTP Request — call external API, capture response ────
+      // ─── HTTP Request - call external API, capture response ────
       case "http_request": {
         const method = String(node.data?.method || "GET").toUpperCase();
         const rawUrl = interpolate(String(node.data?.url || ""), ctx.vars);
@@ -818,7 +818,7 @@ async function walk(
             nodeId: node.id, type: node.type, action: "http_error",
             detail: { status, error },
           });
-          // Fall through to next node — authors can wire a Condition on the
+          // Fall through to next node - authors can wire a Condition on the
           // response variable to branch on failure.
           ctx.vars[responseVar] = { ok: false, status, error };
         } else {
@@ -833,13 +833,13 @@ async function walk(
         break;
       }
 
-      // ─── AI Generate — single-shot LLM (author-only for now) ───
+      // ─── AI Generate - single-shot LLM (author-only for now) ───
       case "ai_generate": {
         const prompt = interpolate(String(node.data?.prompt || ""), ctx.vars);
         const responseVar = String(node.data?.responseVariable || "ai_output").trim() || "ai_output";
         // The ai-service internal endpoint for raw single-shot generation is
         // not yet exposed. We log author intent, stash the prompt, and move
-        // on — wiring this to services/ai is the follow-up bug. Treat it as
+        // on - wiring this to services/ai is the follow-up bug. Treat it as
         // "returned empty string" so downstream interpolation doesn't crash.
         ctx.vars[responseVar] = "";
         ctx.trace.push({
@@ -850,7 +850,7 @@ async function walk(
         break;
       }
 
-      // ─── Update Customer — tag / attribute on the contact row ──
+      // ─── Update Customer - tag / attribute on the contact row ──
       case "update_customer": {
         const action = String(node.data?.action || "add_tag");
         const key = interpolate(String(node.data?.key || ""), ctx.vars).trim();
@@ -864,7 +864,7 @@ async function walk(
         break;
       }
 
-      // ─── Bring User Data — load contact fields into variables ──
+      // ─── Bring User Data - load contact fields into variables ──
       case "bring_user_data": {
         const fields: string[] = Array.isArray(node.data?.fields) ? node.data.fields : [];
         const prefix = String(node.data?.prefix || "customer").replace(/[^a-z0-9_]/gi, "");
@@ -895,7 +895,7 @@ async function walk(
 }
 
 // ─── Condition evaluation (graph-local, deterministic) ───────
-// Intent conditions require the LLM batch path in routing.service.ts — for the
+// Intent conditions require the LLM batch path in routing.service.ts - for the
 // graph walker we treat them as false so authors wire them through a Route-to-
 // agent node instead. Deterministic types are fully supported.
 
@@ -946,7 +946,7 @@ function evaluateSingle(c: any, ctx: FlowExecCtx): boolean {
 
 // Infer the outbound channel from the shape of an explicit recipient. An "@"
 // marks an email address; an otherwise phone-like value (digits with optional
-// +, spaces, dashes, parens) is treated as WhatsApp — the only channel that
+// +, spaces, dashes, parens) is treated as WhatsApp - the only channel that
 // carries templates today and the default for plain phone delivery. Returns
 // null when the value matches neither, so the caller skips rather than guessing.
 function inferChannelFromRecipient(recipient: string): string | null {
@@ -963,7 +963,7 @@ function inferChannelFromRecipient(recipient: string): string | null {
 // mapper UI, Card 5). Mirrors the broadcast/outgoing-worker resolution: pick an
 // active ChannelAccount for the tenant+channel and decrypt its credentials.
 // Returns null when no recipient is configured or no active account backs the
-// channel — callers then no-op exactly as before.
+// channel - callers then no-op exactly as before.
 async function buildExplicitSendCtx(
   data: Record<string, any>,
   ctx: FlowExecCtx,
@@ -1040,7 +1040,7 @@ async function sendMedia(
     await persistOutbound(ctx, resolvedCaption || resolvedUrl, mediaType, extId, { url: resolvedUrl, filename: resolvedName });
     return;
   }
-  // Adapter doesn't support media — fall back to text with URL so the user at
+  // Adapter doesn't support media - fall back to text with URL so the user at
   // least gets the link instead of silent failure.
   const fallback = resolvedCaption ? `${resolvedCaption}\n${resolvedUrl}` : resolvedUrl;
   await sendText(fallback, ctx);
@@ -1064,7 +1064,7 @@ function extractTemplatePlaceholders(text: string | null | undefined): string[] 
 // Resolve a `crm:<field>` token against a Contact row. Mirrors the alias
 // surface used by outbound/scheduled (resolveCrmFieldFromContact) so flow
 // authors get the same field names regardless of which sender path runs.
-// Returns "" when the field can't be resolved — buildTemplateComponents
+// Returns "" when the field can't be resolved - buildTemplateComponents
 // then falls back to the template's declared sample.
 function resolveCrmField(
   field: string,
@@ -1183,13 +1183,13 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   // the trace JSON. Keep prefix stable: `[flow.template]`.
   const tag = "[flow.template]";
   // Conversation-bound runs use ctx.sendCtx (unchanged). Context-free webhook
-  // runs carry no sendCtx — resolve an explicit recipient from the node so the
+  // runs carry no sendCtx - resolve an explicit recipient from the node so the
   // template still dispatches through the existing WhatsApp outbound path.
   const sendCtx = ctx.sendCtx ?? (await buildExplicitSendCtx(data, ctx));
   if (!sendCtx) { console.warn(`${tag} skip no_send_ctx conv=${ctx.conversationId}`); return "skipped_no_send_ctx"; }
   const templateId = String(data.templateId || "").trim();
   if (!templateId) { console.warn(`${tag} skip no_template conv=${ctx.conversationId}`); return "skipped_no_template"; }
-  // Templates are a WhatsApp-only concept — if the resolved recipient is on any
+  // Templates are a WhatsApp-only concept - if the resolved recipient is on any
   // other channel, log and skip rather than crash. Flow author can still
   // pipe the same playbook through multiple channels safely.
   if (String(sendCtx.channel).toUpperCase() !== "WHATSAPP") {
@@ -1209,7 +1209,7 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
   }
 
   // Look up the Contact backing this conversation so `crm:<field>` tokens
-  // (set in the inspector) can resolve. Best-effort — when there's no
+  // (set in the inspector) can resolve. Best-effort - when there's no
   // contact row, crm tokens fall back to the template's declared sample.
   // Context-free runs have no conversation/contact: crm tokens fall back to
   // the declared sample, while plain `{{body.*}}` values still interpolate.
@@ -1228,7 +1228,7 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
         select: { displayName: true, email: true, phone: true, source: true, metadata: true },
       });
     }
-    // Fall back to the conversation's customerName when no Contact exists yet —
+    // Fall back to the conversation's customerName when no Contact exists yet -
     // keeps simple `crm:displayName` mappings working on first inbound.
     if (!contact && conversationRow) {
       contact = { displayName: conversationRow.customerName };
@@ -1368,7 +1368,7 @@ async function dispatchRoute(
     });
     return "DEPARTMENT";
   }
-  // Unassigned human — park the conversation in WAITING for a person to claim.
+  // Unassigned human - park the conversation in WAITING for a person to claim.
   await prisma.conversation.update({
     where: { id: ctx.conversationId },
     data: { status: "WAITING", handledBy: "human" },
@@ -1383,7 +1383,7 @@ async function applyEnd(
   // Context-free run: no Conversation row to transition. The End node just
   // terminates the walk.
   if (!ctx.conversationId) return;
-  // The flow has terminated — drop chatbot state so the next inbound is NOT
+  // The flow has terminated - drop chatbot state so the next inbound is NOT
   // resumed back into the last paused node (which would re-capture every
   // future message into the Collect Input variable and loop the greeting).
   const clearFlow = { chatbotNodeId: null, chatbotFlowId: null } as const;
@@ -1398,7 +1398,7 @@ async function applyEnd(
       data: { ...clearFlow, status: "WAITING", handledBy: "human" },
     });
   } else {
-    // "wait_for_reply" — flow is done; release the conversation back to the
+    // "wait_for_reply" - flow is done; release the conversation back to the
     // inbox (handledBy=null) so the next inbound surfaces for a human and
     // does not re-enter the graph walker.
     await prisma.conversation.update({
@@ -1413,7 +1413,7 @@ async function applyEnd(
 /**
  * Replace `{{var_name}}` (and dotted paths like `{{customer.email}}`) in a
  * string with values from the flow's variable store. Missing keys render as
- * empty strings — flow authors can guard with a Condition on the var if they
+ * empty strings - flow authors can guard with a Condition on the var if they
  * need fallback behavior.
  */
 function interpolate(text: string, vars: Record<string, any>): string {
@@ -1453,7 +1453,7 @@ function getByPath(obj: any, path: string): any {
  */
 async function persistVars(ctx: FlowExecCtx): Promise<void> {
   // Context-free runs (webhook triggers) have no Conversation row to persist
-  // variables to — the store lives only for the duration of the walk.
+  // variables to - the store lives only for the duration of the walk.
   if (!ctx.conversationId) return;
   try {
     await prisma.conversation.update({
@@ -1469,7 +1469,7 @@ async function persistVars(ctx: FlowExecCtx): Promise<void> {
  * Fetch with SSRF guard + timeout. Blocks internal IP ranges (10.x, 127.x,
  * 172.16-31.x, 192.168.x, link-local, metadata endpoints) so a flow author
  * can't point HTTP Request at an internal service. This is NOT a substitute
- * for a proper allowlist — it's a floor.
+ * for a proper allowlist - it's a floor.
  */
 async function safeFetch(
   url: string,

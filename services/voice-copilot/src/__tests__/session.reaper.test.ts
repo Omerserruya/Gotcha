@@ -185,7 +185,7 @@ describe("Reaper", () => {
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));
 
-    // Second tick — lock held so scan should NOT run again
+    // Second tick - lock held so scan should NOT run again
     deps.clock.advance(1001);
     await new Promise((r) => setImmediate(r));
     await new Promise((r) => setImmediate(r));

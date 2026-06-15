@@ -20,7 +20,7 @@ async function main() {
       firstTakeCareEnabled: true,
     },
   });
-  console.log(`Tenant: ${tenant.name} (${tenant.id}) — ACTIVE`);
+  console.log(`Tenant: ${tenant.name} (${tenant.id}) - ACTIVE`);
 
   // ─── Business Profile ────────────────────────────────────────
   await prisma.businessProfile.upsert({
@@ -347,7 +347,7 @@ async function main() {
     create: { tenantId: tenant.id, tenantIntegrationId: hubspotTenantInt.id, catalogToolId: catalogCreateDeal.id, isEnabled: true },
   });
 
-  console.log("Tenant integrations: Shopify (CONNECTED), HubSpot (CONNECTED) — 5 tools enabled");
+  console.log("Tenant integrations: Shopify (CONNECTED), HubSpot (CONNECTED) - 5 tools enabled");
 
   // ─── Agent Tool Permissions ──────────────────────────────────
   // Sales: HubSpot Customer Lookup (auto), HubSpot Create Deal (auto)
@@ -383,7 +383,7 @@ async function main() {
   const now = new Date();
   const ago = (minutes: number) => new Date(now.getTime() - minutes * 60000);
 
-  // Conversation 1: WhatsApp — Sales inquiry (assigned, multi-message)
+  // Conversation 1: WhatsApp - Sales inquiry (assigned, multi-message)
   const conv1 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -410,7 +410,7 @@ async function main() {
     });
   }
 
-  // Conversation 2: Messenger — Support issue (open, waiting on customer)
+  // Conversation 2: Messenger - Support issue (open, waiting on customer)
   const conv2 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -436,7 +436,7 @@ async function main() {
     });
   }
 
-  // Conversation 3: Instagram — New lead (unassigned)
+  // Conversation 3: Instagram - New lead (unassigned)
   const conv3 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -452,7 +452,7 @@ async function main() {
     data: { tenantId: tenant.id, conversationId: conv3.id, channel: "INSTAGRAM", direction: "INBOUND", body: "Love your product! How much is the starter plan? Also do you integrate with Shopify?", senderName: "Noa Mizrahi", status: "DELIVERED", createdAt: ago(5) },
   });
 
-  // Conversation 4: Gmail — Billing question (assigned)
+  // Conversation 4: Gmail - Billing question (assigned)
   const conv4 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -477,7 +477,7 @@ async function main() {
     });
   }
 
-  // Conversation 5: Slack — Internal request
+  // Conversation 5: Slack - Internal request
   const conv5 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -492,10 +492,10 @@ async function main() {
     },
   });
   await prisma.message.create({
-    data: { tenantId: tenant.id, conversationId: conv5.id, channel: "SLACK", direction: "INBOUND", body: "Quick question — can we get an API key for the sandbox environment? We want to test the integration before going live.", senderName: "Ron Peretz", status: "DELIVERED", createdAt: ago(10) },
+    data: { tenantId: tenant.id, conversationId: conv5.id, channel: "SLACK", direction: "INBOUND", body: "Quick question - can we get an API key for the sandbox environment? We want to test the integration before going live.", senderName: "Ron Peretz", status: "DELIVERED", createdAt: ago(10) },
   });
 
-  // Conversation 6: WhatsApp — Closed conversation (for history/replay)
+  // Conversation 6: WhatsApp - Closed conversation (for history/replay)
   const conv6 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -515,7 +515,7 @@ async function main() {
     { dir: "INBOUND" as const, body: "Hi, we're evaluating communication platforms for our enterprise. What API capabilities do you offer?", sender: "Amit Goldberg", at: ago(120) },
     { dir: "OUTBOUND" as const, body: "Welcome Amit! Our Enterprise plan includes full REST API access, webhooks, and SDKs for Node.js, Python, and Java. What's your use case?", sender: "Dana Avraham", at: ago(115) },
     { dir: "INBOUND" as const, body: "We need to integrate with our existing CRM (Salesforce) and have automated messaging for order updates.", sender: "Amit Goldberg", at: ago(100) },
-    { dir: "OUTBOUND" as const, body: "Great news — we have native Salesforce integration and support automated transactional messages. I'll schedule a technical demo. Does Thursday work?", sender: "Dana Avraham", at: ago(90) },
+    { dir: "OUTBOUND" as const, body: "Great news - we have native Salesforce integration and support automated transactional messages. I'll schedule a technical demo. Does Thursday work?", sender: "Dana Avraham", at: ago(90) },
     { dir: "INBOUND" as const, body: "Thursday at 2pm works. Send me a calendar invite to amit@goldberg-tech.com", sender: "Amit Goldberg", at: ago(80) },
     { dir: "OUTBOUND" as const, body: "Done! You'll receive the invite shortly. Looking forward to the demo. Have a great day!", sender: "Dana Avraham", at: ago(65) },
   ];
@@ -651,7 +651,7 @@ async function main() {
       knowledgeBaseId: kb.id,
       tenantId: tenant.id,
       title: "Pricing & Plans",
-      content: "We offer 3 plans:\n\n**Starter** — $49/mo: Up to 5 agents, WhatsApp + Messenger, basic analytics\n**Pro** — $149/mo: Up to 20 agents, all channels, AI copilot, advanced analytics, knowledge base\n**Enterprise** — Custom pricing: Unlimited agents, dedicated support, API access, custom integrations, SLA guarantees\n\nAll plans include a 14-day free trial. Annual billing saves 20%.",
+      content: "We offer 3 plans:\n\n**Starter** - $49/mo: Up to 5 agents, WhatsApp + Messenger, basic analytics\n**Pro** - $149/mo: Up to 20 agents, all channels, AI copilot, advanced analytics, knowledge base\n**Enterprise** - Custom pricing: Unlimited agents, dedicated support, API access, custom integrations, SLA guarantees\n\nAll plans include a 14-day free trial. Annual billing saves 20%.",
       sourceType: "text",
       status: "indexed",
       chunkCount: 1,
@@ -769,6 +769,92 @@ async function main() {
     });
   }
   console.log(`Action contracts: ${ACTION_CONTRACTS.map((c) => c.trigger).join(", ")}`);
+
+  // ─── Industry Intelligence Packs (V2 - system, shared) ───────
+  // Each pack `fields` entry is a scope-tagged template cloned into
+  // per-tenant FieldDefinition rows when applied. scope/type are lowercase
+  // here and normalized to the Prisma enums by the apply route.
+  // See docs/customer-intelligence-domain-model.md §4.4.
+  type PackField = {
+    key: string;
+    label: string;
+    type: "text" | "number" | "boolean" | "enum" | "date";
+    scope: "customer" | "opportunity" | "conversation";
+    options?: string[];
+    required?: boolean;
+  };
+  const SYSTEM_PACKS: { slug: string; name: string; fields: PackField[] }[] = [
+    {
+      slug: "event_hall",
+      name: "Event Hall",
+      fields: [
+        { key: "event_type", label: "Event Type", type: "enum", scope: "opportunity", options: ["wedding", "bar_mitzvah", "bat_mitzvah", "brit", "corporate", "other"] },
+        { key: "event_date", label: "Event Date", type: "text", scope: "opportunity" },
+        { key: "event_time", label: "Event Time", type: "text", scope: "opportunity" },
+        { key: "guest_count", label: "Guest Count", type: "number", scope: "opportunity", required: true },
+        { key: "budget", label: "Budget", type: "number", scope: "opportunity" },
+        { key: "kosher_level", label: "Kosher Level", type: "enum", scope: "opportunity", options: ["regular", "mehadrin", "badatz"] },
+        { key: "outdoor_ceremony", label: "Outdoor Ceremony", type: "boolean", scope: "opportunity" },
+        { key: "parking_required", label: "Parking Required", type: "boolean", scope: "opportunity" },
+        { key: "special_requests", label: "Special Requests", type: "text", scope: "opportunity" },
+        { key: "bride_name", label: "Bride Name", type: "text", scope: "opportunity" },
+        { key: "groom_name", label: "Groom Name", type: "text", scope: "opportunity" },
+      ],
+    },
+    {
+      slug: "real_estate",
+      name: "Real Estate",
+      fields: [
+        { key: "property_type", label: "Property Type", type: "enum", scope: "opportunity", options: ["apartment", "house", "penthouse", "commercial", "land"] },
+        { key: "rooms", label: "Rooms", type: "number", scope: "opportunity" },
+        { key: "budget", label: "Budget", type: "number", scope: "opportunity" },
+        { key: "location", label: "Location", type: "text", scope: "opportunity" },
+        { key: "move_date", label: "Move Date", type: "text", scope: "opportunity" },
+        { key: "mortgage_required", label: "Mortgage Required", type: "boolean", scope: "opportunity" },
+      ],
+    },
+    {
+      slug: "recruiting",
+      name: "Recruiting",
+      fields: [
+        { key: "desired_position", label: "Desired Position", type: "text", scope: "opportunity" },
+        { key: "expected_salary", label: "Expected Salary", type: "number", scope: "opportunity" },
+        { key: "availability", label: "Availability", type: "text", scope: "opportunity" },
+        { key: "experience_years", label: "Years of Experience", type: "number", scope: "customer" },
+        { key: "security_clearance", label: "Security Clearance", type: "boolean", scope: "customer" },
+      ],
+    },
+    {
+      slug: "ecommerce",
+      name: "E-commerce",
+      fields: [
+        { key: "order_number", label: "Order Number", type: "text", scope: "opportunity" },
+        { key: "order_status", label: "Order Status", type: "enum", scope: "opportunity", options: ["pending", "shipped", "delivered", "returned", "cancelled"] },
+        { key: "product", label: "Product", type: "text", scope: "opportunity" },
+        { key: "refund_requested", label: "Refund Requested", type: "boolean", scope: "opportunity" },
+        { key: "shipping_issue", label: "Shipping Issue", type: "boolean", scope: "opportunity" },
+        { key: "delivery_date", label: "Delivery Date", type: "text", scope: "opportunity" },
+      ],
+    },
+  ];
+  for (const pack of SYSTEM_PACKS) {
+    // tenantId is null for system packs; the (tenantId, slug) unique index
+    // treats NULLs as distinct, so use findFirst + update/create for idempotency.
+    const existing = await prisma.intelligencePack.findFirst({
+      where: { tenantId: null, slug: pack.slug },
+    });
+    if (existing) {
+      await prisma.intelligencePack.update({
+        where: { id: existing.id },
+        data: { name: pack.name, fields: pack.fields as any, isSystem: true },
+      });
+    } else {
+      await prisma.intelligencePack.create({
+        data: { tenantId: null, slug: pack.slug, name: pack.name, fields: pack.fields as any, isSystem: true },
+      });
+    }
+  }
+  console.log(`Industry packs: ${SYSTEM_PACKS.map((p) => p.slug).join(", ")}`);
 
   // ─── Done ───────────────────────────────────────────────────
   console.log("\n✅ Seed complete!\n");

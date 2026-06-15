@@ -43,14 +43,14 @@ interface WsState {
   streamSid?: string;
   callSid?: string;
   graceTimer?: { cancel(): void };
-  /** Media frames that arrived before session was ready — replayed on bootstrap. */
+  /** Media frames that arrived before session was ready - replayed on bootstrap. */
   pendingMedia?: import("../session/session").MediaFrameParsed[];
   /** Conference-mode: fixed speaker for this WS (one participant = one speaker).
    *  Resolved from `customParameters.speaker` on the `start` frame. */
   fixedSpeaker?: import("../stt/provider").Speaker;
 }
 
-const PENDING_MEDIA_MAX = 200; // ≈ 4 s of 20 ms frames — covers the start-handler gap
+const PENDING_MEDIA_MAX = 200; // ≈ 4 s of 20 ms frames - covers the start-handler gap
 
 // In-process map: callSid → { session, ws }
 const liveSessionMap = new Map<string, { session: Session; ws: WebSocket }>();
@@ -80,7 +80,7 @@ export function attachTwilioHandler(
   // Track active connections independently of wss.clients (testability)
   let activeConnections = 0;
 
-  // Legacy injection points (kept for test compat — see TwilioHandlerDeps).
+  // Legacy injection points (kept for test compat - see TwilioHandlerDeps).
   const getToken: (tenantId: string) => Promise<string> =
     deps.getTwilioAuthToken ??
     (async (tenantId: string) => {
@@ -110,7 +110,7 @@ export function attachTwilioHandler(
       }
       return valid ? { kind: "ok" } : { kind: "signature_mismatch" };
     }
-    // Legacy path — identical to the pre-seam implementation.
+    // Legacy path - identical to the pre-seam implementation.
     let authToken: string;
     try {
       authToken = await getToken(tenantId);
@@ -130,7 +130,7 @@ export function attachTwilioHandler(
     const match = PATH_RE.exec(url);
 
     if (!match) {
-      // Not our path — destroy without responding
+      // Not our path - destroy without responding
       socket.destroy();
       return;
     }
@@ -138,7 +138,7 @@ export function attachTwilioHandler(
     const tenantId = match[1];
 
     // Validate Twilio signature. For Media Streams, Twilio signs the URL
-    // exactly as given in <Stream url="..."> — typically wss:// — but TLS
+    // exactly as given in <Stream url="..."> - typically wss:// - but TLS
     // terminates upstream of nginx so we don't know the original scheme for
     // sure. Try every plausible variant before rejecting.
     const host = req.headers.host ?? "localhost";
@@ -164,7 +164,7 @@ export function attachTwilioHandler(
       return;
     }
 
-    // Valid upgrade — hand off to WS server
+    // Valid upgrade - hand off to WS server
     wss.handleUpgrade(req, socket, head, (ws) => {
       wss.emit("connection", ws, req, { tenantId });
     });
@@ -183,7 +183,7 @@ export function attachTwilioHandler(
     activeConnections++;
 
     if (activeConnections > maxConcurrent) {
-      logger.warn({ tenantId }, "twilio-handler: overload — rejecting connection");
+      logger.warn({ tenantId }, "twilio-handler: overload - rejecting connection");
       metrics.voiceOverload.inc();
       activeConnections--;
       ws.close(1013, "overload");
@@ -311,7 +311,7 @@ export function attachTwilioHandler(
 
             // Replay any media frames that arrived during the async bootstrap.
             // Yield to the event loop between frames so live frames arriving
-            // concurrently interleave cleanly — no replay-burst starvation.
+            // concurrently interleave cleanly - no replay-burst starvation.
             if (state.pendingMedia && state.pendingMedia.length > 0) {
               const buffered = state.pendingMedia;
               state.pendingMedia = undefined;
@@ -327,7 +327,7 @@ export function attachTwilioHandler(
           case "media": {
             const mediaFrame = frame as import("../session/session").MediaFrameParsed;
             if (!state.session) {
-              // Session not ready yet — buffer, don't drop. Drop-oldest on overflow.
+              // Session not ready yet - buffer, don't drop. Drop-oldest on overflow.
               if (!state.pendingMedia) state.pendingMedia = [];
               if (state.pendingMedia.length >= PENDING_MEDIA_MAX) {
                 state.pendingMedia.shift();
@@ -369,7 +369,7 @@ export function attachTwilioHandler(
     });
 
     // ----------------------------------------------------------------
-    // Close handler — schedule grace period
+    // Close handler - schedule grace period
     // ----------------------------------------------------------------
     ws.on("close", async () => {
       activeConnections = Math.max(0, activeConnections - 1);
@@ -382,7 +382,7 @@ export function attachTwilioHandler(
       const session = state.session;
       const callSid = state.callSid;
 
-      // Schedule grace timer — if it fires without reconnect, end session
+      // Schedule grace timer - if it fires without reconnect, end session
       state.graceTimer = clock.setTimeout(async () => {
         if (session.state !== "ended") {
           try {

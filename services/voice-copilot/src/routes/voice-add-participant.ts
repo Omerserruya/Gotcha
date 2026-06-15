@@ -1,7 +1,7 @@
 /**
  * POST /api/voice-copilot/sessions/:sessionId/add-participant
  *
- * Internal-only — protected by `X-Internal-Key`. Lets the conversation
+ * Internal-only - protected by `X-Internal-Key`. Lets the conversation
  * service surface an "Add participant" button on the workspace without
  * needing per-tenant Twilio credentials.
  *
@@ -12,7 +12,7 @@
  * reads the conferenceSid out of the Redis stash that
  * `/twiml/conference-status` populates on participant-join, and dials the
  * new leg into the same conference. The added participant is NOT marked
- * `endConferenceOnExit` — when they leave the call continues for the
+ * `endConferenceOnExit` - when they leave the call continues for the
  * agent + customer.
  */
 import { Router, Request, Response } from "express";
@@ -68,7 +68,7 @@ export function createVoiceAddParticipantRouter(opts: {
       return;
     }
 
-    // Derive the friendlyName the conference is registered under —
+    // Derive the friendlyName the conference is registered under -
     // mirrors how twilio-twiml.ts builds it for outbound, and how
     // voice-incoming.ts builds it for inbound.
     const friendlyName = session.direction === "outbound"
@@ -150,14 +150,14 @@ export function createVoiceAddParticipantRouter(opts: {
         from: callerId,
         to,
         label,
-        // Crucially false — when the added party hangs up the call keeps
+        // Crucially false - when the added party hangs up the call keeps
         // going for the agent + customer.
         endConferenceOnExit: false,
       });
       logger.info({ sessionId, to, label, conferenceSid: meta.conferenceSid, participantId }, "add-participant: dialed");
       res.json({ data: { id: participantId, to, label, conferenceSid: meta.conferenceSid } });
     } catch (err: any) {
-      // Dial failed — mark the pre-inserted row as FAILED so the UI can
+      // Dial failed - mark the pre-inserted row as FAILED so the UI can
       // surface the error and stop showing a "Dialing..." spinner.
       await prisma.voiceSessionParticipant.update({
         where: { id: participantId },

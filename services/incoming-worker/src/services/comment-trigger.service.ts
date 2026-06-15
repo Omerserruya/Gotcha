@@ -5,7 +5,7 @@
  * Public comments on FB / IG don't fit the conversation+message model the
  * rest of the engine is built around. They fan out 0..N flow runs, each one
  * scoped to a single comment, and the bot's first reply must use the
- * Private Reply API (recipient.comment_id) — Meta's only path to DM a
+ * Private Reply API (recipient.comment_id) - Meta's only path to DM a
  * commenter who hasn't messaged us first.
  *
  * Lifecycle:
@@ -52,7 +52,7 @@ interface CommentSendCtx {
 export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promise<void> {
   const { tenantId, channel, channelAccountId, comment } = job.data;
 
-  // Tenant gate — skip work for non-active tenants (mirrors message worker).
+  // Tenant gate - skip work for non-active tenants (mirrors message worker).
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
     select: { status: true },
@@ -75,9 +75,9 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
     typeof rawCreds === "string" ? decryptCredentials(rawCreds) : ((rawCreds as any) || {});
 
   // Comment triggers can live in two places:
-  //   1) FlowCanvas — the Main Playbook (one canvas per tenant). This is where
+  //   1) FlowCanvas - the Main Playbook (one canvas per tenant). This is where
   //      the CommentTriggerBody UI in node-registry.tsx writes.
-  //   2) ChatbotFlow — sub-flows that opted into comment_trigger via the
+  //   2) ChatbotFlow - sub-flows that opted into comment_trigger via the
   //      unified-graph set in chatbot-engine.service.ts. Less common but
   //      supported. We pull from both and merge.
   type FlowSource = { id: string; nodes: GraphNode[]; edges: GraphEdge[] };
@@ -104,9 +104,9 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
 
   // Find every candidate trigger across all sources and score by specificity.
   // Priority (higher wins):
-  //   3 — keyword match AND specific postId
-  //   2 — keyword match (any post)  OR  specific postId (any keywords)
-  //   1 — any comment (no keyword filter, any post)
+  //   3 - keyword match AND specific postId
+  //   2 - keyword match (any post)  OR  specific postId (any keywords)
+  //   1 - any comment (no keyword filter, any post)
   // Ties are broken by source order (canvas before sub-flows) then trigger id.
   type Candidate = {
     src: { id: string; nodes: GraphNode[]; edges: GraphEdge[] };
@@ -178,7 +178,7 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
     }
     console.log(
       `[comment-trigger] No match for inbound channelAccountId=${channelAccountId} post=${comment.postId}. ` +
-        `Seen triggers: ${seen.length === 0 ? "(none — playbook has no comment_trigger nodes)" : JSON.stringify(seen)}`,
+        `Seen triggers: ${seen.length === 0 ? "(none - playbook has no comment_trigger nodes)" : JSON.stringify(seen)}`,
     );
   }
 }
@@ -189,10 +189,10 @@ export async function processCommentTrigger(job: Job<IncomingCommentJob>): Promi
  * Returns a positive score when the trigger matches the inbound comment,
  * higher = more specific. Returns 0 when the trigger doesn't match at all.
  *
- *   3 — keyword match AND specific postId
- *   2 — keyword match (any post)  OR  specific postId (any keywords)
- *   1 — any-comment trigger (no keyword filter, no postId)
- *   0 — channel mismatch / channelAccount mismatch / keyword filter missed
+ *   3 - keyword match AND specific postId
+ *   2 - keyword match (any post)  OR  specific postId (any keywords)
+ *   1 - any-comment trigger (no keyword filter, no postId)
+ *   0 - channel mismatch / channelAccount mismatch / keyword filter missed
  */
 function scoreTriggerMatch(
   trig: GraphNode,
@@ -248,7 +248,7 @@ interface WalkArgs {
   comment: IncomingCommentJob["comment"];
   send: CommentSendCtx;
   // Set when the trigger lives in a ChatbotFlow row (sub-flow). Null for
-  // FlowCanvas (Main Playbook) — the resume path then keys off
+  // FlowCanvas (Main Playbook) - the resume path then keys off
   // conversation.chatbotNodeId without a flowId.
   sourceChatbotFlowId: string | null;
 }
@@ -346,13 +346,13 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
       }
 
       case "send_comment_reply": {
-        // Public reply on the original post — visible to everyone, distinct
+        // Public reply on the original post - visible to everyone, distinct
         // from Private Reply DM. data.mode picks "text" or "ai":
-        //   text — use data.text (interpolated). Simple announce-and-reply.
-        //   ai   — call data.agentId with the inbound comment text and use
+        //   text - use data.text (interpolated). Simple announce-and-reply.
+        //   ai   - call data.agentId with the inbound comment text and use
         //          the agent's response. data.fallbackText (optional) is sent
         //          when generation fails so the flow doesn't go silent.
-        // Doesn't change recipientPsid — the run can still continue into
+        // Doesn't change recipientPsid - the run can still continue into
         // Private Reply / DM nodes after this.
         const mode = String(node.data?.mode || "text").toLowerCase();
         let body = "";
@@ -388,13 +388,13 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
       case "end":
       case "route_target":
       case "default_fallback": {
-        // Comment-triggered runs are ephemeral — there's no Conversation row
+        // Comment-triggered runs are ephemeral - there's no Conversation row
         // to flip into HUMAN/WAITING, no session to close. Stop walking.
         console.log(`[comment-trigger] Reached terminal/route node (${node.type}); stopping`);
         return;
       }
 
-      // Pause-y nodes — promote the comment-triggered run into a real
+      // Pause-y nodes - promote the comment-triggered run into a real
       // Conversation. Send the message via Private Reply (which captures
       // the PSID Meta returns), then create/find a Conversation keyed on
       // that PSID and persist the paused state. The next inbound DM from
@@ -428,7 +428,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
         return;
       }
 
-      // Still unsupported in the comment context — these need infrastructure
+      // Still unsupported in the comment context - these need infrastructure
       // we don't replicate inline (HTTP timer, AI usage, contact mutations,
       // delayed resume queue). Bail with a clear log.
       case "wait":
@@ -442,7 +442,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
         return;
 
       default:
-        // Unknown node — walk past it like the main executor does for safety.
+        // Unknown node - walk past it like the main executor does for safety.
         break;
     }
 
@@ -455,7 +455,7 @@ async function runCommentFlow(args: WalkArgs): Promise<void> {
 // Called when the walker hits a pause-y node. After the Private Reply has
 // landed (so we have a PSID), create or find a Conversation keyed on that
 // PSID and persist the paused state. From here the run is indistinguishable
-// from a DM-initiated flow — next inbound DM is picked up by
+// from a DM-initiated flow - next inbound DM is picked up by
 // incoming.worker.ts which resumes via executeMainFlow / executeSubFlow with
 // resumeNodeId = conversation.chatbotNodeId.
 async function promoteToConversation(
@@ -468,9 +468,9 @@ async function promoteToConversation(
     console.warn("[comment-trigger] Cannot promote: no PSID captured (Private Reply must have failed)");
     return;
   }
-  const channel = args.send.channel; // "INSTAGRAM" | "MESSENGER" — matches enum
+  const channel = args.send.channel; // "INSTAGRAM" | "MESSENGER" - matches enum
   // findFirst keyed on (tenantId, channel, customerExternalId) and not CLOSED
-  // — same lookup the message worker does. We can't use a unique index
+  // - same lookup the message worker does. We can't use a unique index
   // because Conversation has no compound unique on (tenant, channel, psid).
   let conv = await prisma.conversation.findFirst({
     where: {
@@ -516,11 +516,11 @@ async function promoteToConversation(
 // ─── Outbound: Private Reply, then DM by PSID ──────────────────────────────
 //
 // Three send shapes, all using the same first-send-is-Private-Reply rule:
-//   sendOutbound            — plain text
-//   sendOutboundWithButtons — quick-reply / buttons (IG+Messenger render as
+//   sendOutbound            - plain text
+//   sendOutboundWithButtons - quick-reply / buttons (IG+Messenger render as
 //                             quick_replies; Meta supports them on the very
 //                             first private reply)
-//   sendOutboundMedia       — image / document. Private Reply doesn't accept
+//   sendOutboundMedia       - image / document. Private Reply doesn't accept
 //                             media payloads, so we prime the PSID with a
 //                             text private reply (caption / filename / URL)
 //                             and emit the media via the regular DM endpoint.
@@ -587,7 +587,7 @@ async function sendOutboundWithButtons(
   }
 
   // First send: Private Reply with quick_replies attached. IG and Messenger
-  // adapters both pass a `quickReplies` arg straight through to Meta — buttons
+  // adapters both pass a `quickReplies` arg straight through to Meta - buttons
   // land on the very first private reply.
   if (!send.recipientPsid) {
     if (!adapter.sendPrivateReply) {
@@ -641,7 +641,7 @@ async function sendOutboundMedia(
   }
 
   // Prime the PSID via a text Private Reply, since Meta's Private Reply API
-  // only accepts text + quick_replies — never an attachment payload. Caption
+  // only accepts text + quick_replies - never an attachment payload. Caption
   // (when present) doubles as the priming message; otherwise filename, then
   // the URL itself, so the user always sees coherent content.
   if (!send.recipientPsid) {
@@ -651,7 +651,7 @@ async function sendOutboundMedia(
       mediaUrl;
     const ok = await sendOutbound(send, priming);
     if (!ok) return false;
-    // Caption already shown by the priming send — don't echo it on the media.
+    // Caption already shown by the priming send - don't echo it on the media.
     caption = undefined;
   }
 
@@ -661,7 +661,7 @@ async function sendOutboundMedia(
   }
 
   if (!adapter.sendMediaMessage) {
-    // No native media support on this adapter — degrade to a text DM with the
+    // No native media support on this adapter - degrade to a text DM with the
     // URL so the user at least sees the link.
     const fallback = caption ? `${caption}\n${mediaUrl}` : mediaUrl;
     return sendOutbound(send, fallback);
@@ -684,7 +684,7 @@ async function sendOutboundMedia(
 
 // Public-comment reply (NOT a DM). IG: POST /{ig-comment-id}/replies.
 // Messenger: POST /{comment-id}/comments. The walker continues regardless of
-// outcome — the run is allowed to drop into a private DM afterwards.
+// outcome - the run is allowed to drop into a private DM afterwards.
 async function sendCommentReplyOutbound(send: CommentSendCtx, text: string): Promise<boolean> {
   const adapter = getOutboundAdapter(send.channel);
   if (!adapter) {

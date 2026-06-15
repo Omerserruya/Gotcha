@@ -1,5 +1,5 @@
 /**
- * System Copilot — agent runtime.
+ * System Copilot - agent runtime.
  *
  * The conversational loop powering the Command Center. On each `run()` call:
  *   1. Load short-term memory + UI context.
@@ -24,6 +24,7 @@ import {
   appendToMemory,
   getAgentMemory,
   memoryToChatMessages,
+  sanitizeHistoryForLLM,
 } from "./agent-memory.service";
 import { buildAgentContext } from "./agent-context.service";
 import type { ClientContext, OperatorContext } from "./agent-context.service";
@@ -81,7 +82,7 @@ export async function runAgent(
 ): Promise<void> {
   await onEvent({ type: "ready", sessionId: input.sessionId });
 
-  // 1. UI context — resolved IDs travel with the tool dispatcher so calls
+  // 1. UI context - resolved IDs travel with the tool dispatcher so calls
   //    like `system_summarize_conversation` can default to the selected
   //    conversation without an explicit arg.
   const ctxBuilt = await buildAgentContext({ operator: input.operator, client: input.client ?? null });
@@ -96,7 +97,7 @@ export async function runAgent(
   const chatMessages: any[] = [
     { role: "system", content: SYSTEM_PROMPT },
     { role: "system", content: ctxBuilt.block },
-    ...memoryToChatMessages(history),
+    ...sanitizeHistoryForLLM(memoryToChatMessages(history)),
     { role: "user", content: input.message },
   ];
 
@@ -154,7 +155,7 @@ export async function runAgent(
     }
 
     if (!finalToolCalls || finalToolCalls.length === 0) {
-      // Model is done — final answer turn.
+      // Model is done - final answer turn.
       if (finalContent && !input.ephemeral) {
         await appendToMemory({
           tenantId: input.operator.tenantId,

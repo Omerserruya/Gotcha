@@ -254,10 +254,10 @@ const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-int
 
 /**
  * Ask the AI service for the CRM-side identifiers (phone, email, every
- * GOTCHA-prefixed channel id custom field — gotcha_psid_instagram,
+ * GOTCHA-prefixed channel id custom field - gotcha_psid_instagram,
  * gotcha_wa_id, etc.) tied to this conversation's linked Lead/Contact. The
- * CRM is authoritative — local Contact rows can be sparse or missing for
- * some channels — so the History walk uses these to find every
+ * CRM is authoritative - local Contact rows can be sparse or missing for
+ * some channels - so the History walk uses these to find every
  * conversation across every channel for the same person.
  *
  * Returns null on any failure; the caller falls back to local-only matching.
@@ -297,12 +297,12 @@ export async function getHistoryByCustomerExternalId(
   // Cross-platform history walk. The bare (tenantId, customerExternalId) lookup
   // only finds same-channel conversations (Instagram PSID matches the PSID,
   // phone matches the phone, etc.). To surface ALL prior conversations for
-  // this person — WhatsApp + Instagram + Messenger + voice + … — we follow
+  // this person - WhatsApp + Instagram + Messenger + voice + … - we follow
   // two unification keys:
-  //   1. Contact.personId    — populated by unifyContact when rows share an
+  //   1. Contact.personId    - populated by unifyContact when rows share an
   //                            email/phone, so platform contacts on different
   //                            channels collapse to a single person.
-  //   2. Contact.metadata.crmContactId — the auto-link pointer that bridges
+  //   2. Contact.metadata.crmContactId - the auto-link pointer that bridges
   //                            inbound conversations to the same CRM Lead/
   //                            Contact across every channel.
   //
@@ -331,7 +331,7 @@ export async function getHistoryByCustomerExternalId(
     if (crmId) crmContactIds.add(crmId);
   }
 
-  // Pull the CRM-side identifiers — the CRM is the source of truth for
+  // Pull the CRM-side identifiers - the CRM is the source of truth for
   // phone/email and gotcha_psid_* custom fields. Local Contact rows can be
   // sparse or missing on some channels; this fills the gaps.
   if (conversationId) {
@@ -358,13 +358,13 @@ export async function getHistoryByCustomerExternalId(
       // matches in practice. Also add a raw exact match as a safety net.
       siblingFilters.push({ email: { in: Array.from(emails) } });
     }
-    // Prisma's path filter on Json works for Postgres — `path: ["crmContactId"]`
+    // Prisma's path filter on Json works for Postgres - `path: ["crmContactId"]`
     // matches the same key our auto-link writes.
     for (const id of crmContactIds) {
       siblingFilters.push({ metadata: { path: ["crmContactId"], equals: id } });
     }
     // Also pull externalIds that LITERALLY match the phone (Meta WhatsApp
-    // stores the customerExternalId AS the phone digits — no `+`). Trying
+    // stores the customerExternalId AS the phone digits - no `+`). Trying
     // both formats covers tenants that normalize to E.164 and tenants on
     // legacy local format.
     for (const p of phones) {

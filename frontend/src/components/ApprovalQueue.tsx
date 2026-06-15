@@ -20,9 +20,9 @@ interface PendingItem {
 }
 
 /**
- * F4.3 — Minimal Approval Queue.
+ * F4.3 - Minimal Approval Queue.
  * Lists high-risk actions that were blocked by the executor and surfaces
- * them for review. "Approve" here is advisory — real approval re-runs
+ * them for review. "Approve" here is advisory - real approval re-runs
  * the executor with approved=true from the originating command path.
  */
 export default function ApprovalQueue({ token, refreshMs = 15000 }: Props) {
@@ -55,7 +55,7 @@ export default function ApprovalQueue({ token, refreshMs = 15000 }: Props) {
             <code>{it.action}</code>{" "}
             <em style={{ color: "#b15" }}>({it.metadata.riskLevel ?? "high"})</em>
             <div style={{ fontSize: 12, color: "#555" }}>
-              {it.metadata.reason ?? "no reason recorded"} —{" "}
+              {it.metadata.reason ?? "no reason recorded"} -{" "}
               {new Date(it.createdAt).toLocaleString()}
             </div>
             {it.metadata.params && (

@@ -1,9 +1,9 @@
 /**
- * Inbound voice webhooks — single endpoint, channel resolved by `To`.
+ * Inbound voice webhooks - single endpoint, channel resolved by `To`.
  *
- *   POST /api/voice/incoming/voice     — TwiML on incoming call
- *   POST /api/voice/incoming/status    — call-progress events
- *   POST /api/voice/incoming/recording — recording lifecycle
+ *   POST /api/voice/incoming/voice     - TwiML on incoming call
+ *   POST /api/voice/incoming/status    - call-progress events
+ *   POST /api/voice/incoming/recording - recording lifecycle
  *
  * Channel resolution (applied to all three):
  *   1. parse `body.To` (Twilio sends the destination E.164)
@@ -15,11 +15,11 @@
  *      session-create / FSM transitions / recording persistence.
  *
  * Failure semantics:
- *   - 403 invalid signature   — no retry
- *   - 200 dedupe hit          — idempotent retry
- *   - 503 infra failure        — let Twilio back off + retry
- *   - 422 FSM violation        — alert; not retryable
- *   - 500 provider failure     — Twilio retries with backoff
+ *   - 403 invalid signature   - no retry
+ *   - 200 dedupe hit          - idempotent retry
+ *   - 503 infra failure        - let Twilio back off + retry
+ *   - 422 FSM violation        - alert; not retryable
+ *   - 500 provider failure     - Twilio retries with backoff
  */
 import express, { Router, Request, Response } from "express";
 import twilio from "twilio";
@@ -56,7 +56,7 @@ interface ResolvedChannel {
   // Per-channel inbound routing. When `defaultAgentId` is set the call rings
   // only that user's browser; after `ringTimeoutSeconds` the call broadcasts
   // to every member of `fallbackDepartmentId` (or, if null, to the whole
-  // tenant — matching today's behavior).
+  // tenant - matching today's behavior).
   defaultAgentId: string | null;
   fallbackDepartmentId: string | null;
   ringTimeoutSeconds: number;
@@ -137,7 +137,7 @@ function buildHoldTwiml(_sessionId: string, conferenceName: string, publicBaseUr
       startConferenceOnEnter: false,
       endConferenceOnExit: true,
       beep: "false",
-      // No waitUrl — let Twilio use its own default hold music. The legacy
+      // No waitUrl - let Twilio use its own default hold music. The legacy
       // S3 URL was HTTP-only and intermittently fails the URL fetch.
       statusCallback: `${publicBaseUrl}/api/voice-copilot/twiml/conference-status`,
       statusCallbackEvent: ["start", "end", "join", "leave"] as any[],
@@ -260,7 +260,7 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
               startedAt: { gte: cutoff },
               OR: [
                 { assignedAgentId: matchingAgent.id },
-                // Channel default-agent missed calls before claim — these
+                // Channel default-agent missed calls before claim - these
                 // never had assignedAgent set when the fallback fired.
                 { channel: { voiceChannel: { defaultAgentId: matchingAgent.id } } },
               ],
@@ -278,7 +278,7 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
               // UNIQUE, and the missed call already owns
               // `recentMissed.conversationId`. Reusing it would FK-violate
               // the create and silently drop us into the regular inbound
-              // ring flow (which then rings the agent's phone — the very
+              // ring flow (which then rings the agent's phone - the very
               // phone that's calling us). Mint a fresh Conversation row
               // dedicated to this callback leg; missedSessionId in meta
               // preserves the audit link to the original missed call.
@@ -509,14 +509,14 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
       //   - "agent":      only defaultAgentId rings (rest of the tenant sees
       //                   nothing until the fallback fires)
       //   - "department": every member of fallbackDepartmentId rings
-      //   - "tenant":     broadcast to everyone (today's behavior — no
+      //   - "tenant":     broadcast to everyone (today's behavior - no
       //                   default agent configured)
       const initialTarget: "agent" | "tenant" = resolved.defaultAgentId ? "agent" : "tenant";
       await publishEvent({
         event: "voice.incoming.ringing",
         tenantId,
         data: {
-          // Full row — consumed by VoiceSessionsContext ringingHandler.
+          // Full row - consumed by VoiceSessionsContext ringingHandler.
           session: sessionRow,
           // Backward-compat fields for any other consumers.
           sessionId: session.id,
@@ -532,7 +532,7 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
       // Schedule the fallback broadcast. If the default agent doesn't claim
       // within `ringTimeoutSeconds`, re-emit the ringing event with a
       // wider `routing.target` so the rest of the team can pick up.
-      // In-process setTimeout — acceptable because (a) Twilio's own
+      // In-process setTimeout - acceptable because (a) Twilio's own
       // hold-music dial timeout is 60s and (b) a crash here just degrades
       // to "the assigned agent's phone keeps ringing." The fallback is a
       // best-effort UX improvement, not a correctness invariant.
@@ -589,7 +589,7 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
       }
 
       // Hard ring cap. Twilio's <Dial timeout> on the inbound parent leg
-      // only triggers when the conference never starts — once an agent
+      // only triggers when the conference never starts - once an agent
       // joins, hold music plays indefinitely; if no one ever joins, the
       // 60s default still leaves the call up. When the channel opts in
       // via `autoHangupSeconds`, force-terminate the leg and mark MISSED
@@ -728,7 +728,7 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
           case "no-answer":   return "MISSED";
           case "failed":      return "FAILED";
           case "canceled":    return "MISSED";
-          // `in-progress` fires on the parent leg the moment TwiML returns —
+          // `in-progress` fires on the parent leg the moment TwiML returns -
           // Twilio considers the call answered as soon as <Say> plays, even
           // though no human is on the line yet (the caller is just listening
           // to hold music inside an empty conference). Promoting RINGING →
@@ -786,7 +786,7 @@ export function createVoiceIncomingRouter(opts: VoiceIncomingRouterOpts): Router
   // Action callback on the <Dial> emitted by FORWARD_TO_AGENT mode.
   // Twilio posts DialCallStatus once the forwarded leg finishes
   // (answered, busy, no-answer, failed, canceled). We use this to
-  // transition the session FSM — without it the session would stay
+  // transition the session FSM - without it the session would stay
   // RINGING because the conference-status events never fire.
   router.post("/forward-complete", async (req: Request, res: Response) => {
     const body = (req.body || {}) as Record<string, string>;

@@ -1,5 +1,5 @@
 /**
- * Re-export — the call state machine lives in @chatcenter/shared so both
+ * Re-export - the call state machine lives in @chatcenter/shared so both
  * voice-copilot (writer) and the conversation service (reader/claim API)
  * share a single source of truth. This file exists purely to keep the
  * existing voice-copilot import paths stable.

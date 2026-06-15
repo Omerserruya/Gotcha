@@ -2,7 +2,7 @@
 
 ## Quick Start
 
-This guide walks you through setting up ChatCenter from scratch — from creating the system admin to onboarding your first tenant.
+This guide walks you through setting up ChatCenter from scratch - from creating the system admin to onboarding your first tenant.
 
 ---
 
@@ -86,11 +86,11 @@ From the System Admin panel:
 1. Go to **Tenants** in the sidebar
 2. Click **"New Tenant"**
 3. Fill in:
-   - **Organization Name** — the company name (e.g., "Acme Corp")
-   - **Slug** — URL-safe identifier, auto-generated from name (e.g., "acme-corp")
-   - **Admin Name** — name of the tenant's admin user
-   - **Admin Email** — login email for the tenant admin
-   - **Admin Password** — password for the tenant admin (min 8 characters)
+   - **Organization Name** - the company name (e.g., "Acme Corp")
+   - **Slug** - URL-safe identifier, auto-generated from name (e.g., "acme-corp")
+   - **Admin Name** - name of the tenant's admin user
+   - **Admin Email** - login email for the tenant admin
+   - **Admin Password** - password for the tenant admin (min 8 characters)
 4. Click **"Create Tenant"**
 
 This creates the organization and its first admin user in one step.
@@ -113,7 +113,7 @@ As a tenant admin, go to **Channels** in the sidebar:
 2. Complete the Facebook Embedded Signup wizard
 3. Select or create a WhatsApp Business Account
 4. Choose a phone number
-5. Done — messages will start flowing in
+5. Done - messages will start flowing in
 
 ### Messenger
 1. Click **"Connect Messenger"**
@@ -177,15 +177,15 @@ Go to **Settings** to configure business hours:
 
 ChatCenter is a multi-tenant, multi-channel customer communication platform:
 
-- **Auth Service** (port 4001) — Authentication, agents, departments, channels, system admin
-- **Conversation Service** (port 4002) — Conversations, messages, WebSocket
-- **Webhook Service** (port 4003) — Incoming webhooks from WhatsApp/Messenger/Instagram
-- **Analytics Service** (port 4004) — Dashboard stats and reporting
-- **Chatbot Service** (port 4005) — Chatbot flow execution
-- **AI Service** (port 4006) — OpenAI-powered co-pilot
-- **Workers** — Background message processing (incoming + outgoing queues)
-- **Nginx Gateway** (port 80) — Routes requests to services
-- **Frontend** (port 3000) — Next.js web application
+- **Auth Service** (port 4001) - Authentication, agents, departments, channels, system admin
+- **Conversation Service** (port 4002) - Conversations, messages, WebSocket
+- **Webhook Service** (port 4003) - Incoming webhooks from WhatsApp/Messenger/Instagram
+- **Analytics Service** (port 4004) - Dashboard stats and reporting
+- **Chatbot Service** (port 4005) - Chatbot flow execution
+- **AI Service** (port 4006) - OpenAI-powered co-pilot
+- **Workers** - Background message processing (incoming + outgoing queues)
+- **Nginx Gateway** (port 80) - Routes requests to services
+- **Frontend** (port 3000) - Next.js web application
 
 ---
 

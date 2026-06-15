@@ -42,7 +42,7 @@ router.get("/", async (req: Request, res: Response) => {
       data: {
         defaultCountryCode: tenant?.defaultCountryCode ?? "IL",
         supportedCountries: listSupportedCountries(),
-        // Phase 1 — Live Call CoPilot feature flags. All default-false so
+        // Phase 1 - Live Call CoPilot feature flags. All default-false so
         // tenants without the rollout see byte-identical UI to today.
         voiceCopilotEnabled: !!tenant?.voiceCopilotEnabled,
         voiceInboxUiEnabled: !!tenant?.voiceInboxUiEnabled,

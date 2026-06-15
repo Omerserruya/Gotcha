@@ -1,19 +1,19 @@
 /**
- * Unified connector admin — OAuth + API-key + config + meta selectors
+ * Unified connector admin - OAuth + API-key + config + meta selectors
  * for every adapter shipped in services/ai/src/services/connectors/.
  *
- *   GET  /connectors/:slug/oauth/init        — start OAuth (returns auth URL)
- *   GET  /connectors/:slug/oauth/callback    — finish OAuth (302 redirect)
- *   POST /connectors/:slug/connect           — API-key style connect
- *   POST /connectors/:slug/config            — patch the integration `config` JSON
- *   POST /connectors/:slug/disconnect        — flip status to DISCONNECTED
- *   GET  /connectors/:slug/status            — cheap status read
- *   GET  /connectors/:slug/meta/:resource    — meta selectors (airtable bases/tables)
+ *   GET  /connectors/:slug/oauth/init        - start OAuth (returns auth URL)
+ *   GET  /connectors/:slug/oauth/callback    - finish OAuth (302 redirect)
+ *   POST /connectors/:slug/connect           - API-key style connect
+ *   POST /connectors/:slug/config            - patch the integration `config` JSON
+ *   POST /connectors/:slug/disconnect        - flip status to DISCONNECTED
+ *   GET  /connectors/:slug/status            - cheap status read
+ *   GET  /connectors/:slug/meta/:resource    - meta selectors (airtable bases/tables)
  *
  * Concrete OAuth flows:
  *   - stripe   (Stripe Connect)
  *   - hubspot
- *   - shopify  (per-shop — `shop` query param required on init)
+ *   - shopify  (per-shop - `shop` query param required on init)
  * API-key style:
  *   - airtable (PAT)
  *   - postgres / mongodb / aws_rds (connection string)
@@ -24,16 +24,19 @@
 
 import { Router, type Request, type Response } from "express";
 import jwt from "jsonwebtoken";
+import * as crypto from "crypto";
 import {
   prisma,
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requireOnboardingOrActiveTenant,
   requireRole,
   encryptCredentials,
 } from "@chatcenter/shared";
-import { airtableListBases, airtableListTables } from "../services/connectors/airtable.adapter";
+import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
+import { loadConnection } from "../services/connectors/integration-framework";
 
 const router = Router();
 const JWT_SECRET = process.env.JWT_SECRET || "change-me";
@@ -87,6 +90,24 @@ function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
   const params = new URLSearchParams({ status: "connected", ...query });
   const path = `/ai-studio/marketplace/${slug}?${params.toString()}`;
   return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
+}
+
+// Where to land after an OAuth round-trip. When the connect was kicked off
+// from onboarding (state carries flow:"onboarding"), return to /setup so the
+// boot logic detects the connected core system and finishes activation.
+// Otherwise fall through to the marketplace page for the provider.
+function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
+  if (flow === "onboarding") {
+    const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
+    const params = new URLSearchParams({ connected: slug, ...query });
+    return `${base}/setup?${params.toString()}`;
+  }
+  return dashboardRedirect(slug, query);
+}
+
+// base64url encode (no padding) - used for OAuth2 PKCE (Airtable).
+function base64url(buf: Buffer): string {
+  return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
 // ─── Status / disconnect / config (universal) ─────────────────
@@ -229,13 +250,14 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/hubspot/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot" }, JWT_SECRET, { expiresIn: "10m" });
-    // Includes Leads scopes — they 403 silently for tenants on Pro/Starter
+    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, JWT_SECRET, { expiresIn: "10m" });
+    // Includes Leads scopes - they 403 silently for tenants on Pro/Starter
     // (no Leads object). Leaving them in keeps Enterprise install fast.
     const scope = [
       "crm.objects.contacts.read",
@@ -292,7 +314,7 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
         expiresAt: new Date(Date.now() + Number(j.expires_in || 1800) * 1000).toISOString(),
       }),
     });
-    res.redirect(dashboardRedirect("hubspot"));
+    res.redirect(postOAuthRedirect("hubspot", payload.flow));
   } catch (err: any) {
     res.status(500).send(`hubspot_callback_error:${err?.message || ""}`);
   }
@@ -302,13 +324,13 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
 
 router.get(
   "/connectors/shopify/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.SHOPIFY_API_KEY;
     const redirect = process.env.SHOPIFY_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "shopify_oauth_not_configured" }); return; }
     // Forgiving normalization: users paste anything from "my-store" to
-    // "https://my-store.myshopify.com/admin/" — strip protocol, path, and
+    // "https://my-store.myshopify.com/admin/" - strip protocol, path, and
     // whitespace, then auto-append .myshopify.com if they only typed a slug.
     const raw = String(req.query.shop || "").trim().toLowerCase();
     const stripped = raw
@@ -320,8 +342,9 @@ router.get(
       res.status(400).json({ error: "shop_required (e.g. my-store or my-store.myshopify.com)" });
       return;
     }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "shopify", shop }, JWT_SECRET, { expiresIn: "10m" });
-    const scopes = "read_orders,write_orders,read_customers,write_discounts,read_products";
+    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "shopify", shop, flow }, JWT_SECRET, { expiresIn: "10m" });
+    const scopes = "read_orders,write_orders,read_customers,write_discounts,read_products,read_returns";
     const params = new URLSearchParams({
       client_id: clientId,
       scope: scopes,
@@ -362,7 +385,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       }),
       config: { shopDomain: shop },
     });
-    res.redirect(dashboardRedirect("shopify"));
+    res.redirect(postOAuthRedirect("shopify", payload.flow));
   } catch (err: any) {
     res.status(500).send(`shopify_callback_error:${err?.message || ""}`);
   }
@@ -400,11 +423,190 @@ router.get(
   },
 );
 
-// ─── Wix App OAuth (install flow — multi-tenant) ─────────────
+// ─── Airtable OAuth (OAuth2 + PKCE) ──────────────────────────
+//
+// Airtable mandates PKCE (S256). Our other OAuth flows are plain auth-code;
+// here we generate a code_verifier, send its S256 challenge on init, and carry
+// the verifier inside the signed, short-lived state JWT so the callback can
+// complete the token exchange. Confidential client → also HTTP Basic with the
+// client secret. Reachable during onboarding (requireOnboardingOrActiveTenant).
+
+router.get(
+  "/connectors/airtable/oauth/init",
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  (req: Request, res: Response) => {
+    const clientId = process.env.AIRTABLE_CLIENT_ID;
+    const redirect = process.env.AIRTABLE_REDIRECT_URI;
+    if (!clientId || !redirect) { res.status(500).json({ error: "airtable_oauth_not_configured" }); return; }
+    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const verifier = base64url(crypto.randomBytes(48));
+    const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "airtable", flow, v: verifier }, JWT_SECRET, { expiresIn: "10m" });
+    const scope = "data.records:read data.records:write schema.bases:read schema.bases:write";
+    const params = new URLSearchParams({
+      client_id: clientId,
+      redirect_uri: redirect,
+      response_type: "code",
+      scope,
+      state,
+      code_challenge: challenge,
+      code_challenge_method: "S256",
+    });
+    res.json({ url: `https://airtable.com/oauth2/v1/authorize?${params.toString()}` });
+  },
+);
+
+router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Response) => {
+  try {
+    const { code, state, error } = req.query;
+    if (error) { res.status(400).send(`airtable_oauth_error:${String(error)}`); return; }
+    if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
+    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    if (payload.provider !== "airtable") { res.status(400).send("bad_state"); return; }
+    const clientId = process.env.AIRTABLE_CLIENT_ID!;
+    const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
+    const redirect = process.env.AIRTABLE_REDIRECT_URI!;
+    const body = new URLSearchParams({
+      grant_type: "authorization_code",
+      code: String(code),
+      redirect_uri: redirect,
+      client_id: clientId,
+      code_verifier: String(payload.v || ""),
+    });
+    const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+    if (clientSecret) headers.Authorization = `Basic ${Buffer.from(`${clientId}:${clientSecret}`).toString("base64")}`;
+    const tokenRes = await fetch("https://airtable.com/oauth2/v1/token", { method: "POST", headers, body: body.toString() });
+    if (!tokenRes.ok) {
+      const t = await tokenRes.text().catch(() => "");
+      res.status(400).send(`token_exchange_failed:${t.slice(0, 200)}`);
+      return;
+    }
+    const j: any = await tokenRes.json();
+    const cat = await findCatalog("airtable");
+    if (!cat) { res.status(500).send("airtable_catalog_missing"); return; }
+    await upsertConnection({
+      tenantId: payload.tenantId,
+      catalogId: cat.id,
+      status: "CONNECTED",
+      credentialsBlob: encryptCredentials({
+        accessToken: j.access_token,
+        refreshToken: j.refresh_token,
+        expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() : undefined,
+        scope: j.scope,
+      }),
+    });
+    // Onboarding still needs the base/table/column mapping after OAuth, so the
+    // /setup page detects "connected airtable without fieldMap" and shows the
+    // mapping wizard before completing.
+    res.redirect(postOAuthRedirect("airtable", payload.flow));
+  } catch (err: any) {
+    res.status(500).send(`airtable_callback_error:${err?.message || ""}`);
+  }
+});
+
+// ─── Airtable: CRM source mapping (post-OAuth) ───────────────
+//
+// After OAuth we still need to know which base/table is "contacts" and which
+// columns map to canonical fields. These power the mapping wizard and run
+// during onboarding. They read the stored OAuth token (no PAT query param).
+
+async function airtableToken(tenantId: string): Promise<string | null> {
+  const conn = await loadConnection({ tenantId, slug: "airtable" });
+  return (conn?.credentials?.accessToken as string) || (conn?.credentials?.apiKey as string) || null;
+}
+
+router.get(
+  "/connectors/airtable/oauth/bases",
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    const token = await airtableToken(req.tenantId!);
+    if (!token) { res.status(400).json({ error: "not_connected" }); return; }
+    try { res.json({ data: await airtableListBases(token) }); }
+    catch (e: any) { res.status(400).json({ error: e?.message || "airtable_meta_failed" }); }
+  },
+);
+
+router.get(
+  "/connectors/airtable/oauth/tables",
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    const token = await airtableToken(req.tenantId!);
+    const baseId = String(req.query.baseId || "");
+    if (!token) { res.status(400).json({ error: "not_connected" }); return; }
+    if (!baseId) { res.status(400).json({ error: "baseId_required" }); return; }
+    try { res.json({ data: await airtableListTables(token, baseId) }); }
+    catch (e: any) { res.status(400).json({ error: e?.message || "airtable_meta_failed" }); }
+  },
+);
+
+router.get(
+  "/connectors/airtable/oauth/fields",
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    const token = await airtableToken(req.tenantId!);
+    const baseId = String(req.query.baseId || "");
+    const tableId = String(req.query.tableId || "");
+    if (!token) { res.status(400).json({ error: "not_connected" }); return; }
+    if (!baseId || !tableId) { res.status(400).json({ error: "baseId_and_tableId_required" }); return; }
+    try { res.json({ data: await airtableListFields(token, baseId, tableId) }); }
+    catch (e: any) { res.status(400).json({ error: e?.message || "airtable_meta_failed" }); }
+  },
+);
+
+// Save the mapping onto the connection config. Optionally auto-create the
+// notes / idempotency columns we OWN (never identifier columns) when
+// create_missing=true and the token carries schema.bases:write.
+router.post(
+  "/connectors/airtable/mapping",
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  async (req: Request, res: Response) => {
+    const cat = await findCatalog("airtable");
+    if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
+    const ti = await (prisma as any).tenantIntegration.findUnique({
+      where: { tenantId_integrationId: { tenantId: req.tenantId, integrationId: cat.id } },
+    });
+    if (!ti) { res.status(400).json({ error: "not_connected" }); return; }
+
+    const { baseId, tableId, fieldMap, notesField, idempotencyField, createMissing } = req.body || {};
+    if (!baseId || !tableId) { res.status(400).json({ error: "baseId_and_tableId_required" }); return; }
+    const fm = (fieldMap && typeof fieldMap === "object") ? fieldMap : {};
+    if (!fm.email && !fm.phone) { res.status(400).json({ error: "map_email_or_phone" }); return; }
+    if (!fm.display_name) { res.status(400).json({ error: "map_display_name" }); return; }
+
+    let finalNotesField: string | undefined = notesField || undefined;
+    let finalIdempotencyField: string | undefined = idempotencyField || undefined;
+    let warning: string | undefined;
+
+    if (createMissing && (!finalNotesField || !finalIdempotencyField)) {
+      const token = await airtableToken(req.tenantId!);
+      if (!token) {
+        warning = "not_connected_for_create";
+      } else {
+        try {
+          if (!finalNotesField) finalNotesField = (await airtableCreateField(token, baseId, tableId, "Notes (Gotcha)", "multilineText")).name;
+          if (!finalIdempotencyField) finalIdempotencyField = (await airtableCreateField(token, baseId, tableId, "Gotcha Source ID", "singleLineText")).name;
+        } catch (e: any) {
+          warning = `create_field_failed:${(e?.message || "").slice(0, 120)}`;
+        }
+      }
+    }
+
+    const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>;
+    cfg.baseId = baseId;
+    cfg.tableId = tableId;
+    cfg.fieldMap = { email: fm.email, phone: fm.phone, display_name: fm.display_name, stage: fm.stage };
+    if (finalNotesField) cfg.notesField = finalNotesField;
+    if (finalIdempotencyField) cfg.idempotencyField = finalIdempotencyField;
+    const updated = await (prisma as any).tenantIntegration.update({ where: { id: ti.id }, data: { config: cfg } });
+    res.json({ data: { id: updated.id, config: cfg }, ...(warning ? { warning } : {}) });
+  },
+);
+
+// ─── Wix App OAuth (install flow - multi-tenant) ─────────────
 //
 // CORRECT flow for "any Wix store owner connects their store to us":
 //   1. We send the user to https://www.wix.com/installer/install?appId=…
-//      &redirectUrl=…&state=… — Wix shows them a "Add to site" picker.
+//      &redirectUrl=…&state=… - Wix shows them a "Add to site" picker.
 //   2. After they pick a site + approve permissions, Wix redirects back to
 //      our callback with `?code=…&instanceId=<site-instance>&state=…`.
 //   3. We POST that code to https://www.wixapis.com/oauth/access
@@ -413,7 +615,7 @@ router.get(
 //
 // We persist `instanceId` on the integration so subsequent API calls can
 // reference the right Wix site. Refresh tokens are long-lived (Wix handles
-// expiry transparently — token expiry is ~5 minutes, refresh-token rotation
+// expiry transparently - token expiry is ~5 minutes, refresh-token rotation
 // is one-shot per refresh).
 
 router.get(
@@ -424,7 +626,7 @@ router.get(
     const redirect = process.env.WIX_REDIRECT_URI;
     if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured" }); return; }
     const state = jwt.sign({ tenantId: req.tenantId, provider: "wix" }, JWT_SECRET, { expiresIn: "10m" });
-    // Wix App install flow — NOT the headless `oauth/authorize` flow.
+    // Wix App install flow - NOT the headless `oauth/authorize` flow.
     const params = new URLSearchParams({
       appId,
       redirectUrl: redirect,
@@ -549,7 +751,7 @@ router.get("/connectors/square/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/salesforce/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const redirect = process.env.SALESFORCE_REDIRECT_URI;
@@ -559,7 +761,8 @@ router.get(
       res.status(400).json({ error: "bad_login_host (use login.salesforce.com or test.salesforce.com)" });
       return;
     }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "salesforce", loginHost }, JWT_SECRET, { expiresIn: "10m" });
+    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "salesforce", loginHost, flow }, JWT_SECRET, { expiresIn: "10m" });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -609,7 +812,7 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
       }),
       config: { instanceUrl: j.instance_url, loginHost },
     });
-    res.redirect(dashboardRedirect("salesforce"));
+    res.redirect(postOAuthRedirect("salesforce", payload.flow));
   } catch (err: any) {
     res.status(500).send(`salesforce_callback_error:${err?.message || ""}`);
   }
@@ -700,7 +903,7 @@ router.get(
 // ─── DB schema introspection ─────────────────────────────────
 //
 // POST endpoints (not GET) so connection strings stay out of access logs +
-// referer headers. Each handler accepts the connection string in the body —
+// referer headers. Each handler accepts the connection string in the body -
 // either freshly typed (during the connect form) or null to reuse what's
 // already stored on the tenant's CONNECTED integration.
 
@@ -839,7 +1042,7 @@ router.post(
     const engine = String(req.body?.engine || "postgres").toLowerCase();
     try {
       if (engine === "mysql" || engine === "mariadb") {
-        // mysql2 is loaded lazily — avoids requiring it on Postgres-only deploys.
+        // mysql2 is loaded lazily - avoids requiring it on Postgres-only deploys.
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const m = require("mysql2/promise");
         const conn = await m.createConnection({

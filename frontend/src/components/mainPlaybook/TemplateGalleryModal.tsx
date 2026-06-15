@@ -50,7 +50,7 @@ export function TemplateGalleryModal({ open, onClose, onPick }: Props) {
       className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm"
       onClick={close}
     >
-      {/* Side panel — slides in from the right. Full height, fixed width on
+      {/* Side panel - slides in from the right. Full height, fixed width on
           desktop, full width on mobile. */}
       <div
         className="absolute top-0 right-0 h-full w-full sm:w-[520px] bg-white shadow-2xl flex flex-col overflow-hidden animate-slide-in-right"
@@ -111,7 +111,7 @@ function GalleryView({
         <div>
           <h2 className="text-lg font-bold text-gray-900">Start from a template</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Pick one and fill the short form — we&apos;ll wire the nodes for you. The template adds to your existing canvas.
+            Pick one and fill the short form - we&apos;ll wire the nodes for you. The template adds to your existing canvas.
           </p>
         </div>
         <button

@@ -13,7 +13,7 @@ interface TranscriptStageProps {
   /** True when a call is in connecting/ringing/active so the "Listening…"
    * placeholder shows instead of the post-call empty state. */
   isLive: boolean;
-  /** Optional outer className override — defaults to viewport-locked card. */
+  /** Optional outer className override - defaults to viewport-locked card. */
   className?: string;
 }
 

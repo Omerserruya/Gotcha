@@ -2,7 +2,7 @@
  * Exponential-backoff retry helper.
  *
  * Lifted from the dead `services/voice-copilot/src/dispatch/dispatcher.ts`
- * (deleted in Phase 4). Schedule was [250, 500, 1000, 2000, 4000] ms — kept
+ * (deleted in Phase 4). Schedule was [250, 500, 1000, 2000, 4000] ms - kept
  * here verbatim so the proven semantics carry forward.
  */
 

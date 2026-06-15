@@ -4,7 +4,7 @@
 -- TenantToolPermission.requiresApproval=true. The conversation is paused
 -- until a human in the inbox decides. See memory/bug_f4_approval_wrong_surface.md.
 --
--- NOT used for Command Center — those actions are human-initiated by
+-- NOT used for Command Center - those actions are human-initiated by
 -- construction and rely on dry-run preview + confirmation modal.
 
 CREATE TYPE "ApprovalStatus" AS ENUM (

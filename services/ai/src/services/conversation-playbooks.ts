@@ -1,5 +1,5 @@
 /**
- * Conversation Playbooks — structured prompt-time reasoning patterns.
+ * Conversation Playbooks - structured prompt-time reasoning patterns.
  *
  * IMPORTANT: this is NOT the workflow / automation playbook system.
  * Automation playbooks live in DB (`ChatbotFlow` rows) and run inside
@@ -11,11 +11,11 @@
  * deferral, etc.). They are:
  *   - Selected by BEL based on BehaviorState (strategy / stage / intent / markers).
  *   - Rendered by Prompt Builder into the [Playbooks] section.
- *   - Frozen, platform-defined data — authors do NOT write them freehand.
+ *   - Frozen, platform-defined data - authors do NOT write them freehand.
  *
  * Each step has an `actionImplied` ActionCategory so the model knows what
  * KIND of move closes that step. The FINAL step of every playbook MUST
- * imply a progress action — never just "close politely".
+ * imply a progress action - never just "close politely".
  */
 
 import type { ActionCategory, StrategyName } from "./behavior-strategies";
@@ -64,15 +64,16 @@ const LEAD_QUALIFICATION: ConversationPlaybook = {
     stages: ["exploration"],
   },
   steps: [
-    { description: "Ask what they are trying to achieve (the outcome they want).", actionImplied: "ask_question" },
-    { description: "Ask about their current situation — channels, tools, team size — whichever is the biggest unknown.", actionImplied: "ask_question" },
-    { description: "Identify the specific pain that's driving the inquiry. Reflect it back.", actionImplied: "acknowledge" },
-    { description: "Only after the pain is clear, propose a concrete next step (demo / proposal / call).", actionImplied: "schedule_booking" },
+    { description: "Acknowledge what they just said and reflect the pain back in their own words - before asking anything.", actionImplied: "acknowledge" },
+    { description: "Ask what outcome they're trying to reach.", actionImplied: "ask_question" },
+    { description: "Surface the biggest unknown about their situation - channels, tools, or scale - as a natural follow-up, not a form field.", actionImplied: "ask_question" },
+    { description: "Once the pain is clear, propose one concrete next step (demo / proposal / call).", actionImplied: "schedule_booking" },
   ],
   hardRules: [
-    "ONE question per turn — never two.",
-    "Do NOT pitch features before pain is identified.",
-    "Do NOT close passively (\"if you need anything else…\"). Always end with a forward move.",
+    "Acknowledge before you ask - never open a turn with a cold qualifier.",
+    "ONE question per turn. A reflection that leads into a single question still counts as one move.",
+    "Do NOT pitch features before the pain is identified.",
+    "Not every turn must end in a question - an observation or reflection can be the move. Just don't let the conversation stall indefinitely.",
   ],
 };
 
@@ -85,13 +86,13 @@ const PRICE_OBJECTION: ConversationPlaybook = {
   },
   steps: [
     { description: "Acknowledge the concern in their language. Don't dismiss or defend.", actionImplied: "acknowledge" },
-    { description: "Reframe — move from cost to return. Anchor in the pain they already stated.", actionImplied: "explain" },
+    { description: "Reframe - move from cost to return. Anchor in the pain they already stated.", actionImplied: "explain" },
     { description: "Cite ONE concrete social-proof point (a similar customer + a result number).", actionImplied: "explain" },
-    { description: "Close with a SPECIFIC next step — a named time slot for a 15-min demo or a tailored proposal.", actionImplied: "schedule_booking" },
+    { description: "Close with a SPECIFIC next step - a named time slot for a 15-min demo or a tailored proposal.", actionImplied: "schedule_booking" },
   ],
   hardRules: [
     "Do NOT discount, offer a coupon, or promise a deal that wasn't already on the table.",
-    "Do NOT list features here — value over features.",
+    "Do NOT list features here - value over features.",
     "Do NOT skip the social-proof step. \"I understand it's expensive\" alone is not enough.",
   ],
 };
@@ -108,11 +109,11 @@ const DEFERRAL_HANDLING: ConversationPlaybook = {
   steps: [
     { description: "Validate the pause without protest. Don't push against thinking time.", actionImplied: "acknowledge" },
     { description: "Ask ONE question that surfaces the actual blocker (price / fit / timing / authority).", actionImplied: "ask_question" },
-    { description: "Offer a low-friction next-touch they can opt into NOW — calendar hold, follow-up at a specific time, free trial setup.", actionImplied: "schedule_followup" },
+    { description: "Offer a low-friction next-touch they can opt into NOW - calendar hold, follow-up at a specific time, free trial setup.", actionImplied: "schedule_followup" },
   ],
   hardRules: [
     "Do NOT just say \"sure, let me know when you decide\". That's the failure mode.",
-    "Do NOT pile on new value props — they've already heard them.",
+    "Do NOT pile on new value props - they've already heard them.",
     "Do close with ONE concrete commitment-light option.",
   ],
 };
@@ -127,7 +128,7 @@ const TRUST_CONCERN: ConversationPlaybook = {
     ],
   },
   steps: [
-    { description: "Acknowledge the question directly — no defensiveness.", actionImplied: "acknowledge" },
+    { description: "Acknowledge the question directly - no defensiveness.", actionImplied: "acknowledge" },
     { description: "Ground credibility in ONE concrete proof point (founder name, customer count, named brand using the product).", actionImplied: "explain" },
     { description: "Offer to share a public reference / case study link.", actionImplied: "send_proposal" },
     { description: "Pivot back to their need with a forward question.", actionImplied: "ask_question" },
@@ -135,7 +136,7 @@ const TRUST_CONCERN: ConversationPlaybook = {
   hardRules: [
     "Do NOT list your whole company history.",
     "Do NOT get defensive.",
-    "Do NOT skip the pivot back — trust talk is a detour, not the conversation.",
+    "Do NOT skip the pivot back - trust talk is a detour, not the conversation.",
   ],
 };
 
@@ -151,10 +152,10 @@ const DEMO_REQUEST: ConversationPlaybook = {
   },
   steps: [
     { description: "Confirm enthusiasm and propose two concrete time options in their timezone.", actionImplied: "schedule_booking" },
-    { description: "Capture / update CRM record silently while booking — never narrate this.", actionImplied: "create_lead" },
+    { description: "Capture / update CRM record silently while booking - never narrate this.", actionImplied: "create_lead" },
   ],
   hardRules: [
-    "Do NOT keep qualifying past this point — they asked for a demo, give them a demo.",
+    "Do NOT keep qualifying past this point - they asked for a demo, give them a demo.",
     "Do NOT send a generic Calendly link without two anchored options.",
     "Do silently create_lead OR update_record (depending on CRM state) before confirming the booking.",
   ],
@@ -175,7 +176,7 @@ const SUPPORT_RESOLUTION: ConversationPlaybook = {
   hardRules: [
     "Do NOT ask for info already in the CRM block.",
     "Do NOT promise an outcome that requires approval without flagging the approval step.",
-    "Do escalate explicitly when the issue is outside policy — \"I'll loop in a teammate now\".",
+    "Do escalate explicitly when the issue is outside policy - \"I'll loop in a teammate now\".",
   ],
 };
 
@@ -187,13 +188,13 @@ const FEATURE_INQUIRY: ConversationPlaybook = {
     intents: ["informational"],
   },
   steps: [
-    { description: "Answer the specific feature question briefly — no monologue.", actionImplied: "explain" },
+    { description: "Answer the specific feature question briefly - no monologue.", actionImplied: "explain" },
     { description: "Connect the feature to a concrete use case relevant to their stated context.", actionImplied: "explain" },
     { description: "Pivot forward with ONE question that surfaces buying intent or a remaining concern.", actionImplied: "ask_question" },
   ],
   hardRules: [
-    "Do NOT enumerate every feature you have — they asked one question.",
-    "Do NOT close passively. Always pivot to a forward question or a next-step proposal.",
+    "Do NOT enumerate every feature you have - they asked one question.",
+    "Always pivot forward - a question or a next-step proposal - don't trail off.",
   ],
 };
 
@@ -207,7 +208,7 @@ export const CONVERSATION_PLAYBOOKS: Readonly<Record<PlaybookId, ConversationPla
   feature_inquiry: FEATURE_INQUIRY,
 });
 
-/** All ids in display order — used by the Prompt Builder when rendering. */
+/** All ids in display order - used by the Prompt Builder when rendering. */
 export const PLAYBOOK_RENDER_ORDER: PlaybookId[] = [
   "demo_request",
   "price_objection",

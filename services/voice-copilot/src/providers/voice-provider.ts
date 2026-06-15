@@ -1,12 +1,12 @@
 /**
- * VoiceProvider — provider-agnostic interface for the voice copilot's
+ * VoiceProvider - provider-agnostic interface for the voice copilot's
  * outbound/inbound call orchestration.
  *
  * Each tenant's voice traffic is resolved per-call from their
  * `CommunicationChannel` + `VoiceChannel` row. There is no shared/env
  * fallback: a tenant without an ACTIVE voice channel is not callable.
  *
- * `authType` is BYO-only — tenants supply their own Twilio credentials
+ * `authType` is BYO-only - tenants supply their own Twilio credentials
  * which are AES-256-GCM encrypted in `encryptedSecrets`.
  */
 
@@ -93,7 +93,7 @@ export interface VoiceProvider {
   attachMediaStreamToCall(input: AttachMediaStreamInput): Promise<void>;
 
   /**
-   * Terminate a call leg. Used when the agent declines or hangs up — the
+   * Terminate a call leg. Used when the agent declines or hangs up - the
    * DB state transition is not enough, the upstream provider keeps the
    * customer on the line (or in hold music / conference) until we tell it
    * to drop. Idempotent: terminating an already-completed call is a no-op.

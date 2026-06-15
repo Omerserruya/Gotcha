@@ -1,5 +1,5 @@
 /**
- * StreamRouter — per-session fan-out of audio + transcripts into independent
+ * StreamRouter - per-session fan-out of audio + transcripts into independent
  * downstream branches. One instance per voice session.
  *
  * Two branches, two failure domains:
@@ -9,7 +9,7 @@
  *
  * Guarantees (see architecture doc):
  *   - Router is stateless per message (no per-call accumulator).
- *   - No shared await between branches — slow Postgres does NOT stall Pub/Sub.
+ *   - No shared await between branches - slow Postgres does NOT stall Pub/Sub.
  *   - Ordering per callSid preserved by single-threaded event loop + seq on event.
  *   - Partials: may be lost (Pub/Sub fire-forget). Finals: must not be lost
  *     (PersistenceSink retries via idempotency key on next final; manual recovery
@@ -20,7 +20,7 @@ import type { Logger } from "../lib/logger";
 import type { SttStream } from "../stt/provider";
 import { publishEvent, prisma as sharedPrisma } from "@chatcenter/shared";
 
-// The shared Prisma client is extended with tenant-guard middleware — use
+// The shared Prisma client is extended with tenant-guard middleware - use
 // its actual inferred type (not the raw `PrismaClient` from @prisma/client)
 // so method chains don't fail type-check.
 type SharedPrisma = typeof sharedPrisma;
@@ -65,7 +65,7 @@ function projectionDeliver(event: TranscriptEvent, logger: Logger): void {
 /**
  * Durable persistence of final transcripts. Writes directly to Postgres via
  * Prisma. Idempotency relies on a unique index on
- * Message(conversationId, metadata->>'seq') for VOICE channel — Prisma emits
+ * Message(conversationId, metadata->>'seq') for VOICE channel - Prisma emits
  * P2002 on conflict, which we swallow.
  *
  * Always called as fire-forget from the router; the caller does NOT await.
@@ -76,7 +76,7 @@ function persistenceDeliver(
   logger: Logger,
 ): void {
   if (!event.isFinal) return;
-  // Stable per-utterance key — keeps duplicate inserts identifiable if any
+  // Stable per-utterance key - keeps duplicate inserts identifiable if any
   // slip past the in-memory reorder/dedup guards (e.g., after STT reconnect).
   const externalMessageId = `voice:${event.callSid}:${event.speaker}:${event.seq}`;
   prisma.message
@@ -103,7 +103,7 @@ function persistenceDeliver(
     })
     .then((message) => {
       // Best-effort: bump lastMessageAt and notify the inbox UI. Neither is
-      // load-bearing — if they fail, the message itself is safely in Postgres.
+      // load-bearing - if they fail, the message itself is safely in Postgres.
       prisma.conversation
         .update({
           where: { id: event.conversationId },

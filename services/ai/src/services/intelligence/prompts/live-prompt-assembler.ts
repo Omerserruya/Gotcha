@@ -37,7 +37,7 @@ import {
 export interface LivePromptInput {
   /** Tier B summary text. Empty string when no rolling summary yet. */
   rollingSummary: string;
-  /** Last N utterances (Tier A window) — already trimmed by ConversationMemory. */
+  /** Last N utterances (Tier A window) - already trimmed by ConversationMemory. */
   recentUtterances: TranscriptUtterance[];
   /** Org-level instructions (defaults provided by the block). */
   org?: { identity?: string; tone?: string; forbidden?: string[] };
@@ -77,7 +77,7 @@ export interface ChatMessage {
 
 export class LivePromptAssembler {
   /**
-   * Assemble the full message array. No imports across assemblers — only
+   * Assemble the full message array. No imports across assemblers - only
    * shared blocks (anti-duplication rule #2).
    */
   build(input: LivePromptInput): ChatMessage[] {
@@ -88,7 +88,7 @@ export class LivePromptAssembler {
     // Channel-level + stage-level copilot config (language, persona, goal,
     // required Qs, data fields, exit criteria). Stage takes precedence
     // over channel for goal/Qs/fields when both are present. Skipped when
-    // neither is configured — the block returns "" in that case.
+    // neither is configured - the block returns "" in that case.
     const copilotBlock = copilotConfigBlock(input.copilotConfig, input.stageContext);
     if (copilotBlock) {
       messages.push({ role: "system", content: copilotBlock });
@@ -96,7 +96,7 @@ export class LivePromptAssembler {
 
     // ALREADY-ANSWERED hint sheet. Rendered AFTER copilotConfigBlock (so the
     // LLM has already seen the field/question list) and BEFORE the
-    // behaviorContract — close enough to the schema instructions to act as
+    // behaviorContract - close enough to the schema instructions to act as
     // a binding rule, far enough from the transcript that it's not
     // overshadowed by the live audio.
     const aaBlock = alreadyAnsweredBlock(input.alreadyAnswered);

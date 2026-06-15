@@ -5,7 +5,7 @@
  * resolves a deduped list of `User` rows that should be notified.
  *
  * Codebase mapping:
- *   - The `Role` enum is { SYSTEM_ADMIN, ADMIN, AGENT } — there is no OWNER.
+ *   - The `Role` enum is { SYSTEM_ADMIN, ADMIN, AGENT } - there is no OWNER.
  *     We treat ADMIN as the closest analogue (tenant-level admin = owner).
  *     SYSTEM_ADMIN is the platform operator and is intentionally excluded
  *     from tenant-scoped notifications.

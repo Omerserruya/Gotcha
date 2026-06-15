@@ -1,10 +1,10 @@
 /**
- * F8 — Business Policy Engine
+ * F8 - Business Policy Engine
  *
  * Persistent policy layer. Source of truth = `BusinessPolicy` table in
  * Postgres (see packages/shared/prisma/schema.prisma). Reads go through
  * DB; a small in-process cache wraps them to avoid hitting Postgres on
- * every executeAction, but the cache NEVER overrides the DB value — it
+ * every executeAction, but the cache NEVER overrides the DB value - it
  * is invalidated on write and only serves as a fallback when the DB is
  * unreachable (dev/test environments without a running database).
  *
@@ -28,7 +28,7 @@ export const DEFAULT_POLICY: BusinessPolicy = {
   blockedTopics: [],
 };
 
-// Cache layer — write-through, read-fallback only. Never consulted while
+// Cache layer - write-through, read-fallback only. Never consulted while
 // the DB is available and returning a row.
 const policyCache = new Map<string, BusinessPolicy>();
 
@@ -50,7 +50,7 @@ function normalize(raw: unknown): BusinessPolicy {
 }
 
 export async function getPolicy(tenantId: string): Promise<BusinessPolicy> {
-  // Try DB first — authoritative path.
+  // Try DB first - authoritative path.
   try {
     const row = await (prisma as any).businessPolicy?.findUnique?.({ where: { tenantId } });
     if (row && row.data) {
@@ -62,7 +62,7 @@ export async function getPolicy(tenantId: string): Promise<BusinessPolicy> {
     // cache entry from a deleted policy must not leak through.
     if (row === null) return DEFAULT_POLICY;
   } catch {
-    // DB unavailable (test env, cold start) — fall through to cache.
+    // DB unavailable (test env, cold start) - fall through to cache.
   }
   return policyCache.get(tenantId) ?? DEFAULT_POLICY;
 }
@@ -86,7 +86,7 @@ export async function setPolicy(
 ): Promise<BusinessPolicy> {
   const current = await getPolicy(tenantId);
   const next: BusinessPolicy = { ...current, ...patch };
-  // Write-through to DB. Cache is updated only after DB ack — on DB
+  // Write-through to DB. Cache is updated only after DB ack - on DB
   // failure in prod the write fails loudly; in tests without a DB, the
   // cache is still updated so the test harness can round-trip.
   try {

@@ -1,5 +1,5 @@
 /**
- * Zoho CRM — OAuth token exchange + refresh helpers.
+ * Zoho CRM - OAuth token exchange + refresh helpers.
  *
  * Zoho implements standard OAuth2 with two non-standard details:
  *   1. The API host is region-specific and returned per-user at token exchange
@@ -7,7 +7,7 @@
  *      We persist it on TenantIntegration.config.baseUrl so tool-execution can
  *      address the correct datacenter for that tenant.
  *   2. API calls expect the header `Authorization: Zoho-oauthtoken <token>`
- *      — NOT `Bearer`. That scheme is persisted on config.authScheme and read
+ *      - NOT `Bearer`. That scheme is persisted on config.authScheme and read
  *      by tool-execution.service at dispatch time.
  *
  * Access tokens are short-lived (~1h). `maybeRefreshZohoToken` is called
@@ -43,7 +43,7 @@ export function getZohoAccountsUrl(): string {
 
 /**
  * Exchange an authorization code for an access + refresh token pair.
- * Throws on non-2xx or missing access_token — caller wraps to an error response.
+ * Throws on non-2xx or missing access_token - caller wraps to an error response.
  */
 export async function exchangeZohoCode(params: {
   code: string;
@@ -127,7 +127,7 @@ export async function refreshZohoAccessToken(refreshToken: string): Promise<{
  * If expired/near-expiry, refresh and persist. Returns the fresh access
  * token so the caller can use it in-memory without re-reading the row.
  *
- * Returns null if the integration has no refreshToken (nothing to do —
+ * Returns null if the integration has no refreshToken (nothing to do -
  * caller should let the original token fly and surface any 401 as-is).
  */
 export async function maybeRefreshZohoToken(integrationId: string): Promise<string | null> {
@@ -166,11 +166,11 @@ export async function maybeRefreshZohoToken(integrationId: string): Promise<stri
 }
 
 /**
- * Default scope bundle for Zoho CRM — read + write on Contacts, Leads,
+ * Default scope bundle for Zoho CRM - read + write on Contacts, Leads,
  * Deals, Tasks, Notes (the modules our CatalogTool rows touch) PLUS
  * `ZohoCRM.users.READ` and `ZohoCRM.bulk.create` for tag operations.
  *
- * `offline_access` is REQUIRED — without it Zoho's OAuth callback returns
+ * `offline_access` is REQUIRED - without it Zoho's OAuth callback returns
  * an access token only (no refresh_token), so after the ~1h access-token
  * TTL every tool call fails with "Invalid or expired token". Tenants
  * connected before this scope was added must reconnect to get a refresh
@@ -184,11 +184,11 @@ export const ZOHO_DEFAULT_SCOPES = [
   "ZohoCRM.modules.notes.ALL",
   "ZohoCRM.users.READ",
   "ZohoCRM.settings.tags.ALL",
-  // Required for the audience builder's "load CRM schema" picker — lets
+  // Required for the audience builder's "load CRM schema" picker - lets
   // the server enumerate fields per module (Leads/Contacts/etc.) so the
   // operator can pick a field to filter on. Tenants connected before
   // this scope was added must reconnect once to receive a token with
-  // it (Zoho doesn't grant new scopes on refresh — only on a fresh
+  // it (Zoho doesn't grant new scopes on refresh - only on a fresh
   // OAuth grant).
   "ZohoCRM.settings.fields.READ",
   "offline_access",

@@ -10,7 +10,7 @@ interface Props {
 }
 
 /**
- * F8.4 — Business Policy admin surface.
+ * F8.4 - Business Policy admin surface.
  *
  * The policy is a single JSON document per tenant (`BusinessPolicy`
  * table). This form edits every top-level field and write-throughs via

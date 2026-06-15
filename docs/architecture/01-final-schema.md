@@ -1,4 +1,4 @@
-# 01 — Final Unified Schema
+# 01 - Final Unified Schema
 
 Target state after all migration phases complete. This is what `packages/shared/prisma/schema.prisma` must look like after phase 8.
 
@@ -6,7 +6,7 @@ All models here are tenant-scoped unless explicitly noted. Indexes for tenant is
 
 ---
 
-## 1. `AIAgent` — the single source of truth
+## 1. `AIAgent` - the single source of truth
 
 Absorbs everything previously spread across `AIAgent` + `CopilotConfig` + per-department copilot overrides.
 
@@ -25,7 +25,7 @@ model AIAgent {
   avatarColor    String?       @map("avatar_color")
   status         AgentStatus   @default(DRAFT)
 
-  // Capabilities — which modes this agent can run in
+  // Capabilities - which modes this agent can run in
   // Both can be true. Mode is runtime; capability is config.
   capabilities   Json          @default("{\"auto\":true,\"assist\":true}")
   //   { auto: boolean, assist: boolean }
@@ -55,9 +55,9 @@ model AIAgent {
   behavioralAnchors Json       @default("[]") @map("behavioral_anchors")
   //   [{ id, condition, intent, guidance }]
 
-  // Escalation — two shapes to end the dual-purpose today:
-  //   gates   = deterministic triggers (max msgs, keyword list) — part of HITL
-  //   anchors = LLM-judged hints — part of behavioralAnchors
+  // Escalation - two shapes to end the dual-purpose today:
+  //   gates   = deterministic triggers (max msgs, keyword list) - part of HITL
+  //   anchors = LLM-judged hints - part of behavioralAnchors
   escalationGates   Json       @default("[]") @map("escalation_gates")
   //   [{ type: "max_messages"|"keyword"|"max_minutes",
   //      value: number|string[], enabled: bool }]
@@ -83,7 +83,7 @@ model AIAgent {
 
 ---
 
-## 2. `AIAgentPromptVersion` — snapshot per publish
+## 2. `AIAgentPromptVersion` - snapshot per publish
 
 Enables replay and "why did the bot answer differently yesterday" debugging.
 
@@ -108,7 +108,7 @@ model AIAgentPromptVersion {
 
 ---
 
-## 3. `CatalogTool` — tool definition (floor for HITL)
+## 3. `CatalogTool` - tool definition (floor for HITL)
 
 Expanded to carry full tool contract + hitl policy + runtime limits.
 
@@ -124,7 +124,7 @@ model CatalogTool {
   name           String
   description    String
 
-  // NEW — required per spec §4.3
+  // NEW - required per spec §4.3
   whenToUse      String?       @map("when_to_use")    @db.Text
   exampleUsage   Json?         @map("example_usage")
   //   [{ input: {...}, output: {...}, note: "..." }]
@@ -132,7 +132,7 @@ model CatalogTool {
   category       ToolCategory  @default(READ)
   riskLevel      RiskLevel     @default(LOW) @map("risk_level")
 
-  // NEW — which modes this tool is valid in
+  // NEW - which modes this tool is valid in
   allowedModes   Json          @default("[\"AUTO\",\"ASSIST\"]") @map("allowed_modes")
   //   ["AUTO"] | ["ASSIST"] | ["AUTO","ASSIST"]
 
@@ -142,7 +142,7 @@ model CatalogTool {
   endpoint       String?
   method         String        @default("GET")
 
-  // HITL — the FLOOR. Tenant / agent can only tighten.
+  // HITL - the FLOOR. Tenant / agent can only tighten.
   hitlPolicy     Json          @default("{\"mode\":\"never\"}") @map("hitl_policy")
   //   { mode: "never" | "always" | "on_condition",
   //     condition?: string,        // JSONLogic/CEL-like
@@ -174,7 +174,7 @@ model CatalogTool {
 
 ---
 
-## 4. `TenantTool` — per-tenant activation + tenant-level HITL override
+## 4. `TenantTool` - per-tenant activation + tenant-level HITL override
 
 `TenantToolPermission` is **deleted**. Tenant-wide hitl overrides move into `TenantTool.configOverrides.hitlPolicy`.
 
@@ -212,7 +212,7 @@ model TenantTool {
 
 ---
 
-## 5. `AgentToolPermission` — per-agent grant + per-agent HITL override
+## 5. `AgentToolPermission` - per-agent grant + per-agent HITL override
 
 Last layer. Can also only tighten, not loosen.
 
@@ -243,7 +243,7 @@ model AgentToolPermission {
 
 ---
 
-## 6. `RouterRule` — no priority; list-ordered first-match
+## 6. `RouterRule` - no priority; list-ordered first-match
 
 ```prisma
 enum RouteType { AGENT ROUTINE HUMAN }
@@ -292,7 +292,7 @@ Tenant.defaultAgentId → Tenant.defaultRoutineId → Tenant.defaultQueue → UN
 
 ---
 
-## 7. `Routine` — formerly `ChatbotFlow`, constrained
+## 7. `Routine` - formerly `ChatbotFlow`, constrained
 
 ```prisma
 enum FlowType   { MAIN SUB }
@@ -340,7 +340,7 @@ Save-time validators (application code, not DB):
 
 ---
 
-## 8. `Tenant` — defaults for routing fallback
+## 8. `Tenant` - defaults for routing fallback
 
 ```prisma
 model Tenant {
@@ -361,7 +361,7 @@ model Tenant {
 
 ---
 
-## 9. `Conversation` — mode, snapshot, intake facts
+## 9. `Conversation` - mode, snapshot, intake facts
 
 ```prisma
 enum ConversationStatus { OPEN WAITING CLAIMED PAUSED CLOSED }
@@ -380,15 +380,15 @@ model Conversation {
   routineId             String?            @map("routine_id")
   routineNodeId         String?            @map("routine_node_id")
 
-  // NEW — mode is per-conversation, set by routing or on handoff
+  // NEW - mode is per-conversation, set by routing or on handoff
   mode                  AgentMode?
   modeReason            String?            @map("mode_reason")
   //   "routed_auto" | "routed_assist" | "bot_requested_handoff" | "human_unclaimed_resume" | ...
 
-  // NEW — prompt version this conversation is running against (snapshot on start)
+  // NEW - prompt version this conversation is running against (snapshot on start)
   promptVersionId       String?            @map("prompt_version_id")
 
-  // NEW — structured intake facts from routines / agent extraction
+  // NEW - structured intake facts from routines / agent extraction
   intakeFacts           Json               @default("{}") @map("intake_facts")
   //   { email?, phone?, name?, capturedBy: "routine"|"agent"|"human",
   //     capturedAt: iso, routineNodeTrail: string[] }
@@ -409,7 +409,7 @@ model Conversation {
 
 ---
 
-## 10. `AgentTurnLog` — unified observability row
+## 10. `AgentTurnLog` - unified observability row
 
 One row per call to `executeAgentTurn`. Replaces the inconsistent mix of `AuditLog` entries bot/copilot currently produce.
 
@@ -424,7 +424,7 @@ model AgentTurnLog {
   promptVersionId     String?  @map("prompt_version_id")
 
   toolsOffered        Json     @default("[]") @map("tools_offered")
-  //   string[] — tool names the LLM saw
+  //   string[] - tool names the LLM saw
 
   toolCalls           Json     @default("[]") @map("tool_calls")
   //   [{ id, name, args, policyDecision, ok, error?, durationMs }]
@@ -448,13 +448,13 @@ model AgentTurnLog {
 
 ---
 
-## 11. `ApprovalRequest` — add policy snapshot
+## 11. `ApprovalRequest` - add policy snapshot
 
 ```prisma
 model ApprovalRequest {
   // ... existing fields ...
 
-  // NEW — snapshot of evaluatePolicies() output at creation time.
+  // NEW - snapshot of evaluatePolicies() output at creation time.
   // No FK to TenantToolPermission (which is deleted); self-contained.
   policySnapshot   Json     @map("policy_snapshot")
   //   { catalog: {...}, tenant: {...}, agent: {...}, effective: { mode, reason } }
@@ -463,7 +463,7 @@ model ApprovalRequest {
 
 ---
 
-## 12. `ProposedToolCall` — for assist-mode approvals
+## 12. `ProposedToolCall` - for assist-mode approvals
 
 Server-side staging of tool proposals so the client can't tamper with args.
 
@@ -498,8 +498,8 @@ model ProposedToolCall {
 
 | Table | Disposition |
 |---|---|
-| `copilot_configs` | **DROP** — fields absorbed into `AIAgent`. |
-| `tenant_tool_permissions` | **DROP** — fields moved to `TenantTool.configOverrides`. |
+| `copilot_configs` | **DROP** - fields absorbed into `AIAgent`. |
+| `tenant_tool_permissions` | **DROP** - fields moved to `TenantTool.configOverrides`. |
 | `chatbot_flows` | **RENAME** to `routines` (schema above). |
 | `chatbot_flow_runs` | **RENAME** to `routine_runs`. |
 

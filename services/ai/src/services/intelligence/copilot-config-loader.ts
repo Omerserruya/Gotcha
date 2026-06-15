@@ -7,14 +7,14 @@ import { prisma, parseCopilotConfig, EMPTY_COPILOT_CONFIG, type CopilotConfig } 
  * Returns an empty config when nothing is configured so the live runner can
  * always fall through to platform defaults.
  *
- * Cached for the duration of a live call via the runner's lifecycle — the
+ * Cached for the duration of a live call via the runner's lifecycle - the
  * supervisor calls this exactly once when the runner spins up.
  */
 export async function loadCopilotConfigForConversation(
   conversationId: string,
 ): Promise<CopilotConfig> {
   try {
-    // Conversation rows don't carry the CommunicationChannel.id directly —
+    // Conversation rows don't carry the CommunicationChannel.id directly -
     // the link is via VoiceCallSession.channelId (set when the call rings
     // in / is placed out). Falls through to defaults when there's no
     // session yet (e.g. very early in the lifecycle).
@@ -28,7 +28,7 @@ export async function loadCopilotConfigForConversation(
     const voiceChannel = await prisma.voiceChannel.findFirst({
       where: { communicationChannelId: session.channelId },
       // Phase 6: aiAgentId is now a real FK column. The JSONB still carries
-      // legacy goals/persona/questions/dataFields — those remain the
+      // legacy goals/persona/questions/dataFields - those remain the
       // fallback for tenants without a funnel. We overlay the FK onto the
       // parsed config so downstream consumers keep reading a uniform shape.
       select: { copilotConfig: true, aiAgentId: true },

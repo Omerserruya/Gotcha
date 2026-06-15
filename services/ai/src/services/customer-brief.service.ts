@@ -1,9 +1,9 @@
 /**
- * Customer Brief — persistent, customer-level behavioral intelligence.
+ * Customer Brief - persistent, customer-level behavioral intelligence.
  *
  * The per-conversation summary answers "what happened in this thread?". The
  * customer brief answers "who is this person, and how should I treat them?"
- * — and lives BEYOND any single conversation so the next agent (or AI) can
+ * - and lives BEYOND any single conversation so the next agent (or AI) can
  * pick up cold.
  *
  * Refresh hooks:
@@ -15,7 +15,7 @@
  *
  * Storage: `customer_briefs` (one row per tenant+identityKey+locale). The
  * identity key prefers `person:<id>` > `crm:<vendor>:<id>` > `contact:<id>`
- * — when the unifier converges later, the writer will move briefs onto the
+ * - when the unifier converges later, the writer will move briefs onto the
  * stronger key automatically (next refresh writes under the new key).
  *
  * Locale-aware: a tenant with Hebrew and English agents gets one persisted
@@ -79,7 +79,7 @@ const LOCALE_NAME: Record<string, string> = {
 /**
  * Look up the freshest brief for a customer. Queries the indexed identity
  * COLUMNS (personId / crmContactId / contactId) rather than the composite
- * identityKey — the column query survives vendor-string drift (e.g. a row
+ * identityKey - the column query survives vendor-string drift (e.g. a row
  * written when contact.metadata.crmVendor was null vs. "zoho") which would
  * otherwise produce false cache misses and force regeneration on every
  * panel open.
@@ -115,13 +115,13 @@ export async function refreshCustomerBriefFromConversation(args: {
   tenantId: string;
   conversationId: string;
   locale?: string;
-  /** Optional event name for provenance — e.g. "chat.closed" or "voice.finalized". */
+  /** Optional event name for provenance - e.g. "chat.closed" or "voice.finalized". */
   sourceEvent?: string;
 }): Promise<CustomerBriefRecord | null> {
   const locale = (args.locale || "en").toLowerCase().slice(0, 8);
 
   // Pull the cross-channel bundle. loadCustomerContext walks Contact.personId
-  // and metadata.crmContactId — same path the side panel uses, so the brief
+  // and metadata.crmContactId - same path the side panel uses, so the brief
   // sees exactly the data the operator does.
   const bundle = await loadCustomerContext({
     tenantId: args.tenantId,
@@ -139,7 +139,7 @@ export async function refreshCustomerBriefFromConversation(args: {
   // We need contactId for the weakest-key fallback. Try the exact
   // (channel, externalId) tuple first; if nothing matches and the
   // customerExternalId is phone-shaped (voice / WhatsApp / SMS), fall back
-  // to a phone-column lookup so we cross channels — the same human ingested
+  // to a phone-column lookup so we cross channels - the same human ingested
   // first on WhatsApp resolves on a later voice call.
   let contactId: string | null = null;
   if (conv?.channel && conv?.customerExternalId) {
@@ -173,11 +173,11 @@ export async function refreshCustomerBriefFromConversation(args: {
   };
   const identityKey = deriveIdentityKey(hints);
   if (!identityKey) {
-    // No identity at all — nothing to persist under. Skip silently.
+    // No identity at all - nothing to persist under. Skip silently.
     return null;
   }
 
-  // Sibling conversations come pre-computed on the bundle — the walk
+  // Sibling conversations come pre-computed on the bundle - the walk
   // unions every identity layer (personId + CRM pin + phone + email),
   // mirroring conversation.service.ts:getHistoryByCustomerExternalId so
   // the brief sees exactly the same prior history the side panel does.
@@ -186,7 +186,7 @@ export async function refreshCustomerBriefFromConversation(args: {
   const siblingConvIds = bundle.sibling_conversation_ids.filter((id) => id !== args.conversationId).slice(0, 20);
 
   // Sample inbound (customer-voiced) messages from sibling conversations.
-  // These ARE the prior history — what the customer actually said over
+  // These ARE the prior history - what the customer actually said over
   // time. The brief grounds entirely on this; the current conversation is
   // intentionally excluded since CoPilot owns that surface.
   const priorMessageSamples: Array<{ conversationId: string; channel: string; direction: string; body: string; createdAt: string }> = [];
@@ -297,7 +297,7 @@ async function generateBriefText(args: {
   customerName: string | null;
   currentChannel: string | null;
   /** Verbatim customer messages sampled from PRIOR conversations across
-   *  every channel. Excludes the current conversation by design — the
+   *  every channel. Excludes the current conversation by design - the
    *  CoPilot context card owns "what's happening right now". This brief
    *  is purely about the customer's behavioral arc over time. */
   priorMessageSamples: Array<{ conversationId: string; channel: string; direction: string; body: string; createdAt: string }>;
@@ -323,10 +323,10 @@ async function generateBriefText(args: {
   if (bundle.personId) profileLines.push(`Unified identity (personId): ${bundle.personId}`);
   profileLines.push(`Total prior conversations on file (excluding the current one): ${siblingConversationCount}`);
   if (args.currentChannel) {
-    profileLines.push(`(Current conversation channel: ${args.currentChannel} — DO NOT summarize the current conversation; another surface owns that.)`);
+    profileLines.push(`(Current conversation channel: ${args.currentChannel} - DO NOT summarize the current conversation; another surface owns that.)`);
   }
 
-  // Cross-channel summaries from ConversationIntelligence — the high-signal
+  // Cross-channel summaries from ConversationIntelligence - the high-signal
   // path. Excludes the current conversation by design.
   const otherSummaries = bundle.recent_summaries.filter((s) => !s.isCurrentConversation);
   if (otherSummaries.length > 0) {
@@ -344,7 +344,7 @@ async function generateBriefText(args: {
   }
 
   // Verbatim customer messages from prior conversations. This is the
-  // anti-hallucination anchor — when ConversationIntelligence summaries
+  // anti-hallucination anchor - when ConversationIntelligence summaries
   // are missing or stale, the LLM still has real text to quote from.
   if (priorMessageSamples.length > 0) {
     profileLines.push("", "## Verbatim customer messages from PRIOR conversations (most-recent first)");
@@ -380,25 +380,25 @@ async function generateBriefText(args: {
 
   const profile = profileLines.join("\n");
 
-  // STRICT scope rule: the brief is about WHO THIS CUSTOMER IS over time —
+  // STRICT scope rule: the brief is about WHO THIS CUSTOMER IS over time -
   // not what's happening in the current conversation. CoPilot has its own
   // context card for that. Duplicating that scope is wasteful and confuses
   // the agent's attention.
   const systemPrompt = [
     "You are a senior customer-relationship analyst writing a CROSS-CONVERSATION behavioral brief about a single customer.",
-    "Audience: the human agent who will talk to this customer — they already have a separate \"current conversation\" surface (CoPilot), so do NOT describe what's happening right now.",
+    "Audience: the human agent who will talk to this customer - they already have a separate \"current conversation\" surface (CoPilot), so do NOT describe what's happening right now.",
     "",
-    `WRITE EVERY STRING IN ${targetLanguage.toUpperCase()}. The platform is operating in ${targetLanguage} — both \`brief\` and every entry in \`signals\` / \`recommended_behaviors\` MUST be in ${targetLanguage}.`,
+    `WRITE EVERY STRING IN ${targetLanguage.toUpperCase()}. The platform is operating in ${targetLanguage} - both \`brief\` and every entry in \`signals\` / \`recommended_behaviors\` MUST be in ${targetLanguage}.`,
     "",
-    "SCOPE RULES (strict — violations make the brief useless):",
+    "SCOPE RULES (strict - violations make the brief useless):",
     "1. The brief is about the customer's HISTORICAL behavior across all prior conversations.",
     "2. NEVER mention what they sent in the current conversation, what file they attached, what number they shared just now, or anything else about the live interaction. That is CoPilot's territory.",
-    "3. If you have zero prior history, write a short honest brief that says so — DO NOT pad by describing the current conversation.",
+    "3. If you have zero prior history, write a short honest brief that says so - DO NOT pad by describing the current conversation.",
     "",
     "ANTI-HALLUCINATION RULES:",
     "4. Never invent intent. If the prior messages / summaries don't show it, don't write it.",
     "5. Never write filler like \"asking about wellbeing\", \"checking in\", \"reaching out to say hi\" unless those exact intents appear in prior messages.",
-    "6. NAME concrete topics from prior conversations — products, features, prices, complaints, requests they actually wrote about.",
+    "6. NAME concrete topics from prior conversations - products, features, prices, complaints, requests they actually wrote about.",
     "7. If you cite a topic, it must be quotable from the profile.",
     "",
     "BEHAVIORAL DEPTH (this is the value the brief adds):",
@@ -406,23 +406,23 @@ async function generateBriefText(args: {
     "- Mood pattern: are they consistently warm, frustrated, neutral, sharp, etc?",
     "- Tone preference: how do they like to be talked to (formal/casual, short/long, language)?",
     "- Recurring topics / unresolved issues / past product interest.",
-    "- Disappointment + churn signals matter more than positive signals — surface them clearly.",
+    "- Disappointment + churn signals matter more than positive signals - surface them clearly.",
     "- What would make THIS person feel good and well-treated on the next interaction?",
     "",
     "Output JSON with EXACTLY this shape:",
     "{",
     '  "brief": "3-5 short sentences about who they are across ALL prior interactions. Cover: their recurring interests / requests across channels (name them), their relationship arc, any unresolved issues, dominant mood with evidence, and what they respond well to. NO mention of the current conversation.",',
-    '  "signals": ["≤5 short noun phrases — historical things to keep in mind (e.g. \\"asked about GOTCHA pricing twice in the past month\\", \\"prefers Hebrew\\", \\"unresolved billing issue from 2026-03-12\\")"],',
-    '  "tone": "tone this customer responds to best, inferred from how they wrote in past conversations — short phrase. null if no signal.",',
-    '  "mood": "dominant mood across PRIOR interactions with evidence — short phrase. null if no signal.",',
-    '  "recommended_behaviors": ["≤5 concrete things the next agent should DO based on the customer\'s history — e.g. \\"follow up on his GOTCHA pricing question from last week\\", \\"acknowledge the unresolved billing issue first\\". NOT instructions about the current conversation."]',
+    '  "signals": ["≤5 short noun phrases - historical things to keep in mind (e.g. \\"asked about GOTCHA pricing twice in the past month\\", \\"prefers Hebrew\\", \\"unresolved billing issue from 2026-03-12\\")"],',
+    '  "tone": "tone this customer responds to best, inferred from how they wrote in past conversations - short phrase. null if no signal.",',
+    '  "mood": "dominant mood across PRIOR interactions with evidence - short phrase. null if no signal.",',
+    '  "recommended_behaviors": ["≤5 concrete things the next agent should DO based on the customer\'s history - e.g. \\"follow up on his GOTCHA pricing question from last week\\", \\"acknowledge the unresolved billing issue first\\". NOT instructions about the current conversation."]',
     "}",
   ].join("\n");
 
   try {
     const result = await generateResponse({
       tenantId: args.tenantId,
-      // Per-contact brief — pin to the strongest available identity so
+      // Per-contact brief - pin to the strongest available identity so
       // repeat briefs for the same person route to the same backend cache.
       sessionId: args.bundle.personId
         ? `person:${args.bundle.personId}`
@@ -432,7 +432,7 @@ async function generateBriefText(args: {
       model: getDefaultModel(),
       messages: [
         { role: "system", content: systemPrompt },
-        { role: "user", content: `## Profile\n${profile || "(no profile data yet — brand-new customer with zero messages on record)"}` },
+        { role: "user", content: `## Profile\n${profile || "(no profile data yet - brand-new customer with zero messages on record)"}` },
       ],
       temperature: 0.2,
       maxTokens: 700,
@@ -474,11 +474,11 @@ async function generateBriefText(args: {
 function fallbackBrief(locale: string, hasHistory: boolean): string {
   const fallbacks: Record<string, { returning: string; newCustomer: string }> = {
     he: {
-      returning: "לקוח חוזר — ראה שיחות קודמות להקשר.",
-      newCustomer: "לקוח חדש — אין אינטראקציות קודמות מתועדות.",
+      returning: "לקוח חוזר - ראה שיחות קודמות להקשר.",
+      newCustomer: "לקוח חדש - אין אינטראקציות קודמות מתועדות.",
     },
     en: {
-      returning: "Returning customer — see prior conversations for context.",
+      returning: "Returning customer - see prior conversations for context.",
       newCustomer: "New customer with no recorded prior interactions.",
     },
   };
@@ -501,7 +501,7 @@ function mapRow(row: any): CustomerBriefRecord {
     lastSourceConvId: row.lastSourceConvId ?? null,
     generatedAt: (row.generatedAt ?? row.updatedAt ?? new Date()).toISOString?.() ?? new Date().toISOString(),
     locale: row.locale,
-    // We don't pin a vendor name on the brief — consumers that need the
+    // We don't pin a vendor name on the brief - consumers that need the
     // current vendor read it from the CRM adapter at panel-render time
     // (which is where vendor strings actually mean something).
     vendor: null,

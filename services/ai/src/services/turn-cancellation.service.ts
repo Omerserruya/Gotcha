@@ -2,13 +2,13 @@
  * In-process AbortController registry for per-conversation AI turns.
  *
  * Why: a customer who fires three messages in quick succession should not
- * burn three full LLM rounds — the older replies are obsolete the moment a
+ * burn three full LLM rounds - the older replies are obsolete the moment a
  * newer message arrives. `beginTurn(key)` aborts any in-flight controller
  * for the same key before handing back a fresh signal, so the older LLM
  * fetch is cancelled at the SDK layer (saves tokens + latency) and the
  * caller returns early via the AbortError branch.
  *
- * Scope: lives in the AI service process — the entry points
+ * Scope: lives in the AI service process - the entry points
  * (/api/ai-bot/reply, voice-assist triggerAssist) all run here, so a single
  * in-memory map is the correct authority. The incoming-worker holds no
  * controllers; if a newer worker job arrives while an older one is still
@@ -50,7 +50,7 @@ export function beginTurn(tenantId: string, conversationId: string, kind: TurnKi
     end: () => {
       if (released) return;
       released = true;
-      // Only clear if it's still our controller — a newer turn may have
+      // Only clear if it's still our controller - a newer turn may have
       // already replaced us, in which case we leave that one alone.
       if (inflight.get(key) === ctrl) inflight.delete(key);
     },

@@ -580,6 +580,7 @@ export default function KnowledgePage() {
           </div>
           <button
             onClick={() => setShowCreateModal(true)}
+            data-tour="kb-add-source"
             className="bg-violet-600 hover:bg-violet-700 text-white px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -762,7 +763,7 @@ export default function KnowledgePage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-800">Google Drive</p>
-                                <p className="text-xs text-gray-400">{gdConnected ? "Connected — browse files" : "Connect to import docs"}</p>
+                                <p className="text-xs text-gray-400">{gdConnected ? "Connected - browse files" : "Connect to import docs"}</p>
                               </div>
                             </button>
                             <button
@@ -775,7 +776,7 @@ export default function KnowledgePage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-800">Confluence</p>
-                                <p className="text-xs text-gray-400">{cfConnected ? "Connected — browse spaces" : "Connect to import wiki"}</p>
+                                <p className="text-xs text-gray-400">{cfConnected ? "Connected - browse spaces" : "Connect to import wiki"}</p>
                               </div>
                             </button>
                           </div>

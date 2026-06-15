@@ -87,7 +87,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       return;
     }
 
-    // Next position — appends to the end of the non-default list
+    // Next position - appends to the end of the non-default list
     const maxPos = await prisma.routerRule.aggregate({
       where: { tenantId: req.tenantId! as string },
       _max: { position: true as any } as any,
@@ -212,7 +212,7 @@ router.post("/test", authenticate, resolveTenant, requireActiveTenant(), require
     });
     const rules = [...all.filter(r => !r.isDefault), ...all.filter(r => r.isDefault)];
 
-    // Intent conditions — batched via the AI service
+    // Intent conditions - batched via the AI service
     const intents = Array.from(new Set(
       rules.flatMap(r => ((r.conditions as any) ?? []).filter((c: any) => c.type === "intent").map((c: any) => c.value))
     ));

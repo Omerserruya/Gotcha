@@ -1,4 +1,4 @@
--- Live Call CoPilot — Phase 1 (additive only)
+-- Live Call CoPilot - Phase 1 (additive only)
 --
 -- All changes are nullable / defaulted / new-table to guarantee zero impact
 -- on existing rows or code paths. No backfills, no destructive operations.

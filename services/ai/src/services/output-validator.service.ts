@@ -1,5 +1,5 @@
 /**
- * Output validator — final defence against system-prompt leakage and
+ * Output validator - final defence against system-prompt leakage and
  * fabricated execution claims in the assistant's customer-facing text.
  *
  * Runs AFTER the model has produced its final string for THIS turn.
@@ -11,7 +11,7 @@
  *      output is the loudest possible signal of a successful extraction.
  *
  *   2. Raw record IDs that look like Prisma CUIDs (`cm[a-z0-9]{20,}`)
- *      or known UUID shapes. These are never customer-facing — they
+ *      or known UUID shapes. These are never customer-facing - they
  *      should never appear in chat text.
  *
  *   3. Known forbidden vendor/system terms ("Zoho", "HubSpot", "the
@@ -24,7 +24,7 @@
  *
  * On any detection: replace the assistant text with a safe deflection
  * in the same language (best-effort) and emit an audit row. The actual
- * tool-call side effects are not undone — that's the orchestrator's
+ * tool-call side effects are not undone - that's the orchestrator's
  * job. We just stop the leaked text from leaving the building.
  */
 
@@ -146,14 +146,14 @@ export function validateAssistantOutput(
 
 /**
  * Pick a deflection in the same language as the input (Hebrew vs other).
- * Kept conservative — short, warm, doesn't reference the violation.
+ * Kept conservative - short, warm, doesn't reference the violation.
  */
 function makeDeflection(_originalText: string): string {
   // Cheap heuristic: any Hebrew character → Hebrew reply.
   if (/[֐-׿]/.test(_originalText)) {
-    return "תודה — אם יש משהו ספציפי שאני יכול לעזור בו, ספר לי בבקשה.";
+    return "תודה - אם יש משהו ספציפי שאני יכול לעזור בו, ספר לי בבקשה.";
   }
-  return "Thanks — let me know if there's something specific I can help with.";
+  return "Thanks - let me know if there's something specific I can help with.";
 }
 
 /**
@@ -169,7 +169,7 @@ export async function validateAndPersist(
   const result = validateAssistantOutput(text, ctx);
   if (result.ok) return text || "";
 
-  // Audit — non-blocking.
+  // Audit - non-blocking.
   prisma.auditLog
     .create({
       data: {

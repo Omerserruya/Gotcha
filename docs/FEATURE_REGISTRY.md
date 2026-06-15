@@ -7,7 +7,7 @@ Complete mapping of every gateable product feature in ChatCenter / GOTCHA, used 
 
 **Default for AGENT** = whether a regular AGENT user gets the feature automatically when the tenant has it enabled (`all`), or needs an explicit role/user grant (`none`). `ADMIN` always gets every tenant-enabled feature. `SYSTEM_ADMIN` bypasses every check.
 
-All features ship with `defaultEnabled: false` — a brand-new tenant starts with nothing on until SYSTEM_ADMIN flips toggles.
+All features ship with `defaultEnabled: false` - a brand-new tenant starts with nothing on until SYSTEM_ADMIN flips toggles.
 
 Source of truth: [`packages/shared/src/lib/features.ts`](../packages/shared/src/lib/features.ts)
 
@@ -61,7 +61,7 @@ Source of truth: [`packages/shared/src/lib/features.ts`](../packages/shared/src/
 | `customer_briefs` | Customer Briefs | all | AI-generated customer context summaries |
 | `post_call_analysis` | Post-Call Analysis | all | AI analysis of voice conversations |
 | `router_rules` | Router Rules (Main Playbook) | all | Rules-based routing to agents and bots |
-| `knowledge_base` | Knowledge Base (legacy) | all | Legacy alias — prefer `knowledge_base_rag` |
+| `knowledge_base` | Knowledge Base (legacy) | all | Legacy alias - prefer `knowledge_base_rag` |
 
 ## Knowledge (4)
 
@@ -179,7 +179,7 @@ Some features have intentional or accidental overlap. Consider whether to keep b
 
 | Pair | Notes |
 |---|---|
-| `confluence_integration` ↔ `confluence_knowledge` | Same connector — integration auth vs RAG sync. Keep both if admins should be able to install without enabling sync. |
+| `confluence_integration` ↔ `confluence_knowledge` | Same connector - integration auth vs RAG sync. Keep both if admins should be able to install without enabling sync. |
 | `google_drive_integration` ↔ `google_drive_knowledge` | Same as above. |
 | `bot` ↔ `chatbot_flow_builder` + `autonomous_ai_mode` | `bot` is the legacy master toggle; the new pair gates each underlying mode independently. |
 | `knowledge_base` ↔ `knowledge_base_rag` | `knowledge_base` is a legacy alias retained for back-compat. |
@@ -187,7 +187,7 @@ Some features have intentional or accidental overlap. Consider whether to keep b
 
 ## Adding / removing features
 
-- **Add**: append to `FEATURES` const and `FEATURE_METADATA` in `packages/shared/src/lib/features.ts`. No DB migration needed — the system seeds the row on first toggle.
+- **Add**: append to `FEATURES` const and `FEATURE_METADATA` in `packages/shared/src/lib/features.ts`. No DB migration needed - the system seeds the row on first toggle.
 - **Remove**: delete the key from `FEATURES`. Orphan rows in `tenant_features` / `user_feature_grants` / `tenant_role_features` are harmless and can be cleaned up later with a `DELETE WHERE feature NOT IN (...)` script.
 - **Backfill from legacy column**: set `legacyColumn: "tenant_column_name"` in the metadata. The resolver falls back to the column when no `tenant_features` row exists.
 

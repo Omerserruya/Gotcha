@@ -26,7 +26,7 @@ interface VarEntry {
   nodeId?: string;
 }
 
-// Built-in variables always available in a flow run — the user's last
+// Built-in variables always available in a flow run - the user's last
 // message, the channel it came in on, etc. Authors can mix these with
 // anything they define on the canvas.
 const BUILT_IN_VARS: VarEntry[] = [
@@ -112,7 +112,7 @@ export function useAvailableVariables(): VarEntry[] {
     const id = setInterval(() => setTick((n) => n + 1), 600);
     return () => clearInterval(id);
   }, []);
-  // `tick` keeps the useMemo fresh at a reasonable cadence. Polling is ok —
+  // `tick` keeps the useMemo fresh at a reasonable cadence. Polling is ok -
   // there are rarely more than a few dozen nodes, and ReactFlow doesn't
   // expose a clean subscription for "node data changed without position".
   return useMemo(() => {
@@ -234,7 +234,7 @@ export function VariableMentionInput({
 
       {pickerOpen && (
         <>
-          {/* backdrop — click outside to close */}
+          {/* backdrop - click outside to close */}
           <div className="fixed inset-0 z-30" onClick={() => { setPickerOpen(false); setFilter(""); }} />
           <div className="absolute right-0 top-full mt-1 z-40 w-72 bg-white rounded-xl shadow-2xl border border-gray-200 overflow-hidden">
             <div className="px-3 py-2 border-b border-gray-100 flex items-center gap-2">

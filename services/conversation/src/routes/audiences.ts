@@ -48,7 +48,7 @@ router.post("/preview", async (req: Request, res: Response) => {
 });
 
 /**
- * Schema discovery for the audience builder. Returns CRM fields only —
+ * Schema discovery for the audience builder. Returns CRM fields only -
  * the platform's local Contact fields are not surfaced here anymore (the
  * platform contact table is a write-side cache, not a source of truth
  * for audience targeting).

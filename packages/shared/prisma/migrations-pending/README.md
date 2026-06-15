@@ -7,7 +7,7 @@ and runs `prisma migrate deploy`.
 
 This pattern is used when a migration's gate is **time-based or
 behavioural** ("one week green on the unified worker", "after every
-caller has migrated") — Prisma has no native equivalent, and a
+caller has migrated") - Prisma has no native equivalent, and a
 half-applied migration in a hotfix branch is far worse than a folder
 sitting on disk.
 

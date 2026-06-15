@@ -4,10 +4,10 @@
  * Executes tenant-scoped integration tools resolved via
  * TenantTool → CatalogTool. Uses the REAL schema fields:
  *
- *   CatalogTool.endpoint    — target URL (required)
- *   CatalogTool.method      — HTTP verb (default GET)
- *   CatalogTool.inputSchema — JSON-Schema-ish params contract
- *   CatalogTool.category    — READ | WRITE | DELETE | ACTION
+ *   CatalogTool.endpoint    - target URL (required)
+ *   CatalogTool.method      - HTTP verb (default GET)
+ *   CatalogTool.inputSchema - JSON-Schema-ish params contract
+ *   CatalogTool.category    - READ | WRITE | DELETE | ACTION
  *
  * Credentials and per-tenant config come from TenantIntegration.
  * No silent fallback: missing endpoint, unreachable host, 4xx/5xx →
@@ -49,7 +49,7 @@ export interface ToolExecutionResult {
 
 /**
  * Validate `input` against a CatalogTool.inputSchema.
- * Very permissive intentionally — we only enforce presence of keys the
+ * Very permissive intentionally - we only enforce presence of keys the
  * schema's top-level `required` array asks for. The LLM tool call surface
  * is otherwise loosely typed, so we refuse to invent stricter gates here.
  */
@@ -103,7 +103,7 @@ export async function executeTool(params: {
 
   // Provider-specific: Zoho access tokens live ~1h. Refresh pre-emptively
   // so the downstream request doesn't eat an avoidable 401. If the refresh
-  // fails we fall through with the stale token — axios will surface the
+  // fails we fall through with the stale token - axios will surface the
   // eventual 401 and the audit log records it.
   if (integrationSlug === "zoho_crm") {
     try {
@@ -116,7 +116,7 @@ export async function executeTool(params: {
     }
   }
 
-  // Fail loudly on missing endpoint — no silent fallback.
+  // Fail loudly on missing endpoint - no silent fallback.
   if (!catalogTool.endpoint) {
     return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
   }
@@ -136,7 +136,7 @@ export async function executeTool(params: {
 
   // URL template support: replace :param placeholders from `input` or
   // from integrationConfig.  e.g. "/contacts/:id" + { id: "c1" }.
-  // If endpoint is relative ("/..."), prepend integrationConfig.baseUrl —
+  // If endpoint is relative ("/..."), prepend integrationConfig.baseUrl -
   // used for providers with per-tenant hosts (Zoho api_domain, Zendesk
   // subdomain, etc.). Absolute URLs in the catalog are honored as-is.
   let url = catalogTool.endpoint;
@@ -203,7 +203,7 @@ export async function executeTool(params: {
 
   const durationMs = Date.now() - startTime;
 
-  // Always record the execution — success or failure — for the audit
+  // Always record the execution - success or failure - for the audit
   // trail. Never silently swallow.
   const execution = await prisma.toolExecution.create({
     data: {
@@ -256,7 +256,7 @@ export async function executeTool(params: {
   // CRM-mutating tools change the lead/contact rows the prefetch cache
   // is keyed on. Invalidate so the next bot turn rebuilds the prompt
   // context against fresh Zoho data instead of stale matches. Read-only
-  // slugs (*_search, get_*, list_*) are intentionally skipped — they
+  // slugs (*_search, get_*, list_*) are intentionally skipped - they
   // already CAME from the cache or don't change anything.
   if (success) {
     const slug = catalogTool.slug || "";

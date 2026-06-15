@@ -65,6 +65,8 @@ export default function LoginPage() {
           setError("Your organization setup is not complete. Please contact your admin.");
           return;
         } else {
+          // Everyone lands in the inbox. Setup progress continues via the
+          // sidebar mission panel (no dedicated home page).
           router.push("/conversations");
         }
       }

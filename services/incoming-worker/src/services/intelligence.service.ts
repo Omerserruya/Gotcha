@@ -48,7 +48,7 @@ function determineResolutionOutcome(messages: { direction: string; metadata: any
  * Run full intelligence analysis on a conversation.
  *
  * Name kept historically as `analyzeClosedConversation` but the function
- * is no longer close-only — it now also fires on bot→human handoff
+ * is no longer close-only - it now also fires on bot→human handoff
  * milestones so the incoming human gets an instant summary. The
  * `analyzeConversation` alias below is the preferred name for new callers.
  */

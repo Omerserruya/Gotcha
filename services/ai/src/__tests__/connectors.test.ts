@@ -21,7 +21,7 @@ describe("connector registry", () => {
   });
 
   it("default messaging connector is the real queue-backed implementation", async () => {
-    // The default messaging connector enqueues to outgoingMessageQueue — a
+    // The default messaging connector enqueues to outgoingMessageQueue - a
     // real side effect. Without a DB it naturally fails; we only assert the
     // connector is registered and has the expected name so tests that do
     // provide a DB exercise the real path.

@@ -1,7 +1,7 @@
 /**
- * MongoDB adapter — production-grade with collection-level permissions.
+ * MongoDB adapter - production-grade with collection-level permissions.
  *
- * Auth: API key style — credentials hold a Mongo connection string
+ * Auth: API key style - credentials hold a Mongo connection string
  * (mongodb:// or mongodb+srv://). Works with Mongo Atlas, self-hosted,
  * AWS DocumentDB.
  *
@@ -14,13 +14,13 @@
  *     maxDocs: number          // hard cap on returned docs (default 100)
  *   }
  *
- * Tools — every operation enforces the allowlist + uses the official driver
+ * Tools - every operation enforces the allowlist + uses the official driver
  * to avoid query-string injection.
  *
- *   - mongodb.find_documents      — { filter, limit, sort, projection }
- *   - mongodb.get_document        — { _id }
- *   - mongodb.insert_document     — { doc }
- *   - mongodb.update_document     — { _id, set }
+ *   - mongodb.find_documents      - { filter, limit, sort, projection }
+ *   - mongodb.get_document        - { _id }
+ *   - mongodb.insert_document     - { doc }
+ *   - mongodb.update_document     - { _id, set }
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
@@ -45,7 +45,7 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "mongodb.find_documents",
     description: "Query documents from a whitelisted collection.",
-    whenToUse: "You need a list of documents matching a filter — e.g. orders for an email.",
+    whenToUse: "You need a list of documents matching a filter - e.g. orders for an email.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {
@@ -70,7 +70,7 @@ const TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         collection: { type: "string" },
-        _id: { description: "Document _id — string OR 24-hex ObjectId." },
+        _id: { description: "Document _id - string OR 24-hex ObjectId." },
       },
       required: ["collection", "_id"],
     },

@@ -71,7 +71,7 @@ export function CollapsedNode(props: NodeProps) {
         "hover:shadow-lg",
       ].join(" ")}
     >
-      {/* Incoming-edge target — anchored to the LEFT edge near the top of the
+      {/* Incoming-edge target - anchored to the LEFT edge near the top of the
           card, regardless of registry's "top"/"left" preference. */}
       {hasTarget ? (
         <Handle
@@ -161,7 +161,7 @@ export function CollapsedNode(props: NodeProps) {
         </div>
       )}
 
-      {/* Source handles — quick-reply renders its handles inside each button
+      {/* Source handles - quick-reply renders its handles inside each button
           row above; everything else gets a single right-edge "Next" dot or
           labeled bottom multi-exits. */}
       {type === "send_message_quick_reply"

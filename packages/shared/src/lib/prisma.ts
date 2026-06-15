@@ -2,7 +2,7 @@ import { PrismaClient } from "@prisma/client";
 import { AsyncLocalStorage } from "async_hooks";
 
 /**
- * Tenant-scoped models — every row in these tables belongs to a single
+ * Tenant-scoped models - every row in these tables belongs to a single
  * tenant. ANY query (read or mutate) must include a `tenantId` filter,
  * or the Prisma client extension below will refuse to run it.
  *
@@ -76,7 +76,7 @@ export function crossTenantMiddleware(_req: any, _res: any, next: any): void {
 }
 
 /**
- * BULK operations — they return or affect MANY rows. These are the
+ * BULK operations - they return or affect MANY rows. These are the
  * dangerous ones: a missing tenantId filter means "return everyone's
  * data" or "return the first match from any tenant". These MUST have
  * tenantId in their WHERE.
@@ -93,7 +93,7 @@ const BULK_WHERE_OPERATIONS = new Set([
 ]);
 
 /**
- * SINGLE-ROW operations — inherently safe because they key by the
+ * SINGLE-ROW operations - inherently safe because they key by the
  * primary key (or a unique index) which is an unguessable cuid in this
  * schema. They never leak cross-tenant data on a guess. We allow them
  * without an explicit tenantId filter so workers/background jobs that
@@ -119,7 +119,7 @@ function hasTenantIdInWhere(where: unknown): boolean {
   // channel, externalId } }`. Prisma exposes the compound index as a single
   // top-level field whose value is an object containing each component. We
   // accept it as guarded when the nested object itself includes tenantId.
-  // Limited to one level deep on direct object values — this avoids false
+  // Limited to one level deep on direct object values - this avoids false
   // positives from JSON-column filters like `where: { metadata: { equals: {
   // tenantId: "X" } } }`, which don't actually filter on tenant.
   for (const v of Object.values(w)) {
@@ -128,7 +128,7 @@ function hasTenantIdInWhere(where: unknown): boolean {
       if ("tenantId" in nv && nv.tenantId !== undefined) return true;
     }
   }
-  // Nested AND/OR/NOT — walk the structure.
+  // Nested AND/OR/NOT - walk the structure.
   for (const key of ["AND", "OR", "NOT"] as const) {
     const branch = w[key];
     if (Array.isArray(branch)) {
@@ -201,7 +201,7 @@ function buildClient() {
             return query(args);
           }
 
-          // WHERE_OPERATIONS — require tenantId in the where clause.
+          // WHERE_OPERATIONS - require tenantId in the where clause.
           const where = (args as any)?.where;
           if (!hasTenantIdInWhere(where)) {
             throw new Error(

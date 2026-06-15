@@ -10,6 +10,15 @@ import type {
 } from "./types";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+// Unversioned: graph.instagram.com (Instagram Login) rejects version-prefixed paths.
+const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
+
+// Instagram-Login accounts hold an IG-user token that only works against
+// graph.instagram.com; legacy Facebook-Login accounts use a Page token against
+// graph.facebook.com. The `igLogin` flag on stored credentials selects the host.
+function igBase(credentials: ChannelCredentials): string {
+  return credentials.igLogin ? IG_API_URL : FB_API_URL;
+}
 
 // ─── Inbound Adapter ─────────────────────────────────────────
 
@@ -23,19 +32,37 @@ export const instagramInboundAdapter: InboundAdapter = {
   extractMessages(body: any): NormalizedInboundMessage[] {
     const messages: NormalizedInboundMessage[] = [];
     for (const entry of body.entry || []) {
-      for (const event of entry.messaging || []) {
+      // Instagram delivers DMs in two shapes depending on the product:
+      //   - Facebook-Login IG Messaging:  entry[].messaging[]
+      //   - Instagram-Login (graph.instagram.com): entry[].changes[] with
+      //     field === "messages" and the event under change.value
+      // The event body (sender/recipient/message/postback) is identical; only
+      // the envelope and timestamp units (changes = seconds) differ.
+      const events = [
+        ...(entry.messaging || []),
+        ...((entry.changes || [])
+          .filter((c: any) => c.field === "messages" && c.value)
+          .map((c: any) => c.value)),
+      ];
+      for (const event of events) {
         // Skip echo messages
         if (event.message?.is_echo) continue;
 
         const senderId = event.sender?.id;
         if (!senderId) continue;
 
+        // messaging[] timestamps are epoch-ms numbers; changes[] value.timestamp
+        // is an epoch-seconds string. Normalize both to a Date.
+        const ts = typeof event.timestamp === "string"
+          ? new Date(Number(event.timestamp) * 1000)
+          : new Date(event.timestamp);
+
         if (event.message) {
           messages.push({
             externalMessageId: event.message.mid,
             channel: "INSTAGRAM",
             senderId,
-            timestamp: new Date(event.timestamp),
+            timestamp: ts,
             content: extractInstagramContent(event.message),
           });
         } else if (event.postback) {
@@ -43,7 +70,7 @@ export const instagramInboundAdapter: InboundAdapter = {
             externalMessageId: `ig_postback_${event.timestamp}_${senderId}`,
             channel: "INSTAGRAM",
             senderId,
-            timestamp: new Date(event.timestamp),
+            timestamp: ts,
             content: {
               type: "interactive",
               interactiveReply: {
@@ -77,12 +104,19 @@ export const instagramInboundAdapter: InboundAdapter = {
     // For DMs (entry.messaging[]): recipient.id is the IG Business Account ID,
     // which matches the externalId we store in DB.
     // For comment events (entry.changes[].field === "comments"): entry.id IS
-    // the IG Business Account ID itself — Meta delivers comments keyed by the
+    // the IG Business Account ID itself - Meta delivers comments keyed by the
     // IG account, not the linked FB Page. Fall back to entry.id when no
     // messaging[] is present.
     for (const entry of body.entry || []) {
       for (const event of entry.messaging || []) {
         if (event.recipient?.id) return event.recipient.id;
+      }
+      // Instagram-Login DMs arrive as changes[] with field "messages"; the
+      // business account is value.recipient.id.
+      for (const ch of entry.changes || []) {
+        if (ch.field === "messages" && ch.value?.recipient?.id) {
+          return String(ch.value.recipient.id);
+        }
       }
       const hasComments = (entry.changes || []).some(
         (c: any) => c.field === "comments",
@@ -189,7 +223,7 @@ export const instagramOutboundAdapter: OutboundAdapter = {
   ): Promise<string | null> {
     try {
       const response = await axios.post(
-        `${FB_API_URL}/me/messages`,
+        `${igBase(credentials)}/me/messages`,
         {
           recipient: { id: recipientId },
           message: { text },
@@ -213,7 +247,7 @@ export const instagramOutboundAdapter: OutboundAdapter = {
     try {
       // Instagram supports quick_replies similar to Messenger
       const response = await axios.post(
-        `${FB_API_URL}/me/messages`,
+        `${igBase(credentials)}/me/messages`,
         {
           recipient: { id: recipientId },
           message: {
@@ -246,7 +280,7 @@ export const instagramOutboundAdapter: OutboundAdapter = {
     try {
       const attachmentType = mediaType === "document" ? "file" : mediaType;
       const response = await axios.post(
-        `${FB_API_URL}/me/messages`,
+        `${igBase(credentials)}/me/messages`,
         {
           recipient: { id: recipientId },
           message: {
@@ -273,12 +307,12 @@ export const instagramOutboundAdapter: OutboundAdapter = {
     quickReplies?: Array<{ id: string; title: string }>,
   ): Promise<{ messageId: string | null; recipientPsid: string | null } | null> {
     // Private Reply on IG Messaging API. The recipient form is exactly
-    // `{ comment_id }` — Meta resolves the actual IGSID server-side and
+    // `{ comment_id }` - Meta resolves the actual IGSID server-side and
     // returns it in `recipient_id` so the caller can switch to regular DM
     // for any subsequent message in this flow run. 7-day window from comment
     // timestamp is enforced by Meta; outside it this call returns 4xx.
     // IG private replies accept the same `quick_replies` payload as a
-    // standard DM — let callers attach buttons on the very first reply.
+    // standard DM - let callers attach buttons on the very first reply.
     try {
       const message: Record<string, any> = { text };
       if (quickReplies && quickReplies.length > 0) {
@@ -289,7 +323,7 @@ export const instagramOutboundAdapter: OutboundAdapter = {
         }));
       }
       const response = await axios.post(
-        `${FB_API_URL}/me/messages`,
+        `${igBase(credentials)}/me/messages`,
         {
           recipient: { comment_id: commentId },
           message,
@@ -319,7 +353,7 @@ export const instagramOutboundAdapter: OutboundAdapter = {
     // not required by the walker.
     try {
       const response = await axios.post(
-        `${FB_API_URL}/${commentId}/replies`,
+        `${igBase(credentials)}/${commentId}/replies`,
         { message: text },
         { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } },
       );

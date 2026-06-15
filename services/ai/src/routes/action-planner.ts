@@ -13,7 +13,7 @@ import {
 /**
  * Command Center prompts live on disk as editable markdown files under
  * `services/ai/src/prompts/`. They are loaded once at module init. Edit the
- * .md files to tune the planner/classifier behavior — no code change needed.
+ * .md files to tune the planner/classifier behavior - no code change needed.
  *
  *  - action-planner.md   : main ExecutionPlan system prompt. Must contain
  *                          `{{toolsBlock}}` and `{{capabilitiesBlock}}`
@@ -33,7 +33,7 @@ const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
 
 /**
- * ActionSchema — structured tool-calling format consumed by the
+ * ActionSchema - structured tool-calling format consumed by the
  * Action Engine (F3). Every AI-driven operation flows through this shape.
  */
 export type ActionTool =
@@ -75,7 +75,7 @@ function buildSystemPrompt(toolsBlock: string, capabilitiesBlock: string): strin
     .replace("{{capabilitiesBlock}}", capabilitiesBlock);
 }
 
-// POST /plan — produce an ExecutionPlan for a prompt (dry-run by default)
+// POST /plan - produce an ExecutionPlan for a prompt (dry-run by default)
 router.post("/plan", async (req: Request, res: Response) => {
   try {
     const { prompt, context } = req.body ?? {};
@@ -122,7 +122,7 @@ router.post("/plan", async (req: Request, res: Response) => {
   }
 });
 
-// POST /classify — decide chat vs execution mode for a prompt.
+// POST /classify - decide chat vs execution mode for a prompt.
 router.post("/classify", async (req: Request, res: Response) => {
   try {
     const { prompt, context } = req.body ?? {};
@@ -172,7 +172,7 @@ async function classifyIntent(
   }
 }
 
-// POST /simulate — dual-mode. Classifies first: chat-mode returns a natural
+// POST /simulate - dual-mode. Classifies first: chat-mode returns a natural
 // answer with no plan; execution-mode plans + dry-run executes as before.
 router.post("/simulate", async (req: Request, res: Response) => {
   try {
@@ -245,7 +245,7 @@ router.post("/simulate", async (req: Request, res: Response) => {
   }
 });
 
-// F4.2 — Approval queue: list pending high-risk actions that were blocked
+// F4.2 - Approval queue: list pending high-risk actions that were blocked
 router.get("/approvals", async (req: Request, res: Response) => {
   try {
     const { prisma } = await import("@chatcenter/shared");
@@ -269,7 +269,7 @@ router.get("/approvals", async (req: Request, res: Response) => {
   }
 });
 
-// POST /execute — run a previously planned ExecutionPlan (F3 Action Engine)
+// POST /execute - run a previously planned ExecutionPlan (F3 Action Engine)
 router.post("/execute", async (req: Request, res: Response) => {
   try {
     const { plan, approved, approvedBy, dryRun, idempotencyKey } = req.body ?? {};

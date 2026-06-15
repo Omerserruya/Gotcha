@@ -13,7 +13,7 @@ import type {
 } from "./types";
 
 /**
- * The Action Orchestrator — Layer 3 of the architecture.
+ * The Action Orchestrator - Layer 3 of the architecture.
  *
  * SINGLE entry point for tool execution across Chat, Live, and Post-Call.
  * Direct calls to the underlying tool registry from outside this package
@@ -82,7 +82,7 @@ export class ActionOrchestrator {
 
   /**
    * Approval surface entry. Marks the row as approved and emits the
-   * lifecycle event. Phase 4 does NOT re-execute on approve — the agent
+   * lifecycle event. Phase 4 does NOT re-execute on approve - the agent
    * UI is responsible for re-issuing the action with full context if
    * desired. A polish pass can promote re-execution into the orchestrator.
    */

@@ -17,7 +17,7 @@ interface CustomerGroup {
   key: string; // normalised cross-channel identity (phone digits / email / externalId)
   name: string;
   channel: string;            // primary channel (most recent conversation)
-  channels: Set<string>;      // all channels this customer has used — drives the badge strip
+  channels: Set<string>;      // all channels this customer has used - drives the badge strip
   conversations: any[];
   lastMessageAt: string;
   lastMessageBody: string;
@@ -26,7 +26,7 @@ interface CustomerGroup {
 
 // Normalise a customer identifier so the same human shows up as ONE row even
 // when WhatsApp stores their phone, Voice stores E.164, and SMS stores a
-// formatted variant. Returns `null` when no recognisable identifier exists —
+// formatted variant. Returns `null` when no recognisable identifier exists -
 // callers fall back to the conversation id (one row per conversation).
 function customerKey(conv: any): string {
   const ext = (conv.customerExternalId || "").trim();
@@ -165,7 +165,7 @@ export default function HistoryPage() {
     }
   }, [token, deleteTarget, fetchConversations]);
 
-  // Group conversations by customer — ONE row per real human across every
+  // Group conversations by customer - ONE row per real human across every
   // channel. `customerKey()` normalises phones / emails so WhatsApp + Voice
   // + SMS for the same person collapse into a single entry instead of three
   // sibling rows.
@@ -404,7 +404,7 @@ export default function HistoryPage() {
                       <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2 mb-0.5">
                           <span className="text-sm font-semibold text-gray-900 truncate">{group.name}</span>
-                          {/* Cross-platform badges — every channel the customer
+                          {/* Cross-platform badges - every channel the customer
                               has touched. Capped at 4 visible to keep the row
                               tidy when a customer has used many channels. */}
                           <div className="flex items-center gap-0.5 shrink-0">

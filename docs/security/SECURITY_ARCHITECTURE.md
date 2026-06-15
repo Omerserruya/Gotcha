@@ -1,4 +1,4 @@
-# GOTCHA — AI Security Architecture
+# GOTCHA - AI Security Architecture
 
 > Phase 1 deliverable of the full AI security pass.
 > Owner: Principal AI Security Architect. Audience: platform engineers, auditors, anyone wiring a new AI surface into the system.
@@ -21,14 +21,14 @@ This document maps every service, surface, trust boundary, and data flow that to
 | `auth`               | `services/auth`                   | (varies)       | Login, signup, JWT issuance, refresh tokens, OAuth start                                     | **Auth edge**      |
 | `notifications`      | `services/notifications`          | (varies)       | Email + system-event fan-out                                                                 | Internal           |
 | `analytics`          | `services/analytics`              | (varies)       | Read models for dashboards                                                                   | Internal           |
-| `frontend`           | `frontend/`                       | `3001`         | Next.js — operator console, embedded chat widget                                             | **Browser edge**   |
+| `frontend`           | `frontend/`                       | `3001`         | Next.js - operator console, embedded chat widget                                             | **Browser edge**   |
 | `nginx`              | `nginx/`                          | `80/443`       | TLS termination, routing, SSE buffering control                                              | **Gateway**        |
 
 All Node services share a workspace package `@chatcenter/shared` (`packages/shared/`) which owns:
 
 * **Prisma client + schema** (`packages/shared/prisma/schema.prisma`)
-* **Auth middleware** (`packages/shared/src/middleware/auth.ts`) — JWT verify + `INTERNAL_SERVICE_KEY` / `INTERNAL_SERVICE_TOKEN` shared-secret accept for service-to-service calls
-* **Tenant middleware** (`packages/shared/src/middleware/tenant.ts`) — `resolveTenant`, `assertTenantId`. JWT tenant claim is **authoritative** for non-admins; `x-tenant-id` header is **ignored** for non-admins (good).
+* **Auth middleware** (`packages/shared/src/middleware/auth.ts`) - JWT verify + `INTERNAL_SERVICE_KEY` / `INTERNAL_SERVICE_TOKEN` shared-secret accept for service-to-service calls
+* **Tenant middleware** (`packages/shared/src/middleware/tenant.ts`) - `resolveTenant`, `assertTenantId`. JWT tenant claim is **authoritative** for non-admins; `x-tenant-id` header is **ignored** for non-admins (good).
 * **Agent tools, tool gate, policy engine, identity resolver, encryption** (`packages/shared/src/lib/*`)
 
 ---
@@ -39,7 +39,7 @@ All Node services share a workspace package `@chatcenter/shared` (`packages/shar
 | -------------- | -------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
 | Postgres + Prisma | Tenants, users, conversations, messages, contacts, leads, CRM secrets, voice calls, audit logs, approvals, scheduled messages, action contracts, policies | Every row has `tenantId`. **Prisma queries are responsible for adding `tenantId` to every `where` clause.** No DB-level row security. |
 | Qdrant         | KB document chunks + vectors                                                                                                     | Single collection (`kb_chunks`) with a `tenantId` payload field + payload index. Search filters by `tenantId` (verified).   |
-| Redis (BullMQ) | `incomingMessageQueue`, `outgoingMessageQueue`, scheduled jobs, presence, redaction state                                       | Job payloads carry `tenantId`. No per-tenant queue isolation — collisions impossible because job IDs are unique.            |
+| Redis (BullMQ) | `incomingMessageQueue`, `outgoingMessageQueue`, scheduled jobs, presence, redaction state                                       | Job payloads carry `tenantId`. No per-tenant queue isolation - collisions impossible because job IDs are unique.            |
 | OpenAI         | Sent on every LLM/embedding call. Account-level data isolation only.                                                             | `metadata.tenantId` set on calls + `user` field pinned to `sessionId` for prefix caching.                                   |
 | Filesystem     | Prompt markdown (`services/ai/src/prompts/*.md`), uploaded KB files                                                              | Prompts are global. Uploaded KB files are scoped via `tenantId` in the upload path / DB row.                                 |
 
@@ -71,14 +71,14 @@ All Node services share a workspace package `@chatcenter/shared` (`packages/shar
 │     Tools: read-only (cue surfacing is non-mutating)                  │
 │     Auth: JWT (operator) for UI; internal service token for Twilio    │
 ├───────────────────────────────────────────────────────────────────────┤
-│  4. EMBEDDED CHAT WIDGET (/api/embedded-chat/*) — ★ NO-AUTH SURFACE ★ │
+│  4. EMBEDDED CHAT WIDGET (/api/embedded-chat/*) - ★ NO-AUTH SURFACE ★ │
 │     Trigger: anonymous visitor on tenant's site                       │
 │     Owner: services/ai/src/routes/embedded-chat.ts                    │
 │     Flow: /init → /message → incomingMessageQueue → ai-bot            │
 │     Auth: NONE. Lookup is by widgetId (public) which derives tenantId │
 │     Concern: rate-limit, abuse, cost cap, tenant-binding token        │
 ├───────────────────────────────────────────────────────────────────────┤
-│  5. AI ASSIST (/api/ai-assist) — copilot for human agent inbox        │
+│  5. AI ASSIST (/api/ai-assist) - copilot for human agent inbox        │
 │     Modes: context-only, draft reply, summarize, chat                 │
 │     Owner: services/ai/src/services/ai-assist.service.ts              │
 │     Auth: JWT (operator)                                              │
@@ -105,9 +105,9 @@ All Node services share a workspace package `@chatcenter/shared` (`packages/shar
 
 Each surface composes the **same prompt-builder.service.ts** but with different `mode` (`agent` / `copilot` / `generator`) and different `ContextSlot` blocks. The builder renders three blocks in order:
 
-1. **BLOCK 1** — per-agent (Identity + Guardrails + agent playbooks)  ← `guardrails.md` is loaded here at module init
-2. **BLOCK 2** — per-conversation (Customer info + CRM snapshot + memory + templates + locale skill)
-3. **BLOCK 3** — per-turn (Conversation State + Pipeline stage + Knowledge slice + Execution Contract + Tools Policy)
+1. **BLOCK 1** - per-agent (Identity + Guardrails + agent playbooks)  ← `guardrails.md` is loaded here at module init
+2. **BLOCK 2** - per-conversation (Customer info + CRM snapshot + memory + templates + locale skill)
+3. **BLOCK 3** - per-turn (Conversation State + Pipeline stage + Knowledge slice + Execution Contract + Tools Policy)
 
 The model `user` field is pinned to `sessionId = conversationId` so OpenAI's prefix cache reuses BLOCK 1+2.
 
@@ -159,11 +159,11 @@ The model `user` field is pinned to `sessionId = conversationId` so OpenAI's pre
 
 Trust classes:
 
-* **Untrusted edge** — Meta webhooks, embedded chat. Must validate HMAC (Meta) or apply rate limit + tenant binding (widget).
-* **Auth edge** — `/api/auth/*`. Login, refresh, OAuth callbacks. Already rate-limited.
-* **Browser edge** — operator console. Authenticated via JWT issued by `auth` service.
-* **Internal mesh** — service-to-service over the Docker network. Authenticated via `Authorization: Bearer ${INTERNAL_SERVICE_KEY}` with `x-tenant-id` header. **The shared secret IS the security boundary; if it leaks the entire system is compromised.**
-* **External boundary** — OpenAI, Zoho/HubSpot, Twilio, Meta, Google, Calendly. We send tenant data outbound; provider terms control retention.
+* **Untrusted edge** - Meta webhooks, embedded chat. Must validate HMAC (Meta) or apply rate limit + tenant binding (widget).
+* **Auth edge** - `/api/auth/*`. Login, refresh, OAuth callbacks. Already rate-limited.
+* **Browser edge** - operator console. Authenticated via JWT issued by `auth` service.
+* **Internal mesh** - service-to-service over the Docker network. Authenticated via `Authorization: Bearer ${INTERNAL_SERVICE_KEY}` with `x-tenant-id` header. **The shared secret IS the security boundary; if it leaks the entire system is compromised.**
+* **External boundary** - OpenAI, Zoho/HubSpot, Twilio, Meta, Google, Calendly. We send tenant data outbound; provider terms control retention.
 
 ---
 
@@ -174,7 +174,7 @@ Trust classes:
 | Source                           | Where it lands in the prompt                                | Adversary control       |
 | -------------------------------- | ----------------------------------------------------------- | ----------------------- |
 | Customer messages (chat history) | `chatMessages` (chat history, role=user)                    | Full text               |
-| Customer messages (memory facts) | Memory block (Block 2) — derived from transcript            | Full text               |
+| Customer messages (memory facts) | Memory block (Block 2) - derived from transcript            | Full text               |
 | CRM lead/contact name            | `Existing CRM Records` block (Block 2)                      | Whoever can write CRM   |
 | CRM description                  | `Existing CRM Records` block (Block 2)                      | Whoever can write CRM   |
 | CRM notes (title + content)      | `recent notes` block (Block 2)                              | Whoever can write CRM   |
@@ -201,7 +201,7 @@ Every tool routes through `dispatchToolCall` → `ActionOrchestrator.submit` →
 
 ### 5.3 Network ingress
 
-* `nginx` → `frontend` (Next.js) — static + RSC + SSE proxy
+* `nginx` → `frontend` (Next.js) - static + RSC + SSE proxy
 * `nginx` → `auth` (`/api/auth/*`)
 * `nginx` → `conversation` (`/api/*`)
 * `nginx` → `ai` (`/api/agent/run` with `proxy_buffering off`, `/api/embedded-chat/*`, `/api/ai-bot`, etc.)
@@ -209,10 +209,10 @@ Every tool routes through `dispatchToolCall` → `ActionOrchestrator.submit` →
 
 ### 5.4 Outbound network egress (LLM + integrations)
 
-* `openai.com` — every LLM + embedding call
-* `*.zoho.com` — CRM
-* `graph.facebook.com` — Meta WhatsApp / IG / Messenger
-* `*.googleapis.com` — Drive + Calendar
+* `openai.com` - every LLM + embedding call
+* `*.zoho.com` - CRM
+* `graph.facebook.com` - Meta WhatsApp / IG / Messenger
+* `*.googleapis.com` - Drive + Calendar
 * `api.calendly.com`
 * `*.twilio.com`
 
@@ -220,22 +220,22 @@ Every tool routes through `dispatchToolCall` → `ActionOrchestrator.submit` →
 
 ## 6. Authentication & authorization summary
 
-* **JWT issuance** (`services/auth`) — payload `{ userId, tenantId, role, email, departmentId?, departmentRole? }`. HS256 signed with `JWT_SECRET` (env). Default secret literal `"change-me"` if env missing — flagged in findings.
-* **JWT verify** (`packages/shared/src/middleware/auth.ts`) — `verifyToken` checks signature + expiry, then a lightweight `User.isActive` DB hop. **Fail-open** on DB error (intentional, but noted).
-* **Internal service auth** — `INTERNAL_SERVICE_KEY` or `INTERNAL_SERVICE_TOKEN` shared secret, sent as `Authorization: Bearer …` with `x-tenant-id`. Either env value is accepted by the gate; both must be treated as production secrets.
-* **Tenant resolution** — JWT tenant for non-admins (authoritative); explicit override allowed only for `SYSTEM_ADMIN`. Path / header / JWT in that order. Missing tenant → 400.
-* **RBAC** — `requireRole("ADMIN")`, `requireRole("SYSTEM_ADMIN")` middlewares. Department role on per-route basis.
-* **Tool ABAC** — `TenantToolPermission` per tenant-per-tool with decision = ALLOW | REQUIRE_APPROVAL | DENY. Falls back to internal `HIGH_RISK_DEFAULTS`.
-* **Policy gate** — `validateAgainstPolicy(policy, { tool, params })` — tenant-configurable allowlist / denylist of (tool, params).
-* **Action contracts** — sequence + at-least-one tool gates per trigger (replay-safe progress).
+* **JWT issuance** (`services/auth`) - payload `{ userId, tenantId, role, email, departmentId?, departmentRole? }`. HS256 signed with `JWT_SECRET` (env). Default secret literal `"change-me"` if env missing - flagged in findings.
+* **JWT verify** (`packages/shared/src/middleware/auth.ts`) - `verifyToken` checks signature + expiry, then a lightweight `User.isActive` DB hop. **Fail-open** on DB error (intentional, but noted).
+* **Internal service auth** - `INTERNAL_SERVICE_KEY` or `INTERNAL_SERVICE_TOKEN` shared secret, sent as `Authorization: Bearer …` with `x-tenant-id`. Either env value is accepted by the gate; both must be treated as production secrets.
+* **Tenant resolution** - JWT tenant for non-admins (authoritative); explicit override allowed only for `SYSTEM_ADMIN`. Path / header / JWT in that order. Missing tenant → 400.
+* **RBAC** - `requireRole("ADMIN")`, `requireRole("SYSTEM_ADMIN")` middlewares. Department role on per-route basis.
+* **Tool ABAC** - `TenantToolPermission` per tenant-per-tool with decision = ALLOW | REQUIRE_APPROVAL | DENY. Falls back to internal `HIGH_RISK_DEFAULTS`.
+* **Policy gate** - `validateAgainstPolicy(policy, { tool, params })` - tenant-configurable allowlist / denylist of (tool, params).
+* **Action contracts** - sequence + at-least-one tool gates per trigger (replay-safe progress).
 
 ---
 
 ## 7. Audit + logging surfaces
 
-* `AuditLog` table — every tool call, every action, every behavior-state turn (`ai.bot_turn`), every approval decision.
-* `UsageLog` — token spend per call.
-* `console.*` — currently noisy + unredacted. **Findings doc lists every line that may leak a token, JWT, or PII.**
+* `AuditLog` table - every tool call, every action, every behavior-state turn (`ai.bot_turn`), every approval decision.
+* `UsageLog` - token spend per call.
+* `console.*` - currently noisy + unredacted. **Findings doc lists every line that may leak a token, JWT, or PII.**
 
 ---
 
@@ -289,7 +289,7 @@ visitor (browser)       ── HTTPS ──►  nginx ──► ai-service /api/
 | Per-turn / per-conversation cost cap               | `services/ai/src/services/cost-budget.service.ts` (new) called by `ai-bot.service.ts` before each `generateResponse` and on the tool-call loop counter |
 | Strip system-prompt fragments from assistant output | `services/ai/src/services/output-validator.service.ts` (new) called after `replyText` is finalised        |
 | Embedded-chat rate limit + abuse                   | `services/ai/src/routes/embedded-chat.ts` (new middleware)                                                  |
-| Log redaction                                      | `packages/shared/src/lib/log-redact.ts` (new) — masks JWTs, Bearer tokens, phones, emails                   |
+| Log redaction                                      | `packages/shared/src/lib/log-redact.ts` (new) - masks JWTs, Bearer tokens, phones, emails                   |
 | Tenant filter audit                                | Findings doc enumerates every unsafe `prisma.*` site; patches the top 10                                    |
 
 These are the new modules Phase 4 will create.

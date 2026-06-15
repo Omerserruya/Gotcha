@@ -2,12 +2,12 @@
  * Approval request REST surface.
  *
  * Owns the human-facing side of the F4 bot-surface approval flow:
- *   - GET  /api/approvals               — list for tenant (optional filters)
- *   - GET  /api/approvals/:id           — single, with full rich-card data
- *   - POST /api/approvals/:id/approve   — human clicks Approve
- *   - POST /api/approvals/:id/reject    — human clicks Reject with reason
+ *   - GET  /api/approvals               - list for tenant (optional filters)
+ *   - GET  /api/approvals/:id           - single, with full rich-card data
+ *   - POST /api/approvals/:id/approve   - human clicks Approve
+ *   - POST /api/approvals/:id/reject    - human clicks Reject with reason
  *
- * The "actually run the approved action" step does NOT live here — that
+ * The "actually run the approved action" step does NOT live here - that
  * stays in the bot engine / action-executor. This route only transitions
  * ApprovalRequest.status and records the human's decision. The bot
  * engine's resume-on-approval worker picks up APPROVED rows, dispatches
@@ -34,12 +34,12 @@ import {
  * Dispatch an approved action by calling the AI service.
  *
  * Two paths because the bot's tool surface has two shapes:
- *   - `integration_<slug>` (e.g. integration_create_lead) — the bot's
+ *   - `integration_<slug>` (e.g. integration_create_lead) - the bot's
  *     auto-dispatch path resolves slug → TenantTool and POSTs to
  *     /api/ai-assist/:conversationId/tools/execute. Approved-tool
  *     dispatch must use the SAME path so the lead/deal/etc. actually
  *     reaches the connected integration. Without this branch, approval
- *     would silently no-op — the action-planner executor's switch only
+ *     would silently no-op - the action-planner executor's switch only
  *     knows the legacy hardcoded action names (tag_contact, update_crm,
  *     create_ticket, …) and throws on anything else.
  *   - Everything else falls through to the legacy action-planner
@@ -51,7 +51,7 @@ import {
  * confusing the user.
  *
  * Best-effort: failure is logged but does NOT roll the ApprovalRequest
- * back to PENDING — the human already decided. A follow-up worker can
+ * back to PENDING - the human already decided. A follow-up worker can
  * retry from APPROVED rows.
  */
 async function dispatchApprovedAction(args: {
@@ -69,7 +69,7 @@ async function dispatchApprovedAction(args: {
   if (token) headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   headers["x-tenant-id"] = args.tenantId;
 
-  // ── Integration tools — same path the bot uses ─────────────
+  // ── Integration tools - same path the bot uses ─────────────
   if (args.tool.startsWith("integration_")) {
     const slug = args.tool.slice("integration_".length);
     let tenantTool: { id: string } | null = null;
@@ -104,7 +104,7 @@ async function dispatchApprovedAction(args: {
         return { ok: false, error: data?.error || `executor returned ${res.status}` };
       }
       // The /tools/execute endpoint wraps the connector result in
-      // `{ data: { ok, output|error, status } }` — propagate inner failure.
+      // `{ data: { ok, output|error, status } }` - propagate inner failure.
       const exec = data?.data;
       if (exec && exec.ok === false) {
         return {
@@ -152,7 +152,7 @@ async function dispatchApprovedAction(args: {
       return { ok: false, error: data?.error || `executor returned ${res.status}` };
     }
     // /api/action-planner/execute returns { results: [{ ok, error, ... }] }
-    // — propagate the first non-ok step so a tool failure doesn't fire the
+    // - propagate the first non-ok step so a tool failure doesn't fire the
     // post-approval customer message.
     const results = Array.isArray(data?.results) ? data.results : [];
     const firstFail = results.find((r: any) => r && r.ok === false);
@@ -280,7 +280,7 @@ router.get("/:id", async (req: Request, res: Response) => {
  * Separation of duties: the approver MUST NOT be the same actor who
  * authored the originating bot action. For bot-initiated requests
  * (requestedBy starts with "bot" / "flow:" / "ai-agent:") this is
- * trivially satisfied — the actor is the bot, not a human. For
+ * trivially satisfied - the actor is the bot, not a human. For
  * human-initiated requests (rare under the F4 model), we reject
  * same-actor approvals.
  */
@@ -351,8 +351,8 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 
     // Customer-facing continuation: once the action succeeds, ask the AI
     // agent to continue the conversation in the customer's language. The
-    // bot stays in charge — no "team member will reach out" hand-off.
-    // If the oneshot fails, fall back to silence — the next inbound
+    // bot stays in charge - no "team member will reach out" hand-off.
+    // If the oneshot fails, fall back to silence - the next inbound
     // message will trigger a normal bot turn anyway.
     if (dispatch.ok) {
       try {
@@ -386,14 +386,14 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
         let body: string | null = null;
         if (conv && aiAgentId) {
           const userInput =
-            `[INTERNAL CONTEXT — do not echo to the customer]\n` +
+            `[INTERNAL CONTEXT - do not echo to the customer]\n` +
             `A background action you triggered (${row.tool}) just succeeded.\n` +
             `Customer's recent messages (oldest → newest):\n${inboundSample}\n\n` +
             (conv.customerName ? `Customer name: ${conv.customerName}\n` : "") +
             `\nTASK: Send ONE short reply to the customer that keeps the conversation moving forward.\n` +
             `Rules:\n` +
             `- Detect the language from the FIRST customer message above (or any earlier non-trivial message). Reply in THAT language. If any message contains Hebrew characters, the language is Hebrew. Do not default to English.\n` +
-            `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies handing off — you are still handling this conversation.\n` +
+            `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies handing off - you are still handling this conversation.\n` +
             `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
             `- Be brief, in-character, and propose the next step in the conversation if appropriate.\n`;
 
@@ -491,7 +491,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 /**
  * POST /api/approvals/:id/reject
  * Body: { decisionReason }
- * Rejection reason is REQUIRED — no silent "just no". The bot resume
+ * Rejection reason is REQUIRED - no silent "just no". The bot resume
  * worker uses it to craft the fallback customer message.
  */
 router.post("/:id/reject", async (req: Request, res: Response) => {
@@ -515,7 +515,7 @@ router.post("/:id/reject", async (req: Request, res: Response) => {
     const updated = await rejectRequest(tenantId, row.id, actorId, decisionReason);
 
     // Un-pause the conversation but route to human. Rejected actions
-    // mean the bot shouldn't retry — hand off to a human so they can
+    // mean the bot shouldn't retry - hand off to a human so they can
     // respond directly.
     try {
       await prisma.conversation.update({

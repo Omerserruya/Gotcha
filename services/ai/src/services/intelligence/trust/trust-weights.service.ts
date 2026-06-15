@@ -10,7 +10,7 @@ import { aggregateAll } from "./cue-outcomes.repo";
  * Smoothing rationale:
  *   weight = (accepts + 1) / (accepts + rejects + 0.5*ignores + 2)
  *   - Unseen cue → 0.5 (neutral) instead of biasing high or low.
- *   - "ignored" counts half-negative — gentler than an explicit reject.
+ *   - "ignored" counts half-negative - gentler than an explicit reject.
  */
 
 const CACHE_TTL_MS = 5 * 60_000;
@@ -23,7 +23,7 @@ class TrustWeights {
 
   weightFor(kind: string, text: string): number {
     if (Date.now() - this.loadedAt > CACHE_TTL_MS) {
-      // Don't await — first call after expiry returns the stale value once,
+      // Don't await - first call after expiry returns the stale value once,
       // the refresh lands for the next caller. This keeps the hot path on
       // the live runner non-blocking.
       void this.refresh();
@@ -31,7 +31,7 @@ class TrustWeights {
     return this.cache.get(this.key(kind, text)) ?? NEUTRAL_WEIGHT;
   }
 
-  /** Force a refresh — used by the cue-outcome route after a new record. */
+  /** Force a refresh - used by the cue-outcome route after a new record. */
   refresh(): Promise<void> {
     if (this.inflight) return this.inflight;
     this.inflight = (async () => {
@@ -52,13 +52,13 @@ class TrustWeights {
     return this.inflight;
   }
 
-  /** Test hook — seed weights directly, bypassing DB. */
+  /** Test hook - seed weights directly, bypassing DB. */
   _setForTest(kind: string, text: string, weight: number): void {
     this.cache.set(this.key(kind, text), weight);
     this.loadedAt = Date.now();
   }
 
-  /** Test hook — clear cache and reset load time. */
+  /** Test hook - clear cache and reset load time. */
   _resetForTest(): void {
     this.cache.clear();
     this.loadedAt = 0;

@@ -1,5 +1,5 @@
 /**
- * AWS RDS adapter — production-grade.
+ * AWS RDS adapter - production-grade.
  *
  * AWS RDS itself is just managed Postgres / MySQL behind a connection
  * string. We expose a small adapter that delegates to the official
@@ -40,7 +40,7 @@ async function mysql(): Promise<any> {
   if (!mysqlPromise) {
     mysqlPromise = (async () => {
       try {
-        // Dynamic import — kept as a runtime require so TypeScript doesn't
+        // Dynamic import - kept as a runtime require so TypeScript doesn't
         // need @types/mysql2 at build time. Tenants on Postgres engines never
         // hit this path; MySQL/MariaDB tenants must `npm install mysql2`.
         const moduleName = "mysql2/promise";
@@ -63,7 +63,7 @@ const TOOLS: ToolDefinition[] = [
     name: "aws_rds.query_table",
     description: "SELECT rows from a whitelisted table with optional equality filters.",
     whenToUse: "You need rows matching a simple condition.",
-    whenNotToUse: "Joins / aggregations — not supported here for safety.",
+    whenNotToUse: "Joins / aggregations - not supported here for safety.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {

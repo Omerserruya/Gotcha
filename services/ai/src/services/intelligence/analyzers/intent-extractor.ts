@@ -7,7 +7,7 @@ import type { TranscriptAnalyzer } from "./types";
  * Phase 3 ships the analyzers as thin selectors: the LiveAnalysisRunner
  * makes ONE LLM call returning the full frame, then the runner emits
  * granular events. The analyzer files exist so Phase 5 (QA replay) and
- * Phase 6 (async processing) can compose them differently — e.g. QA may
+ * Phase 6 (async processing) can compose them differently - e.g. QA may
  * want to recompute intent from raw frames while reusing the contract.
  *
  * For now, `analyze` is a pure projection of the frame.

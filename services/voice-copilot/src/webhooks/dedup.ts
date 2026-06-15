@@ -2,12 +2,12 @@
  * Webhook dedupe + retry-safety primitive.
  *
  * Pattern:
- *   1. begin()    — Redis SETNX with `pending` marker + short TTL. If the key
+ *   1. begin()    - Redis SETNX with `pending` marker + short TTL. If the key
  *                   already exists, returns the existing status so the handler
  *                   can treat it as "already in progress" or "already done".
- *   2. complete() — flips the marker to `complete` and extends TTL (typically
+ *   2. complete() - flips the marker to `complete` and extends TTL (typically
  *                   24h) so subsequent retries of the same event are dropped.
- *   3. fail()     — DELETEs the key so a Twilio retry re-enters the pipeline.
+ *   3. fail()     - DELETEs the key so a Twilio retry re-enters the pipeline.
  *
  * This is what lets us comply with the "let Twilio retry on internal failures"
  * contract: we only persist a "complete" marker once the DB transaction
@@ -24,7 +24,7 @@ export interface DedupeHandle {
 }
 
 const PENDING_TTL_SECONDS = 60;       // covers a slow handler / DB write
-const COMPLETE_TTL_SECONDS = 24 * 60 * 60; // 24h — well past Twilio retry budget
+const COMPLETE_TTL_SECONDS = 24 * 60 * 60; // 24h - well past Twilio retry budget
 
 export async function begin(redis: Redis, key: string): Promise<DedupeHandle> {
   const fullKey = `webhook:dedupe:${key}`;

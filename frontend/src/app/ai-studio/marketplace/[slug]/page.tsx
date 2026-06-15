@@ -128,14 +128,14 @@ export default function IntegrationDetailPage() {
 
   // Build credential fields from authSchema. Per-provider fallbacks below
   // protect against stale catalog rows (e.g. an old marketplace migration
-  // where Shopify is still API_KEY without the `shop` field) — without
+  // where Shopify is still API_KEY without the `shop` field) - without
   // them the OAuth init endpoint would 400 with shop_required.
   const authSchema = integration?.authSchema || {};
   let credFields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; helpText?: string }> =
     authSchema.fields || (integration?.authType === "API_KEY" ? [{ key: "apiKey", label: t("marketplace.apiKey"), type: "password", required: true }] : []);
   if (slug === "shopify" && !credFields.some((f) => f.key === "shop")) {
     credFields = [
-      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain — e.g. my-store or my-store.myshopify.com." },
+      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain - e.g. my-store or my-store.myshopify.com." },
       ...credFields.filter((f) => f.key !== "apiKey"),
     ];
   }
@@ -359,7 +359,7 @@ export default function IntegrationDetailPage() {
             )}
           </div>
 
-          {/* Connect / Edit Credentials — skipped for custom_api since each
+          {/* Connect / Edit Credentials - skipped for custom_api since each
               tenant-defined Custom API tool carries its own credentials. */}
           {slug !== "custom_api" && (!isConnected || editingCreds) && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
@@ -367,7 +367,7 @@ export default function IntegrationDetailPage() {
                 {editingCreds ? `${t("common.edit")} ${t("marketplace.credentials")}` : t("marketplace.connect")}
               </h2>
 
-              {/* OAUTH2 branch — renders pre-OAuth fields (e.g. Shopify
+              {/* OAUTH2 branch - renders pre-OAuth fields (e.g. Shopify
                   shop domain, Square environment) and passes them to the
                   OAuth init endpoint. Without this, providers like Shopify
                   reject the init with shop_required. */}
@@ -413,7 +413,7 @@ export default function IntegrationDetailPage() {
                         const { url } = await initIntegrationOAuth(token, slug, credentials);
                         window.location.href = url;
                       } catch (err: any) {
-                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check provider client ID/secret/redirect on the server." });
+                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed - check provider client ID/secret/redirect on the server." });
                       }
                     }}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
@@ -507,7 +507,7 @@ export default function IntegrationDetailPage() {
             </div>
           )}
 
-          {/* Custom API tool builder — always visible for the custom_api
+          {/* Custom API tool builder - always visible for the custom_api
               integration, regardless of connection state, since each tool
               is tenant-defined and self-contained (no central token to
               authorize). */}
@@ -560,7 +560,7 @@ export default function IntegrationDetailPage() {
             </div>
           )}
 
-          {/* Meeting types — calendar integrations only, after connection */}
+          {/* Meeting types - calendar integrations only, after connection */}
           {isConnected && (slug === "google_calendar" || slug === "calendly") && (
             <MeetingTypesSection />
           )}

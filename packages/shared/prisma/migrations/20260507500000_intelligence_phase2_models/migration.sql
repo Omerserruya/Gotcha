@@ -1,7 +1,7 @@
 -- Migration: intelligence_phase2_models
 -- Phase 2 of the conversation intelligence platform refactor.
 -- Adds durable storage for the intelligence engine + post-call workflows.
--- No service code writes to these tables yet — Phase 3 starts using them.
+-- No service code writes to these tables yet - Phase 3 starts using them.
 
 -- ── 1. VoiceCallSession ────────────────────────────────────────
 CREATE TABLE "voice_call_sessions" (

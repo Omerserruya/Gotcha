@@ -5,7 +5,7 @@
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml build frontend
 #   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d frontend
 #
-# Hydration audit MUST be kept clean — static export pre-renders all "use client"
+# Hydration audit MUST be kept clean - static export pre-renders all "use client"
 # components with build-time defaults; any browser-API read in a useState initializer
 # crashes hydration and unmounts the tree (incl. VoiceCallProvider → dropped calls).
 # See I18nContext.tsx, ConversationList.tsx, CueLanesCard.tsx for the safe pattern.

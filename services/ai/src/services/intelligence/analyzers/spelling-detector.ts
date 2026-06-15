@@ -6,8 +6,8 @@ import { generateResponse } from "../../ai.service";
  *
  * Lives alongside the main LiveAnalysisRunner turn. Where the main turn
  * produces intent/stage/sentiment, this stage produces structured metadata
- * about entities the customer is *spelling* — emails, domains, URLs,
- * product names — so the cue projector can surface a high-signal
+ * about entities the customer is *spelling* - emails, domains, URLs,
+ * product names - so the cue projector can surface a high-signal
  * "Confirm: omer@gmail.com" cue for the rep.
  *
  * Why a separate LLM call:
@@ -20,7 +20,7 @@ import { generateResponse } from "../../ai.service";
  *     code-switch trigger, saving cost.
  */
 
-// Cheap heuristic — only fire the LLM when the recent transcript shows
+// Cheap heuristic - only fire the LLM when the recent transcript shows
 // signs of code-switching or spelling mode. Avoids per-turn cost on
 // purely Hebrew or purely English conversations.
 const HEBREW_TRIGGERS = [
@@ -211,7 +211,7 @@ export interface SpellingDetectorInput {
 
 /**
  * Run the spelling detector for a single turn. Returns null when the cheap
- * heuristic determines there's no signal worth burning an LLM call on — the
+ * heuristic determines there's no signal worth burning an LLM call on - the
  * runner treats null as "no spellingHints this turn" and keeps the prior
  * value (or omits it entirely).
  */

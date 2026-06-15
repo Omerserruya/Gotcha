@@ -172,7 +172,7 @@ describe("Session state machine", () => {
     await session.handleStop(); // → ended
 
     // handleMediaFrame checks state === "ended" and calls end("panic") internally
-    // but due to error boundary it doesn't throw — session stays ended
+    // but due to error boundary it doesn't throw - session stays ended
     await session.handleMediaFrame(makeMediaFrame(2));
     expect(session.state).toBe("ended");
   });
@@ -195,7 +195,7 @@ describe("Session state machine", () => {
     await session.resumeFromReconnect();
     expect(deps.metrics.reconnects.inc).toHaveBeenCalledWith({ tenant: "t1" });
 
-    // advance past grace — session should NOT end since grace was cancelled
+    // advance past grace - session should NOT end since grace was cancelled
     (deps.clock as any).advance(200);
     expect(session.state).toBe("active");
   });
@@ -237,7 +237,7 @@ describe("Session state machine", () => {
     sttStream._emitError(rateError);
     expect(session.state).toBe("active");
 
-    // Third error — triggers stt_overload
+    // Third error - triggers stt_overload
     sttStream._emitError(rateError);
     // The end("stt_overload") is called async via safe(); advance clock past setTimeout
     clock.advance(1);

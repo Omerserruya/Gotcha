@@ -9,11 +9,12 @@ import {
 } from "@chatcenter/shared";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
+const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 const META_APP_ID = process.env.META_APP_ID || "";
 const META_APP_SECRET = process.env.META_APP_SECRET || "";
 
 interface ChannelHealthJob {
-  type: "health_check" | "token_refresh";
+  type: "health_check" | "token_refresh" | "gmail_watch_renew";
 }
 
 async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
@@ -23,6 +24,8 @@ async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
     await runHealthCheck();
   } else if (type === "token_refresh") {
     await runTokenRefresh();
+  } else if (type === "gmail_watch_renew") {
+    await runGmailWatchRenewal();
   }
 }
 
@@ -31,7 +34,7 @@ async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
 async function runHealthCheck(): Promise<void> {
   console.log("[channel-health] Running health check...");
 
-  // Only check Meta channels — Facebook's debug_token API doesn't apply to Gmail/Outlook/Slack
+  // Only check Meta channels - Facebook's debug_token API doesn't apply to Gmail/Outlook/Slack
   const accounts = await prisma.channelAccount.findMany({
     where: {
       connectionStatus: "CONNECTED",
@@ -71,6 +74,32 @@ async function runHealthCheck(): Promise<void> {
           },
         });
         errors++;
+        continue;
+      }
+
+      // Instagram-Login accounts hold an IG-user token that can't be validated
+      // via Facebook's debug_token. Probe graph.instagram.com/me instead.
+      if (credentials?.igLogin) {
+        try {
+          await axios.get(`${IG_API_URL}/me`, {
+            params: { fields: "user_id", access_token: accessToken },
+          });
+          await prisma.channelAccount.update({
+            where: { id: account.id },
+            data: { lastHealthCheck: new Date() },
+          });
+        } catch (igErr: any) {
+          await prisma.channelAccount.update({
+            where: { id: account.id },
+            data: {
+              connectionStatus: "ERROR",
+              lastError: igErr.response?.data?.error?.message || "Instagram token is invalid or expired",
+              lastHealthCheck: new Date(),
+            },
+          });
+          errors++;
+        }
+        checked++;
         continue;
       }
 
@@ -153,15 +182,20 @@ async function runTokenRefresh(): Promise<void> {
       const currentToken = credentials?.accessToken;
       if (!currentToken) continue;
 
-      // Exchange for new long-lived token
-      const response = await axios.get(`${FB_API_URL}/oauth/access_token`, {
-        params: {
-          grant_type: "fb_exchange_token",
-          client_id: META_APP_ID,
-          client_secret: META_APP_SECRET,
-          fb_exchange_token: currentToken,
-        },
-      });
+      // Instagram-Login long-lived tokens refresh via graph.instagram.com with
+      // ig_refresh_token (no app id/secret), not the Facebook fb_exchange_token flow.
+      const response = credentials?.igLogin
+        ? await axios.get(`${IG_API_URL}/refresh_access_token`, {
+            params: { grant_type: "ig_refresh_token", access_token: currentToken },
+          })
+        : await axios.get(`${FB_API_URL}/oauth/access_token`, {
+            params: {
+              grant_type: "fb_exchange_token",
+              client_id: META_APP_ID,
+              client_secret: META_APP_SECRET,
+              fb_exchange_token: currentToken,
+            },
+          });
 
       const newToken = response.data.access_token;
       const expiresIn = response.data.expires_in || 5184000; // 60 days default
@@ -199,6 +233,113 @@ async function runTokenRefresh(): Promise<void> {
   console.log(`[channel-health] Token refresh complete: ${refreshed} refreshed, ${failed} failed, ${accounts.length} total`);
 }
 
+// ─── Gmail Watch Renewal ─────────────────────────────────────
+//
+// Gmail `users.watch` registrations expire after a maximum of 7 days. Google
+// recommends re-arming at least daily. The push subscription itself is
+// permanent (GCP-side); only the per-mailbox watch lapses, after which Gmail
+// silently stops publishing to the topic. This job refreshes each connected
+// Gmail account's OAuth access token (they expire hourly, so the stored one is
+// almost always stale here) and re-issues the watch against GMAIL_PUBSUB_TOPIC.
+
+const GMAIL_PUBSUB_TOPIC = process.env.GMAIL_PUBSUB_TOPIC || "";
+
+async function refreshGoogleAccessToken(creds: {
+  refreshToken?: string;
+  clientId?: string;
+  clientSecret?: string;
+}): Promise<string | null> {
+  if (!creds.refreshToken || !creds.clientId || !creds.clientSecret) return null;
+  const resp = await axios.post(
+    "https://oauth2.googleapis.com/token",
+    new URLSearchParams({
+      client_id: creds.clientId,
+      client_secret: creds.clientSecret,
+      refresh_token: creds.refreshToken,
+      grant_type: "refresh_token",
+    }).toString(),
+    { headers: { "Content-Type": "application/x-www-form-urlencoded" } },
+  );
+  return resp.data?.access_token || null;
+}
+
+async function runGmailWatchRenewal(): Promise<void> {
+  console.log("[channel-health] Running Gmail watch renewal...");
+
+  if (!GMAIL_PUBSUB_TOPIC) {
+    console.warn("[channel-health] GMAIL_PUBSUB_TOPIC not configured, skipping Gmail watch renewal");
+    return;
+  }
+
+  const accounts = await prisma.channelAccount.findMany({
+    where: { connectionStatus: "CONNECTED", isActive: true, channel: "GMAIL" },
+  });
+
+  let renewed = 0;
+  let failed = 0;
+
+  for (const account of accounts) {
+    try {
+      let credentials: any;
+      try {
+        credentials = typeof account.credentials === "string"
+          ? decryptCredentials(account.credentials as string)
+          : account.credentials;
+      } catch {
+        credentials = account.credentials;
+      }
+
+      // Refresh the access token (Gmail tokens last ~1h; the stored one is stale).
+      const freshToken = await refreshGoogleAccessToken(credentials || {});
+      if (!freshToken) {
+        failed++;
+        console.warn(`[channel-health] Gmail watch renewal skipped for ${account.externalId}: missing refresh credentials`);
+        await prisma.channelAccount.update({
+          where: { id: account.id },
+          data: { lastError: "Gmail watch renewal: missing refresh credentials" },
+        });
+        continue;
+      }
+
+      // Re-arm the watch on the env-configured topic (dev vs prod isolation).
+      const watchResp = await axios.post(
+        "https://gmail.googleapis.com/gmail/v1/users/me/watch",
+        { topicName: GMAIL_PUBSUB_TOPIC, labelIds: ["INBOX"] },
+        { headers: { Authorization: `Bearer ${freshToken}`, "Content-Type": "application/json" } },
+      );
+
+      // Persist the refreshed access token so the webhook's history fetches keep
+      // working, plus the new watch expiration for observability. Leave
+      // platformMeta.lastHistoryId untouched - the push handler advances it.
+      const updatedCredentials = { ...credentials, accessToken: freshToken };
+      await prisma.channelAccount.update({
+        where: { id: account.id },
+        data: {
+          credentials: encryptCredentials(updatedCredentials),
+          lastError: null,
+          platformMeta: {
+            ...((account.platformMeta as Record<string, unknown>) || {}),
+            watchExpiration: watchResp.data?.expiration ?? null,
+          },
+        },
+      });
+
+      renewed++;
+      console.log(`[channel-health] Gmail watch renewed for ${account.externalId}, expires: ${watchResp.data?.expiration}`);
+    } catch (err: any) {
+      failed++;
+      const errorMsg = err.response?.data?.error?.message || err.message;
+      console.error(`[channel-health] Gmail watch renewal failed for ${account.externalId}:`, errorMsg);
+      await prisma.channelAccount.update({
+        where: { id: account.id },
+        data: { lastError: `Gmail watch renewal failed: ${errorMsg}` },
+      }).catch(() => {});
+    }
+  }
+
+  console.log(`[channel-health] Gmail watch renewal complete: ${renewed} renewed, ${failed} failed, ${accounts.length} total`);
+}
+
 // ─── Setup Repeatable Jobs + Start Worker ────────────────────
 
 export async function startChannelHealthWorker(): Promise<void> {
@@ -225,8 +366,19 @@ export async function startChannelHealthWorker(): Promise<void> {
     }
   );
 
+  // Gmail watch renewal once daily (watches expire after max 7 days)
+  await channelHealthQueue.add(
+    "gmail-watch-renew",
+    { type: "gmail_watch_renew" },
+    {
+      repeat: { pattern: "0 2 * * *" }, // Daily at 2am
+      removeOnComplete: { count: 10 },
+      removeOnFail: { count: 20 },
+    }
+  );
+
   // Start the worker
   createWorker<ChannelHealthJob>("channel-health", processChannelHealth, 1);
 
-  console.log("[channel-health] Worker started with repeatable health check (6h) and token refresh (12h)");
+  console.log("[channel-health] Worker started with repeatable health check (6h), token refresh (12h), Gmail watch renewal (daily)");
 }

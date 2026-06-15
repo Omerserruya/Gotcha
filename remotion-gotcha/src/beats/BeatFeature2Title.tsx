@@ -24,7 +24,7 @@ export const BeatFeature2Title: React.FC = () => {
         }}
       >
         <WordReveal
-          text="When it needs a human —"
+          text="When it needs a human -"
           startFrame={5}
           stagger={10}
           localFrame={frame}

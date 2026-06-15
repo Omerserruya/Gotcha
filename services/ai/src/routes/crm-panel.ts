@@ -1,17 +1,17 @@
 /**
- * CRM panel routes — feed the conversation side panel from the tenant's CRM
+ * CRM panel routes - feed the conversation side panel from the tenant's CRM
  * and let the agent post manual notes during the interaction.
  *
  * Routes (all mounted under /api/crm):
- *   GET  /conversation/:id/context        — hydrate the panel (contact + activities)
- *   POST /conversation/:id/notes          — post a manual note from the panel
- *   POST /conversation/:id/sync-close     — close-of-conversation projection
+ *   GET  /conversation/:id/context        - hydrate the panel (contact + activities)
+ *   POST /conversation/:id/notes          - post a manual note from the panel
+ *   POST /conversation/:id/sync-close     - close-of-conversation projection
  *                                            (summary + engagement) into CRM
  *
  * All routes resolve the customer via the existing `Contact` row attached to
  * the conversation (today's source of truth). When the migration adds
  * `GotchaPerson` + `CrmContactMapping` (Wave 1.11+), the resolution layer
- * switches over — these route bodies don't change.
+ * switches over - these route bodies don't change.
  */
 
 import { Router, type Request, type Response } from "express";
@@ -69,9 +69,9 @@ function channelToStrong(channel: string | null | undefined): StrongChannel | nu
  * Strong identifiers we ship:
  *   - email + phone (the universal anchors)
  *   - per-channel external_id (PSID/IGSID/WA id) for cross-platform retrieval
- *   - username (Instagram @handle, FB profile name) — picked up from
+ *   - username (Instagram @handle, FB profile name) - picked up from
  *     contact.metadata when the platform webhook captured it
- *   - display_name — for the create-lead path's First/Last name split
+ *   - display_name - for the create-lead path's First/Last name split
  *
  * Phone normalization needs a region hint when the source number is in local
  * format (e.g. `050-123-4567`). Tenant.metadata.defaultRegion would be the
@@ -152,7 +152,7 @@ async function loadConversationContext(tenantId: string, conversationId: string)
  * Resolved by the same stage-resolver the live runner uses, so the
  * frontend stage progress card and the live cue copilot always agree on
  * which stage is active. Returns null when no funnel is configured or
- * we couldn't determine a stage — the frontend then hides the card.
+ * we couldn't determine a stage - the frontend then hides the card.
  */
 async function resolveActiveStagePayload(args: {
   tenantId: string;
@@ -174,7 +174,7 @@ async function resolveActiveStagePayload(args: {
   } | null;
   next: { id: string; label: string } | null;
   /**
-   * Every stage in the active funnel — populates the manual override
+   * Every stage in the active funnel - populates the manual override
    * dropdown on the live workspace. Stages without `crmValue` are kept
    * (UI flags them as non-writable but still shows them for context).
    */
@@ -234,7 +234,7 @@ async function resolveActiveStagePayload(args: {
 /**
  * Cache the vendor's stage value onto Contact.metadata so the live-call
  * stage resolver can read it without re-calling the vendor adapter on
- * every turn. Called after each successful context fetch — best-effort,
+ * every turn. Called after each successful context fetch - best-effort,
  * never blocks the panel render.
  */
 async function cacheCrmStageOnContact(args: {
@@ -330,7 +330,7 @@ router.get(
 
     const adapter = await getCrmAdapter(tenantId);
     if (adapter.capabilities.is_stub && adapter.vendor === "custom_api") {
-      // NoOp (no CRM connected) — return a minimal envelope so the panel can
+      // NoOp (no CRM connected) - return a minimal envelope so the panel can
       // render "Connect a CRM" call-to-action.
       res.json({
         data: {
@@ -360,7 +360,7 @@ router.get(
         kind: loaded.resolved.crmObjectKind,
       });
       if (ctx.ok && ctx.context) {
-        // Open issues + recent summaries + CRM notes + activities — fail-soft
+        // Open issues + recent summaries + CRM notes + activities - fail-soft
         // (never block the panel render). Loaded in parallel with the context
         // hydrate. We override `recent_activities` from the adapter's
         // getCustomerContext (which returns [] for all vendors today) with
@@ -401,11 +401,11 @@ router.get(
         });
         return;
       }
-      // Linked but vendor returned not-found — fall through to identity service.
+      // Linked but vendor returned not-found - fall through to identity service.
     }
 
     // 2. Identity service does the 0/1/2+ reconciliation. search_only because
-    //    auto-creating on every panel open would be too aggressive — the
+    //    auto-creating on every panel open would be too aggressive - the
     //    operator clicks "Create lead" explicitly via POST /create-lead.
     const hints = extractIdentityHints(loaded.resolved, loaded.contactMetadata);
     const outcome = await linkOrCreateCrmContact({ adapter, hints, mode: "search_only" });
@@ -494,7 +494,7 @@ router.get(
       return;
     }
 
-    // not_found OR error — both surface as "unmapped" so the UI can offer Create.
+    // not_found OR error - both surface as "unmapped" so the UI can offer Create.
     res.json({
       data: {
         vendor: adapter.vendor,
@@ -509,7 +509,7 @@ router.get(
 
 // ─── POST /api/crm/conversation/:id/create-lead ────────────
 //
-// Used when the panel shows "unmapped" — operator clicks "Create lead in CRM".
+// Used when the panel shows "unmapped" - operator clicks "Create lead in CRM".
 
 router.post(
   "/conversation/:id/create-lead",
@@ -538,8 +538,8 @@ router.post(
       display_name: (overrides.display_name as string | undefined) ?? baseHints.display_name,
     };
 
-    // Always go through the identity service — even on the explicit "create"
-    // path — so we don't accidentally produce a duplicate when a row was
+    // Always go through the identity service - even on the explicit "create"
+    // path - so we don't accidentally produce a duplicate when a row was
     // created between the panel's first context fetch and the operator click.
     const outcome = await linkOrCreateCrmContact({
       adapter,
@@ -608,7 +608,7 @@ router.post(
 //
 // Operator resolution path for the "needs_approval" state. When the identity
 // service finds 2+ CRM candidates and can't safely merge, the panel surfaces
-// the list; the operator picks one and we pin the linkage. No merge happens —
+// the list; the operator picks one and we pin the linkage. No merge happens -
 // the unselected duplicates stay in the CRM and the operator can clean them
 // up in the vendor UI.
 
@@ -715,7 +715,7 @@ router.post(
 //
 // Called from:
 //   • Manual close path (frontend "End conversation" button)
-//   • idle-conversation worker (later — for now synchronous from the manual
+//   • idle-conversation worker (later - for now synchronous from the manual
 //     route)
 //   • flow-executor 'end' node (later)
 //
@@ -747,7 +747,7 @@ export async function syncCloseToCrm(
   conversationId: string,
 ): Promise<CrmSyncCloseResult> {
   // Idempotency guard. The manual "End conversation" button and the
-  // conversation:closed event subscriber both fire syncCloseToCrm — without
+  // conversation:closed event subscriber both fire syncCloseToCrm - without
   // this check the CRM gets two activity notes ~2s apart (different LLM
   // wording each time because the summarizer ran twice). 5-min window is
   // long enough to absorb the race but short enough that an operator who
@@ -784,18 +784,18 @@ export async function syncCloseToCrm(
   // run identity lookup now so close-of-conversation still hits the CRM.
   //
   // Auto-create policy: when the conversation has at least one strong
-  // identifier (phone or email — including the channel-derived phone for
+  // identifier (phone or email - including the channel-derived phone for
   // WhatsApp/SMS/voice), promote the recovery to `create_if_missing`. This
   // turns the agent-back-office into a system job: an inbound or outbound
   // call closing with a known number always lands in the CRM as a lead,
   // and the summarizer's `crm_patch` then enriches it with whatever else
-  // came up in the call. Anonymous callers (no phone, no email — e.g.
-  // blocked caller-ID) still skip — creating empty leads is just noise.
+  // came up in the call. Anonymous callers (no phone, no email - e.g.
+  // blocked caller-ID) still skip - creating empty leads is just noise.
   if (!loaded.resolved.crmContactId || !loaded.resolved.crmObjectKind) {
     console.log(
       `[crm-sync-close] missing_link conv=${conversationId} tenant=${tenantId} ` +
       `contactId=${loaded.resolved.contactId ?? "null"} channel=${loaded.resolved.channel} ` +
-      `externalId=${loaded.resolved.externalId} — attempting identity recovery`,
+      `externalId=${loaded.resolved.externalId} - attempting identity recovery`,
     );
     const hints = extractIdentityHints(loaded.resolved, loaded.contactMetadata);
     const hasStrongId =
@@ -819,7 +819,7 @@ export async function syncCloseToCrm(
       outcome.status === "created";
     if (!recovered) {
       console.warn(
-        `[crm-sync-close] recovery_failed conv=${conversationId} status=${outcome.status} — skipping`,
+        `[crm-sync-close] recovery_failed conv=${conversationId} status=${outcome.status} - skipping`,
       );
       return { status: "skipped", synced: false, reason: "no_crm_link", recovery_status: outcome.status };
     }
@@ -833,7 +833,7 @@ export async function syncCloseToCrm(
       });
     } else {
       console.log(
-        `[crm-sync-close] recovered link without local contact — proceeding without persistCrmLinkage ` +
+        `[crm-sync-close] recovered link without local contact - proceeding without persistCrmLinkage ` +
         `conv=${conversationId} crm_contact_id=${outcome.contact.id}`,
       );
     }

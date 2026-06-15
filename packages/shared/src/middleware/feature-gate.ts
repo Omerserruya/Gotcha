@@ -34,7 +34,7 @@ export function requireFeature(feature: Feature) {
 
     try {
       // Cheap pre-check so we can distinguish tenant- vs user-level denial in
-      // the response body — the frontend uses this to choose copy ("contact
+      // the response body - the frontend uses this to choose copy ("contact
       // your sysadmin to enable" vs "contact your tenant admin for access").
       const tenantOk = await isFeatureEnabledForTenant(tenantId, feature);
       if (!tenantOk && req.user.role !== "SYSTEM_ADMIN") {

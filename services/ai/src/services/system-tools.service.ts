@@ -1,5 +1,5 @@
 /**
- * System Copilot — read-only system tools + propose_plan.
+ * System Copilot - read-only system tools + propose_plan.
  *
  * These tools are EXCLUSIVE to the System Copilot (Command Center). They
  * do not appear in the customer-bot tool surface. All system_* tools are
@@ -375,7 +375,7 @@ async function dispatchSystemTool(
             toolCallId,
             content: JSON.stringify({
               ok: false,
-              error: "no conversation selected — pass conversationId or open one in the UI",
+              error: "no conversation selected - pass conversationId or open one in the UI",
             }),
           };
         }
@@ -496,7 +496,7 @@ async function dispatchProposePlan(
 
   // Audit each step's gate decision so the operator's approval UI can show
   // an aggregate "needs approval / cleared" status. We don't actually
-  // execute anything here — the existing approval-resume path in the
+  // execute anything here - the existing approval-resume path in the
   // conversation service runs the steps when the human clicks Approve.
   const stepGates = await Promise.all(
     steps.map(async (s: any) => {

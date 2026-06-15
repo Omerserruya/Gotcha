@@ -1,4 +1,4 @@
-# 04 — Service Boundaries
+# 04 - Service Boundaries
 
 The convergence does **not** fork services. Keep the existing container topology; change the internal contracts.
 
@@ -14,23 +14,23 @@ Copilot is a **mode**, not a service. "Voice Co-Pilot" is out of scope for this 
 | `incoming-worker` | Inbound message consumer; calls AI engine in AUTO mode | Queue consumers; no domain tables |
 | `conversation` | Inbox, messages, contacts, identity, broadcasts, approvals UI | `Conversation`, `Message`, `Contact`, `Department`, `ChannelAccount` (some), `RouterRule` |
 | `auth` | Users, tenants, channel OAuth, sessions | `User`, `Tenant`, `ChannelAccount`, `Session` |
-| `webhook` | Inbound webhook ingestion (Meta, Gmail push, Slack) | — (writes to queues) |
+| `webhook` | Inbound webhook ingestion (Meta, Gmail push, Slack) | - (writes to queues) |
 | `outgoing-worker` | Outbound message dispatch, scheduled broadcasts/followups | `ScheduledFollowup`, `BroadcastDelivery` |
 | `analytics` | Event aggregation, usage reports | `AnalyticsEvent`, `AIUsage` |
 | `voice-copilot` | Twilio media streams + STT. Unrelated to "Co-Pilot" rename. | `VoiceSession`, `VoiceTranscript` |
-| `frontend` | Next.js UI for Inbox, AI Studio, Integrations, Settings | — |
-| `gateway` | Nginx reverse-proxy, tenant subdomain routing | — |
+| `frontend` | Next.js UI for Inbox, AI Studio, Integrations, Settings | - |
+| `gateway` | Nginx reverse-proxy, tenant subdomain routing | - |
 
 ---
 
 ## 2. Logical layers inside `ai` service
 
-The `ai` service contains the new engine primitives. All other services call into it via HTTP — no direct DB writes to agent/tool tables.
+The `ai` service contains the new engine primitives. All other services call into it via HTTP - no direct DB writes to agent/tool tables.
 
 ```
 services/ai/
 ├── src/
-│   ├── engine/                       ← NEW — single source of execution logic
+│   ├── engine/                       ← NEW - single source of execution logic
 │   │   ├── execute-agent-turn.ts     executeAgentTurn({mode})
 │   │   ├── tool-surface.ts           buildToolSurface()
 │   │   ├── tool-dispatch.ts          dispatchTool()
@@ -54,8 +54,8 @@ services/ai/
 │   │   ├── router-rules.ts               (with /test endpoint)
 │   │   ├── routines.ts                   (CRUD + save-time lint/enforce)
 │   │   ├── proposed-tool-calls.ts        (NEW)
-│   │   ├── agent-turn.ts                 (NEW — internal endpoint, see §3)
-│   │   └── ai-assist.ts                  (copilot HTTP surface — now a thin wrapper)
+│   │   ├── agent-turn.ts                 (NEW - internal endpoint, see §3)
+│   │   └── ai-assist.ts                  (copilot HTTP surface - now a thin wrapper)
 ```
 
 The `engine/` directory is promoted to `packages/shared/src/engine/` in Phase 1 so `incoming-worker` can import it directly without HTTP.
@@ -140,7 +140,7 @@ Ascii, authoritative shape. Arrows point in direction of call.
 
 ## 4. Data ownership
 
-Every table has exactly one owning service. Other services read via HTTP or via `@chatcenter/shared` types (but read-only Prisma access is tolerated for performance-critical paths — `TenantGuard` enforces isolation).
+Every table has exactly one owning service. Other services read via HTTP or via `@chatcenter/shared` types (but read-only Prisma access is tolerated for performance-critical paths - `TenantGuard` enforces isolation).
 
 | Table | Owner |
 |---|---|
@@ -172,7 +172,7 @@ POST   /api/ai-agents
 PATCH  /api/ai-agents/:id
 DELETE /api/ai-agents/:id
 
-# Assist mode — lazy per conversation
+# Assist mode - lazy per conversation
 GET    /api/ai-assist/:conversationId/suggestions?locale=...
 GET    /api/ai-assist/:conversationId/summary?locale=...
 GET    /api/ai-assist/:conversationId/intelligence
@@ -192,7 +192,7 @@ PUT    /api/integrations/:slug/tools/:toolSlug     (tenant-level enable/disable)
 
 # OAuth (public callbacks via JWT state)
 GET    /api/integrations/oauth/zoho_crm/init       (admin)
-GET    /api/integrations/oauth/zoho_crm/callback   (public — state-verified)
+GET    /api/integrations/oauth/zoho_crm/callback   (public - state-verified)
 
 # Routing
 GET    /api/router-rules
@@ -292,7 +292,7 @@ No outage should cascade across tenants. All per-tenant quotas + circuit breaker
 
 ## 10. What this does NOT touch
 
-- `services/voice-copilot` — its "Co-Pilot" naming stays. Rename is a separate PR per §10 of the spec lock.
-- Billing service / usage export — unchanged.
-- Gateway nginx config — unchanged except possibly a new location block for `/api/ai-assist/:id/proposed-tool-calls` (covered by existing `/api/ai-assist` location).
-- Meta/Gmail webhook subscription setup — unchanged.
+- `services/voice-copilot` - its "Co-Pilot" naming stays. Rename is a separate PR per §10 of the spec lock.
+- Billing service / usage export - unchanged.
+- Gateway nginx config - unchanged except possibly a new location block for `/api/ai-assist/:id/proposed-tool-calls` (covered by existing `/api/ai-assist` location).
+- Meta/Gmail webhook subscription setup - unchanged.

@@ -87,7 +87,7 @@ async function processScheduledMessages(): Promise<void> {
 
   for (const scheduledMessage of dueMessages) {
     try {
-      // Check opt-out — use the resolver so a merged-away contact's
+      // Check opt-out - use the resolver so a merged-away contact's
       // scheduled messages (authored before the merge) still honor the
       // opt-out state of the surviving target.
       const { resolveContactByChannelId } = await import("@chatcenter/shared");
@@ -112,12 +112,12 @@ async function processScheduledMessages(): Promise<void> {
       // kick: enqueue the existing `flow-resume` queue with the target
       // flow id so the flow-executor (in incoming-worker) starts it from
       // its entry node. The flow runs with the scheduled message's
-      // `body` as the inbound payload — useful for time-triggered
+      // `body` as the inbound payload - useful for time-triggered
       // followups ("send retention check after 7 days of silence").
       //
       // Requires a `conversationId` so the flow has a scope to write
       // into. v1 surfaces a clear FAILED state when missing rather than
-      // synthesizing a conversation — keeps the operator decision
+      // synthesizing a conversation - keeps the operator decision
       // explicit. Future: auto-upsert OPEN conversation for the channel.
       if (scheduledMessage.flowId) {
         if (!scheduledMessage.conversationId) {
@@ -179,7 +179,7 @@ async function processScheduledMessages(): Promise<void> {
 
       // Create the Message row UP FRONT so the outgoing worker has a real
       // id to update with the SENT/FAILED status and externalMessageId.
-      // conversationId is nullable on Message — for scheduled sends with
+      // conversationId is nullable on Message - for scheduled sends with
       // no linked conversation this row still gives us a place to record
       // the delivery outcome.
       const messageRow = await prisma.message.create({

@@ -1,6 +1,6 @@
 "use client";
 
-// GuidedTour — first-time end-to-end walkthrough for new tenants.
+// GuidedTour - first-time end-to-end walkthrough for new tenants.
 //
 // Behavior:
 //   • Triggers when localStorage["onboarding.launchTour"] === "1" OR the
@@ -45,7 +45,7 @@ const STEPS: TourStep[] = [
     title: ["Welcome aboard.", "ברוכים הבאים"],
     body: [
       "Let's set up your first AI Employee end-to-end. It takes about a minute.",
-      "ניצור יחד את עובד ה-AI הראשון שלכם — לוקח דקה.",
+      "ניצור יחד את עובד ה-AI הראשון שלכם - לוקח דקה.",
     ],
     cta: ["Start the tour", "התחל את הסיור"],
   },
@@ -95,19 +95,19 @@ const STEPS: TourStep[] = [
     selector: '[data-tour="nav-conversations"]',
     title: ["Send your first reply", "שלחו את התגובה הראשונה"],
     body: [
-      "Open Conversations to send a real test reply from your new AI Employee — that completes onboarding.",
-      "פתחו 'שיחות' ושלחו תגובת בדיקה אמיתית מהעובד החדש — זה משלים את ההצטרפות.",
+      "Open Conversations to send a real test reply from your new AI Employee - that completes onboarding.",
+      "פתחו 'שיחות' ושלחו תגובת בדיקה אמיתית מהעובד החדש - זה משלים את ההצטרפות.",
     ],
     advanceOnClick: true,
     placement: "right",
   },
   {
-    id: "send-reply-mission",
-    selector: '[data-tour="mission-send_test_reply"]',
-    title: ["Send Reply step", "שלב 'שליחת תגובה'"],
+    id: "workflow-mission",
+    selector: '[data-tour="mission-workflows"]',
+    title: ["Your setup checklist", "רשימת ההגדרה שלכם"],
     body: [
-      "This card guides you. Open any conversation, type a reply, and send. The step turns green automatically.",
-      "הכרטיס הזה ינחה אתכם. פתחו שיחה, כתבו תגובה ושלחו — הצעד יצבע ירוק אוטומטית.",
+      "This checklist guides your setup: connect a knowledge base, set up your AI Employee, connect a channel, and wire your workflow. Each step turns green automatically as you complete it.",
+      "הרשימה הזו מלווה אתכם בהגדרה: חיבור מאגר ידע, הגדרת עובד ה-AI, חיבור ערוץ והגדרת תהליך העבודה. כל צעד יצבע ירוק אוטומטית עם השלמתו.",
     ],
   },
   {
@@ -197,7 +197,7 @@ export function GuidedTour() {
     };
   }, [active, stepIdx, pathname, measure]);
 
-  // Retry locating the target for up to ~4s — covers transitions
+  // Retry locating the target for up to ~4s - covers transitions
   // where the target isn't mounted yet (e.g. navigated route).
   useEffect(() => {
     if (!active || !step?.selector) return;
@@ -351,7 +351,7 @@ export function GuidedTour() {
         <div className="absolute inset-0 bg-black/55 backdrop-blur-[3px] pointer-events-auto" />
       )}
 
-      {/* Popup — anchored next to the spotlight when there is one, otherwise
+      {/* Popup - anchored next to the spotlight when there is one, otherwise
           pinned to the bottom-right so welcome/done screens don't block the
           page. Width is capped tight so the popup doesn't crowd panels. */}
       <div

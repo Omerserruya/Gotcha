@@ -1,5 +1,5 @@
 /**
- * Scheduler API helpers — meeting types + calendar account status.
+ * Scheduler API helpers - meeting types + calendar account status.
  *
  * Mirrors the contract exposed by services/ai/src/routes/scheduler-admin.ts.
  * Token is the user's session token from AuthContext; the backend enforces

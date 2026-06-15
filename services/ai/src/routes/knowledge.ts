@@ -230,7 +230,7 @@ router.post("/:id/documents/:docId/process", async (req: Request, res: Response)
     });
     if (!doc) { res.status(404).json({ error: "Document not found" }); return; }
 
-    // Process async — don't block the request
+    // Process async - don't block the request
     processDocument(doc.id).catch((err) => {
       console.error(`[Knowledge] Background processing failed for ${doc.id}:`, err.message);
     });

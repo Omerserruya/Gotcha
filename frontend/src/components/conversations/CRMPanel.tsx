@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * CRMPanel — conversation-side panel that hydrates context from the tenant's
+ * CRMPanel - conversation-side panel that hydrates context from the tenant's
  * CRM and lets the agent post a manual note while the conversation is open.
  *
  * Talks to /api/crm/conversation/:id/... (see services/ai/src/routes/crm-panel.ts).
@@ -40,9 +40,9 @@ export function CRMPanel({ conversation, onClose }: CRMPanelProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // AI-generated customer brief — rendered as a highlighted card at the top
+  // AI-generated customer brief - rendered as a highlighted card at the top
   // of the panel. Persistent, customer-level (NOT scoped to this
-  // conversation — that's the Co-Pilot context card's job). Refreshed
+  // conversation - that's the Co-Pilot context card's job). Refreshed
   // automatically on conversation close + call hangup; the agent can also
   // force-refresh from the card. We pass the active locale so the LLM
   // generates in the agent's language.
@@ -93,7 +93,7 @@ export function CRMPanel({ conversation, onClose }: CRMPanelProps) {
     setError(null);
     try {
       await createCrmLeadForConversation(token, conversationId);
-      // Re-load context — now should be "linked".
+      // Re-load context - now should be "linked".
       await load();
     } catch (err: any) {
       setError(err?.message || "create_lead_failed");
@@ -232,7 +232,7 @@ export function CRMPanel({ conversation, onClose }: CRMPanelProps) {
 
         {!loading && ctx?.status === "linked" && ctx.contact && (
           <>
-            {/* Highlighted AI customer summary — single source of "what an
+            {/* Highlighted AI customer summary - single source of "what an
                 agent needs to know right now" for this customer. Same payload
                 will feed Co-Pilot in a follow-up so the human and AI share
                 one view. */}
@@ -276,7 +276,7 @@ export function CRMPanel({ conversation, onClose }: CRMPanelProps) {
           </div>
         )}
 
-        {/* Manual note composer removed — agents post notes from the
+        {/* Manual note composer removed - agents post notes from the
             conversation's normal compose surface. The "CRM notes" collapsible
             above is the read-only timeline pulled from the vendor side. */}
       </div>
@@ -303,7 +303,7 @@ const CHANNEL_FIELD_LABELS: Array<{
   { channel: "Email",     idField: "gotcha_email_id",       emoji: "📧" },
 ];
 
-// Keys that are surfaced elsewhere on the card OR are GOTCHA bookkeeping —
+// Keys that are surfaced elsewhere on the card OR are GOTCHA bookkeeping -
 // hidden from the generic "Other fields" dump so it doesn't repeat info.
 const HIDDEN_CUSTOM_FIELDS = new Set<string>([
   ...CHANNEL_FIELD_LABELS.flatMap((c) => [c.idField, c.userField].filter(Boolean) as string[]),
@@ -314,7 +314,7 @@ function ChannelLinks({ customFields }: { customFields: Record<string, unknown> 
   const present = CHANNEL_FIELD_LABELS.filter((c) => typeof customFields[c.idField] === "string" && (customFields[c.idField] as string).trim());
   if (present.length === 0) {
     return (
-      <div className="text-[11px] text-gray-400 italic">No channel identifiers linked yet — the CRM record has no gotcha_* fields populated.</div>
+      <div className="text-[11px] text-gray-400 italic">No channel identifiers linked yet - the CRM record has no gotcha_* fields populated.</div>
     );
   }
   return (
@@ -361,7 +361,7 @@ function OtherCustomFields({ customFields }: { customFields: Record<string, unkn
   );
 }
 
-// Inner version — drops the outer card chrome since CollapsibleSection
+// Inner version - drops the outer card chrome since CollapsibleSection
 // already wraps it. Identical content otherwise.
 function ContactCardInner({ contact, linkMeta, vendor }: {
   contact: NonNullable<CrmContextEnvelope["contact"]>;
@@ -404,7 +404,7 @@ function ContactCardInner({ contact, linkMeta, vendor }: {
         )}
       </div>
 
-      {/* Linked channels — pulls from custom_fields where the CRM stores
+      {/* Linked channels - pulls from custom_fields where the CRM stores
           the GOTCHA-prefixed identifiers (gotcha_psid_instagram, gotcha_wa_id,
           etc). Empty when the CRM record only has phone/email and no channel
           identifiers wired yet. */}
@@ -590,7 +590,7 @@ function RecentCrmNotesBlock({ notes }: { notes: NonNullable<CrmContextEnvelope[
   );
 }
 
-// Collapsible section wrapper — gives every CRM-panel category an
+// Collapsible section wrapper - gives every CRM-panel category an
 // independent expand/collapse with a chevron. State lives in-component so
 // each section remembers its open/closed during the session.
 function CollapsibleSection({
@@ -647,7 +647,7 @@ function CollapsibleSection({
 // Highlighted AI customer-brief card at the top of the panel. Gradient
 // shell so it visually anchors above the structured CRM blocks. Shows the
 // model-generated behavioral brief plus short "signals" pills, preferred
-// tone, current mood, and recommended-behavior chips — everything the agent
+// tone, current mood, and recommended-behavior chips - everything the agent
 // needs to make THIS customer feel good on the next interaction.
 //
 // The brief is persistent + cross-channel: it's refreshed by the post-chat
@@ -722,7 +722,7 @@ function AISummaryCard({
               {summary.summary}
             </p>
 
-            {/* Mood + tone — short behavioral tags right under the prose. */}
+            {/* Mood + tone - short behavioral tags right under the prose. */}
             {(mood || tone) && (
               <div className="mt-2 flex flex-wrap gap-1.5 text-[10px]">
                 {mood && (
@@ -752,7 +752,7 @@ function AISummaryCard({
             )}
 
             {/* Concrete actions for the next agent. The brief tells them
-                what the customer feels — this list tells them what to DO. */}
+                what the customer feels - this list tells them what to DO. */}
             {recommendedBehaviors.length > 0 && (
               <div className="mt-2 pt-2 border-t border-gray-100">
                 <div className="text-[9px] uppercase tracking-wide text-gray-500 mb-1">{t("crmPanel.brief.howToTreat")}</div>

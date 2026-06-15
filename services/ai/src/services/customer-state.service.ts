@@ -1,14 +1,14 @@
 import { prisma } from "@chatcenter/shared";
 
 /**
- * F7.2 — Customer "state object" builder.
+ * F7.2 - Customer "state object" builder.
  *
  * Aggregates a compact, LLM-ready view of a customer across recent
  * conversations + intelligence records + audit trail. Pulls ONLY from
- * services' read models — no cross-service joins, no direct DB access
+ * services' read models - no cross-service joins, no direct DB access
  * to other domains (per CLAUDE.md Service Ownership boundary).
  *
- * F7.5 — Decision history is derived from AuditLog entries with
+ * F7.5 - Decision history is derived from AuditLog entries with
  * actorType="ai" targeting conversations/contacts for this customer.
  */
 export interface CustomerState {
@@ -64,7 +64,7 @@ export async function buildCustomerState(
 
   // Pull AI decisions across ALL sibling contacts, not just the single
   // row the caller passed in. Same cross-channel logic as the summaries
-  // query above — a decision taken on the IG contact row should show up
+  // query above - a decision taken on the IG contact row should show up
   // in the customer state fetched via the WA contact row.
   const indexedLogs = await prisma.auditLog.findMany({
     where: {

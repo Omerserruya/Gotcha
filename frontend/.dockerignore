@@ -1,0 +1,8 @@
+node_modules
+.next
+out
+npm-debug.log
+.git
+Dockerfile
+Dockerfile.dev
+Dockerfile.prod

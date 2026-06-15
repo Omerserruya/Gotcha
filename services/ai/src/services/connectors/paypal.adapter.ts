@@ -1,5 +1,5 @@
 /**
- * PayPal adapter — production-grade.
+ * PayPal adapter - production-grade.
  *
  * Auth: PayPal uses OAuth 2.0 client_credentials. Each tenant supplies
  * their own client_id + client_secret (created in their PayPal Developer
@@ -10,11 +10,11 @@
  *   config       = { environment }   // mirrored for marketplace UI
  *
  * Tools (top use-cases for support + commerce bots):
- *   - paypal.create_invoice     — issue an invoice and send to email
- *   - paypal.refund_capture     — refund a captured payment (partial/full)
- *   - paypal.get_order          — order detail (v2 Orders API)
- *   - paypal.list_transactions  — recent transactions (Reporting API)
- *   - paypal.create_payment_link — create a checkout order + return approval URL
+ *   - paypal.create_invoice     - issue an invoice and send to email
+ *   - paypal.refund_capture     - refund a captured payment (partial/full)
+ *   - paypal.get_order          - order detail (v2 Orders API)
+ *   - paypal.list_transactions  - recent transactions (Reporting API)
+ *   - paypal.create_payment_link - create a checkout order + return approval URL
  */
 
 import {
@@ -36,7 +36,7 @@ const TOOLS: ToolDefinition[] = [
     category: "WRITE",
     riskLevel: "MEDIUM",
     sideEffects: "Sends an email to the recipient with the invoice + payment link.",
-    idempotencyNotes: "Uses PayPal-Request-Id header derived from args — safe to retry.",
+    idempotencyNotes: "Uses PayPal-Request-Id header derived from args - safe to retry.",
     parameters: {
       type: "object",
       properties: {
@@ -52,12 +52,12 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "paypal.refund_capture",
     description: "Refund a captured PayPal payment (full or partial).",
-    whenToUse: "Customer is approved for a refund — by policy or human approval.",
+    whenToUse: "Customer is approved for a refund - by policy or human approval.",
     whenNotToUse: "Customer is just inquiring about refund eligibility.",
     category: "WRITE",
     riskLevel: "HIGH",
-    sideEffects: "Issues a real refund — irreversible.",
-    idempotencyNotes: "Uses PayPal-Request-Id header — same args never refund twice.",
+    sideEffects: "Issues a real refund - irreversible.",
+    idempotencyNotes: "Uses PayPal-Request-Id header - same args never refund twice.",
     parameters: {
       type: "object",
       properties: {
@@ -92,8 +92,8 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        start_date_iso: { type: "string", description: "ISO datetime — default 30 days ago." },
-        end_date_iso: { type: "string", description: "ISO datetime — default now." },
+        start_date_iso: { type: "string", description: "ISO datetime - default 30 days ago." },
+        end_date_iso: { type: "string", description: "ISO datetime - default now." },
         page_size: { type: "number", description: "Default 20, max 500." },
       },
     },
@@ -105,7 +105,7 @@ const TOOLS: ToolDefinition[] = [
     category: "WRITE",
     riskLevel: "MEDIUM",
     sideEffects: "Creates an order PayPal will hold open until paid or expires.",
-    idempotencyNotes: "Uses PayPal-Request-Id header — same args never duplicate.",
+    idempotencyNotes: "Uses PayPal-Request-Id header - same args never duplicate.",
     parameters: {
       type: "object",
       properties: {
@@ -150,7 +150,7 @@ const PayPalAdapter: ProviderAdapter = {
     const base = env === "live" ? LIVE_BASE : SANDBOX_BASE;
     let token = credentials.accessToken;
     if (!token) {
-      // First call after connect — mint a token now.
+      // First call after connect - mint a token now.
       const refreshed = await PayPalAdapter.refreshTokens!(credentials);
       token = refreshed.accessToken;
       await persistCredentials({

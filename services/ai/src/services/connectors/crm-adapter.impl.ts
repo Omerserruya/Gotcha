@@ -10,18 +10,18 @@
  * on what the vendor actually supports.
  *
  * v1 scope:
- *   • findCustomer       — phone/email lookup
- *   • getCustomerContext — contact + last 5 activities
- *   • createLead         — when CRM doesn't have them yet
- *   • createNote         — manual notes from the chat panel
- *   • appendInteraction  — close-of-conversation summary + engagement
+ *   • findCustomer       - phone/email lookup
+ *   • getCustomerContext - contact + last 5 activities
+ *   • createLead         - when CRM doesn't have them yet
+ *   • createNote         - manual notes from the chat panel
+ *   • appendInteraction  - close-of-conversation summary + engagement
  *
  * Reserved for later: createTask, createTicket, mergeContacts, splitContacts,
  * subscribeToChanges, parseWebhook, pollChanges. The interface in
  * `crm-adapter.types.ts` only models v1 methods so type checks stay tight.
  */
 
-import { executeAdapterTool } from "./integration-framework";
+import { executeAdapterTool, loadConnection } from "./integration-framework";
 import {
   DEFAULT_CAPABILITIES,
   GOTCHA_CUSTOM_FIELDS,
@@ -57,7 +57,7 @@ function nowIso(): string { return new Date().toISOString(); }
 /**
  * Per-locale labels for the CRM activity note. Falls back to English when
  * the tenant's effective locale isn't represented here. Add a new locale
- * by adding its block — `renderInteractionBody` picks it up automatically.
+ * by adding its block - `renderInteractionBody` picks it up automatically.
  */
 interface NoteLabels {
   inbound: string; outbound: string;
@@ -66,6 +66,10 @@ interface NoteLabels {
   summary: string; sentiment: string;
   qualification: string; actionItems: string;
   minutesShort: string; secondsShort: string;
+  /** Localized words for the sentiment enum so the value isn't raw English. */
+  sentiments: Record<string, string>;
+  /** BCP-47 tag for Intl date formatting (locale → readable timestamps). */
+  intlTag: string;
 }
 
 const NOTE_LABELS: Record<string, NoteLabels> = {
@@ -76,6 +80,8 @@ const NOTE_LABELS: Record<string, NoteLabels> = {
     summary: "Summary", sentiment: "Sentiment",
     qualification: "Qualification", actionItems: "Action items",
     minutesShort: "m", secondsShort: "s",
+    sentiments: { positive: "Positive", neutral: "Neutral", negative: "Negative", mixed: "Mixed" },
+    intlTag: "en-US",
   },
   he: {
     inbound: "נכנסת", outbound: "יוצאת",
@@ -84,6 +90,8 @@ const NOTE_LABELS: Record<string, NoteLabels> = {
     summary: "סיכום", sentiment: "סנטימנט",
     qualification: "כשירות", actionItems: "פעולות לביצוע",
     minutesShort: "ד׳", secondsShort: "ש׳",
+    sentiments: { positive: "חיובי", neutral: "ניטרלי", negative: "שלילי", mixed: "מעורב" },
+    intlTag: "he-IL",
   },
 };
 
@@ -103,19 +111,19 @@ export function renderInteractionBody(i: InteractionEnvelope): string {
   const lines: string[] = [];
   const channel = i.channel.toUpperCase();
   const dir = i.direction === "inbound" ? L.inbound : L.outbound;
-  lines.push(`GOTCHA — ${dir} ${channel}`);
+  lines.push(`GOTCHA - ${dir} ${channel}`);
   if (i.duration_seconds != null) lines.push(`${L.duration}: ${formatDuration(i.duration_seconds, L)}`);
   if (i.message_count != null) lines.push(`${L.messages}: ${i.message_count}`);
-  if (i.started_at) lines.push(`${L.started}: ${i.started_at}`);
-  if (i.ended_at) lines.push(`${L.ended}: ${i.ended_at}`);
+  if (i.started_at) lines.push(`${L.started}: ${formatTimestamp(i.started_at, L)}`);
+  if (i.ended_at) lines.push(`${L.ended}: ${formatTimestamp(i.ended_at, L)}`);
   lines.push("");
-  if (i.summary) lines.push(`${L.summary}:`, i.summary.trim(), "");
+  if (i.summary) lines.push(`${L.summary}:`, stripNoteMarkdown(i.summary.trim()), "");
   const eng = i.engagement || {};
-  if (eng.sentiment) lines.push(`${L.sentiment}: ${eng.sentiment}`);
+  if (eng.sentiment) lines.push(`${L.sentiment}: ${L.sentiments[String(eng.sentiment).toLowerCase()] ?? eng.sentiment}`);
   if (eng.qualification) lines.push(`${L.qualification}: ${eng.qualification}`);
   if (Array.isArray(eng.action_items) && eng.action_items.length) {
     lines.push("", `${L.actionItems}:`);
-    for (const a of eng.action_items) lines.push(`- ${a}`);
+    for (const a of eng.action_items) lines.push(`• ${stripNoteMarkdown(String(a))}`);
   }
   lines.push("", `[gotcha_source_interaction_id=${i.source_interaction_id}]`);
   return lines.join("\n").trim();
@@ -128,6 +136,44 @@ function formatDuration(seconds: number, L: NoteLabels): string {
   return m > 0 ? `${m}${L.minutesShort} ${s}${L.secondsShort}` : `${s}${L.secondsShort}`;
 }
 
+/**
+ * ISO-8601 → a clean, human date/time in the note's language. Times are shown
+ * in UTC (consistent with how the timestamps are stored) so the note never
+ * leaks a raw "2026-06-10T09:29:47.703Z" into the CRM. Falls back to the raw
+ * value if parsing/formatting ever throws.
+ */
+function formatTimestamp(iso: string, L: NoteLabels): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  try {
+    return new Intl.DateTimeFormat(L.intlTag, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(d) + " UTC";
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * CRM activity notes are PLAIN TEXT - markdown emphasis renders as literal
+ * "**asterisks**", which looks like junk. The summary/action-item text is
+ * generated with markdown for the rich workspace UI, so we strip the emphasis
+ * here (note-only) instead of at the source, preserving markdown everywhere
+ * the UI wants it.
+ */
+function stripNoteMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "$1")        // **bold** → bold
+    .replace(/__([^_]+)__/g, "$1")            // __bold__ → bold
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1$2") // *italic* → italic
+    .replace(/`([^`]+)`/g, "$1")              // `code` → code
+    .replace(/^#{1,6}\s+/gm, "")              // # heading → heading
+    .replace(/[ \t]+$/gm, "")                  // trailing whitespace
+    .trim();
+}
+
 // ─── HubSpot ────────────────────────────────────────────────
 
 export class HubSpotCRMAdapter implements CRMAdapter {
@@ -136,7 +182,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
   constructor(public readonly tenantId: string) {}
 
   async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
-    // Defense-in-depth normalization — identity service normalizes too, but
+    // Defense-in-depth normalization - identity service normalizes too, but
     // direct callers shouldn't bypass. Phone uses the *lax* coercion so the
     // identity service can probe multiple variants of the same number
     // (with/without +, national form, etc.) without each adapter snapping
@@ -178,7 +224,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
       return { ok: true, contacts: list.map(mapHubSpotContact).filter(Boolean) as CanonicalCrmContact[] };
     }
 
-    // External id passthrough — HubSpot uses contact_id (the HubSpot id).
+    // External id passthrough - HubSpot uses contact_id (the HubSpot id).
     const r = await executeAdapterTool({
       tenantId: this.tenantId,
       toolFunctionName: "hubspot.get_contact",
@@ -230,7 +276,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
   async createLead(payload: CrmContactCreatePayload): Promise<CrmAdapterWriteResult & { kind: CrmObjectKind }> {
     const email = normalizeEmail(payload.email);
     const phone = normalizePhone(payload.phone);
-    // HubSpot Pro/Starter don't have Leads — default to Contact upsert. Tenants on
+    // HubSpot Pro/Starter don't have Leads - default to Contact upsert. Tenants on
     // Sales Hub Enterprise can override via tenant config (Phase 2).
     if (!email && !phone) {
       return { ok: false, kind: "contact", reason: "email_or_phone_required" };
@@ -252,7 +298,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
       const id = (r.result as any)?.id ?? (r.result as any)?.results?.[0]?.id;
       // Best-effort: persist channel custom fields via update_contact. If the
       // tenant hasn't defined these properties, HubSpot rejects the patch and
-      // we log + move on — the create itself succeeded.
+      // we log + move on - the create itself succeeded.
       if (id && payload.custom && Object.keys(payload.custom).length) {
         await executeAdapterTool({
           tenantId: this.tenantId,
@@ -262,7 +308,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
       }
       return { ok: true, kind: "contact", id };
     }
-    // Phone-only — HubSpot upsert requires email; the public create endpoint
+    // Phone-only - HubSpot upsert requires email; the public create endpoint
     // refuses phone-only creates. Surface a clear reason; identity service
     // routes this back to the panel as `error`.
     return { ok: false, kind: "contact", reason: "hubspot_requires_email_for_create" };
@@ -307,7 +353,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
     source_interaction_id?: string;
   }): Promise<CrmAdapterWriteResult> {
     // HubSpot's adapter tool surface today is `hubspot.log_activity` with
-    // kinds NOTE/EMAIL/CALL — no first-class TASK. Degrade by writing a NOTE
+    // kinds NOTE/EMAIL/CALL - no first-class TASK. Degrade by writing a NOTE
     // prefixed with "TODO:" so the action is at least visible on the
     // record's timeline (and search-discoverable in HubSpot).
     const head = `TODO: ${args.subject}` + (args.priority ? ` [priority=${args.priority}]` : "")
@@ -325,7 +371,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
 
   async updateRecord(args: { id: string; kind: CrmObjectKind; fields: Record<string, unknown> }): Promise<CrmAdapterWriteResult> {
     // HubSpot has the same update tool surface as enrichContact (update_lead /
-    // update_contact). Pass the sparse `fields` straight through — the LLM is
+    // update_contact). Pass the sparse `fields` straight through - the LLM is
     // responsible for using HubSpot property names (the summarizer's
     // allowedFields list is the contract).
     const properties: Record<string, unknown> = {};
@@ -368,7 +414,7 @@ export class HubSpotCRMAdapter implements CRMAdapter {
 
   async appendInteraction(args: AppendInteractionArgs): Promise<CrmAdapterWriteResult> {
     // HubSpot has Engagements for call / email / note. For v1 we project every
-    // channel as NOTE (uniform body via renderInteractionBody) — Phase 2 splits
+    // channel as NOTE (uniform body via renderInteractionBody) - Phase 2 splits
     // voice → CALL, email → EMAIL.
     const body = renderInteractionBody({
       ...args.interaction,
@@ -434,7 +480,7 @@ export class SalesforceCRMAdapter implements CRMAdapter {
   async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
     const email = normalizeEmail(query.email);
     // Lax phone coercion: identity service probes multiple variants of the
-    // same number — preserve whatever shape it asked for so we don't snap
+    // same number - preserve whatever shape it asked for so we don't snap
     // them all back to strict E.164.
     const phone = coerceSearchPhone(query.phone);
     if (!email && !phone && !query.external_id) {
@@ -446,7 +492,7 @@ export class SalesforceCRMAdapter implements CRMAdapter {
     if (query.external_id) clauses.push(`Id = '${escapeSoql(query.external_id)}'`);
     const where = clauses.join(" OR ");
 
-    // Try Lead first, then Contact — vendor norm is Lead-first for inbound.
+    // Try Lead first, then Contact - vendor norm is Lead-first for inbound.
     for (const sobject of ["Lead", "Contact"] as const) {
       const r = await executeAdapterTool({
         tenantId: this.tenantId,
@@ -535,7 +581,7 @@ export class SalesforceCRMAdapter implements CRMAdapter {
 
   async enrichContact(args: CrmEnrichArgs): Promise<CrmAdapterWriteResult> {
     // v1 supports Lead enrichment (salesforce.update_lead). Contact enrichment
-    // would require a salesforce.update_contact tool which doesn't exist yet —
+    // would require a salesforce.update_contact tool which doesn't exist yet -
     // surface a clean reason so the identity service degrades to was_enriched:false.
     if (args.kind !== "lead") {
       return { ok: false, reason: notImplemented("enrichContact:contact", "salesforce").reason };
@@ -578,7 +624,7 @@ export class SalesforceCRMAdapter implements CRMAdapter {
     source_interaction_id?: string;
   }): Promise<CrmAdapterWriteResult> {
     // Salesforce Tasks live on the Task object. `salesforce.log_task` already
-    // creates a Task — for a real OPEN task we set Status="Not Started"
+    // creates a Task - for a real OPEN task we set Status="Not Started"
     // (the note path uses Status="Completed"). WhoId works for Lead+Contact.
     const description = args.body
       ? augmentBodyWithMarker(args.body, args.source_interaction_id, undefined, undefined)
@@ -655,7 +701,7 @@ export class SalesforceCRMAdapter implements CRMAdapter {
   async appendInteraction(args: AppendInteractionArgs): Promise<CrmAdapterWriteResult> {
     const body = renderInteractionBody(args.interaction);
     const finalBody = augmentBodyWithMarker(body, args.interaction.source_interaction_id, args.source_outbox_id, args.payload_version);
-    const subject = `GOTCHA — ${args.interaction.channel.toUpperCase()} ${args.interaction.direction}`;
+    const subject = `GOTCHA - ${args.interaction.channel.toUpperCase()} ${args.interaction.direction}`;
     const r = await executeAdapterTool({
       tenantId: this.tenantId,
       toolFunctionName: "salesforce.log_task",
@@ -679,7 +725,7 @@ export class SalesforceCRMAdapter implements CRMAdapter {
   }
 
   async listRecentNotes(_args: { contact_id: string; kind: CrmObjectKind; limit?: number }): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> {
-    // Same constraint — SF Notes are ContentNote linked via ContentDocumentLink.
+    // Same constraint - SF Notes are ContentNote linked via ContentDocumentLink.
     // Empty for v1; Phase 2 wires the ContentNote query.
     return { ok: true, activities: [] };
   }
@@ -817,7 +863,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
     const c = await loadZohoConnection(this.tenantId);
     if (!c.ok) return { ok: false, contacts: [], reason: c.reason };
 
-    // External_id passthrough — assume it's a Lead id; let getCustomerContext
+    // External_id passthrough - assume it's a Lead id; let getCustomerContext
     // route Contact lookups via its own kind argument.
     if (query.external_id) {
       const r = await zohoFetch(c.conn, "GET", `/crm/v6/Leads/${encodeURIComponent(query.external_id)}`);
@@ -897,7 +943,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
       Company: payload.company || payload.source || "GOTCHA Inbound",
       Lead_Source: payload.source ?? "GOTCHA",
     };
-    // Channel custom fields — Zoho API names are case-sensitive but the keys
+    // Channel custom fields - Zoho API names are case-sensitive but the keys
     // GOTCHA emits use snake_case which is the Zoho convention.
     if (payload.custom) {
       for (const [k, v] of Object.entries(payload.custom)) {
@@ -933,7 +979,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
         if (typeof v === "string" && v) record[k] = v;
       }
     }
-    // Just the id means nothing to update — short-circuit.
+    // Just the id means nothing to update - short-circuit.
     if (Object.keys(record).length <= 1) return { ok: true };
 
     const mod = args.kind === "lead" ? "Leads" : "Contacts";
@@ -1000,7 +1046,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
   }
 
   async mergeContacts(_args: CrmMergeArgs): Promise<CrmMergeResult> {
-    // Zoho CRM v6 doesn't expose a public merge endpoint — manual dedup is
+    // Zoho CRM v6 doesn't expose a public merge endpoint - manual dedup is
     // operator-driven in the Zoho UI. Identity service routes 2+ matches to
     // approval (the operator picks the survivor manually).
     return { ok: false, reason: notImplemented("mergeContacts", "zoho").reason };
@@ -1032,7 +1078,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
     const body = renderInteractionBody(args.interaction);
     const finalBody = augmentBodyWithMarker(body, args.interaction.source_interaction_id, args.source_outbox_id, args.payload_version);
     const seModule = args.kind === "lead" ? "Leads" : "Contacts";
-    const title = `GOTCHA — ${args.interaction.channel.toUpperCase()} ${args.interaction.direction}`;
+    const title = `GOTCHA - ${args.interaction.channel.toUpperCase()} ${args.interaction.direction}`;
     const payload = {
       data: [{
         Note_Title: title,
@@ -1084,7 +1130,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
   async listRecentNotes(args: { contact_id: string; kind: CrmObjectKind; limit?: number }): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> {
     const c = await loadZohoConnection(this.tenantId);
     if (!c.ok) return { ok: false, activities: [], reason: c.reason };
-    // Zoho v6: Notes can't be searched by `Parent_Id:equals` — that lookup
+    // Zoho v6: Notes can't be searched by `Parent_Id:equals` - that lookup
     // field rejects the equals operator with INVALID_QUERY. The supported
     // path is the related-list endpoint `/{Module}/{record_id}/Notes`,
     // which Zoho explicitly exposes for the polymorphic parent relationship.
@@ -1143,7 +1189,7 @@ export class ZohoCRMAdapter implements CRMAdapter {
       merged.push({
         id: String(t.id),
         kind: "task",
-        body: [t.subject, t.status ? `[${t.status}]` : "", cleanedDescription].filter(Boolean).join(" — "),
+        body: [t.subject, t.status ? `[${t.status}]` : "", cleanedDescription].filter(Boolean).join(" - "),
         occurred_at: t.created_at ?? nowIso(),
         source_interaction_id: null,
       });
@@ -1171,6 +1217,566 @@ export class ZohoCRMAdapter implements CRMAdapter {
 // Returned by the resolver when a tenant has no CRM connected. Methods all
 // return `ok: false, reason: 'no_crm_configured'` so callers can degrade
 // gracefully (the side panel shows "no CRM connected"; close-sync skips).
+
+// ─── Shopify (optional CRM / source of truth) ───────────────
+//
+// Shopify is primarily an ECOMMERCE integration, but a tenant can opt to use
+// it as their CRM source of truth (config.useAsCrm on the Shopify connection
+// - see crm-adapter-resolver). This adapter is a thin CRM projection over the
+// Shopify customer tools in shopify.adapter.ts: a Shopify "customer" is our
+// canonical "contact", order history projects onto `deals`, and notes/
+// interactions are appended to the customer's free-text `note` field.
+export class ShopifyCRMAdapter implements CRMAdapter {
+  readonly vendor: CrmVendor = "shopify";
+  readonly capabilities: CrmAdapterCapabilities = DEFAULT_CAPABILITIES.shopify;
+  constructor(public readonly tenantId: string) {}
+
+  async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
+    const email = normalizeEmail(query.email);
+    const phone = coerceSearchPhone(query.phone);
+    if (!email && !phone && !query.external_id) {
+      return { ok: false, contacts: [], reason: "no_query" };
+    }
+
+    if (query.external_id) {
+      const r = await executeAdapterTool({
+        tenantId: this.tenantId,
+        toolFunctionName: "shopify.get_customer",
+        args: { customer_id: query.external_id },
+      });
+      if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+      const c = mapShopifyCustomer(r.result);
+      return { ok: true, contacts: c ? [c] : [] };
+    }
+    if (email) {
+      const r = await executeAdapterTool({
+        tenantId: this.tenantId,
+        toolFunctionName: "shopify.get_customer_by_email",
+        args: { email },
+      });
+      if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+      const c = mapShopifyCustomer(r.result);
+      return { ok: true, contacts: c ? [c] : [] };
+    }
+    // phone
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "shopify.get_customer_by_phone",
+      args: { phone },
+    });
+    if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+    const c = mapShopifyCustomer(r.result);
+    return { ok: true, contacts: c ? [c] : [] };
+  }
+
+  async getCustomerContext(args: { contact_id: string; kind: CrmObjectKind }): Promise<CrmAdapterContextResult> {
+    const cr = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "shopify.get_customer",
+      args: { customer_id: args.contact_id },
+    });
+    if (!cr.ok) return { ok: false, reason: cr.reason };
+    const contact = mapShopifyCustomer(cr.result);
+    if (!contact) return { ok: false, reason: "contact_not_found" };
+
+    // Project recent order history onto canonical `deals` so the side panel
+    // renders purchase context. Best-effort - failures degrade to no deals.
+    let deals: CrmDeal[] = [];
+    try {
+      const or = await executeAdapterTool({
+        tenantId: this.tenantId,
+        toolFunctionName: "shopify.get_customer_orders",
+        args: { customer_id: args.contact_id, limit: 10 },
+      });
+      if (or.ok && Array.isArray(or.result)) {
+        deals = (or.result as any[]).map(mapShopifyOrderToDeal).filter(Boolean) as CrmDeal[];
+      }
+    } catch { /* no deals */ }
+
+    const ctx: CrmCustomerContext = { contact, recent_activities: [], deals, tickets: [] };
+    return { ok: true, context: ctx };
+  }
+
+  async createLead(payload: CrmContactCreatePayload): Promise<CrmAdapterWriteResult & { kind: CrmObjectKind }> {
+    const email = normalizeEmail(payload.email);
+    const phone = normalizePhone(payload.phone);
+    if (!email && !phone) return { ok: false, kind: "contact", reason: "email_or_phone_required" };
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "shopify.create_customer",
+      args: {
+        email: email ?? undefined,
+        phone: phone ?? undefined,
+        first_name: payload.first_name,
+        last_name: payload.last_name,
+        tags: payload.source ? [String(payload.source)] : undefined,
+      },
+    });
+    if (!r.ok) return { ok: false, kind: "contact", reason: r.reason };
+    const id = (r.result as any)?.id;
+    return { ok: true, kind: "contact", id: id != null ? String(id) : undefined };
+  }
+
+  async createNote(args: CreateNoteArgs): Promise<CrmAdapterWriteResult> {
+    // Shopify customers have a single free-text `note` field (no timeline) -
+    // create_note appends to it. Markers keep read-then-write idempotency.
+    const body = augmentBodyWithMarker(args.body, args.source_interaction_id, args.source_outbox_id, args.payload_version);
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "shopify.create_note",
+      args: { customer_id: args.contact_id, note: body },
+    });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: args.contact_id, was_update: true };
+  }
+
+  async appendInteraction(args: AppendInteractionArgs): Promise<CrmAdapterWriteResult> {
+    const body = renderInteractionBody(args.interaction);
+    const finalBody = augmentBodyWithMarker(body, args.interaction.source_interaction_id, args.source_outbox_id, args.payload_version);
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "shopify.create_note",
+      args: { customer_id: args.contact_id, note: finalBody },
+    });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: args.contact_id, was_update: true };
+  }
+
+  async enrichContact(args: CrmEnrichArgs): Promise<CrmAdapterWriteResult> {
+    const fields: Record<string, unknown> = {};
+    const email = normalizeEmail(args.update.email);
+    const phone = normalizePhone(args.update.phone);
+    if (email) fields.email = email;
+    if (phone) fields.phone = phone;
+    if (args.update.display_name) {
+      const [first, ...rest] = args.update.display_name.trim().split(/\s+/);
+      if (first) fields.first_name = first;
+      if (rest.length) fields.last_name = rest.join(" ");
+    }
+    if (args.update.custom) {
+      for (const [k, v] of Object.entries(args.update.custom)) {
+        if (typeof v === "string" && v) fields[k] = v;
+      }
+    }
+    if (Object.keys(fields).length === 0) return { ok: true };
+    return this.updateRecord({ id: args.contact_id, kind: args.kind, fields });
+  }
+
+  async updateRecord(args: { id: string; kind: CrmObjectKind; fields: Record<string, unknown> }): Promise<CrmAdapterWriteResult> {
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args.fields ?? {})) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === "string" && v.trim() === "") continue;
+      fields[k] = v;
+    }
+    if (Object.keys(fields).length === 0) return { ok: true, id: args.id, was_update: false };
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "shopify.update_customer",
+      args: { customer_id: args.id, fields },
+    });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: args.id, was_update: true };
+  }
+
+  async listRecentNotes(_args: { contact_id: string; kind: CrmObjectKind; limit?: number }): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> {
+    return { ok: true, activities: [] };
+  }
+
+  async listRecentActivities(_args: { contact_id: string; kind: CrmObjectKind; limit?: number }): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> {
+    return { ok: true, activities: [] };
+  }
+}
+
+function mapShopifyCustomer(raw: unknown): CanonicalCrmContact | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c: any = raw;
+  if (c.id == null) return null;
+  const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim()
+    || c.default_address?.name || null;
+  return {
+    id: String(c.id),
+    kind: "contact",
+    display_name: name,
+    email: c.email ?? null,
+    phone: c.phone ?? c.default_address?.phone ?? null,
+    owner_id: null,
+    stage: null,
+    custom_fields: {
+      orders_count: c.orders_count ?? null,
+      total_spent: c.total_spent ?? null,
+      currency: c.currency ?? null,
+      tags: c.tags ?? null,
+      state: c.state ?? null,
+      verified_email: c.verified_email ?? null,
+      note: c.note ?? null,
+      last_order_id: c.last_order_id ?? null,
+      last_order_name: c.last_order_name ?? null,
+    },
+    vendor_updated_at: c.updated_at ?? nowIso(),
+    fetched_at: nowIso(),
+    vendor: "shopify",
+  };
+}
+
+function mapShopifyOrderToDeal(raw: unknown): CrmDeal | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o: any = raw;
+  if (o.id == null) return null;
+  const amount = o.total_price != null ? Number(o.total_price) : null;
+  return {
+    id: String(o.id),
+    name: o.name ?? `Order ${o.id}`,
+    stage: o.financial_status ?? o.fulfillment_status ?? null,
+    amount: Number.isFinite(amount as number) ? (amount as number) : null,
+    close_date: o.created_at ?? null,
+  };
+}
+
+// ─── Fireberry (Powerlink) ──────────────────────────────────
+//
+// Customer entity is the Account object (objecttype 1). Object type + field
+// names are tenant-customizable, so we resolve them from the integration
+// `config` with documented defaults. Notes project onto a single text field
+// (default `description`) via read-modify-write - Fireberry has no lightweight
+// timeline note we rely on. Auth is a static API token (no refresh).
+
+interface FireberrySchema {
+  objectTypeName: string;
+  objectTypeCode: number;
+  idField: string;
+  nameField: string;
+  emailField: string;
+  phoneField: string;
+  noteField: string;
+}
+
+function fireberrySchemaFromConfig(config: Record<string, any>): FireberrySchema {
+  return {
+    objectTypeName: config.objectTypeName || "account",
+    objectTypeCode: Number(config.objectTypeCode ?? 1),
+    idField: config.idField || "accountid",
+    nameField: config.nameField || "accountname",
+    emailField: config.emailField || "emailaddress1",
+    phoneField: config.phoneField || "telephone1",
+    noteField: config.noteField || "description",
+  };
+}
+
+function escapeFireberryValue(v: string): string {
+  return v.replace(/'/g, "''");
+}
+
+export class FireberryCRMAdapter implements CRMAdapter {
+  readonly vendor: CrmVendor = "fireberry";
+  readonly capabilities: CrmAdapterCapabilities = DEFAULT_CAPABILITIES.fireberry;
+  constructor(public readonly tenantId: string) {}
+
+  private schemaCache: FireberrySchema | null = null;
+  private async schema(): Promise<FireberrySchema> {
+    if (this.schemaCache) return this.schemaCache;
+    const conn = await loadConnection({ tenantId: this.tenantId, slug: "fireberry" });
+    this.schemaCache = fireberrySchemaFromConfig(conn?.config || {});
+    return this.schemaCache;
+  }
+
+  private mapRecord(raw: any, s: FireberrySchema): CanonicalCrmContact | null {
+    if (!raw || typeof raw !== "object") return null;
+    const id = raw[s.idField] ?? raw.id ?? raw.objectid ?? null;
+    if (id == null) return null;
+    return {
+      id: String(id),
+      kind: "contact",
+      display_name: raw[s.nameField] ?? null,
+      email: raw[s.emailField] ?? null,
+      phone: raw[s.phoneField] ?? null,
+      owner_id: raw.ownerid ?? null,
+      stage: raw.statuscode ?? raw.statecode ?? null,
+      custom_fields: raw,
+      vendor_updated_at: raw[this.capabilities.version_token_field] ?? nowIso(),
+      fetched_at: nowIso(),
+      vendor: "fireberry",
+    };
+  }
+
+  async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
+    const s = await this.schema();
+    const email = normalizeEmail(query.email);
+    const phone = coerceSearchPhone(query.phone);
+    if (!email && !phone && !query.external_id) return { ok: false, contacts: [], reason: "no_query" };
+
+    if (query.external_id) {
+      const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "fireberry.get_record", args: { object_type: s.objectTypeName, record_id: query.external_id } });
+      if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+      const c = this.mapRecord(r.result, s);
+      return { ok: true, contacts: c ? [c] : [] };
+    }
+
+    const field = email ? s.emailField : s.phoneField;
+    const value = email ?? phone!;
+    const r = await executeAdapterTool({
+      tenantId: this.tenantId,
+      toolFunctionName: "fireberry.query_records",
+      args: { object_type_code: s.objectTypeCode, query: `(${field} = '${escapeFireberryValue(value)}')`, page_size: 5 },
+    });
+    if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+    const rows = Array.isArray(r.result) ? r.result : [];
+    const contacts = rows.map((row: any) => this.mapRecord(row, s)).filter(Boolean) as CanonicalCrmContact[];
+    return { ok: true, contacts };
+  }
+
+  async getCustomerContext(args: { contact_id: string; kind: CrmObjectKind }): Promise<CrmAdapterContextResult> {
+    const s = await this.schema();
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "fireberry.get_record", args: { object_type: s.objectTypeName, record_id: args.contact_id } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    const contact = this.mapRecord(r.result, s);
+    if (!contact) return { ok: false, reason: "contact_not_found" };
+    return { ok: true, context: { contact, recent_activities: [], deals: [], tickets: [] } };
+  }
+
+  async createLead(payload: CrmContactCreatePayload): Promise<CrmAdapterWriteResult & { kind: CrmObjectKind }> {
+    const s = await this.schema();
+    const email = normalizeEmail(payload.email);
+    const phone = normalizePhone(payload.phone);
+    const name = payload.display_name || [payload.first_name, payload.last_name].filter(Boolean).join(" ").trim();
+    if (!email && !phone && !name) return { ok: false, kind: "contact", reason: "identifier_required" };
+    const fields: Record<string, unknown> = {};
+    if (name) fields[s.nameField] = name;
+    if (email) fields[s.emailField] = email;
+    if (phone) fields[s.phoneField] = phone;
+    if (payload.custom) Object.assign(fields, payload.custom);
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "fireberry.create_record", args: { object_type: s.objectTypeName, fields } });
+    if (!r.ok) return { ok: false, kind: "contact", reason: r.reason };
+    const id = (r.result as any)?.[s.idField] ?? (r.result as any)?.id;
+    return { ok: true, kind: "contact", id: id != null ? String(id) : undefined };
+  }
+
+  // Read-modify-write onto a single text field (no lightweight timeline).
+  private async appendToNoteField(contactId: string, body: string): Promise<CrmAdapterWriteResult> {
+    const s = await this.schema();
+    let existing = "";
+    const cur = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "fireberry.get_record", args: { object_type: s.objectTypeName, record_id: contactId } });
+    if (cur.ok && cur.result && typeof cur.result === "object") {
+      const v = (cur.result as any)[s.noteField];
+      if (typeof v === "string") existing = v;
+    }
+    const next = existing ? `${existing}\n\n${body}` : body;
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "fireberry.update_record", args: { object_type: s.objectTypeName, record_id: contactId, fields: { [s.noteField]: next } } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: contactId, was_update: true };
+  }
+
+  async createNote(args: CreateNoteArgs): Promise<CrmAdapterWriteResult> {
+    const body = augmentBodyWithMarker(args.body, args.source_interaction_id, args.source_outbox_id, args.payload_version);
+    return this.appendToNoteField(args.contact_id, body);
+  }
+
+  async appendInteraction(args: AppendInteractionArgs): Promise<CrmAdapterWriteResult> {
+    const body = augmentBodyWithMarker(renderInteractionBody(args.interaction), args.interaction.source_interaction_id, args.source_outbox_id, args.payload_version);
+    return this.appendToNoteField(args.contact_id, body);
+  }
+
+  async enrichContact(args: CrmEnrichArgs): Promise<CrmAdapterWriteResult> {
+    const s = await this.schema();
+    const fields: Record<string, unknown> = {};
+    const email = normalizeEmail(args.update.email);
+    const phone = normalizePhone(args.update.phone);
+    if (email) fields[s.emailField] = email;
+    if (phone) fields[s.phoneField] = phone;
+    if (args.update.display_name) fields[s.nameField] = args.update.display_name;
+    if (args.update.custom) for (const [k, v] of Object.entries(args.update.custom)) if (typeof v === "string" && v) fields[k] = v;
+    if (Object.keys(fields).length === 0) return { ok: true };
+    return this.updateRecord({ id: args.contact_id, kind: args.kind, fields });
+  }
+
+  async updateRecord(args: { id: string; kind: CrmObjectKind; fields: Record<string, unknown> }): Promise<CrmAdapterWriteResult> {
+    const s = await this.schema();
+    const map: Record<string, string> = { email: s.emailField, phone: s.phoneField, display_name: s.nameField, name: s.nameField, notes: s.noteField };
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args.fields ?? {})) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === "string" && v.trim() === "") continue;
+      fields[map[k] || k] = v;
+    }
+    if (Object.keys(fields).length === 0) return { ok: true, id: args.id, was_update: false };
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "fireberry.update_record", args: { object_type: s.objectTypeName, record_id: args.id, fields } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: args.id, was_update: true };
+  }
+
+  async listRecentNotes(): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> { return { ok: true, activities: [] }; }
+  async listRecentActivities(): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> { return { ok: true, activities: [] }; }
+}
+
+// ─── Airtable (bring-your-own-schema) ───────────────────────
+//
+// Airtable has no fixed contact schema, so the adapter is a thin translator
+// driven entirely by per-tenant `config`: which columns map to canonical
+// fields, a long-text notes column, and an optional idempotency column. Notes
+// append to the single notes column (no timeline). The base/table live on
+// `config.baseId`/`config.tableId` and are read by the generic airtable.* tools.
+
+interface AirtableSchema {
+  fieldMap: { email?: string; phone?: string; display_name?: string; stage?: string };
+  notesField?: string;
+  idempotencyField?: string;
+}
+
+function airtableSchemaFromConfig(config: Record<string, any>): AirtableSchema {
+  const fm = (config.fieldMap && typeof config.fieldMap === "object") ? config.fieldMap : {};
+  return {
+    fieldMap: { email: fm.email, phone: fm.phone, display_name: fm.display_name, stage: fm.stage },
+    notesField: config.notesField,
+    idempotencyField: config.idempotencyField,
+  };
+}
+
+function airtableFormulaEscape(v: string): string { return v.replace(/'/g, "\\'"); }
+
+export class AirtableCRMAdapter implements CRMAdapter {
+  readonly vendor: CrmVendor = "airtable";
+  readonly capabilities: CrmAdapterCapabilities = DEFAULT_CAPABILITIES.airtable;
+  constructor(public readonly tenantId: string) {}
+
+  private schemaCache: AirtableSchema | null = null;
+  private async schema(): Promise<AirtableSchema> {
+    if (this.schemaCache) return this.schemaCache;
+    const conn = await loadConnection({ tenantId: this.tenantId, slug: "airtable" });
+    this.schemaCache = airtableSchemaFromConfig(conn?.config || {});
+    return this.schemaCache;
+  }
+
+  private mapRecord(raw: any, s: AirtableSchema): CanonicalCrmContact | null {
+    if (!raw || typeof raw !== "object" || !raw.id) return null;
+    const f = raw.fields || {};
+    return {
+      id: String(raw.id),
+      kind: "contact",
+      display_name: s.fieldMap.display_name ? (f[s.fieldMap.display_name] ?? null) : null,
+      email: s.fieldMap.email ? (f[s.fieldMap.email] ?? null) : null,
+      phone: s.fieldMap.phone ? (f[s.fieldMap.phone] ?? null) : null,
+      owner_id: null,
+      stage: s.fieldMap.stage ? (f[s.fieldMap.stage] ?? null) : null,
+      custom_fields: f,
+      vendor_updated_at: nowIso(),
+      fetched_at: nowIso(),
+      vendor: "airtable",
+    };
+  }
+
+  async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
+    const s = await this.schema();
+    const email = normalizeEmail(query.email);
+    const phone = coerceSearchPhone(query.phone);
+
+    if (query.external_id) {
+      const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.get_record", args: { record_id: query.external_id } });
+      if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+      const c = this.mapRecord(r.result, s);
+      return { ok: true, contacts: c ? [c] : [] };
+    }
+
+    let col: string | undefined;
+    let val: string | undefined;
+    if (email && s.fieldMap.email) { col = s.fieldMap.email; val = email; }
+    else if (phone && s.fieldMap.phone) { col = s.fieldMap.phone; val = phone; }
+    if (!col || !val) return { ok: false, contacts: [], reason: "no_query_or_unmapped" };
+
+    const formula = `{${col}}='${airtableFormulaEscape(val)}'`;
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.list_records", args: { filter_formula: formula, max_records: 5 } });
+    if (!r.ok) return { ok: false, contacts: [], reason: r.reason };
+    const rows = Array.isArray(r.result) ? r.result : [];
+    return { ok: true, contacts: rows.map((row: any) => this.mapRecord(row, s)).filter(Boolean) as CanonicalCrmContact[] };
+  }
+
+  async getCustomerContext(args: { contact_id: string; kind: CrmObjectKind }): Promise<CrmAdapterContextResult> {
+    const s = await this.schema();
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.get_record", args: { record_id: args.contact_id } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    const contact = this.mapRecord(r.result, s);
+    if (!contact) return { ok: false, reason: "contact_not_found" };
+    return { ok: true, context: { contact, recent_activities: [], deals: [], tickets: [] } };
+  }
+
+  async createLead(payload: CrmContactCreatePayload): Promise<CrmAdapterWriteResult & { kind: CrmObjectKind }> {
+    const s = await this.schema();
+    const email = normalizeEmail(payload.email);
+    const phone = normalizePhone(payload.phone);
+    const name = payload.display_name || [payload.first_name, payload.last_name].filter(Boolean).join(" ").trim();
+    if (!email && !phone && !name) return { ok: false, kind: "contact", reason: "identifier_required" };
+    const fields: Record<string, unknown> = {};
+    if (name && s.fieldMap.display_name) fields[s.fieldMap.display_name] = name;
+    if (email && s.fieldMap.email) fields[s.fieldMap.email] = email;
+    if (phone && s.fieldMap.phone) fields[s.fieldMap.phone] = phone;
+    if (Object.keys(fields).length === 0) return { ok: false, kind: "contact", reason: "no_mapped_fields" };
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.create_record", args: { fields } });
+    if (!r.ok) return { ok: false, kind: "contact", reason: r.reason };
+    const id = (r.result as any)?.id;
+    return { ok: true, kind: "contact", id: id != null ? String(id) : undefined };
+  }
+
+  private async appendToNoteField(contactId: string, body: string): Promise<CrmAdapterWriteResult> {
+    const s = await this.schema();
+    if (!s.notesField) return { ok: false, reason: "notes_field_not_mapped" };
+    let existing = "";
+    const cur = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.get_record", args: { record_id: contactId } });
+    if (cur.ok && (cur.result as any)?.fields) {
+      const v = (cur.result as any).fields[s.notesField];
+      if (typeof v === "string") existing = v;
+    }
+    const next = existing ? `${existing}\n\n${body}` : body;
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.update_record", args: { record_id: contactId, fields: { [s.notesField]: next } } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: contactId, was_update: true };
+  }
+
+  async createNote(args: CreateNoteArgs): Promise<CrmAdapterWriteResult> {
+    const body = augmentBodyWithMarker(args.body, args.source_interaction_id, args.source_outbox_id, args.payload_version);
+    return this.appendToNoteField(args.contact_id, body);
+  }
+
+  async appendInteraction(args: AppendInteractionArgs): Promise<CrmAdapterWriteResult> {
+    const body = augmentBodyWithMarker(renderInteractionBody(args.interaction), args.interaction.source_interaction_id, args.source_outbox_id, args.payload_version);
+    return this.appendToNoteField(args.contact_id, body);
+  }
+
+  async enrichContact(args: CrmEnrichArgs): Promise<CrmAdapterWriteResult> {
+    const s = await this.schema();
+    const fields: Record<string, unknown> = {};
+    const email = normalizeEmail(args.update.email);
+    const phone = normalizePhone(args.update.phone);
+    if (email && s.fieldMap.email) fields[s.fieldMap.email] = email;
+    if (phone && s.fieldMap.phone) fields[s.fieldMap.phone] = phone;
+    if (args.update.display_name && s.fieldMap.display_name) fields[s.fieldMap.display_name] = args.update.display_name;
+    if (Object.keys(fields).length === 0) return { ok: true };
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.update_record", args: { record_id: args.contact_id, fields } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: args.contact_id, was_update: true };
+  }
+
+  async updateRecord(args: { id: string; kind: CrmObjectKind; fields: Record<string, unknown> }): Promise<CrmAdapterWriteResult> {
+    const s = await this.schema();
+    const map: Record<string, string | undefined> = {
+      email: s.fieldMap.email, phone: s.fieldMap.phone,
+      display_name: s.fieldMap.display_name, name: s.fieldMap.display_name,
+      stage: s.fieldMap.stage, notes: s.notesField,
+    };
+    const fields: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(args.fields ?? {})) {
+      if (v === null || v === undefined) continue;
+      if (typeof v === "string" && v.trim() === "") continue;
+      const col = k in map ? map[k] : k; // pass through unknown keys as literal column names
+      if (col) fields[col] = v;
+    }
+    if (Object.keys(fields).length === 0) return { ok: true, id: args.id, was_update: false };
+    const r = await executeAdapterTool({ tenantId: this.tenantId, toolFunctionName: "airtable.update_record", args: { record_id: args.id, fields } });
+    if (!r.ok) return { ok: false, reason: r.reason };
+    return { ok: true, id: args.id, was_update: true };
+  }
+
+  async listRecentNotes(): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> { return { ok: true, activities: [] }; }
+  async listRecentActivities(): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }> { return { ok: true, activities: [] }; }
+}
 
 export class NoOpCRMAdapter implements CRMAdapter {
   readonly vendor: CrmVendor = "custom_api"; // placeholder vendor
@@ -1228,7 +1834,7 @@ export class NoOpCRMAdapter implements CRMAdapter {
  */
 /**
  * Pull the GOTCHA conversation id back out of a marked-up note body.
- * Used when projecting CRM activities back into GOTCHA's history view —
+ * Used when projecting CRM activities back into GOTCHA's history view -
  * lets us link CRM notes to the original conversation when known.
  */
 function extractGotchaMarker(body: string | null | undefined): string | null {

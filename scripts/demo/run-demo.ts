@@ -2,19 +2,19 @@
  * GOTCHA demo orchestrator.
  *
  * Phases (chained by default, or run individually via --phase=<name>):
- *   setup    — preflight checks, pre-seed EMAIL contact, patch agent config
+ *   setup    - preflight checks, pre-seed EMAIL contact, patch agent config
  *              (systemPrompt + relaxed autonomy limits).
- *   wait     — poll for the demo WhatsApp conversation to appear (the
+ *   wait     - poll for the demo WhatsApp conversation to appear (the
  *              presenter sends "hey" from their phone, up to 5 min).
  *              Pre-seeds the WhatsApp Contact row as soon as the conversation
  *              shows up (needed so `link_customer_identifier` is exposed to
  *              the LLM).
- *   drive    — send turn 2 (lead-intent + contact details), detect the F4
+ *   drive    - send turn 2 (lead-intent + contact details), detect the F4
  *              approval, fire the real Zoho POST /crm/v7/Leads with refreshed
  *              token, mark APPROVED + unpause, send turn 3, then replay
  *              link_customer_identifier via POST /api/identity/link to
  *              produce a real IdentityLinkSuggestion for the merge demo.
- *   report   — print a demo-ready status card (lead id, approval id,
+ *   report   - print a demo-ready status card (lead id, approval id,
  *              suggestion id, audit count).
  *
  * Usage:
@@ -23,10 +23,10 @@
  *   tsx scripts/demo/run-demo.ts --phase=drive # assumes conversation exists
  *
  * Environment:
- *   DATABASE_URL           — defaults to localhost:5432 postgres
- *   GATEWAY_URL            — defaults to http://localhost:80
- *   INTERNAL_SERVICE_KEY   — defaults to chatcenter-internal-2026 (must match svc env)
- *   ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET — used only if stored access token has expired
+ *   DATABASE_URL           - defaults to localhost:5432 postgres
+ *   GATEWAY_URL            - defaults to http://localhost:80
+ *   INTERNAL_SERVICE_KEY   - defaults to chatcenter-internal-2026 (must match svc env)
+ *   ZOHO_CLIENT_ID / ZOHO_CLIENT_SECRET - used only if stored access token has expired
  */
 import { PrismaClient } from "@prisma/client";
 import axios from "axios";
@@ -68,16 +68,16 @@ const phase = flag("phase");
 const EXTRA_INSTRUCTIONS = `
 
 ---
-LEAD QUALIFICATION PROTOCOL (highest priority — overrides anything above):
+LEAD QUALIFICATION PROTOCOL (highest priority - overrides anything above):
 
-STEP 1 — Detect buying signal.
+STEP 1 - Detect buying signal.
 A buying signal is ANY of:
 - Asking about prices, plans, packages, tiers, subscription.
 - Saying they're interested, want to sign up, want a demo, want to buy.
 - Describing their team size, use-case, or pain point in a way that sounds
   like they're evaluating the product.
 
-STEP 2 — Gather contact info BEFORE anything else.
+STEP 2 - Gather contact info BEFORE anything else.
 The moment you detect a buying signal, your NEXT reply MUST proactively ask
 for the three fields you need, in one short message. Do NOT answer the
 pricing question first. Do NOT say "I'll connect you with a human".
@@ -90,13 +90,13 @@ Hebrew example: "אשמח לחבר אותך בדיוק עם האדם הנכון!
 בשם המלא, כתובת אימייל ומספר טלפון? (וגם שם החברה אם רלוונטי) ואחזיר
 אליך הצעה מותאמת תוך כמה דקות."
 
-English example: "Happy to get you the right info — can you share your full
+English example: "Happy to get you the right info - can you share your full
 name, email, and phone (with country code)? Also your company if relevant.
 I'll have the right person follow up within minutes."
 
-STEP 3 — Once you HAVE name + email + phone in the conversation history,
+STEP 3 - Once you HAVE name + email + phone in the conversation history,
 call tools in this exact order, no exceptions:
-1. \`integration_create_lead\` — params:
+1. \`integration_create_lead\` - params:
      { data: [{ Last_Name, First_Name, Email, Phone, Company, Description }] }
      - Last_Name: their surname (or full name if you can't split it)
      - First_Name: their first name (optional)
@@ -104,9 +104,9 @@ call tools in this exact order, no exceptions:
      - Phone: E.164 format (+<country><number>)
      - Company: their company, or "Individual" if none given
      - Description: one short sentence on what they want / team size / timeframe
-2. \`link_customer_identifier\` — once with { type: "email", value: <email>, confidence: 0.9 }
+2. \`link_customer_identifier\` - once with { type: "email", value: <email>, confidence: 0.9 }
    and once with { type: "phone", value: <phone>, confidence: 0.9 }.
-3. \`escalate_to_human\` — { priority: "high", summary: "<brief close-ready summary>" }.
+3. \`escalate_to_human\` - { priority: "high", summary: "<brief close-ready summary>" }.
 
 NEVER invent values. NEVER guess email or phone. If any required field is
 missing, ASK for it again (politely) instead of calling the tool.
@@ -184,13 +184,13 @@ async function setup() {
       tenantTool: { isEnabled: true, catalogTool: { slug: "create_lead" } },
     },
   });
-  if (!leadPerm) throw new Error("create_lead not granted to agent — enable it in AI Studio");
+  if (!leadPerm) throw new Error("create_lead not granted to agent - enable it in AI Studio");
   log("✓ Zoho CONNECTED, create_lead granted to agent");
 }
 
 // ─── Phase: wait ────────────────────────────────────────────
 async function waitForConversation(timeoutMs = 5 * 60_000): Promise<string> {
-  log("phase=wait — send 'hey' from the demo phone now (5 min timeout)");
+  log("phase=wait - send 'hey' from the demo phone now (5 min timeout)");
   const start = Date.now();
   let reported = false;
   while (Date.now() - start < timeoutMs) {
@@ -228,7 +228,7 @@ async function waitForConversation(timeoutMs = 5 * 60_000): Promise<string> {
     }
     await new Promise((r) => setTimeout(r, 2500));
   }
-  throw new Error("timed out waiting for 'hey' — did you send it to the demo WhatsApp number?");
+  throw new Error("timed out waiting for 'hey' - did you send it to the demo WhatsApp number?");
 }
 
 // ─── Webhook helpers ────────────────────────────────────────
@@ -306,7 +306,7 @@ async function refreshZohoIfNeeded(integrationId: string): Promise<string> {
   if (!creds.refreshToken) return creds.accessToken;
   const { ZOHO_CLIENT_ID, ZOHO_CLIENT_SECRET } = process.env;
   if (!ZOHO_CLIENT_ID || !ZOHO_CLIENT_SECRET) {
-    log("⚠ Zoho token may be expired and ZOHO_CLIENT_ID/SECRET not set — trying anyway");
+    log("⚠ Zoho token may be expired and ZOHO_CLIENT_ID/SECRET not set - trying anyway");
     return creds.accessToken;
   }
   const params = new URLSearchParams({
@@ -419,14 +419,14 @@ async function replayLink(convId: string) {
     where: { tenantId: TENANT_ID, channel: "WHATSAPP", externalId: WA_EXT },
     select: { id: true },
   });
-  if (!waContact) throw new Error("WA contact missing — setup should have created it");
+  if (!waContact) throw new Error("WA contact missing - setup should have created it");
 
   const body = {
     contactId: waContact.id,
     type: "email",
     value: EMAIL_EXT,
     confidence: 0.9,
-    reason: "link_customer_identifier replay — customer shared personal email in chat",
+    reason: "link_customer_identifier replay - customer shared personal email in chat",
   };
   log(`→ POST ${GATEWAY}/api/identity/link`);
   const r = await axios.post(`${GATEWAY}/api/identity/link`, body, {
@@ -464,16 +464,16 @@ async function drive(convId: string) {
   const TURN_2 =
     "מעולה! אני רוצה להירשם. שמי עומר סרויה, האימייל שלי omerts58@gmail.com, הטלפון +972525401686, החברה GotchaDemo Ltd. יש לי צוות של 15 אנשים בתחום המכירות.";
   const TURN_3 =
-    "אגב, שכחתי לציין — אפשר גם לשלוח פרטים למייל הפרטי שלי omerts58@gmail.com? זה הכי קל לתפוס אותי שם.";
+    "אגב, שכחתי לציין - אפשר גם לשלוח פרטים למייל הפרטי שלי omerts58@gmail.com? זה הכי קל לתפוס אותי שם.";
 
-  // Turn 2 — expect approval pause
+  // Turn 2 - expect approval pause
   const t2Start = new Date().toISOString();
   log(`→ turn 2: ${TURN_2.slice(0, 60)}…`);
   await sendInbound(TURN_2);
   const t2 = await waitForBotTurnEnd(convId, t2Start);
   log(`← turn 2 outcome: ${t2.kind}`);
   if (t2.kind !== "paused_for_approval") {
-    log("⚠ expected paused_for_approval, got " + t2.kind + " — continuing anyway");
+    log("⚠ expected paused_for_approval, got " + t2.kind + " - continuing anyway");
   }
 
   // Approve + dispatch Zoho
@@ -487,7 +487,7 @@ async function drive(convId: string) {
   // Replay link_customer_identifier (deterministic; LLM skips it when email is in lead payload)
   await replayLink(convId);
 
-  // Turn 3 — optional, gives the transcript a natural close
+  // Turn 3 - optional, gives the transcript a natural close
   const t3Start = new Date().toISOString();
   log(`→ turn 3: ${TURN_3.slice(0, 60)}…`);
   await sendInbound(TURN_3);
@@ -521,7 +521,7 @@ async function report(convId: string) {
   const leadId = (leadAudit?.metadata as any)?.leadId;
 
   console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log(`  DEMO REPORT — conversation ${convId}`);
+  console.log(`  DEMO REPORT - conversation ${convId}`);
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log(`  messages:            ${msgs.length}`);
   console.log(`  tool calls (LLM):    ${audits.length}  (${audits.map((a) => a.action.split(".").pop()).join(", ")})`);
@@ -544,7 +544,7 @@ async function main() {
       select: { id: true },
     });
     convId = c?.id;
-    if (!convId) throw new Error("no WhatsApp conversation found — run with --phase=wait first");
+    if (!convId) throw new Error("no WhatsApp conversation found - run with --phase=wait first");
   }
   if (!phase || phase === "drive") await drive(convId!);
   if (!phase || phase === "report") await report(convId!);

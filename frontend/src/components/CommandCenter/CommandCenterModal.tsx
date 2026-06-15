@@ -48,7 +48,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
   const [turns, setTurns] = useState<Turn[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [mounted, setMounted] = useState(false);
-  // Stable per-open session id — groups memory rows server-side. Reset on close.
+  // Stable per-open session id - groups memory rows server-side. Reset on close.
   const sessionIdRef = useRef<string>("");
   const abortRef = useRef<AbortController | null>(null);
 
@@ -170,7 +170,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
               if (!ev.ok) {
                 addTurn({
                   kind: "system",
-                  text: `✗ ${ev.name.replace(/^integration_/, "")} — ${ev.resultSummary}`,
+                  text: `✗ ${ev.name.replace(/^integration_/, "")} - ${ev.resultSummary}`,
                 });
               }
               break;
@@ -190,7 +190,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
             case "denied":
               addTurn({
                 kind: "system",
-                text: `🚫 ${ev.tool} — ${ev.reason}`,
+                text: `🚫 ${ev.tool} - ${ev.reason}`,
               });
               break;
             case "error":
@@ -216,7 +216,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     }
 
     if (earlyError) setError(earlyError);
-    // Suppress unused-variable lint for the captured plan summary — used by
+    // Suppress unused-variable lint for the captured plan summary - used by
     // the system turn above; the modal's PlanCard now lives in the approvals
     // surface, not inline (since propose_plan creates an ApprovalRequest).
     void proposedPlanSummary;
@@ -240,7 +240,7 @@ export default function CommandCenterModal({ open, onClose, token, context }: Pr
     patchTurn(turnId, { executed: true });
     addTurn({
       kind: "system",
-      text: t("commandCenter.dismissed") || "Dismissed — keep chatting to refine.",
+      text: t("commandCenter.dismissed") || "Dismissed - keep chatting to refine.",
     });
   }
 

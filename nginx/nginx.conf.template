@@ -97,7 +97,7 @@ http {
 
         # ─── Public Onboarding (no-auth invite endpoints) ─
         # Routes used by the /join page: GET /invite/:token and POST
-        # /invite/accept. Auth header is intentionally NOT required —
+        # /invite/accept. Auth header is intentionally NOT required -
         # invites are validated by the signed-random token instead.
         location /api/public/onboarding {
             limit_req zone=api burst=10 nodelay;
@@ -430,6 +430,24 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # AI Employee builder - /run streams via SSE and /readiness-test is a
+        # single long LLM call. Longest-prefix override of /api/ai-agents:
+        # buffering off + 600s timeout so neither is cut off by nginx.
+        location /api/ai-agents/builder {
+            limit_req zone=api burst=20 nodelay;
+            client_max_body_size 12m;
+            proxy_pass http://ai_service;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/ai-agents {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
@@ -484,7 +502,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # System Copilot agent runtime. /api/agent/run is an SSE stream —
+        # System Copilot agent runtime. /api/agent/run is an SSE stream -
         # disable buffering, keep the connection alive, and raise the read
         # timeout so long-running tool loops aren't cut off by nginx.
         location /api/agent {
@@ -510,7 +528,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # AI customer summary — POST /api/customer-summary { conversationId }.
+        # AI customer summary - POST /api/customer-summary { conversationId }.
         # Returns an LLM-generated cross-channel briefing for the top of the
         # context panel. Authenticated via the same bearer token as /api/crm.
         location /api/customer-summary {
@@ -522,8 +540,38 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Customer Intelligence Snapshot - the primary read projection (V2).
+        location /api/customer-snapshot {
+            limit_req zone=api burst=10 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Per-tenant post-conversation schema admin (Settings → Post-Conversation).
         location /api/post-conversation-config {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Industry Intelligence Pack catalog + apply (Customer Intelligence V2).
+        location /api/industry-packs {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Scope-aware intelligence field registry CRUD (Fields Builder).
+        location /api/field-definitions {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
@@ -705,8 +753,32 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        location ~ ^/t/([^/]+)/api/customer-snapshot(.*)$ {
+            proxy_pass http://ai_service/api/customer-snapshot$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location ~ ^/t/([^/]+)/api/post-conversation-config(.*)$ {
             proxy_pass http://ai_service/api/post-conversation-config$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ~ ^/t/([^/]+)/api/industry-packs(.*)$ {
+            proxy_pass http://ai_service/api/industry-packs$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ~ ^/t/([^/]+)/api/field-definitions(.*)$ {
+            proxy_pass http://ai_service/api/field-definitions$2$is_args$args;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -729,6 +801,22 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
 
+        # AI Employee builder, tenant-scoped (SSE + long readiness POST). Must
+        # precede the generic ai-agents regex below - first match wins.
+        location ~ ^/t/([^/]+)/api/ai-agents/builder(.*)$ {
+            proxy_pass http://ai_service/api/ai-agents/builder$2$is_args$args;
+            proxy_http_version 1.1;
+            proxy_set_header Connection "";
+            proxy_buffering off;
+            proxy_cache off;
+            proxy_read_timeout 600s;
+            client_max_body_size 12m;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
         location ~ ^/t/([^/]+)/api/ai-agents(.*)$ {
             proxy_pass http://ai_service/api/ai-agents$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
@@ -737,7 +825,7 @@ http {
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
 
-        # Tenant-prefixed System Copilot agent runtime. SSE — see comment
+        # Tenant-prefixed System Copilot agent runtime. SSE - see comment
         # on the unprefixed /api/agent block above.
         location ~ ^/t/([^/]+)/api/agent(.*)$ {
             proxy_pass http://ai_service/api/agent$2$is_args$args;
@@ -849,7 +937,7 @@ http {
             proxy_send_timeout 86400;
         }
 
-        # ─── Voice Channels — BYO / Twilio Connect onboarding (conversation) ─
+        # ─── Voice Channels - BYO / Twilio Connect onboarding (conversation) ─
         location /api/voice-channels {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
@@ -859,7 +947,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ─── Voice Sessions — agent claim / transcript / context (conversation) ─
+        # ─── Voice Sessions - agent claim / transcript / context (conversation) ─
         location /api/voice-sessions {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
@@ -869,7 +957,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # ─── Voice Inbound — single Twilio webhook entrypoint (voice-copilot) ─
+        # ─── Voice Inbound - single Twilio webhook entrypoint (voice-copilot) ─
         # Twilio posts `voice`, `status`, `recording` to this prefix; channel
         # resolution happens server-side via the `To` form field.
         location /api/voice/incoming {
@@ -895,6 +983,10 @@ http {
         # ─── Frontend (catch-all) ────────────────────────
         location / {
             proxy_pass http://frontend;
+            # WebSocket upgrade so Next.js dev HMR (/_next/webpack-hmr) works.
+            proxy_http_version 1.1;
+            proxy_set_header Upgrade $http_upgrade;
+            proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

@@ -26,7 +26,7 @@ const httpServer = createServer(app);
 initSocket(httpServer);
 
 // Subscribe to cross-service events and relay to Socket.IO.
-// This is pure projection — no side effects, no DB writes. Voice-copilot
+// This is pure projection - no side effects, no DB writes. Voice-copilot
 // writes final VOICE-channel messages directly to Postgres via its
 // StreamRouter.PersistenceSink; we only forward the events to browsers.
 subscribeToEvents((event) => {
@@ -34,13 +34,13 @@ subscribeToEvents((event) => {
     const io = getIO();
     io.to(`tenant:${event.tenantId}`).emit(event.event, event.data);
   } catch {
-    // Socket not ready yet — event is dropped (acceptable per MVP spec)
+    // Socket not ready yet - event is dropped (acceptable per MVP spec)
   }
 });
 
 // Backend safety net: when a voice session ends (browser close, drop, reaper),
 // close the linked conversation so it doesn't stay OPEN in the inbox. The
-// frontend also closes optimistically on the hangup button — both paths are
+// frontend also closes optimistically on the hangup button - both paths are
 // idempotent because close() is a no-op when status === "CLOSED".
 subscribeToEvents((event) => {
   handleVoiceSessionEnded(event).catch((err) => {

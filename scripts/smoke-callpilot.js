@@ -5,7 +5,7 @@
  * Drives the LiveAnalysisRunner via the shared Redis event bus:
  *   1. Publishes voice.session.started → supervisor spawns runner
  *   2. Publishes a sequence of voice.transcript events (mixed
- *      partial/final, customer/agent) — cadence fires on customer-final
+ *      partial/final, customer/agent) - cadence fires on customer-final
  *      after ~1500ms debounce
  *   3. Waits ~10s for the LLM call + persistence
  *   4. Publishes voice.session.ended → supervisor tears down the runner
@@ -86,7 +86,7 @@ async function wait(ms) {
     "voice.transcript",
     utterance(
       "customer",
-      "And I need to know about CRM integration — we use HubSpot.",
+      "And I need to know about CRM integration - we use HubSpot.",
     ),
   );
   await wait(1800);

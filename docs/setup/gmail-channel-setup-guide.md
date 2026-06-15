@@ -1,9 +1,9 @@
-# Gmail Channel Setup Guide — OAuth2 + Gmail API Integration
+# Gmail Channel Setup Guide - OAuth2 + Gmail API Integration
 
 > **Last updated:** March 2026
 > **Assumes:** You have a Google Cloud project and a domain with HTTPS.
 
-This guide walks you through configuring Google Cloud so that tenants can connect **Gmail** accounts directly from the GOTCHA UI — enabling send/receive email via the Gmail API with OAuth2 authentication.
+This guide walks you through configuring Google Cloud so that tenants can connect **Gmail** accounts directly from the GOTCHA UI - enabling send/receive email via the Gmail API with OAuth2 authentication.
 
 ---
 
@@ -45,7 +45,7 @@ Before starting, confirm you have:
 5. Click **Create**
 6. Switch to the new project using the project dropdown
 
-> **Note:** Save the **Project ID** — you'll need it for Pub/Sub configuration.
+> **Note:** Save the **Project ID** - you'll need it for Pub/Sub configuration.
 
 ---
 
@@ -69,8 +69,8 @@ The consent screen is what users see when connecting their Gmail account.
 
 1. Go to **APIs & Services** → **OAuth consent screen**
 2. Choose User Type:
-   - **Internal** — only users in your Google Workspace org (suitable if you only serve your own org)
-   - **External** — any Google account can connect (required for multi-tenant SaaS)
+   - **Internal** - only users in your Google Workspace org (suitable if you only serve your own org)
+   - **External** - any Google account can connect (required for multi-tenant SaaS)
 3. Click **Create**
 
 ### 4.2 App Information
@@ -143,7 +143,7 @@ If your app is in **Testing** status (not yet verified):
 
 > **Critical:** The redirect URI must **exactly match** `GOOGLE_OAUTH_REDIRECT_URI` in your `.env` file. Include the full path: `/api/channels/oauth/callback`
 
-> **Tip:** If you already have `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set for Knowledge Base (Google Drive) integration, you can reuse the same credentials — just add the Gmail scopes and the redirect URI to the existing OAuth client.
+> **Tip:** If you already have `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` set for Knowledge Base (Google Drive) integration, you can reuse the same credentials - just add the Gmail scopes and the redirect URI to the existing OAuth client.
 
 ---
 
@@ -210,7 +210,7 @@ Incoming worker processes the message
 Message appears in GOTCHA conversation UI (real-time via WebSocket)
 ```
 
-> **Note:** Gmail Pub/Sub notifications contain only a `historyId` — the actual email content is fetched by the incoming worker using the Gmail API with the stored OAuth credentials.
+> **Note:** Gmail Pub/Sub notifications contain only a `historyId` - the actual email content is fetched by the incoming worker using the Gmail API with the stored OAuth credentials.
 
 ### 6.5 Watch Renewal
 
@@ -237,7 +237,7 @@ GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 # OAuth2 Client Secret (from Google Cloud Console → Credentials)
 GOOGLE_CLIENT_SECRET=your-google-client-secret
 
-# OAuth callback URL — must EXACTLY match the Authorized Redirect URI in Google Cloud
+# OAuth callback URL - must EXACTLY match the Authorized Redirect URI in Google Cloud
 GOOGLE_OAUTH_REDIRECT_URI=https://yourdomain.com/api/channels/oauth/callback
 
 # Pub/Sub topic for Gmail push notifications (from step 6.1)
@@ -337,7 +337,7 @@ If your OAuth consent screen is set to **External** user type and uses sensitive
 | "Access denied" during OAuth | App not verified + user not a test user | Add user as test user, or complete verification |
 | No emails arriving in GOTCHA | Pub/Sub not configured correctly | Verify topic, subscription, and service account permissions |
 | No emails arriving in GOTCHA | Gmail watch expired (>7 days) | Renew the watch via Gmail API `/users/me/watch` |
-| `403 Insufficient Permission` when sending | OAuth token missing `gmail.send` scope | Reconnect the account — ensure scopes are correct |
+| `403 Insufficient Permission` when sending | OAuth token missing `gmail.send` scope | Reconnect the account - ensure scopes are correct |
 | `invalid_grant` error | Refresh token revoked or expired | Reconnect the Gmail account |
 | Pub/Sub push not reaching webhook | Endpoint not publicly accessible or not HTTPS | Verify your URL is accessible and uses HTTPS |
 | `gmail-api-push@system.gserviceaccount.com` can't publish | Missing Pub/Sub Publisher role | Re-add the principal with the correct role |
@@ -360,6 +360,6 @@ docker compose logs incoming-worker -f
 
 ### Google's Debug Tools
 
-- **OAuth 2.0 Playground:** [developers.google.com/oauthplayground](https://developers.google.com/oauthplayground) — test Gmail API calls with your tokens
-- **Google Cloud Console Logs:** Pub/Sub → Subscription → **Monitoring** tab — check push delivery metrics
-- **Token Info Endpoint:** `https://oauth2.googleapis.com/tokeninfo?access_token=YOUR_TOKEN` — verify token scopes and validity
+- **OAuth 2.0 Playground:** [developers.google.com/oauthplayground](https://developers.google.com/oauthplayground) - test Gmail API calls with your tokens
+- **Google Cloud Console Logs:** Pub/Sub → Subscription → **Monitoring** tab - check push delivery metrics
+- **Token Info Endpoint:** `https://oauth2.googleapis.com/tokeninfo?access_token=YOUR_TOKEN` - verify token scopes and validity

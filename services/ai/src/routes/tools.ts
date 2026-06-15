@@ -5,7 +5,7 @@ const router = Router();
 
 router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
 
-// GET / — List all active TenantTools for the tenant (with catalog info)
+// GET / - List all active TenantTools for the tenant (with catalog info)
 router.get("/", async (req: Request, res: Response) => {
   try {
     const tools = await prisma.tenantTool.findMany({
@@ -27,7 +27,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// GET /permissions/:departmentId — Get tool permissions for a department
+// GET /permissions/:departmentId - Get tool permissions for a department
 router.get("/permissions/:departmentId", async (req: Request, res: Response) => {
   try {
     const departmentId = req.params.departmentId as string;
@@ -59,7 +59,7 @@ router.get("/permissions/:departmentId", async (req: Request, res: Response) => 
   }
 });
 
-// PUT /permissions/:departmentId — Batch update tool permissions for a department
+// PUT /permissions/:departmentId - Batch update tool permissions for a department
 router.put("/permissions/:departmentId", async (req: Request, res: Response) => {
   try {
     const departmentId = req.params.departmentId as string;

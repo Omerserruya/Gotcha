@@ -36,7 +36,7 @@ const STATUS_CLASS: Record<VoiceChannelStatus, string> = {
 const INCOMING_WEBHOOK_URL = "https://gotcha.co.il/api/voice/incoming/voice";
 
 function truncateSid(sid?: string): string {
-  if (!sid) return "—";
+  if (!sid) return "-";
   if (sid.length <= 14) return sid;
   return `${sid.slice(0, 6)}…${sid.slice(-4)}`;
 }
@@ -71,7 +71,7 @@ export default function VoiceChannelDetailPage() {
   const [aiAgentId, setAiAgentId] = useState<string>("");
   const [aiAgentSaving, setAiAgentSaving] = useState(false);
   // Pipeline funnel override (per-channel). Together with the AI Employee
-  // these are the only two AI-related decisions that live ON the channel —
+  // these are the only two AI-related decisions that live ON the channel -
   // everything else was deleted from the legacy Copilot Configuration page.
   const [funnels, setFunnels] = useState<FunnelSummary[]>([]);
   const [funnelId, setFunnelId] = useState<string>("");
@@ -95,7 +95,7 @@ export default function VoiceChannelDetailPage() {
     reload();
   }, [reload]);
 
-  // Load AI Employee binding + funnel binding + tenant lists in parallel —
+  // Load AI Employee binding + funnel binding + tenant lists in parallel -
   // all four are small and the cards need them to render.
   useEffect(() => {
     if (!token || !channelId) return;
@@ -199,7 +199,7 @@ export default function VoiceChannelDetailPage() {
             }
           : prev,
       );
-      // Notify the flags cache that channel reachability changed — either
+      // Notify the flags cache that channel reachability changed - either
       // direction can flip `hasActiveVoiceChannel` for the tenant.
       window.dispatchEvent(new Event("voice-channel:activated"));
     } catch (err) {
@@ -346,11 +346,11 @@ export default function VoiceChannelDetailPage() {
             </div>
           )}
 
-          {/* AI Employee — the AIAgent that drives call-pilot turns on
+          {/* AI Employee - the AIAgent that drives call-pilot turns on
               this channel. Phase 6 promoted this to a real FK column
               (`voice_channels.ai_agent_id`). The AI Employee's own config
               (language, persona, tone, goals, guardrails, etc.) is the
-              single source of truth — edit it in Settings → AI Employees. */}
+              single source of truth - edit it in Settings → AI Employees. */}
           <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6">
             <div className="flex items-start justify-between gap-3 mb-2">
               <div>
@@ -358,7 +358,7 @@ export default function VoiceChannelDetailPage() {
                 <p className="text-xs text-gray-500 mt-0.5">
                   The AI Employee that drives call-pilot turns on this channel. All
                   the agent-level configuration (language, persona, tone, goals,
-                  guardrails) is set on the employee — edit it in Settings → AI
+                  guardrails) is set on the employee - edit it in Settings → AI
                   Employees.
                 </p>
               </div>
@@ -374,7 +374,7 @@ export default function VoiceChannelDetailPage() {
               disabled={aiAgentSaving}
               className="w-full md:w-96 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:opacity-50"
             >
-              <option value="">— None —</option>
+              <option value="">- None -</option>
               {aiAgents.map((a) => (
                 <option key={a.id} value={a.id}>
                   {a.name}
@@ -390,7 +390,7 @@ export default function VoiceChannelDetailPage() {
             )}
           </div>
 
-          {/* Pipeline funnel — per-channel override of the department-scoped
+          {/* Pipeline funnel - per-channel override of the department-scoped
               funnel resolution. Drives stage-aware copilot during calls
               answered on this number. Independent of the AI Employee
               because the funnel is a CRM/sales-process decision, not an
@@ -420,7 +420,7 @@ export default function VoiceChannelDetailPage() {
               disabled={funnelSaving}
               className="w-full md:w-96 rounded-lg border border-gray-200 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary-300 disabled:opacity-50"
             >
-              <option value="">— Auto (department default) —</option>
+              <option value="">- Auto (department default) -</option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.funnelId}
@@ -487,7 +487,7 @@ export default function VoiceChannelDetailPage() {
                             {number.e164}
                           </td>
                           <td className="px-2 py-3 text-gray-700">
-                            {number.friendlyName || "—"}
+                            {number.friendlyName || "-"}
                           </td>
                           <td className="px-2 py-3 text-gray-500 font-mono text-xs whitespace-nowrap">
                             {truncateSid(number.twilioSid)}

@@ -1,5 +1,5 @@
 /**
- * Post-Call Pilot — Phase 5 ships Mode A (QA validator over live frames).
+ * Post-Call Pilot - Phase 5 ships Mode A (QA validator over live frames).
  *
  * Phase 6 will add Mode B (async transcription + analysis from a recording
  * URL or pasted transcript). Both modes write to CallAnalysis (mode = "qa"

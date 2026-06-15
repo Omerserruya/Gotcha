@@ -37,7 +37,7 @@ export interface VoicePostCallJobData {
   sessionId: string;
 }
 
-/** Test seam — replace the lazily-instantiated queue with a stub. */
+/** Test seam - replace the lazily-instantiated queue with a stub. */
 export function __setVoicePostCallQueueForTests(q: Queue | null): void {
   _queue = q;
 }

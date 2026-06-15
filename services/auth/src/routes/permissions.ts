@@ -16,7 +16,7 @@ import {
 } from "@chatcenter/shared";
 
 /**
- * Tenant ADMIN — permission configuration within the tenant.
+ * Tenant ADMIN - permission configuration within the tenant.
  *
  * Routes:
  *   GET    /api/permissions/me                     features the caller can access

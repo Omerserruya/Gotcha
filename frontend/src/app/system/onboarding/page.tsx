@@ -9,11 +9,11 @@ const steps = [
     content: `Go to **Tenants** > **New Tenant** in the sidebar.
 
 Fill in the organization details:
-- **Organization Name** — the company name (e.g., "Acme Corp")
-- **Slug** — URL-safe identifier, auto-generated from name (e.g., "acme-corp")
-- **Admin Name** — name of the tenant's first admin user
-- **Admin Email** — login email for the tenant admin
-- **Admin Password** — password for the tenant admin (min 8 characters)
+- **Organization Name** - the company name (e.g., "Acme Corp")
+- **Slug** - URL-safe identifier, auto-generated from name (e.g., "acme-corp")
+- **Admin Name** - name of the tenant's first admin user
+- **Admin Email** - login email for the tenant admin
+- **Admin Password** - password for the tenant admin (min 8 characters)
 
 Click **Create Tenant**. This creates the organization and its first admin user in one step.`,
   },
@@ -52,7 +52,7 @@ Enter name, email, and password for each agent. Agents can then log in with the 
   {
     number: 5,
     title: "Tenant Admin: Set Up Departments",
-    description: "Optional — done by the tenant admin",
+    description: "Optional - done by the tenant admin",
     content: `Go to **Departments** to organize agents into teams:
 
 - Create departments (e.g., "Sales", "Support")
@@ -62,16 +62,16 @@ Enter name, email, and password for each agent. Agents can then log in with the 
   {
     number: 6,
     title: "Tenant Admin: Configure Chatbot",
-    description: "Optional — done by the tenant admin",
+    description: "Optional - done by the tenant admin",
     content: `Go to **Chatbot Builder** to create automated conversation flows:
 
 - Add nodes: messages, quick replies, conditions, department routing, handover to agent
-- Activate the flow — incoming messages are handled by the bot before reaching agents`,
+- Activate the flow - incoming messages are handled by the bot before reaching agents`,
   },
   {
     number: 7,
     title: "Tenant Admin: Configure Co-Pilot",
-    description: "Optional — done by the tenant admin",
+    description: "Optional - done by the tenant admin",
     content: `Go to **Co-Pilot** to set up AI-powered agent assistance:
 
 - Write a system prompt describing the business
@@ -83,7 +83,7 @@ Requires \`OPENAI_API_KEY\` to be set in the environment.`,
   {
     number: 8,
     title: "Tenant Admin: Set Business Hours",
-    description: "Optional — done by the tenant admin",
+    description: "Optional - done by the tenant admin",
     content: `Go to **Settings** to configure availability:
 
 - Enable business hours
@@ -93,9 +93,9 @@ Requires \`OPENAI_API_KEY\` to be set in the environment.`,
 ];
 
 const roles = [
-  { name: "SYSTEM_ADMIN", scope: "Global", color: "orange", desc: "You — manage all tenants, create/disable organizations, system-wide stats" },
-  { name: "ADMIN", scope: "Tenant", color: "blue", desc: "Tenant admin — manage agents, channels, departments, chatbot, co-pilot, settings" },
-  { name: "AGENT", scope: "Tenant", color: "gray", desc: "Agent — handle conversations, view assigned chats" },
+  { name: "SYSTEM_ADMIN", scope: "Global", color: "orange", desc: "You - manage all tenants, create/disable organizations, system-wide stats" },
+  { name: "ADMIN", scope: "Tenant", color: "blue", desc: "Tenant admin - manage agents, channels, departments, chatbot, co-pilot, settings" },
+  { name: "AGENT", scope: "Tenant", color: "gray", desc: "Agent - handle conversations, view assigned chats" },
 ];
 
 export default function OnboardingPage() {

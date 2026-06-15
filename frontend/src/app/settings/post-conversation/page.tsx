@@ -17,15 +17,15 @@ import {
  * Settings page for the per-tenant Post-Conversation schema.
  *
  * Drives three sections:
- *   1. Summary fields  — extra CRM slots the LLM should try to populate at
+ *   1. Summary fields  - extra CRM slots the LLM should try to populate at
  *      end of call/chat. Fed into the summarizer prompt as allowed keys.
- *   2. Task rules      — "if AI sees X, create task Y" (intent + keyword
+ *   2. Task rules      - "if AI sees X, create task Y" (intent + keyword
  *      triggers). Applied by the rule engine after summarization.
- *   3. CRM rules       — "if AI sees X, patch CRM field Y" (e.g. set status
+ *   3. CRM rules       - "if AI sees X, patch CRM field Y" (e.g. set status
  *      to qualified on ready_to_buy intent).
  *
  * Spec: sparse-patch semantics. Rules ADD to the AI-proposed crm_patch and
- * task list — they never wipe prior CRM data. Keys not in `summaryFields`
+ * task list - they never wipe prior CRM data. Keys not in `summaryFields`
  * and not in the built-in set will be dropped by the summarizer.
  */
 
@@ -418,7 +418,7 @@ function CrmRulesSection({
                       update(idx, { patch: parsed });
                     }
                   } catch {
-                    // ignore parse errors — user is mid-typing
+                    // ignore parse errors - user is mid-typing
                   }
                 }}
               />

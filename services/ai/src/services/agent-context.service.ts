@@ -1,5 +1,5 @@
 /**
- * System Copilot — UI context injector.
+ * System Copilot - UI context injector.
  *
  * Builds the per-turn context block the agent runtime prepends to its
  * messages. The Command Center frontend submits whatever it knows about
@@ -63,13 +63,13 @@ export async function buildAgentContext(opts: {
   const lines: string[] = ["## Operator & UI Context"];
 
   // Operator identity. The system prompt says "the person talking to you is
-  // an operator" — naming them helps the model's tone.
+  // an operator" - naming them helps the model's tone.
   lines.push(`- Operator: ${op.userName || op.userEmail || op.userId}`);
   if (op.userRole) lines.push(`- Role: ${op.userRole}`);
   if (op.tenantName) lines.push(`- Workspace: ${op.tenantName}`);
   if (client.route) lines.push(`- Current route: \`${client.route}\``);
 
-  // Resolve selected entities. Best-effort — any failure here is logged and
+  // Resolve selected entities. Best-effort - any failure here is logged and
   // the line is omitted rather than throwing.
   let resolvedConversationId: string | null = null;
   let resolvedContactId: string | null = null;
@@ -91,9 +91,9 @@ export async function buildAgentContext(opts: {
       if (c) {
         resolvedConversationId = c.id;
         const who = c.customerName || c.customerExternalId;
-        const last = c.lastMessageAt ? c.lastMessageAt.toISOString() : "—";
+        const last = c.lastMessageAt ? c.lastMessageAt.toISOString() : "-";
         lines.push(
-          `- Selected conversation: \`${c.id}\` — ${who} (${c.channel.toLowerCase()}, ${c.status}, last activity ${last})`,
+          `- Selected conversation: \`${c.id}\` - ${who} (${c.channel.toLowerCase()}, ${c.status}, last activity ${last})`,
         );
       }
     } catch (err: any) {
@@ -110,7 +110,7 @@ export async function buildAgentContext(opts: {
       if (ct) {
         resolvedContactId = ct.id;
         lines.push(
-          `- Selected contact: \`${ct.id}\` — ${ct.displayName || ct.email || ct.phone || ct.externalId}`,
+          `- Selected contact: \`${ct.id}\` - ${ct.displayName || ct.email || ct.phone || ct.externalId}`,
         );
       }
     } catch (err: any) {
@@ -118,7 +118,7 @@ export async function buildAgentContext(opts: {
     }
   }
 
-  // Recent activity — keeps the model grounded ("today the operator was
+  // Recent activity - keeps the model grounded ("today the operator was
   // looking at conversation X, then Y…"). Cheap query with the existing
   // index on Message(tenantId, createdAt).
   try {

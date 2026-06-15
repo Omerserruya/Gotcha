@@ -1,5 +1,5 @@
 /**
- * CRMAdapter — capability-based CRM abstraction.
+ * CRMAdapter - capability-based CRM abstraction.
  *
  * This is the v2 contract from the GOTCHA migration plan: every CRM vendor
  * presents the same surface to the rest of the system, declares what it CAN
@@ -16,7 +16,7 @@
 
 // ─── Vendor + entity model ──────────────────────────────────
 
-export type CrmVendor = "hubspot" | "salesforce" | "zoho" | "pipedrive" | "monday" | "airtable" | "custom_api" | "custom_db";
+export type CrmVendor = "hubspot" | "salesforce" | "zoho" | "shopify" | "fireberry" | "pipedrive" | "monday" | "airtable" | "custom_api" | "custom_db";
 
 export type CrmObjectKind = "contact" | "lead" | "person_account" | "organization_member" | "company";
 
@@ -132,12 +132,12 @@ export interface CrmContactCreatePayload {
   display_name?: string;
   company?: string;
   source?: string;
-  /** Free-form passthrough — vendor-specific. */
+  /** Free-form passthrough - vendor-specific. */
   custom?: Record<string, unknown>;
 }
 
 export interface InteractionEnvelope {
-  /** GOTCHA interaction (Conversation) id — written into a CRM custom field for idempotency. */
+  /** GOTCHA interaction (Conversation) id - written into a CRM custom field for idempotency. */
   source_interaction_id: string;
   /** Channel the interaction occurred on. */
   channel: "voice" | "whatsapp" | "instagram" | "messenger" | "webchat" | "email" | "sms";
@@ -155,7 +155,7 @@ export interface InteractionEnvelope {
     [k: string]: unknown;
   };
   /**
-   * Tenant's effective locale — drives the label translations used by
+   * Tenant's effective locale - drives the label translations used by
    * renderInteractionBody ("Duration:" vs "משך:"). Falls back to "en" when
    * absent. Use SupportedLocale shape ("en" | "he").
    */
@@ -168,7 +168,7 @@ export interface CreateNoteArgs {
   body: string;
   /** GOTCHA-side originator. Used for read-then-write idempotency when supported. */
   source_interaction_id?: string;
-  /** Outbox id — for echo suppression and ledger correlation (later steps). */
+  /** Outbox id - for echo suppression and ledger correlation (later steps). */
   source_outbox_id?: string;
   /** Increments per logical update of the same logical artifact. */
   payload_version?: number;
@@ -187,7 +187,7 @@ export interface CrmEnrichArgs {
   kind: CrmObjectKind;
   /**
    * Fields to patch. Adapters normalize values (email lowercase/trim, phone
-   * E.164) before writing — defense-in-depth even when the caller already
+   * E.164) before writing - defense-in-depth even when the caller already
    * normalized via crm-identity.service.
    */
   update: {
@@ -272,7 +272,7 @@ export interface CRMAdapter {
   /**
    * Patch identifying fields on an existing record. Used by the identity
    * service to fill in a missing phone/email/PSID after a partial-match
-   * find. Optional — adapters that lack a vendor update tool may omit
+   * find. Optional - adapters that lack a vendor update tool may omit
    * this method, in which case enrichment is silently skipped.
    */
   enrichContact?(args: CrmEnrichArgs): Promise<CrmAdapterWriteResult>;
@@ -283,13 +283,13 @@ export interface CRMAdapter {
    * LLM extracted from the just-ended conversation. Routes by `kind` so
    * Leads and Contacts both get correctly updated in their native module.
    *
-   * Sparse-patch contract — callers MUST send only fields that should be
+   * Sparse-patch contract - callers MUST send only fields that should be
    * written; missing/null/empty keys are left untouched on the record.
    * Field names are vendor-neutral keys from PostConversationConfig
    * `summaryFields[].key`; the adapter is responsible for mapping them to
    * the vendor's property names.
    *
-   * Optional — adapters that don't have a generic update path return
+   * Optional - adapters that don't have a generic update path return
    * `{ ok: false, reason: "..." }` and the caller falls back to
    * createNote (writing the patch as a timeline note instead).
    */
@@ -309,7 +309,7 @@ export interface CRMAdapter {
    * (e.g. HubSpot's adapter tool surface), implementations degrade to a
    * "TODO: <subject>" timeline note rather than failing.
    *
-   * Optional — `NoOpCRMAdapter` returns `{ ok: false, reason: "no_crm_configured" }`.
+   * Optional - `NoOpCRMAdapter` returns `{ ok: false, reason: "no_crm_configured" }`.
    */
   createTask?(args: {
     contact_id: string;
@@ -323,7 +323,7 @@ export interface CRMAdapter {
 
   /**
    * Search by a vendor-neutral custom field (e.g. `gotcha_psid_facebook`).
-   * Optional — when omitted, channel-strong-identifier lookup is unavailable
+   * Optional - when omitted, channel-strong-identifier lookup is unavailable
    * and the identity service falls back to phone/email anchors.
    */
   findByCustomField?(args: CrmFindByCustomFieldArgs): Promise<CrmAdapterFindResult>;
@@ -332,14 +332,14 @@ export interface CRMAdapter {
    * Collapse `others` into `primary`. Only called when:
    *   • `capabilities.merge_supported === true`, AND
    *   • caller has explicitly opted in to auto-merge (the identity service
-   *     gates this behind `allow_auto_merge` + a strong merge signal — by
+   *     gates this behind `allow_auto_merge` + a strong merge signal - by
    *     default 2+ matches go to operator approval per CLAUDE.md rule #9).
    */
   mergeContacts?(args: CrmMergeArgs): Promise<CrmMergeResult>;
 
   /**
    * List tasks attached to a contact. `openOnly=true` filters to incomplete
-   * tasks — what GOTCHA surfaces as "open issues" in the side panel.
+   * tasks - what GOTCHA surfaces as "open issues" in the side panel.
    * No new GOTCHA-side state: CRM tasks ARE the open issues.
    */
   listTasks?(args: { contact_id: string; kind: CrmObjectKind; openOnly?: boolean; limit?: number }): Promise<{ ok: boolean; tasks: CrmTask[]; reason?: string }>;
@@ -354,7 +354,7 @@ export interface CRMAdapter {
   /**
    * Unified vendor timeline: notes + tasks + calls + emails + meetings,
    * time-ordered (most-recent first). What the "Recent activity" section of
-   * the side panel renders — broader than `listRecentNotes`, which is notes
+   * the side panel renders - broader than `listRecentNotes`, which is notes
    * only. Returns whatever activity kinds the vendor exposes.
    */
   listRecentActivities?(args: { contact_id: string; kind: CrmObjectKind; limit?: number }): Promise<{ ok: boolean; activities: CrmActivity[]; reason?: string }>;
@@ -363,9 +363,9 @@ export interface CRMAdapter {
 // ─── Custom-field name conventions (idempotency marker) ─────
 
 export const GOTCHA_CUSTOM_FIELDS = {
-  /** GOTCHA interaction (Conversation) id — read-then-write dedup. */
+  /** GOTCHA interaction (Conversation) id - read-then-write dedup. */
   source_interaction_id: "gotcha_source_interaction_id",
-  /** GOTCHA outbox row id — echo suppression for later steps. */
+  /** GOTCHA outbox row id - echo suppression for later steps. */
   source_outbox_id: "gotcha_source_outbox_id",
   /** Marker so inbound webhooks can detect "this came from us". */
   source_marker: "gotcha_source",
@@ -420,12 +420,57 @@ export const DEFAULT_CAPABILITIES: Record<CrmVendor, CrmAdapterCapabilities> = {
     search_by_identifier: ["phone", "email", "external_id"],
     version_token_field: "Modified_Time",
     rate_limit_per_minute: 200,
-    // Zoho CRM v6 does NOT expose a public merge endpoint — merge is UI-only.
+    // Zoho CRM v6 does NOT expose a public merge endpoint - merge is UI-only.
     // Identity service routes 2+ matches straight to operator approval.
     merge_supported: false,
     split_supported: false,
     task_supported: true,
     ticket_supported: true,
+  },
+  shopify: {
+    // Shopify's "customer" maps onto our canonical "contact". There is no
+    // lead lifecycle - a shopper is a customer the moment they exist.
+    entity_kinds_supported: ["contact"],
+    default_entity_kind_for_inbound: "contact",
+    // The customer record has a single free-text `note` field plus order
+    // history - we project notes/interactions onto it. No first-class
+    // task/ticket objects in core Shopify.
+    activity_kinds_supported: ["note"],
+    activity_update_in_place: true, // we PUT the customer.note field in place
+    lead_to_contact_conversion_event: false,
+    webhook_subscription: "app_level",
+    idempotency_via_custom_field: true, // customer metafields carry our markers
+    search_by_identifier: ["phone", "email"],
+    version_token_field: "updated_at",
+    rate_limit_per_minute: 40, // Shopify REST: 2 req/s sustained (bucket of 40)
+    merge_supported: false,
+    split_supported: false,
+    task_supported: false,
+    ticket_supported: false,
+  },
+  fireberry: {
+    // Fireberry (formerly Powerlink) - Israeli CRM. Customer entity is the
+    // Account object (objecttype 1); Contacts/Leads also exist. Field/object
+    // names are tenant-customizable, so the adapter resolves them from config
+    // with these defaults. Auth is a static API token (`tokenid` header) -
+    // no OAuth - so no token refresh.
+    entity_kinds_supported: ["contact", "lead", "company"],
+    default_entity_kind_for_inbound: "contact",
+    // We project notes onto a configurable text field (default `description`),
+    // mirroring Shopify's single-note-field model. Tasks/tickets exist in
+    // Fireberry but aren't wired yet - declare false until implemented.
+    activity_kinds_supported: ["note"],
+    activity_update_in_place: true,
+    lead_to_contact_conversion_event: false,
+    webhook_subscription: "polling_only",
+    idempotency_via_custom_field: true,
+    search_by_identifier: ["phone", "email"],
+    version_token_field: "modifiedon",
+    rate_limit_per_minute: 60,
+    merge_supported: false,
+    split_supported: false,
+    task_supported: false,
+    ticket_supported: false,
   },
   pipedrive: {
     entity_kinds_supported: ["contact", "organization_member"],
@@ -476,7 +521,6 @@ export const DEFAULT_CAPABILITIES: Record<CrmVendor, CrmAdapterCapabilities> = {
     split_supported: false,
     task_supported: false,
     ticket_supported: false,
-    is_stub: true,
   },
   custom_api: {
     entity_kinds_supported: ["contact"],

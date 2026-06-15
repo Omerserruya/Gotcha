@@ -242,7 +242,7 @@ router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request,
 // ─── Department Copilot (= AI Employee attached to the department) ──
 // The "department copilot" is the AIAgent attached to this department via
 // RouterRule (routeType=AI_AGENT, routeTarget=<departmentId>). There is no
-// separate copilot-config blob — reading/writing this route resolves the
+// separate copilot-config blob - reading/writing this route resolves the
 // attached AIAgent and maps its fields to the UI payload shape expected by
 // `frontend/src/lib/api.ts` (`getDepartmentCopilot` / `updateDepartmentCopilot`).
 //
@@ -336,7 +336,7 @@ router.put(
       if (body.goals !== undefined) data.goals = body.goals;
       if (body.tone !== undefined) data.toneConfig = body.tone;
       if (body.behavioral !== undefined) data.behavioral = body.behavioral;
-      // Note: `tools` in the UI payload is NOT persisted here — per-department
+      // Note: `tools` in the UI payload is NOT persisted here - per-department
       // tool permissions live on `AgentToolPermission` and are managed via
       // PUT /api/tools/permissions/:departmentId.
       const updated = await prisma.aIAgent.update({

@@ -26,13 +26,13 @@ const ISRAEL_POLICY: SchedulingPolicy = {
 
 const DISCOVERY: MeetingType = { id: "discovery_call", durationMinutes: 30 };
 
-// Helper — produce an ISO timestamp for a given Israel wall-clock day/time.
-// We use UTC offset +03:00 (IDT) — these tests are deterministic; no DST across them.
+// Helper - produce an ISO timestamp for a given Israel wall-clock day/time.
+// We use UTC offset +03:00 (IDT) - these tests are deterministic; no DST across them.
 function idtIso(day: string, hhmm: string): string {
   return `${day}T${hhmm}:00+03:00`;
 }
 
-describe("Scheduling — VALID path", () => {
+describe("Scheduling - VALID path", () => {
   it("Tuesday 11:00 with empty calendar, asked 5+ hours ahead → VALID", () => {
     const requested = idtIso("2026-05-05", "11:00"); // Tue
     const now = Date.parse("2026-05-05T05:00:00+03:00"); // ~6h before
@@ -51,7 +51,7 @@ describe("Scheduling — VALID path", () => {
   });
 });
 
-describe("Scheduling — INVALID paths", () => {
+describe("Scheduling - INVALID paths", () => {
   it("Saturday request → outside_working_hours", () => {
     const requested = idtIso("2026-05-09", "11:00"); // Sat
     const now = Date.parse("2026-05-05T05:00:00+03:00");
@@ -167,7 +167,7 @@ describe("Scheduling — INVALID paths", () => {
   });
 });
 
-describe("Scheduling — PROPOSE path", () => {
+describe("Scheduling - PROPOSE path", () => {
   it("No requested time → returns 3 valid slots, all in working hours", () => {
     const now = Date.parse("2026-05-05T05:00:00+03:00"); // Tue 05:00
     const r = resolveAvailability({
@@ -216,7 +216,7 @@ describe("Scheduling — PROPOSE path", () => {
   });
 });
 
-describe("Scheduling — meeting type windows override working hours", () => {
+describe("Scheduling - meeting type windows override working hours", () => {
   it("Discovery limited to 10:00–16:00 → 09:30 request rejected with outside_meeting_type_window", () => {
     const stricter: SchedulingPolicy = {
       ...ISRAEL_POLICY,

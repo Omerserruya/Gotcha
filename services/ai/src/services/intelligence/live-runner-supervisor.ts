@@ -26,7 +26,7 @@ import type { StageContextForPrompt } from "./prompts/blocks/copilot-config-bloc
  * we silently no-op.
  *
  * Failure mode: if the runner fails to start, the existing live path keeps
- * working — both paths run independently and one can fail without taking
+ * working - both paths run independently and one can fail without taking
  * down the other.
  */
 
@@ -100,7 +100,7 @@ async function handleStarted(evt: ServiceEvent): Promise<void> {
     resolveStageContextForConversation(tenantId, conversationId),
   ]);
 
-  // A late session.started retry can race the lookup — re-check to keep
+  // A late session.started retry can race the lookup - re-check to keep
   // the singleton-per-callSid invariant after the await.
   if (runners.has(callSid)) return;
 
@@ -140,7 +140,7 @@ function handleEnded(evt: ServiceEvent): void {
   });
 }
 
-/** Test seam — list active runner callSids. */
+/** Test seam - list active runner callSids. */
 export function __activeRunnerCallSidsForTests(): string[] {
   return [...runners.keys()];
 }
@@ -148,7 +148,7 @@ export function __activeRunnerCallSidsForTests(): string[] {
 /**
  * Resolve the active pipeline stage for the conversation's customer +
  * department, shaped for the prompt assembler. Returns undefined when no
- * funnel is configured or the resolver couldn't determine a stage — the
+ * funnel is configured or the resolver couldn't determine a stage - the
  * assembler then falls back to channel-level CopilotConfig.goals.
  */
 async function resolveStageContextForConversation(

@@ -4,8 +4,23 @@ import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.ser
 import { generateResponse } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
+import { isBrandArchetype } from "../services/brand-archetypes";
 
 const router = Router();
+
+// Strip an invalid `brand_archetype` out of an incoming persona object so we
+// never persist a key the renderer can't resolve (it would silently fall back
+// to "neutral"). Leaves the rest of persona (gender, traits, …) untouched and
+// returns the value unchanged when it isn't a persona object.
+function sanitizePersona<T>(persona: T): T {
+  if (!persona || typeof persona !== "object") return persona;
+  const p = persona as Record<string, unknown>;
+  if ("brand_archetype" in p && !isBrandArchetype(p.brand_archetype)) {
+    const { brand_archetype: _drop, ...rest } = p;
+    return rest as T;
+  }
+  return persona;
+}
 
 // ─── List AI Agents ──────────────────────────────────────────
 router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
@@ -98,7 +113,7 @@ router.post("/generate", authenticate, resolveTenant, requireActiveTenant(), req
     // Build the AI Employee name
     const name = agentName || (responsibility ? responsibility.substring(0, 50) : `AI Employee ${new Date().toLocaleDateString()}`);
 
-    // Detect mode — default to AUTONOMOUS for AI agents
+    // Detect mode - default to AUTONOMOUS for AI agents
     const roleAnswerLower = (answers.role || responsibility || "").toLowerCase();
     let mode = "AUTONOMOUS";
     if (roleAnswerLower.includes("copilot") || roleAnswerLower.includes("assist") || roleAnswerLower.includes("suggest")) {
@@ -216,7 +231,7 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
       enabled: tp.isAllowed,
       requireApproval: tp.requireApproval,
       // Per-agent semantics (Tier 2). NULL when the operator hasn't
-      // customized — composeToolDescription falls back to catalog defaults.
+      // customized - composeToolDescription falls back to catalog defaults.
       description: (tp as any).description ?? null,
       usageRule: (tp as any).usageRule ?? null,
     }));
@@ -236,7 +251,7 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
 
 // Roles for which a funnel is REQUIRED at save time. These are
 // outcome-driven roles whose conversations advance through pipeline
-// stages — the funnel provides the stage goals + exit criteria.
+// stages - the funnel provides the stage goals + exit criteria.
 // Roles NOT in this set (support, billing, custom, research) rely on
 // `agent.goal` + `agent.successCriteria` instead and the funnel binding
 // is optional.
@@ -268,7 +283,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
 
     // Role-driven guardrails: funnel-required roles still need a funnel
     // binding (pipelines depend on stage definitions). For text-driven
-    // roles `goal` is preferred but not blocking — if missing we synthesize
+    // roles `goal` is preferred but not blocking - if missing we synthesize
     // a sensible default from name/description/role so the wizard and
     // legacy agents (created before `goal` existed) keep working.
     const effectiveRole = String(role || "customer_support").toLowerCase();
@@ -295,7 +310,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         tenantId: req.tenantId! as string,
         name,
         role: role || "customer_support",
-        // description column dropped per spec — caller-supplied value is ignored.
+        // description column dropped per spec - caller-supplied value is ignored.
         avatarColor: avatarColor || "#7c5cfc",
         status: status || "DRAFT",
         tone: tone || "professional",
@@ -313,7 +328,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         goals: goals || null,
         toneConfig: toneConfig || null,
         behavioral: behavioral || null,
-        persona: persona || null,
+        persona: sanitizePersona(persona) || null,
         maxAutonomousMessages: maxAutonomousMessages ?? 10,
         maxAutonomousMinutes: maxAutonomousMinutes ?? 15,
         confidenceThreshold: confidenceThreshold ?? 0.6,
@@ -373,7 +388,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
 
     const { knowledgeBaseIds, toolIds, tools: toolsWithOverrides, mode: _dropMode, ...updateData } = req.body;
 
-    // Empty strings from the dropdowns mean "no binding" — coerce to NULL
+    // Empty strings from the dropdowns mean "no binding" - coerce to NULL
     // so the FK constraint accepts it (Postgres won't accept "" as a cuid).
     if (Object.prototype.hasOwnProperty.call(updateData, "departmentId") && !updateData.departmentId) {
       updateData.departmentId = null;
@@ -382,8 +397,15 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       updateData.funnelId = null;
     }
 
+    // Strip an unknown brand_archetype before it reaches the DB. The whole
+    // persona object is replaced on update, so the frontend sends the merged
+    // persona (gender/traits + brand_archetype) - we only validate the new key.
+    if (Object.prototype.hasOwnProperty.call(updateData, "persona")) {
+      updateData.persona = sanitizePersona(updateData.persona);
+    }
+
     // Normalize the new goal / successCriteria fields the same way create
-    // does — trim and convert empty strings to NULL.
+    // does - trim and convert empty strings to NULL.
     if (Object.prototype.hasOwnProperty.call(updateData, "goal")) {
       updateData.goal = typeof updateData.goal === "string"
         ? updateData.goal.trim() || null
@@ -395,9 +417,9 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
         : null;
     }
 
-    // Role-driven guardrails on update — funnel binding is still required
+    // Role-driven guardrails on update - funnel binding is still required
     // for pipeline roles (Sales/SDR/Recruiting) because stages drive
-    // behavior. `goal` is preferred but not blocking on PATCH — legacy
+    // behavior. `goal` is preferred but not blocking on PATCH - legacy
     // agents (pre-dating the field) and partial saves must still succeed.
     const merged = { ...existing, ...updateData };
     if (requiresFunnel(merged.role) && !merged.funnelId) {
@@ -430,7 +452,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // Update tool assignments if provided.
     // Preferred shape: `tools: [{ tenantToolId, description?, usageRule? }]`
     // which carries per-agent semantics. Legacy shape `toolIds: string[]`
-    // is kept for backward compat — when both are present, `tools` wins.
+    // is kept for backward compat - when both are present, `tools` wins.
     const useToolsShape = Array.isArray(toolsWithOverrides);
     if (useToolsShape || (toolIds && Array.isArray(toolIds))) {
       await prisma.agentToolPermission.deleteMany({ where: { tenantId: req.tenantId! as string, aiAgentId: agent.id } });
@@ -483,7 +505,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
 // `AgentToolPermission` row) instead of requiring the caller to send the
 // full toolIds array via the PATCH path. The drawer also continues to
 // hit `PUT /api/integrations/:slug/tools/:slug` to ensure the underlying
-// `TenantTool` is enabled — both must be true for the bot to see the tool.
+// `TenantTool` is enabled - both must be true for the bot to see the tool.
 //
 // Body: { isAllowed: boolean, requireApproval?: boolean }
 router.put(
@@ -601,9 +623,11 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
       return;
     }
 
-    // Check if any router rules reference this agent
+    // Check if any router rules reference this agent. Must be tenant-scoped -
+    // the shared TenantGuard rejects any query whose where clause is missing
+    // tenantId (a count without it 500s instead of returning a number).
     const ruleCount = await prisma.routerRule.count({
-      where: { aiAgentId: req.params.id as string, enabled: true },
+      where: { tenantId: req.tenantId! as string, aiAgentId: req.params.id as string, enabled: true },
     });
 
     if (ruleCount > 0) {

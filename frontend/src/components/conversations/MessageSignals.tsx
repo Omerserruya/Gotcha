@@ -7,7 +7,7 @@ import { useI18n } from "@/context/I18nContext";
  * Each card is a small, salesperson-style cue:
  *   ┌─────────────────────────────┐
  *   │ 🟢 Buy intent · strong       │
- *   │ 🔥 Hot Lead — Move fast,     │
+ *   │ 🔥 Hot Lead - Move fast,     │
  *   │ confirm price + close today.│
  *   └─────────────────────────────┘
  *
@@ -62,8 +62,8 @@ const CHIP_META: Record<SignalKind, { en: string; he: string; pill: string; acce
 const COACHING: Record<SignalKind, Record<"strong" | "soft", { en: Coaching; he: Coaching }>> = {
   buy_intent: {
     strong: {
-      en: { headline: "🔥 Hot Lead!",      tip: "Move fast — confirm price + send the next-step link today." },
-      he: { headline: "🔥 ליד חם!",        tip: "תפעל מהר — אשר מחיר ושלח לינק לצעד הבא היום." },
+      en: { headline: "🔥 Hot Lead!",      tip: "Move fast - confirm price + send the next-step link today." },
+      he: { headline: "🔥 ליד חם!",        tip: "תפעל מהר - אשר מחיר ושלח לינק לצעד הבא היום." },
     },
     soft: {
       en: { headline: "Warm signal",       tip: "Acknowledge the intent and clarify the timeline." },
@@ -76,14 +76,14 @@ const COACHING: Record<SignalKind, Record<"strong" | "soft", { en: Coaching; he:
       he: { headline: "התנגדות חזקה",      tip: "אל תתווכח. שאל: 'עזור לי להבין מה לא מתאים.'" },
     },
     soft: {
-      en: { headline: "Soft pushback",     tip: "Probe gently — uncover the real concern under the words." },
-      he: { headline: "התנגדות רכה",       tip: "חקור בעדינות — חשוף את הדאגה האמיתית מאחורי המילים." },
+      en: { headline: "Soft pushback",     tip: "Probe gently - uncover the real concern under the words." },
+      he: { headline: "התנגדות רכה",       tip: "חקור בעדינות - חשוף את הדאגה האמיתית מאחורי המילים." },
     },
   },
   price_objection: {
     strong: {
-      en: { headline: "Price concern",     tip: "Reframe value. Show ROI vs the cost of doing nothing — not the sticker." },
-      he: { headline: "חשש מחיר",          tip: "מסגר ערך מחדש. הראה ROI מול עלות אי-פעולה — לא את המחיר." },
+      en: { headline: "Price concern",     tip: "Reframe value. Show ROI vs the cost of doing nothing - not the sticker." },
+      he: { headline: "חשש מחיר",          tip: "מסגר ערך מחדש. הראה ROI מול עלות אי-פעולה - לא את המחיר." },
     },
     soft: {
       en: { headline: "Budget worry",      tip: "Lean into the value: remind them of the outcomes they'll unlock." },
@@ -96,8 +96,8 @@ const COACHING: Record<SignalKind, Record<"strong" | "soft", { en: Coaching; he:
       he: { headline: "ספק גלוי",          tip: "הוצא את הלא-נאמר: 'מה הדבר היחיד שמעכב אותך?'" },
     },
     soft: {
-      en: { headline: "Mild doubt",        tip: "Reassure with social proof — share a similar customer's win." },
-      he: { headline: "ספק קל",            tip: "הרגע עם הוכחה חברתית — שתף הצלחה של לקוח דומה." },
+      en: { headline: "Mild doubt",        tip: "Reassure with social proof - share a similar customer's win." },
+      he: { headline: "ספק קל",            tip: "הרגע עם הוכחה חברתית - שתף הצלחה של לקוח דומה." },
     },
   },
   rejection: {
@@ -106,8 +106,8 @@ const COACHING: Record<SignalKind, Record<"strong" | "soft", { en: Coaching; he:
       he: { headline: "סוגר את הדלת",      tip: "אל תלחץ. הכר, הודה והשאר דלת פתוחה בכבוד." },
     },
     soft: {
-      en: { headline: "Backing away",      tip: "One last clarifying question — then respect the no." },
-      he: { headline: "מתרחק",             tip: "שאלה מבהירה אחרונה — ואז כבד את ה'לא'." },
+      en: { headline: "Backing away",      tip: "One last clarifying question - then respect the no." },
+      he: { headline: "מתרחק",             tip: "שאלה מבהירה אחרונה - ואז כבד את ה'לא'." },
     },
   },
   urgency: {
@@ -122,8 +122,8 @@ const COACHING: Record<SignalKind, Record<"strong" | "soft", { en: Coaching; he:
   },
   confusion: {
     strong: {
-      en: { headline: "Lost the thread",   tip: "Stop. Slow down. Use simpler words — one concept at a time." },
-      he: { headline: "איבד את החוט",      tip: "עצור. האט. מילים פשוטות — רעיון אחד בכל פעם." },
+      en: { headline: "Lost the thread",   tip: "Stop. Slow down. Use simpler words - one concept at a time." },
+      he: { headline: "איבד את החוט",      tip: "עצור. האט. מילים פשוטות - רעיון אחד בכל פעם." },
     },
     soft: {
       en: { headline: "Some confusion",    tip: "Re-explain the last point with a concrete example." },
@@ -155,7 +155,7 @@ export function MessageSignals({ signals }: { signals?: Signal[] | null }) {
         const coach = COACHING[s.kind]?.[s.severity]?.[lang];
         if (!meta || !coach) return null;
         const label = meta[lang];
-        const tooltip = `"${s.evidence}" — ${Math.round(s.confidence * 100)}%`;
+        const tooltip = `"${s.evidence}" - ${Math.round(s.confidence * 100)}%`;
         return (
           <div
             key={`${s.kind}-${i}`}
@@ -172,7 +172,7 @@ export function MessageSignals({ signals }: { signals?: Signal[] | null }) {
               </div>
               <div className="text-[11px] leading-tight">
                 <span className="font-semibold text-gray-800">{coach.headline}</span>
-                <span className="text-gray-500"> — {coach.tip}</span>
+                <span className="text-gray-500"> - {coach.tip}</span>
               </div>
             </div>
           </div>

@@ -1,7 +1,7 @@
 /**
  * Builds the SYSTEM_CORE prompt string for a worker session.
  *
- * Section order (FIXED — this is the contract):
+ * Section order (FIXED - this is the contract):
  *   1. AI Worker base definition          (constant)
  *   2. Identity                            (per-worker, but session-stable)
  *   3. Skills registry render              (skill fragments composed in id order)
@@ -12,7 +12,7 @@
  * Determinism contract: same `(worker, ctx)` MUST produce byte-identical
  * output. No timestamps, request IDs, or per-call data may appear here.
  *
- * Tools are NOT rendered into SYSTEM_CORE — they go into the OpenAI
+ * Tools are NOT rendered into SYSTEM_CORE - they go into the OpenAI
  * `tools:` parameter directly. Tool POLICY language (when to call vs.
  * when to ask) lives in the `tool_usage_policy` skill.
  */

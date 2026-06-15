@@ -350,7 +350,7 @@ Frontend Action Flow:
 7. Context menu closes
 
 API Call:
-- No API call found (frontend-only behavior — localStorage-backed)
+- No API call found (frontend-only behavior - localStorage-backed)
 
 State Changes:
 - markedUnread Set, contextMenu state
@@ -2634,8 +2634,8 @@ Frontend Location:
 Frontend Action Flow:
 1. Admin toggles SLA enable
 2. If enabled, admin sets:
-   - SLA duration (minutes) — e.g., 30 minutes
-   - Warning threshold (% of SLA) — e.g., 70%
+   - SLA duration (minutes) - e.g., 30 minutes
+   - Warning threshold (% of SLA) - e.g., 70%
 3. Admin can override SLA per department:
    - Toggles "Show Department SLA Overrides"
    - Selects department
@@ -3547,11 +3547,11 @@ Edge Cases:
 2. Some advanced features like undo/redo in flow builder may be frontend-only
 
 **Most complex UX flows**:
-1. **Broadcast Creation Wizard** (4-step process with segmentation, file upload, scheduling) — complex state management and multi-step form validation
-2. **AI Agent Configuration** (many form fields, drawer-based tool/knowledge selection, role-based behavior) — deep nesting of configuration options
-3. **Knowledge Base Management with Integrations** (OAuth flows for Confluence/Drive, browse modals, sync tracking) — integration complexity
-4. **Flow Builder with ReactFlow** (visual node-based editor with canvas manipulation) — most technically sophisticated interaction
-5. **CommandCenter Modal** (context-aware action planning and execution with glow state machine) — complex state and real-time feedback
+1. **Broadcast Creation Wizard** (4-step process with segmentation, file upload, scheduling) - complex state management and multi-step form validation
+2. **AI Agent Configuration** (many form fields, drawer-based tool/knowledge selection, role-based behavior) - deep nesting of configuration options
+3. **Knowledge Base Management with Integrations** (OAuth flows for Confluence/Drive, browse modals, sync tracking) - integration complexity
+4. **Flow Builder with ReactFlow** (visual node-based editor with canvas manipulation) - most technically sophisticated interaction
+5. **CommandCenter Modal** (context-aware action planning and execution with glow state machine) - complex state and real-time feedback
 
 ---
 

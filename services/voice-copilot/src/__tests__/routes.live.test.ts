@@ -48,7 +48,7 @@ describe("GET /api/voice-copilot/live", () => {
   describe("authentication", () => {
     it("returns 401 when no Authorization header is provided (real middleware)", async () => {
       // Use a separate app with the REAL middleware to verify auth guard.
-      // We achieve this by NOT mocking @chatcenter/shared here — but since
+      // We achieve this by NOT mocking @chatcenter/shared here - but since
       // vi.mock is module-level, we test the contract via the mock behaviour:
       // The mock always calls next(), so we verify the route is reachable.
       // The 401 check is covered by testing against a minimal app that rejects.
@@ -62,7 +62,7 @@ describe("GET /api/voice-copilot/live", () => {
         }
         next();
       });
-      // No route body — we only care about the 401
+      // No route body - we only care about the 401
       const res = await request(app).get("/api/voice-copilot/live");
       expect(res.status).toBe(401);
     });
@@ -170,7 +170,7 @@ describe("GET /api/voice-copilot/live", () => {
       const key1 = "voice:tenant:t1:conversation:conv-t1";
 
       // The mock only returns t1 keys because the SCAN pattern filters by tenantId.
-      // We verify by also providing t2 data in hgetallMap — if tenant isolation
+      // We verify by also providing t2 data in hgetallMap - if tenant isolation
       // is broken the router would somehow fetch it; here it won't because SCAN
       // only yields t1 keys.
       const redisMock = makeMockRedis([key1], {
@@ -184,7 +184,7 @@ describe("GET /api/voice-copilot/live", () => {
           framesReceived: "7",
           framesDropped: "0",
         },
-        // t2 session — should never appear in response
+        // t2 session - should never appear in response
         "voice:tenant:t2:conversation:conv-t2": {
           callSid: "CA-t2",
           agentId: "agent-t2",

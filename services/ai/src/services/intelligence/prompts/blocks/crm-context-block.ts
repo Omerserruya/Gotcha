@@ -5,7 +5,7 @@
  * caller and renders it as compact lines. Lazy-loaded once per call (the
  * runner constructs the snapshot before the first turn and reuses it).
  *
- * Concrete CRM-extractor wiring lands later — for now the runner can pass
+ * Concrete CRM-extractor wiring lands later - for now the runner can pass
  * an empty snapshot and the block degrades gracefully.
  */
 export interface CrmSnapshot {

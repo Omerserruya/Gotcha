@@ -1,5 +1,5 @@
 /**
- * Voice Channels API — Live Call CoPilot.
+ * Voice Channels API - Live Call CoPilot.
  *
  * The current architecture treats each tenant's Twilio account as a single
  * `CommunicationChannel { channelType: VOICE }` row with one
@@ -12,7 +12,7 @@
  *      with the just-supplied credentials. Each becomes a
  *      `VoiceChannelPhoneNumber` row (isActive=false).
  *   3. Admin picks a number in the wizard and POSTs
- *      `/numbers/:numberId/activate` — this also updates the number's
+ *      `/numbers/:numberId/activate` - this also updates the number's
  *      `voiceUrl` on Twilio side to point at `/api/voice/incoming/voice`.
  *
  * Secrets:
@@ -110,7 +110,7 @@ function serializePhoneNumber(row: PhoneNumberRow) {
 }
 
 function serializeChannel(row: ChannelRow) {
-  // `numbers` is exposed BOTH at the top level (frontend contract — see
+  // `numbers` is exposed BOTH at the top level (frontend contract - see
   // `VoiceChannel` in `frontend/src/lib/api.ts`) AND nested under
   // `voiceChannel` for any consumer that wants the joined-row shape.
   // Always an array, never `undefined`, so renderers can `.length`/`.map`
@@ -134,7 +134,7 @@ function serializeChannel(row: ChannelRow) {
     accountSidFingerprint: fingerprint(row.voiceChannel?.accountSid ?? null),
     numbers,
     aiAgentId: row.voiceChannel?.aiAgentId ?? null,
-    // Pipeline funnel override — still lives inside the copilot_config JSONB
+    // Pipeline funnel override - still lives inside the copilot_config JSONB
     // (`copilot_config.funnelId`) pending Phase 7 promotion to a real FK
     // column. Surface it at the top level so the detail page can render the
     // picker without parsing the blob.
@@ -223,7 +223,7 @@ async function upsertDiscoveredNumbers(voiceChannelId: string, discovered: Array
   phoneNumber: string;
   friendlyName?: string | null;
 }>): Promise<void> {
-  // Upsert by (voiceChannelId, e164) — twilioSid is filled in. Existing rows
+  // Upsert by (voiceChannelId, e164) - twilioSid is filled in. Existing rows
   // not present in the discovery list are NOT deleted (preserves history) but
   // are deactivated.
   const discoveredE164s = new Set(discovered.map((n) => n.phoneNumber));
@@ -314,7 +314,7 @@ router.get("/", async (req: Request, res: Response) => {
 // Auto-creates an API Key + TwiML App on the customer's Twilio account using
 // AccountSid+AuthToken Basic auth. Both resources are stored back on the
 // voice_channels row. On partial/total failure we log a warning and mark
-// config.outboundProvisioningFailed=true — the channel still works inbound.
+// config.outboundProvisioningFailed=true - the channel still works inbound.
 async function provisionOutboundResources(
   channelId: string,
   voiceChannelId: string,
@@ -402,7 +402,7 @@ async function provisionOutboundResources(
 // list `incomingPhoneNumbers` from Twilio and persists each as a child
 // `VoiceChannelPhoneNumber` row (isActive=false). Admin activates a number
 // in step 3 of the wizard via /numbers/:numberId/activate.
-// apiKeySid / apiKeySecret / twimlAppSid are now auto-provisioned — legacy
+// apiKeySid / apiKeySecret / twimlAppSid are now auto-provisioned - legacy
 // clients may still send them, but they are ignored.
 router.post("/", async (req: Request, res: Response) => {
   try {
@@ -445,7 +445,7 @@ router.post("/", async (req: Request, res: Response) => {
       return { channelId: ch.id, voiceChannelId: vc.id };
     });
 
-    // Auto-provision API Key + TwiML App (best-effort — failures are logged
+    // Auto-provision API Key + TwiML App (best-effort - failures are logged
     // and surfaced via config.outboundProvisioningFailed; inbound still works).
     try {
       await provisionOutboundResources(
@@ -459,7 +459,7 @@ router.post("/", async (req: Request, res: Response) => {
     }
 
     // Discover numbers from Twilio. If this fails, leave the channel in
-    // ERROR so admin can retry — DO NOT delete the channel.
+    // ERROR so admin can retry - DO NOT delete the channel.
     try {
       const numbers = await listIncomingPhoneNumbers({
         channelId: created.channelId,
@@ -493,7 +493,7 @@ router.post("/", async (req: Request, res: Response) => {
 
 // ─── PATCH /:id ─────────────────────────────────────────────
 // ─── GET /:id ─────────────────────────────────────────────────
-// Fetch a single channel with its numbers — used by the detail page.
+// Fetch a single channel with its numbers - used by the detail page.
 router.get("/:id", async (req: Request, res: Response) => {
   try {
     const id = String(req.params.id);
@@ -599,7 +599,7 @@ router.put("/:id/copilot-config", async (req: Request, res: Response) => {
       return;
     }
 
-    // Phase 6: `aiAgentId` is no longer part of the JSONB blob — it has its
+    // Phase 6: `aiAgentId` is no longer part of the JSONB blob - it has its
     // own FK column on `voice_channels` written via PUT /:id/ai-agent. Strip
     // it here so a stale client can't reintroduce the dual-source-of-truth.
     const { aiAgentId: _ignoredAiAgentId, ...persistable } = parsed.data;
@@ -621,7 +621,7 @@ router.put("/:id/copilot-config", async (req: Request, res: Response) => {
 });
 
 // ─── GET /:id/ai-agent ──────────────────────────────────────
-// Returns { aiAgentId } — the AI Employee bound to this voice channel.
+// Returns { aiAgentId } - the AI Employee bound to this voice channel.
 // Phase 6 moved this off `copilot_config.aiAgentId` (JSONB) onto a real
 // FK column. Empty body when nothing is configured; the live runner then
 // falls back to the legacy per-channel copilot config (until Phase 7
@@ -646,7 +646,7 @@ router.get("/:id/ai-agent", async (req: Request, res: Response) => {
 
 // ─── PUT /:id/ai-agent ──────────────────────────────────────
 // Body: { aiAgentId: string | null }. Validates the agent belongs to the
-// same tenant before writing — never trust the id from the client. Pass
+// same tenant before writing - never trust the id from the client. Pass
 // null/"" to detach the channel from any AI Employee (falls back to legacy
 // channel config for the duration of Phase 6).
 router.put("/:id/ai-agent", async (req: Request, res: Response) => {
@@ -694,7 +694,7 @@ router.put("/:id/ai-agent", async (req: Request, res: Response) => {
 });
 
 // ─── GET /:id/funnel ────────────────────────────────────────
-// Returns { funnelId } — the per-channel pipeline funnel override. Stored
+// Returns { funnelId } - the per-channel pipeline funnel override. Stored
 // inside the copilot_config JSONB blob today (`copilot_config.funnelId`);
 // Phase 7 will promote this to a real FK column. Null/empty means
 // "fall back to the department-scoped funnel resolution".
@@ -756,7 +756,7 @@ router.put("/:id/funnel", async (req: Request, res: Response) => {
       }
     }
 
-    // Merge into the existing JSONB blob — never overwrite other legacy
+    // Merge into the existing JSONB blob - never overwrite other legacy
     // fields (persona/goals/etc.) that might still carry transitional data.
     const existing = (channel.voiceChannel.copilotConfig ?? {}) as Record<string, unknown>;
     const next: Record<string, unknown> = { ...existing };
@@ -870,7 +870,7 @@ router.put("/:id/routing", async (req: Request, res: Response) => {
         ? body.openWorkspaceOnAgentFirst
         : ch.voiceChannel.openWorkspaceOnAgentFirst;
 
-    // Tenant-isolation guards — never trust the IDs from the body.
+    // Tenant-isolation guards - never trust the IDs from the body.
     if (defaultAgentId) {
       const u = await prisma.user.findUnique({
         where: { id: defaultAgentId },
@@ -929,7 +929,7 @@ router.put("/:id/routing", async (req: Request, res: Response) => {
     // When both modes are set so the missed-call → WABA template flow
     // can fire, make sure the template is registered with the tenant's
     // WABA exactly once. Fire-and-forget so a Graph API hiccup doesn't
-    // fail the routing save — the ensure-template endpoint is itself
+    // fail the routing save - the ensure-template endpoint is itself
     // idempotent (checks existence first).
     const wantsTemplate = inboundMode === "FORWARD_TO_AGENT" && outboundMode === "AGENT_FIRST";
     const previouslyWanted =

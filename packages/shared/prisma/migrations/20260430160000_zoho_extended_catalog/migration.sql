@@ -8,7 +8,7 @@
 -- Endpoints are RELATIVE; tool-execution.service.ts prepends the
 -- TenantIntegration.config.baseUrl returned by Zoho at token exchange
 -- (https://www.zohoapis.com / .eu / .in / etc.). Path params use `:id`
--- — same pattern the existing `update_deal` row already uses.
+-- - same pattern the existing `update_deal` row already uses.
 --
 -- HITL policy defaults:
 --   - READS                              → "never"  (lookups don't need approval)
@@ -40,7 +40,7 @@ UPDATE "catalog_tools" SET "when_to_use" =
 WHERE "id" = 'tool_zoho_crm_update_deal';
 
 
--- ─── Leads — search / get / update / note / tag / convert ────────────────
+-- ─── Leads - search / get / update / note / tag / convert ────────────────
 
 INSERT INTO "catalog_tools"
   ("id", "slug", "integration_id", "name", "description", "when_to_use",
@@ -81,7 +81,7 @@ VALUES
   ('tool_zoho_crm_update_lead', 'update_lead', 'cat_zoho_crm',
    'Update Lead',
    'Update fields on an existing Zoho lead.',
-   'Use INSTEAD of create_lead when lead_search returned a match — to enrich the existing record (add Phone, Email, Company, Lead_Source, Description, etc.). `id` goes in the URL; field updates go inside data[].',
+   'Use INSTEAD of create_lead when lead_search returned a match - to enrich the existing record (add Phone, Email, Company, Lead_Source, Description, etc.). `id` goes in the URL; field updates go inside data[].',
    'WRITE', 'LOW', true, 12, 'PUT', '/crm/v7/Leads/:id',
    '{
      "type": "object",
@@ -161,7 +161,7 @@ VALUES
   ('tool_zoho_crm_convert_lead', 'convert_lead', 'cat_zoho_crm',
    'Convert Lead',
    'Convert a Zoho lead to a contact, account, and (optionally) deal.',
-   'Use only when the customer has clearly committed (purchase decision, signed quote, scheduled onboarding). This is a one-way lifecycle change — gated by human approval by default.',
+   'Use only when the customer has clearly committed (purchase decision, signed quote, scheduled onboarding). This is a one-way lifecycle change - gated by human approval by default.',
    'WRITE', 'HIGH', true, 15, 'POST', '/crm/v7/Leads/:id/actions/convert',
    '{
      "type": "object",
@@ -188,7 +188,7 @@ VALUES
 ON CONFLICT ("integration_id", "slug") DO NOTHING;
 
 
--- ─── Contacts — get / create / update / note / tag ───────────────────────
+-- ─── Contacts - get / create / update / note / tag ───────────────────────
 
 INSERT INTO "catalog_tools"
   ("id", "slug", "integration_id", "name", "description", "when_to_use",
@@ -317,7 +317,7 @@ VALUES
 ON CONFLICT ("integration_id", "slug") DO NOTHING;
 
 
--- ─── Deals — search / get / create / note ────────────────────────────────
+-- ─── Deals - search / get / create / note ────────────────────────────────
 
 INSERT INTO "catalog_tools"
   ("id", "slug", "integration_id", "name", "description", "when_to_use",
@@ -408,7 +408,7 @@ VALUES
 ON CONFLICT ("integration_id", "slug") DO NOTHING;
 
 
--- ─── Tasks — create ──────────────────────────────────────────────────────
+-- ─── Tasks - create ──────────────────────────────────────────────────────
 
 INSERT INTO "catalog_tools"
   ("id", "slug", "integration_id", "name", "description", "when_to_use",

@@ -15,7 +15,7 @@ import clsx from "clsx";
 
 type Period = 7 | 30 | 90 | 365;
 
-// Tailwind palette per category — keeps Find-Visual-Identity matching across
+// Tailwind palette per category - keeps Find-Visual-Identity matching across
 // the page (card border, swatch in legend, bar fill in trends).
 const COLOR_MAP: Record<string, { bg: string; border: string; text: string; bar: string; dot: string }> = {
   violet: { bg: "bg-violet-50", border: "border-violet-200", text: "text-violet-700", bar: "bg-violet-500", dot: "bg-violet-500" },
@@ -50,7 +50,7 @@ function fmtNum(n: number): string {
   return Math.round(n).toLocaleString();
 }
 function fmtPct(n: number | null | undefined, digits = 0): string {
-  if (n === null || n === undefined || !isFinite(n)) return "—";
+  if (n === null || n === undefined || !isFinite(n)) return "-";
   return `${n.toFixed(digits)}%`;
 }
 
@@ -222,27 +222,27 @@ function CategoryCard({ row }: { row: PricingCategoryRow }) {
         <p className="text-xs text-gray-400 py-6 text-center">No usage in this period.</p>
       ) : (
         <>
-          {/* Headline unit metrics — what you'd price-list against. */}
+          {/* Headline unit metrics - what you'd price-list against. */}
           <div className="grid grid-cols-2 gap-2 mb-3">
             <Metric label="Per call" value={fmtUsd(row.avgCostPerCall, 5)} sub={`${row.calls.toLocaleString()} calls`} />
             <Metric
               label="Per conversation"
-              value={row.avgCostPerConversation !== null ? fmtUsd(row.avgCostPerConversation, 5) : "—"}
+              value={row.avgCostPerConversation !== null ? fmtUsd(row.avgCostPerConversation, 5) : "-"}
               sub={row.conversations > 0 ? `${row.conversations.toLocaleString()} convos` : "n/a"}
             />
             <Metric
               label="$/1K input"
-              value={row.blendedInputUsdPer1K !== null ? fmtUsd(row.blendedInputUsdPer1K, 5) : "—"}
+              value={row.blendedInputUsdPer1K !== null ? fmtUsd(row.blendedInputUsdPer1K, 5) : "-"}
               sub={`${fmtNum(row.promptTokens)} in`}
             />
             <Metric
               label="$/1K output"
-              value={row.blendedOutputUsdPer1K !== null ? fmtUsd(row.blendedOutputUsdPer1K, 5) : "—"}
+              value={row.blendedOutputUsdPer1K !== null ? fmtUsd(row.blendedOutputUsdPer1K, 5) : "-"}
               sub={`${fmtNum(row.completionTokens)} out`}
             />
           </div>
 
-          {/* In/out cost split bar — visualises where the bill actually went. */}
+          {/* In/out cost split bar - visualises where the bill actually went. */}
           <div className="mb-3">
             <div className="flex justify-between text-[10px] text-gray-400 mb-1">
               <span>Input · {fmtUsdShort(row.inputCostUsd)}</span>
@@ -260,7 +260,7 @@ function CategoryCard({ row }: { row: PricingCategoryRow }) {
             </div>
           </div>
 
-          {/* Cache hit footer — when prompt prefix caching is working, $/1K
+          {/* Cache hit footer - when prompt prefix caching is working, $/1K
               effective drops sharply. Useful sanity check next to the rates. */}
           <div className="flex items-center justify-between text-[11px] text-gray-500 pt-2 border-t border-gray-100">
             <span>Cache hit: <span className={clsx(
@@ -309,7 +309,7 @@ type CalcRow = {
 };
 
 function CalculatorSection({ categories }: { categories: PricingCategoryRow[] }) {
-  // Categories that actually have data — calculator otherwise has nothing to
+  // Categories that actually have data - calculator otherwise has nothing to
   // base unit cost on.
   const billable = categories.filter((c) => c.calls > 0 || c.category === "autonomous_agent" || c.category === "call_pilot" || c.category === "copilot_inbox");
 
@@ -502,7 +502,7 @@ function CalculatorSection({ categories }: { categories: PricingCategoryRow[] })
       </div>
       <p className="text-[11px] text-gray-400 mt-2 px-1">
         Unit costs reflect observed average over the selected period (cache-discounted). Suggested
-        price = cost ÷ (1 − margin). Call-pilot covers AI tokens only — Twilio/STT/TTS provider
+        price = cost ÷ (1 − margin). Call-pilot covers AI tokens only - Twilio/STT/TTS provider
         fees are not included.
       </p>
     </section>
@@ -520,7 +520,7 @@ function TrendsSection({ trends }: { trends: PricingTrends | null }) {
   );
   const maxDaily = Math.max(0.0001, ...dailyTotals);
 
-  // Visible series — drop categories that contributed nothing in this period
+  // Visible series - drop categories that contributed nothing in this period
   // so the legend doesn't bloat.
   const visibleSeries = trends.series.filter((s) => s.cost.some((v) => v > 0));
 
@@ -546,7 +546,7 @@ function TrendsSection({ trends }: { trends: PricingTrends | null }) {
           })}
         </div>
 
-        {/* Bars — pure CSS stacked column chart. Width auto-fits container. */}
+        {/* Bars - pure CSS stacked column chart. Width auto-fits container. */}
         <div className="flex items-end gap-0.5 h-48 overflow-x-auto pb-1">
           {trends.days.map((day, i) => {
             const dayTotal = dailyTotals[i];
@@ -576,7 +576,7 @@ function TrendsSection({ trends }: { trends: PricingTrends | null }) {
           })}
         </div>
 
-        {/* X-axis labels — only first, middle, last to avoid clutter. */}
+        {/* X-axis labels - only first, middle, last to avoid clutter. */}
         <div className="flex justify-between mt-1 px-1 text-[10px] text-gray-400">
           <span>{trends.days[0]}</span>
           {trends.days.length > 2 && <span>{trends.days[Math.floor(trends.days.length / 2)]}</span>}
@@ -614,7 +614,7 @@ function PricingTable({ pricing }: { pricing: Record<string, { prompt: number; c
                 <td className="py-2 px-4 text-end font-mono text-xs">${p.prompt.toFixed(2)}</td>
                 <td className="py-2 px-4 text-end font-mono text-xs">${p.completion.toFixed(2)}</td>
                 <td className="py-2 px-4 text-end font-mono text-xs text-gray-400">
-                  {p.prompt > 0 ? `1 : ${(p.completion / p.prompt).toFixed(1)}` : "—"}
+                  {p.prompt > 0 ? `1 : ${(p.completion / p.prompt).toFixed(1)}` : "-"}
                 </td>
               </tr>
             ))}

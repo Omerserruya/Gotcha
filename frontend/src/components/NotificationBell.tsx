@@ -39,7 +39,7 @@ function playPing() {
     osc.stop(ctx.currentTime + 0.2);
     osc.onended = () => ctx.close();
   } catch {
-    // AudioContext unavailable — ignore silently
+    // AudioContext unavailable - ignore silently
   }
 }
 
@@ -101,7 +101,7 @@ export function useNotificationStream(
     pollInterval.current = setInterval(async () => {
       try {
         await getUnreadCount(token);
-        // count-only poll — the bell will re-fetch on next open
+        // count-only poll - the bell will re-fetch on next open
       } catch {
         // swallow
       }
@@ -134,7 +134,7 @@ export function useNotificationStream(
             onNew(msg.data);
           }
         } catch {
-          // malformed frame — ignore
+          // malformed frame - ignore
         }
       };
 
@@ -290,7 +290,7 @@ export function NotificationBell() {
 
   return (
     <div className="relative">
-      {/* Bell button — fixed width so badge never shifts siblings */}
+      {/* Bell button - fixed width so badge never shifts siblings */}
       <button
         ref={buttonRef}
         onClick={() => setOpen((v) => !v)}
@@ -305,7 +305,7 @@ export function NotificationBell() {
         )}
       >
         <BellIcon className="w-5 h-5" />
-        {/* Badge — pre-allocated 18px slot so layout is stable */}
+        {/* Badge - pre-allocated 18px slot so layout is stable */}
         <span
           aria-hidden={unreadCount === 0}
           className={clsx(

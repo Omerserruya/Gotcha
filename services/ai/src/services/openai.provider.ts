@@ -1,5 +1,5 @@
 /**
- * OpenAI Provider — refactored to use central aiService for ALL LLM calls.
+ * OpenAI Provider - refactored to use central aiService for ALL LLM calls.
  * Reads BehaviorState for output contract + KB gating + tool surface.
  */
 
@@ -21,12 +21,12 @@ import {
   type BehaviorState,
 } from "./behavior-engine.service";
 
-// Terminator tool — copilot uses this to "finish" with structured output.
+// Terminator tool - copilot uses this to "finish" with structured output.
 //
 // `signals` is OPTIONAL and DELIBERATELY NOISE-INTOLERANT. The default outcome
 // for any inbound is **no signal**. Only emit a signal when the customer's
 // LATEST inbound message contains a clear, quotable phrase that proves the
-// signal — never on tone alone, never on the bot's interpretation, never on
+// signal - never on tone alone, never on the bot's interpretation, never on
 // trivial messages (one-word replies, emoji-only, < 5 words).
 const SIGNAL_KINDS = [
   "buy_intent",        // Strong purchase intent: "I want to buy", "let's go ahead", "send me the contract"
@@ -102,7 +102,7 @@ interface MessageSignal {
 /**
  * Validate, dedupe and persist signals on the latest inbound message of a conversation.
  *
- * Filters applied (defense in depth — the prompt already says these things, but
+ * Filters applied (defense in depth - the prompt already says these things, but
  * the model has been known to ignore prompts):
  *   - confidence < 0.85         → drop
  *   - evidence not actually present in the message body → drop
@@ -139,7 +139,7 @@ async function persistMessageSignals(
   const seenKinds = new Set<string>();
   const cleaned: MessageSignal[] = [];
 
-  // Collect kinds already present on EARLIER inbounds in this conversation —
+  // Collect kinds already present on EARLIER inbounds in this conversation -
   // we don't re-flag the same signal across turns.
   const earlierMessages = await prisma.message.findMany({
     where: { tenantId, conversationId, direction: "INBOUND", id: { not: latestInbound.id } },
@@ -190,7 +190,7 @@ async function persistMessageSignals(
 }
 
 // Minimal stub agent used when no copilotConfig is present (tests / dev).
-// `description` field dropped per spec — identity flows through role +
+// `description` field dropped per spec - identity flows through role +
 // persona + identity block, never free-text on the agent record.
 const STUB_COPILOT_AGENT: AgentRecord = {
   name: "AI Copilot",
@@ -219,13 +219,13 @@ function renderCustomerInfoBlock(context: ConversationContext): string | undefin
   // restart relationships or repeat commitments.
   if (mem) {
     if (mem.openIssues && mem.openIssues.length) {
-      lines.push("", "## Open Issues (CRM tasks — outstanding commitments)");
+      lines.push("", "## Open Issues (CRM tasks - outstanding commitments)");
       for (const i of mem.openIssues.slice(0, 5)) {
         const parts: string[] = [];
         if (i.priority) parts.push(`[${i.priority}]`);
         if (i.status) parts.push(`(${i.status})`);
         parts.push(i.subject);
-        if (i.due_at) parts.push(`— due ${i.due_at}`);
+        if (i.due_at) parts.push(`- due ${i.due_at}`);
         lines.push(`- ${parts.join(" ")}`);
       }
     }
@@ -235,7 +235,7 @@ function renderCustomerInfoBlock(context: ConversationContext): string | undefin
         const head: string[] = [`[${s.channel}` + (s.occurredAt ? ` ${s.occurredAt.slice(0, 10)}]` : "]")];
         if (s.sentiment) head.push(`sentiment: ${s.sentiment}`);
         if (s.qualification) head.push(`qualification: ${s.qualification}`);
-        lines.push(`- ${head.join(" — ")}`);
+        lines.push(`- ${head.join(" - ")}`);
         if (s.summary) lines.push(`  ${s.summary.slice(0, 280)}`);
       }
     }
@@ -269,7 +269,7 @@ export class OpenAIProvider implements AIProvider {
       return [{ id: "disabled", text: "Co-Pilot is disabled for this tenant.", confidence: 0, type: "info" }];
     }
 
-    // ── BEL — copilot mode forces SUPPORT_AGENT, advisory autonomy.
+    // ── BEL - copilot mode forces SUPPORT_AGENT, advisory autonomy.
     const lastInbound = [...context.messages].reverse().find((m) => m.direction === "INBOUND");
     const copilotBehavior = computeBehaviorState({
       mode: "copilot",
@@ -282,11 +282,15 @@ export class OpenAIProvider implements AIProvider {
         lastMessage: lastInbound?.body || "",
         messageCount: context.messages.length,
         recentDirections: context.messages.slice(-5).map((m) => m.direction),
+        recentInboundTexts: context.messages
+          .filter((m) => m.direction === "INBOUND")
+          .slice(-5)
+          .map((m) => m.body || ""),
       },
       copilotPreferredMode: config?.copilotMode,
     });
 
-    // ── KB — strategy-controlled, NOT regex.
+    // ── KB - strategy-controlled, NOT regex.
     let kbBlock: string | undefined;
     if (context.tenantId && lastInbound?.body && shouldRetrieveKB(copilotBehavior, lastInbound.body)) {
       try {
@@ -333,7 +337,7 @@ export class OpenAIProvider implements AIProvider {
         const surface = await buildAgentToolsForAIAgent(context.tenantId, aiAgentId, {
           identityLinking: !!contactId,
           escalation: false,
-          // Copilot is advisory — it must NOT close the conversation or
+          // Copilot is advisory - it must NOT close the conversation or
           // schedule a follow-up on its own. Those are human-agent decisions.
           // Leaving these on caused the LLM to fire close_conversation on
           // casual copilot questions and bounce the chat into history.
@@ -459,7 +463,7 @@ export class OpenAIProvider implements AIProvider {
       return out;
     } catch (err: any) {
       // Abort: caller (voice-assist.triggerAssist) is in charge of the
-      // skip-publish decision — re-throw so we don't replace fresh
+      // skip-publish decision - re-throw so we don't replace fresh
       // suggestions with a stale "AI suggestion error" placeholder.
       if (isAbortError(err)) throw err;
       console.error("OpenAI suggestion error:", err.message);
@@ -497,7 +501,7 @@ export class OpenAIProvider implements AIProvider {
               "• **What they need now**: what the customer is asking for or waiting on right now (from their latest message)\n" +
               "• **Status**: where things stand (resolved, pending, escalated, etc.)\n" +
               "• **Next step**: what the agent should do next\n" +
-              "Be brief — one line per point." + langInstruction,
+              "Be brief - one line per point." + langInstruction,
           },
           { role: "user", content: messagesText },
         ],
@@ -560,7 +564,7 @@ export class OpenAIProvider implements AIProvider {
       customerBlock = lines.join("\n");
     }
 
-    // BEL — copilot CHAT mode (or whatever copilotPreferredMode says).
+    // BEL - copilot CHAT mode (or whatever copilotPreferredMode says).
     const lastInbound = [...params.messages].reverse().find((m) => m.direction === "INBOUND");
     const chatBehavior = computeBehaviorState({
       mode: "copilot",
@@ -573,6 +577,10 @@ export class OpenAIProvider implements AIProvider {
         lastMessage: lastInbound?.body || params.agentMessage || "",
         messageCount: params.messages.length,
         recentDirections: params.messages.slice(-5).map((m) => m.direction),
+        recentInboundTexts: params.messages
+          .filter((m) => m.direction === "INBOUND")
+          .slice(-5)
+          .map((m) => m.body || ""),
       },
       copilotPreferredMode: config?.copilotMode ?? "CHAT",
     });
@@ -600,7 +608,7 @@ export class OpenAIProvider implements AIProvider {
       });
       chatContactId = contact?.id;
     }
-    // Copilot CHAT — advisory to the human agent. Same gating as
+    // Copilot CHAT - advisory to the human agent. Same gating as
     // suggestResponse: NEVER expose close_conversation / schedule_followup,
     // otherwise the LLM closes the live conversation while the agent is just
     // asking it a question.
@@ -741,5 +749,5 @@ function humanizeQuickAction(toolName: string, args: Record<string, unknown>): s
     .slice(0, 3)
     .map(([k, v]) => `${k}: ${typeof v === "string" ? v : JSON.stringify(v)}`)
     .join(", ");
-  return preview ? `${verb} — ${preview}` : verb;
+  return preview ? `${verb} - ${preview}` : verb;
 }

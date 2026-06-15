@@ -108,7 +108,7 @@ describe("WebhookTrigger management API", () => {
       expect(prisma.webhookTrigger.create).not.toHaveBeenCalled();
     });
 
-    it("is idempotent — returns the existing trigger instead of creating", async () => {
+    it("is idempotent - returns the existing trigger instead of creating", async () => {
       (prisma.chatbotFlow.findFirst as any).mockResolvedValue({ id: "flow-1" });
       (prisma.webhookTrigger.findFirst as any).mockResolvedValue(TRIGGER);
       const res = await request(createTestApp())
@@ -162,7 +162,7 @@ describe("WebhookTrigger management API", () => {
 
     it("connected mode provisions without a flow pick / flow-exists check (auto-anchored to the node id)", async () => {
       // No ChatbotFlow exists for the auto-anchor (it's the trigger node's own
-      // canvas id, not a flow) — connected mode must NOT consult chatbotFlow and
+      // canvas id, not a flow) - connected mode must NOT consult chatbotFlow and
       // must NOT 404.
       (prisma.webhookTrigger.findFirst as any).mockResolvedValue(null);
       (prisma.webhookTrigger.create as any).mockImplementation(({ data }: any) => ({

@@ -25,7 +25,7 @@ const SALT_ROUNDS = 10;
 // tenants, aggregate usage across tenants, create new tenant admins,
 // etc). Enable the Prisma tenant-guard opt-out for this entire router.
 // Safe because every handler below is already gated by authenticate +
-// requireSystemAdmin() — only SYSTEM_ADMIN users ever reach this code.
+// requireSystemAdmin() - only SYSTEM_ADMIN users ever reach this code.
 router.use(crossTenantMiddleware);
 
 // ─── System Admin Login (no tenant slug needed) ──────────────
@@ -651,7 +651,7 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
 
     // AI-specific: feature + model breakdowns (only rows where type='ai_tokens')
     const aiWhere = { type: "ai_tokens", createdAt: { gte: since } };
-    // Cached prompt tokens live on `metadata.cachedPromptTokens` (JSONB) — Prisma
+    // Cached prompt tokens live on `metadata.cachedPromptTokens` (JSONB) - Prisma
     // can't aggregate them via groupBy, so we run parallel raw aggregates and
     // merge by key. Empty/missing values count as 0.
     const [byFeature, byModel, aiTotals, cachedTotalsRows, cachedByFeatureRows, cachedByModelRows] = await Promise.all([
@@ -709,7 +709,7 @@ router.get("/usage/stats", authenticate, requireSystemAdmin(), async (req: Reque
       completionTokens: aiTotals._sum.completionTokens || 0,
       costUsd: Number(aiTotals._sum.costUsd ?? 0),
       calls: aiTotals._count.id || 0,
-      // Cache observability — derived from OpenAI's prompt_tokens_details.cached_tokens
+      // Cache observability - derived from OpenAI's prompt_tokens_details.cached_tokens
       // captured in trackAIUsage(). Hit % is cached / total prompt; savings is the
       // 50%-discount applied at billing time vs. uncached.
       cachedPromptTokens: cachedTotal,
@@ -758,7 +758,7 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
       _count: { id: true },
     });
 
-    // Per-tenant AI feature breakdown — answers "which feature used how many
+    // Per-tenant AI feature breakdown - answers "which feature used how many
     // tokens per tenant" directly, no JSON probing needed.
     const [byTenantFeature, cachedByTenantFeatureRows] = await Promise.all([
       prisma.usageLog.groupBy({
@@ -876,7 +876,7 @@ router.get("/usage/by-tenant", authenticate, requireSystemAdmin(), async (req: R
 //    and output are billed at very different rates (e.g. gpt-4o = $2.50 in /
 //    $10 out per 1M). The stored UsageLog.costUsd column already reflects
 //    cache discounts; we re-derive the split here without re-applying them.
-//  - Per-conversation averages count distinct `metadata.conversationId` —
+//  - Per-conversation averages count distinct `metadata.conversationId` -
 //    embeddings and one-shot classifications won't have one, so those
 //    categories return null for that metric.
 
@@ -1017,7 +1017,7 @@ router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req
         cachedPromptTokens,
         totalTokens,
         costUsd,
-        // Re-derived split — may drift slightly from stored costUsd because
+        // Re-derived split - may drift slightly from stored costUsd because
         // of rounding; surface both so the dashboard can show observed total
         // and the in/out breakdown.
         inputCostUsd,
@@ -1033,7 +1033,7 @@ router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req
       };
     });
 
-    // Stable ordering — categories without any data still appear with zeros
+    // Stable ordering - categories without any data still appear with zeros
     // so the calculator UI can offer them as inputs even before traffic.
     const present = new Map(categories.map((c) => [c.category, c]));
     const ordered = AI_CATEGORY_ORDER.map((key) => {
@@ -1150,7 +1150,7 @@ router.get("/pricing/trends", authenticate, requireSystemAdmin(), async (req: Re
       since,
     );
 
-    // Build the full day list (UTC) — zero-fill missing days so the chart
+    // Build the full day list (UTC) - zero-fill missing days so the chart
     // shows a continuous timeline.
     const dayList: string[] = [];
     const today = new Date();

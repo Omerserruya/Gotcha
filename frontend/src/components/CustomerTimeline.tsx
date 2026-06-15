@@ -18,7 +18,7 @@ interface TimelineEvent {
 }
 
 /**
- * F1.5 — Minimal Unified Customer Timeline.
+ * F1.5 - Minimal Unified Customer Timeline.
  * Renders the cross-channel event stream returned by
  * GET /api/identity/:id/timeline.
  */
@@ -41,7 +41,7 @@ export default function CustomerTimeline({ token, contactId }: Props) {
 
   return (
     <div style={{ padding: 12, border: "1px solid #ddd", borderRadius: 8 }}>
-      <strong>Timeline{contactName ? ` — ${contactName}` : ""}</strong>
+      <strong>Timeline{contactName ? ` - ${contactName}` : ""}</strong>
       {error && <div style={{ color: "crimson" }}>{error}</div>}
       {events.length === 0 && !error && (
         <div style={{ color: "#888" }}>No events yet.</div>

@@ -3,11 +3,11 @@
  *
  * Replaces three scattered filtering mechanisms:
  *   1. `buildAgentTools(opts)` in @chatcenter/shared/lib/agent-tools.ts
- *      — boolean flags per built-in tool (closure / followup / etc.)
+ *      - boolean flags per built-in tool (closure / followup / etc.)
  *   2. `BehaviorState.allowedActions[]` filter in behavior-engine.service.ts
- *      — ActionCategory allowlist computed per turn
+ *      - ActionCategory allowlist computed per turn
  *   3. `LiveCallToolPolicy.evaluate()` in orchestrator/policy/
- *      — per-call gating decision
+ *      - per-call gating decision
  *
  * The unified policy is a pure function of:
  *   - the worker's mode
@@ -95,7 +95,7 @@ export interface ToolPolicyInput {
 export interface ToolPolicyDecision {
   /** Final tool names the worker may call this session. */
   allowed: string[];
-  /** Trace of what filtered each tool — keyed by tool name. */
+  /** Trace of what filtered each tool - keyed by tool name. */
   rejections: Record<string, string>;
   /** Trace summary suitable for log lines. */
   summary: string;
@@ -106,7 +106,7 @@ export interface ToolPolicyDecision {
 export function decideToolPolicy(input: ToolPolicyInput): ToolPolicyDecision {
   const rejections: Record<string, string> = {};
   // Dedup skill tools while preserving order (composer already dedups,
-  // but be defensive — callers may invoke directly).
+  // but be defensive - callers may invoke directly).
   const seen = new Set<string>();
   const candidates: string[] = [];
   for (const t of input.skillToolsAdded) {

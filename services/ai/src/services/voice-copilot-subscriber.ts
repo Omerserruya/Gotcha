@@ -8,7 +8,7 @@
  * Contract:
  *   Event: `voice.transcript` (tenantId, { speaker, isFinal, conversationId, ... })
  *   Trigger: speaker === "customer" && isFinal === true
- *   Behavior: scheduleAssistTrigger() — debounced 1500 ms, dedupes rapid finals.
+ *   Behavior: scheduleAssistTrigger() - debounced 1500 ms, dedupes rapid finals.
  *
  * Architecture rationale: we already own the final-utterance stream via the
  * voice-copilot → pub/sub projection; re-reading it here avoids an HTTP

@@ -1,19 +1,19 @@
-# `prompts/` — Authoring Guide
+# `prompts/` - Authoring Guide
 
 This folder holds the **editable markdown layers** that the prompt builder stitches together into the final system prompt sent to the LLM on every turn.
 
-You can edit these `.md` files directly — they are loaded at module init by [`prompt-builder.service.ts`](../services/prompt-builder.service.ts) and applied per the compile order below. **No code change needed to update text.**
+You can edit these `.md` files directly - they are loaded at module init by [`prompt-builder.service.ts`](../services/prompt-builder.service.ts) and applied per the compile order below. **No code change needed to update text.**
 
-> ⚠️ **Cache discipline.** OpenAI charges full price for the cache-miss tokens but ~10% for cached prefix tokens. Our prompt is structured as three blocks (per-agent → per-conversation → per-turn) and the **byte-stable prefix** must not drift. Editing a static-layer file (`guardrails.md`, agent identity) is fine — every conversation will re-cache on next turn. But **do not** introduce per-turn variability into static layers. See "Cache rules" below.
+> ⚠️ **Cache discipline.** OpenAI charges full price for the cache-miss tokens but ~10% for cached prefix tokens. Our prompt is structured as three blocks (per-agent → per-conversation → per-turn) and the **byte-stable prefix** must not drift. Editing a static-layer file (`guardrails.md`, agent identity) is fine - every conversation will re-cache on next turn. But **do not** introduce per-turn variability into static layers. See "Cache rules" below.
 
 ---
 
-## Compile order — every turn
+## Compile order - every turn
 
 The final prompt is built in **three blocks**, joined by `---` separators. Order is load-bearing for OpenAI prefix caching.
 
 ```
-[ BLOCK 1 — Per-AGENT ]   ← static; same for every conversation this agent runs
+[ BLOCK 1 - Per-AGENT ]   ← static; same for every conversation this agent runs
    1. # Identity              ← AIAgent row (name, role, tone, persona)
    2. # Agent Playbooks       ← AIAgent.playbooks (DB)
    3. # Guardrails            ← guardrails.md  ★ editable here
@@ -22,13 +22,13 @@ The final prompt is built in **three blocks**, joined by `---` separators. Order
 
 ---
 
-[ BLOCK 2 — Per-CONVERSATION ]   ← stable for the lifetime of one chat
+[ BLOCK 2 - Per-CONVERSATION ]   ← stable for the lifetime of one chat
    6. # Conversation Context  ← customer block, CRM, memory, templates
    7. Language Skill          ← hebrew.md (if locale=he)  ★ editable here
 
 ---
 
-[ BLOCK 3 — Per-TURN ]   ← fresh every turn — MUST come last for cache
+[ BLOCK 3 - Per-TURN ]   ← fresh every turn - MUST come last for cache
    8. # Conversation State    ← BehaviorState (BEL output)
    9. # Pipeline Stage        ← active funnel stage
   10. # Goals                 ← strategy primaryGoal
@@ -50,31 +50,31 @@ The user's [request](../../README.md) was that every agent prompt must include t
 
 | # | Pillar | Where it lives today |
 |---|---|---|
-| 1 | **Self-introduce** — how the bot opens & names itself | `# Identity` (section 1) — sourced from `AIAgent.identity.intro` + `agent.tone`. Edit on the agent's settings page, not here. |
-| 2 | **Goal** — funnel stage or main goal | `# Goals` (section 10) + `# Pipeline Stage` (section 9). Sourced from `STRATEGY_CONTRACTS[strategy].primaryGoal` (frozen, platform-level) and the agent's `funnel` (if any). |
-| 3 | **Client-serving manner** — empathy, brevity, professionalism | Distributed: `# Identity` (tone, persona traits), `# Forbidden in turn` (strategy.forbiddenBehaviors), and the language skill (sect. 7) for locale-specific style. |
-| 4 | **Tech rules** — "always look for X before calling tool Y" | `# Execution Contract` (section 15) — strongest scaffolding in the prompt. Built per-turn from BEL decision intent + tool gating. To add a new tech rule, edit `prompt-builder.service.ts` `buildExecutionContract()`, NOT here. |
-| 5 | **Language rules** — locale style | This folder: `hebrew.md` for `locale=he`. Add `arabic.md`, `spanish.md`, etc. as needed and wire them in `languageSkillBlock()` in the builder. |
+| 1 | **Self-introduce** - how the bot opens & names itself | `# Identity` (section 1) - sourced from `AIAgent.identity.intro` + `agent.tone`. Edit on the agent's settings page, not here. |
+| 2 | **Goal** - funnel stage or main goal | `# Goals` (section 10) + `# Pipeline Stage` (section 9). Sourced from `STRATEGY_CONTRACTS[strategy].primaryGoal` (frozen, platform-level) and the agent's `funnel` (if any). |
+| 3 | **Client-serving manner** - empathy, brevity, professionalism | Distributed: `# Identity` (tone, persona traits), `# Forbidden in turn` (strategy.forbiddenBehaviors), and the language skill (sect. 7) for locale-specific style. |
+| 4 | **Tech rules** - "always look for X before calling tool Y" | `# Execution Contract` (section 15) - strongest scaffolding in the prompt. Built per-turn from BEL decision intent + tool gating. To add a new tech rule, edit `prompt-builder.service.ts` `buildExecutionContract()`, NOT here. |
+| 5 | **Language rules** - locale style | This folder: `hebrew.md` for `locale=he`. Add `arabic.md`, `spanish.md`, etc. as needed and wire them in `languageSkillBlock()` in the builder. |
 
 ---
 
 ## Files in this folder
 
-### `guardrails.md` — Loaded into every prompt (BLOCK 1)
+### `guardrails.md` - Loaded into every prompt (BLOCK 1)
 Hard rules the bot must never violate: data privacy, brand safety, jailbreak resistance, scope control, customer data boundaries, authority hierarchy. **This is the safety layer.** Editing here changes behavior for every agent in every tenant.
 
-### `hebrew.md` — Loaded only when `locale === "he"` (BLOCK 2)
+### `hebrew.md` - Loaded only when `locale === "he"` (BLOCK 2)
 Hebrew style skill: natural Israeli phrasing, qualifying-questions ladder, idioms (סגור, פיקס, בכיף), opener words (אז, אגב), info-gathering order. The customer's language is detected by `detectLocale()` in `ai-bot.service.ts`.
 
 ### Other `.md` files in this folder
 
 These exist for unrelated AI flows and are **not** loaded into the autonomous chatbot's prompt:
-- `system-copilot.md` — used by the System Copilot (Command Center)
-- `intent-classifier.md`, `action-planner.md` — legacy flows; not currently imported
+- `system-copilot.md` - used by the System Copilot (Command Center)
+- `intent-classifier.md`, `action-planner.md` - legacy flows; not currently imported
 
 ---
 
-## Cache rules — read before editing
+## Cache rules - read before editing
 
 The prompt is split into three blocks for one reason: **OpenAI caches the prefix**. If you preserve byte-stability in BLOCK 1 and BLOCK 2 across turns, the model only pays full price for BLOCK 3 (per-turn). This is roughly a **10× cost reduction** on long conversations.
 

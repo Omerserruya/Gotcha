@@ -12,8 +12,8 @@
  * Lifecycle + call-progress webhooks from Twilio.
  *
  * All routes authenticate via the configured VoiceProvider's signature
- * validator (Twilio HMAC-SHA1 today). Provider-specific work — TwiML
- * generation, dialing the customer leg, attaching media streams — is
+ * validator (Twilio HMAC-SHA1 today). Provider-specific work - TwiML
+ * generation, dialing the customer leg, attaching media streams - is
  * delegated to the provider resolved for the request's tenant. Phase 1
  * always resolves to the shared TwilioProvider.
  */
@@ -54,7 +54,7 @@ function verifySignatureWith(
   return async (req: Request, res: Response, next: NextFunction): Promise<void> => {
     const tenantId = tenantResolver(req);
     if (!tenantId) {
-      logger.warn({ path: req.originalUrl }, "twiml: missing tenantId on body — cannot resolve provider");
+      logger.warn({ path: req.originalUrl }, "twiml: missing tenantId on body - cannot resolve provider");
       res.status(400).json({ error: "missing_tenant" });
       return;
     }
@@ -142,7 +142,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
       const conversationId = String(body.conversationId || "").trim();
       const notes = body.notes ? String(body.notes) : "";
       const agentId = String(body.agentId || "").trim();
-      // The Voice-SDK agent leg's CallSid — Twilio includes it in every
+      // The Voice-SDK agent leg's CallSid - Twilio includes it in every
       // /outbound post. Used later to disambiguate agent vs customer on
       // participant-join (body.Caller isn't sent for conference events).
       const agentCallSid = String(body.CallSid || "").trim();
@@ -152,7 +152,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         return;
       }
       if (!provider.callerId) {
-        logger.error("Voice provider has no caller ID configured — outbound TwiML cannot be generated");
+        logger.error("Voice provider has no caller ID configured - outbound TwiML cannot be generated");
         res.type("text/xml").status(500).send(provider.generateErrorTwiml("Outbound calling is not configured on this server."));
         return;
       }
@@ -289,7 +289,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         // endpoint can dial the new leg into the right Twilio conference.
         conferenceSid?: string;
         // Stashed when the customer leg joins so hold/unhold can target
-        // the right participant — outbound dials the customer second so
+        // the right participant - outbound dials the customer second so
         // the callSid isn't known up-front.
         customerCallSid?: string;
       };
@@ -334,7 +334,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           // Speaker attribution (body.Caller is not present on conference
           // callbacks, so we can't rely on it). Priority order:
           //   1. Twilio's ParticipantLabel (set via `label` in REST dial for
-          //      the customer leg — arrives as body.ParticipantLabel).
+          //      the customer leg - arrives as body.ParticipantLabel).
           //   2. CallSid comparison against the stashed agent parent-leg SID.
           //   3. For inbound: the customer leg is the one that originally rang
           //      in (its SID is stashed as meta.callSid); the agent leg is
@@ -348,7 +348,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           else if (isInbound) speaker = "agent";
           else speaker = "customer";
 
-          // Dial the customer when the agent joins — outbound conferences only.
+          // Dial the customer when the agent joins - outbound conferences only.
           // Inbound conferences already have the customer waiting on hold.
           if (!isInbound && speaker === "agent" && !meta.customerDialed) {
             logger.info({ event, conferenceSid, customerNumber: meta.customerNumber }, "conference: dialing customer");
@@ -375,7 +375,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           const wsHost = new URL(publicBaseUrl).host;
           const wsUrl = `wss://${wsHost}/twilio/media-stream/${encodeURIComponent(meta.tenantId)}`;
 
-          // Metadata via Twilio's native `parameter.N` fields — arrives as
+          // Metadata via Twilio's native `parameter.N` fields - arrives as
           // `customParameters` on the WS `start` frame. URL query string was
           // being stripped somewhere between Twilio and our nginx.
           await provider.attachMediaStreamToCall({
@@ -392,10 +392,10 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           logger.info({ event, conferenceSid, callSid, speaker, label: label || null, isInbound }, "conference: attached media stream to participant");
 
           // The call is ACTIVE once a human-on-each-side bridge exists:
-          //   • Outbound — agent leg is already CONNECTING from placement;
+          //   • Outbound - agent leg is already CONNECTING from placement;
           //     when the customer joins the conference, both parties are
           //     bridged → ACTIVE.
-          //   • Inbound  — customer joined first (hold music), session is
+          //   • Inbound  - customer joined first (hold music), session is
           //     CONNECTING after the agent clicks /answer; when the agent's
           //     browser actually joins the conference, both parties are
           //     bridged → ACTIVE. The earlier "/api/voice/incoming/status
@@ -481,7 +481,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
             }
           }
         } else if (event === "participant-leave") {
-          // Mark the matching row LEFT. Lookup by (sessionId, callSid) —
+          // Mark the matching row LEFT. Lookup by (sessionId, callSid) -
           // it's been stable since participant-join. Best-effort; if no
           // row matches we never tracked the leg, which is fine.
           const callSid = body.CallSid;
@@ -502,7 +502,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
             // edge cases (cold transfer to added-only legs, dropped
             // status events) the conference can outlive the last real
             // speaker. If `answeredAt` is null nobody actually picked up
-            // (the customer hung up while still on hold) — log as MISSED
+            // (the customer hung up while still on hold) - log as MISSED
             // so the missed-call inbox is correct.
             try {
               const remaining = await prisma.voiceSessionParticipant.count({
@@ -518,7 +518,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
                   logger.info({ sessionId: meta.sessionId, target }, "participant-leave: no participants left, closing session");
                   await transitionVoiceCallSessionState(meta.sessionId, target, { reason: "all_participants_left" })
                     .catch((err) => logger.warn({ err, sessionId: meta.sessionId, target }, "participant-leave: transition failed"));
-                  // Fire the WhatsApp callback template only on MISSED —
+                  // Fire the WhatsApp callback template only on MISSED -
                   // ENDED means someone actually spoke, no nudge needed.
                   if (target === "MISSED") {
                     fireMissedTemplate(meta.sessionId, logger);
@@ -532,7 +532,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
         } else if (event === "conference-end") {
           // Transition the VoiceCallSession to ENDED so backend state agrees
           // with reality even when the browser misses the Twilio client-side
-          // disconnect event. Applies to both inbound and outbound — both
+          // disconnect event. Applies to both inbound and outbound - both
           // stash sessionId in meta now.
           //
           // Race guard: an agent decline / customer-hangup-while-ringing can
@@ -550,14 +550,14 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
               });
               if (fresh && !TERMINAL_STATES.has(fresh.state as CallState)) {
                 // Conference ending without anyone ever answering means
-                // nobody actually spoke to the caller — log as MISSED
+                // nobody actually spoke to the caller - log as MISSED
                 // instead of ENDED so the missed-call inbox is correct.
                 const target: CallState = fresh.answeredAt ? "ENDED" : "MISSED";
                 await transitionVoiceCallSessionState(meta.sessionId, target, { reason: "conference_ended" });
                 // Fire the WhatsApp template only when we actually flipped
                 // to MISSED here (the /status webhook handles the case
                 // where Twilio reports the parent leg terminally first).
-                // Idempotent — the endpoint short-circuits if already fired.
+                // Idempotent - the endpoint short-circuits if already fired.
                 if (target === "MISSED") {
                   fireMissedTemplate(meta.sessionId, logger);
                 }
@@ -591,7 +591,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
 
   // ─── Customer-leg status callback (outbound decline detection) ─
   // Twilio POSTs here when the customer-side dial completes. The leg may
-  // never have joined the conference (no-answer/busy/canceled/failed) — in
+  // never have joined the conference (no-answer/busy/canceled/failed) - in
   // that case we transition the VoiceCallSession to MISSED/FAILED and hang
   // up the agent leg so the agent isn't left alone in an empty conference.
   router.post(
@@ -610,7 +610,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
       const redis = getRedis();
       const metaRaw = await redis.get(`conf:${friendlyName}`).catch(() => null);
       if (!metaRaw) {
-        // Meta may already be cleared by conference-end — nothing to do.
+        // Meta may already be cleared by conference-end - nothing to do.
         res.status(204).end();
         return;
       }
@@ -665,14 +665,14 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
           reason: `customer_${callStatus}`,
         });
         if (!result.ok && result.reason === "invalid_transition") {
-          // Session already terminal (e.g. agent hung up first) — nothing to do.
+          // Session already terminal (e.g. agent hung up first) - nothing to do.
           logger.info({ sessionId: meta.sessionId, from: result.from, to: result.to }, "customer-status: session already terminal");
         }
       } catch (transErr) {
         logger.warn({ err: transErr, sessionId: meta.sessionId, target }, "customer-status: session transition failed");
       }
 
-      // Tell the workspace UI specifically — the generic `voice.session.state`
+      // Tell the workspace UI specifically - the generic `voice.session.state`
       // event already fires from the transition above, but a dedicated event
       // lets the page render "Customer didn't answer" vs a plain redirect.
       try {
@@ -730,7 +730,7 @@ export function createTwilioTwimlRouter(opts: TwilioTwimlRouterOpts): Router {
   // TwiML-App-level StatusCallback registered during channel provisioning
   // (see services/conversation/src/routes/voice-channels.ts: Applications.json
   // StatusCallback URL). Twilio's payload here is the standard webhook shape
-  // (CallSid, CallStatus, ApplicationSid, AccountSid, From, To...) — there
+  // (CallSid, CallStatus, ApplicationSid, AccountSid, From, To...) - there
   // is no tenantId field, so the standard signature verifier can't run.
   // The endpoint is logging-only; Twilio doesn't accept commands from the
   // response, so an unverified 204 is safe and stops the 404 noise in logs.

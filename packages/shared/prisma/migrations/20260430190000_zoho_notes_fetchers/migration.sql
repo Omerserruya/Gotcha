@@ -16,7 +16,7 @@ VALUES
   ('tool_zoho_crm_get_lead_notes', 'get_lead_notes', 'cat_zoho_crm',
    'Get Lead Notes',
    'Fetch the timeline notes for a Zoho lead by record id.',
-   'Use to recall what was said or done with this lead in past interactions before drafting a reply. Pre-fetched automatically at the start of every conversation turn — you usually do not need to call this directly.',
+   'Use to recall what was said or done with this lead in past interactions before drafting a reply. Pre-fetched automatically at the start of every conversation turn - you usually do not need to call this directly.',
    'READ', 'LOW', true, 16, 'GET', '/crm/v7/Leads/:id/Notes',
    '{
      "type": "object",

@@ -1,22 +1,22 @@
 /**
- * Monday.com adapter — production-grade.
+ * Monday.com adapter - production-grade.
  *
  * Auth: Monday OAuth (Authorization Code grant). Tokens last 1 year so we
- * mostly don't refresh — but if `refreshToken` is present we honor it.
+ * mostly don't refresh - but if `refreshToken` is present we honor it.
  *
  * Setup:
  *   - Tenant connects via OAuth → we list boards for selection.
  *   - Optionally pin one default board id in `config.defaultBoardId`.
  *
  * Tools (top patterns from Monday automation use-cases):
- *   - monday.list_boards       — admin selector + AI discovery
- *   - monday.list_items        — items on a board (paginated)
- *   - monday.get_item          — full item detail
- *   - monday.create_item       — new item on a board
- *   - monday.update_item_column — patch one column on an item
- *   - monday.add_item_update   — add a comment/update on an item
+ *   - monday.list_boards       - admin selector + AI discovery
+ *   - monday.list_items        - items on a board (paginated)
+ *   - monday.get_item          - full item detail
+ *   - monday.create_item       - new item on a board
+ *   - monday.update_item_column - patch one column on an item
+ *   - monday.add_item_update   - add a comment/update on an item
  *
- * API: GraphQL — single endpoint at https://api.monday.com/v2.
+ * API: GraphQL - single endpoint at https://api.monday.com/v2.
  */
 
 import {
@@ -130,7 +130,7 @@ const TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         object: { type: "string", enum: ["leads", "contacts"], description: "Whose board to describe." },
-        board_id: { type: "string", description: "Override — defaults to leadsBoardId/contactsBoardId from config." },
+        board_id: { type: "string", description: "Override - defaults to leadsBoardId/contactsBoardId from config." },
       },
       required: ["object"],
     },
@@ -145,7 +145,7 @@ const TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         object: { type: "string", enum: ["leads", "contacts"] },
-        board_id: { type: "string", description: "Override — defaults to config.leadsBoardId/contactsBoardId." },
+        board_id: { type: "string", description: "Override - defaults to config.leadsBoardId/contactsBoardId." },
         column_rules: {
           type: "array",
           description: "Array of {column_id, compare_value, operator?} matching Monday's items_page_by_column_values input.",
@@ -294,7 +294,7 @@ const MondayAdapter: ProviderAdapter = {
         const limit = Math.min(500, Number(args.limit ?? 200));
         const rules = Array.isArray(args.column_rules) ? args.column_rules : [];
         if (rules.length === 0) {
-          // No column rules — fall back to listing the board's items.
+          // No column rules - fall back to listing the board's items.
           const q = `query($id: [ID!]!, $limit: Int!) {
             boards(ids: $id) {
               items_page(limit: $limit) {

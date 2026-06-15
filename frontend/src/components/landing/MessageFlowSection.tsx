@@ -49,7 +49,7 @@ const FloatingText = memo(function FloatingText({
         ...style,
       }}
     >
-      {/* Subtle backdrop on mobile — fades out at bottom */}
+      {/* Subtle backdrop on mobile - fades out at bottom */}
       <div className="md:hidden absolute -inset-4 -z-10 rounded-xl" style={{ background: "linear-gradient(180deg, rgba(14,14,18,0.8) 0%, rgba(14,14,18,0.5) 70%, transparent 100%)" }} />
       <p className="text-base sm:text-xl md:text-2xl font-light tracking-[-0.02em] text-white/90 leading-snug">
         {text}
@@ -225,9 +225,9 @@ function ScreenChat({ progress, isRtl, suggestProgress, t }: { progress: number;
 
   return (
     <div className="absolute inset-0 flex justify-center pointer-events-none">
-      {/* Chat area — always centered */}
+      {/* Chat area - always centered */}
       <div className="w-full max-w-md md:max-w-lg h-full flex flex-col justify-end px-3 sm:px-6 pb-[50px] md:pb-[50px] pt-[52vh] md:pt-0">
-        {/* Intent banner — above chat */}
+        {/* Intent banner - above chat */}
         {intentAppear > 0 && (
           <div
             className="mb-3 md:mb-4 flex items-start gap-2 md:gap-2.5 bg-gradient-to-r from-orange-500/10 to-purple-500/8 border border-orange-500/15 rounded-xl px-2.5 py-2 md:px-3.5 md:py-2.5 backdrop-blur-sm"
@@ -252,7 +252,7 @@ function ScreenChat({ progress, isRtl, suggestProgress, t }: { progress: number;
           </div>
         )}
 
-        {/* Chat messages — grow upward from the input, fade at top on mobile */}
+        {/* Chat messages - grow upward from the input, fade at top on mobile */}
         <div className="space-y-2.5 mb-4 flow-chat-fade">
           {messages.map((msg, i) => {
             const p = Math.min(1, Math.max(0, (progress - msg.delay) / 0.1));
@@ -281,7 +281,7 @@ function ScreenChat({ progress, isRtl, suggestProgress, t }: { progress: number;
           })}
         </div>
 
-        {/* Message input bar — pill shape, white, purple glow — always at bottom */}
+        {/* Message input bar - pill shape, white, purple glow - always at bottom */}
         <div className="w-full">
           <div className="relative">
             {/* Purple glow aura (always visible, intensifies when filled) */}
@@ -643,7 +643,7 @@ export default function MessageFlowSection({
   const opCopilot = progress < 0.43 ? 0 : progress < 0.68 ? Math.min(1, (progress - 0.43) / 0.06) : Math.max(0, 1 - (progress - 0.68) / 0.06);
   const opSummary = progress < 0.72 ? 0 : Math.min(1, (progress - 0.72) / 0.06);
 
-  // Floating text — positioned near each element
+  // Floating text - positioned near each element
   const txt1op = progress < 0.10 ? Math.min(1, progress / 0.05) : Math.max(0, 1 - (progress - 0.10) / 0.05);
   const txt2op = progress < 0.20 ? 0 : progress < 0.35 ? Math.min(1, (progress - 0.20) / 0.04) : Math.max(0, 1 - (progress - 0.35) / 0.04);
   const txt3op = progress < 0.44 ? 0 : progress < 0.62 ? Math.min(1, (progress - 0.44) / 0.04) : Math.max(0, 1 - (progress - 0.62) / 0.04);
@@ -696,7 +696,7 @@ export default function MessageFlowSection({
           </div>
         )}
 
-        {/* Stage 3: Chat + Copilot — Desktop: separate panels */}
+        {/* Stage 3: Chat + Copilot - Desktop: separate panels */}
         {opChat > 0 && (
           <div className="hidden md:block" style={{ opacity: opChat }}>
             <ScreenChat progress={pChat} isRtl={isRtl} suggestProgress={suggestInInput} t={t} />
@@ -708,12 +708,12 @@ export default function MessageFlowSection({
           </div>
         )}
 
-        {/* Stage 3: Mobile — stacked: copilot (compact) + chat (bottom-up) */}
+        {/* Stage 3: Mobile - stacked: copilot (compact) + chat (bottom-up) */}
         {(opChat > 0 || opCopilot > 0) && (
           <div className="md:hidden absolute inset-x-0 top-[200px] bottom-[40px] flex flex-col px-3" style={{ opacity: Math.max(opChat, opCopilot) }}>
-            {/* Copilot — compact fixed-height card, lines scroll within */}
+            {/* Copilot - compact fixed-height card, lines scroll within */}
             <div className="bg-[#12121f]/95 backdrop-blur-md rounded-xl border border-primary-500/10 px-3 py-2 mb-1 flex-shrink-0 h-[22vh] flex flex-col">
-              {/* Header — stays at top */}
+              {/* Header - stays at top */}
               <div className="flex items-center gap-1.5 mb-1.5 flex-shrink-0">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-primary-400">
                   <path d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25" />
@@ -727,7 +727,7 @@ export default function MessageFlowSection({
                   </span>
                 )}
               </div>
-              {/* Thinking lines — fill from bottom, old lines fade at top */}
+              {/* Thinking lines - fill from bottom, old lines fade at top */}
               <div className="flex-1 min-h-0 overflow-hidden flex flex-col justify-end flow-copilot-fade">
               <div className="space-y-1">
                 {[
@@ -766,9 +766,9 @@ export default function MessageFlowSection({
               </div>{/* close flow-copilot-fade wrapper */}
             </div>
 
-            {/* Chat — messages appear from bottom, go up, disappear behind copilot */}
+            {/* Chat - messages appear from bottom, go up, disappear behind copilot */}
             <div className="flex-1 min-h-0 flex flex-col">
-              {/* Intent — AI insight */}
+              {/* Intent - AI insight */}
               {pChat > 0.15 && (
                 <div className="flex items-center gap-1.5 text-[10px] text-orange-400/60 px-1 py-1 flex-shrink-0" style={{ opacity: easeOut(Math.min(1, (pChat - 0.15) / 0.1)) }}>
                   <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-orange-400/50 flex-shrink-0">
@@ -778,7 +778,7 @@ export default function MessageFlowSection({
                 </div>
               )}
 
-              {/* Messages — flex-col-reverse so they build from bottom */}
+              {/* Messages - flex-col-reverse so they build from bottom */}
               <div className="flex-1 min-h-0 overflow-hidden flex flex-col justify-end">
                 <div className="space-y-1.5 flow-chat-fade">
                   {[
@@ -807,7 +807,7 @@ export default function MessageFlowSection({
                 </div>
               </div>
 
-              {/* Input bar — prominent */}
+              {/* Input bar - prominent */}
               <div className="flex-shrink-0 mt-2">
                 <div className="relative">
                   <div className="absolute -inset-1.5 rounded-full blur-xl" style={{ background: "radial-gradient(ellipse, rgba(124,92,252,0.3) 0%, transparent 70%)", opacity: suggestInInput > 0.8 ? 1 : 0.5 }} />

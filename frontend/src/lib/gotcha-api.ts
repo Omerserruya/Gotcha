@@ -166,7 +166,7 @@ export async function runAgentStream(
         const ev = JSON.parse(json) as AgentSSEEvent;
         onEvent(ev);
       } catch {
-        // Malformed event — skip rather than blow up the loop.
+        // Malformed event - skip rather than blow up the loop.
       }
     }
   }
@@ -174,6 +174,181 @@ export async function runAgentStream(
 
 export function clearAgentMemory(token: string) {
   return req<{ removed: number }>("POST", "/api/agent/clear", token);
+}
+
+// ─── AI Employee Builder (dynamic creation agent) ───────────
+//
+// Replaces the old static creation wizard. The builder interviews the admin
+// and assembles one AIAgent config via tool-calls. The DRAFT row's id IS the
+// session id; each turn streams tokens + draft updates over SSE.
+
+export interface BuilderDraftSnapshot {
+  id: string;
+  name: string;
+  role: string;
+  status: string;
+  companyOverview: string | null;
+  goal: string | null;
+  successCriteria: string | null;
+  tone: string;
+  style: Record<string, boolean>;
+  languages: Record<string, boolean>;
+  persona: Record<string, unknown> | null;
+  escalationRules: Array<{ label?: string; enabled?: boolean }>;
+  escalationMessage: string;
+  conversationFlow: Array<{ id?: string; action?: string; details?: string }>;
+  customGuardrails: string[];
+  channels: string[];
+  funnel: { id: string; funnelId: string; stageCount: number } | null;
+  knowledge: Array<{ id: string; name: string }>;
+  tools: Array<{ tenantToolId: string; name: string; integration: string }>;
+}
+
+export type BuilderSSEEvent =
+  | { type: "ready"; sessionId: string }
+  | { type: "token"; text: string }
+  | { type: "tool_start"; toolCallId: string; name: string; args: unknown }
+  | { type: "tool_end"; toolCallId: string; name: string; ok: boolean; resultSummary: string }
+  | { type: "draft_update"; draft: BuilderDraftSnapshot }
+  | { type: "round_end"; round: number; hadToolCalls: boolean }
+  | { type: "finalized"; draft: BuilderDraftSnapshot; ready: boolean; missing: string[] }
+  | { type: "done"; usage: unknown; rounds: number }
+  | { type: "error"; message: string }
+  | { type: "close" };
+
+export function builderStart(token: string, departmentId?: string | null, locale?: string) {
+  return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string } }>(
+    "POST",
+    "/api/ai-agents/builder/start",
+    token,
+    { departmentId: departmentId ?? null, locale },
+  );
+}
+
+export function builderGetDraft(token: string, agentId: string) {
+  return req<{ data: { draft: BuilderDraftSnapshot; ready: boolean; missing: string[] } }>(
+    "GET",
+    `/api/ai-agents/builder/${agentId}/draft`,
+    token,
+  );
+}
+
+// Knowledge + tool options for the builder's checkbox-card UI.
+export interface BuilderOptionTool { tenantToolId: string; name: string; integration: string; risk: string; attached: boolean }
+export interface BuilderOptionKb { id: string; name: string; attached: boolean }
+export function builderGetOptions(token: string, agentId: string) {
+  return req<{ data: { tools: BuilderOptionTool[]; knowledgeBases: BuilderOptionKb[] } }>(
+    "GET",
+    `/api/ai-agents/builder/${agentId}/options`,
+    token,
+  );
+}
+export function builderToggleTool(token: string, agentId: string, tenantToolId: string, attach: boolean) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/tool`,
+    token,
+    { tenantToolId, attach },
+  );
+}
+export function builderToggleKnowledge(token: string, agentId: string, knowledgeBaseId: string, attach: boolean) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/knowledge`,
+    token,
+    { knowledgeBaseId, attach },
+  );
+}
+
+// Optional creation-wizard refinements (name / conversation flow / guardrails).
+// Saved deterministically from the dedicated wizard step. Send only the fields
+// you're changing; an empty array clears that field. Returns the fresh draft.
+export interface BuilderRefinements {
+  name?: string;
+  conversationFlow?: Array<{ id?: string; action: string; details?: string }>;
+  customGuardrails?: string[];
+}
+export function builderSaveRefinements(token: string, agentId: string, refinements: BuilderRefinements) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/refinements`,
+    token,
+    refinements,
+  );
+}
+
+// ─── Readiness Test ─────────────────────────────────────────
+export type ReadinessCoverage = "full" | "partial" | "none";
+export interface ReadinessQuestion {
+  question: string;
+  coverage: ReadinessCoverage;
+  reason: string;
+  gapType: "knowledge" | "tool" | "data" | "none";
+}
+export interface ReadinessRecommendation {
+  type: "add_knowledge" | "connect_tool" | "add_business_data" | "add_faq" | "create_workflow" | "other";
+  title: string;
+  detail: string;
+}
+export interface ReadinessReport {
+  score: number;
+  totals: { full: number; partial: number; none: number; total: number };
+  questions: ReadinessQuestion[];
+  recommendations: ReadinessRecommendation[];
+  generatedAt: string;
+}
+export function builderReadinessTest(token: string, agentId: string, locale?: string) {
+  return req<{ data: ReadinessReport }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/readiness-test`,
+    token,
+    { locale },
+  );
+}
+
+export async function builderRunStream(
+  token: string,
+  input: { agentId: string; message: string; locale?: string },
+  onEvent: (ev: BuilderSSEEvent) => void,
+  signal?: AbortSignal,
+): Promise<void> {
+  const res = await fetch(`${API_URL}/api/ai-agents/builder/run`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+    body: JSON.stringify(input),
+    signal,
+  });
+  if (!res.ok || !res.body) {
+    const text = await res.text().catch(() => "");
+    onEvent({ type: "error", message: text || `builder run failed (${res.status})` });
+    return;
+  }
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    let sep: number;
+    while ((sep = buffer.indexOf("\n\n")) >= 0) {
+      const frame = buffer.slice(0, sep);
+      buffer = buffer.slice(sep + 2);
+      if (!frame.trim() || frame.startsWith(":")) continue;
+      const dataLines = frame
+        .split("\n")
+        .filter((l) => l.startsWith("data:"))
+        .map((l) => l.slice(5).trim());
+      if (dataLines.length === 0) continue;
+      try {
+        onEvent(JSON.parse(dataLines.join("\n")) as BuilderSSEEvent);
+      } catch {
+        // skip malformed frame
+      }
+    }
+  }
 }
 
 // ─── F4 bot-surface approvals (new) ────────────────────────
@@ -392,4 +567,144 @@ export function updateToolPermission(
   patch: Partial<Pick<ToolPermissionRow, "enabled" | "requiresApproval" | "approverRole" | "expiresAfterMin" | "allowModification">>,
 ) {
   return req("PUT", `/api/tool-permissions/${encodeURIComponent(toolName)}`, token, patch);
+}
+
+// ─── Customer Intelligence V2 - Industry Packs + Field Registry ──
+
+export type FieldScope = "customer" | "opportunity" | "conversation";
+export type FieldTypeName = "text" | "number" | "boolean" | "enum" | "date" | "entity_ref";
+export type FieldOriginName = "pack" | "custom" | "discovered";
+
+export interface FieldDefinition {
+  id: string;
+  key: string;
+  label: string;
+  description?: string | null;
+  type: FieldTypeName;
+  scope: FieldScope;
+  options: string[];
+  required: boolean;
+  stageRelevance: string[];
+  aiExtract: boolean;
+  syncToCrm: boolean;
+  crmFieldMap?: Record<string, unknown> | null;
+  origin: FieldOriginName;
+  packSlug?: string | null;
+}
+
+export interface PackFieldTemplate {
+  key: string;
+  label: string;
+  type: FieldTypeName;
+  scope: FieldScope;
+  options?: string[];
+  required?: boolean;
+}
+
+export interface IntelligencePack {
+  id: string;
+  slug: string;
+  name: string;
+  version: number;
+  isSystem: boolean;
+  fields: PackFieldTemplate[];
+}
+
+export type FieldDefinitionInput = Partial<Omit<FieldDefinition, "id" | "origin">>;
+
+export function listIndustryPacks(token: string) {
+  return req<{ ok: boolean; packs: IntelligencePack[] }>("GET", "/api/industry-packs", token);
+}
+
+export function applyIndustryPack(token: string, slug: string) {
+  return req<{ ok: boolean; applied: string[]; skipped: string[]; pack: IntelligencePack }>(
+    "POST", "/api/industry-packs/apply", token, { slug },
+  );
+}
+
+export function listFieldDefinitions(token: string, scope?: FieldScope) {
+  const q = scope ? `?scope=${encodeURIComponent(scope)}` : "";
+  return req<{ ok: boolean; fields: FieldDefinition[] }>("GET", `/api/field-definitions${q}`, token);
+}
+
+export function createFieldDefinition(token: string, input: FieldDefinitionInput) {
+  return req<{ ok: boolean; field: FieldDefinition }>("POST", "/api/field-definitions", token, input);
+}
+
+export function updateFieldDefinition(token: string, id: string, patch: FieldDefinitionInput) {
+  return req<{ ok: boolean; field: FieldDefinition }>("PUT", `/api/field-definitions/${encodeURIComponent(id)}`, token, patch);
+}
+
+export function deleteFieldDefinition(token: string, id: string) {
+  return req<{ ok: boolean }>("DELETE", `/api/field-definitions/${encodeURIComponent(id)}`, token);
+}
+
+// ─── Customer Intelligence V2 - Snapshot (Phase 3) ──────────
+
+export interface SnapshotFact {
+  key: string;
+  label: string;
+  value: unknown;
+  type: string;
+  confidence: number;
+  source: string;
+  uncertain: boolean;
+}
+
+export interface SnapshotGap {
+  key: string;
+  label: string;
+  scope: FieldScope;
+  required: boolean;
+  importance: "high" | "medium" | "low";
+}
+
+export interface SnapshotOpportunity {
+  id: string;
+  type: string;
+  title: string | null;
+  stage: string | null;
+  status: string;
+  estimatedValue: number | null;
+  nextAction: string | null;
+  facts: SnapshotFact[];
+  missing: SnapshotGap[];
+  openedAt: string;
+  lastActivityAt: string | null;
+}
+
+export interface CustomerSnapshot {
+  ok: boolean;
+  reason?: string;
+  who: {
+    identityKey: string | null;
+    displayName: string | null;
+    phone: string | null;
+    email: string | null;
+    language: string | null;
+    vipTier: string | null;
+    sentiment: string | null;
+    signals: Record<string, unknown>;
+  };
+  customerFacts: SnapshotFact[];
+  opportunities: SnapshotOpportunity[];
+  now: {
+    conversationId: string | null;
+    channel: string | null;
+    lastAt: string | null;
+    intent: string | null;
+    sentiment: string | null;
+    summary: string | null;
+  } | null;
+  missing: SnapshotGap[];
+  next: string | null;
+  narrative: string | null;
+  generatedAt: string;
+}
+
+export function getCustomerSnapshot(token: string, opts: { conversationId?: string; identityKey?: string }) {
+  const q = new URLSearchParams();
+  if (opts.conversationId) q.set("conversationId", opts.conversationId);
+  if (opts.identityKey) q.set("identityKey", opts.identityKey);
+  return req<{ ok: boolean; snapshot: CustomerSnapshot }>("GET", `/api/customer-snapshot?${q.toString()}`, token);
 }

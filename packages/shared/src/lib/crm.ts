@@ -60,7 +60,7 @@ export interface CrmLookupArgs {
    * custom fields, etc.) down to the CRM instead of trying to evaluate
    * them locally.
    *
-   * Builders live in `audience.ts` and are provider-aware — pass the raw
+   * Builders live in `audience.ts` and are provider-aware - pass the raw
    * expression string here; the executor forwards it as a query param.
    */
   criteria?: string;
@@ -70,7 +70,7 @@ export interface CrmLookupArgs {
 
 /**
  * Returns the tenant's connected CRM, or null. There is at most one
- * "active" CRM per tenant today — when multiple are connected, the first
+ * "active" CRM per tenant today - when multiple are connected, the first
  * CONNECTED row wins. A future revision can let the operator pin a
  * primary.
  */
@@ -96,7 +96,7 @@ export async function getConnectedCrm(tenantId: string): Promise<CrmConnection |
 // ─── Public lookup API ──────────────────────────────────────
 
 /**
- * Search leads in the connected CRM. Returns normalized records — empty
+ * Search leads in the connected CRM. Returns normalized records - empty
  * array if no CRM connected, no match, or the call fails (best-effort).
  */
 export async function searchLeads(
@@ -209,7 +209,7 @@ export async function getCrmSchema(
   //   - Zoho uses the HTTP-catalog-tool path (its `describe_fields`
   //     catalog row points at /crm/v7/settings/fields).
   //   - HubSpot / Salesforce / Monday use the adapter framework via the
-  //     bridge endpoint — each adapter exposes a `describe_fields` tool
+  //     bridge endpoint - each adapter exposes a `describe_fields` tool
   //     that handles the per-provider schema shape (HubSpot Properties,
   //     SF describe, Monday board columns).
   if (conn.slug.startsWith("zoho")) {
@@ -282,7 +282,7 @@ function providerModuleFor(slug: string, module: string): string {
     if (m === "accounts") return "Account";
     if (m === "deals") return "Opportunity";
   }
-  // hubspot + default — lowercase
+  // hubspot + default - lowercase
   return m;
 }
 
@@ -447,7 +447,7 @@ async function runSearch(
     select: { id: true },
   });
   if (!tenantTool) {
-    // CRM is connected but the search tool isn't enabled — caller gets
+    // CRM is connected but the search tool isn't enabled - caller gets
     // an empty result. The Settings → Integrations page is where the
     // operator turns the tool on; this is a config gap, not a bug.
     return [];
@@ -455,7 +455,7 @@ async function runSearch(
 
   // Call the AI service's tool executor over HTTP. We pass a synthetic
   // conversation id of "system" because the executor only uses the
-  // conversation field for audit-row tagging — it does not validate the
+  // conversation field for audit-row tagging - it does not validate the
   // row exists. This keeps the shared client decoupled from any one
   // service's local state.
   //
@@ -513,9 +513,9 @@ async function runSearch(
  */
 function buildSearchArgs(_providerSlug: string, args: CrmLookupArgs): Record<string, unknown> {
   // Zoho `/Leads/search` and `/Contacts/search` accept any of:
-  //   - `email` / `phone` — direct identity shortcuts
-  //   - `word` — free-text search (this is what name/company queries use)
-  //   - `criteria` — structured `(Field:operator:value)` expression
+  //   - `email` / `phone` - direct identity shortcuts
+  //   - `word` - free-text search (this is what name/company queries use)
+  //   - `criteria` - structured `(Field:operator:value)` expression
   // The tool executor passes our `input` as query params on a GET, so
   // every key we set here lands as a `?key=value` on the upstream call.
   // Zoho rejects unknown keys with EXPECTED_PARAM_MISSING (it expects one
@@ -592,7 +592,7 @@ function normalizeRows(providerSlug: string, raw: unknown): CrmRecord[] {
   if (providerSlug === "monday") {
     // Monday items: { id, name, column_values: [{ id, text, value }] }.
     // Column ids are board-specific. We do a best-effort extraction by
-    // matching common patterns (email/phone column titles) — the
+    // matching common patterns (email/phone column titles) - the
     // tenant can override by setting `config.emailColumnId` /
     // `config.phoneColumnId` on the integration. That refinement is a
     // separate ticket.
@@ -699,7 +699,7 @@ async function runHttpCatalogTool(
 
 /**
  * Run an adapter-framework tool over the bridge endpoint. Used by
- * HubSpot/Salesforce/Monday — they don't have HTTP catalog tools, so the
+ * HubSpot/Salesforce/Monday - they don't have HTTP catalog tools, so the
  * shared client reaches their adapters via the bridge route on the AI
  * service. Returns `{ok, output}` envelope mirroring the catalog path.
  */
@@ -734,7 +734,7 @@ async function runAdapterTool(
 // ─── Audience-rule abstraction & per-provider criteria builders ─
 
 /**
- * Generic filter rule shape — matches `AudienceFilter` in audience.ts but
+ * Generic filter rule shape - matches `AudienceFilter` in audience.ts but
  * lives here so the criteria builders are co-located with provider
  * knowledge. Audience.ts passes its rules through to `searchByRules` and
  * stays provider-agnostic.
@@ -758,7 +758,7 @@ export type CrmSearchModule = "leads" | "contacts" | "accounts" | "deals";
  * `searchLeads` / `searchContacts` for identity lookups.
  *
  * When `module` is provided, only that module is queried. When omitted,
- * we call *both* leads and contacts — the legacy behavior, since broadcast
+ * we call *both* leads and contacts - the legacy behavior, since broadcast
  * audiences without an explicit module commonly straddle the two.
  * Accounts/deals go through `module:` only (no implicit fan-out) and are
  * skipped on providers where searchByRules doesn't have an adapter for them.
@@ -805,7 +805,7 @@ async function zohoSearchByRules(
     return { rows: [], skipped, provider: conn };
   }
   // Module routing: when explicit, query only that module. accounts/deals
-  // fall through to "no rows" — Zoho has those modules but messageable
+  // fall through to "no rows" - Zoho has those modules but messageable
   // segments are leads/contacts; the audience resolver surfaces this as
   // skipped rules so the operator sees nothing matched.
   const wantLeads = module === undefined || module === "leads";
@@ -1062,7 +1062,7 @@ async function mondaySearchByRules(
     if (key && !dedup.has(key)) dedup.set(key, r);
   }
   // identity-only hints can't be translated cleanly without column id
-  // mapping — surface as skipped so the caller can hint at config gaps.
+  // mapping - surface as skipped so the caller can hint at config gaps.
   void identityHints;
   return { rows: Array.from(dedup.values()), skipped, provider: conn };
 }

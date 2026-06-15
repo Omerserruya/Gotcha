@@ -6,7 +6,7 @@ import { useAuth } from "@/context/AuthContext";
 /**
  * Variable-insert dropdown for broadcast / template message bodies.
  *
- * Loads field definitions from `/api/audiences/schema?module=leads` —
+ * Loads field definitions from `/api/audiences/schema?module=leads` -
  * which returns:
  *   - local Contact fields (always)
  *   - CRM fields when a CRM is connected (Zoho/HubSpot/Salesforce)
@@ -16,7 +16,7 @@ import { useAuth } from "@/context/AuthContext";
  * the token from the recipient's data on the audience-resolve pass.
  *
  * Renders nothing if the schema endpoint returns no fields (defensive
- * — keeps the broadcast composer clean in degraded states).
+ * - keeps the broadcast composer clean in degraded states).
  */
 interface CrmField {
   name: string;
@@ -76,7 +76,7 @@ export function CrmVarPicker({
           });
         } else if (data.crm.connected && !data.crm.schema) {
           setErr(
-            `${(data.crm as any).provider?.name || "CRM"} connected, but the schema endpoint isn't authorised yet — reconnect from Settings → Integrations to grant the required scope.`,
+            `${(data.crm as any).provider?.name || "CRM"} connected, but the schema endpoint isn't authorised yet - reconnect from Settings → Integrations to grant the required scope.`,
           );
           setCrm(null);
         } else {

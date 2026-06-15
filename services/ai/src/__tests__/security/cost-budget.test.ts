@@ -33,7 +33,7 @@ beforeEach(() => {
   auditCreateMock.mockClear();
 });
 
-describe("createTurnBudget — per-turn cap", () => {
+describe("createTurnBudget - per-turn cap", () => {
   it("does not trip below the cap", () => {
     const b = createTurnBudget({
       tenantId: "t1",
@@ -71,7 +71,7 @@ describe("createTurnBudget — per-turn cap", () => {
   });
 });
 
-describe("createTurnBudget — preflight conversation cap", () => {
+describe("createTurnBudget - preflight conversation cap", () => {
   it("throws when prior conversation usage already exceeds cap", async () => {
     aggregateMock.mockImplementation(async ({ where }: any) => {
       // First call: conversation lookup. Second call: tenant lookup.

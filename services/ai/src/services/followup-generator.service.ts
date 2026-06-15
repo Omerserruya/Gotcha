@@ -3,7 +3,7 @@ import { generateResponse } from "./ai.service";
 import { getPolicyPrompt } from "./policy.service";
 
 /**
- * F6.3 — Follow-up message generator.
+ * F6.3 - Follow-up message generator.
  *
  * Given an idle conversation, produces a contextual follow-up reply the
  * idle-conversation worker can dispatch. Pulls last N messages + applies

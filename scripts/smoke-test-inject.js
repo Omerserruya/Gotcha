@@ -1,6 +1,6 @@
 /* eslint-disable */
 /**
- * Smoke-test injection harness — pushes a single normalized inbound
+ * Smoke-test injection harness - pushes a single normalized inbound
  * WhatsApp message into the BullMQ "incoming-messages" queue, exactly as
  * the webhook would after Twilio/Meta delivery.
  *
@@ -11,7 +11,7 @@
  *        --senderId 972525401686 --senderName "Omer Serruya"
  *
  * The script reads tenantId + channelAccountId from CLI flags or env.
- * It does NOT bypass any worker logic — the message is processed by the
+ * It does NOT bypass any worker logic - the message is processed by the
  * real incoming.worker exactly as a webhook-delivered message.
  */
 const { Queue } = require("bullmq");

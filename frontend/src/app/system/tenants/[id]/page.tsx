@@ -33,7 +33,7 @@ export default function TenantDetailPage() {
   const [botEnabled, setBotEnabled] = useState(false);
   const [botType, setBotType] = useState<string | null>(null);
   const [botConfigSaving, setBotConfigSaving] = useState(false);
-  // Voice Phase-1 flags — surfaced here so a system admin can flip them
+  // Voice Phase-1 flags - surfaced here so a system admin can flip them
   // per-tenant without touching the DB. The tenant's settings sidebar
   // gates /settings/voice-channels on voiceCopilotEnabled.
   const [voiceCopilotEnabled, setVoiceCopilotEnabled] = useState(false);
@@ -407,7 +407,7 @@ export default function TenantDetailPage() {
           )}
         </div>
 
-        {/* Voice CoPilot — Phase-1 master + sub-flags. These live on the
+        {/* Voice CoPilot - Phase-1 master + sub-flags. These live on the
             Tenant model (voice_copilot_enabled, etc.), separate from the
             general FeaturesSection toggles below. */}
         <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -424,7 +424,7 @@ export default function TenantDetailPage() {
           </div>
 
           {([
-            { key: "voiceCopilotEnabled" as const, value: voiceCopilotEnabled, title: "Voice CoPilot enabled", desc: "Master switch — unhides /settings/voice-channels and unlocks all voice APIs." },
+            { key: "voiceCopilotEnabled" as const, value: voiceCopilotEnabled, title: "Voice CoPilot enabled", desc: "Master switch - unhides /settings/voice-channels and unlocks all voice APIs." },
             { key: "voiceInboxUiEnabled" as const, value: voiceInboxUiEnabled, title: "Voice inbox UI", desc: "Show voice sessions inside the Conversations inbox." },
             { key: "voiceIncomingEnabled" as const, value: voiceIncomingEnabled, title: "Incoming voice calls", desc: "Allow inbound voice calls to ring agents from this tenant." },
           ]).map((row) => (
@@ -459,7 +459,7 @@ export default function TenantDetailPage() {
           ))}
         </div>
 
-        {/* Features (two-layer permission system — tenant level) */}
+        {/* Features (two-layer permission system - tenant level) */}
         <FeaturesSection tenantId={tenantId} onMessage={showMsg} />
 
         {/* AI Prompt Viewer */}

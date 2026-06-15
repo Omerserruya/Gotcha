@@ -56,7 +56,7 @@ interface IntegrationDrawerProps {
   onToolsChanged?: (tools: any[]) => void;
   /**
    * When set, tool toggles also persist a per-agent permission
-   * (`AgentToolPermission`) for this AI agent — required for the agent's
+   * (`AgentToolPermission`) for this AI agent - required for the agent's
    * bot to actually see the tool. Without this, toggles only flip the
    * tenant-level `TenantTool.isEnabled` and the bot's tool surface stays
    * unchanged for this specific agent.
@@ -104,7 +104,7 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
     setTestResult(null);
     setTools([]);
     // Load tools if already connected. In agent context, ask the backend
-    // to also include each tool's per-agent permission state — so the
+    // to also include each tool's per-agent permission state - so the
     // toggle reflects what THIS agent can use, not what the tenant has
     // installed.
     const ti = intg.tenantConnection;
@@ -180,7 +180,7 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
     if (!token || !selected) return;
     const target = !currentlyEnabled;
 
-    // Optimistic update — flip whichever layer the toggle reflects in this
+    // Optimistic update - flip whichever layer the toggle reflects in this
     // mode (agent permission in agent mode, tenant tool in marketplace).
     const updatedTools = tools.map((t) => {
       if (t.slug !== toolSlug) return t;
@@ -200,7 +200,7 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
         // Agent mode. Toggle ON: ensure tenant tool exists/enabled (so the
         // bot's join through tenantTool.isEnabled passes) AND grant the
         // per-agent permission. Toggle OFF: revoke the agent permission
-        // only — leave tenant state alone so other agents aren't affected.
+        // only - leave tenant state alone so other agents aren't affected.
         const targetTool = updatedTools.find((t) => t.slug === toolSlug);
         let tenantToolId: string | undefined = targetTool?.tenantTool?.id;
 
@@ -222,13 +222,13 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
           await toggleAgentTool(token, aiAgentId, tenantToolId, true);
         } else {
           if (!tenantToolId) {
-            // Nothing to revoke — agent never had a permission row.
+            // Nothing to revoke - agent never had a permission row.
             return;
           }
           await toggleAgentTool(token, aiAgentId, tenantToolId, false);
         }
       } else {
-        // Marketplace mode — original behaviour: flip tenant tool.
+        // Marketplace mode - original behaviour: flip tenant tool.
         await toggleIntegrationTool(token, selected.slug, toolSlug, target);
       }
     } catch {
@@ -522,7 +522,7 @@ function DetailView({
           <h4 className="text-sm font-semibold text-gray-700">{t("marketplace.availableTools")}</h4>
           {tools.map((tool) => {
             // In agent mode, the toggle reflects whether THIS agent has
-            // permission for the tool — not whether the tenant has it
+            // permission for the tool - not whether the tenant has it
             // installed. Falls back to tenant state when not in agent mode.
             const enabled = aiAgentId
               ? (tool.agentPermission?.isAllowed ?? false)

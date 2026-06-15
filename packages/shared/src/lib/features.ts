@@ -1,10 +1,10 @@
 /**
- * Feature registry — single source of truth for all gateable features.
+ * Feature registry - single source of truth for all gateable features.
  *
  * Two-layer permission model:
- *   1. Tenant-level (SYSTEM_ADMIN controlled) — availability per organization
+ *   1. Tenant-level (SYSTEM_ADMIN controlled) - availability per organization
  *      → backed by the `tenant_features` table.
- *   2. User-level (tenant ADMIN controlled) — access within availability
+ *   2. User-level (tenant ADMIN controlled) - access within availability
  *      → resolved from custom tenant roles + per-user grant/revoke overrides.
  *
  * To add a feature: add a key here + a metadata entry in FEATURE_METADATA.
@@ -16,7 +16,7 @@
  * This is the FULL mapped surface of the product. Some entries overlap
  * (e.g. `confluence_integration` vs `confluence_knowledge`,
  * `google_drive_integration` vs `google_drive_knowledge`). Curate the
- * list down to the gates you actually want to expose — deleting a key
+ * list down to the gates you actually want to expose - deleting a key
  * here automatically hides it from the SYSTEM_ADMIN UI and tenant
  * permissions page.
  */
@@ -32,7 +32,7 @@ export const FEATURES = {
   CHANNEL_SLACK: "channel_slack",
   CHANNEL_WEBCHAT: "channel_webchat",
 
-  // ── Messaging — conversation operations ─────────────────────
+  // ── Messaging - conversation operations ─────────────────────
   CONVERSATION_MANAGEMENT: "conversation_management",
   CLOSE_CONVERSATION: "close_conversation",
   REASSIGN_CONVERSATION: "reassign_conversation",
@@ -191,7 +191,7 @@ const m = (
 });
 
 export const FEATURE_METADATA: Record<Feature, FeatureMetadata> = {
-  // ── Messaging — channels ────────────────────────────────────
+  // ── Messaging - channels ────────────────────────────────────
   [FEATURES.CHANNEL_WHATSAPP]: m(FEATURES.CHANNEL_WHATSAPP, "messaging", "WhatsApp Channel", "Send and receive messages via WhatsApp.", "all"),
   [FEATURES.CHANNEL_MESSENGER]: m(FEATURES.CHANNEL_MESSENGER, "messaging", "Facebook Messenger Channel", "Send and receive messages via Messenger.", "all"),
   [FEATURES.CHANNEL_INSTAGRAM]: m(FEATURES.CHANNEL_INSTAGRAM, "messaging", "Instagram Channel", "Send and receive messages via Instagram DMs.", "all"),
@@ -201,7 +201,7 @@ export const FEATURE_METADATA: Record<Feature, FeatureMetadata> = {
   [FEATURES.CHANNEL_SLACK]: m(FEATURES.CHANNEL_SLACK, "messaging", "Slack Channel", "Send and receive messages via Slack.", "all"),
   [FEATURES.CHANNEL_WEBCHAT]: m(FEATURES.CHANNEL_WEBCHAT, "messaging", "Webchat Channel", "Embedded chat widget on websites.", "all"),
 
-  // ── Messaging — conversation operations ─────────────────────
+  // ── Messaging - conversation operations ─────────────────────
   [FEATURES.CONVERSATION_MANAGEMENT]: m(FEATURES.CONVERSATION_MANAGEMENT, "messaging", "Conversation Management", "View and manage customer conversations.", "all"),
   [FEATURES.CLOSE_CONVERSATION]: m(FEATURES.CLOSE_CONVERSATION, "messaging", "Close Conversation", "Agents can close conversations.", "all"),
   [FEATURES.REASSIGN_CONVERSATION]: m(FEATURES.REASSIGN_CONVERSATION, "messaging", "Reassign Conversation", "Transfer a conversation to another agent.", "all"),
@@ -232,7 +232,7 @@ export const FEATURE_METADATA: Record<Feature, FeatureMetadata> = {
   [FEATURES.CUSTOMER_BRIEFS]: m(FEATURES.CUSTOMER_BRIEFS, "ai", "Customer Briefs", "AI-generated customer context summaries.", "all"),
   [FEATURES.POST_CALL_ANALYSIS]: m(FEATURES.POST_CALL_ANALYSIS, "ai", "Post-Call Analysis", "AI analysis of voice conversations.", "all"),
   [FEATURES.ROUTER_RULES]: m(FEATURES.ROUTER_RULES, "ai", "Router Rules (Main Playbook)", "Rules-based routing to agents and bots.", "all"),
-  [FEATURES.KNOWLEDGE_BASE]: m(FEATURES.KNOWLEDGE_BASE, "ai", "Knowledge Base (legacy)", "Legacy alias — prefer knowledge_base_rag.", "all"),
+  [FEATURES.KNOWLEDGE_BASE]: m(FEATURES.KNOWLEDGE_BASE, "ai", "Knowledge Base (legacy)", "Legacy alias - prefer knowledge_base_rag.", "all"),
 
   // ── Knowledge ───────────────────────────────────────────────
   [FEATURES.KNOWLEDGE_BASE_RAG]: m(FEATURES.KNOWLEDGE_BASE_RAG, "knowledge", "Knowledge Base (RAG)", "Document management and retrieval-augmented generation.", "all"),

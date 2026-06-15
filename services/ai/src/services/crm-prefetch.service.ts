@@ -1,5 +1,5 @@
 /**
- * CRM Prefetch — runs at the start of every autonomous bot turn.
+ * CRM Prefetch - runs at the start of every autonomous bot turn.
  *
  * Calls `lead_search` and `contact_search` against the connected CRM
  * (Zoho today; pattern works for any provider whose catalog tools use
@@ -17,7 +17,7 @@
  *
  * Best-effort: any failure is swallowed and the function returns null.
  * The bot keeps operating (in the worst case it might create a
- * duplicate) — we never want a transient CRM hiccup to break the chat.
+ * duplicate) - we never want a transient CRM hiccup to break the chat.
  */
 
 import { prisma, normalizePhone as sharedNormalizePhone } from "@chatcenter/shared";
@@ -25,7 +25,7 @@ import { executeTool } from "./tool-execution.service";
 
 // ─── Per-conversation cache ─────────────────────────────────
 //
-// The bot called prefetchCrmContext on EVERY turn — 2–4 Zoho calls every
+// The bot called prefetchCrmContext on EVERY turn - 2–4 Zoho calls every
 // time even though the customer hadn't done anything CRM-relevant. Cache
 // the resolved bundle for `CACHE_TTL_MS` keyed by tenant+conversation.
 //
@@ -36,7 +36,7 @@ import { executeTool } from "./tool-execution.service";
 //      collapses the (phone,email) pair into a stable string.
 //
 // Invalidation:
-//   - invalidateCrmPrefetch(tenant, conversation) — called by the
+//   - invalidateCrmPrefetch(tenant, conversation) - called by the
 //     tool-execution layer after any mutating Zoho call so the next bot
 //     turn sees fresh data instead of stale lead/contact rows.
 const CACHE_TTL_MS = 5 * 60 * 1000;
@@ -61,7 +61,7 @@ export function invalidateCrmPrefetch(tenantId: string, conversationId: string):
   cache.delete(cacheKey(tenantId, conversationId));
 }
 
-/** Test/ops helper — clear the entire cache (e.g. on tenant CRM disconnect). */
+/** Test/ops helper - clear the entire cache (e.g. on tenant CRM disconnect). */
 export function clearCrmPrefetchCache(): void {
   cache.clear();
 }
@@ -257,7 +257,7 @@ export function renderCrmContextBlock(prefetch: CrmPrefetchResult | null): strin
     if (top.createdAt) lines.push(`- created: ${top.createdAt}`);
     if (top.description) lines.push(`- description: ${top.description}`);
     if (prefetch.leadMatches.length > 1) {
-      lines.push(`- (${prefetch.leadMatches.length - 1} older lead(s) also match this customer — use the id above)`);
+      lines.push(`- (${prefetch.leadMatches.length - 1} older lead(s) also match this customer - use the id above)`);
     }
     if (prefetch.topLeadNotes.length > 0) {
       lines.push(`- recent notes:`);
@@ -294,10 +294,10 @@ export function renderCrmContextBlock(prefetch: CrmPrefetchResult | null): strin
   if (hasLead) removedTools.push("create_lead");
   if (hasContact) removedTools.push("create_contact");
   const removedNote = removedTools.length > 0
-    ? `\n\nThe ${removedTools.map((s) => `\`${s}\``).join(" and ")} ${removedTools.length === 1 ? "tool has" : "tools have"} been REMOVED from your toolbox for this turn — the customer already exists in CRM. Use the update / note / tag tools on the id(s) above to enrich the existing record(s). Never tell the customer about CRM internals.`
+    ? `\n\nThe ${removedTools.map((s) => `\`${s}\``).join(" and ")} ${removedTools.length === 1 ? "tool has" : "tools have"} been REMOVED from your toolbox for this turn - the customer already exists in CRM. Use the update / note / tag tools on the id(s) above to enrich the existing record(s). Never tell the customer about CRM internals.`
     : "";
 
-  return `## Existing CRM Records — INTERNAL CONTEXT, NEVER ECHO
+  return `## Existing CRM Records - INTERNAL CONTEXT, NEVER ECHO
 
 EVERYTHING in this section is INTERNAL. The customer must NEVER hear about it.
 
@@ -307,7 +307,7 @@ DO NOT, under any circumstances:
 - mention CRM, leads, contacts, deals, records, ids, notes, tags, the database, the system, or any tool name
 - quote any id, email, or phone from this block back at the customer
 
-If you want to acknowledge familiarity, say it the way a human would — "good to hear from you again" — not "I have you on file." Treat the customer as a returning person, not a database row.
+If you want to acknowledge familiarity, say it the way a human would - "good to hear from you again" - not "I have you on file." Treat the customer as a returning person, not a database row.
 
 ${sections.join("\n\n")}${removedNote}`;
 }

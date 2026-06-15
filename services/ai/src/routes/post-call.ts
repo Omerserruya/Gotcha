@@ -11,14 +11,14 @@ import {
 /**
  * Phase 6 HTTP entry point for Mode B (async post-call analysis).
  *
- * POST /api/post-call/analyze — accepts either pasted transcript utterances
+ * POST /api/post-call/analyze - accepts either pasted transcript utterances
  * or a recording URL, enqueues a BullMQ job, returns 202 with the job id.
  * The worker drives `runAsyncAnalysis`, persists CallAnalysis + QAScore,
  * emits `analysis.started` / `analysis.completed`. The caller (admin UI)
  * subscribes to the bus to render progress.
  *
  * Authorization: ADMIN-tenant scope. The route piggybacks on the existing
- * `authenticate + resolveTenant + requireActiveTenant` chain — same shape
+ * `authenticate + resolveTenant + requireActiveTenant` chain - same shape
  * as `/api/notification-preferences` etc.
  */
 
@@ -62,7 +62,7 @@ router.post("/post-call/analyze", async (req: Request, res: Response) => {
     const job = await getPostCallAnalyzeQueue().add("analyze", jobData, {
       ...DEFAULT_POST_CALL_JOB_OPTS,
       // Per-conversation idempotency. A second submit re-runs only if the
-      // first finished — operators wanting to force re-run can pass a unique
+      // first finished - operators wanting to force re-run can pass a unique
       // suffix in a future revision.
       jobId: `analyze-${conversationId}`,
     });

@@ -1,5 +1,5 @@
 /**
- * app.ts — Central factory for the voice-copilot service.
+ * app.ts - Central factory for the voice-copilot service.
  *
  * EXTENSION POINTS FOR DOWNSTREAM PACKETS:
  *   W4 (session/reaper): edit buildDefaultDeps to replace stub SessionStore,
@@ -8,7 +8,7 @@
  *       buildSTTProvider from ./stt/stt-factory.
  *   W6 (dispatcher):     edit buildDefaultDeps to replace stub Dispatcher with
  *       new Dispatcher(deps).
- *   W7 (ws-handler):     no app.ts edit needed — attachTwilioHandler is already
+ *   W7 (ws-handler):     no app.ts edit needed - attachTwilioHandler is already
  *       called here; W7 just fills in the function body.
  *   W8 (routes/live):    mount the live router inside createApp, referencing
  *       deps.sessionStore.
@@ -97,7 +97,7 @@ export interface BuiltApp {
 }
 
 /**
- * buildDefaultDeps — constructs all dependencies from environment.
+ * buildDefaultDeps - constructs all dependencies from environment.
  *
  * Stubs that throw NotImplementedError are placeholders for W4/W5/W6.
  * Downstream packets replace them by editing this function (documented
@@ -115,7 +115,7 @@ export function buildDefaultDeps(env: Env): AppDeps {
   // TODO W7: when twilio-handler lands it owns the live-session map and will
   // pass its own endSession callback via createApp({...overrides}).
   // For now, the default endSession only updates store state + publishes an
-  // event. The reaper.start() call below is left active — W7 will override
+  // event. The reaper.start() call below is left active - W7 will override
   // endSession via the overrides mechanism.
   const reaper = new Reaper({
     store: sessionStore,
@@ -218,7 +218,7 @@ function getEnv(): Env {
 }
 
 /**
- * createApp — testable factory.
+ * createApp - testable factory.
  *
  * Pass `overrides` to inject mocks/real impls in tests and in downstream
  * work packets that swap in their modules.
@@ -231,7 +231,7 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
   const app = express();
   app.use(express.json());
 
-  // Track whether STT is initialized (for /readyz — W5 will set this)
+  // Track whether STT is initialized (for /readyz - W5 will set this)
   let sttInitialized = false;
   const markSttReady = () => { sttInitialized = true; };
   void markSttReady; // used by W5
@@ -283,7 +283,7 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
   // 3. HTTP server
   const httpServer = http.createServer(app);
 
-  // 4. WebSocket server (noServer mode — upgrade handled by attachTwilioHandler)
+  // 4. WebSocket server (noServer mode - upgrade handled by attachTwilioHandler)
   const wss = new WebSocketServer({ noServer: true });
 
   // 5. Wire Twilio WS upgrade handler
@@ -303,7 +303,7 @@ export function createApp(overrides?: Partial<AppDeps>): BuiltApp {
   try {
     deps.reaper.start();
   } catch {
-    // W4 not yet landed — reaper start is a stub; continue booting
+    // W4 not yet landed - reaper start is a stub; continue booting
   }
 
   // 7. Shutdown

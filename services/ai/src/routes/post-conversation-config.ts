@@ -1,10 +1,10 @@
 /**
- * Post-Conversation Config — admin API for the per-tenant schema that
+ * Post-Conversation Config - admin API for the per-tenant schema that
  * drives the end-of-call / end-of-chat summarizer + rule engine.
  *
  * Routes (mounted at /api/post-conversation-config):
- *   GET  /            — fetch the tenant's config (returns defaults if empty)
- *   PUT  /            — replace the tenant's config (partial patch allowed)
+ *   GET  /            - fetch the tenant's config (returns defaults if empty)
+ *   PUT  /            - replace the tenant's config (partial patch allowed)
  *
  * Auth: tenant ADMIN only.
  */

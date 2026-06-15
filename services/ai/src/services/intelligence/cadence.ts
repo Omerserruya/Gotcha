@@ -6,7 +6,7 @@ import type { ConversationMemory } from "./memory";
  *
  * One implementation lives here for live mode (LiveCadence). Mode A QA and
  * Mode B async use their own cadence policies that land in Phase 5/6.
- * Analyzers themselves never branch on `mode` — that's the cadence's job
+ * Analyzers themselves never branch on `mode` - that's the cadence's job
  * (anti-duplication rule #7).
  */
 export interface AnalysisCadence {

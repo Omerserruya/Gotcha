@@ -184,7 +184,7 @@ describe("StubSTTProvider", () => {
     if (customerFinals.length > 0) {
       expect(customerFinals[0].seq).toBe(0);
     }
-    // They should be independent — agent advances don't bump customer's seq
+    // They should be independent - agent advances don't bump customer's seq
     if (agentFinals.length > 1 && customerFinals.length > 0) {
       expect(customerFinals[0].seq).toBe(0);
     }

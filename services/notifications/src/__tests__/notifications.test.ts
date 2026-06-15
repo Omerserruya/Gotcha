@@ -99,7 +99,7 @@ describe("evaluateConditions", () => {
     expect(evaluateConditions([{ field: "tags", op: "contains", value: "ghost" }], data)).toBe(false);
   });
 
-  it("ANDs multiple conditions — fails fast on first mismatch", () => {
+  it("ANDs multiple conditions - fails fast on first mismatch", () => {
     const data = { v: 10, kind: "lead" };
     expect(
       evaluateConditions(
