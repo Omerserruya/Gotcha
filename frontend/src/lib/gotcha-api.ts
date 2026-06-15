@@ -196,7 +196,7 @@ export interface BuilderDraftSnapshot {
   persona: Record<string, unknown> | null;
   escalationRules: Array<{ label?: string; enabled?: boolean }>;
   escalationMessage: string;
-  conversationFlow: Array<{ action?: string; details?: string }>;
+  conversationFlow: Array<{ id?: string; action?: string; details?: string }>;
   customGuardrails: string[];
   channels: string[];
   funnel: { id: string; funnelId: string; stageCount: number } | null;
@@ -257,6 +257,23 @@ export function builderToggleKnowledge(token: string, agentId: string, knowledge
     `/api/ai-agents/builder/${agentId}/knowledge`,
     token,
     { knowledgeBaseId, attach },
+  );
+}
+
+// Optional creation-wizard refinements (name / conversation flow / guardrails).
+// Saved deterministically from the dedicated wizard step. Send only the fields
+// you're changing; an empty array clears that field. Returns the fresh draft.
+export interface BuilderRefinements {
+  name?: string;
+  conversationFlow?: Array<{ id?: string; action: string; details?: string }>;
+  customGuardrails?: string[];
+}
+export function builderSaveRefinements(token: string, agentId: string, refinements: BuilderRefinements) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/refinements`,
+    token,
+    refinements,
   );
 }
 
@@ -620,4 +637,74 @@ export function updateFieldDefinition(token: string, id: string, patch: FieldDef
 
 export function deleteFieldDefinition(token: string, id: string) {
   return req<{ ok: boolean }>("DELETE", `/api/field-definitions/${encodeURIComponent(id)}`, token);
+}
+
+// ─── Customer Intelligence V2 — Snapshot (Phase 3) ──────────
+
+export interface SnapshotFact {
+  key: string;
+  label: string;
+  value: unknown;
+  type: string;
+  confidence: number;
+  source: string;
+  uncertain: boolean;
+}
+
+export interface SnapshotGap {
+  key: string;
+  label: string;
+  scope: FieldScope;
+  required: boolean;
+  importance: "high" | "medium" | "low";
+}
+
+export interface SnapshotOpportunity {
+  id: string;
+  type: string;
+  title: string | null;
+  stage: string | null;
+  status: string;
+  estimatedValue: number | null;
+  nextAction: string | null;
+  facts: SnapshotFact[];
+  missing: SnapshotGap[];
+  openedAt: string;
+  lastActivityAt: string | null;
+}
+
+export interface CustomerSnapshot {
+  ok: boolean;
+  reason?: string;
+  who: {
+    identityKey: string | null;
+    displayName: string | null;
+    phone: string | null;
+    email: string | null;
+    language: string | null;
+    vipTier: string | null;
+    sentiment: string | null;
+    signals: Record<string, unknown>;
+  };
+  customerFacts: SnapshotFact[];
+  opportunities: SnapshotOpportunity[];
+  now: {
+    conversationId: string | null;
+    channel: string | null;
+    lastAt: string | null;
+    intent: string | null;
+    sentiment: string | null;
+    summary: string | null;
+  } | null;
+  missing: SnapshotGap[];
+  next: string | null;
+  narrative: string | null;
+  generatedAt: string;
+}
+
+export function getCustomerSnapshot(token: string, opts: { conversationId?: string; identityKey?: string }) {
+  const q = new URLSearchParams();
+  if (opts.conversationId) q.set("conversationId", opts.conversationId);
+  if (opts.identityKey) q.set("identityKey", opts.identityKey);
+  return req<{ ok: boolean; snapshot: CustomerSnapshot }>("GET", `/api/customer-snapshot?${q.toString()}`, token);
 }

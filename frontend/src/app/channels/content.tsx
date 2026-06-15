@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import {
@@ -91,6 +91,10 @@ function ChannelsPageContent() {
   const { token, user } = useAuth();
   const { t } = useI18n();
   const searchParams = useSearchParams();
+  const router = useRouter();
+  // After a successful connect we nudge the user to wire the channel into the
+  // main workflow (channel entry → AI/team/subflow). Holds the connected platform.
+  const [routingCta, setRoutingCta] = useState<string | null>(null);
 
   const [accounts, setAccounts] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -183,6 +187,7 @@ function ChannelsPageContent() {
 
     if (connected) {
       showMessage(t("channels.connected"), "success");
+      setRoutingCta(connected);
       fetchData();
       window.history.replaceState({}, "", "/channels");
     } else if (error) {
@@ -378,6 +383,26 @@ function ChannelsPageContent() {
             : "bg-red-50 text-red-700 border-red-200"
         )}>
           {message}
+        </div>
+      )}
+
+      {/* Post-connect routing nudge — sends the user into the main workflow with
+          the new channel entry focused + highlighted, ready to wire to an AI
+          employee / team / subflow. */}
+      {routingCta && (
+        <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
+          <span className="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">✓</span>
+          <div className="min-w-0 flex-1">
+            <p className="text-sm font-medium text-violet-900">{t("channels.routingCtaTitle") || "Channel connected — set up what happens to its messages"}</p>
+            <p className="text-xs text-violet-500">{t("channels.routingCtaSub") || "Route it to an AI employee, a team, or a subflow."}</p>
+          </div>
+          <button
+            onClick={() => router.push(`/ai-studio/router?focus=${encodeURIComponent(routingCta)}`)}
+            className="shrink-0 px-3.5 py-2 rounded-lg text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition"
+          >
+            {t("channels.routingCtaButton") || "Set up routing"} →
+          </button>
+          <button onClick={() => setRoutingCta(null)} className="shrink-0 text-violet-400 hover:text-violet-600 text-lg leading-none" aria-label="Dismiss">×</button>
         </div>
       )}
 

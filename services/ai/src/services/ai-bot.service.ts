@@ -393,28 +393,27 @@ function checkAllowedActionsGate(
   toolName: string,
   state: BehaviorState,
 ): { blocked: boolean; reason?: string; categories?: ActionCategory[]; allowed?: ActionCategory[] } {
-  if (!toolName) return { blocked: false };
-  if (toolName === "escalate_to_human") return { blocked: false };
-  if (toolName === "link_customer_identifier") return { blocked: false };
-  if (toolName.startsWith("submit_")) return { blocked: false };
-  if (/(_search|_get|_lookup|_read)$/.test(toolName)) return { blocked: false };
-
-  const cats = actionCategoriesForTool(toolName);
-  if (cats.length === 0) return { blocked: false }; // unmodeled → permit
-
-  const allowed = state.allowedActions || [];
-  const intersects = cats.some((c) => allowed.includes(c));
-  if (intersects) return { blocked: false };
-
-  return {
-    blocked: true,
-    reason:
-      `Tool \`${toolName}\` maps to action categories [${cats.join(", ")}] which are NOT in the ` +
-      `current strategy's allowedActions [${allowed.join(", ")}]. Pivot to a permitted action ` +
-      `or wait for the strategy to change.`,
-    categories: cats,
-    allowed,
-  };
+  // Strategy-based dispatch gating is DISABLED — parity with the disabled
+  // surface filter in `filterToolsByAllowedActions`. Keeping this gate active
+  // while the surface stays full was self-contradictory: the model SEES every
+  // tool, correctly calls a critical one (e.g. `schedule_meeting` after the
+  // customer confirms a slot), and the runtime then refuses it because the BEL
+  // happened to land on GUIDE/QUALIFY — categories like `schedule_booking`
+  // live only in CONVERT. The model then verbalizes "I can't book directly,
+  // I'll pass it to the team" — exactly the failure mode the surface filter
+  // was disabled to prevent, just relocated to dispatch time.
+  //
+  // The strategy still steers MOVE SELECTION via the behavior prompt
+  // (allowedActions / forbiddenBehaviors text the prompt builder renders), and
+  // sequencing is still hard-enforced by the Action Contract gate
+  // (`checkContractGate`) below. But a strategy misclassification must never
+  // again silently veto a tool the model was right to call.
+  //
+  // The taxonomy (`actionCategoriesForTool`) is retained — it still powers
+  // `computeUnmetRequiredActions` observability — but no longer blocks here.
+  void state;
+  void toolName;
+  return { blocked: false };
 }
 
 /**
@@ -883,6 +882,13 @@ async function generateAIBotReplyInner(
       lastMessage: opts.incomingMessage,
       messageCount: messages.length,
       recentDirections: messages.slice(-5).map((m) => m.direction as "INBOUND" | "OUTBOUND"),
+      // Last few inbound texts (oldest→newest) feed the trust/friction
+      // signals — repeated-verification, repeated-complaint, and repetition
+      // detection are inherently multi-message.
+      recentInboundTexts: messages
+        .filter((m) => m.direction === "INBOUND")
+        .slice(-5)
+        .map((m) => m.body || ""),
       lastAssistantMove,
       identifierMessage: extractIdentifierFromMessage(opts.incomingMessage, tenantDefaultCountry),
       assistantPreviouslyAskedFor: detectAssistantAskedFor(messages.map((m) => ({ direction: m.direction, body: m.body }))),

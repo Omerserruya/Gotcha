@@ -3104,7 +3104,7 @@ model FieldDefinition {
 model IntelligenceFact {
   id         String            @id @default(cuid())
   tenantId   String            @map("tenant_id")
-  entityType IntelligenceScope // CUSTOMER | OPPORTUNITY | CONVERSATION
+  entityType IntelligenceScope @map("entity_type") // CUSTOMER | OPPORTUNITY | CONVERSATION
   entityId   String            @map("entity_id")
   fieldKey   String            @map("field_key")
   value      Json

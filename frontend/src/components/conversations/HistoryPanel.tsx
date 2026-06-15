@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { CustomerIntelligenceCard } from "./CustomerIntelligenceCard";
 import { useI18n } from "@/context/I18nContext";
 import { getConversationHistory } from "@/lib/api";
 import { fetchCustomerSummary, postCrmNote, type CrmContextEnvelope, type CustomerSummary } from "@/lib/api-crm";
@@ -157,6 +158,9 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
+        {/* Customer Intelligence snapshot (V2) — structured WHO/WHAT/MISSING/NEXT
+            from the three-domain model. Renders nothing until intelligence exists. */}
+        <CustomerIntelligenceCard conversationId={conversationId} />
         {/* AI customer brief — highlighted card at the top, gradient border so
             it visually anchors above the structured CRM blocks. Same payload
             will plug into Co-Pilot in a follow-up. */}

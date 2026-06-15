@@ -4,8 +4,23 @@ import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.ser
 import { generateResponse } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
+import { isBrandArchetype } from "../services/brand-archetypes";
 
 const router = Router();
+
+// Strip an invalid `brand_archetype` out of an incoming persona object so we
+// never persist a key the renderer can't resolve (it would silently fall back
+// to "neutral"). Leaves the rest of persona (gender, traits, …) untouched and
+// returns the value unchanged when it isn't a persona object.
+function sanitizePersona<T>(persona: T): T {
+  if (!persona || typeof persona !== "object") return persona;
+  const p = persona as Record<string, unknown>;
+  if ("brand_archetype" in p && !isBrandArchetype(p.brand_archetype)) {
+    const { brand_archetype: _drop, ...rest } = p;
+    return rest as T;
+  }
+  return persona;
+}
 
 // ─── List AI Agents ──────────────────────────────────────────
 router.get("/", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
@@ -313,7 +328,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         goals: goals || null,
         toneConfig: toneConfig || null,
         behavioral: behavioral || null,
-        persona: persona || null,
+        persona: sanitizePersona(persona) || null,
         maxAutonomousMessages: maxAutonomousMessages ?? 10,
         maxAutonomousMinutes: maxAutonomousMinutes ?? 15,
         confidenceThreshold: confidenceThreshold ?? 0.6,
@@ -380,6 +395,13 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     }
     if (Object.prototype.hasOwnProperty.call(updateData, "funnelId") && !updateData.funnelId) {
       updateData.funnelId = null;
+    }
+
+    // Strip an unknown brand_archetype before it reaches the DB. The whole
+    // persona object is replaced on update, so the frontend sends the merged
+    // persona (gender/traits + brand_archetype) — we only validate the new key.
+    if (Object.prototype.hasOwnProperty.call(updateData, "persona")) {
+      updateData.persona = sanitizePersona(updateData.persona);
     }
 
     // Normalize the new goal / successCriteria fields the same way create

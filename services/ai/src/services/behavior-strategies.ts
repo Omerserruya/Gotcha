@@ -76,14 +76,13 @@ const QUALIFY: StrategyContract = {
   allowedActions: ["ask_question", "acknowledge", "crm_read", "identity_link"],
   forbiddenBehaviors: [
     "Asking specific qualifying questions when stage=`initial`. Wait until the customer has stated their intent or topic.",
-    "Two questions in one message (one open + one specific is still two — pick one).",
+    "Stacking two SEPARATE questions in one message. A reflective statement that ends in a single question is fine — that's one move, not two.",
     "Opening with \"thanks\" / \"תודה\" when the customer just said hi. Mirror their greeting instead.",
     "Long opening monologues. Greet, invite, stop.",
     "Pitching pricing, plans, or scheduling a transaction (those belong to CONVERT).",
     "Creating CRM records before the user has shared a real need.",
     "Asking the customer for info already retrievable from CRM (name, email, prior orders, lifecycle stage).",
     "Generic questions like \"how can I help?\" AFTER the customer has already stated their intent — by then you should have a specific qualifying question.",
-    "Closing with passive lines like \"if you need anything else, I'm here\" once the conversation is moving — you are LEADING discovery, not waiting.",
   ],
   exitConditions: [
     "Conversation stage moves to `exploration`, `decision`, or `objection`.",
@@ -136,16 +135,12 @@ const CONVERT: StrategyContract = {
   ],
   forbiddenBehaviors: [
     "Generic non-answers like \"depends on the plan\" or \"depends on your needs\" WITHOUT either a packaging anchor or a concrete next step.",
-    "Inventing prices when Knowledge has none. Use packaging language (\"מסלולים מותאמים לגודל הצוות\" / \"plans tiered by team size\") + offer a tailored quote.",
-    "Writing placeholder tokens like `$X`, `<price>`, `[TBD]` in the customer-facing reply. If you'd write a placeholder, restructure the sentence.",
-    "Promising to send a link / schedule a meeting / call back if no tool in the surface can fulfill that promise. Promise only what you can deliver.",
-    "Fabricating your own actions: do NOT say \"מצאתי זמן\" / \"I found a time\" / \"I scheduled\" / \"I sent\" unless a tool actually returned success. When the customer offers a time, ACKNOWLEDGE their proposal.",
     "Open-ended discovery questions — qualification time is over. Move toward the close.",
     "Listing every option when one clear next step exists.",
     "Adding friction (extra qualification, redirects) before the close.",
     "Calling `create_lead` / `create_contact` if the CRM block shows the customer already exists — use `update_record` / `add_note` instead.",
     "Stage=`decision` (customer agreed) without calling `update_record` to log the agreement and the conversation context to the CRM record. The close MUST include a CRM update.",
-    "Stage=`decision` ending without a soft availability close (\"אם יש שאלות נוספות אני כאן\" / \"if any other questions come up, I'm here\"). The forward action AND the soft close go together — not one or the other.",
+    "Ending a `decision`-stage turn with a canned availability template (\"אם יש שאלות נוספות אני כאן\" / \"if any other questions come up, I'm here\"). Sign off warmly in the brand voice instead — HOW to phrase the close is owned by Brand Voice & Personality (Layer 4), not by this strategy.",
   ],
   exitConditions: [
     "User accepts — close the loop and confirm.",

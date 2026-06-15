@@ -832,11 +832,10 @@ router.get("/agent-config/:departmentId", requireRole("ADMIN"), async (req: Requ
 // `deepLink` is consumed by the sidebar MissionPanel so route changes stay server-side.
 
 type MissionId =
-  | "confirm_business"
+  | "knowledge_base"
+  | "ai_employees"
   | "connect_channel"
-  | "send_test_reply"
-  | "review_agent_tone"
-  | "invite_teammate";
+  | "workflows";
 
 interface MissionResult {
   id: MissionId;
@@ -848,33 +847,28 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
   try {
     const tenantId = req.tenantId!;
 
-    const [profile, connectedChannel, outboundMessage, agentForTone, userCount] = await Promise.all([
-      prisma.businessProfile.findUnique({ where: { tenantId }, select: { id: true } }),
+    const [kbCount, aiAgent, connectedChannel, flowCount] = await Promise.all([
+      prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
+      prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true } }).catch(() => null),
       prisma.channelAccount.findFirst({
         where: { tenantId, connectionStatus: "CONNECTED" },
         select: { id: true },
-      }),
-      prisma.message.findFirst({
-        where: { tenantId, direction: "OUTBOUND" },
-        select: { id: true },
-      }),
-      prisma.aIAgent.findFirst({
-        where: { tenantId },
-        select: { id: true, createdAt: true, updatedAt: true },
-        orderBy: { createdAt: "asc" },
-      }),
-      prisma.user.count({ where: { tenantId, isActive: true } }),
+      }).catch(() => null),
+      (prisma as any).chatbotFlow?.count?.({ where: { tenantId } }).catch?.(() => 0) ?? Promise.resolve(0),
     ]);
 
-    const agentTouched =
-      agentForTone &&
-      agentForTone.updatedAt.getTime() - agentForTone.createdAt.getTime() > 60_000;
-
+    // Order matches the onboarding journey: bring knowledge → hire the AI
+    // employee → connect a channel → wire the workflow.
     const missions: MissionResult[] = [
       {
-        id: "confirm_business",
-        done: !!profile,
-        deepLink: "/setup",
+        id: "knowledge_base",
+        done: (kbCount || 0) > 0,
+        deepLink: "/ai-studio/knowledge",
+      },
+      {
+        id: "ai_employees",
+        done: !!aiAgent,
+        deepLink: "/ai-studio",
       },
       {
         id: "connect_channel",
@@ -882,19 +876,9 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
         deepLink: "/channels",
       },
       {
-        id: "send_test_reply",
-        done: !!outboundMessage,
-        deepLink: "/conversations",
-      },
-      {
-        id: "review_agent_tone",
-        done: !!agentTouched,
-        deepLink: agentForTone ? `/ai-studio/agents/${agentForTone.id}` : "/ai-studio",
-      },
-      {
-        id: "invite_teammate",
-        done: userCount > 1,
-        deepLink: "/settings",
+        id: "workflows",
+        done: (flowCount || 0) > 0,
+        deepLink: "/ai-studio/router",
       },
     ];
 

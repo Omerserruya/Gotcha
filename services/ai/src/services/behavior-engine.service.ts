@@ -81,6 +81,36 @@ export type DecisionIntent = "PROGRESS" | "HOLD" | "ESCALATE";
 
 export type ClosurePosture = "open" | "ready_to_close" | "needs_followup";
 
+// ─── Behavioral signals (deterministic, explainable) ────────
+//
+// Three coarse reads of the customer the BEL computes every turn. They are
+// NOT scores — each is a LOW/MEDIUM/HIGH bucket produced by an ordered,
+// auditable rule ladder. Every signal carries the rule that fired (`reason`)
+// and the concrete inputs that drove it (`evidence`), so audit logs can
+// answer "why did the AI read the customer that way?".
+//
+// PHASE 1 (current): computed + surfaced in BehaviorState + the prompt's
+// Conversation State block. They do NOT yet alter strategy/tone/escalation/
+// closure — that wiring is a deliberate follow-up so the read-only signals
+// can be observed in production first.
+
+export type SignalLevel = "low" | "medium" | "high";
+export type RelationshipStrength = SignalLevel;
+export type TrustLevel = SignalLevel;
+export type FrictionLevel = SignalLevel;
+
+/**
+ * A single behavioral read. `level` is the bucket; `reason` is a one-line
+ * human-readable explanation of the rule that fired; `evidence` lists the
+ * exact markers / structured inputs behind it. No hidden numeric scoring.
+ */
+export interface BehaviorSignal<L extends string = SignalLevel> {
+  level: L;
+  confidence: Confidence;
+  reason: string;
+  evidence: string[];
+}
+
 /**
  * Contract enforcement state injected into BehaviorState (Action Contracts).
  * - active: at least one matching contract has unfulfilled tools.
@@ -147,7 +177,7 @@ export interface IdentifierMessage {
  * Frozen per-turn. Every field is required and from a closed enum.
  */
 export interface BehaviorState {
-  schemaVersion: 2;
+  schemaVersion: 3;
   mode: AgentMode;
   userType: UserType;
   conversationStage: ConversationStage;
@@ -159,6 +189,15 @@ export interface BehaviorState {
   toneIntensity: ToneIntensity;
   escalationPressure: EscalationPressure;
   confidence: Confidence;
+  /**
+   * Behavioral signals (PHASE 1 — observe-only). Deterministic LOW/MEDIUM/
+   * HIGH reads of the customer, each with its own provenance. Surfaced in the
+   * prompt's Conversation State block. NOT yet wired into strategy/tone/
+   * escalation/closure — that is a deliberate follow-up.
+   */
+  relationshipStrength: BehaviorSignal<RelationshipStrength>;
+  customerTrust: BehaviorSignal<TrustLevel>;
+  customerFriction: BehaviorSignal<FrictionLevel>;
   /**
    * Required output shape this turn. Decided by BEL — provider only renders.
    */
@@ -251,6 +290,16 @@ export interface RequestInput {
   messageCount: number;
   /** Direction-only of the most recent N messages. */
   recentDirections?: Array<"INBOUND" | "OUTBOUND">;
+  /**
+   * Text of the most recent N INBOUND (customer) messages, oldest→newest,
+   * INCLUDING the current message as the last element. Caller computes this
+   * from the transcript (deterministic). Used by the trust / friction
+   * classifiers to detect repeated verification requests, repeated
+   * complaints, and the customer repeating themselves — patterns a single
+   * message can't reveal. Optional: when omitted, those classifiers fall
+   * back to `lastMessage` alone and lower their confidence.
+   */
+  recentInboundTexts?: string[];
   /**
    * Coarse last-assistant-move tag. Caller looks it up from the prior
    * `ai.bot_turn` audit log row.
@@ -347,6 +396,22 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   // Closure posture — feeds requiredActions for close_conversation / schedule_followup.
   const closurePosture = deriveClosurePosture(input.request, input.flags);
 
+  // Behavioral signals (PHASE 1 — observe-only). Deterministic LOW/MEDIUM/
+  // HIGH reads computed from identity + request + the intent/urgency derived
+  // above. They are surfaced in BehaviorState + the prompt but DO NOT alter
+  // strategy, tone, escalation, or closure yet — that wiring is a follow-up.
+  const relationshipStrength = deriveRelationshipStrength(input.identity);
+  const customerTrust = deriveCustomerTrust({
+    req: input.request,
+    relationship: relationshipStrength.level,
+  });
+  const customerFriction = deriveCustomerFriction({
+    req: input.request,
+    flags: input.flags,
+    intent,
+    urgency,
+  });
+
   // Action Contracts — detect business triggers + enforce required tools.
   // Triggers are matched against tenant contracts; matching contracts
   // restrict allowedActions and add requiredActions.
@@ -438,8 +503,15 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     overrides.push(`action_contract.active triggers=[${triggeredActions.join(",")}] pending=[${actionContractState.pendingTools.join(",")}]`);
   }
 
+  // Audit trail for the behavioral signals — full provenance lands in the
+  // serialized BehaviorState (signal objects carry reason+evidence); these
+  // one-liners make them grep-able in the overrides log too.
+  overrides.push(`signal.relationshipStrength=${relationshipStrength.level} (${relationshipStrength.reason})`);
+  overrides.push(`signal.customerTrust=${customerTrust.level} (${customerTrust.reason})`);
+  overrides.push(`signal.customerFriction=${customerFriction.level} (${customerFriction.reason})`);
+
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     mode: input.mode,
     userType,
     conversationStage,
@@ -451,6 +523,9 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     toneIntensity,
     escalationPressure,
     confidence,
+    relationshipStrength,
+    customerTrust,
+    customerFriction,
     outputContract,
     playbookIds,
     allowedActions,
@@ -1282,7 +1357,7 @@ function selectPlaybooks(opts: {
 
 function buildGeneratorState(input: ComputeBehaviorStateInput): BehaviorState {
   return {
-    schemaVersion: 2,
+    schemaVersion: 3,
     mode: "generator",
     userType: input.identity.hasContact ? "returning" : "unknown",
     conversationStage: "initial",
@@ -1294,6 +1369,19 @@ function buildGeneratorState(input: ComputeBehaviorStateInput): BehaviorState {
     toneIntensity: "neutral",
     escalationPressure: "none",
     confidence: "high",
+    relationshipStrength: deriveRelationshipStrength(input.identity),
+    customerTrust: {
+      level: "medium",
+      confidence: "high",
+      reason: "generator-mode — no live customer to read",
+      evidence: ["mode=generator"],
+    },
+    customerFriction: {
+      level: "low",
+      confidence: "high",
+      reason: "generator-mode — no live customer to read",
+      evidence: ["mode=generator"],
+    },
     outputContract: "STRUCTURED_CONFIG",
     playbookIds: [],
     allowedActions: [],
@@ -1325,6 +1413,332 @@ function buildGeneratorState(input: ComputeBehaviorStateInput): BehaviorState {
     },
   };
 }
+
+// ─── Behavioral signal classifiers (deterministic, explainable) ─────
+//
+// Each is an ordered rule ladder: first match wins and records the rule
+// (`reason`) + the inputs behind it (`evidence`). No numeric scoring.
+
+const LOYAL_CUSTOMER_THRESHOLD = 3;
+
+/**
+ * relationshipStrength — depth of the ongoing relationship, from CRM facts
+ * ONLY (no language parsing). Always HIGH confidence because it is derived
+ * from structured identity data, not noisy text.
+ *
+ *   LOW    — first-time contact / brand-new lead (no history).
+ *   MEDIUM — returning lead, or an existing customer with little history.
+ *   HIGH   — long-term customer (>= LOYAL_CUSTOMER_THRESHOLD prior convos).
+ */
+function deriveRelationshipStrength(id: IdentityInput): BehaviorSignal<RelationshipStrength> {
+  const prior = id.priorConversationCount ?? 0;
+
+  if (!id.hasContact) {
+    return {
+      level: "low",
+      confidence: "high",
+      reason: "no CRM contact → first-time customer",
+      evidence: ["hasContact=false"],
+    };
+  }
+
+  if (id.contactLifecycle === "customer") {
+    if (prior >= LOYAL_CUSTOMER_THRESHOLD) {
+      return {
+        level: "high",
+        confidence: "high",
+        reason: `long-term customer (${prior} prior conversations ≥ ${LOYAL_CUSTOMER_THRESHOLD})`,
+        evidence: ["lifecycle=customer", `priorConversationCount=${prior}`],
+      };
+    }
+    return {
+      level: "medium",
+      confidence: "high",
+      reason: `existing customer (${prior} prior conversation${prior === 1 ? "" : "s"})`,
+      evidence: ["lifecycle=customer", `priorConversationCount=${prior}`],
+    };
+  }
+
+  if (id.contactLifecycle === "lead") {
+    if (prior >= 1) {
+      return {
+        level: "medium",
+        confidence: "high",
+        reason: `returning lead (${prior} prior conversation${prior === 1 ? "" : "s"})`,
+        evidence: ["lifecycle=lead", `priorConversationCount=${prior}`],
+      };
+    }
+    return {
+      level: "low",
+      confidence: "high",
+      reason: "new lead (no prior conversations)",
+      evidence: ["lifecycle=lead", "priorConversationCount=0"],
+    };
+  }
+
+  // Contact exists but lifecycle is unknown — lean on history only.
+  if (prior >= 1) {
+    return {
+      level: "medium",
+      confidence: "medium",
+      reason: `returning contact, lifecycle unknown (${prior} prior conversations)`,
+      evidence: ["lifecycle=null", `priorConversationCount=${prior}`],
+    };
+  }
+  return {
+    level: "low",
+    confidence: "medium",
+    reason: "contact with no history, lifecycle unknown",
+    evidence: ["lifecycle=null", "priorConversationCount=0"],
+  };
+}
+
+/**
+ * customerTrust — how much the customer appears to believe the agent/brand
+ * right now. Baseline is anchored by the relationship (previous successful
+ * interactions ⇒ trust), then adjusted by language in the current + recent
+ * inbound messages.
+ *
+ *   LOW    — repeated verification requests, or skeptical language.
+ *   HIGH   — positive engagement, or a long-term relationship with no
+ *            distrust signal.
+ *   MEDIUM — neutral / insufficient signal (default).
+ */
+function deriveCustomerTrust(opts: {
+  req: RequestInput;
+  relationship: RelationshipStrength;
+}): BehaviorSignal<TrustLevel> {
+  const text = (opts.req.lastMessage || "").toLowerCase();
+  const pool = inboundPool(opts.req);
+
+  // 1. Repeated verification requests across recent inbound → LOW.
+  const verifyCount = countMessagesWithMarkers(pool, VERIFICATION_MARKERS);
+  if (verifyCount >= 2) {
+    return {
+      level: "low",
+      confidence: "medium",
+      reason: "repeated verification requests across messages",
+      evidence: [`verificationMessages=${verifyCount}`],
+    };
+  }
+
+  // 2. Skeptical language in the latest message → LOW.
+  const skeptHit = firstMarkerHit(text, SKEPTICAL_MARKERS);
+  if (skeptHit) {
+    return {
+      level: "low",
+      confidence: "medium",
+      reason: `skeptical language: "${skeptHit}"`,
+      evidence: [skeptHit],
+    };
+  }
+
+  // 3. Positive engagement → HIGH (firmer when the relationship backs it up).
+  const posHit = firstMarkerHit(text, POSITIVE_ENGAGEMENT_MARKERS);
+  if (posHit) {
+    return {
+      level: "high",
+      confidence: opts.relationship === "high" ? "high" : "medium",
+      reason: `positive engagement: "${posHit}"`,
+      evidence: [posHit, `relationshipStrength=${opts.relationship}`],
+    };
+  }
+
+  // 4. Long-term relationship with no distrust signal → HIGH baseline.
+  if (opts.relationship === "high") {
+    return {
+      level: "high",
+      confidence: "medium",
+      reason: "long-term relationship, no distrust signal this turn",
+      evidence: ["relationshipStrength=high"],
+    };
+  }
+
+  // 5. Neutral. Confidence drops when there's barely any text to judge.
+  return {
+    level: "medium",
+    confidence: text.trim().length < 8 ? "low" : "medium",
+    reason: "neutral / insufficient trust signal",
+    evidence: [],
+  };
+}
+
+/**
+ * customerFriction — how much resistance/frustration the customer is
+ * experiencing right now.
+ *
+ *   HIGH   — escalation/handoff flag, repeated complaints, or the customer
+ *            repeating themselves.
+ *   MEDIUM — single negative-sentiment message, or urgent support pressure.
+ *   LOW    — default.
+ */
+function deriveCustomerFriction(opts: {
+  req: RequestInput;
+  flags?: FlagsInput;
+  intent: Intent;
+  urgency: Urgency;
+}): BehaviorSignal<FrictionLevel> {
+  const text = (opts.req.lastMessage || "").toLowerCase();
+  const pool = inboundPool(opts.req);
+
+  // 1. Hard flags — deterministic, HIGH confidence.
+  if (opts.flags?.escalationGateFired || opts.flags?.humanHandoffRequested) {
+    return {
+      level: "high",
+      confidence: "high",
+      reason: "escalation/handoff flag fired",
+      evidence: [
+        opts.flags?.escalationGateFired ? "escalationGateFired" : "",
+        opts.flags?.humanHandoffRequested ? "humanHandoffRequested" : "",
+      ].filter(Boolean),
+    };
+  }
+
+  // 2. Repeated complaints / negative sentiment across recent inbound → HIGH.
+  const negCount = countMessagesWithMarkers(pool, FRICTION_NEGATIVE_MARKERS);
+  if (negCount >= 2) {
+    return {
+      level: "high",
+      confidence: "medium",
+      reason: "repeated complaints / negative sentiment across messages",
+      evidence: [`negativeMessages=${negCount}`],
+    };
+  }
+
+  // 3. Customer repeating themselves → HIGH.
+  const rep = detectRepetition(opts.req.recentInboundTexts);
+  if (rep) {
+    return {
+      level: "high",
+      confidence: "medium",
+      reason: "customer repeating themselves",
+      evidence: [rep],
+    };
+  }
+
+  // 4. Single negative-sentiment message → MEDIUM.
+  const negHit = firstMarkerHit(text, FRICTION_NEGATIVE_MARKERS);
+  if (negHit) {
+    return {
+      level: "medium",
+      confidence: "medium",
+      reason: `negative sentiment: "${negHit}"`,
+      evidence: [negHit],
+    };
+  }
+
+  // 5. Urgent support pressure → MEDIUM.
+  if (opts.urgency === "high" && opts.intent === "support") {
+    return {
+      level: "medium",
+      confidence: "medium",
+      reason: "urgent support pressure",
+      evidence: ["urgency=high", "intent=support"],
+    };
+  }
+
+  return {
+    level: "low",
+    confidence: "medium",
+    reason: "no friction signal",
+    evidence: [],
+  };
+}
+
+// ─── Signal helpers ─────────────────────────────────────────
+
+/**
+ * The inbound messages to scan for multi-message patterns. Prefers the
+ * caller-supplied `recentInboundTexts` (lowercased); falls back to just the
+ * last message when the caller didn't provide history.
+ */
+function inboundPool(req: RequestInput): string[] {
+  const recent = (req.recentInboundTexts ?? []).map((t) => (t || "").toLowerCase());
+  if (recent.length) return recent;
+  const last = (req.lastMessage || "").toLowerCase();
+  return last ? [last] : [];
+}
+
+function countMessagesWithMarkers(messages: string[], markers: string[]): number {
+  let n = 0;
+  for (const m of messages) if (containsAny(m, markers)) n++;
+  return n;
+}
+
+function firstMarkerHit(text: string, markers: string[]): string | null {
+  for (const mk of markers) if (text.includes(mk)) return mk;
+  return null;
+}
+
+/** Lowercase + collapse all punctuation/symbols/whitespace to single spaces. */
+function normalizeForRepetition(s: string): string {
+  return (s || "").toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, " ").trim();
+}
+
+/**
+ * Deterministic "is the customer repeating themselves?" check over the two
+ * most-recent inbound messages. Explainable, not fuzzy: an exact normalized
+ * match, or a token-set overlap (Jaccard) at/above a STATED threshold.
+ * Returns an evidence string when it fires, else null.
+ */
+function detectRepetition(recentInboundTexts?: string[]): string | null {
+  const recent = recentInboundTexts ?? [];
+  if (recent.length < 2) return null;
+  const a = normalizeForRepetition(recent[recent.length - 1]);
+  const b = normalizeForRepetition(recent[recent.length - 2]);
+  if (!a || !b) return null;
+  if (a === b) return "two consecutive inbound messages are identical";
+  const overlap = jaccard(a.split(" "), b.split(" "));
+  if (overlap >= 0.8) return `consecutive inbound token-overlap=${overlap.toFixed(2)} ≥ 0.80`;
+  return null;
+}
+
+function jaccard(a: string[], b: string[]): number {
+  const sa = new Set(a);
+  const sb = new Set(b);
+  if (sa.size === 0 || sb.size === 0) return 0;
+  let inter = 0;
+  for (const x of sa) if (sb.has(x)) inter++;
+  const union = new Set([...a, ...b]).size;
+  return union === 0 ? 0 : inter / union;
+}
+
+// ─── Signal marker sets (HE + EN) ───────────────────────────
+
+const SKEPTICAL_MARKERS = [
+  "really?", "are you sure", "you sure", "prove it", "i don't believe", "i dont believe",
+  "sounds too good", "too good to be true", "is this a scam", "scam", "are you a bot",
+  "is this a bot", "are you real", "how can i trust", "i doubt", "suspicious",
+  "באמת?", "אתה בטוח", "את בטוחה", "אתם בטוחים", "תוכיח", "תוכיחו", "לא מאמין",
+  "לא מאמינה", "נשמע טוב מדי", "רמאות", "אתה בוט", "זה בוט", "חשוד",
+];
+
+const VERIFICATION_MARKERS = [
+  "can you confirm", "please confirm", "how do i know", "is this official",
+  "send proof", "show proof", "any proof", "do you have proof", "verify",
+  "verification", "guarantee", "is it legit", "is this legit",
+  "תאשר", "תאשרו", "אפשר לאמת", "איך אני יודע", "איך אני יודעת", "זה רשמי",
+  "תשלח הוכחה", "יש הוכחה", "אפשר לוודא", "תוכלו לאשר", "אחריות",
+];
+
+const POSITIVE_ENGAGEMENT_MARKERS = [
+  "thank you", "thanks", "thx", "appreciate", "great", "perfect", "awesome",
+  "amazing", "love it", "excellent", "wonderful", "you're the best", "helpful",
+  "👍", "❤️", "🙏", "😊", "🎉",
+  "תודה", "מעולה", "מושלם", "מדהים", "אלוף", "אלופה", "עזרת", "עזרתם", "אחלה", "סבבה",
+];
+
+const FRICTION_NEGATIVE_MARKERS = [
+  // English — frustration / complaint
+  "unacceptable", "ridiculous", "still not", "still doesn't", "still doesnt",
+  "not working", "doesn't work", "doesnt work", "third time", "second time",
+  "frustrated", "frustrating", "fed up", "angry", "terrible", "awful", "worst",
+  "useless", "waste of time", "nobody helped", "no one helped", "this is a joke",
+  // Hebrew — frustration / complaint
+  "לא עובד", "לא עבד", "מתוסכל", "מתוסכלת", "כועס", "כועסת", "עצבני",
+  "שוב פעם", "פעם שלישית", "פעם שנייה", "נמאס", "מספיק", "לא ייאמן",
+  "גרוע", "נורא", "בזבוז זמן", "אף אחד לא", "מקולקל", "זאת בדיחה",
+];
 
 // ─── Heuristic markers (v1 rules; replaceable with classifier later) ──
 

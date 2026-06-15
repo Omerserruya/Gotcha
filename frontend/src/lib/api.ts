@@ -915,11 +915,10 @@ export function acceptPublicInvite(payload: { token: string; name: string; email
 }
 
 export type OnboardingMissionId =
-  | "confirm_business"
+  | "knowledge_base"
+  | "ai_employees"
   | "connect_channel"
-  | "send_test_reply"
-  | "review_agent_tone"
-  | "invite_teammate";
+  | "workflows";
 
 export interface OnboardingMission {
   id: OnboardingMissionId;

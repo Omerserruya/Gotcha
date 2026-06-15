@@ -931,6 +931,28 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     [nodes, reactFlowInstance],
   );
 
+  // Deep-link from the channels page (?focus=<channelType>): once the canvas is
+  // loaded, center on that channel's entry node and pulse it so the user knows
+  // exactly which one was just connected and can wire it up.
+  const didFocusParamRef = useRef(false);
+  useEffect(() => {
+    if (didFocusParamRef.current || !reactFlowInstance || nodes.length === 0) return;
+    const focus = new URLSearchParams(window.location.search).get("focus");
+    if (!focus) return;
+    const target = nodes.find(
+      (n) => n.type === "channel_entry" && String(n.data?.channelType || "").toLowerCase() === focus.toLowerCase(),
+    );
+    if (!target) return;
+    didFocusParamRef.current = true;
+    focusNode(target.id);
+    setNodes((nds) => nds.map((n) => (n.id === target.id ? { ...n, data: { ...n.data, __highlight: true } } : n)));
+    setTimeout(() => {
+      setNodes((nds) => nds.map((n) => (n.id === target.id ? { ...n, data: { ...n.data, __highlight: false } } : n)));
+    }, 4500);
+    // Drop the param so a refresh doesn't re-trigger the focus animation.
+    window.history.replaceState({}, "", "/ai-studio/router");
+  }, [nodes, reactFlowInstance, focusNode, setNodes]);
+
   // Shared data for dropdowns inside nodes
   const [agents, setAgents] = useState<any[]>([]);
   const [flows, setFlows] = useState<any[]>([]);

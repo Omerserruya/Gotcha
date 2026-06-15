@@ -282,6 +282,10 @@ export class OpenAIProvider implements AIProvider {
         lastMessage: lastInbound?.body || "",
         messageCount: context.messages.length,
         recentDirections: context.messages.slice(-5).map((m) => m.direction),
+        recentInboundTexts: context.messages
+          .filter((m) => m.direction === "INBOUND")
+          .slice(-5)
+          .map((m) => m.body || ""),
       },
       copilotPreferredMode: config?.copilotMode,
     });
@@ -573,6 +577,10 @@ export class OpenAIProvider implements AIProvider {
         lastMessage: lastInbound?.body || params.agentMessage || "",
         messageCount: params.messages.length,
         recentDirections: params.messages.slice(-5).map((m) => m.direction),
+        recentInboundTexts: params.messages
+          .filter((m) => m.direction === "INBOUND")
+          .slice(-5)
+          .map((m) => m.body || ""),
       },
       copilotPreferredMode: config?.copilotMode ?? "CHAT",
     });

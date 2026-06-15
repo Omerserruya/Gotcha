@@ -64,15 +64,16 @@ const LEAD_QUALIFICATION: ConversationPlaybook = {
     stages: ["exploration"],
   },
   steps: [
-    { description: "Ask what they are trying to achieve (the outcome they want).", actionImplied: "ask_question" },
-    { description: "Ask about their current situation — channels, tools, team size — whichever is the biggest unknown.", actionImplied: "ask_question" },
-    { description: "Identify the specific pain that's driving the inquiry. Reflect it back.", actionImplied: "acknowledge" },
-    { description: "Only after the pain is clear, propose a concrete next step (demo / proposal / call).", actionImplied: "schedule_booking" },
+    { description: "Acknowledge what they just said and reflect the pain back in their own words — before asking anything.", actionImplied: "acknowledge" },
+    { description: "Ask what outcome they're trying to reach.", actionImplied: "ask_question" },
+    { description: "Surface the biggest unknown about their situation — channels, tools, or scale — as a natural follow-up, not a form field.", actionImplied: "ask_question" },
+    { description: "Once the pain is clear, propose one concrete next step (demo / proposal / call).", actionImplied: "schedule_booking" },
   ],
   hardRules: [
-    "ONE question per turn — never two.",
-    "Do NOT pitch features before pain is identified.",
-    "Do NOT close passively (\"if you need anything else…\"). Always end with a forward move.",
+    "Acknowledge before you ask — never open a turn with a cold qualifier.",
+    "ONE question per turn. A reflection that leads into a single question still counts as one move.",
+    "Do NOT pitch features before the pain is identified.",
+    "Not every turn must end in a question — an observation or reflection can be the move. Just don't let the conversation stall indefinitely.",
   ],
 };
 
@@ -193,7 +194,7 @@ const FEATURE_INQUIRY: ConversationPlaybook = {
   ],
   hardRules: [
     "Do NOT enumerate every feature you have — they asked one question.",
-    "Do NOT close passively. Always pivot to a forward question or a next-step proposal.",
+    "Always pivot forward — a question or a next-step proposal — don't trail off.",
   ],
 };
 

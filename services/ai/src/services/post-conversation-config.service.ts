@@ -149,15 +149,17 @@ export async function setPostConversationConfig(
  * built-in summarizer understands, plus whatever custom keys the tenant
  * declared.
  *
- * TODO(ci-phase2): this is the READ site to cut over to the FieldDefinition
- * registry. Customer Intelligence V2 made `FieldDefinition` the canonical,
- * scope-aware field store (see intelligence-registry.service.ts), but Phase 1
- * deliberately left this legacy `summaryFields` read path untouched to avoid a
- * summarizer regression. Until Phase 2 cuts over, `summaryFields` and
- * `FieldDefinition` are two stores — they don't currently fight (packs/Fields
- * Builder write only to FieldDefinition), but this overlap MUST be closed.
- * Migration plan: docs/customer-intelligence-summaryfields-migration.md
- * Rationale: docs/architecture/adr/0001-customer-intelligence-phase1.md
+ * Phase 2 read cutover (partial): the allow-list now UNIONS the scope-aware
+ * `FieldDefinition` registry (keys with aiExtract=true) on top of the built-ins
+ * and the legacy `summaryFields`. This is what makes the close summarizer (and
+ * the live extractor) actually extract pack/custom intelligence fields so the
+ * ingest layer can route them into the V2 model by scope.
+ *
+ * Still pending (full cutover): retire `summaryFields` as a separate store once
+ * backfill + write-routing are verified at parity. The two stores are unioned
+ * (deduped) here, so they don't conflict in the meantime.
+ *   Migration plan: docs/customer-intelligence-summaryfields-migration.md
+ *   Rationale: docs/architecture/adr/0001-customer-intelligence-phase1.md
  */
 export async function getSummarizerAllowedFields(tenantId: string): Promise<string[]> {
   const cfg = await getPostConversationConfig(tenantId);
@@ -171,5 +173,19 @@ export async function getSummarizerAllowedFields(tenantId: string): Promise<stri
     "role",
   ];
   const custom = cfg.summaryFields.map((f) => f.key);
-  return Array.from(new Set([...builtins, ...custom]));
+
+  // Scope-aware registry (V2). Best-effort: a DB hiccup must not break the
+  // summarizer — fall back to builtins + legacy summaryFields.
+  let registry: string[] = [];
+  try {
+    const defs = await (prisma as any).fieldDefinition.findMany({
+      where: { tenantId, aiExtract: true },
+      select: { key: true },
+    });
+    registry = defs.map((d: { key: string }) => d.key);
+  } catch {
+    /* ignore — registry not available */
+  }
+
+  return Array.from(new Set([...builtins, ...custom, ...registry]));
 }

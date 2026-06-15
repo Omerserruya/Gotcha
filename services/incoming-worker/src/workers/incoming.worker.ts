@@ -7,6 +7,7 @@ import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTr
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v19.0";
+const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
 const UPLOADS_DIR = process.env.UPLOADS_DIR || path.resolve(process.cwd(), "uploads");
 const UPLOADS_BASE_URL = process.env.UPLOADS_BASE_URL || "/api/uploads";
@@ -17,7 +18,7 @@ const UNSUPPORTED_MEDIA_TYPES = ["audio", "location"];
 // Ensure uploads dir exists
 fs.mkdirSync(UPLOADS_DIR, { recursive: true });
 
-async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string): Promise<{ name: string | null; avatarUrl: string | null }> {
+async function fetchMetaProfile(senderId: string, accessToken: string, channel: string, pageId?: string, igLogin?: boolean): Promise<{ name: string | null; avatarUrl: string | null }> {
   let name: string | null = null;
   let avatarUrl: string | null = null;
 
@@ -27,7 +28,11 @@ async function fetchMetaProfile(senderId: string, accessToken: string, channel: 
     const fields = channel === "INSTAGRAM"
       ? "name,username,profile_pic"
       : "first_name,last_name,name,picture.type(large)";
-    const res = await axios.get(`${FB_API_URL}/${senderId}`, {
+    // Instagram-Login accounts hold an IG-user token that only works against
+    // graph.instagram.com; everything else (Messenger, legacy IG page tokens)
+    // uses graph.facebook.com.
+    const base = channel === "INSTAGRAM" && igLogin ? IG_API_URL : FB_API_URL;
+    const res = await axios.get(`${base}/${senderId}`, {
       params: { fields, access_token: accessToken },
     });
     if (channel === "INSTAGRAM") {
@@ -213,7 +218,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     const accessToken = decrypted?.accessToken;
     const pageId = decrypted?.pageId || channelAccount?.externalId;
     if (accessToken) {
-      const profile = await fetchMetaProfile(senderId, accessToken, channel, pageId);
+      const profile = await fetchMetaProfile(senderId, accessToken, channel, pageId, decrypted?.igLogin);
       if (!displayName) displayName = profile.name;
       avatarUrl = profile.avatarUrl;
     }

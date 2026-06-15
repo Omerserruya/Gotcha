@@ -66,6 +66,10 @@ interface NoteLabels {
   summary: string; sentiment: string;
   qualification: string; actionItems: string;
   minutesShort: string; secondsShort: string;
+  /** Localized words for the sentiment enum so the value isn't raw English. */
+  sentiments: Record<string, string>;
+  /** BCP-47 tag for Intl date formatting (locale → readable timestamps). */
+  intlTag: string;
 }
 
 const NOTE_LABELS: Record<string, NoteLabels> = {
@@ -76,6 +80,8 @@ const NOTE_LABELS: Record<string, NoteLabels> = {
     summary: "Summary", sentiment: "Sentiment",
     qualification: "Qualification", actionItems: "Action items",
     minutesShort: "m", secondsShort: "s",
+    sentiments: { positive: "Positive", neutral: "Neutral", negative: "Negative", mixed: "Mixed" },
+    intlTag: "en-US",
   },
   he: {
     inbound: "נכנסת", outbound: "יוצאת",
@@ -84,6 +90,8 @@ const NOTE_LABELS: Record<string, NoteLabels> = {
     summary: "סיכום", sentiment: "סנטימנט",
     qualification: "כשירות", actionItems: "פעולות לביצוע",
     minutesShort: "ד׳", secondsShort: "ש׳",
+    sentiments: { positive: "חיובי", neutral: "ניטרלי", negative: "שלילי", mixed: "מעורב" },
+    intlTag: "he-IL",
   },
 };
 
@@ -106,16 +114,16 @@ export function renderInteractionBody(i: InteractionEnvelope): string {
   lines.push(`GOTCHA — ${dir} ${channel}`);
   if (i.duration_seconds != null) lines.push(`${L.duration}: ${formatDuration(i.duration_seconds, L)}`);
   if (i.message_count != null) lines.push(`${L.messages}: ${i.message_count}`);
-  if (i.started_at) lines.push(`${L.started}: ${i.started_at}`);
-  if (i.ended_at) lines.push(`${L.ended}: ${i.ended_at}`);
+  if (i.started_at) lines.push(`${L.started}: ${formatTimestamp(i.started_at, L)}`);
+  if (i.ended_at) lines.push(`${L.ended}: ${formatTimestamp(i.ended_at, L)}`);
   lines.push("");
-  if (i.summary) lines.push(`${L.summary}:`, i.summary.trim(), "");
+  if (i.summary) lines.push(`${L.summary}:`, stripNoteMarkdown(i.summary.trim()), "");
   const eng = i.engagement || {};
-  if (eng.sentiment) lines.push(`${L.sentiment}: ${eng.sentiment}`);
+  if (eng.sentiment) lines.push(`${L.sentiment}: ${L.sentiments[String(eng.sentiment).toLowerCase()] ?? eng.sentiment}`);
   if (eng.qualification) lines.push(`${L.qualification}: ${eng.qualification}`);
   if (Array.isArray(eng.action_items) && eng.action_items.length) {
     lines.push("", `${L.actionItems}:`);
-    for (const a of eng.action_items) lines.push(`- ${a}`);
+    for (const a of eng.action_items) lines.push(`• ${stripNoteMarkdown(String(a))}`);
   }
   lines.push("", `[gotcha_source_interaction_id=${i.source_interaction_id}]`);
   return lines.join("\n").trim();
@@ -126,6 +134,44 @@ function formatDuration(seconds: number, L: NoteLabels): string {
   const m = Math.floor(seconds / 60);
   const s = Math.round(seconds % 60);
   return m > 0 ? `${m}${L.minutesShort} ${s}${L.secondsShort}` : `${s}${L.secondsShort}`;
+}
+
+/**
+ * ISO-8601 → a clean, human date/time in the note's language. Times are shown
+ * in UTC (consistent with how the timestamps are stored) so the note never
+ * leaks a raw "2026-06-10T09:29:47.703Z" into the CRM. Falls back to the raw
+ * value if parsing/formatting ever throws.
+ */
+function formatTimestamp(iso: string, L: NoteLabels): string {
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return iso;
+  try {
+    return new Intl.DateTimeFormat(L.intlTag, {
+      dateStyle: "medium",
+      timeStyle: "short",
+      timeZone: "UTC",
+    }).format(d) + " UTC";
+  } catch {
+    return iso;
+  }
+}
+
+/**
+ * CRM activity notes are PLAIN TEXT — markdown emphasis renders as literal
+ * "**asterisks**", which looks like junk. The summary/action-item text is
+ * generated with markdown for the rich workspace UI, so we strip the emphasis
+ * here (note-only) instead of at the source, preserving markdown everywhere
+ * the UI wants it.
+ */
+function stripNoteMarkdown(text: string): string {
+  return text
+    .replace(/\*\*([^*]+)\*\*/g, "$1")        // **bold** → bold
+    .replace(/__([^_]+)__/g, "$1")            // __bold__ → bold
+    .replace(/(^|[^*])\*([^*\n]+)\*/g, "$1$2") // *italic* → italic
+    .replace(/`([^`]+)`/g, "$1")              // `code` → code
+    .replace(/^#{1,6}\s+/gm, "")              // # heading → heading
+    .replace(/[ \t]+$/gm, "")                  // trailing whitespace
+    .trim();
 }
 
 // ─── HubSpot ────────────────────────────────────────────────

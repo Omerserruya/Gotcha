@@ -28,6 +28,7 @@ import {
   sanitizeHistoryForLLM,
 } from "./agent-memory.service";
 import { invalidateFunnelCache } from "./funnel-config.repo";
+import { isBrandArchetype } from "./brand-archetypes";
 
 const MAX_ROUNDS = 6;
 
@@ -208,7 +209,7 @@ function systemPrompt(snapshot: BuilderDraftSnapshot, locale?: string): string {
 - You may write the captured config VALUES (goal text, rules, etc.) in ${langName} too so they read naturally for this business.
 
 # Your GOAL
-Produce a finished AI Employee config by the end of the conversation: role → goal → (pipeline, only if sales-type) → personalization → escalation rules → conversation flow → business rules. Knowledge & tools are chosen by the admin in a separate step (do NOT collect them over chat). Every decision is captured by calling a builder tool, which updates the live draft.
+Produce a finished AI Employee config by the end of the conversation: name → role → goal → (pipeline, only if sales-type) → personalization → escalation rules → **then OFFER the optional refinements: conversation flow, business rules/guardrails, brand voice**. Knowledge & tools are chosen by the admin in a separate step (do NOT collect them over chat). Every decision is captured by calling a builder tool, which updates the live draft.
 
 # The company is ALREADY KNOWN — do NOT ask about it
 - We already know the business from onboarding: ${snapshot.companyOverview ? `"${snapshot.companyOverview}"` : "(on file)"}.
@@ -223,7 +224,7 @@ Produce a finished AI Employee config by the end of the conversation: role → g
 - Keep moving toward completeness. Periodically tell the admin what's still missing.
 
 # Naming
-- Give the employee a real name with \`set_identity\` (ask the admin what to call it, or propose a fitting one and confirm). Don't leave it as "Untitled AI Employee" — a name is required to finish.
+- EARLY in the conversation, ask the admin what to name this employee. It's their call — but skippable: if they say "you decide" or skip it, propose a fitting name and confirm. Don't make them think one up. A name is required to finish, but the admin should never feel blocked by it — always offer one. Capture with \`set_identity\`. Never leave it as "Untitled AI Employee".
 
 # Role & goal — every employee MUST have a goal AND success criteria
 - Pick the role with \`set_role\`. Valid roles: ${ALL_ROLES.join(", ")}.
@@ -239,11 +240,15 @@ ${isFunnelRole
 - Confirm stage names with the admin before creating — don't invent a pipeline they didn't describe.`
   : `The CURRENT role is not a pipeline role, so do NOT ask about a sales pipeline or funnel. If — and only if — you change the role to sales/sdr/recruiting, funnel tools become available and you must attach one.`}
 
-# Personalization, escalation, flow, rules
-- \`set_personalization\`: languages and persona only. Do NOT ask about tone or writing style — humanlike behavior is governed centrally by the platform Personality skill, not per-agent. Just confirm the languages the employee should speak and (optionally) gender/persona.
+# Personalization & escalation
+- \`set_personalization\`: languages, persona, and brand voice. Do NOT ask about tone or writing style — humanlike behavior is governed centrally by the platform Personality skill, not per-agent. Confirm the languages the employee should speak and (optionally) gender/persona.
 - \`set_escalation\`: when to hand off to a human + the hand-off message. Ask the admin for their real triggers; offer common ones but let them choose.
-- \`set_conversation_flow\`: the tactical step sequence this employee should follow.
-- \`set_rules\`: hard business guardrails ("never promise refunds", "never quote a price without a quote", etc.).
+
+# Optional refinements — OFFER each, let the admin SKIP
+Before you finalize, proactively OFFER these three, one at a time. Frame each as optional ("want to set this up, or skip it for now?") and move on the INSTANT the admin skips or says "you decide". NEVER block \`finalize\` on them, and never nag — offer once, accept a skip.
+- **Conversation flow** (\`set_conversation_flow\`): the tactical step sequence the employee follows. Offer to draft one from the goal; skip if they don't want a scripted flow.
+- **Business rules / guardrails** (\`set_rules\`): hard limits like "never promise refunds" or "never quote a price without a formal quote". Suggest a couple that fit their business; skip if they have none.
+- **Brand voice** (\`set_personalization\` with \`brand_archetype\`): the archetype shaping HOW the employee sounds — pace, warmth, vocabulary. Options: \`trusted_advisor\` (measured, credible), \`high_energy_coach\` (short, motivating), \`luxury_concierge\` (refined, formal), \`beauty_consultant\` (warm, expressive), or \`neutral\` (default). Suggest the one that fits their brand and confirm; skip to leave it neutral.
 
 # Knowledge & tools — handled OUTSIDE this chat
 - Do NOT ask about, list, or attach knowledge bases or tools over chat. The admin selects Knowledge and Tools as cards in a dedicated step right after this conversation. Skip those topics entirely.
@@ -262,6 +267,7 @@ ${JSON.stringify(
       hasEscalation: snapshot.escalationRules.length > 0,
       flowSteps: snapshot.conversationFlow.length,
       rules: snapshot.customGuardrails.length,
+      brandArchetype: (snapshot.persona as any)?.brand_archetype || null,
       knowledge: snapshot.knowledge.length,
       tools: snapshot.tools.length,
     },
@@ -318,6 +324,13 @@ function buildBuilderTools(role: string): Array<Record<string, unknown>> {
           properties: {
             gender: { type: "string", enum: ["male", "female", "neutral"] },
             warmth: { type: "string" }, humor: { type: "string" },
+            // Brand Voice archetype — shapes HOW the employee sounds (pace,
+            // warmth, vocabulary), layered on the central Personality skill.
+            // Pick the one matching the brand; omit/neutral for no strong flavor.
+            brand_archetype: {
+              type: "string",
+              enum: ["trusted_advisor", "high_energy_coach", "luxury_concierge", "beauty_consultant", "neutral"],
+            },
           },
         },
       },
@@ -624,6 +637,7 @@ async function dispatchBuilderTool(
           if (args.persona.warmth || args.persona.humor) {
             next.traits = { ...(prev.traits || {}), ...(args.persona.warmth ? { warmth: args.persona.warmth } : {}), ...(args.persona.humor ? { humor: args.persona.humor } : {}) };
           }
+          if (isBrandArchetype(args.persona.brand_archetype)) next.brand_archetype = args.persona.brand_archetype;
           data.persona = next;
         }
         if (Object.keys(data).length === 0) return { ok: false, summary: "no fields", toModel: { ok: false, error: "send at least one of languages/persona" } };

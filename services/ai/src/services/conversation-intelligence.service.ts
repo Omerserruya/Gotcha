@@ -1,4 +1,4 @@
-import { prisma } from "@chatcenter/shared";
+import { prisma, resolveEffectiveLocale } from "@chatcenter/shared";
 import { getProvider, summarizeConversation, classifyMessage, ConversationContext } from "./ai-assist.service";
 
 export async function analyzeConversation(tenantId: string, conversationId: string) {
@@ -28,6 +28,13 @@ export async function analyzeConversation(tenantId: string, conversationId: stri
     }
   }
 
+  // Resolve the tenant's effective system language so the summary is written
+  // in the same tongue as the rest of the workspace AND the CRM note labels —
+  // otherwise the summary comes out English while the note frame is localized.
+  const summaryLocale = await resolveEffectiveLocale({ tenantId })
+    .then((r) => r.effective)
+    .catch(() => undefined);
+
   // Summarize conversation
   let summary: string | undefined;
   try {
@@ -35,6 +42,7 @@ export async function analyzeConversation(tenantId: string, conversationId: stri
       tenantId,
       conversationId,
       customerName: conversation.customerName || undefined,
+      locale: summaryLocale,
       messages: messages.map((m) => ({
         direction: m.direction as "INBOUND" | "OUTBOUND",
         body: m.body || "",

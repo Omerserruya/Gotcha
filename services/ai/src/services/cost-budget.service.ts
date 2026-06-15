@@ -116,7 +116,7 @@ export function createTurnBudget(opts: CreateTurnBudgetOpts): TurnBudget {
 }
 
 /**
- * Sum `UsageLog.tokensTotal` for the given scope. Resilient to schema
+ * Sum `UsageLog.tokensEquivalent` for the given scope. Resilient to schema
  * drift — falls back to `0` on any unexpected error. The audit doc is
  * the source of truth; budget enforcement is best-effort.
  */
@@ -126,13 +126,14 @@ async function sumUsage(scope: { tenantId?: string; conversationId?: string; sin
     if (scope.tenantId) where.tenantId = scope.tenantId;
     if (scope.conversationId) where.metadata = { path: ["conversationId"], equals: scope.conversationId };
     if (scope.since) where.createdAt = { gte: scope.since };
-    // The UsageLog model has `tokensTotal`, `promptTokens`, `completionTokens`.
-    // We use `tokensTotal` which is filled on every aiService completion.
+    // The UsageLog model has `tokensEquivalent`, `promptTokens`, `completionTokens`.
+    // We sum `tokensEquivalent` — the denormalized total filled on every
+    // aiService completion (there is no `tokensTotal` column).
     const agg = await (prisma as any).usageLog.aggregate({
       where,
-      _sum: { tokensTotal: true },
+      _sum: { tokensEquivalent: true },
     });
-    const v = agg?._sum?.tokensTotal;
+    const v = agg?._sum?.tokensEquivalent;
     return typeof v === "number" ? v : 0;
   } catch {
     // Fail-open: never block real conversations because the usage table

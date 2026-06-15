@@ -9,9 +9,10 @@
  * dictated over chat). On finish → the existing agent editor (prefilled).
  */
 
-import { useEffect, useRef, useState, useCallback } from "react";
+import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import clsx from "clsx";
+import { logoForIntegration } from "@/lib/integration-logos";
 import { useI18n } from "@/context/I18nContext";
 import {
   builderStart,
@@ -20,6 +21,7 @@ import {
   builderGetOptions,
   builderToggleTool,
   builderToggleKnowledge,
+  builderSaveRefinements,
   builderReadinessTest,
   type BuilderDraftSnapshot,
   type BuilderSSEEvent,
@@ -86,8 +88,9 @@ export default function AgentBuilder({
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
 
-  // Wizard stage: conversational config → KB step → Tools step → readiness.
-  const [wizardStep, setWizardStep] = useState<"chat" | "kb" | "tools">("chat");
+  // Wizard stage: conversational config → KB → Refinements → Tools → readiness.
+  const [wizardStep, setWizardStep] = useState<"chat" | "kb" | "refine" | "tools">("chat");
+  const [savingRefine, setSavingRefine] = useState(false);
   const [optTools, setOptTools] = useState<BuilderOptionTool[]>([]);
   const [optKbs, setOptKbs] = useState<BuilderOptionKb[]>([]);
   const [optLoading, setOptLoading] = useState(false);
@@ -156,6 +159,27 @@ export default function AgentBuilder({
     try { const r = await builderToggleTool(token, agentId, id, attach); setDraft(r.data.draft); }
     catch { /* ignore */ } finally { setToggleBusy(null); }
   }, [agentId, token]);
+
+  // Persist the optional refinements (name / flow / guardrails) then advance to
+  // the Tools step. Everything here is optional — Skip just advances without
+  // saving. `onDone` runs after a successful save so the step can move on.
+  const saveRefinements = useCallback(async (
+    refine: { name?: string; conversationFlow?: Array<{ action: string; details?: string }>; customGuardrails?: string[] },
+    onDone: () => void,
+  ) => {
+    if (!agentId) { onDone(); return; }
+    setSavingRefine(true);
+    setError(null);
+    try {
+      const r = await builderSaveRefinements(token, agentId, refine);
+      setDraft(r.data.draft);
+      onDone();
+    } catch (e: any) {
+      setError(e?.message || L("Couldn't save the refinements.", "שמירת ההגדרות נכשלה."));
+    } finally {
+      setSavingRefine(false);
+    }
+  }, [agentId, token, L]);
 
   // Conversational config is "done enough" to move to the KB/Tools steps —
   // knowledge is NOT part of this (it's collected in the KB step).
@@ -341,8 +365,20 @@ export default function AgentBuilder({
                 busyId={toggleBusy}
                 onToggle={toggleKb}
                 onCreate={() => setKbModalOpen(true)}
-                onNext={() => setWizardStep("tools")}
+                onNext={() => setWizardStep("refine")}
                 canNext={(draft?.knowledge?.length || 0) > 0}
+                L={L}
+              />
+            )}
+
+            {wizardStep === "refine" && draft && (
+              <StepRefine
+                key={draft.id}
+                draft={draft}
+                saving={savingRefine}
+                onBack={() => setWizardStep("kb")}
+                onSkip={() => setWizardStep("tools")}
+                onSave={(refine) => saveRefinements(refine, () => setWizardStep("tools"))}
                 L={L}
               />
             )}
@@ -354,7 +390,7 @@ export default function AgentBuilder({
                 loading={optLoading}
                 busyId={toggleBusy}
                 onToggle={toggleTool}
-                onBack={() => setWizardStep("kb")}
+                onBack={() => setWizardStep("refine")}
                 onFinish={runReadiness}
                 finishing={testing}
                 L={L}
@@ -553,7 +589,7 @@ function StepKnowledge({ kbs, attached, loading, busyId, onToggle, onCreate, onN
     <div className="ml-11 bg-white border border-violet-200 rounded-2xl p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-violet-500">{L("Step 1 of 2", "שלב 1 מתוך 2")}</div>
+          <div className="text-[11px] uppercase tracking-wide text-violet-500">{L("Step 1 of 3", "שלב 1 מתוך 3")}</div>
           <h4 className="text-sm font-semibold text-gray-900">{L("Choose knowledge", "בחירת ידע")} <span className="text-red-400">*</span></h4>
         </div>
         <button onClick={onCreate} className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Create / upload", "+ צור / העלה")}</button>
@@ -582,6 +618,136 @@ function StepKnowledge({ kbs, attached, loading, busyId, onToggle, onCreate, onN
   );
 }
 
+// Step 2 — optional refinements: name, conversation flow, custom guardrails.
+// Everything here is skippable; the builder may have pre-filled some of it over
+// chat, so we seed from the live draft. Skip advances without saving.
+function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
+  draft: BuilderDraftSnapshot;
+  saving: boolean;
+  onBack: () => void;
+  onSkip: () => void;
+  onSave: (refine: { name?: string; conversationFlow: Array<{ action: string; details?: string }>; customGuardrails: string[] }) => void;
+  L: Tr;
+}) {
+  const seedName = draft.name && draft.name !== "Untitled AI Employee" ? draft.name : "";
+  const [name, setName] = useState(seedName);
+  const [flow, setFlow] = useState<Array<{ action: string; details: string }>>(
+    (draft.conversationFlow || []).map((s) => ({ action: s.action || "", details: s.details || "" })),
+  );
+  const [rules, setRules] = useState<string[]>(draft.customGuardrails || []);
+
+  const setFlowAt = (i: number, patch: Partial<{ action: string; details: string }>) =>
+    setFlow((f) => f.map((s, j) => (j === i ? { ...s, ...patch } : s)));
+  const removeFlow = (i: number) => setFlow((f) => f.filter((_, j) => j !== i));
+  const addFlow = () => setFlow((f) => [...f, { action: "", details: "" }]);
+
+  const setRuleAt = (i: number, v: string) => setRules((r) => r.map((x, j) => (j === i ? v : x)));
+  const removeRule = (i: number) => setRules((r) => r.filter((_, j) => j !== i));
+  const addRule = () => setRules((r) => [...r, ""]);
+
+  const submit = () => {
+    const conversationFlow = flow
+      .map((s) => ({ action: s.action.trim(), details: s.details.trim() }))
+      .filter((s) => s.action);
+    const customGuardrails = rules.map((r) => r.trim()).filter(Boolean);
+    onSave({ name: name.trim() || undefined, conversationFlow, customGuardrails });
+  };
+
+  const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition";
+
+  return (
+    <div className="ml-11 bg-white border border-violet-200 rounded-2xl p-4 shadow-sm space-y-4">
+      <div>
+        <div className="text-[11px] uppercase tracking-wide text-violet-500">{L("Step 2 of 3", "שלב 2 מתוך 3")}</div>
+        <h4 className="text-sm font-semibold text-gray-900">{L("Refine (optional)", "שיוף (רשות)")}</h4>
+        <p className="text-xs text-gray-500 mt-0.5">{L("Fine-tune the name, a step-by-step flow, and hard guardrails — or skip and do it later.", "כווננו את השם, תסריט שלב-אחר-שלב וכללים נוקשים — או דלגו ועשו זאת בהמשך.")}</p>
+      </div>
+
+      {/* Name */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-gray-700">{L("Name", "שם")}</label>
+        <input
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+          placeholder={L("e.g. Maya — Support", "למשל מאיה — תמיכה")}
+          className={inputCls}
+        />
+      </div>
+
+      {/* Conversation flow */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-700">{L("Conversation flow", "תסריט שיחה")}</label>
+          <button type="button" onClick={addFlow} className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Add step", "+ הוסף שלב")}</button>
+        </div>
+        {flow.length === 0 ? (
+          <p className="text-xs text-gray-400">{L("No scripted flow — the employee improvises from its goal.", "אין תסריט — העובד מאלתר לפי המטרה.")}</p>
+        ) : (
+          <div className="space-y-2">
+            {flow.map((s, i) => (
+              <div key={i} className="flex items-start gap-2">
+                <span className="mt-2 text-xs text-gray-400 w-4 shrink-0">{i + 1}.</span>
+                <div className="flex-1 space-y-1">
+                  <input
+                    value={s.action}
+                    onChange={(e) => setFlowAt(i, { action: e.target.value })}
+                    placeholder={L("Step action, e.g. Greet & ask the order number", "פעולת השלב, למשל ברכה ובקשת מספר הזמנה")}
+                    className={inputCls}
+                  />
+                  <input
+                    value={s.details}
+                    onChange={(e) => setFlowAt(i, { details: e.target.value })}
+                    placeholder={L("Details (optional)", "פרטים (רשות)")}
+                    className={clsx(inputCls, "text-xs")}
+                  />
+                </div>
+                <button type="button" onClick={() => removeFlow(i)} className="mt-1.5 text-gray-300 hover:text-red-500 shrink-0" aria-label={L("Remove", "הסר")}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      {/* Custom guardrails */}
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between">
+          <label className="text-xs font-medium text-gray-700">{L("Custom guardrails", "כללים נוקשים")}</label>
+          <button type="button" onClick={addRule} className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Add rule", "+ הוסף כלל")}</button>
+        </div>
+        {rules.length === 0 ? (
+          <p className="text-xs text-gray-400">{L("No hard rules. e.g. \"Never promise a refund\".", "אין כללים נוקשים. למשל \"אף פעם אל תבטיח החזר\".")}</p>
+        ) : (
+          <div className="space-y-2">
+            {rules.map((r, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <span className="text-violet-400 shrink-0">•</span>
+                <input
+                  value={r}
+                  onChange={(e) => setRuleAt(i, e.target.value)}
+                  placeholder={L("e.g. Never quote a price without a formal quote", "למשל אל תנקוב במחיר ללא הצעת מחיר רשמית")}
+                  className={inputCls}
+                />
+                <button type="button" onClick={() => removeRule(i)} className="text-gray-300 hover:text-red-500 shrink-0" aria-label={L("Remove", "הסר")}>×</button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+
+      <div className="flex items-center justify-between pt-1">
+        <button onClick={onBack} disabled={saving} className="text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50">← {L("Back", "חזרה")}</button>
+        <div className="flex items-center gap-2">
+          <button onClick={onSkip} disabled={saving} className="px-3 py-2 text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50">{L("Skip", "דלג")}</button>
+          <button onClick={submit} disabled={saving}
+            className="px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition disabled:opacity-50">
+            {saving ? L("Saving…", "שומר…") : L("Save & continue", "שמור והמשך")} →
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinish, finishing, L }: {
   tools: BuilderOptionTool[];
   attached: Set<string>;
@@ -593,11 +759,30 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
   finishing: boolean;
   L: Tr;
 }) {
+  // Group tools by their integration so the picker reads as categories
+  // (integration header + its actions) instead of one flat list.
+  const groups = useMemo(() => {
+    const m = new Map<string, BuilderOptionTool[]>();
+    for (const t of tools) {
+      const key = t.integration || L("Other", "אחר");
+      const arr = m.get(key);
+      if (arr) arr.push(t);
+      else m.set(key, [t]);
+    }
+    return Array.from(m.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+  }, [tools, L]);
+
+  // Filter by integration (chips). "all" shows every category.
+  const [filter, setFilter] = useState<string>("all");
+  const integrations = useMemo(() => groups.map(([name]) => name), [groups]);
+  const activeFilter = filter !== "all" && !integrations.includes(filter) ? "all" : filter;
+  const visibleGroups = activeFilter === "all" ? groups : groups.filter(([name]) => name === activeFilter);
+
   return (
     <div className="ml-11 bg-white border border-violet-200 rounded-2xl p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
         <div>
-          <div className="text-[11px] uppercase tracking-wide text-violet-500">{L("Step 2 of 2", "שלב 2 מתוך 2")}</div>
+          <div className="text-[11px] uppercase tracking-wide text-violet-500">{L("Step 3 of 3", "שלב 3 מתוך 3")}</div>
           <h4 className="text-sm font-semibold text-gray-900">{L("Choose tools", "בחירת כלים")}</h4>
         </div>
         <a href="/integrations" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Connect", "+ חבר")}</a>
@@ -608,11 +793,46 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
       ) : tools.length === 0 ? (
         <p className="text-xs text-gray-300">{L("No connected tools yet.", "אין עדיין כלים מחוברים.")}</p>
       ) : (
-        <div className="space-y-1.5">
-          {tools.map((t) => (
-            <CardCheckbox key={t.tenantToolId} checked={attached.has(t.tenantToolId)} busy={busyId === "tool:" + t.tenantToolId} onClick={() => onToggle(t.tenantToolId, !attached.has(t.tenantToolId))} title={t.name} subtitle={t.integration} risk={t.risk} />
-          ))}
-        </div>
+        <>
+          {integrations.length > 1 && (
+            <div className="flex flex-wrap gap-1.5">
+              <FilterChip active={activeFilter === "all"} onClick={() => setFilter("all")} label={L("All", "הכל")} />
+              {integrations.map((name) => (
+                <FilterChip key={name} active={activeFilter === name} onClick={() => setFilter(name)} label={name} icon={<IntegrationIcon name={name} size={12} />} />
+              ))}
+            </div>
+          )}
+          <div className="space-y-3 max-h-[22rem] overflow-y-auto pr-1 -mr-1">
+          {visibleGroups.map(([integration, items]) => {
+            const attachedCount = items.filter((t) => attached.has(t.tenantToolId)).length;
+            return (
+              <div key={integration} className="space-y-1.5">
+                {/* Category header — integration icon + name + selected count */}
+                <div className="flex items-center gap-2 px-0.5">
+                  <IntegrationIcon name={integration} size={18} />
+                  <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 truncate">{integration}</span>
+                  <span className="ml-auto text-[10px] tabular-nums text-gray-400">
+                    {attachedCount > 0 ? `${attachedCount}/${items.length}` : items.length}
+                  </span>
+                </div>
+                <div className="space-y-1.5">
+                  {items.map((t) => (
+                    <CardCheckbox
+                      key={t.tenantToolId}
+                      checked={attached.has(t.tenantToolId)}
+                      busy={busyId === "tool:" + t.tenantToolId}
+                      onClick={() => onToggle(t.tenantToolId, !attached.has(t.tenantToolId))}
+                      title={t.name}
+                      icon={<IntegrationIcon name={t.integration} size={16} />}
+                      risk={t.risk}
+                    />
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          </div>
+        </>
       )}
       <div className="flex items-center justify-between pt-1">
         <button onClick={onBack} disabled={finishing} className="text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50">← {L("Back", "חזרה")}</button>
@@ -625,8 +845,8 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
   );
 }
 
-function CardCheckbox({ checked, busy, onClick, title, subtitle, risk }: {
-  checked: boolean; busy: boolean; onClick: () => void; title: string; subtitle?: string; risk?: string;
+function CardCheckbox({ checked, busy, onClick, title, subtitle, icon, risk }: {
+  checked: boolean; busy: boolean; onClick: () => void; title: string; subtitle?: string; icon?: React.ReactNode; risk?: string;
 }) {
   return (
     <button
@@ -645,6 +865,7 @@ function CardCheckbox({ checked, busy, onClick, title, subtitle, risk }: {
           <svg className="w-3 h-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={3}><path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" /></svg>
         ) : null}
       </span>
+      {icon}
       <span className="min-w-0 flex-1">
         <span className="block text-sm text-gray-800 truncate">{title}</span>
         {subtitle && <span className="block text-[11px] text-gray-400 truncate">{subtitle}</span>}
@@ -652,6 +873,52 @@ function CardCheckbox({ checked, busy, onClick, title, subtitle, risk }: {
       {risk && risk.toUpperCase() === "HIGH" && (
         <span className="text-[9px] uppercase tracking-wide text-red-500 border border-red-200 rounded-full px-1.5 py-0.5 shrink-0">risk</span>
       )}
+    </button>
+  );
+}
+
+// Integration logo for a tool/category. Falls back to a violet first-letter
+// badge when there's no known logo (e.g. built-in/internal tools).
+function IntegrationIcon({ name, size = 16 }: { name: string; size?: number }) {
+  const [broken, setBroken] = useState(false);
+  const url = logoForIntegration(name);
+  if (url && !broken) {
+    return (
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={url}
+        alt=""
+        onError={() => setBroken(true)}
+        className="rounded-sm object-contain shrink-0 bg-white"
+        style={{ width: size, height: size }}
+      />
+    );
+  }
+  const letter = (name || "?").trim().charAt(0).toUpperCase() || "?";
+  return (
+    <span
+      className="rounded-sm bg-violet-100 text-violet-600 font-bold flex items-center justify-center shrink-0"
+      style={{ width: size, height: size, fontSize: Math.round(size * 0.55) }}
+    >
+      {letter}
+    </span>
+  );
+}
+
+function FilterChip({ active, onClick, label, icon }: {
+  active: boolean; onClick: () => void; label: string; icon?: React.ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={clsx(
+        "flex items-center gap-1 px-2 py-1 rounded-full text-[11px] border transition max-w-[10rem]",
+        active ? "bg-violet-600 border-violet-600 text-white" : "bg-white border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-700",
+      )}
+    >
+      {icon}
+      <span className="truncate">{label}</span>
     </button>
   );
 }

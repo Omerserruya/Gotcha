@@ -15,7 +15,6 @@ hang every extracted fact on it (backed by `CustomerBrief`). That collapses thre
 fundamentally different things — *who the customer is*, *what happened in a
 conversation*, and *what deal is in flight* — into a single bag, where the newest
 conversation silently overwrites durable truth and a customer can only ever have
-one "wedding."
 
 **V2 thesis:** Customer Intelligence is not an object. It is a **layered domain**
 of three records with different lifecycles, owners, and cardinalities, stitched by

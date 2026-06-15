@@ -102,12 +102,12 @@ const STEPS: TourStep[] = [
     placement: "right",
   },
   {
-    id: "send-reply-mission",
-    selector: '[data-tour="mission-send_test_reply"]',
-    title: ["Send Reply step", "שלב 'שליחת תגובה'"],
+    id: "workflow-mission",
+    selector: '[data-tour="mission-workflows"]',
+    title: ["Your setup checklist", "רשימת ההגדרה שלכם"],
     body: [
-      "This card guides you. Open any conversation, type a reply, and send. The step turns green automatically.",
-      "הכרטיס הזה ינחה אתכם. פתחו שיחה, כתבו תגובה ושלחו — הצעד יצבע ירוק אוטומטית.",
+      "This checklist guides your setup: connect a knowledge base, set up your AI Employee, connect a channel, and wire your workflow. Each step turns green automatically as you complete it.",
+      "הרשימה הזו מלווה אתכם בהגדרה: חיבור מאגר ידע, הגדרת עובד ה-AI, חיבור ערוץ והגדרת תהליך העבודה. כל צעד יצבע ירוק אוטומטית עם השלמתו.",
     ],
   },
   {

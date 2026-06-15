@@ -548,6 +548,16 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        # Customer Intelligence Snapshot — the primary read projection (V2).
+        location /api/customer-snapshot {
+            limit_req zone=api burst=10 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         # Per-tenant post-conversation schema admin (Settings → Post-Conversation).
         location /api/post-conversation-config {
             limit_req zone=api burst=20 nodelay;
@@ -745,6 +755,14 @@ http {
 
         location ~ ^/t/([^/]+)/api/customer-summary(.*)$ {
             proxy_pass http://ai_service/api/customer-summary$2$is_args$args;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location ~ ^/t/([^/]+)/api/customer-snapshot(.*)$ {
+            proxy_pass http://ai_service/api/customer-snapshot$2$is_args$args;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;

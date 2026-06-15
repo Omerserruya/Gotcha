@@ -514,6 +514,9 @@
     "confirmDisconnect": "Are you sure you want to disconnect this channel? Incoming messages will no longer be received.",
     "disconnected": "Channel disconnected",
     "connected": "Channel connected successfully",
+    "routingCtaTitle": "Channel connected — set up what happens to its messages",
+    "routingCtaSub": "Route it to an AI employee, a team, or a subflow.",
+    "routingCtaButton": "Set up routing",
     "connectionFailed": "Connection failed. Please try again.",
     "noPages": "No Facebook Pages found. Make sure you manage at least one page.",
     "noInstagram": "No Instagram Business Account found. Link your Instagram to a Facebook Page first.",
@@ -1515,18 +1518,16 @@
       "stepLabel": "Step {n}",
       "doneLabel": "Done",
       "items": {
-        "confirm_business": "Confirm your business",
+        "knowledge_base": "Connect a knowledge base",
+        "ai_employees": "Set up your AI Employee",
         "connect_channel": "Connect a channel",
-        "send_test_reply": "Send a test reply",
-        "review_agent_tone": "Review your AI's tone",
-        "invite_teammate": "Invite a teammate"
+        "workflows": "Set up your workflow"
       },
       "descriptions": {
-        "confirm_business": "Tell us what your business does so the AI can speak for you.",
+        "knowledge_base": "Add docs, FAQs, or a website so your AI can answer accurately.",
+        "ai_employees": "Create and configure the AI Employee that will handle conversations.",
         "connect_channel": "Link WhatsApp, Instagram, or web chat to start receiving messages.",
-        "send_test_reply": "Send a message and watch your AI reply in real time.",
-        "review_agent_tone": "Make sure your AI sounds the way you want it to.",
-        "invite_teammate": "Bring teammates in to handle conversations alongside your AI."
+        "workflows": "Wire channels to your AI Employee, teams, and subflows in the main workflow."
       }
     }
   },

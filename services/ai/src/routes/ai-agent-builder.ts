@@ -186,6 +186,55 @@ router.post("/:id/knowledge", async (req: Request, res: Response) => {
   }
 });
 
+// POST /:id/refinements — save the optional creation-wizard refinements
+// (display name, conversation flow, custom guardrails) DETERMINISTICALLY,
+// from the dedicated wizard step — instead of relying on the conversational
+// builder to volunteer them. Send only the fields you're changing; an empty
+// array clears that field. Returns the refreshed draft snapshot.
+router.post("/:id/refinements", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+
+    const { name, conversationFlow, customGuardrails } = req.body || {};
+    const data: any = {};
+
+    if (typeof name === "string" && name.trim()) {
+      data.name = name.trim().slice(0, 120);
+    }
+
+    if (Array.isArray(conversationFlow)) {
+      const flow = conversationFlow
+        .filter((s: any) => s && typeof s.action === "string" && s.action.trim())
+        .map((s: any, i: number) => ({
+          id: typeof s.id === "string" && s.id ? s.id : `cf_${i}`,
+          action: String(s.action).trim().slice(0, 280),
+          details: String(s.details || "").trim().slice(0, 500),
+        }));
+      data.conversationFlow = flow.length ? flow : null;
+    }
+
+    if (Array.isArray(customGuardrails)) {
+      const rules = customGuardrails
+        .map((r: any) => String(r || "").trim())
+        .filter(Boolean)
+        .map((r: string) => r.slice(0, 280));
+      data.customGuardrails = rules.length ? rules : null;
+    }
+
+    if (Object.keys(data).length > 0) {
+      await prisma.aIAgent.update({ where: { id: agentId }, data });
+    }
+
+    res.json({ data: { draft: await loadDraftSnapshot(tenantId, agentId) } });
+  } catch (err: any) {
+    console.error("Builder refinements error:", err);
+    res.status(500).json({ error: "Failed to save refinements" });
+  }
+});
+
 // ─── Current draft (reconnect / review fetch) ───────────────
 router.get("/:id/draft", async (req: Request, res: Response) => {
   try {

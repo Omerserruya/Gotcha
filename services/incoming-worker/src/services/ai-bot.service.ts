@@ -359,7 +359,10 @@ function buildSendContext(conversation: any): SendContext | null {
   return {
     channel: conversation.channel,
     channelAccountExternalId: conversation.channelAccount.externalId,
-    credentials: { accessToken: creds.accessToken, appSecret: creds.appSecret },
+    // Spread ALL decrypted fields (not just accessToken/appSecret) so channel
+    // flags like `igLogin` survive — the Instagram adapter needs it to pick the
+    // graph.instagram.com host instead of graph.facebook.com.
+    credentials: { ...creds },
     recipientId: conversation.customerExternalId,
   };
 }

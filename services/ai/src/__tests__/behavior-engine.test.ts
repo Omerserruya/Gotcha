@@ -805,3 +805,262 @@ describe("BehaviorEngine — provenance + determinism", () => {
     expect(a).toEqual(b);
   });
 });
+
+// ─── Behavioral signals (PHASE 1 — observe-only) ─────────────
+
+describe("BehaviorEngine — relationshipStrength", () => {
+  it("first-time customer (no contact) → low", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.unknown,
+      request: { lastMessage: "hi", messageCount: 1 },
+    });
+    expect(s.relationshipStrength.level).toBe("low");
+    expect(s.relationshipStrength.confidence).toBe("high");
+    expect(s.relationshipStrength.reason).toMatch(/first-time/i);
+    expect(s.relationshipStrength.evidence.length).toBeGreaterThan(0);
+  });
+
+  it("new lead (lead, 0 prior) → low", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "hi", messageCount: 1 },
+    });
+    expect(s.relationshipStrength.level).toBe("low");
+    expect(s.relationshipStrength.reason).toMatch(/new lead/i);
+  });
+
+  it("returning lead (lead, >=1 prior) → medium", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.returning,
+      request: { lastMessage: "hi", messageCount: 1 },
+    });
+    expect(s.relationshipStrength.level).toBe("medium");
+    expect(s.relationshipStrength.reason).toMatch(/returning lead/i);
+  });
+
+  it("existing customer (customer, <3 prior) → medium", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: { hasContact: true, contactLifecycle: "customer", priorConversationCount: 2 },
+      request: { lastMessage: "hi", messageCount: 1 },
+    });
+    expect(s.relationshipStrength.level).toBe("medium");
+    expect(s.relationshipStrength.reason).toMatch(/existing customer/i);
+  });
+
+  it("long-term customer (customer, >=3 prior) → high", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.customer, // priorConversationCount: 5
+      request: { lastMessage: "hi", messageCount: 1 },
+    });
+    expect(s.relationshipStrength.level).toBe("high");
+    expect(s.relationshipStrength.confidence).toBe("high");
+    expect(s.relationshipStrength.reason).toMatch(/long-term/i);
+  });
+});
+
+describe("BehaviorEngine — customerTrust", () => {
+  it("skeptical language → low", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "sounds too good to be true, are you a bot?", messageCount: 2 },
+    });
+    expect(s.customerTrust.level).toBe("low");
+    expect(s.customerTrust.reason).toMatch(/skeptical/i);
+    expect(s.customerTrust.evidence.length).toBeGreaterThan(0);
+  });
+
+  it("repeated verification requests across messages → low", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "how do i know this is official?",
+        messageCount: 4,
+        recentInboundTexts: [
+          "can you confirm this is real?",
+          "ok but how do i know this is official?",
+        ],
+      },
+    });
+    expect(s.customerTrust.level).toBe("low");
+    expect(s.customerTrust.reason).toMatch(/repeated verification/i);
+  });
+
+  it("positive engagement → high", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "מעולה, תודה רבה!", messageCount: 3 },
+    });
+    expect(s.customerTrust.level).toBe("high");
+    expect(s.customerTrust.reason).toMatch(/positive engagement/i);
+  });
+
+  it("long-term relationship with neutral message → high baseline", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.customer,
+      request: { lastMessage: "can we adjust the delivery window", messageCount: 2 },
+    });
+    expect(s.customerTrust.level).toBe("high");
+    expect(s.customerTrust.reason).toMatch(/long-term relationship/i);
+  });
+
+  it("neutral new lead → medium", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "what integrations do you support", messageCount: 2 },
+    });
+    expect(s.customerTrust.level).toBe("medium");
+  });
+});
+
+describe("BehaviorEngine — customerFriction", () => {
+  it("escalation/handoff flag → high (deterministic)", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "I need help", messageCount: 3 },
+      flags: { humanHandoffRequested: true },
+    });
+    expect(s.customerFriction.level).toBe("high");
+    expect(s.customerFriction.confidence).toBe("high");
+    expect(s.customerFriction.reason).toMatch(/escalation\/handoff/i);
+  });
+
+  it("repeated complaints across messages → high", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.customer,
+      request: {
+        lastMessage: "this is the third time it's still not working",
+        messageCount: 6,
+        recentInboundTexts: [
+          "the export still doesn't work",
+          "this is the third time it's still not working",
+        ],
+      },
+    });
+    expect(s.customerFriction.level).toBe("high");
+    expect(s.customerFriction.reason).toMatch(/repeated complaints/i);
+  });
+
+  it("customer repeating themselves → high", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: {
+        lastMessage: "where is my order??",
+        messageCount: 5,
+        recentInboundTexts: ["where is my order", "where is my order??"],
+      },
+    });
+    expect(s.customerFriction.level).toBe("high");
+    expect(s.customerFriction.reason).toMatch(/repeating themselves/i);
+  });
+
+  it("single negative-sentiment message → medium", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "the dashboard doesn't work", messageCount: 2 },
+    });
+    expect(s.customerFriction.level).toBe("medium");
+    expect(s.customerFriction.reason).toMatch(/negative sentiment/i);
+  });
+
+  it("calm conversation → low", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "what's the price?", messageCount: 2 },
+    });
+    expect(s.customerFriction.level).toBe("low");
+  });
+});
+
+describe("BehaviorEngine — signals: provenance, determinism, degradation", () => {
+  it("every signal carries level, confidence, reason", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "hello", messageCount: 1 },
+    });
+    for (const sig of [s.relationshipStrength, s.customerTrust, s.customerFriction]) {
+      expect(["low", "medium", "high"]).toContain(sig.level);
+      expect(["low", "medium", "high"]).toContain(sig.confidence);
+      expect(sig.reason).not.toBe("");
+      expect(Array.isArray(sig.evidence)).toBe(true);
+    }
+  });
+
+  it("signal summaries are appended to provenance.overrides for audit", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "hello", messageCount: 1 },
+    });
+    expect(s.provenance.overrides.some((o) => o.startsWith("signal.relationshipStrength="))).toBe(true);
+    expect(s.provenance.overrides.some((o) => o.startsWith("signal.customerTrust="))).toBe(true);
+    expect(s.provenance.overrides.some((o) => o.startsWith("signal.customerFriction="))).toBe(true);
+  });
+
+  it("degrades gracefully without recentInboundTexts", () => {
+    const s = computeBehaviorState({
+      mode: "agent",
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "are you sure?", messageCount: 2 },
+    });
+    // Single-message skeptical read still fires; no crash from missing history.
+    expect(s.customerTrust.level).toBe("low");
+    expect(s.customerFriction.level).toBe("low");
+  });
+
+  it("signals are deterministic across runs", () => {
+    const input = {
+      mode: "agent" as const,
+      identity: baseIdentity.customer,
+      request: {
+        lastMessage: "this is the third time it's still not working",
+        messageCount: 6,
+        recentInboundTexts: ["still not working", "this is the third time it's still not working"],
+      },
+    };
+    const a = computeBehaviorState(input);
+    const b = computeBehaviorState(input);
+    expect(a.relationshipStrength).toEqual(b.relationshipStrength);
+    expect(a.customerTrust).toEqual(b.customerTrust);
+    expect(a.customerFriction).toEqual(b.customerFriction);
+  });
+
+  it("PHASE 1 — friction signal alone does NOT alter strategy/tone/escalation", () => {
+    // Identical inputs except one carries high-friction language (no flags).
+    // Observe-only: strategy, tone, and escalation must be unchanged.
+    const base = {
+      mode: "agent" as const,
+      identity: baseIdentity.newLead,
+      request: { lastMessage: "what's the price?", messageCount: 2 },
+    };
+    const calm = computeBehaviorState(base);
+    const frustrated = computeBehaviorState({
+      ...base,
+      request: {
+        ...base.request,
+        recentInboundTexts: ["this is ridiculous", "this is awful — what's the price?"],
+        lastMessage: "this is awful — what's the price?",
+      },
+    });
+    expect(frustrated.customerFriction.level).toBe("high"); // read changed…
+    // …decisions did not.
+    expect(frustrated.strategy).toBe(calm.strategy);
+    expect(frustrated.toneIntensity).toBe(calm.toneIntensity);
+    expect(frustrated.escalationPressure).toBe(calm.escalationPressure);
+  });
+});

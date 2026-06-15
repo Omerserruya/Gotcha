@@ -9,7 +9,7 @@ import clsx from "clsx";
 
 const HIDE_KEY = "onboarding.missions.hidden";
 const POLL_MS = 30_000;
-const TOTAL = 5;
+const TOTAL = 4;
 
 interface Props {
   collapsed: boolean;

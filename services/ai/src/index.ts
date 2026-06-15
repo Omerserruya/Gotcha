@@ -31,6 +31,7 @@ import crmPanelRoutes from "./routes/crm-panel";
 import postConversationConfigRoutes from "./routes/post-conversation-config";
 import industryPacksRoutes from "./routes/industry-packs";
 import fieldDefinitionsRoutes from "./routes/field-definitions";
+import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
@@ -109,6 +110,7 @@ app.use("/api/crm", crmPanelRoutes);
 app.use("/api/post-conversation-config", postConversationConfigRoutes);
 app.use("/api/industry-packs", industryPacksRoutes);
 app.use("/api/field-definitions", fieldDefinitionsRoutes);
+app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
 app.use("/api/copilot", copilotOutcomesRoutes);
@@ -127,9 +129,11 @@ app.use("/api", postCallRoutes);
 import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber";
 import { startVoicePostCallWorker } from "./workers/voice-postcall";
 import { startPostChatSubscriber } from "./workers/post-chat/subscriber";
+import { startIntelligenceLiveSubscriber } from "./workers/intelligence-live/subscriber";
 startVoiceCopilotSubscriber();
 startVoicePostCallWorker();
 startPostChatSubscriber();
+startIntelligenceLiveSubscriber();
 startLiveRunnerSupervisor();
 
 // Voice-flow runner — bridges live-call events into ChatbotFlow rows with

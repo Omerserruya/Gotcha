@@ -105,6 +105,10 @@ interface AgentFormData {
   status: "active" | "draft" | "paused";
   conversationFlow: ConversationFlowStep[];
   customGuardrails: string[];
+  // Full persona JSON ({ gender, traits, brand_archetype, … }). Kept whole so a
+  // brand_archetype edit doesn't wipe gender/traits set elsewhere — the PATCH
+  // route replaces the whole persona object.
+  persona: Record<string, unknown>;
 }
 
 // ─── Constants ─────────────────────────────────────────────────
@@ -199,7 +203,17 @@ function mapApiToForm(agent: any): AgentFormData {
     status: ((agent.status || "DRAFT").toLowerCase()) as "active" | "draft" | "paused",
     conversationFlow: Array.isArray(agent.conversationFlow) ? agent.conversationFlow : [],
     customGuardrails: Array.isArray(agent.customGuardrails) ? agent.customGuardrails : [],
+    persona: parsePersona(agent.persona),
   };
+}
+
+function parsePersona(persona: any): Record<string, unknown> {
+  if (!persona) return {};
+  if (typeof persona === "string") {
+    try { const p = JSON.parse(persona); return p && typeof p === "object" ? p : {}; }
+    catch { return {}; }
+  }
+  return typeof persona === "object" ? persona : {};
 }
 
 const NEW_AGENT_DEFAULT: AgentFormData = {
@@ -234,7 +248,18 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   status: "draft",
   conversationFlow: [],
   customGuardrails: [],
+  persona: {},
 };
+
+// Brand Voice archetypes — keys MUST match services/ai/src/services/brand-archetypes.ts.
+// "" = no strong flavor (renderer resolves it to the neutral default).
+const BRAND_ARCHETYPE_OPTIONS: { value: string; en: string; he: string }[] = [
+  { value: "", en: "Neutral / Professional (default)", he: "ניטרלי / מקצועי (ברירת מחדל)" },
+  { value: "trusted_advisor", en: "Trusted Advisor — measured, credible, no hype", he: "יועץ מהימן — שקול, אמין, בלי הייפ" },
+  { value: "high_energy_coach", en: "High-Energy Coach — short, fast, motivating", he: "מאמן אנרגטי — קצר, מהיר, מניע לפעולה" },
+  { value: "luxury_concierge", en: "Luxury Concierge — refined, formal, deliberate", he: "קונסיירז' יוקרתי — מעודן, רשמי, מדוד" },
+  { value: "beauty_consultant", en: "Beauty Consultant — warm, intimate, expressive", he: "יועצת יופי — חמה, אישית, אקספרסיבית" },
+];
 
 // ─── Small shared components ───────────────────────────────────
 function SectionCard({ title, subtitle, children }: { title: React.ReactNode; subtitle?: React.ReactNode; children: React.ReactNode }) {
@@ -303,7 +328,7 @@ function StatusDot({ status }: { status: "synced" | "syncing" | "error" }) {
 export default function AgentEditorPage() {
   const id = useDynamicParam();
   const router = useRouter();
-  const { t } = useI18n();
+  const { t, locale } = useI18n();
   const { token } = useAuth();
 
   const isNew = id === "new";
@@ -408,6 +433,7 @@ export default function AgentEditorPage() {
         status: form.status.toUpperCase(),
         conversationFlow: form.conversationFlow.length > 0 ? form.conversationFlow : null,
         customGuardrails: form.customGuardrails.length > 0 ? form.customGuardrails : null,
+        persona: Object.keys(form.persona).length > 0 ? form.persona : null,
         toolIds,
         tools,
         knowledgeBaseIds,
@@ -757,7 +783,36 @@ export default function AgentEditorPage() {
               is now governed centrally by the platform Personality skill
               (services/ai/src/prompts/personality.md), not per-agent toggles.
               The tone/style fields remain on the record for back-compat but are
-              no longer edited here and no longer affect the prompt. */}
+              no longer edited here and no longer affect the prompt.
+
+              Brand Voice IS the sanctioned per-agent voice dial: it shapes HOW
+              the employee sounds (pace/warmth/vocabulary), layered on top of the
+              central Personality skill — it never changes WHAT it does. */}
+          <SectionCard
+            title={locale === "he" ? "קול המותג" : "Brand Voice"}
+            subtitle={
+              locale === "he"
+                ? "ארכיטיפ שמעצב איך העובד נשמע — קצב, חום ואוצר מילים. נשען על מנגנון האישיות המרכזי, לא מחליף אותו."
+                : "An archetype that shapes how this employee sounds — pace, warmth, vocabulary. Layered on the central Personality skill; it never overrides strategy or guardrails."
+            }
+          >
+            <label className="block text-xs font-medium text-gray-500 mb-1.5">
+              {locale === "he" ? "ארכיטיפ" : "Archetype"}
+            </label>
+            <select
+              value={typeof form.persona.brand_archetype === "string" ? form.persona.brand_archetype : ""}
+              onChange={(e) =>
+                patch({ persona: { ...form.persona, brand_archetype: e.target.value } })
+              }
+              className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
+            >
+              {BRAND_ARCHETYPE_OPTIONS.map((opt) => (
+                <option key={opt.value || "neutral"} value={opt.value}>
+                  {locale === "he" ? opt.he : opt.en}
+                </option>
+              ))}
+            </select>
+          </SectionCard>
 
           {/* ── Section 3: Skills (Tools) ── */}
           <SectionCard
