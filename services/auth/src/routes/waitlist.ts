@@ -8,13 +8,16 @@ const router = Router();
 
 // ─── Public: Submit Waitlist Entry ──────────────────────────
 
+// email/role/companySize are optional so the lightweight landing form
+// (name + phone + industry) can submit. The `email` column is NOT NULL +
+// unique, so phone-first leads get a synthetic, clearly-marked key.
 const waitlistSchema = z.object({
   firstName: z.string().min(1).max(100),
-  email: z.string().email().max(255),
+  email: z.string().email().max(255).optional(),
   phone: z.string().max(30).optional().default(""),
   company: z.string().max(200).optional().default(""),
-  role: z.string().min(1).max(100),
-  companySize: z.string().min(1).max(50),
+  role: z.string().max(100).optional().default(""),
+  companySize: z.string().max(50).optional().default(""),
   frustration: z.string().max(500).optional().default(""),
   source: z.string().max(100).optional(),
 });
@@ -22,33 +25,44 @@ const waitlistSchema = z.object({
 router.post("/", validate(waitlistSchema), async (req: Request, res: Response): Promise<void> => {
   const { firstName, email, phone, company, role, companySize, frustration, source } = req.body;
 
-  const normalizedEmail = email.toLowerCase().trim();
+  const cleanPhone = (phone || "").trim();
+  const realEmail = email ? email.toLowerCase().trim() : "";
 
-  const existing = await prisma.waitlistEntry.findUnique({
-    where: { email: normalizedEmail },
-  });
-
-  if (existing) {
-    res.status(409).json({ error: "This email is already on the waitlist." });
-    return;
+  // Dedup by email when given, otherwise by phone.
+  if (realEmail) {
+    const existing = await prisma.waitlistEntry.findUnique({ where: { email: realEmail } });
+    if (existing) {
+      res.status(409).json({ error: "This email is already on the waitlist." });
+      return;
+    }
+  } else if (cleanPhone) {
+    const existingByPhone = await prisma.waitlistEntry.findFirst({ where: { phone: cleanPhone } });
+    if (existingByPhone) {
+      res.status(409).json({ error: "This phone number is already on the waitlist." });
+      return;
+    }
   }
+
+  // The email column is required + unique; synthesize a placeholder for phone-first leads.
+  const handleKey = cleanPhone ? cleanPhone.replace(/\D/g, "") : Date.now().toString(36);
+  const emailKey = realEmail || `lead-${handleKey}@no-email.gotcha`;
 
   const entry = await prisma.waitlistEntry.create({
     data: {
       firstName: firstName.trim(),
-      email: normalizedEmail,
-      phone: phone || null,
+      email: emailKey,
+      phone: cleanPhone || null,
       company: company || null,
-      role,
-      companySize,
+      role: role || "",
+      companySize: companySize || "",
       frustration: frustration || null,
       source: source || "early-access-form",
     },
   });
 
-  // Get position and send welcome email (non-blocking)
+  // Get position and send welcome email only when we have a real address (non-blocking)
   const position = await prisma.waitlistEntry.count();
-  sendWaitlistWelcomeEmail(entry.email, entry.firstName, position).catch(() => {});
+  if (realEmail) sendWaitlistWelcomeEmail(entry.email, entry.firstName, position).catch(() => {});
 
   // Send Telegram notification (non-blocking)
   sendTelegramNotification(formatNewLeadMessage({

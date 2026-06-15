@@ -20,7 +20,7 @@ async function main() {
       firstTakeCareEnabled: true,
     },
   });
-  console.log(`Tenant: ${tenant.name} (${tenant.id}) — ACTIVE`);
+  console.log(`Tenant: ${tenant.name} (${tenant.id}) - ACTIVE`);
 
   // ─── Business Profile ────────────────────────────────────────
   await prisma.businessProfile.upsert({
@@ -347,7 +347,7 @@ async function main() {
     create: { tenantId: tenant.id, tenantIntegrationId: hubspotTenantInt.id, catalogToolId: catalogCreateDeal.id, isEnabled: true },
   });
 
-  console.log("Tenant integrations: Shopify (CONNECTED), HubSpot (CONNECTED) — 5 tools enabled");
+  console.log("Tenant integrations: Shopify (CONNECTED), HubSpot (CONNECTED) - 5 tools enabled");
 
   // ─── Agent Tool Permissions ──────────────────────────────────
   // Sales: HubSpot Customer Lookup (auto), HubSpot Create Deal (auto)
@@ -383,7 +383,7 @@ async function main() {
   const now = new Date();
   const ago = (minutes: number) => new Date(now.getTime() - minutes * 60000);
 
-  // Conversation 1: WhatsApp — Sales inquiry (assigned, multi-message)
+  // Conversation 1: WhatsApp - Sales inquiry (assigned, multi-message)
   const conv1 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -410,7 +410,7 @@ async function main() {
     });
   }
 
-  // Conversation 2: Messenger — Support issue (open, waiting on customer)
+  // Conversation 2: Messenger - Support issue (open, waiting on customer)
   const conv2 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -436,7 +436,7 @@ async function main() {
     });
   }
 
-  // Conversation 3: Instagram — New lead (unassigned)
+  // Conversation 3: Instagram - New lead (unassigned)
   const conv3 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -452,7 +452,7 @@ async function main() {
     data: { tenantId: tenant.id, conversationId: conv3.id, channel: "INSTAGRAM", direction: "INBOUND", body: "Love your product! How much is the starter plan? Also do you integrate with Shopify?", senderName: "Noa Mizrahi", status: "DELIVERED", createdAt: ago(5) },
   });
 
-  // Conversation 4: Gmail — Billing question (assigned)
+  // Conversation 4: Gmail - Billing question (assigned)
   const conv4 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -477,7 +477,7 @@ async function main() {
     });
   }
 
-  // Conversation 5: Slack — Internal request
+  // Conversation 5: Slack - Internal request
   const conv5 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -492,10 +492,10 @@ async function main() {
     },
   });
   await prisma.message.create({
-    data: { tenantId: tenant.id, conversationId: conv5.id, channel: "SLACK", direction: "INBOUND", body: "Quick question — can we get an API key for the sandbox environment? We want to test the integration before going live.", senderName: "Ron Peretz", status: "DELIVERED", createdAt: ago(10) },
+    data: { tenantId: tenant.id, conversationId: conv5.id, channel: "SLACK", direction: "INBOUND", body: "Quick question - can we get an API key for the sandbox environment? We want to test the integration before going live.", senderName: "Ron Peretz", status: "DELIVERED", createdAt: ago(10) },
   });
 
-  // Conversation 6: WhatsApp — Closed conversation (for history/replay)
+  // Conversation 6: WhatsApp - Closed conversation (for history/replay)
   const conv6 = await prisma.conversation.create({
     data: {
       tenantId: tenant.id,
@@ -515,7 +515,7 @@ async function main() {
     { dir: "INBOUND" as const, body: "Hi, we're evaluating communication platforms for our enterprise. What API capabilities do you offer?", sender: "Amit Goldberg", at: ago(120) },
     { dir: "OUTBOUND" as const, body: "Welcome Amit! Our Enterprise plan includes full REST API access, webhooks, and SDKs for Node.js, Python, and Java. What's your use case?", sender: "Dana Avraham", at: ago(115) },
     { dir: "INBOUND" as const, body: "We need to integrate with our existing CRM (Salesforce) and have automated messaging for order updates.", sender: "Amit Goldberg", at: ago(100) },
-    { dir: "OUTBOUND" as const, body: "Great news — we have native Salesforce integration and support automated transactional messages. I'll schedule a technical demo. Does Thursday work?", sender: "Dana Avraham", at: ago(90) },
+    { dir: "OUTBOUND" as const, body: "Great news - we have native Salesforce integration and support automated transactional messages. I'll schedule a technical demo. Does Thursday work?", sender: "Dana Avraham", at: ago(90) },
     { dir: "INBOUND" as const, body: "Thursday at 2pm works. Send me a calendar invite to amit@goldberg-tech.com", sender: "Amit Goldberg", at: ago(80) },
     { dir: "OUTBOUND" as const, body: "Done! You'll receive the invite shortly. Looking forward to the demo. Have a great day!", sender: "Dana Avraham", at: ago(65) },
   ];
@@ -651,7 +651,7 @@ async function main() {
       knowledgeBaseId: kb.id,
       tenantId: tenant.id,
       title: "Pricing & Plans",
-      content: "We offer 3 plans:\n\n**Starter** — $49/mo: Up to 5 agents, WhatsApp + Messenger, basic analytics\n**Pro** — $149/mo: Up to 20 agents, all channels, AI copilot, advanced analytics, knowledge base\n**Enterprise** — Custom pricing: Unlimited agents, dedicated support, API access, custom integrations, SLA guarantees\n\nAll plans include a 14-day free trial. Annual billing saves 20%.",
+      content: "We offer 3 plans:\n\n**Starter** - $49/mo: Up to 5 agents, WhatsApp + Messenger, basic analytics\n**Pro** - $149/mo: Up to 20 agents, all channels, AI copilot, advanced analytics, knowledge base\n**Enterprise** - Custom pricing: Unlimited agents, dedicated support, API access, custom integrations, SLA guarantees\n\nAll plans include a 14-day free trial. Annual billing saves 20%.",
       sourceType: "text",
       status: "indexed",
       chunkCount: 1,
@@ -770,7 +770,7 @@ async function main() {
   }
   console.log(`Action contracts: ${ACTION_CONTRACTS.map((c) => c.trigger).join(", ")}`);
 
-  // ─── Industry Intelligence Packs (V2 — system, shared) ───────
+  // ─── Industry Intelligence Packs (V2 - system, shared) ───────
   // Each pack `fields` entry is a scope-tagged template cloned into
   // per-tenant FieldDefinition rows when applied. scope/type are lowercase
   // here and normalized to the Prisma enums by the apply route.

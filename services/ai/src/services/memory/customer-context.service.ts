@@ -4,17 +4,17 @@
  * Loads the "what does the system remember about this person" bundle that
  * the side panel, the bot's prompt construction, and AI tools all need.
  * Pulls from THREE sources in parallel:
- *   1. GOTCHA's own conversation_intelligence table — recent AI summaries +
+ *   1. GOTCHA's own conversation_intelligence table - recent AI summaries +
  *      sentiment/qualification + action_items.
- *   2. GOTCHA's messages table — last N inbound/outbound for keyword search.
- *   3. CRM via the adapter — open tasks (= "open issues") and recent notes
+ *   2. GOTCHA's messages table - last N inbound/outbound for keyword search.
+ *   3. CRM via the adapter - open tasks (= "open issues") and recent notes
  *      (vendor-side timeline) when the contact is linked.
  *
- * No new state table — every field is derived from data that already exists.
+ * No new state table - every field is derived from data that already exists.
  * Cache-friendly: each input identifier (conversationId / crmContactId)
  * produces a deterministic bundle; callers can wrap with their own cache.
  *
- * All vendor calls are wrapped in try/catch — a failing CRM does NOT block
+ * All vendor calls are wrapped in try/catch - a failing CRM does NOT block
  * the panel; missing sections just render empty.
  */
 
@@ -55,11 +55,11 @@ export interface CustomerContextBundle {
   open_issues: CrmTask[];
   /** CRM-side recent notes (vendor timeline). */
   recent_crm_notes: CrmActivity[];
-  /** Unified vendor timeline — notes + tasks + calls + emails + meetings. */
+  /** Unified vendor timeline - notes + tasks + calls + emails + meetings. */
   recent_activities: CrmActivity[];
   /** Aggregate sentiment trend (last 5 conversations). */
   sentiment_trend: ("positive" | "neutral" | "negative" | "unknown")[];
-  /** Reasons + missing pieces — useful for debugging stale links. */
+  /** Reasons + missing pieces - useful for debugging stale links. */
   meta: {
     summaries_count: number;
     open_issues_count: number;
@@ -90,7 +90,7 @@ interface LoadArgs {
  * Contact row → CRM mapping pinned in Contact.metadata.
  *
  * This walks the same chain that crm-panel.ts:loadConversationContext does
- * — duplicated intentionally to keep this module self-contained (memory
+ * - duplicated intentionally to keep this module self-contained (memory
  * tools may be called from outside the route handler).
  */
 async function resolveFromConversation(tenantId: string, conversationId: string): Promise<{
@@ -130,7 +130,7 @@ async function resolveFromConversation(tenantId: string, conversationId: string)
  * Find all GOTCHA conversations for the same customer across channels.
  *
  * For cross-channel continuity we walk Contact.personId when present (the
- * GotchaPerson identity), otherwise we look up by the CRM mapping — every
+ * GotchaPerson identity), otherwise we look up by the CRM mapping - every
  * GOTCHA Contact pinned to the same crmContactId belongs to the same
  * person. Falls back to same-channel-only when neither identity layer
  * gives us a wider view.
@@ -156,7 +156,7 @@ async function findRelatedConversations(args: {
   // phone matches across rows) still gets the full cross-channel view.
   //
   // Mirrors the strategy used by conversation.service.ts:getHistoryByCustomerExternalId
-  // — keep them aligned so the side panel + AI brief see the same prior history.
+  // - keep them aligned so the side panel + AI brief see the same prior history.
   const siblingFilters: Array<{ channel: string; customerExternalId: string }> = [];
   const externalIdSet = new Set<string>();
   const seen = new Set<string>();
@@ -184,7 +184,7 @@ async function findRelatedConversations(args: {
     await collectSiblings({ metadata: { path: ["crmContactId"], equals: crmContactId } });
   }
 
-  // 3. Same-phone walk — catches sibling Contact rows on different channels
+  // 3. Same-phone walk - catches sibling Contact rows on different channels
   //    that haven't been unified yet but share the same phone number. WhatsApp
   //    stores phone digits as externalId so we ALSO add the raw digits to
   //    cover legacy national-format storage.
@@ -200,7 +200,7 @@ async function findRelatedConversations(args: {
 
   // 5. Channel external IDs harvested from the CRM record itself. Each
   //    gotcha_psid_*, gotcha_wa_id, etc. is the customerExternalId of a
-  //    conversation we might own on that channel — even if no local
+  //    conversation we might own on that channel - even if no local
   //    Contact row exists yet (channel webhook hasn't fired, but the
   //    operator manually populated the CRM field).
   for (const xid of extraExternalIds) {
@@ -245,7 +245,7 @@ export async function loadCustomerContext(args: LoadArgs): Promise<CustomerConte
   const crmNoteLimit = args.crmNoteLimit ?? 5;
 
   // 1. Resolve identity. We always run the resolver when a conversationId is
-  //    provided, even if the caller already passed a crmContactId — we still
+  //    provided, even if the caller already passed a crmContactId - we still
   //    need personId/phone/email + channel/externalId to build the
   //    cross-channel sibling walk.
   let channel: string | null = null;
@@ -268,7 +268,7 @@ export async function loadCustomerContext(args: LoadArgs): Promise<CustomerConte
   }
 
   // CRM-side identifier enrichment. The local Contact row is often sparse
-  // (the channel webhook only saw the PSID — phone/email live in the CRM
+  // (the channel webhook only saw the PSID - phone/email live in the CRM
   // record). Pull the canonical phone/email/per-channel external IDs from
   // the CRM via the adapter, so the sibling walk sees them. Mirrors
   // conversation.service.ts:fetchCrmIdentifiersForConversation so the side
@@ -289,7 +289,7 @@ export async function loadCustomerContext(args: LoadArgs): Promise<CustomerConte
           for (const [k, v] of Object.entries(cf)) {
             if (!k.startsWith("gotcha_")) continue;
             if (typeof v !== "string" || !v.trim()) continue;
-            // Skip the source marker — it's not an externalId.
+            // Skip the source marker - it's not an externalId.
             if (k === "gotcha_source_interaction_id") continue;
             extraExternalIds.push(v);
           }
@@ -321,7 +321,7 @@ export async function loadCustomerContext(args: LoadArgs): Promise<CustomerConte
   const intelPromise = (async (): Promise<RecentSummary[]> => {
     if (relatedIds.length === 0) return [];
     const results: RecentSummary[] = [];
-    // Limit batch — bounded N keeps latency predictable.
+    // Limit batch - bounded N keeps latency predictable.
     for (const convId of relatedIds.slice(0, summaryLimit)) {
       try {
         const intel = await getConversationIntelligence(args.tenantId, convId);

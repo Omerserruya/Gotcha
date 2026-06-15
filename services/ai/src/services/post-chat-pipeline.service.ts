@@ -1,5 +1,5 @@
 /**
- * Post-chat pipeline — one-shot end-of-conversation processor for text
+ * Post-chat pipeline - one-shot end-of-conversation processor for text
  * channels (WhatsApp, Messenger, Webchat, ...).
  *
  * Triggered by the `conversation:closed` event when a non-voice conversation
@@ -44,7 +44,7 @@ export async function runPostChatPipeline(params: {
 }> {
   const notes: string[] = [];
 
-  // 0. Guard — don't run twice on the same conversation.
+  // 0. Guard - don't run twice on the same conversation.
   const existing = await prisma.callAnalysis.findUnique({
     where: { conversationId: params.conversationId },
     select: { meta: true, finalSummary: true },
@@ -63,7 +63,7 @@ export async function runPostChatPipeline(params: {
     getPostConversationConfig(params.tenantId),
     loadExistingActionItems({ tenantId: params.tenantId, conversationId: params.conversationId }),
     // System language drives the AI summary copy. Post-chat runs in a
-    // background subscriber with no user context — use the tenant default.
+    // background subscriber with no user context - use the tenant default.
     resolveEffectiveLocale({ tenantId: params.tenantId }).catch(() => null),
   ]);
   const raw = await summarizePostConversation({
@@ -130,7 +130,7 @@ export async function runPostChatPipeline(params: {
   let tasksCreated = 0;
   let followupScheduled = false;
 
-  // 3b. Customer Intelligence V2 ingest (Phase 2) — route the extracted
+  // 3b. Customer Intelligence V2 ingest (Phase 2) - route the extracted
   //     fields into the scope-aware model (CustomerProfile / Opportunity /
   //     IntelligenceFact) under the merge policy. ADDITIVE + best-effort: a
   //     failure here must never affect the legacy CRM/task path below.
@@ -194,7 +194,7 @@ export async function runPostChatPipeline(params: {
     notes.push("crm:no-fields");
   }
 
-  // 5. CRM tasks per suggested_task — kind-aware path first; falls back to
+  // 5. CRM tasks per suggested_task - kind-aware path first; falls back to
   //    the legacy contact-only create_task when the vendor adapter can't
   //    create tasks (e.g. NoOp). Identity resolved once, reused for all.
   //
@@ -219,7 +219,7 @@ export async function runPostChatPipeline(params: {
       notes.push(`task:${vendor.kind}:ok`);
       continue;
     }
-    // Vendor declined — try legacy contact-only path so the GOTCHA-side
+    // Vendor declined - try legacy contact-only path so the GOTCHA-side
     // mirror still gets the task.
     if (contactId) {
       const action: PlannedAction = {
@@ -245,10 +245,10 @@ export async function runPostChatPipeline(params: {
     }
   }
 
-  // 6. Follow-up — dedup against any PENDING ScheduledMessage already queued
+  // 6. Follow-up - dedup against any PENDING ScheduledMessage already queued
   //    for this contact. The bot may have called schedule_followup mid-turn
   //    (e.g. customer said "תחזרו אליי מחר"), in which case there's already
-  //    a row waiting for the scheduled-messages worker — re-scheduling here
+  //    a row waiting for the scheduled-messages worker - re-scheduling here
   //    would send the customer two follow-ups.
   if (contactId && structured.suggested_followup) {
     const hasPending = await hasPendingFollowupForConversation({

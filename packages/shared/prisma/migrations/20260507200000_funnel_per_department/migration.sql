@@ -2,7 +2,7 @@
 -- Replace (tenantId × mode × funnelId) uniqueness with (tenantId × departmentId × funnelId).
 -- NULL departmentId = tenant default funnel. Postgres 14+ compatible.
 
--- 1. Add department_id column (nullable — NULL = tenant default).
+-- 1. Add department_id column (nullable - NULL = tenant default).
 ALTER TABLE "tenant_funnels" ADD COLUMN "department_id" TEXT;
 
 -- 2. Add FK constraint with ON DELETE SET NULL.

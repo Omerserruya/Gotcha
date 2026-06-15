@@ -1,5 +1,5 @@
 /**
- * Routing service — graph-walker only (Phase 3).
+ * Routing service - graph-walker only (Phase 3).
  *
  * The Main Playbook flow canvas is the single source of truth. Every brand-new
  * inbound conversation is routed through `executeMainFlow`; the graph decides
@@ -12,7 +12,7 @@
  * removed: the graph IS the flow.
  *
  * Resume of in-flight conversations is handled upstream in the worker
- * (`incoming.worker.ts`) via the `chatbotNodeId` branch — this service only
+ * (`incoming.worker.ts`) via the `chatbotNodeId` branch - this service only
  * makes the *initial* routing decision.
  */
 import { prisma, analyticsQueue, publishEvent } from "@chatcenter/shared";
@@ -38,7 +38,7 @@ export interface RoutingTraceEntry {
   stopped?: true;
 }
 
-// ─── Live routing — graph-walker only ───────────────────────
+// ─── Live routing - graph-walker only ───────────────────────
 
 export async function routeConversation(
   tenantId: string,

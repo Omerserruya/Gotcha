@@ -6,7 +6,7 @@ import { z } from "zod";
  *
  * `source` is load-bearing for safety: prompt assemblers wrap each utterance
  * in a fenced `<utt role="...">` tag before it enters an LLM prompt. Customer
- * text is treated as untrusted input — never as instructions.
+ * text is treated as untrusted input - never as instructions.
  */
 export const TranscriptUtteranceSchema = z.object({
   /** Monotonic per source. For voice: `${callSid}:${speaker}:${seq}`. */

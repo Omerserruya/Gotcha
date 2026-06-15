@@ -181,7 +181,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
       }
       delete map[sessionId];
       localStorage.setItem(PENDING_KEY, JSON.stringify(map));
-    } catch { /* parse/quota — degrade silently */ }
+    } catch { /* parse/quota - degrade silently */ }
   }, [session?.state, sessionId]);
 
   // Auto-join the inbound conference if we land on this page with a claimed
@@ -231,7 +231,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
 
   // Customer declined the outbound call (no-answer/busy/canceled/failed
   // before joining the conference). voice-copilot publishes this from
-  // /twiml/customer-status — surfacing it here lets us render a brief
+  // /twiml/customer-status - surfacing it here lets us render a brief
   // reason banner instead of an unexplained redirect.
   const [declineReason, setDeclineReason] = useState<string | null>(null);
   useEffect(() => {
@@ -247,7 +247,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     return () => { socket.off("voice.session.declined", onDeclined); };
   }, [sessionId]);
 
-  // Spelling/code-switch detector output — emails/domains/URLs the LLM
+  // Spelling/code-switch detector output - emails/domains/URLs the LLM
   // reconstructed from a mixed Hebrew/English window. We render them as
   // confirmation chips so the rep can verify the parse before relying on
   // it (e.g. typing the email into a follow-up). Each chip carries a
@@ -305,13 +305,13 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     try {
       if (isLocalDevice) voice.hangup();
       // Route through the context so the session is dropped from `live`/
-      // `ringing`/`allLive` immediately — otherwise the ActiveCallBar lingers
+      // `ringing`/`allLive` immediately - otherwise the ActiveCallBar lingers
       // until a websocket state push arrives.
       await hangupSession(session.id);
       // Optimistically close the linked Conversation so the call doesn't
       // linger as an open chat in the inbox. The backend voice-auto-close
       // subscriber is the safety net; this is the user-clicked-hangup path.
-      // Fire-and-forget — a failure here shouldn't block the redirect.
+      // Fire-and-forget - a failure here shouldn't block the redirect.
       if (token && session.conversationId) {
         closeConversation(token, session.conversationId).catch(() => { /* ignore */ });
       }
@@ -327,7 +327,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     if (isLocalDevice) voice.toggleMute();
   }
 
-  // Add-participant flow — opens a small inline panel with a phone input
+  // Add-participant flow - opens a small inline panel with a phone input
   // that calls /api/voice-sessions/:id/add-participant. The added party
   // joins the live conference (3-way); their leg is `endConferenceOnExit:
   // false` so they can drop without ending the call.
@@ -355,7 +355,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     }
   }
 
-  // Participants panel — live legs of the conference (customer, agent,
+  // Participants panel - live legs of the conference (customer, agent,
   // any added 3rd parties). Polled while the session is live so the UI
   // sees DIALING → JOINED → LEFT transitions even when the websocket
   // doesn't carry per-participant events. Per-row controls call the
@@ -368,7 +368,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
       const { data } = await getVoiceSessionParticipants(token, session.id);
       setParticipants(data);
     } catch {
-      /* swallow — non-fatal */
+      /* swallow - non-fatal */
     }
   }
   useEffect(() => {
@@ -406,7 +406,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     try {
       await kickVoiceParticipant(token, session.id, p.id);
       // Refresh so the row flips to LEFT once the participant-leave
-      // webhook lands. Don't preemptively remove — the webhook is the
+      // webhook lands. Don't preemptively remove - the webhook is the
       // source of truth for leftAt/endReason.
       void refreshParticipants();
     } catch (err) {
@@ -444,7 +444,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
     setLeaveBusy(true);
     try {
       await voiceSessionAgentLeave(token, session.id);
-      // The agent leg is dropped server-side — the local Twilio device
+      // The agent leg is dropped server-side - the local Twilio device
       // will fire its own end event; the redirect-on-terminal effect
       // takes us back to /conversations.
     } catch (err) {
@@ -501,7 +501,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
 
   return (
     <div className="flex flex-col md:flex-row h-[100dvh] md:h-[calc(100vh-16px)] md:gap-3 md:p-2">
-      {/* Stage — full-height on mobile so the call UI is the primary surface
+      {/* Stage - full-height on mobile so the call UI is the primary surface
           and isn't pushed off-screen by the context panel stacked below.
           The context panel is hidden under md and opened via the header
           toggle as a slide-over sheet. */}
@@ -563,7 +563,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
               <span>{isLocalDevice && voice.isMuted ? t("voice.workspace.header.unmuteButton") : t("voice.workspace.header.muteButton")}</span>
             </button>
             {/* Add participant (3-way). Hidden until the conference is live
-                — RINGING/CONNECTING conferences don't yet have a conferenceSid. */}
+                - RINGING/CONNECTING conferences don't yet have a conferenceSid. */}
             {(stateLabel === "ACTIVE" || stateLabel === "HOLD") && (
               <>
                 <button
@@ -631,7 +631,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
           </div>
         </div>
 
-        {/* Add-participant inline panel — slides in when the agent clicks
+        {/* Add-participant inline panel - slides in when the agent clicks
             "Add". Submit dials the new leg into the live conference (3-way). */}
         {addPanelOpen && (
           <div className="px-4 md:px-10 mb-2">
@@ -672,7 +672,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
           </div>
         )}
 
-        {/* Participants panel — one row per leg with per-row hold/kick
+        {/* Participants panel - one row per leg with per-row hold/kick
             controls. Rendered whenever any participant exists so post-
             call view shows who was on the line. */}
         {participants.length > 0 && (
@@ -754,7 +754,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
           </div>
         )}
 
-        {/* Decline banner — shown when the customer didn't pick up the
+        {/* Decline banner - shown when the customer didn't pick up the
             outbound call (no-answer/busy/canceled/failed). Replaces the
             silent terminal-state redirect with a one-line reason so the
             agent knows what just happened. */}
@@ -775,7 +775,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
           </div>
         )}
 
-        {/* Status strip — sentiment dot · stage · missing-data badge.
+        {/* Status strip - sentiment dot · stage · missing-data badge.
             Only renders once the intelligence engine has produced a frame.
             Stays terse so the agent's eye doesn't get pulled here mid-call. */}
         {isLive && frame && (() => {
@@ -803,7 +803,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
           );
         })()}
 
-        {/* Spelling/code-switch entity chips — high-signal reconstructions
+        {/* Spelling/code-switch entity chips - high-signal reconstructions
             of emails / domains / URLs spoken on a Hebrew-English call.
             Click-to-copy because the most common follow-on action is
             pasting the email/URL into a follow-up message. Confidence
@@ -844,7 +844,7 @@ function VoiceWorkspaceInner({ sessionId }: { sessionId: string }) {
         />
       </div>
 
-      {/* Right panel — desktop sidebar AND mobile slide-over.
+      {/* Right panel - desktop sidebar AND mobile slide-over.
           The mobile slide-over is rendered as a fixed full-screen overlay
           so it doesn't compete with the call stage for vertical space.
           Width grows on larger screens so the cards don't compress into

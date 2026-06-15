@@ -35,7 +35,7 @@ export function MissionPanel({ collapsed }: Props) {
       const res = await getOnboardingMissions(token);
       setMissions(res.data.missions);
     } catch {
-      /* silent — sidebar shouldn't break if endpoint is unavailable */
+      /* silent - sidebar shouldn't break if endpoint is unavailable */
     }
   }, [token, user?.role]);
 
@@ -71,7 +71,7 @@ export function MissionPanel({ collapsed }: Props) {
     router.push(m.deepLink);
   }
 
-  // Collapsed sidebar — just a progress dot that expands the rail's panel
+  // Collapsed sidebar - just a progress dot that expands the rail's panel
   // (clicking restores the full panel if it was dismissed).
   if (collapsed) {
     return (
@@ -88,7 +88,7 @@ export function MissionPanel({ collapsed }: Props) {
     );
   }
 
-  // Dismissed — a slim restore bar so the user can bring it back any time.
+  // Dismissed - a slim restore bar so the user can bring it back any time.
   if (hidden) {
     return (
       <div className="px-3 pb-2">
@@ -198,7 +198,7 @@ export function MissionPanel({ collapsed }: Props) {
                       </span>
                     )}
                   </span>
-                  {/* Description only on the active step — keeps it clear without clutter. */}
+                  {/* Description only on the active step - keeps it clear without clutter. */}
                   {isActive && description && (
                     <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">{description}</span>
                   )}

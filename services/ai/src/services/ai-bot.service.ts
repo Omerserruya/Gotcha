@@ -5,7 +5,7 @@
  *   1. Collect runtime data (agent, conversation, history, CRM, approvals).
  *   2. Compute BehaviorState (BEL is the ONLY decision layer).
  *   3. Build the system prompt (PB consumes BehaviorState; never decides).
- *   4. Filter tools using ONLY `state.allowedActions` — no ad-hoc filters.
+ *   4. Filter tools using ONLY `state.allowedActions` - no ad-hoc filters.
  *   5. Run the tool-calling loop.
  *   6. Audit BehaviorState (with provenance) + tool calls.
  *
@@ -114,7 +114,7 @@ function unwrapToolExec(
 }
 
 // Map a tool function name to a SystemEvent type (when applicable).
-// Names are matched as `slug.tool` — the slug part is preserved for context
+// Names are matched as `slug.tool` - the slug part is preserved for context
 // in the event data. We only emit on success; failed/denied calls are noisy.
 function classifyToolForNotification(toolFunctionName: string): SystemEventType | null {
   const lower = toolFunctionName.toLowerCase();
@@ -143,7 +143,7 @@ function toAgentRecord(row: any): AgentRecord {
   return {
     name: row.name,
     role: row.role,
-    // description removed per spec — see prompt-builder AgentRecord.
+    // description removed per spec - see prompt-builder AgentRecord.
     tone: row.tone,
     style: row.style,
     identity: row.identity,
@@ -177,7 +177,7 @@ export async function buildAgentSystemPrompt(rawAgent: any): Promise<string> {
 }
 
 /**
- * Detect a human-handoff REQUEST. Must require an action verb context — the
+ * Detect a human-handoff REQUEST. Must require an action verb context - the
  * customer is asking to talk to a human, not describing their own team.
  *
  * \b doesn't work for Hebrew in JavaScript (non-ASCII letters aren't word
@@ -186,12 +186,12 @@ export async function buildAgentSystemPrompt(rawAgent: any): Promise<string> {
  * require a verb of asking/requesting paired with the noun.
  */
 const HUMAN_HANDOFF_PATTERNS = [
-  // English — explicit request
+  // English - explicit request
   /\b(speak|talk|connect|chat|transfer|put me through)\s+(to|with|me)\s+(a\s+)?(human|agent|person|someone|rep|representative)\b/i,
   /\b(can\s+i|i\s+(?:want|need|wanna|would like))\s+(to\s+)?(speak|talk|chat)\s+(to|with)\s+(a\s+)?(human|agent|person|someone|rep)\b/i,
   /\b(give|get|connect)\s+me\s+(to\s+)?(a\s+)?(human|agent|person|rep)\b/i,
   /\bnot\s+a\s+bot\b/i,
-  // Hebrew — explicit request only. Word boundaries via space/start/end.
+  // Hebrew - explicit request only. Word boundaries via space/start/end.
   /(?:^|\s)לדבר עם\s+(אדם|נציג|נציגה|מישהו|בנאדם)/,
   /(?:^|\s)תעבירו אותי\s+(?:ל|אל)\s*(אדם|נציג|נציגה|מישהו)/,
   /(?:^|\s)(?:אני רוצה|אני צריך|תן לי|תני לי|אפשר)\s+(?:לדבר עם\s+)?(אדם|נציג|נציגה|בנאדם|אנושי)(?:\s|$|[.,!?])/,
@@ -212,14 +212,14 @@ function detectHumanHandoff(text: string): boolean {
  * (not just the worker) cannot bypass them. When any gate trips, the
  * caller passes `flags.escalationGateFired: true` into the BEL, which
  * forces strategy=RESOLVE + escalationPressure=escalate_now + required
- * action `escalate_to_human` — the same path a worker-side trip takes.
+ * action `escalate_to_human` - the same path a worker-side trip takes.
  *
  * Three gates:
- *   1. max_messages — total OUTBOUND ai_bot messages on this conversation
+ *   1. max_messages - total OUTBOUND ai_bot messages on this conversation
  *      hits the per-agent cap (default 10).
- *   2. max_minutes  — wall-clock minutes since conversation.createdAt
+ *   2. max_minutes  - wall-clock minutes since conversation.createdAt
  *      exceeds the per-agent cap (default 15).
- *   3. Returns `false` for keyword-match — that's already handled by
+ *   3. Returns `false` for keyword-match - that's already handled by
  *      `detectHumanHandoff` and flows through `humanHandoffRequested`.
  */
 async function evaluateEscalationGates(opts: {
@@ -245,7 +245,7 @@ async function evaluateEscalationGates(opts: {
       return true;
     }
   } catch (err: any) {
-    // Fail-open on transient DB error — the worker still has its own
+    // Fail-open on transient DB error - the worker still has its own
     // copy of this check; don't block legitimate replies because the
     // metadata-path query hiccupped.
     console.warn("[ai-bot] escalation gate count failed (non-fatal):", err?.message);
@@ -348,7 +348,7 @@ function checkExitCriteriaGate(
       continue;
     }
     if (lower === "name" || lower === "full_name" || lower === "first_name") {
-      // Too noisy to enforce — defer to LLM/structured fields.
+      // Too noisy to enforce - defer to LLM/structured fields.
       continue;
     }
 
@@ -364,7 +364,7 @@ function checkExitCriteriaGate(
   return {
     blocked: true,
     reason:
-      `Cannot close — funnel stage \`${stageContext?.label ?? stageContext?.id ?? "current"}\` ` +
+      `Cannot close - funnel stage \`${stageContext?.label ?? stageContext?.id ?? "current"}\` ` +
       `requires fields not yet captured: ${missing.map((m) => `\`${m}\``).join(", ")}. ` +
       `Ask the customer for each missing field before calling \`close_conversation\` again.`,
     missing,
@@ -373,34 +373,34 @@ function checkExitCriteriaGate(
 }
 
 /**
- * Programmatic BEL allowedActions gate. Evaluated at dispatch time —
+ * Programmatic BEL allowedActions gate. Evaluated at dispatch time -
  * NOT at surface-build time (see filterToolsByAllowedActions comment
  * for why surface-level narrowing was disabled).
  *
  * Block iff: the tool maps to one-or-more known ActionCategories and
  * none of those categories are in BehaviorState.allowedActions. Tools
  * with empty categories (custom/adapter tools we haven't taxonomized)
- * are always allowed — default-permit for unmodeled tools.
+ * are always allowed - default-permit for unmodeled tools.
  *
  * Always-allowed (safety + read): escalate_to_human, link_customer_identifier,
  * submit_*, *_search/*_get/*_lookup/*_read.
  *
  * When this fires often, the fix is BEL classification (e.g. BEL picked
- * QUALIFY when the customer was actually transactional+hot) — not
+ * QUALIFY when the customer was actually transactional+hot) - not
  * weakening the gate.
  */
 function checkAllowedActionsGate(
   toolName: string,
   state: BehaviorState,
 ): { blocked: boolean; reason?: string; categories?: ActionCategory[]; allowed?: ActionCategory[] } {
-  // Strategy-based dispatch gating is DISABLED — parity with the disabled
+  // Strategy-based dispatch gating is DISABLED - parity with the disabled
   // surface filter in `filterToolsByAllowedActions`. Keeping this gate active
   // while the surface stays full was self-contradictory: the model SEES every
   // tool, correctly calls a critical one (e.g. `schedule_meeting` after the
   // customer confirms a slot), and the runtime then refuses it because the BEL
-  // happened to land on GUIDE/QUALIFY — categories like `schedule_booking`
+  // happened to land on GUIDE/QUALIFY - categories like `schedule_booking`
   // live only in CONVERT. The model then verbalizes "I can't book directly,
-  // I'll pass it to the team" — exactly the failure mode the surface filter
+  // I'll pass it to the team" - exactly the failure mode the surface filter
   // was disabled to prevent, just relocated to dispatch time.
   //
   // The strategy still steers MOVE SELECTION via the behavior prompt
@@ -409,8 +409,8 @@ function checkAllowedActionsGate(
   // (`checkContractGate`) below. But a strategy misclassification must never
   // again silently veto a tool the model was right to call.
   //
-  // The taxonomy (`actionCategoriesForTool`) is retained — it still powers
-  // `computeUnmetRequiredActions` observability — but no longer blocks here.
+  // The taxonomy (`actionCategoriesForTool`) is retained - it still powers
+  // `computeUnmetRequiredActions` observability - but no longer blocks here.
   void state;
   void toolName;
   return { blocked: false };
@@ -427,7 +427,7 @@ function checkAllowedActionsGate(
  * so the synthesized tool-result message can name them verbatim.
  *
  * Always-allowed escape valves (escalate_to_human, link_customer_identifier,
- * submit_*, read-only *_search/*_get/*_lookup/*_read) are never blocked —
+ * submit_*, read-only *_search/*_get/*_lookup/*_read) are never blocked -
  * the safety latch must remain reachable.
  */
 function checkContractGate(
@@ -447,7 +447,7 @@ function checkContractGate(
     if (!c.blocking) continue;
     if (!c.requiredTools.includes(toolName)) continue;
     if (c.pending.includes(toolName)) continue; // currently allowed
-    if (c.completed.includes(toolName)) continue; // already done — idempotent
+    if (c.completed.includes(toolName)) continue; // already done - idempotent
     // Tool is part of the contract but the LLM is jumping the sequence.
     return {
       blocked: true,
@@ -476,7 +476,7 @@ function computeUnmetRequiredActions(
   for (const action of required) {
     // Find the first surface tool that maps to this action.
     const matchingTool = surfaceToolNames.find((fn) => actionCategoriesForTool(fn).includes(action));
-    if (!matchingTool) continue; // No tool exists for this action — not a violation.
+    if (!matchingTool) continue; // No tool exists for this action - not a violation.
     // Was any tool that maps to this action called?
     const wasCalled = [...calledToolNames].some((called) => actionCategoriesForTool(called).includes(action));
     if (!wasCalled) unmet.push({ action, toolName: matchingTool });
@@ -485,7 +485,7 @@ function computeUnmetRequiredActions(
 }
 
 function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] {
-  // Strategy-based tool gating is DISABLED — the agent gets the full tool
+  // Strategy-based tool gating is DISABLED - the agent gets the full tool
   // surface (escalate, schedule_*, create_lead, close, etc.) on every turn
   // regardless of strategy. The behavior prompt (allowedActions /
   // forbiddenBehaviors text rendered into the system prompt) still steers
@@ -495,8 +495,8 @@ function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] 
   // concrete slot, close_conversation when the customer says goodbye).
   //
   // Previously this filter physically removed schedule_* / write / close
-  // tools when the BEL picked QUALIFY or GUIDE — which is the strategy for
-  // every message-1 turn and for most informational chats — so the LLM
+  // tools when the BEL picked QUALIFY or GUIDE - which is the strategy for
+  // every message-1 turn and for most informational chats - so the LLM
   // verbalized actions it had no tool for. That mismatch is the bug; the
   // unfiltered surface is the fix.
   //
@@ -535,14 +535,14 @@ function extractIdentifierFromMessage(
   const m = trimmed.match(emailRe);
   if (m) return { kind: "email", value: m[0].toLowerCase() };
 
-  // Phone extraction — loose candidate match, then libphonenumber-js validates
+  // Phone extraction - loose candidate match, then libphonenumber-js validates
   // against the tenant's default country. This way local formats sent in
   // Instagram/Messenger ("054-1234567", "(555) 123-4567", "0541234567")
   // resolve correctly, not just strict E.164 with a leading `+`.
   //
   // Candidate criteria: 7+ digits in a row (with optional separators) AND
   // either a leading `+` OR at least one separator/grouping or a leading
-  // zero — that filters out random IDs/order numbers like "1234567890" in
+  // zero - that filters out random IDs/order numbers like "1234567890" in
   // body prose. We also reject overly-long digit runs (16+) which are
   // typically card / order numbers, not phones.
   const phoneCandidateRe = /(\+?\d[\d\s().-]{6,}\d)/g;
@@ -608,7 +608,7 @@ function extractRecentEmail(messages: Array<{ direction: string; body: string | 
 /**
  * True iff the AI agent has at least one CONNECTED calendar (Google or
  * Calendly). Drives whether `schedule_meeting` is exposed in the tool
- * surface — surfacing it without a backend would let the model promise
+ * surface - surfacing it without a backend would let the model promise
  * meeting times it cannot actually book.
  */
 async function hasConnectedCalendarFor(tenantId: string, aiAgentId: string): Promise<boolean> {
@@ -647,7 +647,7 @@ function renderCustomerInfoBlock(conv: any): string | undefined {
   if (conv.channel) lines.push(`- Channel: ${conv.channel}`);
   if (conv.status) lines.push(`- Conversation Status: ${conv.status}`);
   if (conv.createdAt) lines.push(`- Conversation Started: ${conv.createdAt.toISOString()}`);
-  // `lastMessageAt` deliberately omitted — it changes every turn and would
+  // `lastMessageAt` deliberately omitted - it changes every turn and would
   // break the per-conversation cache prefix. The latest customer message is
   // already in the transcript appended after the system prompt.
   if (lines.length <= 1) return undefined;
@@ -663,9 +663,9 @@ function renderPendingApprovalsBlock(pending: Array<{ tool: string }>): string |
   if (!pending.length) return undefined;
   const list = pending.map((a) => `\`${a.tool}\``).join(", ");
   return [
-    "## Pending Approval — IMPORTANT",
+    "## Pending Approval - IMPORTANT",
     `The following tool(s) you proposed earlier are awaiting human approval: ${list}.`,
-    "Do NOT call them again in this turn — the request is already in front of the team. " +
+    "Do NOT call them again in this turn - the request is already in front of the team. " +
       "Keep the conversation moving with the customer in a natural way: answer their question, " +
       "clarify, qualify, or move toward the next step. Do not mention the approval to the customer.",
   ].join("\n");
@@ -707,7 +707,7 @@ export async function generateAIBotReply(opts: {
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
   // this controller. Every generateResponse() below threads `signal` so the
-  // underlying OpenAI fetch is cancelled — no tokens burned, no stale reply
+  // underlying OpenAI fetch is cancelled - no tokens burned, no stale reply
   // emitted. The route layer converts the resulting AbortError into HTTP 499.
   const turn = beginTurn(opts.tenantId, opts.conversationId, "bot");
   try {
@@ -736,7 +736,7 @@ async function generateAIBotReplyInner(
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
   }
 
-  // Tenant default country — passed to extractIdentifierFromMessage so phone
+  // Tenant default country - passed to extractIdentifierFromMessage so phone
   // candidates without a `+` prefix (e.g. Israeli "054-1234567" sent over IG)
   // still parse to E.164 and trigger identity_link against the existing CRM.
   const tenantRow = await prisma.tenant
@@ -753,7 +753,7 @@ async function generateAIBotReplyInner(
 
   // Per-turn / per-conversation / per-tenant-day token caps. Preflight
   // runs before any heavy lookups so a tripped cap aborts cheaply. The
-  // budget enforcer is fail-open on DB errors — a transient UsageLog
+  // budget enforcer is fail-open on DB errors - a transient UsageLog
   // hiccup never blocks live traffic, but the in-memory per-turn counter
   // still trips runaway loops below.
   const budget = createTurnBudget({
@@ -806,7 +806,7 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] pending-approval lookup failed:", err?.message);
   }
 
-  // CRM prefetch — outputs:
+  // CRM prefetch - outputs:
   //   crmBlock for the prompt + crmHasLead/crmHasCustomer flags into BEL.
   let crmBlock: string | undefined;
   let crmHasLead = false;
@@ -853,7 +853,7 @@ async function generateAIBotReplyInner(
   // Last bot turn (for cross-turn coherence).
   const lastAssistantMove = await lookupLastAssistantMove(opts.tenantId, opts.conversationId);
 
-  // Tenant funnel (optional — Task 2). Pre-loaded so BEL stays pure.
+  // Tenant funnel (optional - Task 2). Pre-loaded so BEL stays pure.
   // departmentId is resolved from the conversation's assigned department when
   // available; falls back to null (tenant default funnel).
   const funnelDepartmentId = conversation.departmentId ?? null;
@@ -869,7 +869,7 @@ async function generateAIBotReplyInner(
     contractIds: actionContracts.map((c) => c.id),
   });
 
-  // ── Behavior Engine — single decision point ─────────────
+  // ── Behavior Engine - single decision point ─────────────
   const behaviorState = computeBehaviorState({
     mode: "agent",
     identity: {
@@ -883,7 +883,7 @@ async function generateAIBotReplyInner(
       messageCount: messages.length,
       recentDirections: messages.slice(-5).map((m) => m.direction as "INBOUND" | "OUTBOUND"),
       // Last few inbound texts (oldest→newest) feed the trust/friction
-      // signals — repeated-verification, repeated-complaint, and repetition
+      // signals - repeated-verification, repeated-complaint, and repetition
       // detection are inherently multi-message.
       recentInboundTexts: messages
         .filter((m) => m.direction === "INBOUND")
@@ -912,7 +912,7 @@ async function generateAIBotReplyInner(
     actionContractProgress,
   });
 
-  // ── KB retrieval — strategy-controlled, NOT regex ──────
+  // ── KB retrieval - strategy-controlled, NOT regex ──────
   let kbBlock: string | undefined;
   if (shouldRetrieveKB(behaviorState, opts.incomingMessage)) {
     try {
@@ -923,7 +923,7 @@ async function generateAIBotReplyInner(
     }
   }
 
-  // ── Conversation memory (Task 5) — fact snapshot injected as ground truth ─
+  // ── Conversation memory (Task 5) - fact snapshot injected as ground truth ─
   const memory = buildConversationMemory({
     messages: messages.map((m) => ({
       direction: m.direction as "INBOUND" | "OUTBOUND",
@@ -955,7 +955,7 @@ async function generateAIBotReplyInner(
     templatesBlock: followupFacts.templatesBlock,
   };
 
-  // ── Tool surface — single source of truth: state.allowedActions ──
+  // ── Tool surface - single source of truth: state.allowedActions ──
   // Build it BEFORE the prompt so we can pass the actual function names
   // into the Execution Contract's capability whitelist.
   const hasConnectedCalendar = await hasConnectedCalendarFor(opts.tenantId, config.id);
@@ -986,7 +986,7 @@ async function generateAIBotReplyInner(
     runCreateTask: async ({ subject, body, priority }) => {
       // Route create_task through the existing action-executor path so it
       // hits the same CRM connector (Zoho/HubSpot/…) and audit log as the
-      // post-chat pipeline. contactId is required by the executor — fall
+      // post-chat pipeline. contactId is required by the executor - fall
       // back to a per-tenant policy result when the local contact row
       // isn't resolved yet (rare; identity-link normally runs first).
       if (!contactRow?.id) {
@@ -1042,7 +1042,7 @@ async function generateAIBotReplyInner(
     identityLinking: !!contactRow?.id,
     escalation: true,
     scheduleMeeting: hasConnectedCalendar,
-    // Honor CatalogTool.allowedModes — tools tagged ASSIST-only are dropped
+    // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
     // from the autonomous surface. The copilot path uses {closure,followup}
     // flags; the autonomous path uses this mode filter.
     allowedMode: "AUTO",
@@ -1167,7 +1167,7 @@ async function generateAIBotReplyInner(
               if (reads.includes(q) && writes.includes(q)) parts.push("(read+write)");
               else if (writes.includes(q)) parts.push("(write)");
               else parts.push("(read-only)");
-              if (n.description) parts.push(`— ${n.description}`);
+              if (n.description) parts.push(`- ${n.description}`);
               if (n.whenToUse) parts.push(`[USE WHEN: ${n.whenToUse}]`);
               return parts.join(" ");
             }).join("\n")
@@ -1198,11 +1198,11 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] adapter tool surface failed:", err?.message);
   }
 
-  // Surface-level CRM strip — when crm-prefetch finds an existing lead or
+  // Surface-level CRM strip - when crm-prefetch finds an existing lead or
   // contact, the prompt builder injects a note telling the LLM that
   // create_lead/create_contact have been removed. That note is necessary
   // but not sufficient: a confused LLM can still emit the tool call and
-  // duplicate the CRM record. Belt-and-braces — actually drop the tool
+  // duplicate the CRM record. Belt-and-braces - actually drop the tool
   // from the array so the model literally cannot select it.
   if (crmHasLead) {
     tools = (tools as any[]).filter((t) => {
@@ -1217,7 +1217,7 @@ async function generateAIBotReplyInner(
     });
   }
 
-  // SINGLE filter — replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
+  // SINGLE filter - replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
   tools = filterToolsByAllowedActions(tools, behaviorState);
 
   // Sort tools alphabetically by function name BEFORE the OpenAI call so the
@@ -1238,12 +1238,12 @@ async function generateAIBotReplyInner(
     .filter((n): n is string => typeof n === "string");
 
   // ── Pipeline stage resolution ──────────────────────────────
-  // The same stage-resolver the voice copilot uses — pulls the customer's
+  // The same stage-resolver the voice copilot uses - pulls the customer's
   // current funnel stage from CRM, falls back to the funnel's first stage
   // for new contacts, or returns null when no funnel is configured. The
   // chat bot now follows the funnel exactly the way call-pilot does:
   // stage.goal / requiredQuestions / requiredDataFields / exitCriteria
-  // all flow into the per-turn prompt block. Fail-soft — any error here
+  // all flow into the per-turn prompt block. Fail-soft - any error here
   // just means the bot falls back to the agent-level config.
   let stageContext: StageContextForPrompt | undefined;
   try {
@@ -1279,8 +1279,8 @@ async function generateAIBotReplyInner(
   // ALSO as a separate user message at index 1 was injecting BEL-driven
   // content into the chatMessages prefix, which broke the cache layout
   // every time the contract flipped (REPLY → READY_MESSAGE → ...). The
-  // model still sees the same instruction — just once, in the system
-  // prompt — so behavior is unchanged.
+  // model still sees the same instruction - just once, in the system
+  // prompt - so behavior is unchanged.
 
   for (const m of messages) {
     if (!m.body?.trim()) continue;
@@ -1304,7 +1304,7 @@ async function generateAIBotReplyInner(
       // Pin every autonomous turn of the SAME conversation to one session so
       // OpenAI's automatic prefix cache routes consistently across turns.
       // Without this, multiple turns of the same conversation may land on
-      // different backends and miss the cache — silently doubling token cost.
+      // different backends and miss the cache - silently doubling token cost.
       sessionId: opts.conversationId,
       model,
       messages: chatMessages,
@@ -1345,7 +1345,7 @@ async function generateAIBotReplyInner(
         let toolArgs: Record<string, unknown> = {};
         try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
 
-        // Exit-criteria gate — refuse to close the conversation until
+        // Exit-criteria gate - refuse to close the conversation until
         // the resolved funnel stage's `mustHaveFields` have evidence.
         // Defense-in-depth on top of the prompt-level instruction.
         const exitGate = checkExitCriteriaGate(toolName, stageContext, {
@@ -1394,7 +1394,7 @@ async function generateAIBotReplyInner(
           continue;
         }
 
-        // BEL allowedActions gate — dispatch-time enforcement of the
+        // BEL allowedActions gate - dispatch-time enforcement of the
         // strategy's permitted action categories. Surface stays full
         // (the model can SEE every tool to avoid the "talks-about-tool-
         // it-doesn't-have" failure mode the author hit earlier) but
@@ -1444,7 +1444,7 @@ async function generateAIBotReplyInner(
           continue;
         }
 
-        // Programmatic Action Contract gate — refuse to dispatch tools
+        // Programmatic Action Contract gate - refuse to dispatch tools
         // that jump a SEQUENCE contract's order. The surface filter
         // also narrows blocking contracts, but this is a defense-in-depth
         // check that catches custom/adapter tool names that may slip
@@ -1544,7 +1544,7 @@ async function generateAIBotReplyInner(
           pausedForApproval = result.sideEffect.awaitingApproval;
         }
 
-        // Action Contract progress — record this tool execution against
+        // Action Contract progress - record this tool execution against
         // any active contract that lists it. Idempotent: a re-dispatch
         // never double-counts. SEQUENCE contracts pause if the result
         // came back as awaiting_approval (no further steps until cleared).
@@ -1652,7 +1652,7 @@ async function generateAIBotReplyInner(
           .join(" "),
       );
     }
-    console.warn(`[ai-bot] Contract violation — ${reasonParts.join(" | ")}. Forcing retry.`);
+    console.warn(`[ai-bot] Contract violation - ${reasonParts.join(" | ")}. Forcing retry.`);
     chatMessages.push({
       role: "user",
       content:
@@ -1735,7 +1735,7 @@ async function generateAIBotReplyInner(
           content: result.content,
         });
       }
-      // Final pass to get the customer-facing reply text — unless the
+      // Final pass to get the customer-facing reply text - unless the
       // per-turn budget already tripped on the retry, in which case we
       // ship whatever the retry already produced.
       if (budget.exceededTurnCap()) {
@@ -1771,7 +1771,7 @@ async function generateAIBotReplyInner(
     }
   }
 
-  // Audit — full BehaviorState + tool calls.
+  // Audit - full BehaviorState + tool calls.
   prisma.auditLog.create({
     data: {
       tenantId: opts.tenantId,
@@ -1809,7 +1809,7 @@ async function generateAIBotReplyInner(
 
   // Notification emit: conversation escalated. Fire when BEL signals
   // escalate_now or when a tool side-effect set pendingEscalation. Wrapped
-  // in tryEmit + try/catch — never throws into the hot path.
+  // in tryEmit + try/catch - never throws into the hot path.
   try {
     if (behaviorState.escalationPressure === "escalate_now" || pendingEscalation) {
       tryEmit({
@@ -1830,7 +1830,7 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] escalation emit failed:", err?.message);
   }
 
-  // Output validator — last defence against prompt-leakage and fabricated
+  // Output validator - last defence against prompt-leakage and fabricated
   // execution claims ("I refunded your card" with no refund tool call).
   // Fire-and-forget audit on any violation; returns a safe deflection in
   // the same language. Skipped when we're handing off (approval / escalation).
@@ -1885,7 +1885,7 @@ export async function generateAIBotOneshot(opts: {
 
   const result = await generateResponse({
     tenantId: opts.tenantId,
-    // One-shot replies have no conversation — pin to the agent so repeat
+    // One-shot replies have no conversation - pin to the agent so repeat
     // one-shots from the same agent (comment replies, smart-tasks, etc.)
     // share a cache routing key when the system prompt is stable.
     sessionId: `ai-agent:${config.id}`,
@@ -1911,7 +1911,7 @@ export async function generateAIBotOneshot(opts: {
 const HEBREW_RE = /[֐-׿]/;
 
 function detectLocale(samples: string[]): "he" | "en" {
-  // Lightweight detector — any Hebrew chars in recent customer messages
+  // Lightweight detector - any Hebrew chars in recent customer messages
   // flips locale to Hebrew. This is what the prompt-builder reads when
   // deciding which language to render its "STRICT" blocks in.
   for (const s of samples) {
@@ -1928,7 +1928,7 @@ interface FollowupFlowFacts {
 /**
  * Loads two facts the bot needs to drive the follow-up decision tree:
  *
- *   1. WhatsApp 24h customer-service window — when did the customer last
+ *   1. WhatsApp 24h customer-service window - when did the customer last
  *      send an INBOUND message? If > 24h, free-text follow-ups are silently
  *      dropped by Meta and the bot must use a template path instead.
  *
@@ -1974,7 +1974,7 @@ async function loadFollowupFlowFacts(args: {
     lines.push(`- conversation_channel: ${channel || "unknown"}`);
     if (isWhatsApp) {
       if (secondsSinceLastInbound === null) {
-        lines.push("- no inbound messages yet — window is CLOSED by default; template path required to first-contact");
+        lines.push("- no inbound messages yet - window is CLOSED by default; template path required to first-contact");
       } else {
         const hh = Math.floor(secondsSinceLastInbound / 3600);
         const mm = Math.floor((secondsSinceLastInbound % 3600) / 60);
@@ -2030,7 +2030,7 @@ async function loadFollowupFlowFacts(args: {
             if (!v || typeof v.key !== "string") continue;
             const key = v.key;
             const desc = typeof v.description === "string" && v.description.trim() ? v.description.trim() : "(no description)";
-            const sample = typeof v.sample === "string" && v.sample.trim() ? ` — sample: ${JSON.stringify(v.sample.trim())}` : "";
+            const sample = typeof v.sample === "string" && v.sample.trim() ? ` - sample: ${JSON.stringify(v.sample.trim())}` : "";
             lines.push(`    {{${key}}}: ${desc}${sample}`);
           }
         }
@@ -2045,7 +2045,7 @@ async function loadFollowupFlowFacts(args: {
       }
       out.templatesBlock = lines.join("\n");
     } else if (channel === "WHATSAPP" || channel === "") {
-      out.templatesBlock = "## Approved WhatsApp templates\n- (none configured) — if the 24h window is closed, ask the team to register a callback template before scheduling.";
+      out.templatesBlock = "## Approved WhatsApp templates\n- (none configured) - if the 24h window is closed, ask the team to register a callback template before scheduling.";
     }
   } catch (err: any) {
     console.warn("[ai-bot] loadFollowupFlowFacts templates:", err?.message);

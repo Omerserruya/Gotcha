@@ -49,36 +49,36 @@ const FOLLOWUP_CONTRACT: ActionContract = {
   isActive: true,
 };
 
-describe("ActionContracts — pure helpers", () => {
-  it("isFulfilled — ALL_REQUIRED needs every tool", () => {
+describe("ActionContracts - pure helpers", () => {
+  it("isFulfilled - ALL_REQUIRED needs every tool", () => {
     expect(isFulfilled(BOOKING_CONTRACT, ["schedule_meeting"])).toBe(false);
     expect(isFulfilled(BOOKING_CONTRACT, ["schedule_meeting", "integration_update_lead"])).toBe(true);
   });
-  it("isFulfilled — AT_LEAST_ONE needs any tool", () => {
+  it("isFulfilled - AT_LEAST_ONE needs any tool", () => {
     expect(isFulfilled(FOLLOWUP_CONTRACT, [])).toBe(false);
     expect(isFulfilled(FOLLOWUP_CONTRACT, ["schedule_followup"])).toBe(true);
   });
-  it("isFulfilled — SEQUENCE needs every tool (order checked elsewhere)", () => {
+  it("isFulfilled - SEQUENCE needs every tool (order checked elsewhere)", () => {
     expect(isFulfilled(REFUND_CONTRACT, ["refund_payment"])).toBe(false);
     expect(isFulfilled(REFUND_CONTRACT, ["refund_payment", "create_ticket"])).toBe(true);
   });
-  it("computeNextStepIndex — SEQUENCE advances per completed step", () => {
+  it("computeNextStepIndex - SEQUENCE advances per completed step", () => {
     expect(computeNextStepIndex(REFUND_CONTRACT, [])).toBe(0);
     expect(computeNextStepIndex(REFUND_CONTRACT, ["refund_payment"])).toBe(1);
     expect(computeNextStepIndex(REFUND_CONTRACT, ["refund_payment", "create_ticket"])).toBe(2);
   });
-  it("pendingToolsFor — SEQUENCE returns only the next step", () => {
+  it("pendingToolsFor - SEQUENCE returns only the next step", () => {
     expect(pendingToolsFor(REFUND_CONTRACT, [])).toEqual(["refund_payment"]);
     expect(pendingToolsFor(REFUND_CONTRACT, ["refund_payment"])).toEqual(["create_ticket"]);
     expect(pendingToolsFor(REFUND_CONTRACT, ["refund_payment", "create_ticket"])).toEqual([]);
   });
-  it("pendingToolsFor — ALL_REQUIRED returns every unfulfilled tool", () => {
+  it("pendingToolsFor - ALL_REQUIRED returns every unfulfilled tool", () => {
     expect(pendingToolsFor(BOOKING_CONTRACT, [])).toEqual(["schedule_meeting", "integration_update_lead"]);
     expect(pendingToolsFor(BOOKING_CONTRACT, ["schedule_meeting"])).toEqual(["integration_update_lead"]);
   });
 });
 
-describe("ActionContracts — deriveTriggeredActions", () => {
+describe("ActionContracts - deriveTriggeredActions", () => {
   it("detects refund from English markers", () => {
     expect(deriveTriggeredActions({ lastMessage: "i want a refund please" })).toContain("refund");
   });
@@ -100,7 +100,7 @@ describe("ActionContracts — deriveTriggeredActions", () => {
   });
 });
 
-describe("ActionContracts — deriveActionContractState", () => {
+describe("ActionContracts - deriveActionContractState", () => {
   it("inactive when no contracts match", () => {
     const s = deriveActionContractState({
       triggeredActions: ["booking"],
@@ -122,7 +122,7 @@ describe("ActionContracts — deriveActionContractState", () => {
     expect(s.pendingTools).toEqual(["schedule_meeting", "integration_update_lead"]);
   });
 
-  it("SEQUENCE — pendingTools is just the next step (not the full list)", () => {
+  it("SEQUENCE - pendingTools is just the next step (not the full list)", () => {
     const s = deriveActionContractState({
       triggeredActions: ["refund"],
       contracts: [REFUND_CONTRACT],
@@ -132,7 +132,7 @@ describe("ActionContracts — deriveActionContractState", () => {
     expect(s.currentStep).toBe("refund_payment");
   });
 
-  it("SEQUENCE — partial completion advances to step 2", () => {
+  it("SEQUENCE - partial completion advances to step 2", () => {
     const progress = new Map<string, ActionContractProgress>([
       [REFUND_CONTRACT.id, {
         id: "p1", contractId: REFUND_CONTRACT.id, conversationId: "c1",
@@ -149,7 +149,7 @@ describe("ActionContracts — deriveActionContractState", () => {
     expect(s.currentStep).toBe("create_ticket");
   });
 
-  it("SEQUENCE — out-of-order proposed tool calls flag a violation", () => {
+  it("SEQUENCE - out-of-order proposed tool calls flag a violation", () => {
     const s = deriveActionContractState({
       triggeredActions: ["refund"],
       contracts: [REFUND_CONTRACT],
@@ -178,7 +178,7 @@ describe("ActionContracts — deriveActionContractState", () => {
     expect(s.pendingTools).toEqual([]);
   });
 
-  it("AT_LEAST_ONE non-blocking — not blocking even with pending tools", () => {
+  it("AT_LEAST_ONE non-blocking - not blocking even with pending tools", () => {
     const s = deriveActionContractState({
       triggeredActions: ["follow_up"],
       contracts: [FOLLOWUP_CONTRACT],
@@ -190,7 +190,7 @@ describe("ActionContracts — deriveActionContractState", () => {
   });
 });
 
-describe("BEL — computeBehaviorState integration", () => {
+describe("BEL - computeBehaviorState integration", () => {
   it("threads actionContractState into BehaviorState when booking matches", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -216,7 +216,7 @@ describe("BEL — computeBehaviorState integration", () => {
     expect(s.actionContractState.active).toBe(false);
   });
 
-  it("multi-turn — partial progress is honored", () => {
+  it("multi-turn - partial progress is honored", () => {
     const progress = new Map<string, ActionContractProgress>([
       [REFUND_CONTRACT.id, {
         id: "p3", contractId: REFUND_CONTRACT.id, conversationId: "c1",
@@ -235,7 +235,7 @@ describe("BEL — computeBehaviorState integration", () => {
     expect(s.actionContractState.pendingTools).toEqual(["create_ticket"]);
   });
 
-  it("LLM-tries-to-skip — proposedToolCalls=create_ticket BEFORE refund_payment → violation flagged", () => {
+  it("LLM-tries-to-skip - proposedToolCalls=create_ticket BEFORE refund_payment → violation flagged", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,

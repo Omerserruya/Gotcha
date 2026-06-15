@@ -1,7 +1,7 @@
 import { prisma } from "@chatcenter/shared";
 
 /**
- * Repository for CopilotCueOutcome rows — the durable backing of the trust
+ * Repository for CopilotCueOutcome rows - the durable backing of the trust
  * loop. The aggregate (per cueKind, cueText) is read by TrustWeights to
  * compute Laplace-smoothed accept rates. Insert is best-effort: a hiccup
  * recording feedback must NOT break the live call.

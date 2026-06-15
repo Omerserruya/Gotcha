@@ -3,13 +3,13 @@
  *
  * We mount the router on a fresh Express app per test, with `@chatcenter/shared`
  * stubbed so no DB or queue work happens. The rate-limit middleware is the
- * code under test — for each route we send N requests with the same
+ * code under test - for each route we send N requests with the same
  * (widgetId/sessionId, ip) tuple and assert request N+1 is rejected with 429.
  * We then change the keying tuple and assert the new bucket has its own quota.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
-// Force tight limits — env vars are read at module-init time of the route file.
+// Force tight limits - env vars are read at module-init time of the route file.
 // Set BEFORE any other module runs by using vi.hoisted (which is itself
 // hoisted to the top of the file with vi.mock factories).
 vi.hoisted(() => {
@@ -97,7 +97,7 @@ beforeEach(() => {
   queueAddMock.mockClear();
 });
 
-describe("/init — rate limit", () => {
+describe("/init - rate limit", () => {
   it("allows the first N requests and rejects N+1 with 429", async () => {
     const app = makeApp("10.0.0.1");
     const widgetId = "wid-init-1";
@@ -105,7 +105,7 @@ describe("/init — rate limit", () => {
     // INIT_RPM is set to 3.
     for (let i = 0; i < 3; i++) {
       const res = await request(app).post("/api/embedded-chat/init").send({ widgetId });
-      // Either 200 (ok) or some legitimate downstream error — but NEVER 429
+      // Either 200 (ok) or some legitimate downstream error - but NEVER 429
       // while we're under the cap.
       expect(res.status).not.toBe(429);
     }
@@ -134,7 +134,7 @@ describe("/init — rate limit", () => {
   });
 });
 
-describe("/message — rate limit", () => {
+describe("/message - rate limit", () => {
   it("allows AI_WIDGET_MESSAGE_RPM requests and rejects the next", async () => {
     const app = makeApp("10.0.1.1");
     const sessionId = "sess-msg-1";
@@ -163,7 +163,7 @@ describe("/message — rate limit", () => {
   });
 });
 
-describe("/messages — poll rate limit", () => {
+describe("/messages - poll rate limit", () => {
   it("allows POLL_RPM requests and rejects the next from the same (sessionId, ip)", async () => {
     const app = makeApp("10.0.2.1");
     const sessionId = "sess-poll-1";

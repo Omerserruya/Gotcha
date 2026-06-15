@@ -13,7 +13,7 @@ import ReactMarkdown from "react-markdown";
 interface HistoryPanelProps {
   conversation: any;
   /** Rich CRM payload (lifted to ChatPanel). Used to render the CRM-side
-   *  timeline: recent summaries, activities, CRM notes — alongside the local
+   *  timeline: recent summaries, activities, CRM notes - alongside the local
    *  past-conversations list. Null when CRM isn't connected/linked. */
   crmContext?: CrmContextEnvelope | null;
   crmLoading?: boolean;
@@ -32,14 +32,14 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
   const [loading, setLoading] = useState(true);
   const [expandedId, setExpandedId] = useState<string | null>(null);
 
-  // CRM note composer — manual notes from the agent that land on the
+  // CRM note composer - manual notes from the agent that land on the
   // vendor's contact timeline. The CRM-notes collapsible below renders
   // them once the next context fetch returns.
   const [crmNoteText, setCrmNoteText] = useState("");
   const [postingCrmNote, setPostingCrmNote] = useState(false);
   const [crmNoteMsg, setCrmNoteMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
 
-  // AI-generated customer briefing — rendered as a highlighted card at the
+  // AI-generated customer briefing - rendered as a highlighted card at the
   // top of the panel. Same payload Co-Pilot will consume next. Cached
   // server-side for 10 minutes; the ↻ button bypasses the cache.
   const [summary, setSummary] = useState<CustomerSummary | null>(null);
@@ -53,7 +53,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
 
   // Index summaries by conversationId so the expanded row in the unified
   // "Past Conversations" list can surface sentiment / qualification /
-  // action items inline — no separate "AI summaries (other channels)"
+  // action items inline - no separate "AI summaries (other channels)"
   // section needed.
   const summaryByConv = useMemo(() => {
     const m = new Map<string, NonNullable<CrmContextEnvelope["recent_summaries"]>[number]>();
@@ -73,7 +73,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
     try {
       // Pass conversationId so the backend can hit the linked CRM record
       // and pull cross-platform identifiers (phone, email, every gotcha_psid_*)
-      // — that's what makes WhatsApp / Instagram / Messenger / voice history
+      // - that's what makes WhatsApp / Instagram / Messenger / voice history
       // for the same person show up together.
       const res = await getConversationHistory(token, customerKey, conversationId);
       setHistory(res.data);
@@ -158,10 +158,10 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-2">
-        {/* Customer Intelligence snapshot (V2) — structured WHO/WHAT/MISSING/NEXT
+        {/* Customer Intelligence snapshot (V2) - structured WHO/WHAT/MISSING/NEXT
             from the three-domain model. Renders nothing until intelligence exists. */}
         <CustomerIntelligenceCard conversationId={conversationId} />
-        {/* AI customer brief — highlighted card at the top, gradient border so
+        {/* AI customer brief - highlighted card at the top, gradient border so
             it visually anchors above the structured CRM blocks. Same payload
             will plug into Co-Pilot in a follow-up. */}
         <AISummaryCard
@@ -400,7 +400,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
           </CollapsibleSection>
         )}
 
-        {/* Manual CRM note composer — kept, since this is a deliberate
+        {/* Manual CRM note composer - kept, since this is a deliberate
             agent action (lands on the vendor's contact timeline). Only
             the local "demo" notes block was removed. */}
         {isLinked && (
@@ -441,7 +441,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
           </div>
         )}
 
-        {/* Local "demo" notes section removed — agents add notes from the
+        {/* Local "demo" notes section removed - agents add notes from the
             normal conversation compose surface. The CRM notes collapsible
             above is the canonical read-only timeline. */}
       </div>
@@ -456,7 +456,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
   );
 }
 
-// Platform pill — uses the same PNG icons (from /public/icons) that the
+// Platform pill - uses the same PNG icons (from /public/icons) that the
 // inbox conversation cards render, so cross-platform history visually
 // matches the inbox. Falls back to a text label for channels that don't
 // have a logo (Voice, SMS, WebChat) but keeps the same chip shape.
@@ -474,7 +474,7 @@ const CHANNEL_ICONS: Record<string, { logo?: string; label: string }> = {
   SMS:       { label: "SMS" },
 };
 
-// Collapsible section wrapper — each context category opens/closes
+// Collapsible section wrapper - each context category opens/closes
 // independently with a chevron and shows a count badge (gray when empty).
 function CollapsibleSection({
   title,
@@ -522,7 +522,7 @@ function CollapsibleSection({
 }
 
 // Highlighted Customer Brief card pinned at the top of the panel. Persistent
-// customer-level behavioral intelligence (NOT scoped to this conversation —
+// customer-level behavioral intelligence (NOT scoped to this conversation -
 // that lives in Co-Pilot). Gradient shell so it visually anchors above the
 // structured CRM blocks.
 function AISummaryCard({
@@ -677,7 +677,7 @@ function ExpandableBody({ body, maxChars, t }: {
   const isLong = text.length > maxChars;
   // When collapsed we slice on raw text so the trigger is deterministic
   // (CSS line-clamp varies with line height + RTL). The slice may cut
-  // mid-markdown — that's fine because the collapsed view is preview-only;
+  // mid-markdown - that's fine because the collapsed view is preview-only;
   // the full markdown renders cleanly when expanded.
   const visible = open || !isLong ? text : text.slice(0, maxChars).trimEnd() + "…";
   return (

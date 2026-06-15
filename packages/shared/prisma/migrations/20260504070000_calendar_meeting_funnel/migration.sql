@@ -23,7 +23,7 @@ CREATE UNIQUE INDEX "calendar_accounts_ai_agent_id_provider_key" ON "calendar_ac
 CREATE INDEX "calendar_accounts_tenant_id_idx" ON "calendar_accounts"("tenant_id");
 CREATE INDEX "calendar_accounts_tenant_id_status_idx" ON "calendar_accounts"("tenant_id", "status");
 
--- Meeting types (Task 3 — scheduling policy per kind)
+-- Meeting types (Task 3 - scheduling policy per kind)
 CREATE TABLE "meeting_types" (
   "id" TEXT NOT NULL,
   "tenant_id" TEXT NOT NULL,
@@ -47,7 +47,7 @@ CREATE TABLE "meeting_types" (
 CREATE UNIQUE INDEX "meeting_types_tenant_id_slug_key" ON "meeting_types"("tenant_id", "slug");
 CREATE INDEX "meeting_types_tenant_id_is_active_idx" ON "meeting_types"("tenant_id", "is_active");
 
--- Tenant funnels (Task 2 — configurable funnel + playbooks)
+-- Tenant funnels (Task 2 - configurable funnel + playbooks)
 CREATE TABLE "tenant_funnels" (
   "id" TEXT NOT NULL,
   "tenant_id" TEXT NOT NULL,

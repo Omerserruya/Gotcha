@@ -24,18 +24,18 @@ const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
 const JWT_SECRET = process.env.JWT_SECRET || "change-me";
 
-// Instagram API with Instagram Login (direct IG Business connect — no Facebook Page).
+// Instagram API with Instagram Login (direct IG Business connect - no Facebook Page).
 // These are the *Instagram* app credentials from the Meta App Dashboard
 // ("Instagram API setup with Instagram login"), which differ from META_APP_ID/SECRET.
 // INSTAGRAM_OAUTH_REDIRECT_URI must be registered under that product; falls back to
 // the shared OAuth callback when unset.
-// Falls back to the Meta app credentials — when Instagram Login is added to the
+// Falls back to the Meta app credentials - when Instagram Login is added to the
 // SAME Meta app, the dashboard shows the same app id/secret, so no duplication needed.
 const INSTAGRAM_APP_ID = process.env.INSTAGRAM_APP_ID || META_APP_ID;
 const INSTAGRAM_APP_SECRET = process.env.INSTAGRAM_APP_SECRET || META_APP_SECRET;
 const INSTAGRAM_OAUTH_REDIRECT_URI = process.env.INSTAGRAM_OAUTH_REDIRECT_URI || OAUTH_REDIRECT_URI;
 // graph.instagram.com (Instagram Login) does NOT accept a version-prefixed path
-// for these edges (/me, /access_token, /me/subscribed_apps) — a versioned path is
+// for these edges (/me, /access_token, /me/subscribed_apps) - a versioned path is
 // treated as an unknown node and returns "Unsupported request". Must be unversioned.
 const IG_API_URL = process.env.INSTAGRAM_API_URL || "https://graph.instagram.com";
 
@@ -70,7 +70,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     });
     if (hasChannelRule) return;
 
-    // Email rules go first — shift all existing rules down by 1
+    // Email rules go first - shift all existing rules down by 1
     await prisma.$transaction(
       existingRules.map((r) =>
         prisma.routerRule.update({
@@ -83,7 +83,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
     await prisma.routerRule.create({
       data: {
         tenantId,
-        name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} — ${displayName}`,
+        name: `${channel === "GMAIL" ? "Gmail" : "Outlook"} - ${displayName}`,
         position: 1,
         conditions: [{ type: "channel", operator: "equals", value: channel.toLowerCase() }],
         logic: "AND",
@@ -151,7 +151,7 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
 //
 // Returns a normalized list of the page's own posts so flow authors can
 // select which post a Comment Trigger should listen on, instead of pasting
-// raw IDs. Group posts intentionally NOT supported — the Meta Groups API
+// raw IDs. Group posts intentionally NOT supported - the Meta Groups API
 // was deprecated April 2024; for those, the trigger UI exposes a manual
 // post-URL paste field that the runtime later matches via the page webhook.
 //
@@ -369,7 +369,7 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
       }
 
       // Check if already connected. findUnique on the (channel, externalId)
-      // compound unique index — TenantGuard exempts single-row lookups by
+      // compound unique index - TenantGuard exempts single-row lookups by
       // unique key, so this works whether the row belongs to us or another
       // tenant; we still gate on existing.tenantId before mutating.
       const existing = await prisma.channelAccount.findUnique({
@@ -650,7 +650,7 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
       ].join(",");
       oauthUrl = `https://slack.com/oauth/v2/authorize?client_id=${SLACK_CLIENT_ID}&redirect_uri=${encodeURIComponent(SLACK_OAUTH_REDIRECT_URI)}&scope=${encodeURIComponent(slackScopes)}&state=${encodeURIComponent(state)}`;
     } else if (platform === "instagram") {
-      // Instagram API with Instagram Login — connects an Instagram professional
+      // Instagram API with Instagram Login - connects an Instagram professional
       // (Business/Creator) account DIRECTLY. The consent screen is Instagram-only;
       // there is no Facebook Page picker because no Page is involved. Scopes are
       // comma-separated, business-prefixed.
@@ -1013,7 +1013,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         }
 
         // Subscribe page to webhooks. `feed` delivers comment + post events
-        // for the FB page — required for the Comment Trigger to fire.
+        // for the FB page - required for the Comment Trigger to fire.
         // `message_reactions` delivers reactions to inbound messages.
         try {
           const pageSubResp = await axios.post(`${FB_API_URL}/${pageId}/subscribed_apps`, null, {
@@ -1123,7 +1123,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
         console.error(`[INSTAGRAM-CALLBACK] IG subscription FAILED for ${igBusinessId}:`, subErr.response?.data || subErr.message);
       }
 
-      // Unique-key lookup on (channel, externalId) — see Messenger.
+      // Unique-key lookup on (channel, externalId) - see Messenger.
       const existing = await prisma.channelAccount.findUnique({
         where: { channel_externalId: { channel: "INSTAGRAM", externalId: igBusinessId } },
       });

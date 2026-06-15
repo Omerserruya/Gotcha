@@ -24,7 +24,7 @@ export function startNotificationsDispatcherWorker(): Worker<SystemEvent> {
     async (job: Job<SystemEvent>) => {
       const event = job.data;
       if (!event || !event.tenantId || !event.type) {
-        console.warn("[notifications.dispatcher] malformed job payload — skipped", job.id);
+        console.warn("[notifications.dispatcher] malformed job payload - skipped", job.id);
         return;
       }
       try {

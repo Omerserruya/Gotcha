@@ -1,12 +1,12 @@
 /**
  * Centralized AI usage logger.
  *
- * Every AI call in the platform — chat completion, embedding, classification,
- * suggestion, onboarding, bot responder — MUST call trackAIUsage() with the
+ * Every AI call in the platform - chat completion, embedding, classification,
+ * suggestion, onboarding, bot responder - MUST call trackAIUsage() with the
  * provider's usage numbers so the Platform Usage admin view can show a single
  * unified number per tenant, model, and feature.
  *
- * Writes to `usage_logs` (the authoritative table). Never throws —
+ * Writes to `usage_logs` (the authoritative table). Never throws -
  * instrumentation must never break business logic.
  */
 import { prisma } from "./prisma";
@@ -41,7 +41,7 @@ export function estimateAICost(
 export interface AIUsageEvent {
   tenantId: string;
   /**
-   * High-level feature label — what PART of the product spent the tokens.
+   * High-level feature label - what PART of the product spent the tokens.
    * The Platform Usage page aggregates by this field to answer
    * "who ate my tokens this month".
    * Examples: "chat", "suggestion", "summary", "classification", "embedding",
@@ -104,7 +104,7 @@ export async function trackAIUsage(event: AIUsageEvent): Promise<void> {
       },
     });
   } catch (err: any) {
-    // Never throw — instrumentation must never break business logic.
+    // Never throw - instrumentation must never break business logic.
     console.error("[trackAIUsage] failed:", err?.message ?? err);
   }
 }

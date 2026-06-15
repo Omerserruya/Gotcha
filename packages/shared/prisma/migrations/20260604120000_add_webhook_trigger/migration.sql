@@ -1,4 +1,4 @@
--- Webhook trigger — lets a workflow (ChatbotFlow) be fired by an inbound HTTP
+-- Webhook trigger - lets a workflow (ChatbotFlow) be fired by an inbound HTTP
 -- call instead of the built-in trigger kinds (channel_entry / comment /
 -- keyword / schedule). Foundation for the custom-webhook-as-workflow-trigger
 -- feature; pure data model, no route/dispatch logic.

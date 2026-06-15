@@ -34,7 +34,7 @@ async function processChannelHealth(job: Job<ChannelHealthJob>): Promise<void> {
 async function runHealthCheck(): Promise<void> {
   console.log("[channel-health] Running health check...");
 
-  // Only check Meta channels — Facebook's debug_token API doesn't apply to Gmail/Outlook/Slack
+  // Only check Meta channels - Facebook's debug_token API doesn't apply to Gmail/Outlook/Slack
   const accounts = await prisma.channelAccount.findMany({
     where: {
       connectionStatus: "CONNECTED",
@@ -310,7 +310,7 @@ async function runGmailWatchRenewal(): Promise<void> {
 
       // Persist the refreshed access token so the webhook's history fetches keep
       // working, plus the new watch expiration for observability. Leave
-      // platformMeta.lastHistoryId untouched — the push handler advances it.
+      // platformMeta.lastHistoryId untouched - the push handler advances it.
       const updatedCredentials = { ...credentials, accessToken: freshToken };
       await prisma.channelAccount.update({
         where: { id: account.id },

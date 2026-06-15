@@ -13,7 +13,7 @@ import {
  *
  * SYSTEM_ADMIN bypasses everything.
  * ADMIN bypasses the user layer (gets every tenant-enabled feature).
- * AGENT must be granted via role assignment or per-user grant — unless the
+ * AGENT must be granted via role assignment or per-user grant - unless the
  *   feature metadata says defaultAgentAccess: "all".
  *
  * For features that map to a legacy Boolean column on `Tenant` (e.g.
@@ -161,7 +161,7 @@ export async function isFeatureEnabledForTenant(
 export async function hasFeature(user: PermissionUser, feature: Feature): Promise<boolean> {
   if (!isFeature(feature)) return false;
 
-  // 1. SYSTEM_ADMIN — total bypass.
+  // 1. SYSTEM_ADMIN - total bypass.
   if (user.role === "SYSTEM_ADMIN") return true;
 
   // 2. Tenant must have it enabled.

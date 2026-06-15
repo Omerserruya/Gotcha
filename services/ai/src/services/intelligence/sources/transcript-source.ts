@@ -5,9 +5,9 @@ import type { TranscriptUtterance } from "@chatcenter/shared";
  * replay, async) consumes.
  *
  * Three implementations live alongside this file:
- *   - LiveStreamingSource     — bridges voice-copilot bus events
- *   - UploadedTranscriptSource — pasted/uploaded transcript text
- *   - RecordingTranscriber    — Whisper batch over a recording URL
+ *   - LiveStreamingSource     - bridges voice-copilot bus events
+ *   - UploadedTranscriptSource - pasted/uploaded transcript text
+ *   - RecordingTranscriber    - Whisper batch over a recording URL
  *
  * The runner does not know which it has. That's how live and async share
  * one analysis stack instead of two.

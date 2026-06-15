@@ -1,5 +1,5 @@
 /**
- * AIWorker — top-level orchestration class for a single session.
+ * AIWorker - top-level orchestration class for a single session.
  *
  * This is the call-site entry point that replaces:
  *   - LivePromptAssembler.build()
@@ -11,7 +11,7 @@
  *   ... // many calls within the same session reuse the cached session
  *   worker.close();
  *
- * `open()` is idempotent — calling it twice with the same sessionId
+ * `open()` is idempotent - calling it twice with the same sessionId
  * returns the SAME WorkerSession via the registry. This is what guarantees
  * the prefix bytes don't drift across turns within a session.
  *
@@ -47,7 +47,7 @@ export interface OpenWorkerArgs {
   locale?: string;
   /**
    * Tenant-level tool overrides loaded by the call site. Empty/undefined
-   * means "no allowlist — every skill-granted tool is offered".
+   * means "no allowlist - every skill-granted tool is offered".
    */
   tenantAllowlist?: string[];
   tenantDenylist?: string[];
@@ -55,11 +55,11 @@ export interface OpenWorkerArgs {
 
 export interface GenerateArgs {
   /**
-   * The dynamic part of the conversation — everything that changes turn
+   * The dynamic part of the conversation - everything that changes turn
    * to turn. Appended AFTER the cached prefix. Typically:
    *   - prior user/assistant/tool messages from the conversation
    *   - the latest user turn at the tail
-   * The worker does NOT order or filter these — pass them in the order
+   * The worker does NOT order or filter these - pass them in the order
    * they should appear to OpenAI.
    */
   turnMessages: AIRequestParams["messages"];
@@ -118,7 +118,7 @@ export class AIWorker {
    *
    * Structure: [system: SYSTEM_CORE, system: SESSION_PROFILE, ...turnMessages]
    * The first two messages are byte-identical across all calls in this
-   * session — which is what makes OpenAI's prefix cache hit.
+   * session - which is what makes OpenAI's prefix cache hit.
    */
   buildMessages(turnMessages: AIRequestParams["messages"]): AIRequestParams["messages"] {
     return [

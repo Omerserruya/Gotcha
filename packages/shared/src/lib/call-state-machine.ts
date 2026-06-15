@@ -1,5 +1,5 @@
 /**
- * Call state machine — typed transitions for VoiceCallSession.
+ * Call state machine - typed transitions for VoiceCallSession.
  *
  * Replaces the previous untyped `status` string handling with an explicit
  * FSM. Dual-write window: both the new `state` column and the legacy
@@ -8,7 +8,7 @@
  * observation period the legacy column becomes read-only.
  *
  * Invalid transitions throw `InvalidTransitionError`. Callers should treat
- * that as a bug indicator — the upper layer either has a state-tracking
+ * that as a bug indicator - the upper layer either has a state-tracking
  * defect or a stale read. The route handler maps it to HTTP 422 + alert
  * (see "webhook failure handling" plan).
  */
@@ -84,7 +84,7 @@ export function toLegacyStatus(state: CallState): LegacyCallStatus {
 }
 
 /**
- * Best-effort reverse mapping — used only when reading legacy rows that
+ * Best-effort reverse mapping - used only when reading legacy rows that
  * pre-date the FSM column. Lossy (in-progress could be CONNECTING/ACTIVE/HOLD;
  * we default to ACTIVE which is the common case).
  */

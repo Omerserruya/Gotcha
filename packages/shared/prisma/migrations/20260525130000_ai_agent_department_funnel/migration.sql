@@ -1,6 +1,6 @@
 -- Per-agent department + funnel binding.
 --
--- Until now the agent had no department or funnel column — funnel resolution
+-- Until now the agent had no department or funnel column - funnel resolution
 -- worked off (voiceChannel override → conversation.departmentId → tenant
 -- default). The frontend already exposes a department selector on the agent
 -- editor, but the submitted value was silently dropped because the column
@@ -13,7 +13,7 @@
 --      in the resolver chain" (channel override → dept → tenant default).
 --   3. Indexes both for the resolver lookup.
 --
--- Both columns are nullable with no defaults — existing agents keep working
+-- Both columns are nullable with no defaults - existing agents keep working
 -- (they just fall through the resolver chain as before).
 
 ALTER TABLE "ai_agents"

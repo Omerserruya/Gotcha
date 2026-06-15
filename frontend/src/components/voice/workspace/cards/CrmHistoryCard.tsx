@@ -27,7 +27,7 @@ function channelStyle(channel: string): { bg: string; text: string; label: strin
 
 export function CrmHistoryCard({ context, loading }: Props) {
   const { t } = useI18n();
-  // Cross-platform history — every prior conversation across every channel,
+  // Cross-platform history - every prior conversation across every channel,
   // sorted by most-recent first. The separate PreviousCallsCard used to
   // duplicate voice history here; the History tab now unifies them so an
   // agent can scan a single timeline with channel badges instead of jumping
@@ -60,7 +60,7 @@ export function CrmHistoryCard({ context, loading }: Props) {
                       {style.label}
                     </span>
                     <span className="text-[10px] text-gray-400 tabular-nums shrink-0">
-                      {c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleDateString() : "—"}
+                      {c.lastMessageAt ? new Date(c.lastMessageAt).toLocaleDateString() : "-"}
                     </span>
                   </div>
                   {c.aiSummary && (

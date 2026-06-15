@@ -30,7 +30,7 @@ export async function pushToDlq(entry: DlqEntry): Promise<void> {
     await redis.lpush(key, JSON.stringify(entry));
     await redis.ltrim(key, 0, DLQ_MAX - 1);
   } catch (err: any) {
-    // Even DLQ writes can fail in a Redis outage — log and drop.
+    // Even DLQ writes can fail in a Redis outage - log and drop.
     console.warn("[orchestrator.dlq] push failed:", err?.message);
   }
 }

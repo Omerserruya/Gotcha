@@ -7,7 +7,7 @@
 --       ACTIVE transition).
 --
 -- The /missed query filters out `handled_at IS NOT NULL`. Without this
--- column, dismissals were per-agent localStorage — meaning the WhatsApp
+-- column, dismissals were per-agent localStorage - meaning the WhatsApp
 -- template callback (browser-less) could never clear the inbox.
 ALTER TABLE "voice_call_sessions"
   ADD COLUMN "handled_at" TIMESTAMP(3);

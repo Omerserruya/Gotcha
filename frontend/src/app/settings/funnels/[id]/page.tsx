@@ -9,7 +9,7 @@
  *     exit criteria (must-have fields, must-ask questions, positive/
  *     negative signals), and explicit nextStageId.
  *
- * The whole funnel is PATCHed atomically — the backend re-validates
+ * The whole funnel is PATCHed atomically - the backend re-validates
  * shape and invalidates the in-process cache so BEL picks up changes
  * within ~1 request.
  */
@@ -272,7 +272,7 @@ export default function FunnelEditorPage() {
               </div>
             </div>
 
-            {/* Stage body — only when expanded to keep the list scannable. */}
+            {/* Stage body - only when expanded to keep the list scannable. */}
             {expanded === stage.id && (
               <div className="px-4 py-4 space-y-4">
                 {/* Basic info */}

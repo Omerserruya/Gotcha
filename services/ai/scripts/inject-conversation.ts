@@ -1,6 +1,6 @@
 /**
  * Inject a scripted "customer" conversation into the live `incoming-messages`
- * queue — the same queue the WhatsApp webhook publishes to. The incoming-worker
+ * queue - the same queue the WhatsApp webhook publishes to. The incoming-worker
  * picks each job up, runs the full pipeline (routing → BEL → PB → LLM → tools),
  * and the outgoing-worker sends real WhatsApp replies back to the wa_id.
  *
@@ -15,11 +15,11 @@
  *     --delay 30
  *
  * Available scenarios:
- *   warm_lead         — greet → interest → features → demo request
- *   price_objection   — interest → ask price → "too expensive" → close
- *   deferral          — interest → "let me think about it"
- *   support           — customer with issue → escalation path
- *   demo_request      — straight demo ask
+ *   warm_lead         - greet → interest → features → demo request
+ *   price_objection   - interest → ask price → "too expensive" → close
+ *   deferral          - interest → "let me think about it"
+ *   support           - customer with issue → escalation path
+ *   demo_request      - straight demo ask
  *
  * Or `--turns "msg1|msg2|msg3"` for a freeform conversation.
  *
@@ -117,7 +117,7 @@ async function verifyTenantAndChannel(args: CliArgs): Promise<void> {
   });
   if (!tenant) throw new Error(`Tenant not found: ${args.tenantId}`);
   if (tenant.status !== "ACTIVE") {
-    throw new Error(`Tenant ${args.tenantId} status=${tenant.status} — must be ACTIVE`);
+    throw new Error(`Tenant ${args.tenantId} status=${tenant.status} - must be ACTIVE`);
   }
   console.log(`✓ Tenant: ${tenant.name} (${tenant.id}) status=${tenant.status} botEnabled=${tenant.botEnabled} botType=${tenant.botType}`);
 
@@ -147,7 +147,7 @@ async function verifyTenantAndChannel(args: CliArgs): Promise<void> {
       `✓ Will REUSE conversation ${conv.id} status=${conv.status} handledBy=${conv.handledBy ?? "null"}`,
     );
   } else {
-    console.log(`✓ No open conversation — a fresh one will be created from the first inbound.`);
+    console.log(`✓ No open conversation - a fresh one will be created from the first inbound.`);
   }
 }
 
@@ -190,7 +190,7 @@ async function run() {
   await verifyTenantAndChannel(args);
 
   console.log("\nThis injects REAL inbound jobs. The bot will reply over WhatsApp");
-  console.log("and may write to CRM (create/update lead). Continuing in 5s — Ctrl+C to abort.\n");
+  console.log("and may write to CRM (create/update lead). Continuing in 5s - Ctrl+C to abort.\n");
   await new Promise((r) => setTimeout(r, 5_000));
 
   for (let i = 0; i < args.turns!.length; i++) {
@@ -202,10 +202,10 @@ async function run() {
     console.log(`   externalMessageId: ${job.normalizedMessage.externalMessageId}`);
 
     if (args.dryRun) {
-      console.log("   (dry-run — not enqueued)");
+      console.log("   (dry-run - not enqueued)");
     } else {
       const enqueued = await incomingMessageQueue.add("process", job);
-      console.log(`   ✓ enqueued — bullmq job id ${enqueued.id}`);
+      console.log(`   ✓ enqueued - bullmq job id ${enqueued.id}`);
     }
 
     if (i < args.turns!.length - 1) {

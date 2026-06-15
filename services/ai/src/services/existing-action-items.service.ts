@@ -1,5 +1,5 @@
 /**
- * Existing action items loader — fetches tasks + scheduled follow-ups that
+ * Existing action items loader - fetches tasks + scheduled follow-ups that
  * already exist for a contact/conversation BEFORE the post-conversation
  * summarizer runs.
  *
@@ -14,13 +14,13 @@
  * semantically identical items collapse into one.
  *
  * Best-effort: any DB failure returns the empty shape so the pipeline still
- * runs — the summarizer just won't have dedup context that turn.
+ * runs - the summarizer just won't have dedup context that turn.
  */
 
 import { prisma } from "@chatcenter/shared";
 
 export interface ExistingTaskItem {
-  /** What the task is about — already-sanitized string for prompt context. */
+  /** What the task is about - already-sanitized string for prompt context. */
   subject: string;
   /** Optional body / details. */
   body?: string;
@@ -49,7 +49,7 @@ const EMPTY: ExistingActionItems = { tasks: [], pendingFollowups: [] };
  *     (not the vendor CRM) because it's the deterministic source of truth
  *     for what the bot/agent actually did mid-conversation, vendor-agnostic.
  *   - pendingFollowups: PENDING ScheduledMessage rows targeting the same
- *     recipient on the same channel — these are real outbound messages
+ *     recipient on the same channel - these are real outbound messages
  *     queued for the scheduled-messages worker to send.
  */
 export async function loadExistingActionItems(args: {

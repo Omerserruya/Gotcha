@@ -15,7 +15,7 @@ export function authenticate(req: Request, res: Response, next: NextFunction): v
     // Internal service-to-service calls use a shared secret instead of a JWT.
     // The caller must also set x-tenant-id so we know which tenant scope to
     // use. We accept EITHER `INTERNAL_SERVICE_KEY` or `INTERNAL_SERVICE_TOKEN`
-    // — different services historically populated/sent different ones, and
+    // - different services historically populated/sent different ones, and
     // mismatches surface as a misleading "Invalid or expired token" 401 that
     // looks like a Zoho/JWT issue but is actually our own auth gate. Accepting
     // either keeps the gate just as strict (each is still a shared secret)

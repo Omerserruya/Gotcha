@@ -1,5 +1,5 @@
 /**
- * Phase 1 — Live Call CoPilot post-call pipeline.
+ * Phase 1 - Live Call CoPilot post-call pipeline.
  *
  * Two pieces:
  *   - subscriber: reacts to voice.session.ended / voice.session.state events

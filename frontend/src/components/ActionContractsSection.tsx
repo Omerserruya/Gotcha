@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Action Contracts editor — embedded inside the AI agent detail page.
+ * Action Contracts editor - embedded inside the AI agent detail page.
  *
  * Tenant-scoped: contracts apply to all bots in the tenant. The bot
  * loads them every turn and the BEL strips the tool surface to only
@@ -28,11 +28,11 @@ const KNOWN_TOOLS: Array<{ name: string; label: string }> = [
   { name: "close_conversation", label: "Close conversation" },
   { name: "link_customer_identifier", label: "Link customer identifier" },
   { name: "escalate_to_human", label: "Escalate to human" },
-  { name: "integration_create_lead", label: "CRM — create lead" },
-  { name: "integration_update_lead", label: "CRM — update lead" },
-  { name: "integration_add_lead_note", label: "CRM — add note" },
-  { name: "refund_payment", label: "Payments — refund (if connected)" },
-  { name: "create_ticket", label: "Helpdesk — create ticket (if connected)" },
+  { name: "integration_create_lead", label: "CRM - create lead" },
+  { name: "integration_update_lead", label: "CRM - update lead" },
+  { name: "integration_add_lead_note", label: "CRM - add note" },
+  { name: "refund_payment", label: "Payments - refund (if connected)" },
+  { name: "create_ticket", label: "Helpdesk - create ticket (if connected)" },
 ];
 
 export default function ActionContractsSection() {
@@ -55,7 +55,7 @@ export default function ActionContractsSection() {
       <header className="flex items-start justify-between">
         <div>
           <p className="text-xs text-gray-500">
-            Deterministic tool chains. When a trigger fires, the bot is forced to call the listed tools — no skipping, no reordering.
+            Deterministic tool chains. When a trigger fires, the bot is forced to call the listed tools - no skipping, no reordering.
             <br />Pending blocking contracts strip the bot's tool surface to ONLY the next required tool.
           </p>
         </div>
@@ -214,7 +214,7 @@ function Editor(props: {
                 <label key={t.name} className="flex items-center gap-2 px-2 py-1 text-sm cursor-pointer hover:bg-gray-50">
                   <input type="checkbox" checked={checked} onChange={() => toggleTool(t.name)} />
                   <span className="font-mono text-xs text-gray-700">{t.name}</span>
-                  <span className="text-xs text-gray-500 truncate">— {t.label}</span>
+                  <span className="text-xs text-gray-500 truncate">- {t.label}</span>
                 </label>
               );
             })}

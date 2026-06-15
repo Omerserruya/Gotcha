@@ -7,7 +7,7 @@
  * gateway subscribes to that bus; if a user has no active connection
  * the row stays visible via the GET /notifications polling endpoint.
  *
- * Design note: this codebase has NO dedicated /ws gateway in services/ai —
+ * Design note: this codebase has NO dedicated /ws gateway in services/ai -
  * realtime delivery is via the shared Redis pub/sub bus consumed by the
  * dashboard's nginx-proxied SSE/WS server. The publishEvent envelope is
  * the same one used by approval-requests for the inbox banner, so the
@@ -60,7 +60,7 @@ export async function createInAppNotification(
 
   // Real-time fan-out: emit on the shared Redis bus so the dashboard's
   // SSE/WS gateway can deliver to whichever browser session(s) the user
-  // has open. Failure is non-fatal — the GET /notifications endpoint
+  // has open. Failure is non-fatal - the GET /notifications endpoint
   // always backstops with polling.
   publishEvent({
     event: "notification:created",

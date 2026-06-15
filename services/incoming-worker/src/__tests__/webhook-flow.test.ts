@@ -158,7 +158,7 @@ describe("executeWebhookFlow (context-free)", () => {
   });
 });
 
-describe("executeWebhookFlow — connected-nodes mode", () => {
+describe("executeWebhookFlow - connected-nodes mode", () => {
   function canvas(nodes: TestNode[], edges: TestEdge[]) {
     return { id: "canvas-1", tenantId: "tenant-1", nodes, edges };
   }

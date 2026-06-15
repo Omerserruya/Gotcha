@@ -1,7 +1,7 @@
 /**
  * Behavior Engine Layer (BEL).
  *
- * Sits ABOVE the prompt builder. Decides WHAT the AI should do this turn —
+ * Sits ABOVE the prompt builder. Decides WHAT the AI should do this turn -
  * the prompt builder decides HOW to say it.
  *
  * `computeBehaviorState()` is a pure function over its inputs:
@@ -84,14 +84,14 @@ export type ClosurePosture = "open" | "ready_to_close" | "needs_followup";
 // ─── Behavioral signals (deterministic, explainable) ────────
 //
 // Three coarse reads of the customer the BEL computes every turn. They are
-// NOT scores — each is a LOW/MEDIUM/HIGH bucket produced by an ordered,
+// NOT scores - each is a LOW/MEDIUM/HIGH bucket produced by an ordered,
 // auditable rule ladder. Every signal carries the rule that fired (`reason`)
 // and the concrete inputs that drove it (`evidence`), so audit logs can
 // answer "why did the AI read the customer that way?".
 //
 // PHASE 1 (current): computed + surfaced in BehaviorState + the prompt's
 // Conversation State block. They do NOT yet alter strategy/tone/escalation/
-// closure — that wiring is a deliberate follow-up so the read-only signals
+// closure - that wiring is a deliberate follow-up so the read-only signals
 // can be observed in production first.
 
 export type SignalLevel = "low" | "medium" | "high";
@@ -115,12 +115,12 @@ export interface BehaviorSignal<L extends string = SignalLevel> {
  * Contract enforcement state injected into BehaviorState (Action Contracts).
  * - active: at least one matching contract has unfulfilled tools.
  * - pendingTools: tool names the LLM MUST call this turn (or next valid turn).
- *                 For SEQUENCE contracts this is exactly one — the next step.
+ *                 For SEQUENCE contracts this is exactly one - the next step.
  *                 For ALL_REQUIRED / AT_LEAST_ONE it's the full unfulfilled set.
  * - completedTools: tool names already executed across THIS conversation
  *                   (carried over via ActionContractProgress).
  * - blocking: when true, allowedActions is restricted to pendingTools only.
- * - currentStep: for SEQUENCE — the next required tool name.
+ * - currentStep: for SEQUENCE - the next required tool name.
  * - violatedThisTurn: set when the LLM tries to call a tool the contract
  *                     forbids (e.g. step 2 before step 1). Triggers retry.
  * - contracts: lightweight summary surfaced to the prompt builder.
@@ -163,7 +163,7 @@ export interface OwnershipSignal {
   /** True when we believe the identifier belongs to THIS customer. */
   ownerIsCustomer: boolean;
   evidence: OwnershipEvidence;
-  /** 0..1 — direct answer 0.9, self-ref 0.85, implicit 0.7, ambiguous <0.5. */
+  /** 0..1 - direct answer 0.9, self-ref 0.85, implicit 0.7, ambiguous <0.5. */
   confidence: number;
 }
 
@@ -173,7 +173,7 @@ export interface IdentifierMessage {
 }
 
 /**
- * BehaviorState — the only object the prompt builder consumes from the BEL.
+ * BehaviorState - the only object the prompt builder consumes from the BEL.
  * Frozen per-turn. Every field is required and from a closed enum.
  */
 export interface BehaviorState {
@@ -190,16 +190,16 @@ export interface BehaviorState {
   escalationPressure: EscalationPressure;
   confidence: Confidence;
   /**
-   * Behavioral signals (PHASE 1 — observe-only). Deterministic LOW/MEDIUM/
+   * Behavioral signals (PHASE 1 - observe-only). Deterministic LOW/MEDIUM/
    * HIGH reads of the customer, each with its own provenance. Surfaced in the
    * prompt's Conversation State block. NOT yet wired into strategy/tone/
-   * escalation/closure — that is a deliberate follow-up.
+   * escalation/closure - that is a deliberate follow-up.
    */
   relationshipStrength: BehaviorSignal<RelationshipStrength>;
   customerTrust: BehaviorSignal<TrustLevel>;
   customerFriction: BehaviorSignal<FrictionLevel>;
   /**
-   * Required output shape this turn. Decided by BEL — provider only renders.
+   * Required output shape this turn. Decided by BEL - provider only renders.
    */
   outputContract: OutputContract;
   /**
@@ -210,7 +210,7 @@ export interface BehaviorState {
   /**
    * Action categories permitted this turn. Strategy + autonomy + flags +
    * CRM existence already applied. The tool surface filter MUST consume
-   * this list — no other source of allowance.
+   * this list - no other source of allowance.
    */
   allowedActions: ActionCategory[];
   /**
@@ -220,22 +220,22 @@ export interface BehaviorState {
   requiredActions: ActionCategory[];
   /**
    * What the BEL expects from this turn:
-   *   PROGRESS — advance the strategy.
-   *   HOLD     — wait (e.g. pending human approval); reply is allowed but no writes.
-   *   ESCALATE — pivot to escalate_to_human; do not attempt resolution.
+   *   PROGRESS - advance the strategy.
+   *   HOLD     - wait (e.g. pending human approval); reply is allowed but no writes.
+   *   ESCALATE - pivot to escalate_to_human; do not attempt resolution.
    */
   decisionIntent: DecisionIntent;
   /**
-   * Identifier-ownership signal — drives whether `identity_link` is required
+   * Identifier-ownership signal - drives whether `identity_link` is required
    * this turn. Computed from the customer's message + whether the assistant
    * had previously asked for an identifier.
    */
   ownershipSignal: OwnershipSignal;
   /**
    * Closure posture (Task 4):
-   *   open            — conversation is mid-flight; do not close.
-   *   ready_to_close  — goal achieved + customer acknowledged; close + summarize.
-   *   needs_followup  — customer deferred; schedule a follow-up.
+   *   open            - conversation is mid-flight; do not close.
+   *   ready_to_close  - goal achieved + customer acknowledged; close + summarize.
+   *   needs_followup  - customer deferred; schedule a follow-up.
    */
   closurePosture: ClosurePosture;
   /**
@@ -245,7 +245,7 @@ export interface BehaviorState {
    */
   actionContractState: ActionContractStateView;
   /**
-   * Provenance — which rule or input drove each axis.
+   * Provenance - which rule or input drove each axis.
    * Required so audit logs can answer "why did the AI do that?".
    */
   provenance: {
@@ -269,11 +269,11 @@ export interface BehaviorState {
 
 export interface IdentityInput {
   hasContact: boolean;
-  /** "lead" | "customer" — null when contact exists but lifecycle unknown. */
+  /** "lead" | "customer" - null when contact exists but lifecycle unknown. */
   contactLifecycle: "lead" | "customer" | null;
   priorConversationCount: number;
   /**
-   * Pre-fetched CRM existence — caller computes from CRM prefetch.
+   * Pre-fetched CRM existence - caller computes from CRM prefetch.
    * Lets BEL emit constrained allowedActions instead of leaving the
    * decision to runtime tool-stripping.
    */
@@ -295,7 +295,7 @@ export interface RequestInput {
    * INCLUDING the current message as the last element. Caller computes this
    * from the transcript (deterministic). Used by the trust / friction
    * classifiers to detect repeated verification requests, repeated
-   * complaints, and the customer repeating themselves — patterns a single
+   * complaints, and the customer repeating themselves - patterns a single
    * message can't reveal. Optional: when omitted, those classifiers fall
    * back to `lastMessage` alone and lower their confidence.
    */
@@ -319,7 +319,7 @@ export interface RequestInput {
   /**
    * Raw text of the assistant's previous outbound message in this
    * conversation. BEL uses this to detect cross-turn state that a
-   * single-token enum can't carry — e.g. "the bot just asked the customer
+   * single-token enum can't carry - e.g. "the bot just asked the customer
    * for a follow-up time, so a timing-signal reply this turn means we
    * should now schedule the follow-up."
    */
@@ -340,7 +340,7 @@ export interface ComputeBehaviorStateInput {
   /**
    * Copilot-only: which output shape the agent prefers (READY_MESSAGE /
    * CONTEXT_ONLY / CHAT). Stored on the AIAgent record; passed in here so
-   * BEL — not the provider — owns the output contract.
+   * BEL - not the provider - owns the output contract.
    */
   copilotPreferredMode?: "READY_MESSAGE" | "CONTEXT_ONLY" | "CHAT";
   /**
@@ -349,7 +349,7 @@ export interface ComputeBehaviorStateInput {
    *   - Strategy override (recomputes allowedActions/requiredActions with the
    *     overridden strategy)
    *   - Playbook override (replaces the platform-default playbook selection)
-   * BEL stays the only decision layer — funnel is just a tenant-shaped
+   * BEL stays the only decision layer - funnel is just a tenant-shaped
    * overlay on the same closed primitives (ConversationStage, Intent, etc.).
    */
   funnel?: FunnelConfig | null;
@@ -364,7 +364,7 @@ export interface ComputeBehaviorStateInput {
    */
   actionContractProgress?: Map<string, ActionContractProgress>;
   /**
-   * The tool the LLM is about to call this turn — passed in by the caller
+   * The tool the LLM is about to call this turn - passed in by the caller
    * AFTER the model emits its tool_calls but BEFORE actual dispatch. Used
    * by SEQUENCE contracts to detect out-of-order calls. Optional: when
    * omitted (the prompt-build pass), no violation is flagged.
@@ -379,27 +379,27 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
 
   const overrides: string[] = [];
 
-  // Step 1 — Resolve user type.
+  // Step 1 - Resolve user type.
   const { value: userType, source: userTypeSource } = resolveUserType(input.identity);
 
-  // Step 2 — Determine conversation stage.
+  // Step 2 - Determine conversation stage.
   const { value: conversationStage, source: stageSource } = resolveStage(input.request, input.flags);
 
-  // Step 3 — Classify intent + urgency.
+  // Step 3 - Classify intent + urgency.
   const { intent, intentSource, urgency, urgencySource } = classifyIntentAndUrgency(input.request, input.flags);
 
   // Engagement.
   const { engagement, engagementSource } = deriveEngagement(input.identity, input.request);
 
-  // Ownership signal — feeds requiredActions for identity_link.
+  // Ownership signal - feeds requiredActions for identity_link.
   const ownershipSignal = deriveOwnership(input.request);
-  // Closure posture — feeds requiredActions for close_conversation / schedule_followup.
+  // Closure posture - feeds requiredActions for close_conversation / schedule_followup.
   const closurePosture = deriveClosurePosture(input.request, input.flags);
 
-  // Behavioral signals (PHASE 1 — observe-only). Deterministic LOW/MEDIUM/
+  // Behavioral signals (PHASE 1 - observe-only). Deterministic LOW/MEDIUM/
   // HIGH reads computed from identity + request + the intent/urgency derived
   // above. They are surfaced in BehaviorState + the prompt but DO NOT alter
-  // strategy, tone, escalation, or closure yet — that wiring is a follow-up.
+  // strategy, tone, escalation, or closure yet - that wiring is a follow-up.
   const relationshipStrength = deriveRelationshipStrength(input.identity);
   const customerTrust = deriveCustomerTrust({
     req: input.request,
@@ -412,7 +412,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     urgency,
   });
 
-  // Action Contracts — detect business triggers + enforce required tools.
+  // Action Contracts - detect business triggers + enforce required tools.
   // Triggers are matched against tenant contracts; matching contracts
   // restrict allowedActions and add requiredActions.
   const triggeredActions = deriveTriggeredActions({
@@ -422,7 +422,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     closurePosture,
   });
 
-  // Step 4 — Strategy from the decision matrix + overrides.
+  // Step 4 - Strategy from the decision matrix + overrides.
   const strategyResult = selectStrategy({
     mode: input.mode,
     userType,
@@ -434,7 +434,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   });
   overrides.push(...strategyResult.overrides);
 
-  // Step 4a — Funnel overlay (Task 2). Resolves tenant stage label, may
+  // Step 4a - Funnel overlay (Task 2). Resolves tenant stage label, may
   // override strategy + playbookIds. Pure: no I/O. Caller hydrates the
   // funnel from DB before calling.
   const funnelRes = resolveFunnel({
@@ -448,7 +448,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   const finalStrategy: StrategyName = funnelRes.strategy;
   if (funnelRes.appliedReasons.length) overrides.push(...funnelRes.appliedReasons);
 
-  // Step 5 — Derived auxiliaries (use finalStrategy so overrides cascade).
+  // Step 5 - Derived auxiliaries (use finalStrategy so overrides cascade).
   const confidence = deriveConfidence({ conversationStage, intent });
   const autonomy = deriveAutonomy({ mode: input.mode, confidence, flags: input.flags });
   const escalationPressure = deriveEscalationPressure(input.flags, urgency);
@@ -479,7 +479,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     strategy: finalStrategy,
     flags: input.flags,
   });
-  // Platform default playbook selection — funnel may replace it wholesale.
+  // Platform default playbook selection - funnel may replace it wholesale.
   const platformPlaybooks = selectPlaybooks({
     strategy: finalStrategy,
     conversationStage,
@@ -488,7 +488,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
   });
   const playbookIds: PlaybookId[] = funnelRes.playbookIds ?? platformPlaybooks;
 
-  // Action Contract enforcement — runs LAST so it can clamp allowed/
+  // Action Contract enforcement - runs LAST so it can clamp allowed/
   // required actions on top of strategy + funnel decisions.
   const actionContractState = deriveActionContractState({
     triggeredActions,
@@ -503,7 +503,7 @@ export function computeBehaviorState(input: ComputeBehaviorStateInput): Behavior
     overrides.push(`action_contract.active triggers=[${triggeredActions.join(",")}] pending=[${actionContractState.pendingTools.join(",")}]`);
   }
 
-  // Audit trail for the behavioral signals — full provenance lands in the
+  // Audit trail for the behavioral signals - full provenance lands in the
   // serialized BehaviorState (signal objects carry reason+evidence); these
   // one-liners make them grep-able in the overrides log too.
   overrides.push(`signal.relationshipStrength=${relationshipStrength.level} (${relationshipStrength.reason})`);
@@ -599,7 +599,7 @@ function isSemanticallyRetrievable(text: string): boolean {
   return true;
 }
 
-// ─── Step 1 — Identity ──────────────────────────────────────
+// ─── Step 1 - Identity ──────────────────────────────────────
 
 function resolveUserType(id: IdentityInput): { value: UserType; source: string } {
   if (!id.hasContact) return { value: "unknown", source: "no contact found" };
@@ -612,7 +612,7 @@ function resolveUserType(id: IdentityInput): { value: UserType; source: string }
   return { value: "unknown", source: "contact with no lifecycle and no history" };
 }
 
-// ─── Step 2 — Stage ────────────────────────────────────────
+// ─── Step 2 - Stage ────────────────────────────────────────
 
 function resolveStage(req: RequestInput, flags?: FlagsInput): { value: ConversationStage; source: string } {
   if (flags?.escalationGateFired || flags?.humanHandoffRequested) {
@@ -624,10 +624,10 @@ function resolveStage(req: RequestInput, flags?: FlagsInput): { value: Conversat
   if (containsAny(text, SUPPORT_MARKERS)) return { value: "support", source: "support marker in message" };
   if (containsAny(text, OBJECTION_MARKERS)) return { value: "objection", source: "objection marker in message" };
   if (containsAny(text, DECISION_MARKERS)) return { value: "decision", source: "decision marker in message" };
-  return { value: "exploration", source: "default — exploration" };
+  return { value: "exploration", source: "default - exploration" };
 }
 
-// ─── Step 3 — Intent + urgency ─────────────────────────────
+// ─── Step 3 - Intent + urgency ─────────────────────────────
 
 function classifyIntentAndUrgency(
   req: RequestInput,
@@ -636,7 +636,7 @@ function classifyIntentAndUrgency(
   const text = (req.lastMessage || "").toLowerCase();
 
   let intent: Intent = "unclear";
-  let intentSource = "default — unclear";
+  let intentSource = "default - unclear";
 
   if (containsAny(text, SUPPORT_MARKERS)) {
     intent = "support";
@@ -650,7 +650,7 @@ function classifyIntentAndUrgency(
   }
 
   let urgency: Urgency = "low";
-  let urgencySource = "default — low";
+  let urgencySource = "default - low";
   if (flags?.escalationGateFired || flags?.humanHandoffRequested) {
     urgency = "high";
     urgencySource = "escalation gate or handoff signal";
@@ -674,7 +674,7 @@ function deriveEngagement(
   return { engagement: "cold", engagementSource: "no history" };
 }
 
-// ─── Step 4 — Strategy decision matrix ─────────────────────
+// ─── Step 4 - Strategy decision matrix ─────────────────────
 
 interface StrategySelectorInput {
   mode: AgentMode;
@@ -740,7 +740,7 @@ function selectStrategy(
   return { strategy: "GUIDE", source: `matrix ${matrixSource} → GUIDE (default)`, overrides };
 }
 
-// ─── Step 5 — Derived auxiliaries ──────────────────────────
+// ─── Step 5 - Derived auxiliaries ──────────────────────────
 
 function deriveConfidence(opts: { conversationStage: ConversationStage; intent: Intent }): Confidence {
   if (opts.intent === "unclear") return "low";
@@ -817,7 +817,7 @@ function deriveAllowedActions(opts: {
 }): ActionCategory[] {
   let allowed = [...STRATEGY_CONTRACTS[opts.strategy].allowedActions];
 
-  // Closure posture takes precedence over strategy gating — once the
+  // Closure posture takes precedence over strategy gating - once the
   // conversation has reached its terminal state (ready_to_close /
   // needs_followup) the corresponding tool MUST be in the surface even if
   // the current strategy contract doesn't normally allow it. Mirrors the
@@ -857,7 +857,7 @@ const SELF_OWNERSHIP_MARKERS = [
 const THIRD_PARTY_OWNERSHIP_MARKERS = [
   "support@", "info@", "contact@", "sales@",
   "send to my", "forward to", "tell my", "send it to ",
-  // Hebrew — verb-led only. (Bare "X של" overlaps with "שלי" = "my-X" so
+  // Hebrew - verb-led only. (Bare "X של" overlaps with "שלי" = "my-X" so
   // we cannot use "המייל של" / "האימייל של" as third-party markers.)
   "שלח ל", "שלחו ל", "תשלחו ל", "תשלח ל",
   // "X שלי" patterns where X is a person, not an identifier.
@@ -885,7 +885,7 @@ function deriveOwnership(req: RequestInput): OwnershipSignal {
     return { ownerIsCustomer: true, evidence: "self_referential_phrase", confidence: 0.85 };
   }
 
-  // Bare identifier with no third-party markers — implicit ownership.
+  // Bare identifier with no third-party markers - implicit ownership.
   const trimmed = (req.lastMessage || "").trim().toLowerCase();
   if (trimmed === req.identifierMessage.value.toLowerCase()) {
     return { ownerIsCustomer: true, evidence: "implicit_context", confidence: 0.7 };
@@ -921,7 +921,7 @@ function deriveRequiredActions(opts: {
   if (opts.closurePosture === "needs_followup") {
     // Only force schedule_followup when the customer actually gave us a time.
     // A vague "get back to me" / "תחזור אלי" with no when MUST trigger a
-    // clarifying question first — otherwise the contract checker force-
+    // clarifying question first - otherwise the contract checker force-
     // retries the bot into scheduling at an arbitrary delay it invented.
     if (hasFollowupTimingSignal(opts.lastMessage)) {
       out.push("schedule_followup");
@@ -946,7 +946,7 @@ function deriveRequiredActions(opts: {
       // Objection handling MUST end with a forward move.
       out.push("schedule_booking");
     } else if (opts.conversationStage === "decision") {
-      // Customer accepted — MUST log the agreement to the CRM record.
+      // Customer accepted - MUST log the agreement to the CRM record.
       // (No schedule_booking here: it's already been agreed; logging is the close.)
       if (opts.crmRecord?.hasLead || opts.crmRecord?.hasContact) {
         out.push("update_record");
@@ -993,7 +993,7 @@ function requiredActionsProvenance(opts: {
   return parts.join("; ") || "(no required actions)";
 }
 
-// ─── Action Contracts — trigger detection + state derivation ─
+// ─── Action Contracts - trigger detection + state derivation ─
 
 const REFUND_MARKERS = [
   "refund", "money back", "return my money", "chargeback", "give me back",
@@ -1015,12 +1015,12 @@ const FOLLOWUP_MARKERS = [
  * Map the customer turn + BEL outputs to coarse business triggers. The
  * trigger names are tenant-meaningful labels matched verbatim against
  * `ActionContract.trigger`. Standard set:
- *   - "refund"            — customer asking for money back
- *   - "booking"           — customer asking to schedule
- *   - "follow_up"         — customer deferred / asked to be re-contacted
- *   - "close_conversation"— ready to close (BEL closurePosture)
+ *   - "refund"            - customer asking for money back
+ *   - "booking"           - customer asking to schedule
+ *   - "follow_up"         - customer deferred / asked to be re-contacted
+ *   - "close_conversation"- ready to close (BEL closurePosture)
  *
- * Tenants can also write contracts on custom triggers — those will only
+ * Tenants can also write contracts on custom triggers - those will only
  * fire if the caller passes them via `proposedToolCalls` / `triggeredActions`
  * derived elsewhere (e.g. from a flow node). The base set covers the
  * inline-message case deterministically.
@@ -1045,7 +1045,7 @@ export function deriveTriggeredActions(opts: {
 }
 
 /**
- * Compute the per-turn ActionContractStateView the BEL surfaces. Pure —
+ * Compute the per-turn ActionContractStateView the BEL surfaces. Pure -
  * the caller pre-loads contracts + per-conversation progress.
  *
  * Logic per matching contract:
@@ -1079,7 +1079,7 @@ export function deriveActionContractState(opts: {
   for (const c of matched) {
     const prog = opts.progressByContract.get(c.id);
     const completed = prog?.completedTools ?? [];
-    if (prog?.fulfilledAt) continue; // already done — keep summary but no pending
+    if (prog?.fulfilledAt) continue; // already done - keep summary but no pending
     const pending = pendingToolsFor(c, completed);
     pending.forEach((p) => allPending.add(p));
     completed.forEach((c0) => allCompleted.add(c0));
@@ -1135,7 +1135,7 @@ export function deriveActionContractState(opts: {
 const CUSTOMER_DEFER_MARKERS = [
   "i'll think about it", "let me think", "get back to you", "i'll let you know",
   "later", "next week", "in a few days", "not right now", "not now", "another time",
-  // Callback-intent phrases — "ai agrees verbally but never fires the
+  // Callback-intent phrases - "ai agrees verbally but never fires the
   // schedule tool" was rooted in these missing. Without a defer match the
   // BEL kept closurePosture=open, so requiredActions never pushed
   // schedule_followup and the bot had no reason to dispatch it.
@@ -1144,7 +1144,7 @@ const CUSTOMER_DEFER_MARKERS = [
   "to call me back", "to call back", "to get back to me", "to ring me",
   "תחזרו אליי", "תחזור אליי", "תחזרו אלי", "תחזור אלי",
   "תתקשרו אלי", "תתקשר אלי", "תתקשר אליי", "תתקשרו אליי",
-  // Infinitive forms — "תוכל לחזור אלי מחר?" / "אפשר להתקשר אליי" appear
+  // Infinitive forms - "תוכל לחזור אלי מחר?" / "אפשר להתקשר אליי" appear
   // very naturally in Hebrew callback requests and were missed by the
   // imperative-only markers above. Live test exposed this gap.
   "לחזור אלי", "לחזור אליי", "להתקשר אלי", "להתקשר אליי",
@@ -1155,7 +1155,7 @@ const CUSTOMER_DEFER_MARKERS = [
 /**
  * Heuristic check: does the customer's message contain an explicit
  * follow-up timing signal STRONG ENOUGH to schedule on? This must
- * include an HOUR — a date alone ("tomorrow", "מחר") is NOT enough,
+ * include an HOUR - a date alone ("tomorrow", "מחר") is NOT enough,
  * because the bot has no way to pick a sensible time of day and would
  * end up messaging the customer at an arbitrary hour.
  *
@@ -1173,15 +1173,15 @@ function hasFollowupTimingSignal(rawText: string): boolean {
   if (!text) return false;
 
   // ── Hour patterns (the load-bearing requirement) ──
-  // 15:30 / 9.00 — clock format
+  // 15:30 / 9.00 - clock format
   if (/\b\d{1,2}\s*[:.]\s*\d{2}\b/.test(text)) return true;
   // 3pm / 11 am
   if (/\b\d{1,2}\s*(am|pm|a\.m\.|p\.m\.)\b/.test(text)) return true;
-  // "at 3" / "at 10" — English "at <hour>"
+  // "at 3" / "at 10" - English "at <hour>"
   if (/\bat\s+\d{1,2}(\s|$|\.|,|!|\?)/.test(text)) return true;
-  // Hebrew "ב-7" / "ב7" / "בשעה 7" — preposition + digit hour.
+  // Hebrew "ב-7" / "ב7" / "בשעה 7" - preposition + digit hour.
   // JS \b doesn't recognise Hebrew letters as word chars, so we anchor
-  // with a negative lookbehind on Hebrew letters instead — this matches
+  // with a negative lookbehind on Hebrew letters instead - this matches
   // the "ב" prefix when it stands alone, not as the last char of another
   // word.
   if (/(?<![א-ת])ב-?\s?\d{1,2}(?!\d)/.test(text)) return true;
@@ -1189,7 +1189,7 @@ function hasFollowupTimingSignal(rawText: string): boolean {
   // Compact Hebrew: "ב7 בבוקר" / "ב-15 אחה\"צ"
   if (/\d{1,2}\s*(בבוקר|בערב|בצהריים|בלילה|אחה"?צ|אחרי הצהריים)/.test(text)) return true;
 
-  // ── Short durations (self-anchoring — "in 2 hours" is enough) ──
+  // ── Short durations (self-anchoring - "in 2 hours" is enough) ──
   if (/\bin\s+\d+\s*(hour|hours|min|mins|minutes)\b/.test(text)) return true;
   if (/\bבעוד\s*\d+\s*(שעה|שעות|דקות|דקה)\b/.test(text)) return true;
   if (/\bבעוד שעה\b|\bבעוד שעתיים\b/.test(text)) return true;
@@ -1210,7 +1210,7 @@ const CUSTOMER_CLOSE_ACK_MARKERS = [
 
 // Unambiguous customer-side sign-offs. Unlike CLOSE_ACK_MARKERS ("תודה"),
 // these only appear when the customer is actually ending the conversation
-// — so they don't need the prior-assistant-closing-move gate. A bare
+// - so they don't need the prior-assistant-closing-move gate. A bare
 // "תודה" stays open and relies on the existing isClosingMove + CLOSE_ACK
 // path (or the idle worker's auto-close).
 const CUSTOMER_FAREWELL_MARKERS = [
@@ -1232,11 +1232,11 @@ const CUSTOMER_FAREWELL_MARKERS = [
  *
  * Notes:
  * - Pending approvals block closure (HOLD); BEL sets posture=open in that case.
- * - Escalation also blocks closure — handled by the earlier escalate_now branch
+ * - Escalation also blocks closure - handled by the earlier escalate_now branch
  *   in deriveRequiredActions (returns before closure check).
  */
 // Markers that indicate the bot's previous turn was asking the customer
-// for a follow-up time (HE+EN). Used cross-turn — when the customer replies
+// for a follow-up time (HE+EN). Used cross-turn - when the customer replies
 // to one of these with a timing signal, the conversation is still in the
 // "schedule a follow-up" sub-flow even though their answer alone wouldn't
 // match the defer markers.
@@ -1275,7 +1275,7 @@ function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePos
     return "needs_followup";
   }
   // Bare-agreement to a follow-up-time proposal ("yes", "sure", "כן", "סבבה").
-  // We're not done — still need to pin the exact hour — so STAY in
+  // We're not done - still need to pin the exact hour - so STAY in
   // needs_followup posture so the prompt's STEP 1 "BARE AGREEMENT" branch
   // fires and the bot keeps pushing for a specific hour instead of letting
   // the conversation drift into a close.
@@ -1294,7 +1294,7 @@ function deriveClosurePosture(req: RequestInput, flags?: FlagsInput): ClosurePos
     return "ready_to_close";
   }
 
-  // Explicit farewell — customer signed off with "bye"/"להתראות". This is
+  // Explicit farewell - customer signed off with "bye"/"להתראות". This is
   // an UNAMBIGUOUS terminal signal so we don't need the prior-assistant-move
   // gate the CLOSE_ACK branch uses. A bare "תודה" is NOT enough (customers
   // drop it as politeness mid-conversation); only direct goodbyes fire here.
@@ -1373,13 +1373,13 @@ function buildGeneratorState(input: ComputeBehaviorStateInput): BehaviorState {
     customerTrust: {
       level: "medium",
       confidence: "high",
-      reason: "generator-mode — no live customer to read",
+      reason: "generator-mode - no live customer to read",
       evidence: ["mode=generator"],
     },
     customerFriction: {
       level: "low",
       confidence: "high",
-      reason: "generator-mode — no live customer to read",
+      reason: "generator-mode - no live customer to read",
       evidence: ["mode=generator"],
     },
     outputContract: "STRUCTURED_CONFIG",
@@ -1422,13 +1422,13 @@ function buildGeneratorState(input: ComputeBehaviorStateInput): BehaviorState {
 const LOYAL_CUSTOMER_THRESHOLD = 3;
 
 /**
- * relationshipStrength — depth of the ongoing relationship, from CRM facts
+ * relationshipStrength - depth of the ongoing relationship, from CRM facts
  * ONLY (no language parsing). Always HIGH confidence because it is derived
  * from structured identity data, not noisy text.
  *
- *   LOW    — first-time contact / brand-new lead (no history).
- *   MEDIUM — returning lead, or an existing customer with little history.
- *   HIGH   — long-term customer (>= LOYAL_CUSTOMER_THRESHOLD prior convos).
+ *   LOW    - first-time contact / brand-new lead (no history).
+ *   MEDIUM - returning lead, or an existing customer with little history.
+ *   HIGH   - long-term customer (>= LOYAL_CUSTOMER_THRESHOLD prior convos).
  */
 function deriveRelationshipStrength(id: IdentityInput): BehaviorSignal<RelationshipStrength> {
   const prior = id.priorConversationCount ?? 0;
@@ -1476,7 +1476,7 @@ function deriveRelationshipStrength(id: IdentityInput): BehaviorSignal<Relations
     };
   }
 
-  // Contact exists but lifecycle is unknown — lean on history only.
+  // Contact exists but lifecycle is unknown - lean on history only.
   if (prior >= 1) {
     return {
       level: "medium",
@@ -1494,15 +1494,15 @@ function deriveRelationshipStrength(id: IdentityInput): BehaviorSignal<Relations
 }
 
 /**
- * customerTrust — how much the customer appears to believe the agent/brand
+ * customerTrust - how much the customer appears to believe the agent/brand
  * right now. Baseline is anchored by the relationship (previous successful
  * interactions ⇒ trust), then adjusted by language in the current + recent
  * inbound messages.
  *
- *   LOW    — repeated verification requests, or skeptical language.
- *   HIGH   — positive engagement, or a long-term relationship with no
+ *   LOW    - repeated verification requests, or skeptical language.
+ *   HIGH   - positive engagement, or a long-term relationship with no
  *            distrust signal.
- *   MEDIUM — neutral / insufficient signal (default).
+ *   MEDIUM - neutral / insufficient signal (default).
  */
 function deriveCustomerTrust(opts: {
   req: RequestInput;
@@ -1564,13 +1564,13 @@ function deriveCustomerTrust(opts: {
 }
 
 /**
- * customerFriction — how much resistance/frustration the customer is
+ * customerFriction - how much resistance/frustration the customer is
  * experiencing right now.
  *
- *   HIGH   — escalation/handoff flag, repeated complaints, or the customer
+ *   HIGH   - escalation/handoff flag, repeated complaints, or the customer
  *            repeating themselves.
- *   MEDIUM — single negative-sentiment message, or urgent support pressure.
- *   LOW    — default.
+ *   MEDIUM - single negative-sentiment message, or urgent support pressure.
+ *   LOW    - default.
  */
 function deriveCustomerFriction(opts: {
   req: RequestInput;
@@ -1581,7 +1581,7 @@ function deriveCustomerFriction(opts: {
   const text = (opts.req.lastMessage || "").toLowerCase();
   const pool = inboundPool(opts.req);
 
-  // 1. Hard flags — deterministic, HIGH confidence.
+  // 1. Hard flags - deterministic, HIGH confidence.
   if (opts.flags?.escalationGateFired || opts.flags?.humanHandoffRequested) {
     return {
       level: "high",
@@ -1729,12 +1729,12 @@ const POSITIVE_ENGAGEMENT_MARKERS = [
 ];
 
 const FRICTION_NEGATIVE_MARKERS = [
-  // English — frustration / complaint
+  // English - frustration / complaint
   "unacceptable", "ridiculous", "still not", "still doesn't", "still doesnt",
   "not working", "doesn't work", "doesnt work", "third time", "second time",
   "frustrated", "frustrating", "fed up", "angry", "terrible", "awful", "worst",
   "useless", "waste of time", "nobody helped", "no one helped", "this is a joke",
-  // Hebrew — frustration / complaint
+  // Hebrew - frustration / complaint
   "לא עובד", "לא עבד", "מתוסכל", "מתוסכלת", "כועס", "כועסת", "עצבני",
   "שוב פעם", "פעם שלישית", "פעם שנייה", "נמאס", "מספיק", "לא ייאמן",
   "גרוע", "נורא", "בזבוז זמן", "אף אחד לא", "מקולקל", "זאת בדיחה",
@@ -1770,7 +1770,7 @@ const TRANSACTIONAL_MARKERS = [
   "free trial", "trial period", "discount",
   "כמה עולה", "כמה זה עולה", "מה המחיר", "מה העלות", "מחירון",
   "תוכנית מחיר", "מסלול", "דמו", "ניסיון", "הדגמה", "תקופת ניסיון", "הנחה",
-  // Booking / meeting requests — customer is signaling they want a real next step.
+  // Booking / meeting requests - customer is signaling they want a real next step.
   "demo", "meeting", "appointment", "consultation", "call back", "callback",
   "set up a call", "set up a meeting", "set up a demo", "schedule a call",
   "schedule a meeting", "schedule a demo", "book a call", "book a meeting",

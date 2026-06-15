@@ -125,7 +125,7 @@ export interface SessionStore {
 }
 
 // ---------------------------------------------------------------------------
-// RedisSessionStore — concrete implementation
+// RedisSessionStore - concrete implementation
 // ---------------------------------------------------------------------------
 class RedisSessionStore implements SessionStore {
   constructor(private readonly redis: Redis) {}
@@ -149,7 +149,7 @@ class RedisSessionStore implements SessionStore {
     const key = sessionKey(tenantId, conversationId);
     const raw = await this.redis.hgetall(key);
     if (!raw || Object.keys(raw).length === 0) return null;
-    // hgetall returns object, not array — convert
+    // hgetall returns object, not array - convert
     const arr: string[] = [];
     for (const [k, v] of Object.entries(raw)) {
       arr.push(k, v);

@@ -3,7 +3,7 @@
  *
  * BUG REPRO: tool-gate.ts splits on "integration." prefix only, so an adapter
  * tool name like "stripe.refund_payment" is queried verbatim against
- * CatalogTool.slug — but the catalog stores `slug = "refund_payment"` (per the
+ * CatalogTool.slug - but the catalog stores `slug = "refund_payment"` (per the
  * 20260506100000_marketplace_real_integrations_only migration). The lookup
  * misses, the gate denies, and EVERY adapter tool is blocked in production.
  */
@@ -14,7 +14,7 @@ import { describe, it, expect, vi } from "vitest";
 // relative `./prisma` path. The string here is the resolved absolute module
 // id; vitest catches both this deep reference AND the package re-export so
 // the test's `import { prisma } from "@chatcenter/shared"` below sees the
-// same mocked object. String-literal — no TS path resolution constraint.
+// same mocked object. String-literal - no TS path resolution constraint.
 vi.mock("../../../../packages/shared/src/lib/prisma", () => ({
   prisma: {
     tenantTool: { findFirst: vi.fn(), findUnique: vi.fn() },
@@ -39,7 +39,7 @@ describe("tool-gate adapter-tool routing", () => {
       if (where?.integration?.slug === "stripe" && where?.slug === "refund_payment") {
         return { id: "tt1", isEnabled: true, catalogTool: { hitlPolicy: { mode: "always" } } };
       }
-      // Naive lookup that matches by slug only — returns the WRONG row.
+      // Naive lookup that matches by slug only - returns the WRONG row.
       if (where?.slug === "refund_payment" || where?.slug === "stripe.refund_payment") {
         return null;
       }

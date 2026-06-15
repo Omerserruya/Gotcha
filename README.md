@@ -10,13 +10,13 @@ docker compose up
 ```
 
 Services start on the following ports:
-- **frontend** (port 3000) — React/Next.js UI
-- **gateway** (port 8080) — Nginx reverse proxy
-- **auth** (port 4001) — Identity and RBAC
-- **conversation** (port 4002) — Messaging and conversation threads
-- **incoming-worker** (port 4003) — Inbound channel processors (email, SMS, webhook)
-- **ai** (port 4006) — AI reasoning, approval engine, tool execution
-- **voice-copilot** (port 4007) — Twilio Media Streams ingress; dual-channel audio → STT → voice_stream events to ai-assist. See services/voice-copilot/README.md.
+- **frontend** (port 3000) - React/Next.js UI
+- **gateway** (port 8080) - Nginx reverse proxy
+- **auth** (port 4001) - Identity and RBAC
+- **conversation** (port 4002) - Messaging and conversation threads
+- **incoming-worker** (port 4003) - Inbound channel processors (email, SMS, webhook)
+- **ai** (port 4006) - AI reasoning, approval engine, tool execution
+- **voice-copilot** (port 4007) - Twilio Media Streams ingress; dual-channel audio → STT → voice_stream events to ai-assist. See services/voice-copilot/README.md.
 
 ## Services
 
@@ -30,8 +30,8 @@ Services start on the following ports:
 
 ## Documentation
 
-- **[Voice Copilot Service](services/voice-copilot/README.md)** — Real-time call transcription and copilot dispatch
-- **[Architecture](CLAUDE.md)** — System design principles and AI execution boundaries
+- **[Voice Copilot Service](services/voice-copilot/README.md)** - Real-time call transcription and copilot dispatch
+- **[Architecture](CLAUDE.md)** - System design principles and AI execution boundaries
 
 ## Development
 

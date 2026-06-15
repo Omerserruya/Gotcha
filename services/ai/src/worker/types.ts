@@ -26,7 +26,7 @@ export type {
 
 /**
  * The context passed to a SkillRenderer at compose time. Stable per
- * session — anything dynamic per turn lives in the message history, NOT
+ * session - anything dynamic per turn lives in the message history, NOT
  * in the rendered skill fragment.
  */
 export interface SkillRenderContext {
@@ -35,13 +35,13 @@ export interface SkillRenderContext {
   guardrails: AIWorkerGuardrails;
   /** Locale snapshot at session start. */
   locale?: string;
-  /** Frozen pipeline context — funnel/stage. May be null for non-funnel workers. */
+  /** Frozen pipeline context - funnel/stage. May be null for non-funnel workers. */
   pipeline?: AIWorkerSessionProfile["pipeline"];
 }
 
 /**
  * A skill renderer is a pure function from (context) -> string fragment.
- * It MUST be deterministic — same context always yields identical bytes.
+ * It MUST be deterministic - same context always yields identical bytes.
  *
  * Skills declared via `defineSkill()` get this signature; the registry
  * composer concatenates fragments in a deterministic order.
@@ -67,6 +67,6 @@ export interface ComposedSkills {
   text: string;
   toolsAdded: string[];
   toolsRequired: string[];
-  /** Ordered skill ids that contributed — useful for observability. */
+  /** Ordered skill ids that contributed - useful for observability. */
   skillIds: string[];
 }

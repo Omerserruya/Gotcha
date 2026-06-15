@@ -1,9 +1,9 @@
-# Meta Platform Setup Guide — Channel Self-Service Connection
+# Meta Platform Setup Guide - Channel Self-Service Connection
 
 > **Last updated:** February 2026
 > **Assumes:** You already have a Meta App created and webhooks configured at the app level.
 
-This guide walks you through configuring your Meta App so that tenants can connect **WhatsApp**, **Messenger**, and **Instagram** channels directly from the GOTCHA UI — no manual Meta Console work per tenant.
+This guide walks you through configuring your Meta App so that tenants can connect **WhatsApp**, **Messenger**, and **Instagram** channels directly from the GOTCHA UI - no manual Meta Console work per tenant.
 
 ---
 
@@ -26,7 +26,7 @@ This guide walks you through configuring your Meta App so that tenants can conne
 
 Before starting, confirm you have:
 
-- [x] A **Meta Developer Account** — [developers.facebook.com](https://developers.facebook.com)
+- [x] A **Meta Developer Account** - [developers.facebook.com](https://developers.facebook.com)
 - [x] A **Meta App** created (type: **Business**)
 - [x] A **Meta Business Account** (formerly Business Manager) linked to the app
 - [x] **Webhooks** already configured at the app level for:
@@ -36,7 +36,7 @@ Before starting, confirm you have:
 - [x] Your webhook endpoint is publicly accessible (e.g., `https://yourdomain.com/api/webhook`)
 - [x] GOTCHA application deployed and running
 
-> **Note:** Your Meta App ID is shown at the top of your App Dashboard. Save it — you'll need it for `META_APP_ID`.
+> **Note:** Your Meta App ID is shown at the top of your App Dashboard. Save it - you'll need it for `META_APP_ID`.
 
 ---
 
@@ -131,9 +131,9 @@ This creates the `config_id` that the frontend uses to launch the WhatsApp signu
 
 8. Click **Create** / **Save**
 
-9. **Copy the Configuration ID** — it looks like a numeric string, e.g., `1234567890123456`
+9. **Copy the Configuration ID** - it looks like a numeric string, e.g., `1234567890123456`
 
-> **This is your `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`** — save it for the environment variables step.
+> **This is your `WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID`** - save it for the environment variables step.
 
 ### Verify Embedded Signup Setup:
 
@@ -148,7 +148,7 @@ This creates the `config_id` that the frontend uses to launch the WhatsApp signu
 
 1. Go to **App Dashboard** → **Settings** → **Basic**
 2. Under **App Secret**, click **Show**
-3. Copy the secret — this is your `META_APP_SECRET`
+3. Copy the secret - this is your `META_APP_SECRET`
 
 > **Security:** Never expose the App Secret in frontend code. It's only used server-side.
 
@@ -166,7 +166,7 @@ This creates the `config_id` that the frontend uses to launch the WhatsApp signu
 1. In **Settings** → **Basic**
 2. Fill in:
    - **Privacy Policy URL**: Any publicly accessible URL (e.g., a Notion page, Google Doc, or your own page)
-   - **Terms of Service URL**: Same — any public URL works
+   - **Terms of Service URL**: Same - any public URL works
 3. You can add proper pages later at `/privacy` and `/terms` on your domain
 
 ---
@@ -213,7 +213,7 @@ Your app needs specific permissions approved before tenants can connect channels
 > - The connected channel appearing in the UI
 > - A message being sent/received through the connected channel
 
-4. Submit the review — Meta typically responds within 1-5 business days
+4. Submit the review - Meta typically responds within 1-5 business days
 
 ### 6.3 Development Mode vs. Live Mode
 
@@ -243,7 +243,7 @@ META_APP_SECRET=your-meta-app-secret
 # Embedded Signup Configuration ID (from Facebook Login for Business → Configurations)
 WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID=your-embedded-signup-config-id
 
-# OAuth callback URL — must EXACTLY match what you set in Facebook Login for Business → Settings
+# OAuth callback URL - must EXACTLY match what you set in Facebook Login for Business → Settings
 OAUTH_REDIRECT_URI=https://yourdomain.com/api/channels/oauth/callback
 
 # Encryption key for storing channel credentials (generate with: openssl rand -hex 32)
@@ -254,7 +254,7 @@ FACEBOOK_API_URL=https://graph.facebook.com/v21.0
 
 # ─── Frontend ──────────────────────────────────────────────
 
-# Must match META_APP_ID — used by the Facebook JS SDK in the browser
+# Must match META_APP_ID - used by the Facebook JS SDK in the browser
 NEXT_PUBLIC_META_APP_ID=your-facebook-app-id
 
 # Your application's public URL (used for OAuth redirect back to frontend)
@@ -333,7 +333,7 @@ FRONTEND_URL=https://yourdomain.com
 
 **If no Instagram account is found:**
 - The error `no_instagram_account` means the Facebook Page(s) don't have linked IG Business accounts
-- Only **Instagram Business** or **Creator** accounts can be linked — personal accounts are not supported
+- Only **Instagram Business** or **Creator** accounts can be linked - personal accounts are not supported
 
 ---
 
@@ -397,6 +397,6 @@ curl -H "Authorization: Bearer YOUR_JWT_TOKEN" \
 
 ### Meta's Debug Tools
 
-- **Graph API Explorer:** [developers.facebook.com/tools/explorer](https://developers.facebook.com/tools/explorer) — test API calls with your tokens
-- **Access Token Debugger:** [developers.facebook.com/tools/debug/accesstoken](https://developers.facebook.com/tools/debug/accesstoken) — check token validity and scopes
+- **Graph API Explorer:** [developers.facebook.com/tools/explorer](https://developers.facebook.com/tools/explorer) - test API calls with your tokens
+- **Access Token Debugger:** [developers.facebook.com/tools/debug/accesstoken](https://developers.facebook.com/tools/debug/accesstoken) - check token validity and scopes
 - **Webhook Test:** App Dashboard → Webhooks → select topic → **Test** button

@@ -8,7 +8,7 @@ ALTER TABLE "usage_logs"
 
 -- Backfill attempt from the pre-existing metadata JSON so historical rows
 -- still show up in the admin aggregations. Nulls on fields that aren't in
--- metadata are fine — the aggregate queries tolerate them.
+-- metadata are fine - the aggregate queries tolerate them.
 UPDATE "usage_logs"
 SET
   "feature"           = COALESCE("metadata"->>'type', NULL),

@@ -4,7 +4,7 @@
  * One entry per `sessionId` (conversation/call). Holds the FROZEN
  * SYSTEM_CORE + SESSION_PROFILE strings + their fingerprint. The
  * worker's `generate()` method reads from here so the same bytes are
- * sent to OpenAI for every call in the session — which is what makes
+ * sent to OpenAI for every call in the session - which is what makes
  * the prefix cache hit.
  *
  * Lifecycle:
@@ -89,7 +89,7 @@ export function getOrCreateSession(args: OpenSessionArgs): WorkerSession {
   const sessionProfileText = buildSessionProfile(args.profile);
   const fingerprint = fingerprintPrefix(core.text, sessionProfileText);
 
-  // Record fingerprint — this is the first call so it should always be
+  // Record fingerprint - this is the first call so it should always be
   // firstSeen=true. Calling here makes the registry self-validating.
   const drift = recordPrefixFingerprint(args.sessionId, fingerprint.hash);
   // If somehow a stale fingerprint exists for this sessionId (e.g. a
@@ -117,7 +117,7 @@ export function getOrCreateSession(args: OpenSessionArgs): WorkerSession {
 
 /**
  * Validate that a session's prefix is still stable. Call this on every
- * subsequent turn before sending to OpenAI — drift = bug to fix, not a
+ * subsequent turn before sending to OpenAI - drift = bug to fix, not a
  * recoverable runtime condition.
  */
 export function verifySessionFingerprint(sessionId: string): void {

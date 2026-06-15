@@ -5,7 +5,7 @@ import { prisma } from "@chatcenter/shared";
  *
  * One row per (callAnalysisId, rubricVersion). If a rubric is rerun on the
  * same analysis (e.g. after a rubric upgrade), a new row is written rather
- * than updating in place — preserves audit history. Tenants reading "latest
+ * than updating in place - preserves audit history. Tenants reading "latest
  * QA score" for a conversation should ORDER BY scoredAt DESC.
  */
 

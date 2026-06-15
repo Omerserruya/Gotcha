@@ -1,10 +1,10 @@
 /**
- * Airtable adapter — production-grade.
+ * Airtable adapter - production-grade.
  *
  * Auth: Personal Access Token (PAT). The user generates one at
  * airtable.com/create/tokens with scopes: data.records:read,
  * data.records:write, schema.bases:read. We accept the PAT as `apiKey`
- * in credentials. No refresh — PATs are long-lived.
+ * in credentials. No refresh - PATs are long-lived.
  *
  * Setup flow (admin UI calls these helpers indirectly):
  *   1. List bases → user picks the base.
@@ -12,10 +12,10 @@
  *   3. We persist `config = { baseId, tableId, tableName }`.
  *
  * Tools (most-used patterns for support + sales bots):
- *   - airtable.list_records   — query records (filterByFormula optional)
- *   - airtable.get_record     — by id
- *   - airtable.create_record  — single record
- *   - airtable.update_record  — patch fields by id
+ *   - airtable.list_records   - query records (filterByFormula optional)
+ *   - airtable.get_record     - by id
+ *   - airtable.create_record  - single record
+ *   - airtable.update_record  - patch fields by id
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
@@ -26,7 +26,7 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "airtable.list_records",
     description: "List records from the configured Airtable table.",
-    whenToUse: "You need to find rows by criteria — e.g. all records where a field equals a value.",
+    whenToUse: "You need to find rows by criteria - e.g. all records where a field equals a value.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {
@@ -130,7 +130,7 @@ const AirtableAdapter: ProviderAdapter = {
 
   // OAuth2 token refresh (Airtable access tokens are short-lived; refresh
   // tokens rotate on use). PAT connections have no refreshToken and never
-  // reach here — the framework only refreshes when expiresAt is set + passed.
+  // reach here - the framework only refreshes when expiresAt is set + passed.
   async refreshTokens(credentials) {
     const clientId = process.env.AIRTABLE_CLIENT_ID;
     const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
@@ -186,7 +186,7 @@ export async function airtableListTables(token: string, baseId: string): Promise
   return (r.tables || []).map((t: any) => ({ id: t.id, name: t.name }));
 }
 
-/** List the columns of a specific table — powers the mapping UI. */
+/** List the columns of a specific table - powers the mapping UI. */
 export async function airtableListFields(token: string, baseId: string, tableId: string): Promise<Array<{ id: string; name: string; type: string }>> {
   const r: any = await airtable(token, "GET", `https://api.airtable.com/v0/meta/bases/${baseId}/tables`);
   const table = (r.tables || []).find((t: any) => t.id === tableId || t.name === tableId);

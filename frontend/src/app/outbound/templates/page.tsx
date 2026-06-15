@@ -106,7 +106,7 @@ function statusBadge(status: string) {
 
 /** Extract every {{n}} placeholder from the template body in order of
  *  appearance. Meta's WhatsApp Cloud API only accepts POSITIONAL keys
- *  ({{1}}, {{2}}, …) for body parameters — named placeholders are silently
+ *  ({{1}}, {{2}}, …) for body parameters - named placeholders are silently
  *  passed through as literal text and the customer sees "{{name}}" in the
  *  message. Anything non-numeric is excluded from the detected variable
  *  list so the UI doesn't pretend it's a real binding.
@@ -410,7 +410,7 @@ export default function TemplatesPage() {
 
       // Sanitize buttons: trim text, drop empties, enforce mutual-exclusivity.
       // Meta does not allow QUICK_REPLY mixed with URL/PHONE in the same
-      // template — keep the first type the user picked and drop conflicts.
+      // template - keep the first type the user picked and drop conflicts.
       const cleanedButtons: TemplateButton[] = (form.buttons || [])
         .filter((b) => b && b.text && b.text.trim())
         .slice(0, 3)
@@ -791,10 +791,10 @@ export default function TemplatesPage() {
                       className={selectCls}
                       required
                     >
-                      {connectedAccounts.length === 0 && <option value="">—</option>}
+                      {connectedAccounts.length === 0 && <option value="">-</option>}
                       {connectedAccounts.map((a) => (
                         <option key={a.id} value={a.id}>
-                          {a.channel} — {a.displayName}
+                          {a.channel} - {a.displayName}
                         </option>
                       ))}
                     </select>
@@ -851,7 +851,7 @@ export default function TemplatesPage() {
                   </div>
                 )}
 
-                {/* Example media URL — Meta requires an example asset to
+                {/* Example media URL - Meta requires an example asset to
                     submit IMAGE/VIDEO/DOCUMENT templates. The same URL is
                     used as the live header at send time, so it must be
                     publicly reachable. */}
@@ -913,7 +913,7 @@ export default function TemplatesPage() {
                       <AIComposePanel />
                     </AIComposeScope>
 
-                    {/* Named-placeholder warning — Meta only accepts {{1}}, {{2}}, … */}
+                    {/* Named-placeholder warning - Meta only accepts {{1}}, {{2}}, … */}
                     {isWhatsApp && findNamedPlaceholders(form.body).length > 0 && (
                       <div className="bg-amber-50 border border-amber-200 rounded-xl p-3 text-xs text-amber-800">
                         <span className="font-semibold">Heads up:</span> Meta only substitutes positional placeholders (
@@ -974,7 +974,7 @@ export default function TemplatesPage() {
                       />
                     </div>
 
-                    {/* Buttons (Quick-Reply / URL / Phone) — up to 3 per Meta. */}
+                    {/* Buttons (Quick-Reply / URL / Phone) - up to 3 per Meta. */}
                     {isWhatsApp && (
                       <div>
                         <div className="flex items-center justify-between mb-1.5">
@@ -982,7 +982,7 @@ export default function TemplatesPage() {
                           <span className="text-xs text-gray-400">{(form.buttons || []).length}/3</span>
                         </div>
                         <p className="text-xs text-gray-500 mb-2">
-                          Quick-reply buttons re-open the 24h WhatsApp window the moment a customer taps them. Mix-and-match is not allowed by Meta — all quick-reply OR all URL/Phone.
+                          Quick-reply buttons re-open the 24h WhatsApp window the moment a customer taps them. Mix-and-match is not allowed by Meta - all quick-reply OR all URL/Phone.
                         </p>
                         <div className="space-y-2">
                           {(form.buttons || []).map((btn, idx) => (

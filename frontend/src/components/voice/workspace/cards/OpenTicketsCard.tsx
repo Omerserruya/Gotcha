@@ -6,7 +6,7 @@ import type { CrmOpenIssue } from "@/lib/api-crm";
 interface Props {
   /**
    * CRM open issues pulled by CallRightPanel from /api/crm/conversation/:id/context.
-   * Same shape as the chat-side panel — single source of truth.
+   * Same shape as the chat-side panel - single source of truth.
    */
   openIssues?: CrmOpenIssue[];
   loading?: boolean;

@@ -8,7 +8,7 @@ import { getOnboardingMissions } from "@/lib/api";
 // Renders a one-line nudge at the top of /channels ONLY while
 // the "connect_channel" mission is the active one. As soon as a
 // channel finishes OAuth + the next poll runs, the mission flips
-// to done and this disappears — no manual dismiss.
+// to done and this disappears - no manual dismiss.
 export function ChannelsOnboardingBanner() {
   const { token, user } = useAuth();
   const { t } = useI18n();

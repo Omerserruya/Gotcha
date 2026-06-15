@@ -1,7 +1,7 @@
 /**
  * POST /api/voice-copilot/sessions/:sessionId/terminate
  *
- * Internal-only — protected by `X-Internal-Key` (same shared secret used by
+ * Internal-only - protected by `X-Internal-Key` (same shared secret used by
  * the AI service). Used by `services/conversation` after the agent declines
  * or hangs up an incoming voice call: the DB state transition is not enough,
  * the upstream Twilio leg keeps the customer on the line until we explicitly
@@ -9,7 +9,7 @@
  *
  * Looks up the session row to find (a) the customer call SID and (b) the
  * owning tenant, resolves the per-tenant VoiceProvider, then calls
- * `provider.endCall({ callSid })`. Idempotent at the provider level — a
+ * `provider.endCall({ callSid })`. Idempotent at the provider level - a
  * second terminate for an already-finished call returns 200 with `noop=true`.
  */
 import { Router, Request, Response } from "express";
@@ -42,7 +42,7 @@ export function createVoiceTerminateRouter(opts: {
     }
 
     // Pull tenantId + callSid in one query. We deliberately don't gate on
-    // session state (e.g. require RINGING) — the caller already enforced
+    // session state (e.g. require RINGING) - the caller already enforced
     // that. This route's only job is to drop the upstream leg.
     const session = await (prisma as any).voiceCallSession
       .findUnique({
@@ -68,7 +68,7 @@ export function createVoiceTerminateRouter(opts: {
       provider = await resolveProvider(session.tenantId);
     } catch (err) {
       if (err instanceof NoActiveVoiceChannelError) {
-        // Channel was disconnected between answer and decline — nothing we
+        // Channel was disconnected between answer and decline - nothing we
         // can do upstream. Log + return so the caller can move on.
         logger.warn({ sessionId, tenantId: session.tenantId }, "voice-terminate: no active channel");
         res.json({ data: { terminated: false, reason: "no_active_channel" } });

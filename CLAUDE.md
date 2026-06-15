@@ -1,4 +1,4 @@
-# CLAUDE.md — GOTCHA AI Execution Brain
+# CLAUDE.md - GOTCHA AI Execution Brain
 
 ## 🧠 Core Purpose
 
@@ -37,11 +37,11 @@ plus top-level `gateway/` and `frontend/`.
 ## Inter-service communication
 Services talk over the Docker network via **service DNS names + HTTP** (e.g. `http://ai:4006`,
 `http://voice-copilot:4007`). The `gateway/` is the external entry; `nginx/` fronts it. No
-cross-service direct DB joins — go through a service's API.
+cross-service direct DB joins - go through a service's API.
 
 ## Bring up the full stack (E2E)
 ```bash
-docker compose up --build -d      # alias: npm run docker:up   (dev only — docker-compose.yml)
+docker compose up --build -d      # alias: npm run docker:up   (dev only - docker-compose.yml)
 docker compose ps                 # health
 docker compose down               # tear down
 ```
@@ -66,7 +66,7 @@ docker compose down               # tear down
 
 # ⚠️ Non-Negotiable Principles
 
-## 1. AI is NOT the system — it operates the system
+## 1. AI is NOT the system - it operates the system
 
 * AI does NOT store business state
 * AI does NOT replace services

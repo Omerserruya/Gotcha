@@ -50,7 +50,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   return (
     <AppLayout>
       <div className="flex h-[calc(100vh-16px)] md:gap-2 md:p-2">
-        {/* Settings sidebar — hidden on mobile, shown on md+ */}
+        {/* Settings sidebar - hidden on mobile, shown on md+ */}
         <aside className="hidden md:flex w-[220px] flex-col bg-white rounded-2xl shadow-subtle overflow-hidden shrink-0">
           <div className="px-4 py-3 bg-gray-50/50">
             <h2 className="text-sm font-semibold text-gray-900">{t("nav.settings")}</h2>

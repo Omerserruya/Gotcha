@@ -3,7 +3,7 @@ import { GOAL_ORDER, type Goal, type LeadStateView, missingForGoal } from "./goa
 /**
  * Deterministic goal state machine, one logical instance per conversation.
  *
- * The LLM's frame.stage answers "what playbook stage are we on" (UX) — this
+ * The LLM's frame.stage answers "what playbook stage are we on" (UX) - this
  * machine answers "what data does the deal need next" (business gate).
  * Advances only when every required field for the current goal is present
  * in the lead view. Never regresses; a partial backslide in CRM state does
@@ -21,7 +21,7 @@ export class GoalStateMachine {
   }
 
   /**
-   * Advance as many stages as the lead now satisfies. Idempotent — calling
+   * Advance as many stages as the lead now satisfies. Idempotent - calling
    * twice with the same lead is a no-op. Returns the goal after advance.
    */
   advance(conversationId: string, lead: LeadStateView): Goal {

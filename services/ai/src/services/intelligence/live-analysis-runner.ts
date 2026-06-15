@@ -30,7 +30,7 @@ import { detectSpellingMode } from "./analyzers/spelling-detector";
  * rolling-summary side call is wired but disabled by default; it can be
  * enabled once the prompt cost vs benefit is measured in production.
  *
- * NOT YET INVOKED FROM voice-assist.service.ts in Phase 3 — the runner is
+ * NOT YET INVOKED FROM voice-assist.service.ts in Phase 3 - the runner is
  * triggered by a parallel hook so the existing chat-shaped path keeps
  * running for backward compatibility. Phase 4 will switch the live path
  * over and delete the old call site.
@@ -110,7 +110,7 @@ export class LiveAnalysisRunner {
     });
 
     // Pre-load CRM-known identifiers so the "ALREADY ANSWERED" block can be
-    // populated on the very first turn. Failures are non-fatal — the block
+    // populated on the very first turn. Failures are non-fatal - the block
     // simply renders without those fields and the projector's observedFilled
     // set still drives suppression.
     try {
@@ -153,14 +153,14 @@ export class LiveAnalysisRunner {
   // ── Internal ───────────────────────────────────────────────
 
   /**
-   * One-shot CRM-known-identifier lookup against LOCAL state only — no
+   * One-shot CRM-known-identifier lookup against LOCAL state only - no
    * external CRM calls. Pulls the customer's display name from the
    * Conversation row and any verified phone/email from the linked Contact.
    * Used to populate the "ALREADY ANSWERED" prompt block so the LLM doesn't
    * re-ask for things we already know.
    *
    * Heavier vendor CRM lookups (Zoho / HubSpot) intentionally NOT done here
-   * — they belong to `prefetchCrmContext` which has caching, rate-limiting,
+   * - they belong to `prefetchCrmContext` which has caching, rate-limiting,
    * and HITL semantics. The live runner needs sub-millisecond identifier
    * resolution, so we stay on local DB.
    */
@@ -180,7 +180,7 @@ export class LiveAnalysisRunner {
     });
     if (!conv) return {};
 
-    // Contact has no FK from Conversation — the join is on
+    // Contact has no FK from Conversation - the join is on
     // (tenantId, channel, externalId). Look it up once; if absent we fall
     // back to whatever the conversation row carries directly.
     let contactPhone: string | null = null;
@@ -205,7 +205,7 @@ export class LiveAnalysisRunner {
     }
 
     // For phone-shaped channels (WhatsApp / voice / SMS) the
-    // customerExternalId IS the phone — use it when Contact didn't have one.
+    // customerExternalId IS the phone - use it when Contact didn't have one.
     if (!contactPhone && conv.customerExternalId) {
       const looksLikePhone = /^\+?\d{6,}$/.test(conv.customerExternalId.replace(/[\s-]/g, ""));
       if (looksLikePhone) contactPhone = conv.customerExternalId;
@@ -285,7 +285,7 @@ export class LiveAnalysisRunner {
       );
       const res = await generateResponse({
         tenantId: this.opts.tenantId,
-        // Voice live-copilot turns rapidly — pinning the conversation here
+        // Voice live-copilot turns rapidly - pinning the conversation here
         // is the single biggest cache win in the live path because every
         // frame for the same call shares a stable SYSTEM_CORE prefix.
         sessionId: this.opts.conversationId,
@@ -354,7 +354,7 @@ export class LiveAnalysisRunner {
       ts: frame.ts,
     };
 
-    // The full frame is the canonical event — frontend uses this for the
+    // The full frame is the canonical event - frontend uses this for the
     // version-reducer pattern that eliminates the partial-reconciliation
     // race in VoiceCallContext.
     console.log(
@@ -366,7 +366,7 @@ export class LiveAnalysisRunner {
     }).catch(() => {});
 
     // Granular events for systems that care about specific fields. All on
-    // either conversation-room or agent-only — never tenant broadcast.
+    // either conversation-room or agent-only - never tenant broadcast.
     if (frame.intent)
       await publishConvEvent(convTarget, "intent.updated", {
         ...base,
@@ -447,7 +447,7 @@ export class LiveAnalysisRunner {
               urgency: "medium",
             },
             async () => {
-              // Live-mode mutating tools never auto-execute — the policy
+              // Live-mode mutating tools never auto-execute - the policy
               // gate routes everything through propose-and-await-approval.
               throw new Error(
                 "live-runner: executor invoked unexpectedly (live mutating tools must propose)",
@@ -508,7 +508,7 @@ function parseFrame(
 /**
  * Best-effort coercion of common LLM synonyms onto the canonical urgency
  * enum (low|medium|high). Mutates `candidate` in place. Only touches values
- * the schema would otherwise reject — leaves valid ones alone.
+ * the schema would otherwise reject - leaves valid ones alone.
  */
 function normalizeUrgencyEnums(candidate: Record<string, unknown>): void {
   const map = (v: unknown): "low" | "medium" | "high" | unknown => {
@@ -518,7 +518,7 @@ function normalizeUrgencyEnums(candidate: Record<string, unknown>): void {
     if (["now", "immediate", "immediately", "asap", "urgent", "critical"].includes(k)) return "high";
     if (["soon", "important", "elevated"].includes(k)) return "medium";
     if (["later", "minor", "trivial"].includes(k)) return "low";
-    return v; // unknown — let the schema flag it
+    return v; // unknown - let the schema flag it
   };
   if (typeof candidate.urgency === "string") {
     candidate.urgency = map(candidate.urgency);

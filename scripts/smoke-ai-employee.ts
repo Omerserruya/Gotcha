@@ -6,7 +6,7 @@
  *   1. Skills registry is populated (system skills self-registered).
  *   2. Skill composition is byte-stable for a given (ctx, skillIds).
  *   3. Prompt builder is byte-stable across two builds with identical
- *      inputs — this is what the cached-prefix strategy depends on.
+ *      inputs - this is what the cached-prefix strategy depends on.
  *   4. Per-block layout is correct: per-agent / per-conv / per-turn
  *      separators in the expected order. If a per-turn-only field
  *      (like behaviorState.toneIntensity) leaks into the per-agent
@@ -15,7 +15,7 @@
  * Run:
  *   docker compose exec ai npx tsx /app/scripts/smoke-ai-employee.ts
  *
- * Exits 0 on PASS, 1 on FAIL — suitable for CI integration.
+ * Exits 0 on PASS, 1 on FAIL - suitable for CI integration.
  */
 
 /* eslint-disable @typescript-eslint/no-var-requires */
@@ -195,7 +195,7 @@ async function main() {
     "block present with label + goal",
   );
   record(
-    "Stage block lives in per-turn (block 3) — not per-agent",
+    "Stage block lives in per-turn (block 3) - not per-agent",
     !((promptD.split("\n\n---\n\n")[0] ?? "").includes("Pipeline Stage")),
     "must be per-turn so stage transitions don't break cache prefix",
   );

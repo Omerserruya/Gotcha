@@ -1,5 +1,5 @@
 /**
- * Prompt validation harness — renders 30 assembled prompts across a matrix of
+ * Prompt validation harness - renders 30 assembled prompts across a matrix of
  * (situation × brand archetype) and asserts the de-confliction + humanization
  * invariants hold on the ACTUAL assembled prompt (not just the source files).
  *
@@ -19,7 +19,7 @@ const SITUATIONS = [
   { key: "buying_he",      locale: "he", lastMessage: "כמה זה עולה? אני רוצה להתחיל",            messageCount: 6,  id: { hasContact: true,  contactLifecycle: "lead",    priorConversationCount: 1 } },
   { key: "objection_en",   locale: "en", lastMessage: "honestly this is too expensive for us", messageCount: 8,  id: { hasContact: true,  contactLifecycle: "lead",    priorConversationCount: 1 } },
   { key: "support_he",     locale: "he", lastMessage: "יש לי בעיה, לא מצליח לשלוח הודעות",       messageCount: 3,  id: { hasContact: true,  contactLifecycle: "customer", priorConversationCount: 5 } },
-  { key: "returning_en",   locale: "en", lastMessage: "hey, back again — need help with billing", messageCount: 5, id: { hasContact: true, contactLifecycle: "customer", priorConversationCount: 8 } },
+  { key: "returning_en",   locale: "en", lastMessage: "hey, back again - need help with billing", messageCount: 5, id: { hasContact: true, contactLifecycle: "customer", priorConversationCount: 8 } },
 ];
 
 const REDACTED_CUSTOMER = [
@@ -40,10 +40,10 @@ function assertions(p: string, locale: string, archetype: string) {
     "no_convert_forced_close": !has("soft close go together") && !has("soft availability close") ,
     "no_office_ladder":       !has("Information-Gathering Ladder") && !has("לקבוע מועד לסיור") && !has("היסטוריה של משרד"),
     "hierarchy_present":      has("SINGLE SOURCE OF TRUTH") && has("Style tie-break"),
-    "brand_voice_present":    has(`# Brand Voice — ${archLabel[archetype]}`),
+    "brand_voice_present":    has(`# Brand Voice - ${archLabel[archetype]}`),
     "acknowledge_before_ask": has("Acknowledge before you ask"),
     "personality_present":    has("# Personality"),
-    "gender_rule_general":    has("Gendered languages — infer"),
+    "gender_rule_general":    has("Gendered languages - infer"),
     "gender_hebrew_when_he":  locale !== "he" || has("Gender in Hebrew"),
   };
 }
@@ -112,10 +112,10 @@ async function main() {
   console.log(`\nPer-check failures (0 = all ${total} prompts pass):`);
   for (const c of checkNames) console.log(`  ${failBy[c] === 0 ? "✅" : "❌"} ${c}: ${total - failBy[c]}/${total} pass`);
 
-  // residual duplication (informational — not failures)
+  // residual duplication (informational - not failures)
   const dupAgg: Record<string, number[]> = {};
   for (const r of rows) for (const [k, v] of Object.entries(r.dups)) (dupAgg[k] ||= []).push(v as number);
-  console.log(`\nResidual duplicate-phrase counts (avg occurrences per prompt — dedup candidates):`);
+  console.log(`\nResidual duplicate-phrase counts (avg occurrences per prompt - dedup candidates):`);
   for (const [k, arr] of Object.entries(dupAgg)) console.log(`  ${k}: avg ${(arr.reduce((a,b)=>a+b,0)/arr.length).toFixed(1)}×`);
 
   if (totalFails > 0) {

@@ -62,13 +62,13 @@ import { TriggerSectionHeaderNode } from "./TriggerSectionHeaderNode";
 
 // ─── Node types ────────────────────────────────────────────────
 const nodeTypes: NodeTypes = {
-  // Triggers — all share the canvas-integrated TriggerCardNode (When… style)
+  // Triggers - all share the canvas-integrated TriggerCardNode (When… style)
   channel_entry: TriggerCardNode,
   comment_trigger: TriggerCardNode,
   keyword_trigger: TriggerCardNode,
   schedule_trigger: TriggerCardNode,
   webhook_trigger: TriggerCardNode,
-  // Voice triggers (7) reuse the same When… card chrome — TriggerCardNode's
+  // Voice triggers (7) reuse the same When… card chrome - TriggerCardNode's
   // describe() handles the per-type icon + title + subtitle.
   "voice_trigger:call.incoming": TriggerCardNode,
   "voice_trigger:call.answered": TriggerCardNode,
@@ -338,7 +338,7 @@ export const NODE_PALETTE = [
       {
         type: "send_message_template",
         label: "Send WhatsApp Template",
-        desc: "Approved WABA template — re-opens 24h window",
+        desc: "Approved WABA template - re-opens 24h window",
         color: "emerald",
         bg: "bg-emerald-50",
         border: "border-emerald-200",
@@ -675,7 +675,7 @@ function buildNodesFromData(
   const edgesOut: Edge[] = [];
   const shared = { agents, flows, departments };
 
-  // 1. Channel entry nodes (left column) — one per connected channel
+  // 1. Channel entry nodes (left column) - one per connected channel
   let channelY = 50;
   const channelNodeIds: string[] = [];
   for (const ch of channels) {
@@ -872,8 +872,8 @@ interface Props {
 }
 
 export function MainPlaybookEditor(props: Props) {
-  // Wrap so that the side-panel Inspector — which renders OUTSIDE <ReactFlow>
-  // but inside the editor — can call hooks like useReactFlow (used by
+  // Wrap so that the side-panel Inspector - which renders OUTSIDE <ReactFlow>
+  // but inside the editor - can call hooks like useReactFlow (used by
   // VariableMentionInput's variable scanner) and share state with the canvas.
   return (
     <ReactFlowProvider>
@@ -890,7 +890,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   const [saving, setSaving] = useState(false);
   const [loading, setLoading] = useState(true);
   const [paletteOpen, setPaletteOpen] = useState(true);
-  // Template gallery — auto-opens once on an empty canvas to give new users a
+  // Template gallery - auto-opens once on an empty canvas to give new users a
   // starting point. We track whether we've already auto-opened so a user who
   // dismisses it doesn't get re-prompted every render.
   const [templateGalleryOpen, setTemplateGalleryOpen] = useState(false);
@@ -911,7 +911,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   // node id to drive the panel.
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
 
-  // Validator — recomputed whenever the graph changes. Cheap, O(nodes+edges).
+  // Validator - recomputed whenever the graph changes. Cheap, O(nodes+edges).
   const issues = useMemo(
     () =>
       validateFlow(
@@ -984,7 +984,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           : null;
 
         if (serverCanvas) {
-          // Restore directly from the persisted graph — this is THE flow.
+          // Restore directly from the persisted graph - this is THE flow.
           const restoredNodes: Node[] = serverCanvas.nodes.map((n: any) => ({
             id: n.id,
             type: n.type,
@@ -1007,7 +1007,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           setNodes(restoredNodes);
           setEdges(restoredEdges);
         } else {
-          // No saved canvas yet — open the template gallery so the author
+          // No saved canvas yet - open the template gallery so the author
           // can pick a starting point instead of seeing a blank sheet.
           setNodes([]);
           setEdges([]);
@@ -1039,7 +1039,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
 
       if (TRIGGER_TYPES.has(type)) {
         // Triggers belong in the static column, not the canvas. Drop position
-        // is ignored — the column auto-routes by category bucket.
+        // is ignored - the column auto-routes by category bucket.
         const newNode: Node = {
           id, type,
           position: { x: 0, y: 0 },
@@ -1079,7 +1079,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     const id = `${type}-${Date.now()}`;
     const shared = { agents, flows, departments };
     if (TRIGGER_TYPES.has(type)) {
-      // Trigger nodes live in the static column — position is unused.
+      // Trigger nodes live in the static column - position is unused.
       const newNode: Node = { id, type, position: { x: 0, y: 0 }, data: getDefaultData(type, shared) };
       setNodes((nds) => [...nds, newNode]);
       return;
@@ -1092,7 +1092,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   // ─── Save ────────────────────────────────────────────────────
   // The graph IS the flow. We persist it as-is to FlowCanvas.
   // The runtime (services/incoming-worker/src/services/flow-executor.service.ts)
-  // walks exactly these nodes and edges at message time — NO conversion to
+  // walks exactly these nodes and edges at message time - NO conversion to
   // RouterRule entities. What you see here is exactly what executes.
   async function handleSave() {
     if (!token) return;
@@ -1102,7 +1102,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       saveLayout(nodes, edges);
 
       // Strip the ephemeral shared-data (agents/flows/departments lists) injected
-      // into route_target / default_fallback nodes — it belongs to the session,
+      // into route_target / default_fallback nodes - it belongs to the session,
       // not the persisted graph.
       const serializedNodes = nodes
         .filter((n) => n.type !== "trigger_section_header")
@@ -1130,7 +1130,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       setTimeout(() => setSavedToast(null), 2200);
     } catch (err) {
       console.error("Save error:", err);
-      setSavedToast("Save failed — check the console");
+      setSavedToast("Save failed - check the console");
       setTimeout(() => setSavedToast(null), 3500);
     } finally {
       setSaving(false);
@@ -1146,7 +1146,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   }, [setEdges, selectedNodeId]);
 
   // ─── Inspector wiring ────────────────────────────────────────
-  // Update a single node's data via setNodes — the canvas summary will
+  // Update a single node's data via setNodes - the canvas summary will
   // re-render automatically and the inspector reads the latest data on
   // next render.
   const updateNodeData = useCallback((id: string, patch: Record<string, any>) => {
@@ -1189,8 +1189,8 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     function onKeyDown(e: KeyboardEvent) {
       if (isTextTarget(e.target)) return;
       const k = e.key.toLowerCase();
-      // Delete / Backspace work without a modifier — and without requiring
-      // ReactFlow to have focus — so the popup-selected node is deletable.
+      // Delete / Backspace work without a modifier - and without requiring
+      // ReactFlow to have focus - so the popup-selected node is deletable.
       if (k === "delete" || k === "backspace") {
         const { nodes: ns, selectedNodeId: sid } = stateRef.current;
         const targetIds = new Set(ns.filter(isSelectedFor).map((n) => n.id));
@@ -1244,7 +1244,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           idMap.set(n.id, newId);
           const isTrigger = n.type ? TRIGGER_TYPES.has(n.type) : false;
           // Triggers get auto-snapped by the trigger-layout effect, so the
-          // initial position is irrelevant — but reset draggable so the
+          // initial position is irrelevant - but reset draggable so the
           // pasted node isn't accidentally locked before that effect runs.
           return {
             ...n,
@@ -1304,7 +1304,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   // ─── Trigger placement ──────────────────────────────────────
   // Triggers ARE rendered on the canvas, but auto-laid-out as a static
   // left-edge stack: the user can't drag or reposition them. Wiring is
-  // explicit — the user drags from the "Then ●" handle to whatever node
+  // explicit - the user drags from the "Then ●" handle to whatever node
   // should fire next. We do NOT auto-create trigger→entry edges (that
   // caused arrows to retarget on every drag).
   const triggerNodes = useMemo(() => nodes.filter((n) => isTriggerNode(n)), [nodes]);
@@ -1312,7 +1312,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
   // Auto-layout triggers down the left edge, in stable bucket order, with a
   // small section header above each present bucket ("Chats", "Comments", etc.).
   // Triggers and headers are pinned as `draggable: false`. Headers are
-  // synthetic — never persisted — and are stripped on save and from the
+  // synthetic - never persisted - and are stripped on save and from the
   // validator.
   // Each bucket renders a single section header followed by one or more
   // trigger cards. Most buckets hold a single type; Voice groups all 7
@@ -1425,7 +1425,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
     // explicit height, so `h-full` (= 100% of parent) collapses to auto.
     // Use viewport units, subtracting AppLayout's 8px top + 8px bottom padding.
     <div className="h-screen md:h-[calc(100vh-1rem)] flex flex-col overflow-hidden">
-      {/* Toolbar — breadcrumb left, secondary actions middle, primary CTA right */}
+      {/* Toolbar - breadcrumb left, secondary actions middle, primary CTA right */}
       <div className="bg-white border-b border-[var(--border-hairline)] px-2 md:px-4 h-14 flex items-center gap-2 md:gap-3 z-10">
         {onBack && (
           <button onClick={onBack} className="text-gray-400 hover:text-gray-700 p-1.5 rounded-md hover:bg-black/[0.04] transition shrink-0">
@@ -1517,7 +1517,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
           </div>
         </div>
 
-        {/* ReactFlow Canvas — triggers are pinned at the left as static
+        {/* ReactFlow Canvas - triggers are pinned at the left as static
             (non-draggable) nodes, connected by bezier edges to the entry node. */}
         <div className="flex-1" ref={reactFlowWrapper}>
           <ReactFlow
@@ -1576,13 +1576,13 @@ function MainPlaybookEditorInner({ onBack }: Props) {
         </div>
       </div>
 
-      {/* Template gallery — opens automatically on first-time empty canvas,
+      {/* Template gallery - opens automatically on first-time empty canvas,
           and on demand via the toolbar Templates button. */}
       <TemplateGalleryModal
         open={templateGalleryOpen}
         onClose={() => setTemplateGalleryOpen(false)}
         onPick={({ nodes: tNodes, edges: tEdges }) => {
-          // ADDITIVE — drop the template into the existing canvas instead of
+          // ADDITIVE - drop the template into the existing canvas instead of
           // replacing it. Trigger nodes get re-pinned into the left column by
           // the auto-layout effect, so we only need to offset the non-trigger
           // flow nodes so they don't collide with what's already there.
@@ -1636,7 +1636,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
         }}
       />
 
-      {/* Inspector — opens when a node is selected. Spec: ALL editing happens here. */}
+      {/* Inspector - opens when a node is selected. Spec: ALL editing happens here. */}
       <NodeInspector
         node={selectedNode}
         shared={sharedForInspector}

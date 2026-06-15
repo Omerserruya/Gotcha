@@ -1,12 +1,12 @@
 /**
- * Intelligence Registry — Customer Intelligence V2, Phase 1.
+ * Intelligence Registry - Customer Intelligence V2, Phase 1.
  *
  * The scope-aware field registry (`FieldDefinition`) + Industry Pack catalog
  * (`IntelligencePack`). Replaces the flat `PostConversationConfig.summaryFields`
  * as the canonical schema for what intelligence GOTCHA tracks per tenant.
  *
  * Each FieldDefinition declares the SCOPE it owns
- * (customer | opportunity | conversation) — the core anti-overwrite mechanic
+ * (customer | opportunity | conversation) - the core anti-overwrite mechanic
  * (see docs/customer-intelligence-domain-model.md §4.4 / §5).
  *
  * Phase 1 = define + store + CRUD only. The summarizer / live extractor do not
@@ -257,7 +257,7 @@ export async function applyPack(tenantId: string, slug: string): Promise<ApplyPa
     if (!KEY_RE.test(key)) continue;
     const owner = byKey.get(key);
     if (owner && owner !== "PACK") {
-      // a tenant custom/discovered field owns this key — never clobber
+      // a tenant custom/discovered field owns this key - never clobber
       skipped.push(key);
       continue;
     }

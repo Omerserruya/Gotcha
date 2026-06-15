@@ -1,5 +1,5 @@
 /**
- * Behavior Engine Layer — Strategy contracts.
+ * Behavior Engine Layer - Strategy contracts.
  *
  * Each strategy is a frozen platform-defined contract. Authors do NOT edit
  * these; the BEL emits a strategy name, the prompt builder reads the
@@ -65,29 +65,29 @@ export interface StrategyContract {
 
 const QUALIFY: StrategyContract = {
   name: "QUALIFY",
-  primaryGoal: "Open the conversation warmly, then progressively learn who the user is and what they're trying to solve. Match the energy of the customer's last message — don't lead before they've told you what they want.",
+  primaryGoal: "Open the conversation warmly, then progressively learn who the user is and what they're trying to solve. Match the energy of the customer's last message - don't lead before they've told you what they want.",
   posture:
-    "**Two phases — read the Conversation State block to know which one applies.**\n\n" +
-    "**Phase 1 — stage=`initial` (the customer has just opened the chat):**\n" +
-    "Mirror their greeting in their language and energy (\"היי\" → \"היי עומר!\"; \"hi\" → \"Hi Omer!\"; not \"תודה\" / \"thanks\" — they haven't done anything yet). Introduce yourself in ONE short line if it fits. Then ONE open invitation: \"במה אוכל לעזור?\" / \"how can I help today?\". DO NOT ask a specific qualifying question yet — they haven't told you their topic. Keep the whole reply short (1–2 sentences max).\n\n" +
-    "**Phase 2 — stage=`exploration` and intent is still unclear or under-specified:**\n" +
-    "The customer has stated something general. Now pivot to ONE specific qualifying question that surfaces a fact you don't yet know — pick from: team size / number of agents, channels they use today, current tools, the specific pain they're solving, timeline, decision authority. Pick the highest-leverage one for THIS context. Still one question per message.\n\n" +
+    "**Two phases - read the Conversation State block to know which one applies.**\n\n" +
+    "**Phase 1 - stage=`initial` (the customer has just opened the chat):**\n" +
+    "Mirror their greeting in their language and energy (\"היי\" → \"היי עומר!\"; \"hi\" → \"Hi Omer!\"; not \"תודה\" / \"thanks\" - they haven't done anything yet). Introduce yourself in ONE short line if it fits. Then ONE open invitation: \"במה אוכל לעזור?\" / \"how can I help today?\". DO NOT ask a specific qualifying question yet - they haven't told you their topic. Keep the whole reply short (1–2 sentences max).\n\n" +
+    "**Phase 2 - stage=`exploration` and intent is still unclear or under-specified:**\n" +
+    "The customer has stated something general. Now pivot to ONE specific qualifying question that surfaces a fact you don't yet know - pick from: team size / number of agents, channels they use today, current tools, the specific pain they're solving, timeline, decision authority. Pick the highest-leverage one for THIS context. Still one question per message.\n\n" +
     "**Always:** silently run CRM lookups / searches before asking the customer for info the system might already know. If the CRM block shows an existing record, skip identifying questions and reference what you already know.",
   allowedActions: ["ask_question", "acknowledge", "crm_read", "identity_link"],
   forbiddenBehaviors: [
     "Asking specific qualifying questions when stage=`initial`. Wait until the customer has stated their intent or topic.",
-    "Stacking two SEPARATE questions in one message. A reflective statement that ends in a single question is fine — that's one move, not two.",
+    "Stacking two SEPARATE questions in one message. A reflective statement that ends in a single question is fine - that's one move, not two.",
     "Opening with \"thanks\" / \"תודה\" when the customer just said hi. Mirror their greeting instead.",
     "Long opening monologues. Greet, invite, stop.",
     "Pitching pricing, plans, or scheduling a transaction (those belong to CONVERT).",
     "Creating CRM records before the user has shared a real need.",
     "Asking the customer for info already retrievable from CRM (name, email, prior orders, lifecycle stage).",
-    "Generic questions like \"how can I help?\" AFTER the customer has already stated their intent — by then you should have a specific qualifying question.",
+    "Generic questions like \"how can I help?\" AFTER the customer has already stated their intent - by then you should have a specific qualifying question.",
   ],
   exitConditions: [
     "Conversation stage moves to `exploration`, `decision`, or `objection`.",
-    "User reveals a buying signal (asks about price, demo, plans, timeline) — strategy switches to CONVERT.",
-    "Three rounds of qualification have completed without progress — strategy switches to GUIDE.",
+    "User reveals a buying signal (asks about price, demo, plans, timeline) - strategy switches to CONVERT.",
+    "Three rounds of qualification have completed without progress - strategy switches to GUIDE.",
   ],
   knowledgeRetrieval: "skip",
   defaultToneIntensity: "soft",
@@ -104,8 +104,8 @@ const GUIDE: StrategyContract = {
     "Fabricating facts that are not in the Knowledge section.",
   ],
   exitConditions: [
-    "User signals readiness — stage moves to `decision`.",
-    "User raises an objection — stage moves to `objection`.",
+    "User signals readiness - stage moves to `decision`.",
+    "User raises an objection - stage moves to `objection`.",
   ],
   knowledgeRetrieval: "always",
   defaultToneIntensity: "neutral",
@@ -113,9 +113,9 @@ const GUIDE: StrategyContract = {
 
 const CONVERT: StrategyContract = {
   name: "CONVERT",
-  primaryGoal: "Advance the user to ONE concrete next step (book a demo, schedule a call, accept a proposal, sign up). Every reply MUST end with a specific, named next action — not a generic \"let me know if you need anything\".",
+  primaryGoal: "Advance the user to ONE concrete next step (book a demo, schedule a call, accept a proposal, sign up). Every reply MUST end with a specific, named next action - not a generic \"let me know if you need anything\".",
   posture:
-    "Confident, specific, low-friction. State the next action by name: \"בוא נקבע שיחה של 15 דק׳ לחמישי הזה\" / \"let's book a 15-min demo this Thursday\". When asked about price, give a concrete answer or anchor (\"the team plan starts at $X/month, here's a 15-min walkthrough so I can show you the right fit\") — never \"depends on the plan\". If you have CRM tools, capture the lead silently while you propose the next step.",
+    "Confident, specific, low-friction. State the next action by name: \"בוא נקבע שיחה של 15 דק׳ לחמישי הזה\" / \"let's book a 15-min demo this Thursday\". When asked about price, give a concrete answer or anchor (\"the team plan starts at $X/month, here's a 15-min walkthrough so I can show you the right fit\") - never \"depends on the plan\". If you have CRM tools, capture the lead silently while you propose the next step.",
   allowedActions: [
     "explain",
     "acknowledge",
@@ -135,17 +135,17 @@ const CONVERT: StrategyContract = {
   ],
   forbiddenBehaviors: [
     "Generic non-answers like \"depends on the plan\" or \"depends on your needs\" WITHOUT either a packaging anchor or a concrete next step.",
-    "Open-ended discovery questions — qualification time is over. Move toward the close.",
+    "Open-ended discovery questions - qualification time is over. Move toward the close.",
     "Listing every option when one clear next step exists.",
     "Adding friction (extra qualification, redirects) before the close.",
-    "Calling `create_lead` / `create_contact` if the CRM block shows the customer already exists — use `update_record` / `add_note` instead.",
+    "Calling `create_lead` / `create_contact` if the CRM block shows the customer already exists - use `update_record` / `add_note` instead.",
     "Stage=`decision` (customer agreed) without calling `update_record` to log the agreement and the conversation context to the CRM record. The close MUST include a CRM update.",
-    "Ending a `decision`-stage turn with a canned availability template (\"אם יש שאלות נוספות אני כאן\" / \"if any other questions come up, I'm here\"). Sign off warmly in the brand voice instead — HOW to phrase the close is owned by Brand Voice & Personality (Layer 4), not by this strategy.",
+    "Ending a `decision`-stage turn with a canned availability template (\"אם יש שאלות נוספות אני כאן\" / \"if any other questions come up, I'm here\"). Sign off warmly in the brand voice instead - HOW to phrase the close is owned by Brand Voice & Personality (Layer 4), not by this strategy.",
   ],
   exitConditions: [
-    "User accepts — close the loop and confirm.",
-    "User defers — strategy switches back to GUIDE.",
-    "User objects strongly — strategy stays CONVERT with soft tone, or escalate.",
+    "User accepts - close the loop and confirm.",
+    "User defers - strategy switches back to GUIDE.",
+    "User objects strongly - strategy stays CONVERT with soft tone, or escalate.",
   ],
   knowledgeRetrieval: "when_relevant",
   defaultToneIntensity: "assertive",
@@ -174,9 +174,9 @@ const RESOLVE: StrategyContract = {
     "Blaming the user for the issue.",
   ],
   exitConditions: [
-    "Issue resolved — close.",
-    "Tool returns blocking error — escalate.",
-    "User's expectation cannot be met — escalate.",
+    "Issue resolved - close.",
+    "Tool returns blocking error - escalate.",
+    "User's expectation cannot be met - escalate.",
   ],
   knowledgeRetrieval: "always",
   defaultToneIntensity: "neutral",
@@ -197,11 +197,11 @@ const SUPPORT_AGENT: StrategyContract = {
   ],
   forbiddenBehaviors: [
     "Sending a message to the customer directly.",
-    "Executing writes autonomously — every write must be a quick-action proposal.",
+    "Executing writes autonomously - every write must be a quick-action proposal.",
     "Recommending escalation while the human agent is already present.",
   ],
   exitConditions: [
-    "Strategy never switches inside copilot mode — SUPPORT_AGENT runs the entire copilot session.",
+    "Strategy never switches inside copilot mode - SUPPORT_AGENT runs the entire copilot session.",
   ],
   knowledgeRetrieval: "when_relevant",
   defaultToneIntensity: "neutral",
@@ -209,8 +209,8 @@ const SUPPORT_AGENT: StrategyContract = {
 
 const NOT_APPLICABLE: StrategyContract = {
   name: "N/A",
-  primaryGoal: "Not applicable — no live conversation.",
-  posture: "—",
+  primaryGoal: "Not applicable - no live conversation.",
+  posture: "-",
   allowedActions: [],
   forbiddenBehaviors: [],
   exitConditions: [],

@@ -140,7 +140,7 @@ router.post("/merge", async (req: Request, res: Response) => {
     );
 
     // SOFT MERGE: previously we hard-deleted the source row here. That
-    // created "ghost contacts" — the next inbound message on the merged
+    // created "ghost contacts" - the next inbound message on the merged
     // channel would miss the direct (tenantId, channel, externalId)
     // lookup and create a brand-new row, silently defeating the merge.
     //
@@ -212,7 +212,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
       : contact;
     if (!effective) return res.status(404).json({ error: "Contact target not found" });
 
-    // Pull all rows belonging to the same person — personId-first path
+    // Pull all rows belonging to the same person - personId-first path
     // covers contacts auto-unified via /capture, fallback email/phone
     // covers legacy contacts created before the personId column.
     const { findSiblingContacts } = await import("@chatcenter/shared");
@@ -260,7 +260,7 @@ router.get("/:id/timeline", async (req: Request, res: Response) => {
 
 // ─── POST /link ──────────────────────────────────────────────
 // Progressive identity linker. Called by the AI tool executor when an
-// email or phone is extracted from a customer message. NEVER merges —
+// email or phone is extracted from a customer message. NEVER merges -
 // either attaches the identifier to the current contact (safe) or
 // records a pending IdentityLinkSuggestion when the identifier already
 // belongs to a DIFFERENT contact in the same tenant.
@@ -294,7 +294,7 @@ router.post("/link", async (req: Request, res: Response) => {
         return res.status(400).json({ error: "invalid email format" });
       }
     } else {
-      // Loose E.164 check — digits, optional +, 8–15 total digits
+      // Loose E.164 check - digits, optional +, 8–15 total digits
       const digits = normalized.replace(/[^\d]/g, "");
       if (digits.length < 8 || digits.length > 15) {
         return res.status(400).json({ error: "invalid phone format" });
@@ -308,7 +308,7 @@ router.post("/link", async (req: Request, res: Response) => {
     if (!current) return res.status(404).json({ error: "contact not found" });
 
     // Idempotency: if a suggestion already exists with this (messageId, value)
-    // for this contact, short-circuit. Attach-path idempotency is inherent —
+    // for this contact, short-circuit. Attach-path idempotency is inherent -
     // writing the same value twice is a no-op.
     if (messageId) {
       const existingSuggestion = await prisma.identityLinkSuggestion.findFirst({
@@ -334,7 +334,7 @@ router.post("/link", async (req: Request, res: Response) => {
       return res.status(429).json({ error: "identity update rate limit exceeded" });
     }
 
-    // Resolve — is this identifier already attached to another contact?
+    // Resolve - is this identifier already attached to another contact?
     const field = type === "email" ? "email" : "phone";
     const otherContact = await prisma.contact.findFirst({
       where: { tenantId, [field]: normalizedValue, NOT: { id: contactId } },
@@ -473,7 +473,7 @@ router.post("/capture", async (req: Request, res: Response) => {
       } as any,
     });
 
-    // Resolve target personId — adopt sibling's if present, otherwise mint
+    // Resolve target personId - adopt sibling's if present, otherwise mint
     const { randomUUID } = await import("crypto");
     const personId =
       sibling?.personId ?? current.personId ?? `person_${randomUUID()}`;

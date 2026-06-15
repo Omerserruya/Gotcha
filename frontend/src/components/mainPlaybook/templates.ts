@@ -1,7 +1,7 @@
 /**
  * Flow templates.
  *
- * Each template is a ready-to-edit graph — nodes and edges positioned so the
+ * Each template is a ready-to-edit graph - nodes and edges positioned so the
  * user can immediately grasp the shape, then tweak text / targets to taste.
  * Same format as what the save path persists, so "apply template" is just
  * setNodes(template.nodes) / setEdges(template.edges).
@@ -51,7 +51,7 @@ function setIf(values: FormValues, key: string, target: any, field: string): voi
   if (v != null && v !== "") target[field] = v;
 }
 
-// Layout helpers — keep templates tidy without pulling in a layout engine.
+// Layout helpers - keep templates tidy without pulling in a layout engine.
 const COL = { a: 80, b: 440, c: 800, d: 1160 };
 const ROW = (n: number) => 80 + n * 180;
 
@@ -78,7 +78,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     tagline: "Greet and capture a name",
     nodes: [
       { id: "ch", type: "channel_entry", position: { x: COL.a, y: ROW(0) }, data: { channelType: "webchat", label: "Any channel", connected: true } },
-      { id: "greet", type: "send_message_text", position: { x: COL.b, y: ROW(0) }, data: { text: "Hi there — welcome! 👋" } },
+      { id: "greet", type: "send_message_text", position: { x: COL.b, y: ROW(0) }, data: { text: "Hi there - welcome! 👋" } },
       { id: "ask_name", type: "collect_input", position: { x: COL.b, y: ROW(1) }, data: { prompt: "What's your name?", variable: "customer_name", validation: "any" } },
       { id: "reply", type: "send_message_text", position: { x: COL.b, y: ROW(2) }, data: { text: "Great to meet you, {{customer_name}}! How can we help today?" } },
       { id: "end", type: "end", position: { x: COL.b, y: ROW(3) }, data: { kind: "wait_for_reply" } },
@@ -90,7 +90,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       edge("reply", "end"),
     ],
     formFields: [
-      { id: "greeting",     type: "textarea", label: "Greeting message",   default: "Hi there — welcome! 👋", rows: 2 },
+      { id: "greeting",     type: "textarea", label: "Greeting message",   default: "Hi there - welcome! 👋", rows: 2 },
       { id: "name_prompt",  type: "text",     label: "Name question",       default: "What's your name?" },
       { id: "reply_after",  type: "textarea", label: "Reply after capture", default: "Great to meet you, {{customer_name}}! How can we help today?", helper: "Use {{customer_name}} to insert the captured name.", rows: 2 },
     ],
@@ -143,11 +143,11 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     ],
     formFields: [
       { id: "menu_prompt",   type: "text",     label: "Menu prompt",          default: "How can we help?" },
-      { id: "option1_label", type: "text",     label: "Option 1 — button",    default: "Opening hours" },
-      { id: "option1_answer",type: "textarea", label: "Option 1 — answer",    default: "We're open Mon–Fri, 9am–6pm.", rows: 2 },
-      { id: "option2_label", type: "text",     label: "Option 2 — button",    default: "Pricing" },
-      { id: "option2_answer",type: "textarea", label: "Option 2 — answer",    default: "Plans start at $29/mo. Full pricing at example.com/pricing.", rows: 2 },
-      { id: "option3_label", type: "text",     label: "Option 3 — button (routes to human)", default: "Talk to human" },
+      { id: "option1_label", type: "text",     label: "Option 1 - button",    default: "Opening hours" },
+      { id: "option1_answer",type: "textarea", label: "Option 1 - answer",    default: "We're open Mon–Fri, 9am–6pm.", rows: 2 },
+      { id: "option2_label", type: "text",     label: "Option 2 - button",    default: "Pricing" },
+      { id: "option2_answer",type: "textarea", label: "Option 2 - answer",    default: "Plans start at $29/mo. Full pricing at example.com/pricing.", rows: 2 },
+      { id: "option3_label", type: "text",     label: "Option 3 - button (routes to human)", default: "Talk to human" },
     ],
     applyForm: (v, nodes) => {
       const menu = findData(nodes, "menu");
@@ -175,7 +175,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     tagline: "Bypass the bot when asked",
     nodes: [
       { id: "kw", type: "keyword_trigger", position: { x: COL.a, y: ROW(0) }, data: { keywords: ["agent", "human", "help"], matchType: "any", caseSensitive: false } },
-      { id: "reassure", type: "send_message_text", position: { x: COL.b, y: ROW(0) }, data: { text: "Of course — connecting you to a teammate now. One moment." } },
+      { id: "reassure", type: "send_message_text", position: { x: COL.b, y: ROW(0) }, data: { text: "Of course - connecting you to a teammate now. One moment." } },
       { id: "route_human", type: "route_target", position: { x: COL.c, y: ROW(0) }, data: { routeType: "human", targetId: "" } },
     ],
     edges: [
@@ -184,7 +184,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     ],
     formFields: [
       { id: "keywords", type: "keywords", label: "Trigger keywords", default: "agent, human, help", helper: "Comma-separated. The flow fires when the user's message matches any of these." },
-      { id: "reassure", type: "textarea", label: "Reassurance message", default: "Of course — connecting you to a teammate now. One moment.", rows: 2 },
+      { id: "reassure", type: "textarea", label: "Reassurance message", default: "Of course - connecting you to a teammate now. One moment.", rows: 2 },
     ],
     applyForm: (v, nodes) => {
       const kw = findData(nodes, "kw");
@@ -204,7 +204,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     tagline: "Capture → tag → hand off",
     nodes: [
       { id: "ch", type: "channel_entry", position: { x: COL.a, y: ROW(0) }, data: { channelType: "webchat", label: "Any channel", connected: true } },
-      { id: "ask_email", type: "collect_input", position: { x: COL.b, y: ROW(0) }, data: { prompt: "Great — what's the best email to reach you?", variable: "customer_email", validation: "email" } },
+      { id: "ask_email", type: "collect_input", position: { x: COL.b, y: ROW(0) }, data: { prompt: "Great - what's the best email to reach you?", variable: "customer_email", validation: "email" } },
       { id: "ask_company", type: "collect_input", position: { x: COL.b, y: ROW(1) }, data: { prompt: "And which company are you with?", variable: "customer_company", validation: "any" } },
       { id: "tag_lead", type: "update_customer", position: { x: COL.b, y: ROW(2) }, data: { action: "add_tag", key: "lead", value: "" } },
       { id: "set_email", type: "update_customer", position: { x: COL.c, y: ROW(0) }, data: { action: "set_attribute", key: "email", value: "{{customer_email}}" } },
@@ -222,7 +222,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       edge("confirm", "route_sales"),
     ],
     formFields: [
-      { id: "email_prompt",   type: "text",     label: "Email question",   default: "Great — what's the best email to reach you?" },
+      { id: "email_prompt",   type: "text",     label: "Email question",   default: "Great - what's the best email to reach you?" },
       { id: "company_prompt", type: "text",     label: "Company question", default: "And which company are you with?" },
       { id: "confirmation",   type: "textarea", label: "Confirmation message", default: "Thanks! A teammate from sales will follow up shortly.", rows: 2 },
     ],
@@ -241,12 +241,12 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     id: "drip_followup",
     name: "Delayed follow-up",
     description:
-      "Answer now, then follow up 30 minutes later with a link — handy for pricing nudges and quote reminders.",
+      "Answer now, then follow up 30 minutes later with a link - handy for pricing nudges and quote reminders.",
     category: "Sales",
     tagline: "Reply now + nudge later",
     nodes: [
       { id: "ch", type: "channel_entry", position: { x: COL.a, y: ROW(0) }, data: { channelType: "webchat", label: "Any channel", connected: true } },
-      { id: "ack", type: "send_message_text", position: { x: COL.b, y: ROW(0) }, data: { text: "Got it — we'll send over the details shortly." } },
+      { id: "ack", type: "send_message_text", position: { x: COL.b, y: ROW(0) }, data: { text: "Got it - we'll send over the details shortly." } },
       { id: "wait", type: "wait", position: { x: COL.b, y: ROW(1) }, data: { amount: 30, unit: "minutes" } },
       { id: "nudge", type: "send_message_interactive", position: { x: COL.b, y: ROW(2) }, data: { text: "Here's the info you asked about:", buttonLabel: "View pricing", buttonUrl: "https://example.com/pricing" } },
       { id: "end", type: "end", position: { x: COL.b, y: ROW(3) }, data: { kind: "wait_for_reply" } },
@@ -258,7 +258,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       edge("nudge", "end"),
     ],
     formFields: [
-      { id: "ack",         type: "textarea", label: "Immediate reply",  default: "Got it — we'll send over the details shortly.", rows: 2 },
+      { id: "ack",         type: "textarea", label: "Immediate reply",  default: "Got it - we'll send over the details shortly.", rows: 2 },
       { id: "wait_amount", type: "number",   label: "Wait amount",      default: 30, min: 1 },
       { id: "wait_unit",   type: "select",   label: "Wait unit",        default: "minutes", options: [
         { value: "minutes", label: "minutes" }, { value: "hours", label: "hours" }, { value: "days", label: "days" },
@@ -302,7 +302,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       { id: "dm_resource",  type: "send_message_interactive", position: { x: COL.b, y: ROW(2) }, data: { text: "Tap below to grab it.", buttonLabel: "Get it", buttonUrl: "https://example.com/freebie" } },
       { id: "ask_email",    type: "collect_input",       position: { x: COL.b, y: ROW(3) }, data: { prompt: "What's the best email to send updates to?", variable: "customer_email", validation: "email" } },
       { id: "save_email",   type: "update_customer",     position: { x: COL.b, y: ROW(4) }, data: { action: "set_attribute", key: "email", value: "{{customer_email}}" } },
-      { id: "confirm",      type: "send_message_text",   position: { x: COL.b, y: ROW(5) }, data: { text: "Thanks! You're on the list — we'll only send the good stuff." } },
+      { id: "confirm",      type: "send_message_text",   position: { x: COL.b, y: ROW(5) }, data: { text: "Thanks! You're on the list - we'll only send the good stuff." } },
       { id: "end",          type: "end",                 position: { x: COL.b, y: ROW(6) }, data: { kind: "wait_for_reply" } },
     ],
     edges: [
@@ -320,9 +320,9 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       { id: "public_reply", type: "text",     label: "Public reply on the comment", default: "Sent! Check your DMs 📬" },
       { id: "dm_intro",     type: "textarea", label: "DM opener",           default: "Hey! Here's the resource you asked for 👇", rows: 2 },
       { id: "resource_label", type: "text",   label: "Resource button label", default: "Get it" },
-      { id: "resource_url",   type: "text",   label: "Resource URL",         default: "https://example.com/freebie", helper: "Link to the lead magnet (PDF, page, video — anything URL-addressable)." },
+      { id: "resource_url",   type: "text",   label: "Resource URL",         default: "https://example.com/freebie", helper: "Link to the lead magnet (PDF, page, video - anything URL-addressable)." },
       { id: "email_prompt", type: "text",     label: "Email question",      default: "What's the best email to send updates to?" },
-      { id: "confirmation", type: "textarea", label: "Confirmation message", default: "Thanks! You're on the list — we'll only send the good stuff.", rows: 2 },
+      { id: "confirmation", type: "textarea", label: "Confirmation message", default: "Thanks! You're on the list - we'll only send the good stuff.", rows: 2 },
     ],
     applyForm: (v, nodes) => {
       const trig = findData(nodes, "trig");
@@ -357,7 +357,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     nodes: [
       { id: "trig",         type: "comment_trigger",    position: { x: COL.a, y: ROW(0) }, data: { channelId: "", postId: "", keywords: ["ENTER"], matchType: "any", caseSensitive: false } },
       { id: "public_reply", type: "send_comment_reply", position: { x: COL.b, y: ROW(0) }, data: { text: "You're in! Check your DMs 🎉" } },
-      { id: "dm_intro",     type: "send_message_text",  position: { x: COL.b, y: ROW(1) }, data: { text: "Thanks for entering! One last thing —" } },
+      { id: "dm_intro",     type: "send_message_text",  position: { x: COL.b, y: ROW(1) }, data: { text: "Thanks for entering! One last thing -" } },
       { id: "ask_email",    type: "collect_input",      position: { x: COL.b, y: ROW(2) }, data: { prompt: "Drop your email so we can reach you if you win 🏆", variable: "customer_email", validation: "email" } },
       { id: "save_email",   type: "update_customer",    position: { x: COL.b, y: ROW(3) }, data: { action: "set_attribute", key: "email", value: "{{customer_email}}" } },
       { id: "tag_entry",    type: "update_customer",    position: { x: COL.b, y: ROW(4) }, data: { action: "add_tag", key: "giveaway_entry", value: "" } },
@@ -377,7 +377,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       { id: "post_id",       type: "text",     label: "Giveaway post ID", default: "",                                                helper: "The specific post for this giveaway. Required to scope the trigger." },
       { id: "keyword",       type: "keywords", label: "Entry keyword",    default: "ENTER" },
       { id: "public_reply",  type: "text",     label: "Public reply on the comment", default: "You're in! Check your DMs 🎉" },
-      { id: "dm_intro",      type: "textarea", label: "DM opener",        default: "Thanks for entering! One last thing —", rows: 2 },
+      { id: "dm_intro",      type: "textarea", label: "DM opener",        default: "Thanks for entering! One last thing -", rows: 2 },
       { id: "email_prompt",  type: "text",     label: "Email question",   default: "Drop your email so we can reach you if you win 🏆" },
       { id: "tag_label",     type: "text",     label: "Entry tag",        default: "giveaway_entry", helper: "Tag added to the contact so you can pick winners or follow up later." },
       { id: "confirmation",  type: "textarea", label: "Confirmation message", default: "You're entered! We'll DM you if you win. Good luck 🍀", rows: 2 },
@@ -422,7 +422,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       { id: "ask_name",  type: "collect_input",   position: { x: COL.c, y: ROW(0) }, data: { prompt: "Got it. What name should I put it under?", variable: "customer_name", validation: "any" } },
       { id: "ask_phone", type: "collect_input",   position: { x: COL.c, y: ROW(1) }, data: { prompt: "And the best phone number?", variable: "customer_phone", validation: "any" } },
       { id: "tag",       type: "update_customer", position: { x: COL.c, y: ROW(2) }, data: { action: "add_tag", key: "appointment_pending", value: "" } },
-      { id: "confirm",   type: "send_message_text", position: { x: COL.c, y: ROW(3) }, data: { text: "Thanks {{customer_name}} — a teammate will confirm shortly." } },
+      { id: "confirm",   type: "send_message_text", position: { x: COL.c, y: ROW(3) }, data: { text: "Thanks {{customer_name}} - a teammate will confirm shortly." } },
       { id: "route",     type: "route_target",     position: { x: COL.d, y: ROW(3) }, data: { routeType: "human", targetId: "" } },
     ],
     edges: [
@@ -443,7 +443,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
       { id: "slot3",       type: "text",     label: "Slot 3 label",      default: "Evening" },
       { id: "name_prompt", type: "text",     label: "Name question",     default: "Got it. What name should I put it under?" },
       { id: "phone_prompt",type: "text",     label: "Phone question",    default: "And the best phone number?" },
-      { id: "confirmation",type: "textarea", label: "Confirmation",      default: "Thanks {{customer_name}} — a teammate will confirm shortly.", rows: 2, helper: "Use {{customer_name}} to insert the captured name." },
+      { id: "confirmation",type: "textarea", label: "Confirmation",      default: "Thanks {{customer_name}} - a teammate will confirm shortly.", rows: 2, helper: "Use {{customer_name}} to insert the captured name." },
     ],
     applyForm: (v, nodes) => {
       const kw = findData(nodes, "kw");
@@ -476,7 +476,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     nodes: [
       { id: "kw",        type: "keyword_trigger",          position: { x: COL.a, y: ROW(0) }, data: { keywords: ["help", "support", "issue"], matchType: "any", caseSensitive: false } },
       { id: "cats",      type: "send_message_quick_reply", position: { x: COL.b, y: ROW(0) }, data: {
-          text: "Sorry to hear that — what's it about?",
+          text: "Sorry to hear that - what's it about?",
           replies: [
             { id: "c_order", label: "Order issue", payload: "order"   },
             { id: "c_tech",  label: "Tech issue",  payload: "tech"    },
@@ -495,7 +495,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     ],
     formFields: [
       { id: "keywords", type: "keywords", label: "Trigger keywords", default: "help, support, issue" },
-      { id: "prompt",   type: "text",     label: "Triage prompt",    default: "Sorry to hear that — what's it about?" },
+      { id: "prompt",   type: "text",     label: "Triage prompt",    default: "Sorry to hear that - what's it about?" },
       { id: "cat1",     type: "text",     label: "Category 1 label", default: "Order issue" },
       { id: "cat2",     type: "text",     label: "Category 2 label", default: "Tech issue" },
       { id: "cat3",     type: "text",     label: "Category 3 label", default: "Something else" },
@@ -519,7 +519,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     id: "ai_first_response",
     name: "AI auto-reply",
     description:
-      "Hand the first reply to your AI agent — it answers from your knowledge base; falls through to a human if it can't.",
+      "Hand the first reply to your AI agent - it answers from your knowledge base; falls through to a human if it can't.",
     category: "AI",
     tagline: "Channel entry → AI agent",
     nodes: [
@@ -552,7 +552,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     tagline: "Order ID → API → reply",
     nodes: [
       { id: "kw",     type: "keyword_trigger", position: { x: COL.a, y: ROW(0) }, data: { keywords: ["order", "status", "tracking", "where"], matchType: "any", caseSensitive: false } },
-      { id: "ask",    type: "collect_input",   position: { x: COL.b, y: ROW(0) }, data: { prompt: "Sure — what's your order number?", variable: "order_id", validation: "any" } },
+      { id: "ask",    type: "collect_input",   position: { x: COL.b, y: ROW(0) }, data: { prompt: "Sure - what's your order number?", variable: "order_id", validation: "any" } },
       { id: "fetch",  type: "http_request",    position: { x: COL.b, y: ROW(1) }, data: { method: "GET", url: "https://api.example.com/orders/{{order_id}}", headers: {}, outputVariable: "order" } },
       { id: "reply",  type: "send_message_text", position: { x: COL.b, y: ROW(2) }, data: { text: "Order {{order_id}} is currently: {{order.status}}. ETA: {{order.eta}}." } },
       { id: "end",    type: "end",             position: { x: COL.b, y: ROW(3) }, data: { kind: "wait_for_reply" } },
@@ -565,7 +565,7 @@ export const FLOW_TEMPLATES: FlowTemplate[] = [
     ],
     formFields: [
       { id: "keywords",  type: "keywords", label: "Trigger keywords", default: "order, status, tracking, where" },
-      { id: "ask_text",  type: "text",     label: "Order ID question", default: "Sure — what's your order number?" },
+      { id: "ask_text",  type: "text",     label: "Order ID question", default: "Sure - what's your order number?" },
       { id: "api_url",   type: "text",     label: "API URL",          default: "https://api.example.com/orders/{{order_id}}", helper: "Use {{order_id}} where the captured ID should be substituted." },
       { id: "reply_text",type: "textarea", label: "Reply template",    default: "Order {{order_id}} is currently: {{order.status}}. ETA: {{order.eta}}.", rows: 2, helper: "Reference fields from the API response with {{order.fieldName}}." },
     ],

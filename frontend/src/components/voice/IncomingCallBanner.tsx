@@ -30,7 +30,7 @@ function getSoundEnabled(): boolean {
 
 /**
  * Play a short two-note attention chime (no loop).
- * Two soft sine pings (E5 → A5, ~140 ms each) at low volume — enough to
+ * Two soft sine pings (E5 → A5, ~140 ms each) at low volume - enough to
  * grab the agent's attention without becoming annoying. Returns a stop
  * function that closes the audio context if called before the chime ends.
  */
@@ -296,7 +296,7 @@ export function IncomingCallBannerMobile() {
           <p className="text-white/60 text-[11px]">{t("voice.banner.incomingCall")}</p>
         </div>
 
-        {/* Decline — red circle */}
+        {/* Decline - red circle */}
         <button
           type="button"
           onClick={() => handleDecline(top)}
@@ -314,7 +314,7 @@ export function IncomingCallBannerMobile() {
           </svg>
         </button>
 
-        {/* Answer — green circle */}
+        {/* Answer - green circle */}
         <button
           type="button"
           onClick={() => handleAnswer(top)}
@@ -337,7 +337,7 @@ export function IncomingCallBannerMobile() {
 }
 
 /**
- * @deprecated — kept so existing imports don't break while migrating.
+ * @deprecated - kept so existing imports don't break while migrating.
  * Use IncomingCallBannerSidebar + IncomingCallBannerMobile instead.
  */
 export function IncomingCallBanner() {

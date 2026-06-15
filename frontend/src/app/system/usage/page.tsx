@@ -111,7 +111,7 @@ export default function SystemUsagePage() {
 
   const aiTotalCost = aiTokens?.costUsd ?? 0;
   const aiTotalTokens = aiTokens?.totalTokens ?? 0;
-  // Cache observability — driven by OpenAI's prompt_tokens_details.cached_tokens
+  // Cache observability - driven by OpenAI's prompt_tokens_details.cached_tokens
   // captured per call in trackAIUsage. Hit % is cached / total prompt; savings
   // is the 50% billing discount applied to cached tokens (per AI_MODEL_PRICING).
   const aiPromptTokens = aiTokens?.promptTokens ?? 0;
@@ -165,7 +165,7 @@ export default function SystemUsagePage() {
           </div>
         ) : (
           <div className="space-y-6">
-            {/* Global Stat Cards — includes AI cost + cache hit observability.
+            {/* Global Stat Cards - includes AI cost + cache hit observability.
                 Cache Hit % surfaces whether the sessionId-pinned prefix cache
                 is actually delivering savings. <20% on a workload that should
                 be cacheable (autonomous agents, live copilot) signals broken
@@ -184,7 +184,7 @@ export default function SystemUsagePage() {
               />
               <StatCard
                 label="Cache Hit"
-                value={aiPromptTokens > 0 ? `${aiCacheHitPct.toFixed(1)}%` : "—"}
+                value={aiPromptTokens > 0 ? `${aiCacheHitPct.toFixed(1)}%` : "-"}
                 sub={`${formatNumber(aiCachedTokens)} cached · saved ~${formatCost(aiCachedSavingsUsd)}`}
                 accent={aiCacheHitPct >= 40 ? "green" : aiCacheHitPct >= 20 ? "amber" : aiPromptTokens > 0 ? "red" : undefined}
               />
@@ -239,7 +239,7 @@ export default function SystemUsagePage() {
                           </td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{row.calls.toLocaleString()}</td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{formatNumber(row.promptTokens)}</td>
-                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{cached > 0 ? formatNumber(cached) : "—"}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{cached > 0 ? formatNumber(cached) : "-"}</td>
                           <td className={clsx(
                             "py-2 px-3 text-end font-mono text-xs font-semibold",
                             row.promptTokens === 0
@@ -250,7 +250,7 @@ export default function SystemUsagePage() {
                                   ? "text-amber-600"
                                   : "text-rose-600",
                           )}>
-                            {row.promptTokens > 0 ? `${hitPct.toFixed(0)}%` : "—"}
+                            {row.promptTokens > 0 ? `${hitPct.toFixed(0)}%` : "-"}
                           </td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{formatNumber(row.completionTokens)}</td>
                           <td className="py-2 px-3 text-end font-semibold text-gray-900 font-mono text-xs">{formatNumber(row.totalTokens)}</td>
@@ -291,7 +291,7 @@ export default function SystemUsagePage() {
                           <td className="py-2 px-3 font-mono text-xs text-gray-700">{row.model}</td>
                           <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{row.calls.toLocaleString()}</td>
                           <td className="py-2 px-3 text-end font-semibold text-gray-900 font-mono text-xs">{formatNumber(row.totalTokens)}</td>
-                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{cached > 0 ? formatNumber(cached) : "—"}</td>
+                          <td className="py-2 px-3 text-end text-gray-500 font-mono text-xs">{cached > 0 ? formatNumber(cached) : "-"}</td>
                           <td className={clsx(
                             "py-2 px-3 text-end font-mono text-xs font-semibold",
                             row.promptTokens === 0
@@ -302,7 +302,7 @@ export default function SystemUsagePage() {
                                   ? "text-amber-600"
                                   : "text-rose-600",
                           )}>
-                            {row.promptTokens > 0 ? `${hitPct.toFixed(0)}%` : "—"}
+                            {row.promptTokens > 0 ? `${hitPct.toFixed(0)}%` : "-"}
                           </td>
                           <td className="py-2 px-3 text-end font-semibold text-green-600 font-mono text-xs">{formatCost(row.costUsd)}</td>
                         </tr>

@@ -1,5 +1,5 @@
 /**
- * Customer Snapshot API — the primary intelligence read surface (V2, Phase 3).
+ * Customer Snapshot API - the primary intelligence read surface (V2, Phase 3).
  *
  * GET /api/customer-snapshot?conversationId=...   (inbox / conversation header)
  * GET /api/customer-snapshot?identityKey=...       (contact profile / CRM panel)

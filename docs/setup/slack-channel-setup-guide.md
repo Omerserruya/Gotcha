@@ -1,9 +1,9 @@
-# Slack Channel Setup Guide — OAuth2 + Events API Integration
+# Slack Channel Setup Guide - OAuth2 + Events API Integration
 
 > **Last updated:** March 2026
 > **Assumes:** You have access to a Slack workspace and a domain with HTTPS.
 
-This guide walks you through configuring a Slack App so that tenants can connect **Slack** workspaces directly from the GOTCHA UI — enabling send/receive messages including threaded conversations via the Slack Web API and Events API.
+This guide walks you through configuring a Slack App so that tenants can connect **Slack** workspaces directly from the GOTCHA UI - enabling send/receive messages including threaded conversations via the Slack Web API and Events API.
 
 ---
 
@@ -204,8 +204,8 @@ If you want to use interactive messages (buttons) that users can click:
 | Secret | Purpose | Exposure Risk |
 |--------|---------|---------------|
 | **Client ID** | Identifies your app in OAuth flows | Low (public in OAuth URL) |
-| **Client Secret** | Authenticates your app during token exchange | **High** — never expose in frontend |
-| **Signing Secret** | Verifies webhook request authenticity | **High** — never expose in frontend |
+| **Client Secret** | Authenticates your app during token exchange | **High** - never expose in frontend |
+| **Signing Secret** | Verifies webhook request authenticity | **High** - never expose in frontend |
 
 ---
 
@@ -222,7 +222,7 @@ SLACK_CLIENT_ID=your-slack-client-id
 # Client Secret (from Slack API → Basic Information → App Credentials)
 SLACK_CLIENT_SECRET=your-slack-client-secret
 
-# OAuth callback URL — must EXACTLY match the Redirect URL in Slack OAuth settings
+# OAuth callback URL - must EXACTLY match the Redirect URL in Slack OAuth settings
 SLACK_OAUTH_REDIRECT_URI=https://yourdomain.com/api/channels/oauth/callback
 
 # Signing Secret for webhook signature verification (from Slack API → Basic Information)
@@ -249,7 +249,7 @@ For initial testing, you can install directly:
 1. In Slack API Dashboard, go to **Install App**
 2. Click **Install to Workspace**
 3. Review the permissions and click **Allow**
-4. You'll see a **Bot User OAuth Token** — this confirms the install works
+4. You'll see a **Bot User OAuth Token** - this confirms the install works
 
 > **Note:** For production, users will install via the OAuth flow from the GOTCHA Channels page. The direct install is just for testing.
 
@@ -295,14 +295,14 @@ For initial testing, you can install directly:
 
 1. In Slack, reply to a message **in a thread** (click "Reply in thread")
 2. The threaded message should arrive in GOTCHA with thread context
-3. Reply from GOTCHA — the reply should appear in the **same Slack thread**
+3. Reply from GOTCHA - the reply should appear in the **same Slack thread**
 4. Verify thread continuity in both Slack and GOTCHA
 
 ### 8.6 Test Direct Messages
 
 1. In Slack, send a direct message to the bot (search for your bot name in DMs)
 2. The message should appear in GOTCHA as a new conversation
-3. Reply from GOTCHA — the reply should appear as a DM in Slack
+3. Reply from GOTCHA - the reply should appear as a DM in Slack
 
 ---
 
@@ -386,7 +386,7 @@ docker compose logs incoming-worker -f
 
 ### Slack's Debug Tools
 
-- **Slack API Tester:** [api.slack.com/methods](https://api.slack.com/methods) — test API methods with your bot token
+- **Slack API Tester:** [api.slack.com/methods](https://api.slack.com/methods) - test API methods with your bot token
 - **Event Subscriptions → Request URL:** Shows real-time verification status
 - **App Dashboard → Event Subscriptions → Retry Policy:** See failed event deliveries
 - **Slack Webhook Debugger:** In the App Dashboard → **Event Subscriptions** → scroll to **Request URL** → check pending retries

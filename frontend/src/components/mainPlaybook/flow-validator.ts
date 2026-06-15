@@ -3,7 +3,7 @@
  *
  * Inspects the current canvas graph (nodes + edges) and returns a list of
  * human-readable issues. The UI renders these in a "N issues" pill in the
- * toolbar — clicking expands a panel that lets the author jump to the
+ * toolbar - clicking expands a panel that lets the author jump to the
  * offending node.
  *
  * The rules here intentionally skew toward *nudging* rather than blocking
@@ -95,7 +95,7 @@ export function validateFlow(nodes: Node[], edges: Edge[]): FlowIssue[] {
         nodeId: n.id,
         title: `${friendlyType(n.type)} goes nowhere`,
         message:
-          "This node has no next step — the flow will halt here. Connect it to another node or an End node.",
+          "This node has no next step - the flow will halt here. Connect it to another node or an End node.",
       });
     }
 
@@ -146,7 +146,7 @@ export function validateFlow(nodes: Node[], edges: Edge[]): FlowIssue[] {
         severity: "warning",
         nodeId: n.id,
         title: `Unknown variable {{${usage}}}`,
-        message: `No node defines "${usage}" yet — this will render as empty text at runtime. Add a Collect Input / Set Variable / HTTP Request node that sets it, or pick from the {x} menu.`,
+        message: `No node defines "${usage}" yet - this will render as empty text at runtime. Add a Collect Input / Set Variable / HTTP Request node that sets it, or pick from the {x} menu.`,
       });
     }
   }
@@ -292,7 +292,7 @@ function collectVarUsages(n: Node): string[] {
     }
   };
 
-  // Per-node field scans — intentionally conservative to avoid false positives
+  // Per-node field scans - intentionally conservative to avoid false positives
   // on fields that happen to contain curly braces.
   switch (n.type) {
     case "send_message_text":

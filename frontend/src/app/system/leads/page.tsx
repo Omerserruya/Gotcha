@@ -287,10 +287,10 @@ export default function LeadsCRMPage() {
                         {lead.notes && <p className="text-xs text-gray-400 truncate max-w-[140px]">{lead.notes}</p>}
                       </td>
                       <td className="px-4 py-3 text-gray-600">{lead.email}</td>
-                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{lead.phone || "—"}</td>
-                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{lead.company || "—"}</td>
+                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{lead.phone || "-"}</td>
+                      <td className="px-4 py-3 text-gray-500 hidden lg:table-cell">{lead.company || "-"}</td>
                       <td className="px-4 py-3 text-gray-500 hidden md:table-cell">{lead.role}</td>
-                      <td className="px-4 py-3 text-gray-500 hidden xl:table-cell">{lead.companySize || "—"}</td>
+                      <td className="px-4 py-3 text-gray-500 hidden xl:table-cell">{lead.companySize || "-"}</td>
                       <td className="px-4 py-3" onClick={(e) => e.stopPropagation()}>
                         <select
                           value={lead.status}
@@ -404,7 +404,7 @@ export default function LeadsCRMPage() {
 
               {/* Details Grid */}
               <div className="grid grid-cols-2 gap-4">
-                <DetailField label="Company" value={selectedLead.company || "—"} />
+                <DetailField label="Company" value={selectedLead.company || "-"} />
                 <DetailField label="Role" value={selectedLead.role} />
                 <DetailField label="Company Size" value={selectedLead.companySize} />
                 <DetailField label="Source" value={selectedLead.source} />

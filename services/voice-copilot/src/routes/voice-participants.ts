@@ -1,5 +1,5 @@
 /**
- * Per-participant control endpoints — generalizes the legacy
+ * Per-participant control endpoints - generalizes the legacy
  * `customer-hold` + `agent-leave` routes to any leg tracked in
  * `VoiceSessionParticipant`.
  *
@@ -219,7 +219,7 @@ export function createVoiceParticipantsRouter(opts: {
       return;
     }
     if (participant.leftAt || participant.status === "LEFT") {
-      // Idempotent — already gone.
+      // Idempotent - already gone.
       res.json({ data: { id: participantId, kicked: true, alreadyLeft: true } });
       return;
     }

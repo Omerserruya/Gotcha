@@ -32,7 +32,7 @@ const listeners = new Set<(f: VoiceFlags) => void>();
 
 function emit(next: VoiceFlags) {
   cachedFlags = next;
-  // Iterate via forEach to stay compatible with the es5 target — for...of
+  // Iterate via forEach to stay compatible with the es5 target - for...of
   // on Set requires downlevelIteration which the frontend tsconfig leaves off.
   listeners.forEach((l) => l(next));
 }
@@ -65,7 +65,7 @@ async function fetchFlags(token: string): Promise<VoiceFlags> {
 
 /**
  * Read tenant-scoped voice feature flags. Components MUST treat `loading`
- * as "render nothing" — never assume `false` means the feature is off, or
+ * as "render nothing" - never assume `false` means the feature is off, or
  * banners and call bars will flicker on every page load.
  */
 export function useVoiceFlags(): VoiceFlags {

@@ -1,6 +1,6 @@
 -- Webhook trigger: drop the workflow_id → chatbot_flows foreign key.
 --
--- In "connected" target mode the webhook trigger does not run a separate flow —
+-- In "connected" target mode the webhook trigger does not run a separate flow -
 -- the `workflow_id` is only an auto-anchor: the trigger node's own canvas id on
 -- the Main Playbook (FlowCanvas), which is NOT a chatbot_flows row. Forcing the
 -- FK meant connected mode had to borrow a real (bogus) flow id, which is exactly
@@ -10,7 +10,7 @@
 -- "flow" mode still references a real ChatbotFlow, but its existence is now
 -- validated in application code (services/webhook trigger-admin.ts) rather than
 -- by the DB constraint. Tradeoff: flow deletion no longer ON DELETE CASCADE-s
--- its flow-mode trigger row (the trigger is left harmless — an inbound POST to a
+-- its flow-mode trigger row (the trigger is left harmless - an inbound POST to a
 -- deleted flow no-ops). Go-forward only; existing rows are untouched.
 --
 -- Idempotent (IF EXISTS) so it is safe to re-run on environments seeded

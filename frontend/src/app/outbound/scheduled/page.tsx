@@ -59,7 +59,7 @@ interface Template {
   variables?: Array<{ key: string; sample?: string }>;
 }
 
-/** A unified contact candidate — local Contact row OR CRM record. The
+/** A unified contact candidate - local Contact row OR CRM record. The
  *  search endpoint returns both shapes; we normalize them so the picker
  *  only cares about the four display fields. `source: "manual"` is what
  *  we use when the operator typed a phone with no match. */
@@ -172,7 +172,7 @@ export default function ScheduledPage() {
   // Message
   const [body, setBody] = useState("");
   const [selectedTemplateId, setSelectedTemplateId] = useState("");
-  // Per-template variable values (one specific recipient — concrete values).
+  // Per-template variable values (one specific recipient - concrete values).
   const [varValues, setVarValues] = useState<Record<string, string>>({});
   // Live media URL for IMAGE/VIDEO/DOCUMENT template headers.
   const [headerMediaUrl, setHeaderMediaUrl] = useState("");
@@ -205,7 +205,7 @@ export default function ScheduledPage() {
     if (!socket) return;
     const onStatus = (data: any) => {
       // Only refetch when this status change actually touched a scheduled
-      // message — keeps the polling quiet for unrelated chat traffic.
+      // message - keeps the polling quiet for unrelated chat traffic.
       if (data?.scheduledMessageId || data?.status === "FAILED") {
         fetchMessages();
       }
@@ -239,7 +239,7 @@ export default function ScheduledPage() {
     try {
       const res = await getChannelAccounts(token);
       const all: ChannelAccount[] = res.data ?? [];
-      // Hide Meta channels — Facebook / Instagram / Messenger DMs cannot be
+      // Hide Meta channels - Facebook / Instagram / Messenger DMs cannot be
       // initiated by the business; outbound is restricted to user-initiated
       // 24h messaging windows, so they don't belong in a scheduled-send
       // picker. Plus the standard "must be CONNECTED" filter.
@@ -377,12 +377,12 @@ export default function ScheduledPage() {
   // Live CRM contact search
   // ---------------------------------------------------------------------------
 
-  // Debounced fetch — fires when the operator types in the recipient field
+  // Debounced fetch - fires when the operator types in the recipient field
   // and clears results when they pick a match or empty the box. Picks up
   // both local Contacts and CRM records via `includeCrm=1`.
   useEffect(() => {
     if (!token) return;
-    // Don't search while a match is selected — the input shows the chip,
+    // Don't search while a match is selected - the input shows the chip,
     // not free text.
     if (selectedContact) return;
     const q = recipientQuery.trim();
@@ -821,7 +821,7 @@ export default function ScheduledPage() {
                   />
                   {selectedTemplateId && channelValue === "WHATSAPP" && (
                     <p className="text-[11px] text-gray-400 mt-1">
-                      WhatsApp template body is locked. Fill in the variables below — Meta requires the exact approved text.
+                      WhatsApp template body is locked. Fill in the variables below - Meta requires the exact approved text.
                     </p>
                   )}
                   <AIComposePanel />
@@ -1243,7 +1243,7 @@ function RecipientSearch({
                   {c.displayName || c.phone || c.email || c.id}
                 </div>
                 <div className="text-xs text-gray-500 truncate">
-                  {[c.phone, c.email].filter(Boolean).join(" · ") || "—"}
+                  {[c.phone, c.email].filter(Boolean).join(" · ") || "-"}
                 </div>
               </div>
               <span className="text-[10px] uppercase tracking-wide text-gray-400 shrink-0">
@@ -1253,7 +1253,7 @@ function RecipientSearch({
           ))}
           {!searching && results.length === 0 && (
             <div className="px-3 py-2 text-xs text-gray-400">
-              No matches — the value will be used as a manual phone number.
+              No matches - the value will be used as a manual phone number.
             </div>
           )}
         </div>

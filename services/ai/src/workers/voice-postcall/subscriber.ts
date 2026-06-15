@@ -11,9 +11,9 @@ import {
  * post-call pipeline.
  *
  * Triggers:
- *   - `voice.session.ended` (StreamRouter / Reaper) — always fires
+ *   - `voice.session.ended` (StreamRouter / Reaper) - always fires
  *   - `voice.session.state` / `voice.session.state_changed` with state in
- *     {ENDED, FAILED} — defense in depth; we ignore duplicates via
+ *     {ENDED, FAILED} - defense in depth; we ignore duplicates via
  *     idempotent upsert + jobId-keyed enqueue.
  *
  * Each trigger upserts a `VoiceCallPostProcessing` row (stage=PENDING) and
@@ -68,12 +68,12 @@ async function enqueueAdvance(sessionId: string): Promise<void> {
   // (`voice.session.ended` plus `voice.session.state*`). The earlier
   // implementation used `upsert` and swallowed the P2002 from the losing
   // race, but Prisma's engine still logs `prisma:error` before our catch
-  // sees the failure — every call produced 3 noisy stack traces.
+  // sees the failure - every call produced 3 noisy stack traces.
   //
   // `createMany({ skipDuplicates: true })` translates to
   // `INSERT ... ON CONFLICT DO NOTHING` so the conflict never escalates
   // to an error event. Same idempotency, zero log noise. We never need
-  // to update an existing row here — the workers themselves bump `stage`
+  // to update an existing row here - the workers themselves bump `stage`
   // / `attempts` later.
   try {
     await prisma.voiceCallPostProcessing.createMany({

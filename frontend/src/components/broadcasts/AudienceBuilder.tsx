@@ -1,26 +1,26 @@
 "use client";
 
 /**
- * AudienceBuilder — the "who" step of the broadcast wizard, redesigned
+ * AudienceBuilder - the "who" step of the broadcast wizard, redesigned
  * around newsletter user-stories rather than dev-style filter modes.
  *
  * Three modes (down from four):
- *   - "smart" (default, "Find & filter") — free CRM+local search at the
+ *   - "smart" (default, "Find & filter") - free CRM+local search at the
  *     top, chips for hand-picked people, then optional schema-driven
  *     rules below for attribute filtering. The single most common path:
  *     "type a name → click chip" or "filter by attribute → see count".
- *   - "import" — paste/CSV.
- *   - "everyone" — channel-wide blast (gated, with confirmation).
+ *   - "import" - paste/CSV.
+ *   - "everyone" - channel-wide blast (gated, with confirmation).
  *
  * Why the merge: the old "Pick people" tab was just Smart-without-rules.
  * Operators kept switching tabs to do "find this one VIP, plus everyone
- * at Consideration stage" — both belong in one screen.
+ * at Consideration stage" - both belong in one screen.
  *
  * New affordances based on UX feedback:
- *   - CRM provenance banner — surfaces that filter fields come from the
+ *   - CRM provenance banner - surfaces that filter fields come from the
  *     connected CRM's lead/contact schema (Zoho/HubSpot/Salesforce).
  *   - Free CRM search pinned to the top (no longer hidden behind a tab).
- *   - Per-rule match count — each rule shows "≈ N match this rule" so
+ *   - Per-rule match count - each rule shows "≈ N match this rule" so
  *     the operator can tell which rule narrowed the audience.
  *   - Audience breakdown ("3 picked + 47 from rule = 50") in the live
  *     count banner so the number is explainable.
@@ -85,10 +85,10 @@ export function buildAudienceDefinition(s: AudienceState, channel: string): any 
   }
   if (s.mode === "import") {
     // Import is materialized into BroadcastRecipient rows directly by
-    // the wizard — no audience definition needed.
+    // the wizard - no audience definition needed.
     return null;
   }
-  // smart (and legacy "pick" — treat as smart-without-rules)
+  // smart (and legacy "pick" - treat as smart-without-rules)
   const ids = s.picked.filter((p) => p.source === "local").map((p) => p.id);
   const crmContacts = s.picked
     .filter((p) => p.source === "crm")
@@ -107,7 +107,7 @@ export function buildAudienceDefinition(s: AudienceState, channel: string): any 
     ...(ids.length > 0 && { contactIds: ids }),
     ...(crmContacts.length > 0 && { crmContacts }),
     ...(validRules.length > 0 && { rules: { all: validRules } }),
-    // Send module only when rules exist — chip-only audiences don't query
+    // Send module only when rules exist - chip-only audiences don't query
     // CRM by criteria so the field is meaningless there.
     ...(validRules.length > 0 && { module: s.module ?? "leads" }),
   };
@@ -177,7 +177,7 @@ interface SchemaState {
   crm: { providerName: string; fields: SchemaField[] } | null;
   /** CRM is connected but the schema fetch returned no fields. Lets the
    *  banner say "reconnect to grant scope" instead of the wrong
-   *  "Connect a CRM" — the CRM IS connected, the OAuth scope is missing. */
+   *  "Connect a CRM" - the CRM IS connected, the OAuth scope is missing. */
   crmAuthGap: { providerName: string } | null;
   loading: boolean;
   error: string | null;
@@ -267,7 +267,7 @@ export function AudienceBuilder({
   useEffect(() => {
     if (!token) return;
     if (state.mode === "import") {
-      // Import count handled locally — just count non-empty lines.
+      // Import count handled locally - just count non-empty lines.
       const n = state.importText.split("\n").map((l) => l.trim()).filter(Boolean).length;
       setPreviewCount(n);
       setPreviewLoading(false);
@@ -352,10 +352,10 @@ export function AudienceBuilder({
 
   return (
     <div className="space-y-4">
-      {/* CRM provenance banner — answers "I don't see how rules tie to my CRM schema" */}
+      {/* CRM provenance banner - answers "I don't see how rules tie to my CRM schema" */}
       <CrmProvenanceBanner schema={schema} t={t} />
 
-      {/* Module selector — show whenever a CRM is connected (even if the
+      {/* Module selector - show whenever a CRM is connected (even if the
           schema fetch failed) so the operator can still flip leads↔contacts
           and trigger another fetch after fixing the OAuth scope. */}
       {(schema.crm || schema.crmAuthGap) && (
@@ -440,7 +440,7 @@ function CrmProvenanceBanner({
     );
   }
   if (!schema.crm) {
-    // Connected-but-unauthorized — distinct from no-CRM-connected. The
+    // Connected-but-unauthorized - distinct from no-CRM-connected. The
     // CRM IS connected; the OAuth scope or describe_fields path is failing.
     if (schema.crmAuthGap) {
       const provider = schema.crmAuthGap.providerName;
@@ -937,7 +937,7 @@ function RuleRow({
         </button>
       </div>
 
-      {/* Per-rule live count — recomputes on rule change with a small debounce */}
+      {/* Per-rule live count - recomputes on rule change with a small debounce */}
       <div className="mt-2 pl-12">
         <RuleMatchBadge rule={rule} t={t} />
       </div>
@@ -948,7 +948,7 @@ function RuleRow({
 /**
  * Tiny live count for a single rule. Calls /audiences/preview with just
  * this rule wrapped in a one-rule filter audience so the operator can
- * see "this rule alone narrows the audience to 47 leads" — telling them
+ * see "this rule alone narrows the audience to 47 leads" - telling them
  * which rule is doing the work.
  */
 function RuleMatchBadge({
@@ -1151,7 +1151,7 @@ function ValueInput({
 }) {
   // Operators that don't need a value
   if (rule.op === "exists" || rule.op === "not_exists") {
-    return <div className="text-[11px] text-gray-400 px-2 py-2 italic">—</div>;
+    return <div className="text-[11px] text-gray-400 px-2 py-2 italic">-</div>;
   }
   const type = (rule.fieldType || "string").toLowerCase();
 
@@ -1205,7 +1205,7 @@ function ValueInput({
         onChange={(e) => onUpdate({ value: e.target.value })}
         className="w-full px-2.5 py-2 bg-white border border-gray-200 rounded-lg text-sm focus:ring-2 focus:ring-primary-200 outline-none transition"
       >
-        <option value="">—</option>
+        <option value="">-</option>
         {rule.picklist.map((opt) => (
           <option key={opt} value={opt}>
             {opt}

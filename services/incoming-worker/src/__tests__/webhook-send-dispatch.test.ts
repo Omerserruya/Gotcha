@@ -59,7 +59,7 @@ beforeEach(() => {
   });
 });
 
-describe("send_message_text — context-free explicit recipient", () => {
+describe("send_message_text - context-free explicit recipient", () => {
   it("dispatches via the existing outbound path when an explicit recipient is set", async () => {
     const nodes: TestNode[] = [
       { id: "n1", type: "start", data: {} },
@@ -144,7 +144,7 @@ describe("send_message_text — context-free explicit recipient", () => {
   });
 });
 
-describe("send_message_template — context-free explicit recipient", () => {
+describe("send_message_template - context-free explicit recipient", () => {
   it("dispatches the template to an explicit recipient with no conversation", async () => {
     messageTemplate.findFirst.mockResolvedValue({
       id: "tmpl-1",
@@ -213,11 +213,11 @@ describe("send_message_template — context-free explicit recipient", () => {
   });
 });
 
-// ─── Manual field mapper (Card 5) — connected-nodes mode ─────────────
+// ─── Manual field mapper (Card 5) - connected-nodes mode ─────────────
 // The webhook trigger node carries `data.fieldMapping` binding declared body
 // fields onto the first connected node's inputs. The send node itself has NO
-// recipient/text — the mapping is what makes it dispatch.
-describe("webhook field mapper — connected mode", () => {
+// recipient/text - the mapping is what makes it dispatch.
+describe("webhook field mapper - connected mode", () => {
   function canvas(nodes: TestNode[], edges: TestEdge[]) {
     return { tenantId: "tenant-1", nodes, edges };
   }
@@ -236,7 +236,7 @@ describe("webhook field mapper — connected mode", () => {
           ],
         },
       },
-      // Authored with neither recipient nor text — both come from the mapping.
+      // Authored with neither recipient nor text - both come from the mapping.
       { id: "n2", type: "send_message_text", data: {} },
     ];
     const edges: TestEdge[] = [{ id: "e1", source: "w1", target: "n2" }];

@@ -127,7 +127,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
           {/* Mobile bottom nav - admin only, hidden on desktop and when chat is open */}
           {!chatOpen && <MobileBottomNav />}
         </div>
-        {/* Persistent first-time guidance layer — shows a per-feature
+        {/* Persistent first-time guidance layer - shows a per-feature
             coachmark the first time a user opens Knowledge Base, AI
             Employees, Workflows, or Settings. Skippable + snoozable, state
             stored per-user in the DB. Renders nothing otherwise. */}

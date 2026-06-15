@@ -172,63 +172,63 @@ ON CONFLICT ("integration_id", "slug") DO NOTHING;
 
 -- ─── 4) Refresh auth_schema + auth_type for live integrations ─
 
--- Stripe — OAuth (Connect) preferred, API key fallback
+-- Stripe - OAuth (Connect) preferred, API key fallback
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[],"helpText":"Connect via Stripe OAuth (Connect). Tenants without a Connect account can paste a restricted API key as a fallback."}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'stripe';
 
--- HubSpot — OAuth
+-- HubSpot - OAuth
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[],"scopes":["crm.objects.contacts.read","crm.objects.contacts.write","crm.objects.deals.read","crm.objects.deals.write"]}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'hubspot';
 
--- Shopify — per-shop OAuth
+-- Shopify - per-shop OAuth
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[{"key":"shop","label":"Shop domain","type":"text","required":true,"placeholder":"my-store.myshopify.com"}],"scopes":["read_orders","write_orders","read_customers","write_discounts","read_products"]}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'shopify';
 
--- WooCommerce — store URL + consumer key/secret
+-- WooCommerce - store URL + consumer key/secret
 UPDATE "integration_catalog" SET
   "auth_type" = 'API_KEY',
   "auth_schema" = '{"required":["storeUrl","consumerKey","consumerSecret"],"fields":[{"key":"storeUrl","label":"Store URL","type":"url","required":true,"placeholder":"https://shop.example.com"},{"key":"consumerKey","label":"Consumer Key","type":"password","required":true},{"key":"consumerSecret","label":"Consumer Secret","type":"password","required":true}]}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'woocommerce';
 
--- Wix — OAuth (Headless)
+-- Wix - OAuth (Headless)
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[],"helpText":"Connects via Wix Headless OAuth. Refresh tokens are issued at install time."}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'wix';
 
--- PayPal — app-level credentials (client_credentials grant)
+-- PayPal - app-level credentials (client_credentials grant)
 UPDATE "integration_catalog" SET
   "auth_type" = 'API_KEY',
   "auth_schema" = '{"required":["clientId","clientSecret","environment"],"fields":[{"key":"clientId","label":"Client ID","type":"password","required":true},{"key":"clientSecret","label":"Client Secret","type":"password","required":true},{"key":"environment","label":"Environment","type":"select","required":true,"options":["live","sandbox"]}]}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'paypal';
 
--- Square — OAuth (production/sandbox toggle in config)
+-- Square - OAuth (production/sandbox toggle in config)
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[{"key":"environment","label":"Environment","type":"select","required":true,"options":["production","sandbox"],"default":"production"}],"scopes":["PAYMENTS_WRITE","PAYMENTS_READ","CUSTOMERS_READ","CUSTOMERS_WRITE","ORDERS_READ","ORDERS_WRITE","INVOICES_READ","INVOICES_WRITE","MERCHANT_PROFILE_READ"]}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'square';
 
--- Salesforce — OAuth (Web Server flow)
+-- Salesforce - OAuth (Web Server flow)
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[{"key":"loginHost","label":"Login Host","type":"select","required":true,"options":["https://login.salesforce.com","https://test.salesforce.com"],"default":"https://login.salesforce.com","helpText":"Use test.salesforce.com for sandbox orgs."}],"scopes":["api","refresh_token","offline_access"]}',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'salesforce';
 
--- Monday.com — OAuth
+-- Monday.com - OAuth
 UPDATE "integration_catalog" SET
   "auth_type" = 'OAUTH2',
   "auth_schema" = '{"oauth":true,"fields":[],"scopes":["boards:read","boards:write","updates:write"]}',
@@ -236,7 +236,7 @@ UPDATE "integration_catalog" SET
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'monday';
 
--- PostgreSQL — connection string + table allowlist
+-- PostgreSQL - connection string + table allowlist
 UPDATE "integration_catalog" SET
   "auth_type" = 'API_KEY',
   "auth_schema" = '{"required":["connectionString"],"fields":[{"key":"connectionString","label":"Connection String","type":"password","required":true,"placeholder":"postgres://user:pass@host:5432/dbname"}]}',
@@ -244,7 +244,7 @@ UPDATE "integration_catalog" SET
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'postgresql';
 
--- MongoDB — connection string + collection allowlist
+-- MongoDB - connection string + collection allowlist
 UPDATE "integration_catalog" SET
   "auth_type" = 'API_KEY',
   "auth_schema" = '{"required":["connectionString"],"fields":[{"key":"connectionString","label":"Connection String","type":"password","required":true,"placeholder":"mongodb+srv://user:pass@cluster.mongodb.net"}]}',
@@ -252,7 +252,7 @@ UPDATE "integration_catalog" SET
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'mongodb';
 
--- AWS RDS — connection string + engine + table allowlist
+-- AWS RDS - connection string + engine + table allowlist
 UPDATE "integration_catalog" SET
   "auth_type" = 'API_KEY',
   "auth_schema" = '{"required":["connectionString"],"fields":[{"key":"connectionString","label":"Connection String","type":"password","required":true,"placeholder":"postgres://user:pass@instance.xyz.rds.amazonaws.com:5432/dbname"}]}',
@@ -260,10 +260,10 @@ UPDATE "integration_catalog" SET
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'aws_rds';
 
--- Custom API — already correct, but tighten the schema messaging
+-- Custom API - already correct, but tighten the schema messaging
 UPDATE "integration_catalog" SET
   "auth_type" = 'API_KEY',
-  "auth_schema" = '{"fields":[{"key":"baseUrl","label":"Base URL (informational)","type":"url","required":false,"helpText":"Default base URL — each tool defines its own URL template."}]}',
+  "auth_schema" = '{"fields":[{"key":"baseUrl","label":"Base URL (informational)","type":"url","required":false,"helpText":"Default base URL - each tool defines its own URL template."}]}',
   "description" = 'Define your own AI tool from any HTTP API. Each tool gets a name, description, when-to-use, parameters, and a URL template.',
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'custom_api';
@@ -273,7 +273,7 @@ WHERE "slug" = 'custom_api';
 -- Tenants can override these via TenantTool.configOverrides.hitlPolicy at any
 -- time, but the catalog default for irreversible / financial actions is
 -- "always require approval". Catalog tools default to {"mode":"never"} per
--- the schema column default — without this seed, a HIGH-risk refund or
+-- the schema column default - without this seed, a HIGH-risk refund or
 -- discount would execute without HITL on a freshly-connected integration.
 
 -- All refund tools (stripe / paypal / square)
@@ -292,7 +292,7 @@ UPDATE "catalog_tools" SET "hitl_policy" = '{"mode":"on_condition","condition":"
 UPDATE "catalog_tools" SET "hitl_policy" = '{"mode":"always","approverRole":"ADMIN","notifyChannels":["in_app"],"expiresAfterMin":120,"allowModification":true}'
   WHERE "slug" IN ('create_invoice', 'create_payment_link');
 
--- DB writes (Postgres / Mongo / RDS) — INSERT defaults to allow (allowlist
+-- DB writes (Postgres / Mongo / RDS) - INSERT defaults to allow (allowlist
 -- already gates table access), UPDATE/DELETE require approval.
 UPDATE "catalog_tools" SET "hitl_policy" = '{"mode":"always","approverRole":"ADMIN","notifyChannels":["in_app"],"expiresAfterMin":30}'
   WHERE "slug" IN ('update_row', 'update_document');

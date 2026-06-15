@@ -5,7 +5,7 @@ import {
   SERVICE_DEFAULT_FUNNEL,
 } from "../services/funnel-config.service";
 
-describe("FunnelConfig — resolveFunnel", () => {
+describe("FunnelConfig - resolveFunnel", () => {
   it("returns null stage + unchanged strategy when no funnel provided", () => {
     const r = resolveFunnel({
       funnel: null,

@@ -35,7 +35,7 @@ interface TranscriptMsg {
 // Phase 4 supervisor (services/ai/src/services/intelligence/) is the new
 // structured-frame consumer of voice transcripts. The legacy suggestions
 // pipeline below was deleted with Phase 4 but its replacement turned out
-// to be incomplete — the frontend kept showing zero copilot suggestions.
+// to be incomplete - the frontend kept showing zero copilot suggestions.
 // Restored as a safety net: scheduleAssistTrigger fires the chat-shaped
 // suggestions on every customer final utterance and publishes them as
 // `voice.copilot.suggestions`. The Phase 4 supervisor keeps running in
@@ -140,7 +140,7 @@ async function triggerAssist(tenantId: string, conversationId: string): Promise<
     let suggestions: any[] = [];
     if (copilotConfig) {
       // Load the cross-channel customer-memory bundle (open issues, recent
-      // summaries across channels, CRM notes, sentiment trend). Fail-soft —
+      // summaries across channels, CRM notes, sentiment trend). Fail-soft -
       // a missing CRM link / vendor hiccup must NOT block copilot suggestions.
       const memoryBundle = await loadCustomerContext({ tenantId, conversationId }).catch(() => null);
       const customerMemory = memoryBundle
@@ -241,7 +241,7 @@ export async function handleVoiceStream(
     }
   }
 
-  // 3. Conversation ownership check (scoped to tenant — don't leak existence)
+  // 3. Conversation ownership check (scoped to tenant - don't leak existence)
   const conversation = await prisma.conversation.findFirst({
     where: { id: conversationId, tenantId },
   });
@@ -284,7 +284,7 @@ export async function handleVoiceStream(
         body: m.text,
         messageType: m.isFinal ? "voice_final" : "voice_partial",
         status: "DELIVERED" as any,
-        // Message.metadata is Json? — use it for voice-specific fields
+        // Message.metadata is Json? - use it for voice-specific fields
         metadata: {
           voice: {
             seq: m.seq,

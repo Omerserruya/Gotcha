@@ -16,7 +16,7 @@ export const viewport: Viewport = {
 export const metadata: Metadata = {
   metadataBase: new URL("https://gotcha.co.il"),
   title: {
-    default: "GOTCHA — AI-Powered Customer Communication",
+    default: "GOTCHA - AI-Powered Customer Communication",
     template: "%s | GOTCHA",
   },
   description:
@@ -43,7 +43,7 @@ export const metadata: Metadata = {
     apple: "/apple-touch-icon.png",
   },
   openGraph: {
-    title: "GOTCHA — AI-Powered Customer Communication",
+    title: "GOTCHA - AI-Powered Customer Communication",
     description:
       "Unify WhatsApp Business, Instagram DMs, and Messenger into one AI-powered inbox. Smart routing, AI co-pilot, and real-time analytics for customer support teams.",
     url: "https://gotcha.co.il",
@@ -54,7 +54,7 @@ export const metadata: Metadata = {
   },
   twitter: {
     card: "summary_large_image",
-    title: "GOTCHA — AI-Powered Customer Communication",
+    title: "GOTCHA - AI-Powered Customer Communication",
     description:
       "Unify WhatsApp Business, Instagram DMs, and Messenger into one AI-powered unified inbox for customer support teams.",
     images: ["/logo.png"],

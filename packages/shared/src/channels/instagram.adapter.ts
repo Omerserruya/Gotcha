@@ -104,7 +104,7 @@ export const instagramInboundAdapter: InboundAdapter = {
     // For DMs (entry.messaging[]): recipient.id is the IG Business Account ID,
     // which matches the externalId we store in DB.
     // For comment events (entry.changes[].field === "comments"): entry.id IS
-    // the IG Business Account ID itself — Meta delivers comments keyed by the
+    // the IG Business Account ID itself - Meta delivers comments keyed by the
     // IG account, not the linked FB Page. Fall back to entry.id when no
     // messaging[] is present.
     for (const entry of body.entry || []) {
@@ -307,12 +307,12 @@ export const instagramOutboundAdapter: OutboundAdapter = {
     quickReplies?: Array<{ id: string; title: string }>,
   ): Promise<{ messageId: string | null; recipientPsid: string | null } | null> {
     // Private Reply on IG Messaging API. The recipient form is exactly
-    // `{ comment_id }` — Meta resolves the actual IGSID server-side and
+    // `{ comment_id }` - Meta resolves the actual IGSID server-side and
     // returns it in `recipient_id` so the caller can switch to regular DM
     // for any subsequent message in this flow run. 7-day window from comment
     // timestamp is enforced by Meta; outside it this call returns 4xx.
     // IG private replies accept the same `quick_replies` payload as a
-    // standard DM — let callers attach buttons on the very first reply.
+    // standard DM - let callers attach buttons on the very first reply.
     try {
       const message: Record<string, any> = { text };
       if (quickReplies && quickReplies.length > 0) {

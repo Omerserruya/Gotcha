@@ -88,13 +88,13 @@ function parseAudience(raw: unknown): AudienceDefinition | null {
 
 /**
  * Resolve the broadcast's audience definition into BroadcastRecipient
- * rows. Idempotent — uses skipDuplicates so re-running doesn't multiply
+ * rows. Idempotent - uses skipDuplicates so re-running doesn't multiply
  * recipients. Returns the count actually inserted.
  *
  * Channel matters because we need a usable externalId per recipient
  * (phone for WhatsApp, email for Email/Gmail, etc.). For CRM-only
  * matches we synthesize the recipient with the right address for the
- * channel and leave contactId null — the worker treats it as a
+ * channel and leave contactId null - the worker treats it as a
  * one-shot send.
  */
 async function materializeRecipientsFromAudience(
@@ -103,7 +103,7 @@ async function materializeRecipientsFromAudience(
   channel: string,
   audience: AudienceDefinition,
 ): Promise<{ inserted: number; total: number }> {
-  // Resolve up to a hard cap — audience-driven broadcasts above this
+  // Resolve up to a hard cap - audience-driven broadcasts above this
   // need an explicit pagination strategy at the worker level.
   const result = await resolveAudience(tenantId, audience, { previewLimit: 5000 });
 
@@ -122,7 +122,7 @@ async function materializeRecipientsFromAudience(
     if (tenant?.defaultCountryCode) defaultCountryCode = tenant.defaultCountryCode;
   }
 
-  // Pull the broadcast's variable mapping spec — shape:
+  // Pull the broadcast's variable mapping spec - shape:
   //   {} (legacy: every recipient gets the same flat values)
   //   {"1": {"source":"crm","field":"First_Name"}}      (per-recipient CRM lookup)
   //   {"1": {"source":"static","value":"Hello"}}         (constant value)
@@ -173,9 +173,9 @@ async function materializeRecipientsFromAudience(
  * Resolve a broadcast's variable mapping spec to per-recipient values.
  * The mapping spec shape on Broadcast.variables is:
  *
- *   {"1": {"source":"crm","field":"First_Name"}}   — look up CRM raw field
- *   {"1": {"source":"static","value":"Hi"}}         — same value for everyone
- *   {"1": "Hi"}                                     — legacy flat shorthand
+ *   {"1": {"source":"crm","field":"First_Name"}}   - look up CRM raw field
+ *   {"1": {"source":"static","value":"Hi"}}         - same value for everyone
+ *   {"1": "Hi"}                                     - legacy flat shorthand
  *
  * For chip-picked CRM recipients (no `raw`), we also expose the snapshot
  * fields displayName/phone/email by their canonical names so the operator
@@ -248,7 +248,7 @@ function resolveRecipientVariables(
         out[key] = "";
       }
     } else {
-      // Legacy flat: {"1": "Hi"} — treat as static.
+      // Legacy flat: {"1": "Hi"} - treat as static.
       out[key] = raw == null ? "" : String(raw);
     }
   }
@@ -858,7 +858,7 @@ router.post("/:id/resend", async (req: Request, res: Response) => {
       return;
     }
 
-    // The wizard expects the new row to start fresh — DRAFT, no scheduledAt,
+    // The wizard expects the new row to start fresh - DRAFT, no scheduledAt,
     // no counts, no error. Keep the same template/audience/variables so the
     // operator can review and hit Send without rebuilding everything.
     const clone = await prisma.broadcast.create({

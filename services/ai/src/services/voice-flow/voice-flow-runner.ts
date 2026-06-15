@@ -1,12 +1,12 @@
 /**
- * Voice Flow Runner — bridges voice events into the existing ChatbotFlow
+ * Voice Flow Runner - bridges voice events into the existing ChatbotFlow
  * schema as an automation surface.
  *
  * Why this lives here (not in incoming-worker's flow-executor): voice
  * triggers fire from live-call events (voice.session.*, voice.frame.updated)
  * that the AI service already subscribes to. Reusing the ChatbotFlow row
  * shape means admins manage chat + voice automations side-by-side, but the
- * runtime is intentionally separate from the chat executor — chat flows
+ * runtime is intentionally separate from the chat executor - chat flows
  * are turn-based; voice flows are event-stream-driven.
  *
  * Trigger types supported (in the first node's `data.triggerType`):
@@ -62,11 +62,11 @@ interface FlowRow {
   // Which node is the trigger we should walk from. For legacy ChatbotFlow
   // rows this is always `nodes[0].id` (those flows have exactly one entry
   // point). For Main Playbook (FlowCanvas) rows we emit one synthetic
-  // FlowRow per voice_trigger node — the playbook hosts many triggers in
+  // FlowRow per voice_trigger node - the playbook hosts many triggers in
   // one canvas, so we MUST point at the matching one or executeFlow walks
   // from the wrong root and finds no edges.
   triggerNodeId: string;
-  // Source table — used to decide whether bumping runCount is meaningful.
+  // Source table - used to decide whether bumping runCount is meaningful.
   source: "chatbot_flow" | "flow_canvas";
 }
 
@@ -93,18 +93,18 @@ const INTERNAL_KEY = () => process.env.INTERNAL_SERVICE_KEY || "chatcenter-inter
 //
 // Why conversationId and not sessionId: voice.frame.updated (powers
 // intent/keyword triggers) publishes ONLY {tenantId, conversationId, frame}
-// — no session field. Using sessionId would fall back to a constant string
+// - no session field. Using sessionId would fall back to a constant string
 // ("no-sid:flowId:call.intent_detected") that's IDENTICAL across every call
 // in the tenant, so the first refund-triggered template would dedupe every
 // subsequent call's refund trigger for the TTL window. conversationId is
 // always non-empty (extractContext returns null otherwise) and is 1:1 with
 // the voice call, so it's the correct namespace.
 //
-// Map vs Redis: in-process is enough today — events for one conversation
+// Map vs Redis: in-process is enough today - events for one conversation
 // are serialized through this AI process, and a restart mid-call already
 // loses the running LLM state. The eviction loop caps memory in long uptimes.
 const firedFlows = new Map<string, number>();
-const FIRED_TTL_MS = 6 * 60 * 60 * 1000; // 6h — comfortably longer than any call.
+const FIRED_TTL_MS = 6 * 60 * 60 * 1000; // 6h - comfortably longer than any call.
 setInterval(() => {
   const cutoff = Date.now() - FIRED_TTL_MS;
   for (const [k, ts] of firedFlows) {
@@ -121,7 +121,7 @@ export function startVoiceFlowRunner(): void {
   started = true;
   try {
     subscribeToEvents((evt: ServiceEvent) => {
-      // Fire-and-forget — never block the bus thread on a flow eval.
+      // Fire-and-forget - never block the bus thread on a flow eval.
       handleEvent(evt).catch((err) => {
         console.warn("[voice-flow] handler crashed:", (err as { message?: string })?.message ?? err);
       });
@@ -156,7 +156,7 @@ async function handleEvent(evt: ServiceEvent): Promise<void> {
     if (!matchesTriggerPayload(triggerNode, triggerType, evt)) continue;
 
     // Idempotency: each (session, flow, trigger) marks itself fired ONLY
-    // after a successful action. Voice state events are noisy — a single
+    // after a successful action. Voice state events are noisy - a single
     // answered call fires `voice.session.state` 2–3 times as participants
     // join and Twilio updates status. We DON'T mark fired until executeFlow
     // reports at least one successful action so a stale early event
@@ -180,7 +180,7 @@ async function handleEvent(evt: ServiceEvent): Promise<void> {
     }
     if (success) firedFlows.set(dedupeKey, Date.now());
     // Bump runCount for observability (best-effort). Only meaningful for
-    // legacy ChatbotFlow rows — FlowCanvas has no equivalent counter.
+    // legacy ChatbotFlow rows - FlowCanvas has no equivalent counter.
     if (flow.source === "chatbot_flow") {
       prisma.chatbotFlow.update({
         where: { id: flow.id },
@@ -199,7 +199,7 @@ function mapEventToTriggers(evt: ServiceEvent): FlowTriggerKind[] {
       return dir === "inbound" ? ["call.incoming"] : [];
     }
     case "voice.incoming.ringing":
-      // Same semantic surface as session.started for inbound — flows may
+      // Same semantic surface as session.started for inbound - flows may
       // listen to either. We DON'T fire for the fallback re-broadcast.
       return d.routing && (d.routing as { target?: string }).target === "tenant" ? [] : ["call.incoming"];
     case "voice.session.state":
@@ -217,7 +217,7 @@ function mapEventToTriggers(evt: ServiceEvent): FlowTriggerKind[] {
       return [];
     }
     case "voice.frame.updated":
-      // intent + keyword triggers both surface here — `matchesTriggerPayload`
+      // intent + keyword triggers both surface here - `matchesTriggerPayload`
       // narrows further per flow.
       return ["call.intent_detected", "call.keyword_spoken"];
     default:
@@ -243,9 +243,9 @@ function extractContext(evt: ServiceEvent): VoiceContext | null {
 
 async function loadActiveVoiceFlows(tenantId: string): Promise<FlowRow[]> {
   // Two source tables host voice triggers:
-  //   1. ChatbotFlow (legacy sub-flows) — keyed by channel="VOICE", one
+  //   1. ChatbotFlow (legacy sub-flows) - keyed by channel="VOICE", one
   //      trigger per row.
-  //   2. FlowCanvas (Main Playbook) — single row per tenant containing all
+  //   2. FlowCanvas (Main Playbook) - single row per tenant containing all
   //      automations. Voice triggers there look like `voice_trigger:call.*`
   //      and there can be MANY in the same canvas. We emit one synthetic
   //      FlowRow per voice_trigger node found so each can be matched +
@@ -345,11 +345,11 @@ function matchesTriggerPayload(
       || (wantedTokens.length > 0 && wantedTokens.every((t) => primaryTokens.includes(t)));
 
     if (!tokensMatch) {
-      console.log(`[voice-flow] intent_detected: name mismatch — trigger="${wanted}" frame="${primary}" (token-check failed) (no match)`);
+      console.log(`[voice-flow] intent_detected: name mismatch - trigger="${wanted}" frame="${primary}" (token-check failed) (no match)`);
       return false;
     }
     if (conf < minConf) {
-      console.log(`[voice-flow] intent_detected: confidence too low — trigger>=${minConf} frame=${conf} (no match)`);
+      console.log(`[voice-flow] intent_detected: confidence too low - trigger>=${minConf} frame=${conf} (no match)`);
       return false;
     }
     console.log(`[voice-flow] intent_detected: ACCEPTED trigger="${wanted}" frame="${primary}" conf=${conf} (>=${minConf})`);
@@ -375,7 +375,7 @@ function matchesTriggerPayload(
 }
 
 async function executeFlow(flow: FlowRow, ctx: VoiceContext): Promise<boolean> {
-  // BFS from the matched trigger node — the canvas's other triggers (and
+  // BFS from the matched trigger node - the canvas's other triggers (and
   // their subtrees) are ignored here. No branching/conditions in the MVP:
   // a fan-out runs every successor unconditionally.
   //
@@ -417,7 +417,7 @@ async function executeFlow(flow: FlowRow, ctx: VoiceContext): Promise<boolean> {
 
 async function executeActionNode(node: FlowNode, ctx: VoiceContext): Promise<boolean> {
   // Returns true when the action ran to completion. Used by executeFlow to
-  // decide whether to mark this flow's (session, trigger) as fired — so a
+  // decide whether to mark this flow's (session, trigger) as fired - so a
   // pure skip (e.g. `no_recipient`) doesn't burn the dedupe slot.
   const data = (node.data ?? {}) as Record<string, unknown>;
   switch (node.type) {
@@ -439,7 +439,7 @@ async function executeActionNode(node: FlowNode, ctx: VoiceContext): Promise<boo
       return await sendTemplateFromVoice(data, ctx);
     }
     default:
-      // Unknown action types are silently ignored — admins can add new
+      // Unknown action types are silently ignored - admins can add new
       // node types in the canvas without breaking running flows.
       return false;
   }
@@ -465,7 +465,7 @@ function extractTemplatePlaceholders(text: string | null | undefined): string[] 
 }
 
 function interpolateVoiceVars(text: string, ctx: VoiceContext): string {
-  // Tiny variable surface — enough to support common follow-up patterns
+  // Tiny variable surface - enough to support common follow-up patterns
   // ("Hi {{customer_phone}}, you missed our call at {{call_started_at}}…").
   // Other `{{...}}` mentions resolve to empty so authors get a visible
   // hole rather than a hard failure.
@@ -590,7 +590,7 @@ function buildTemplateComponentsForVoice(
 
 async function sendTemplateFromVoice(data: Record<string, unknown>, ctx: VoiceContext): Promise<boolean> {
   // Returns true ONLY when Meta accepts the send. Every skip/fail returns
-  // false so the dedupe slot stays open — letting the next noisy event
+  // false so the dedupe slot stays open - letting the next noisy event
   // (which may carry the missing customerNumber) get a clean retry.
   const tag = "[voice-flow.template]";
   const templateId = String(data.templateId || "").trim();
@@ -598,8 +598,8 @@ async function sendTemplateFromVoice(data: Record<string, unknown>, ctx: VoiceCo
 
   // `voice.frame.updated` (the event that powers intent_detected /
   // keyword_spoken triggers) only carries { tenantId, conversationId, frame }
-  // — no customerNumber. Resolve it from the durable voice session row
-  // (preferred — has the E.164 customer number) or fall back to the
+  // - no customerNumber. Resolve it from the durable voice session row
+  // (preferred - has the E.164 customer number) or fall back to the
   // conversation's customerExternalId (for WhatsApp this IS the phone).
   // Without this fallback, every intent/keyword-driven template send would
   // exit at `skip no_recipient`.
@@ -714,7 +714,7 @@ async function sendTemplateFromVoice(data: Record<string, unknown>, ctx: VoiceCo
     console.error(`${tag} fail name=${tmpl.name} err=${msg}`);
     await persistVoiceTemplateMessage(ctx, tmpl, components, null, msg);
     // DO NOT return true. Earlier version did, to suppress retries on the
-    // next noisy event — but that hid Meta rejects from the operator and
+    // next noisy event - but that hid Meta rejects from the operator and
     // matched the symptom "skip already_fired follows match but customer
     // never received the message". Letting the next event retry gives the
     // author one more chance to spot the failure in the inspector

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Push the host-side deploy files (docker-compose.prod.yml + .env) to the prod
-# EC2 box over an SSM SSH tunnel — no open port 22, no public IP.
+# EC2 box over an SSM SSH tunnel - no open port 22, no public IP.
 #
 # Prereqs (one-time, see DEPLOY.md Step 6):
 #   • session-manager-plugin installed locally
@@ -67,7 +67,7 @@ else
     if [ -f .env ]; then
       SRC+=(.env)
     elif [ -f .env.example ]; then
-      echo "NOTE: no local .env — sending .env.example (rename/edit on the box)."
+      echo "NOTE: no local .env - sending .env.example (rename/edit on the box)."
       SRC+=(.env.example)
     else
       echo "WARN: no .env or .env.example found locally; skipping env file." >&2

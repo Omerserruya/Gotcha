@@ -1,5 +1,5 @@
 /**
- * schedule_meeting handler — wires the constraints layer + adapters to the
+ * schedule_meeting handler - wires the constraints layer + adapters to the
  * shared dispatcher (Task 3).
  *
  * Why this lives in ai-service (not shared): the adapters import Prisma
@@ -43,10 +43,10 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
     console.log(
       `[schedule_handler] invoked tenant=${opts.tenantId} agent=${opts.aiAgentId} ` +
         `mt=${args.meeting_type} duration=${args.duration_minutes}min ` +
-        `requested=${args.requested_at_iso || "none"} email=${args.customer_email || "—"}`,
+        `requested=${args.requested_at_iso || "none"} email=${args.customer_email || "-"}`,
     );
 
-    // 1) Load the meeting type — drives policy + duration sanity check.
+    // 1) Load the meeting type - drives policy + duration sanity check.
     const mt = await (prisma as any).meetingType.findUnique({
       where: { tenantId_slug: { tenantId: opts.tenantId, slug: args.meeting_type } } as any,
     });
@@ -97,7 +97,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
     }
     console.log(
       `[schedule_handler] adapter=${account.provider} account_id=${account.id} ` +
-        `email=${account.accountEmail || "—"}`,
+        `email=${account.accountEmail || "-"}`,
     );
 
     // 3) Build the constraints policy + meeting type from the DB row.
@@ -218,14 +218,14 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
       };
     } catch (firstErr: any) {
       console.warn(
-        `[schedule_handler] create.fail attempt=1 err=${firstErr?.message || "unknown"} — re-validating`,
+        `[schedule_handler] create.fail attempt=1 err=${firstErr?.message || "unknown"} - re-validating`,
       );
       // ── Race-condition path ──
       // The slot passed validation a moment ago, but createEvent failed.
       // The most likely cause is another booking landed in the same window
       // between findBusy() and createEvent(). Re-pull busy + re-validate
       // the SAME slot once. If it's still valid, retry create. Otherwise
-      // (or if the retry create also fails) we MUST NOT confirm — return
+      // (or if the retry create also fails) we MUST NOT confirm - return
       // INVALID with `slot_taken` + alternatives, and a ready-to-send
       // Hebrew/English message the model can relay verbatim.
       let freshBusy: typeof busy = busy;
@@ -248,7 +248,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
         return failSlotTaken(verdict.slot, freshBusy, policy, meetingType, Date.now(), firstErr?.message);
       }
 
-      // Re-validated — try once more.
+      // Re-validated - try once more.
       try {
         const event = await tryCreate(recheck.slot);
         return {
@@ -270,7 +270,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
  * Build the "slot was taken between validate and create" failure result.
  * Returns 3 fresh alternatives so the model can offer them in the same turn.
  * Includes pre-localized customer-facing copy in `userMessage` so the model
- * can relay verbatim — the spec requires the exact Hebrew wording.
+ * can relay verbatim - the spec requires the exact Hebrew wording.
  */
 function failSlotTaken(
   slot: { startMs: number; endMs: number },
@@ -298,8 +298,8 @@ function failSlotTaken(
     // The model is instructed in the tool description to relay this string
     // when present. Hebrew + English so it matches the customer's language.
     userMessage: {
-      he: "נראה שהזמן נתפס הרגע — בוא נבחר חלופה",
-      en: "Looks like that slot was just booked — let's pick another time.",
+      he: "נראה שהזמן נתפס הרגע - בוא נבחר חלופה",
+      en: "Looks like that slot was just booked - let's pick another time.",
     },
     requestedSlotIso: new Date(slot.startMs).toISOString(),
   };

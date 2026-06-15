@@ -3,8 +3,8 @@
 /**
  * Voice channel call routing.
  *
- * Two top-level sections — Inbound (when customers call you) and
- * Outbound (when you call customers) — each with its own mode picker
+ * Two top-level sections - Inbound (when customers call you) and
+ * Outbound (when you call customers) - each with its own mode picker
  * and the sub-settings relevant to that mode. Saves to
  * `voice_channels` via `PUT /api/voice-channels/:id/routing`.
  */
@@ -310,7 +310,7 @@ function OutboundSection({
   t: (k: string) => string;
 }) {
   const isAgentFirst = routing.outboundMode === "AGENT_FIRST";
-  // Effective AGENT_FIRST agent — explicit slot, with defaultAgent as
+  // Effective AGENT_FIRST agent - explicit slot, with defaultAgent as
   // legacy fallback. The UI surfaces the fallback transparently so
   // admins know what will actually ring even if they never picked.
   const explicitAgent = findAgent(agents, routing.agentFirstAgentId);
@@ -468,7 +468,7 @@ function AgentSelect({
       <option value="">{placeholder}</option>
       {agents.map((a) => (
         <option key={a.id} value={a.id}>
-          {agentLabel(a)}{a.phoneNumber ? "" : " — ⚠ no phone"}
+          {agentLabel(a)}{a.phoneNumber ? "" : " - ⚠ no phone"}
         </option>
       ))}
     </select>

@@ -302,7 +302,7 @@ function ApprovalListCard({
               row.status === "EXPIRED"
                 ? row.decidedAt
                   ? new Date(row.decidedAt).toLocaleString()
-                  : "—"
+                  : "-"
                 : (row.decidedByName ?? row.decidedBy ?? "system")
                   + (row.decidedAt ? ` · ${new Date(row.decidedAt).toLocaleTimeString()}` : "")
             }
@@ -310,7 +310,7 @@ function ApprovalListCard({
         ) : (
           <Meta
             label={t("approvals.expires")}
-            value={row.expiresAt ? new Date(row.expiresAt).toLocaleTimeString() : "—"}
+            value={row.expiresAt ? new Date(row.expiresAt).toLocaleTimeString() : "-"}
           />
         )}
       </div>
@@ -417,6 +417,6 @@ function playApprovalChime() {
       osc.stop(now + i * 0.12 + 0.4);
     });
   } catch {
-    // Audio API unavailable / blocked — silent fail; the visual update still happens.
+    // Audio API unavailable / blocked - silent fail; the visual update still happens.
   }
 }

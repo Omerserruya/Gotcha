@@ -44,7 +44,7 @@ export interface SessionDeps {
 }
 
 // Parsed media frame shape (subset used by handleMediaFrame).
-// Twilio sends `track` as bare "inbound"/"outbound" — not the historical
+// Twilio sends `track` as bare "inbound"/"outbound" - not the historical
 // `inbound_track`/`outbound_track` form. Accept both literal forms.
 export interface MediaFrameParsed {
   sequenceNumber: string;
@@ -111,7 +111,7 @@ export class Session {
   }
 
   // ---------------------------------------------------------------------------
-  // bootstrap — persist record, publish started event
+  // bootstrap - persist record, publish started event
   // ---------------------------------------------------------------------------
   async bootstrap(): Promise<void> {
     const ttl = this.deps.sessionTtlSeconds ?? DEFAULT_SESSION_TTL_SECONDS;
@@ -163,7 +163,7 @@ export class Session {
       }
 
       // Attribution modes:
-      //   (a) CONFERENCE (preferred): WS is attached per-participant — every
+      //   (a) CONFERENCE (preferred): WS is attached per-participant - every
       //       frame represents ONE speaker. `fixedSpeaker` (from
       //       customParameters.speaker on the start frame) is authoritative;
       //       outbound_track frames carry mixed conference audio and are
@@ -207,7 +207,7 @@ export class Session {
   }
 
   // ---------------------------------------------------------------------------
-  // handleStop — graceful stop signal from Twilio
+  // handleStop - graceful stop signal from Twilio
   // ---------------------------------------------------------------------------
   async handleStop(): Promise<void> {
     await this.safe(async () => {
@@ -216,7 +216,7 @@ export class Session {
   }
 
   // ---------------------------------------------------------------------------
-  // handleWsClose — WS disconnected; start grace timer
+  // handleWsClose - WS disconnected; start grace timer
   // ---------------------------------------------------------------------------
   async handleWsClose(): Promise<void> {
     if (this._state === "ended") return;
@@ -231,7 +231,7 @@ export class Session {
   }
 
   // ---------------------------------------------------------------------------
-  // resumeFromReconnect — cancel grace timer, increment reconnect counter
+  // resumeFromReconnect - cancel grace timer, increment reconnect counter
   // ---------------------------------------------------------------------------
   async resumeFromReconnect(): Promise<void> {
     await this.safe(async () => {
@@ -244,7 +244,7 @@ export class Session {
   }
 
   // ---------------------------------------------------------------------------
-  // end — terminate session cleanly
+  // end - terminate session cleanly
   // ---------------------------------------------------------------------------
   async end(reason: EndReason): Promise<void> {
     if (this._endCalled) return;
@@ -256,7 +256,7 @@ export class Session {
     this.refreshTtlTimer?.cancel();
     this.refreshTtlTimer = null;
 
-    // Transition state (skip if already ended — e.g., panic called twice)
+    // Transition state (skip if already ended - e.g., panic called twice)
     try {
       if (this._state !== "ended") {
         this.transitionTo("ended");
@@ -333,7 +333,7 @@ export class Session {
     }
     const prev = this._state;
     this._state = next;
-    // Fire-and-forget — errors caught in safe()
+    // Fire-and-forget - errors caught in safe()
     this.deps.eventBus.publish({
       event: "voice.session.state_changed",
       tenantId: this.tenantId,
@@ -415,7 +415,7 @@ export class Session {
     const router = this._router;
     if (!router) return;
     for (const emit of buf.drain()) {
-      // Single fan-out call — router handles projection (Pub/Sub) + persistence
+      // Single fan-out call - router handles projection (Pub/Sub) + persistence
       // (Postgres finals) in independent fire-and-forget branches. No awaits.
       router.pushTranscript({
         tenantId: this.tenantId,
@@ -433,7 +433,7 @@ export class Session {
 
   private safePushWithBackoff(pcm: Int16Array, speaker: Speaker): void {
     if (this.sttPaused) {
-      // Audio already in queue — it will be drained when resume
+      // Audio already in queue - it will be drained when resume
       return;
     }
     try {
@@ -479,13 +479,13 @@ export class Session {
   }
 
   // ---------------------------------------------------------------------------
-  // safe — per-session error boundary
+  // safe - per-session error boundary
   // ---------------------------------------------------------------------------
   private async safe(fn: () => Promise<void>): Promise<void> {
     try {
       await fn();
     } catch (err) {
-      this.deps.logger.error({ err, tenantId: this.tenantId, conversationId: this.conversationId }, "session: unhandled error in handler — panic");
+      this.deps.logger.error({ err, tenantId: this.tenantId, conversationId: this.conversationId }, "session: unhandled error in handler - panic");
       // Avoid recursive panic
       if (!this._endCalled) {
         try {

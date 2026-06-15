@@ -1,12 +1,12 @@
 /**
- * Field Definitions — CRUD API for the scope-aware intelligence field
+ * Field Definitions - CRUD API for the scope-aware intelligence field
  * registry (Customer Intelligence V2, Phase 1). Backs the Fields Builder UI.
  *
  * Routes (mounted at /api/field-definitions):
- *   GET    /            — list fields (optional ?scope=customer|opportunity|conversation)
- *   POST   /            — create a custom field
- *   PUT    /:id         — update a field
- *   DELETE /:id         — delete a field
+ *   GET    /            - list fields (optional ?scope=customer|opportunity|conversation)
+ *   POST   /            - create a custom field
+ *   PUT    /:id         - update a field
+ *   DELETE /:id         - delete a field
  *
  * Auth: tenant ADMIN only.
  */

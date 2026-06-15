@@ -26,7 +26,7 @@ local docker stack.
 ## Usage
 
 ```bash
-# full flow — setup, wait for you to send "hey", drive the 3 turns
+# full flow - setup, wait for you to send "hey", drive the 3 turns
 ./node_modules/.bin/tsx scripts/demo/run-demo.ts
 
 # phases can run individually
@@ -44,8 +44,8 @@ local docker stack.
 
 | | Where | Workaround in script |
 |---|---|---|
-| A | `ai-bot.service.ts:508` — bare Hebrew keyword `נציג` substring-matches `נציגי מכירות`, bypassing the LLM tool path | Turn wording avoids `נציג`, `לדבר עם נציג`, `אדם אמיתי`, and English triggers. |
-| B | `ai-bot.service.ts:99/422` — `buildSystemPrompt` reads `systemPrompt` only, not `description` | Setup phase copies `description + TOOL-USE RULES` into `systemPrompt`. |
+| A | `ai-bot.service.ts:508` - bare Hebrew keyword `נציג` substring-matches `נציגי מכירות`, bypassing the LLM tool path | Turn wording avoids `נציג`, `לדבר עם נציג`, `אדם אמיתי`, and English triggers. |
+| B | `ai-bot.service.ts:99/422` - `buildSystemPrompt` reads `systemPrompt` only, not `description` | Setup phase copies `description + TOOL-USE RULES` into `systemPrompt`. |
 | C | `approvals.ts:223` un-pauses with `handledBy:"ai_bot"`, but `incoming.worker.ts:397` resumes the bot only on `handledBy:"ai_agent"` | Script un-pauses with `ai_agent`. |
 | D | Frontend POST `/api/approvals/:id/approve` returns 401 | Script performs Zoho POST directly with the internal key. |
 | E | LLM skips `link_customer_identifier` when the email is already in the `create_lead` payload | Script calls `/api/identity/link` directly to produce the `IdentityLinkSuggestion`. |
@@ -53,6 +53,6 @@ local docker stack.
 
 ## Files
 
-- `run-demo.ts` — orchestrator (setup → wait → drive → report)
-- `cleanup.ts` — reset conversation + seeded contacts + suggestions + approvals
-- `README.md` — this file
+- `run-demo.ts` - orchestrator (setup → wait → drive → report)
+- `cleanup.ts` - reset conversation + seeded contacts + suggestions + approvals
+- `README.md` - this file

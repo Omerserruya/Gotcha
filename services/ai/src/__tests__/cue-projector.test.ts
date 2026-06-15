@@ -5,7 +5,7 @@ import { trustWeights } from "../services/intelligence/trust/trust-weights.servi
 import { goalStateMachine } from "../services/intelligence/goal-state-machine";
 
 /**
- * Pure unit tests — projector logic should not touch the DB. trustWeights
+ * Pure unit tests - projector logic should not touch the DB. trustWeights
  * is seeded via the _setForTest hook so we don't hit Postgres.
  */
 
@@ -118,7 +118,7 @@ describe("CueProjector", () => {
     trustWeights._setForTest("suggested_action", "ask budget", 0.1);
     // High urgency base = 0.85 × (0.5 + 0.1) = 0.51 < pulse threshold 0.70.
     // Other unrelated cues (goal-schema gap-fill) may still surface in the
-    // same project() call — we only assert the dampened cue is dropped.
+    // same project() call - we only assert the dampened cue is dropped.
     const cues = p.project(
       frame({
         suggestedActions: [{ text: "ask budget", rationale: "x", urgency: "high" }],

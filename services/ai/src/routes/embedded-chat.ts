@@ -7,20 +7,20 @@ import { sanitizeVisitorName, sanitizeUntrusted } from "../services/prompt-sanit
 const router = Router();
 
 /**
- * Rate limiters — applied to the public, unauthenticated embedded-chat
+ * Rate limiters - applied to the public, unauthenticated embedded-chat
  * surface. The widget is loaded by every visitor on the tenant's site,
  * so the keys are (widgetId, ip) for init and (sessionId, ip) for
  * message/messages. We trust the JSON body for widget/session ids since
- * the routes themselves verify them downstream — the limiter just keeps
+ * the routes themselves verify them downstream - the limiter just keeps
  * unbounded floods from reaching the verification step or burning OpenAI
  * tokens via the BullMQ enqueue.
  *
  * Caps are conservative for the public internet but never block a normal
  * conversation:
  *
- *   /init     — 5 / min / (widgetId, ip)        — usually called once / tab
- *   /message  — 20 / min / (sessionId, ip)      — burst-tolerant, denies floods
- *   /messages — 60 / min / (sessionId, ip)      — polling endpoint
+ *   /init     - 5 / min / (widgetId, ip)        - usually called once / tab
+ *   /message  - 20 / min / (sessionId, ip)      - burst-tolerant, denies floods
+ *   /messages - 60 / min / (sessionId, ip)      - polling endpoint
  *
  * Overrides via env: AI_WIDGET_INIT_RPM / AI_WIDGET_MESSAGE_RPM / AI_WIDGET_POLL_RPM.
  */
@@ -68,14 +68,14 @@ const pollLimiter = rateLimit({
 });
 
 /**
- * Hard caps applied before anything else — defends against 100KB
+ * Hard caps applied before anything else - defends against 100KB
  * customer messages that would balloon the prompt + bill OpenAI.
  */
 const MAX_BODY_LENGTH = envInt("AI_WIDGET_MAX_BODY_CHARS", 4000);
 const MAX_VISITOR_NAME = 32;
 const MAX_PAGE_URL = 512;
 
-// POST /api/embedded-chat/init — Initialize a chat session (public, no auth)
+// POST /api/embedded-chat/init - Initialize a chat session (public, no auth)
 router.post("/init", initLimiter, async (req: Request, res: Response) => {
   try {
     const { widgetId, visitorId, sessionId, visitorName, pageUrl } = req.body;
@@ -85,7 +85,7 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
       return;
     }
 
-    // Find the channel account for this widget. Widget init is public — the
+    // Find the channel account for this widget. Widget init is public - the
     // anonymous caller has no tenant context yet, and widgetId is globally
     // unique by design, so this lookup MUST be cross-tenant. We then derive
     // tenantId from the channel account and scope everything downstream to it.
@@ -130,7 +130,7 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
     }
 
     if (!conversation) {
-      // Generate a readable visitor name. Anonymous input — sanitize and
+      // Generate a readable visitor name. Anonymous input - sanitize and
       // cap length so this string can never carry prompt-injection into
       // the bot turn that will later quote `conversation.customerName`.
       let displayName = sanitizeVisitorName(visitorName) || "Website Visitor";
@@ -139,7 +139,7 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
           const safePageUrl = sanitizeUntrusted(pageUrl, { wrap: false, maxLength: MAX_PAGE_URL });
           const hostname = new URL(safePageUrl).hostname.replace("www.", "");
           // Hostnames cannot legitimately contain spaces or control chars
-          // by this point — but slice as defence in depth.
+          // by this point - but slice as defence in depth.
           displayName = `Visitor from ${hostname.slice(0, MAX_VISITOR_NAME)}`;
         } catch {}
       }
@@ -170,7 +170,7 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// POST /api/embedded-chat/message — Send a message (public)
+// POST /api/embedded-chat/message - Send a message (public)
 router.post("/message", messageLimiter, async (req: Request, res: Response) => {
   try {
     const { sessionId, visitorId, body } = req.body;
@@ -184,7 +184,7 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
     // The sanitizer further normalises (control chars, RTL, role markers).
     if (body.length > MAX_BODY_LENGTH * 4) {
       // Reject extremely oversized payloads outright (>16k chars). Don't
-      // even sanitize — refuse to allocate the work.
+      // even sanitize - refuse to allocate the work.
       res.status(413).json({ error: "Message too large" });
       return;
     }
@@ -234,7 +234,7 @@ router.post("/message", messageLimiter, async (req: Request, res: Response) => {
   }
 });
 
-// GET /api/embedded-chat/messages/:sessionId — Get messages for a session (public)
+// GET /api/embedded-chat/messages/:sessionId - Get messages for a session (public)
 router.get("/messages/:sessionId", pollLimiter, async (req: Request, res: Response) => {
   try {
     const sessionId = String(req.params.sessionId ?? "");

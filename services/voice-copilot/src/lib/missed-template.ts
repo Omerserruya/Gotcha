@@ -5,7 +5,7 @@
  * subsequent calls), so over-triggering this is safe.
  *
  * Lives here (rather than inside one route module) because multiple state
- * transitions can land in MISSED — `/status` and `/forward-complete` in
+ * transitions can land in MISSED - `/status` and `/forward-complete` in
  * voice-incoming.ts, plus conference-end / participant-leave in twilio-twiml.ts.
  * Sharing one helper keeps the template-fire policy consistent across all
  * MISSED entry points.
@@ -23,7 +23,7 @@ export function fireMissedTemplate(sessionId: string, logger: Logger): void {
     if (!r.ok) {
       const txt = await r.text().catch(() => "");
       // 409 from the missed-template endpoint means the channel didn't
-      // need a template (wrong modes, no WABA channel, etc.) — that's a
+      // need a template (wrong modes, no WABA channel, etc.) - that's a
       // routine outcome, not a real error.
       if (r.status !== 409) {
         logger.warn({ status: r.status, body: txt.slice(0, 200), sessionId }, "missed-template upstream non-ok");

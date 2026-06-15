@@ -136,7 +136,7 @@ export default function IntegrationDetailPage() {
         intg = {
           slug: "custom_api",
           name: "Custom API",
-          description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+          description: "Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
           category: "CUSTOM",
           authType: "CUSTOM",
           authSchema: {},
@@ -181,18 +181,18 @@ export default function IntegrationDetailPage() {
 
   // Build credential fields from authSchema. Per-provider fallbacks below
   // protect against stale catalog rows (e.g. an old marketplace migration
-  // where Shopify is still API_KEY without the `shop` field) — without
+  // where Shopify is still API_KEY without the `shop` field) - without
   // them the OAuth init endpoint would 400 with shop_required.
   const authSchema = integration?.authSchema || {};
   let credFields: Array<{ key: string; label: string; type: string; required: boolean; placeholder?: string; helpText?: string }> =
     authSchema.fields || (integration?.authType === "API_KEY" ? [{ key: "apiKey", label: t("marketplace.apiKey"), type: "password", required: true }] : []);
   if (slug === "shopify" && !credFields.some((f) => f.key === "shop")) {
     credFields = [
-      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain — e.g. my-store or my-store.myshopify.com." },
+      { key: "shop", label: "Shop domain", type: "text", required: true, placeholder: "my-store.myshopify.com", helpText: "Your store's myshopify subdomain - e.g. my-store or my-store.myshopify.com." },
       ...credFields.filter((f) => f.key !== "apiKey"),
     ];
   }
-  // Shopify is OAuth-only — force the OAuth branch even if the catalog
+  // Shopify is OAuth-only - force the OAuth branch even if the catalog
   // still has the legacy API_KEY auth_type (older base migration).
   const effectiveAuthType: string = slug === "shopify" ? "OAUTH2" : (integration?.authType || "API_KEY");
   // Config fields (table allowlists, db name, default board, etc.) for providers that need post-connect setup.
@@ -260,7 +260,7 @@ export default function IntegrationDetailPage() {
     setConfig((prev) => {
       const cur: string[] = Array.isArray(prev[fieldKey]) ? prev[fieldKey] : [];
       const next = cur.includes(name) ? cur.filter((x) => x !== name) : [...cur, name];
-      // Writes must be a subset of Reads — auto-add to reads when writing.
+      // Writes must be a subset of Reads - auto-add to reads when writing.
       if (fieldKey === "allowWrites" && !cur.includes(name)) {
         const reads: string[] = Array.isArray(prev.allowReads) ? prev.allowReads : [];
         if (!reads.includes(name)) {
@@ -470,7 +470,7 @@ export default function IntegrationDetailPage() {
             )}
           </div>
 
-          {/* Connect / Edit Credentials — skipped for custom_api since each
+          {/* Connect / Edit Credentials - skipped for custom_api since each
               tenant-defined Custom API tool carries its own credentials,
               there is no central token to authorize against. */}
           {slug !== "custom_api" && (!isConnected || editingCreds) && (
@@ -479,7 +479,7 @@ export default function IntegrationDetailPage() {
                 {editingCreds ? `${t("common.edit")} ${t("marketplace.credentials")}` : t("marketplace.connect")}
               </h2>
 
-              {/* OAUTH2 branch — render for both first-time connect and
+              {/* OAUTH2 branch - render for both first-time connect and
                   re-auth, otherwise providers like Shopify lose the
                   required `shop` field on the re-auth path and the
                   /oauth/init endpoint rejects the request as shop_required.
@@ -493,7 +493,7 @@ export default function IntegrationDetailPage() {
                       ? "Re-authorize this integration via OAuth. Required fields below are sent to the provider's authorize URL."
                       : "This integration uses OAuth 2.0. Click below to authorize access."}
                   </p>
-                  {/* Pre-OAuth fields — e.g. Shopify shop domain, Salesforce loginHost, Square environment */}
+                  {/* Pre-OAuth fields - e.g. Shopify shop domain, Salesforce loginHost, Square environment */}
                   {credFields.length > 0 && (
                     <div className="space-y-3 pb-2">
                       {credFields.map((field) => (
@@ -543,7 +543,7 @@ export default function IntegrationDetailPage() {
                         const { url } = await initIntegrationOAuth(token, slug, credentials);
                         window.location.href = url;
                       } catch (err: any) {
-                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed — check provider client ID/secret/redirect on the server." });
+                        setTestResult({ ok: false, msg: err?.message || "OAuth init failed - check provider client ID/secret/redirect on the server." });
                       }
                     }}
                     className="inline-flex items-center gap-2 px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white rounded-xl text-sm font-medium transition shadow-sm"
@@ -614,7 +614,7 @@ export default function IntegrationDetailPage() {
                     <div className="pt-3 mt-3 border-t border-gray-100 space-y-3">
                       <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Configuration</h4>
 
-                      {/* DB schema picker — for postgres / mongodb / aws_rds */}
+                      {/* DB schema picker - for postgres / mongodb / aws_rds */}
                       {isDbProvider && (
                         <div className="rounded-xl border border-violet-100 bg-violet-50/40 p-3 space-y-2">
                           <div className="flex items-center justify-between gap-2">
@@ -683,7 +683,7 @@ export default function IntegrationDetailPage() {
                             </div>
                             {enabled.length > 0 && (
                               <div className="rounded-lg border border-gray-200 bg-white p-3 space-y-3">
-                                <p className="text-xs font-semibold text-gray-700">Per-table notes <span className="text-gray-400 font-normal">— help the AI pick the right table</span></p>
+                                <p className="text-xs font-semibold text-gray-700">Per-table notes <span className="text-gray-400 font-normal">- help the AI pick the right table</span></p>
                                 {enabled.map((qualified) => {
                                   const note = tableNotes[qualified] || {};
                                   return (
@@ -693,13 +693,13 @@ export default function IntegrationDetailPage() {
                                         className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none"
                                         value={note.description || ""}
                                         onChange={(e) => setTableNote(qualified, "description", e.target.value)}
-                                        placeholder="Description — what this table holds (e.g. customer orders)"
+                                        placeholder="Description - what this table holds (e.g. customer orders)"
                                       />
                                       <input
                                         className="w-full px-2 py-1.5 bg-gray-50 border border-gray-200 rounded-md text-xs focus:ring-1 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none"
                                         value={note.whenToUse || ""}
                                         onChange={(e) => setTableNote(qualified, "whenToUse", e.target.value)}
-                                        placeholder="When to use — e.g. when the customer asks about an order"
+                                        placeholder="When to use - e.g. when the customer asks about an order"
                                       />
                                     </div>
                                   );
@@ -715,7 +715,7 @@ export default function IntegrationDetailPage() {
                       {configFields.map((field) => {
                         const ftype = (field as any).type || "text";
                         const value = config[field.key] ?? (field as any).default ?? (ftype === "text-list" ? [] : ftype === "number" ? "" : "");
-                        // Suppress legacy text-list inputs for table allowlists when the DB picker is in use —
+                        // Suppress legacy text-list inputs for table allowlists when the DB picker is in use -
                         // those keys are already controlled by the checkbox grid above.
                         if (isDbProvider && (field.key === "allowReads" || field.key === "allowWrites") && dbObjects.length > 0) {
                           return null;
@@ -811,12 +811,12 @@ export default function IntegrationDetailPage() {
             </div>
           )}
 
-          {/* Custom API tool builder — always visible for the custom_api integration,
+          {/* Custom API tool builder - always visible for the custom_api integration,
               regardless of connection state, since each tool is tenant-defined and
               self-contained (no central token to authorize). */}
           {slug === "custom_api" && <CustomApiToolsSection />}
 
-          {/* Custom DB query tool builder — visible on Postgres / MongoDB / RDS
+          {/* Custom DB query tool builder - visible on Postgres / MongoDB / RDS
               integration pages (only after the underlying integration is CONNECTED,
               since the query runs through that integration's connection string). */}
           {isConnected && (slug === "postgresql" || slug === "mongodb" || slug === "aws_rds") && (
@@ -825,7 +825,7 @@ export default function IntegrationDetailPage() {
 
           {/* Shopify as CRM source of truth (opt-in). Shopify is an
               ecommerce integration, but a tenant can elect it as their
-              customer system of record — the bot then reads customer
+              customer system of record - the bot then reads customer
               context (and writes notes/tags) from Shopify instead of a
               CRM-category integration. Leaving this off changes nothing. */}
           {slug === "shopify" && isConnected && (
@@ -834,14 +834,14 @@ export default function IntegrationDetailPage() {
                 <div className="min-w-0">
                   <h2 className="font-semibold text-gray-900">Use Shopify as my CRM</h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    Make Shopify the <strong>source of truth</strong> for customers — the AI reads
+                    Make Shopify the <strong>source of truth</strong> for customers - the AI reads
                     customer identity, order history and summaries from Shopify, and writes notes,
                     tags and metafields back here. When on, this takes precedence over any connected
                     CRM (HubSpot, Zoho, Salesforce…). Your existing tools keep working either way.
                   </p>
                   {useAsCrm && (
                     <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
-                      Active — Shopify is your CRM source of truth
+                      Active - Shopify is your CRM source of truth
                     </span>
                   )}
                 </div>

@@ -11,7 +11,7 @@
  *   - markContractFulfilled(...)      → finalize a contract for this conv
  *
  * Failure mode: any DB error returns empty data and logs. Contracts are an
- * enforcement overlay — falling back to "no contracts" never makes the bot
+ * enforcement overlay - falling back to "no contracts" never makes the bot
  * misbehave on the prior path, so degrade gracefully.
  */
 
@@ -25,7 +25,7 @@ export interface ActionContract {
   trigger: string;
   requiredTools: { name: string }[];
   executionMode: ExecutionMode;
-  /** When SEQUENCE — the canonical execution order (falls back to requiredTools order). */
+  /** When SEQUENCE - the canonical execution order (falls back to requiredTools order). */
   order?: string[] | null;
   blocking: boolean;
   isActive: boolean;
@@ -103,7 +103,7 @@ export async function loadContractProgress(opts: {
 /**
  * Idempotently mark a tool execution against a contract. Bumps the next
  * step index for SEQUENCE contracts. No-op if the tool was already recorded
- * for this (conversation, contract) — that gives free idempotency to the
+ * for this (conversation, contract) - that gives free idempotency to the
  * dispatcher's retry path.
  */
 export async function markContractToolCompleted(opts: {
@@ -120,7 +120,7 @@ export async function markContractToolCompleted(opts: {
       ? existing.completedTools
       : [];
     if (completed.includes(opts.toolName)) {
-      // Already recorded — return current.
+      // Already recorded - return current.
       return rowToProgress(existing);
     }
     const nextCompleted = [...completed, opts.toolName];
@@ -205,7 +205,7 @@ export function pendingToolsFor(contract: ActionContract, completed: string[]): 
 
 function rowToContract(r: any): ActionContract {
   const requiredTools = Array.isArray(r.requiredTools) ? r.requiredTools : [];
-  // Normalize shape — tenants may write either `["x","y"]` or `[{name:"x"}]`.
+  // Normalize shape - tenants may write either `["x","y"]` or `[{name:"x"}]`.
   const norm: { name: string }[] = requiredTools.map((t: any) =>
     typeof t === "string" ? { name: t } : { name: String(t?.name ?? "") },
   ).filter((t: { name: string }) => t.name);

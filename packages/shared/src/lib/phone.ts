@@ -10,7 +10,7 @@ import type { CountryCode } from "libphonenumber-js";
  *   - bare digits with no leading 0 → prepended with the default country
  *
  * Returns the original `raw` value when libphonenumber can't parse it
- * (so callers don't silently drop unknown formats — the broadcast worker
+ * (so callers don't silently drop unknown formats - the broadcast worker
  * will surface the failure when the carrier rejects it).
  */
 export function normalizePhone(raw: string | null | undefined, defaultCountry: string = "IL"): string {
@@ -29,7 +29,7 @@ export function normalizePhone(raw: string | null | undefined, defaultCountry: s
 
 /**
  * True when `raw` parses to a valid E.164 number under the given default
- * country. Useful for surface-level UI hints ("this looks bare — we'll
+ * country. Useful for surface-level UI hints ("this looks bare - we'll
  * prepend +972 at send time").
  */
 export function isValidPhone(raw: string | null | undefined, defaultCountry: string = "IL"): boolean {

@@ -7,12 +7,12 @@
  *   3. SYSTEM_FALLBACK_LOCALE ("en")
  *
  * Surfaces that consume this:
- *   • UI strings — frontend reads the effective locale at boot
- *   • AI generators — customer brief, conversation aiSummary, voice
+ *   • UI strings - frontend reads the effective locale at boot
+ *   • AI generators - customer brief, conversation aiSummary, voice
  *     copilot insights, post-call QA, CRM notes
  *
  * Surfaces that explicitly DO NOT consume this:
- *   • Suggested-reply drafts — use Conversation.detectedLocale so the
+ *   • Suggested-reply drafts - use Conversation.detectedLocale so the
  *     draft matches the customer's language regardless of what the
  *     agent set in Settings.
  */
@@ -44,7 +44,7 @@ export interface ResolvedLocale {
 
 /**
  * Resolve the effective locale for a given (tenant, optional user). One
- * round-trip — selects only the locale columns. Safe to call inline from
+ * round-trip - selects only the locale columns. Safe to call inline from
  * request handlers; cheap enough that route-level caching isn't needed.
  */
 export async function resolveEffectiveLocale(args: {

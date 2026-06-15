@@ -15,7 +15,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
         <VoiceCallProvider>
           {/* VoiceSessionsProvider holds the tenant-wide RINGING + live
               snapshot for Phase-1 Live Call CoPilot. Components inside
-              gate themselves on the tenant feature flags — when disabled
+              gate themselves on the tenant feature flags - when disabled
               they render null so non-rollout tenants see today's UI. */}
           <VoiceSessionsProvider>
             {children}

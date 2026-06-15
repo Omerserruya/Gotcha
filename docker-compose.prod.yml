@@ -1,4 +1,4 @@
-# Production docker-compose — pulls pre-built images from a registry, never builds.
+# Production docker-compose - pulls pre-built images from a registry, never builds.
 #
 # Usage:
 #   1. Set REGISTRY + TAG (and the rest of .env) on the host.
@@ -13,7 +13,7 @@
 #                                   -t $REGISTRY/gotcha:auth-$TAG --push .
 #
 # Key differences vs dev docker-compose.yml:
-#   • No `build:` blocks — `image:` only
+#   • No `build:` blocks - `image:` only
 #   • No host port mappings on db/redis/qdrant (internal network only)
 #   • `restart: unless-stopped` everywhere so a reboot brings the stack back
 #   • JSON-file log driver with rotation so /var/lib/docker doesn't fill the disk
@@ -41,7 +41,7 @@ services:
       POSTGRES_DB: ${POSTGRES_DB:-whatsapp_cc}
     volumes:
       - pgdata:/var/lib/postgresql/data
-    # No host port exposure in prod — services reach it on the internal network.
+    # No host port exposure in prod - services reach it on the internal network.
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-postgres}"]
       interval: 5s
@@ -68,7 +68,7 @@ services:
     logging: *default-logging
     volumes:
       - qdrant_data:/qdrant/storage
-    # No host port exposure in prod — AI service reaches it on the internal network.
+    # No host port exposure in prod - AI service reaches it on the internal network.
     healthcheck:
       test: ["CMD-SHELL", "bash -c ':> /dev/tcp/localhost/6333' || exit 1"]
       interval: 5s
@@ -376,7 +376,7 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
-      # Required by shared/jwt.ts at module-load — even workers that don't
+      # Required by shared/jwt.ts at module-load - even workers that don't
       # mint tokens import the shared barrel, which triggers the prod
       # JWT_SECRET length check.
       JWT_SECRET: ${JWT_SECRET}
@@ -420,7 +420,7 @@ services:
     pull_policy: always
     restart: "no"
     logging: *default-logging
-    # Prod migrate runs SCHEMA only — `prisma migrate deploy` applies every
+    # Prod migrate runs SCHEMA only - `prisma migrate deploy` applies every
     # un-applied migration in packages/shared/prisma/migrations/ (idempotent,
     # never re-runs an already-applied one). It does NOT run seed.ts, which
     # exists for local dev only and would otherwise re-create a "Demo
@@ -439,7 +439,7 @@ services:
     profiles:
       - migrate
 
-  # Frontend service removed in prod — the static export is baked into the
+  # Frontend service removed in prod - the static export is baked into the
   # gateway image (gateway/Dockerfile.prod). NEXT_PUBLIC_* values are baked
   # at build time inside that image; to switch domains, rebuild + push a
   # new gateway tag. Dev (docker-compose.yml) still runs Next.js as its own

@@ -15,7 +15,7 @@ import type { PostCallQAJobData } from "../../services/intelligence/queues";
  * Mode A QA orchestrator.
  *
  * Loads the persisted CallAnalysis.frames stream and runs the QA analyzers
- * against it. Operates ENTIRELY on frames — no transcript, no LLM calls in
+ * against it. Operates ENTIRELY on frames - no transcript, no LLM calls in
  * V1. The Phase 3 LiveAnalysisRunner already paid for the expensive analysis
  * during the call; QA reuses those frames.
  *
@@ -60,7 +60,7 @@ export async function runQA(
     emit: () => {},
   } as any;
 
-  // 3. Run analyzers. Both are pure functions of the frame array — safe to
+  // 3. Run analyzers. Both are pure functions of the frame array - safe to
   //    parallelize, but V1 sequences them for simpler error-handling.
   const playbookCompliance = new PlaybookCompliance();
   const coaching = new CoachingAnalyzer();
@@ -73,7 +73,7 @@ export async function runQA(
   //    mean per-frame risk weighted by severity.
   const riskScore = aggregateRiskFromFrames(frames);
 
-  // 5. Findings union — caps total at 25 to bound JSON size and UI load.
+  // 5. Findings union - caps total at 25 to bound JSON size and UI load.
   const findings: QAScoreFinding[] = [
     ...compliance.findings,
     ...coachingResult.findings,

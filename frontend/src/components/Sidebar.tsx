@@ -116,10 +116,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
           })}
       </nav>
 
-      {/* Incoming call banner — desktop sidebar slot */}
+      {/* Incoming call banner - desktop sidebar slot */}
       <IncomingCallBannerSidebar />
 
-      {/* Onboarding mission panel — auto-hides when all 5 are done */}
+      {/* Onboarding mission panel - auto-hides when all 5 are done */}
       <MissionPanel collapsed={collapsed} />
 
       {/* Language switcher moved to Settings → Language (system-wide

@@ -1,5 +1,5 @@
 /**
- * AI Employee Builder — HTTP surface.
+ * AI Employee Builder - HTTP surface.
  *
  * Mounted at `/api/ai-agents/builder` (BEFORE the ai-agents router so its
  * `GET /:id` never shadows these). The builder is the dynamic replacement
@@ -37,9 +37,9 @@ function buildGreeting(lang: string, orgName: string): string {
   const who = orgName ? ` for **${orgName}**` : "";
   const whoHe = orgName ? ` עבור **${orgName}**` : "";
   const whoAr = orgName ? ` لـ **${orgName}**` : "";
-  if (lang === "he") return `היי! אני כבר מכיר את העסק שלכם${whoHe} מתהליך ההקמה, אז נדלג על זה. בואו נגדיר את עובד ה-AI הזה — מה המטרה שלו ובמה הוא אמור לטפל מול הלקוחות?`;
-  if (lang === "ar") return `مرحبًا! أعرف عملك${whoAr} بالفعل من الإعداد، لذا سنتخطى ذلك. لنحدد موظف الذكاء الاصطناعي هذا — ما هدفه وما الذي يجب أن يتولاه مع العملاء؟`;
-  return `Hi! I already know your business${who} from onboarding, so we'll skip that. Let's define this AI employee — what's its purpose, and what should it handle for your customers?`;
+  if (lang === "he") return `היי! אני כבר מכיר את העסק שלכם${whoHe} מתהליך ההקמה, אז נדלג על זה. בואו נגדיר את עובד ה-AI הזה - מה המטרה שלו ובמה הוא אמור לטפל מול הלקוחות?`;
+  if (lang === "ar") return `مرحبًا! أعرف عملك${whoAr} بالفعل من الإعداد، لذا سنتخطى ذلك. لنحدد موظف الذكاء الاصطناعي هذا - ما هدفه وما الذي يجب أن يتولاه مع العملاء؟`;
+  return `Hi! I already know your business${who} from onboarding, so we'll skip that. Let's define this AI employee - what's its purpose, and what should it handle for your customers?`;
 }
 async function resolveLocale(tenantId: string, bodyLocale: unknown): Promise<string> {
   if (typeof bodyLocale === "string" && bodyLocale.length >= 2) return bodyLocale.toLowerCase();
@@ -58,7 +58,7 @@ router.post("/start", async (req: Request, res: Response) => {
     const { departmentId, locale } = req.body || {};
     const lang = await resolveLocale(tenantId, locale);
 
-    // The company is already known from onboarding — seed it onto the draft so
+    // The company is already known from onboarding - seed it onto the draft so
     // the builder never has to ask "what does your business do?".
     const profile = await prisma.businessProfile.findUnique({
       where: { tenantId },
@@ -138,7 +138,7 @@ router.get("/:id/options", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:id/tool — attach/detach one tool to the draft (checkbox toggle).
+// POST /:id/tool - attach/detach one tool to the draft (checkbox toggle).
 router.post("/:id/tool", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
@@ -163,7 +163,7 @@ router.post("/:id/tool", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:id/knowledge — attach/detach one knowledge base to the draft.
+// POST /:id/knowledge - attach/detach one knowledge base to the draft.
 router.post("/:id/knowledge", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
@@ -186,9 +186,9 @@ router.post("/:id/knowledge", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:id/refinements — save the optional creation-wizard refinements
+// POST /:id/refinements - save the optional creation-wizard refinements
 // (display name, conversation flow, custom guardrails) DETERMINISTICALLY,
-// from the dedicated wizard step — instead of relying on the conversational
+// from the dedicated wizard step - instead of relying on the conversational
 // builder to volunteer them. Send only the fields you're changing; an empty
 // array clears that field. Returns the refreshed draft snapshot.
 router.post("/:id/refinements", async (req: Request, res: Response) => {
@@ -343,7 +343,7 @@ router.post("/run", async (req: Request, res: Response) => {
         tenantId,
         userId,
         agentId,
-        // Cap input length — defends the LLM context budget from pasted walls
+        // Cap input length - defends the LLM context budget from pasted walls
         // of text. 4000 chars is ample for an answer in the interview.
         message: message.trim().slice(0, 4000),
         locale: await resolveLocale(tenantId, locale),

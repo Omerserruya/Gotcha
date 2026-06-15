@@ -1,5 +1,5 @@
 /**
- * System Copilot — short-term memory.
+ * System Copilot - short-term memory.
  *
  * Per-user, per-tenant rolling history backed by `SystemAgentMessage`.
  * Isolated from the customer-facing Conversation/Message tables: operator
@@ -9,7 +9,7 @@
  *
  * Memory is bounded:
  *   - We only LOAD the last N messages per (userId, tenantId).
- *   - We never delete on write — old rows stay queryable for audit.
+ *   - We never delete on write - old rows stay queryable for audit.
  *   - A future job can prune rows older than X days; for now the index
  *     keeps reads fast regardless of total size.
  */
@@ -49,7 +49,7 @@ const DEFAULT_HISTORY_LIMIT = 30;
  *
  * Bounded by `limit` rather than session size so a long-running session
  * doesn't blow up the prompt. The system-copilot prompt assumes the model
- * can handle some loss of older context — operators usually re-state.
+ * can handle some loss of older context - operators usually re-state.
  */
 export async function getAgentMemory(opts: {
   tenantId: string;
@@ -80,7 +80,7 @@ export async function getAgentMemory(opts: {
  * Like getAgentMemory, but scoped to a SINGLE session id (not all of an
  * operator's history). The AI-Employee Builder reuses the SystemAgentMessage
  * table for its turn-by-turn transcript, but its threads must NOT bleed into
- * the Command Center copilot's (userId, tenantId) history — each builder draft
+ * the Command Center copilot's (userId, tenantId) history - each builder draft
  * is its own conversation keyed by `sessionId`. Ordered ASC (oldest→newest).
  */
 export async function getSessionMemory(opts: {
@@ -164,7 +164,7 @@ export function memoryToChatMessages(messages: AgentMemoryMessage[]): any[] {
  * Make a reconstructed history safe to send to the LLM's tool-calling API.
  *
  * Memory is loaded as a bounded window (last N rows), so the window can begin
- * mid-tool-exchange — e.g. its first row is a `tool` message whose preceding
+ * mid-tool-exchange - e.g. its first row is a `tool` message whose preceding
  * `assistant`+`tool_calls` got cut off. OpenAI then rejects the whole request
  * with "messages with role 'tool' must be a response to a preceding message
  * with 'tool_calls'". It equally rejects an `assistant`+`tool_calls` whose
@@ -194,10 +194,10 @@ export function sanitizeHistoryForLLM(messages: any[]): any[] {
       if (answered.size === ids.size) {
         out.push(m, ...responses);
       }
-      // else: incomplete exchange — drop the assistant turn + any partial responses.
+      // else: incomplete exchange - drop the assistant turn + any partial responses.
       i = j - 1;
     } else if (m.role === "tool") {
-      // Orphan tool message (its assistant turn isn't in the window) — skip.
+      // Orphan tool message (its assistant turn isn't in the window) - skip.
       continue;
     } else {
       out.push(m);

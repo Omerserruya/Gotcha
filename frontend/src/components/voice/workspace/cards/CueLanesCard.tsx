@@ -9,11 +9,11 @@ import { postCueOutcome, type CueKind, type CueOutcome } from "@/lib/api-copilot
 import { useCopilotProfile, type CopilotProfile, type CopilotTier } from "@/lib/copilot-prefs";
 
 /**
- * Live Call Copilot — projected cues panel.
+ * Live Call Copilot - projected cues panel.
  *
  * Subscribes to `copilot.cues.updated` and renders cues across three lanes
  * (pulse / direction / strategy). Tier-aware (junior/mid/senior) via
- * useCopilotProfile — senior gets whisper mode (pulse only, no animation,
+ * useCopilotProfile - senior gets whisper mode (pulse only, no animation,
  * tighter cooldown), junior gets all lanes + more guidance.
  *
  * UX behavior:
@@ -51,7 +51,7 @@ interface Payload {
 interface InternalCue extends ProjectedCue {
   /** Local timestamp the cue first arrived in this client. */
   surfacedAt: number;
-  /** Cooldown applies until this timestamp — render muted until then. */
+  /** Cooldown applies until this timestamp - render muted until then. */
   mutedUntil: number;
 }
 
@@ -284,10 +284,10 @@ export function CueLanesCard({ conversationId }: Props) {
   const hasCoaching = lanesView.direction.length + lanesView.strategy.length > 0;
   return (
     <div className="flex flex-col gap-3">
-      {/* Pulse band — breaks out of the card chrome to be visually dominant.
+      {/* Pulse band - breaks out of the card chrome to be visually dominant.
           Pulse cues are time-critical signals (escalation risk, churn flags,
           customer says "cancel"). Bigger type, rose-100 fill, animated pulse
-          dot — must register at a glance even when the agent's eye is on the
+          dot - must register at a glance even when the agent's eye is on the
           transcript. */}
       {lanesView.pulse.length > 0 && (
         <div className="rounded-2xl bg-rose-50 ring-1 ring-rose-200 shadow-sm overflow-hidden">
@@ -322,7 +322,7 @@ export function CueLanesCard({ conversationId }: Props) {
         </div>
       )}
 
-      {/* Coaching card — Direction + Strategy lanes. Lower-urgency,
+      {/* Coaching card - Direction + Strategy lanes. Lower-urgency,
           longer-lived guidance. Same chrome as the rest of the rail. */}
       {(hasCoaching || lanesView.pulse.length === 0) && (
         <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
@@ -603,7 +603,7 @@ function CueRow({ cue, tone, profile, now, flash, focused, suppressedRecently, o
         </svg>
       </button>
 
-      {/* decay bar — taller so it actually reads as a countdown */}
+      {/* decay bar - taller so it actually reads as a countdown */}
       <span
         className={clsx(
           "absolute left-0 bottom-0 rounded-bl-lg transition-all duration-1000 ease-linear",

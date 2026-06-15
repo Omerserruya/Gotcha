@@ -15,7 +15,7 @@ export function ActiveCallWidget() {
   const { state, call, elapsedMs, error, hangup } = useVoiceCall();
 
   if (state === "idle") return null;
-  // The /outbound/call page shows its own full phone UI — don't double up.
+  // The /outbound/call page shows its own full phone UI - don't double up.
   if (pathname === "/outbound/call") return null;
 
   const label = {

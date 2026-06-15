@@ -24,7 +24,7 @@ export default function OutboundLayout({ children }: { children: React.ReactNode
   return (
     <AppLayout>
       <div className="flex flex-col h-screen overflow-hidden">
-        {/* Title — hidden on mobile to save vertical space, shown on md+ */}
+        {/* Title - hidden on mobile to save vertical space, shown on md+ */}
         <div className="hidden md:block px-6 pt-6 pb-0 shrink-0">
           <h1 className="text-2xl font-bold text-gray-900">{t("outbound.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">{t("outbound.subtitle")}</p>

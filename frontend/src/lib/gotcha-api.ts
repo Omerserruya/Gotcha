@@ -166,7 +166,7 @@ export async function runAgentStream(
         const ev = JSON.parse(json) as AgentSSEEvent;
         onEvent(ev);
       } catch {
-        // Malformed event — skip rather than blow up the loop.
+        // Malformed event - skip rather than blow up the loop.
       }
     }
   }
@@ -569,7 +569,7 @@ export function updateToolPermission(
   return req("PUT", `/api/tool-permissions/${encodeURIComponent(toolName)}`, token, patch);
 }
 
-// ─── Customer Intelligence V2 — Industry Packs + Field Registry ──
+// ─── Customer Intelligence V2 - Industry Packs + Field Registry ──
 
 export type FieldScope = "customer" | "opportunity" | "conversation";
 export type FieldTypeName = "text" | "number" | "boolean" | "enum" | "date" | "entity_ref";
@@ -639,7 +639,7 @@ export function deleteFieldDefinition(token: string, id: string) {
   return req<{ ok: boolean }>("DELETE", `/api/field-definitions/${encodeURIComponent(id)}`, token);
 }
 
-// ─── Customer Intelligence V2 — Snapshot (Phase 3) ──────────
+// ─── Customer Intelligence V2 - Snapshot (Phase 3) ──────────
 
 export interface SnapshotFact {
   key: string;

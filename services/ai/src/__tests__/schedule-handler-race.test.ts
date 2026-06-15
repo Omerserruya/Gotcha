@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterAll } from "vitest";
 // Freeze wall-clock time so the hardcoded REQUESTED date below stays inside
 // min_notice (4h) and max_horizon (30d) every time the test runs. Without
 // this, REQUESTED drifts into the past as real time advances. Using fake
-// timers only for system time (setSystemTime) — actual setTimeout is left
+// timers only for system time (setSystemTime) - actual setTimeout is left
 // real so the handler's retry logic still works.
 beforeEach(() => {
   vi.useFakeTimers({
@@ -17,7 +17,7 @@ afterAll(() => {
 
 // We test the slot_taken race path by stubbing the prisma + adapter modules
 // so the handler runs end-to-end without a database or network. The whole
-// point of this file is the retry-on-conflict logic — not the adapters.
+// point of this file is the retry-on-conflict logic - not the adapters.
 
 const TENANT = "tnt_1";
 const AGENT = "agent_1";
@@ -73,7 +73,7 @@ vi.mock("@chatcenter/shared", () => ({
   decryptCredentials: () => ({ accessToken: "x", refreshToken: "y" }),
 }));
 
-// Stub adapter — controlled per test.
+// Stub adapter - controlled per test.
 let adapterCreateImpl: (s: { startMs: number; endMs: number }) => Promise<any> = async () => {
   throw new Error("not configured");
 };
@@ -106,13 +106,13 @@ beforeEach(() => {
   adapterCreateImpl = async () => ({ eventId: "evt_ok", joinUrl: "https://meet.example/abc" });
 });
 
-// Tuesday 11:00 IDT — well inside working hours, > minNotice from `nowMs`.
+// Tuesday 11:00 IDT - well inside working hours, > minNotice from `nowMs`.
 // Compute requested date dynamically so we land between min_notice (4h) and
 // max_horizon (30 days). +7 days is safely inside the window at any test runtime.
-// Monday 11:00 Asia/Jerusalem — inside fake-now's min_notice & max_horizon.
+// Monday 11:00 Asia/Jerusalem - inside fake-now's min_notice & max_horizon.
 const REQUESTED = "2026-05-05T11:00:00+03:00";
 
-describe("schedule_meeting — race-condition retry", () => {
+describe("schedule_meeting - race-condition retry", () => {
   it("VALID on first try → returns success without retrying", async () => {
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
     const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });

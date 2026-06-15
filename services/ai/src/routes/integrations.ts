@@ -7,7 +7,7 @@ const router = Router();
 
 router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
 
-// GET / — List all published catalog integrations with tenant connection status
+// GET / - List all published catalog integrations with tenant connection status
 router.get("/", async (req: Request, res: Response) => {
   try {
     const catalog = await prisma.integrationCatalog.findMany({
@@ -54,7 +54,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-// GET /:slug — Get single catalog integration with connection status + tools
+// GET /:slug - Get single catalog integration with connection status + tools
 router.get("/:slug", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -93,9 +93,9 @@ router.get("/:slug", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:slug/connect — Connect tenant to integration (API_KEY/BASIC_AUTH path)
+// POST /:slug/connect - Connect tenant to integration (API_KEY/BASIC_AUTH path)
 //
-// OAuth providers should hit /api/connectors/:slug/oauth/init instead — this
+// OAuth providers should hit /api/connectors/:slug/oauth/init instead - this
 // endpoint stores credentials directly. Credentials are ENCRYPTED before
 // persistence (the adapter framework decrypts on load). Existing connections
 // are updated in-place rather than rejected, so the marketplace can re-bind
@@ -167,11 +167,11 @@ router.post("/:slug/connect", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:slug/test — Live connection test.
+// POST /:slug/test - Live connection test.
 //
 // Routes by adapter slug:
 //   - If a registered adapter exposes a READ-only tool, we invoke its first
-//     READ tool with empty args — a real network roundtrip that validates
+//     READ tool with empty args - a real network roundtrip that validates
 //     credentials end-to-end.
 //   - If no adapter is registered (e.g. zoho via the legacy path), we fall
 //     back to validating required credential fields from authSchema.
@@ -228,11 +228,11 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
         return;
       }
       // Some READ tools require args (e.g. shopify.get_order needs an order id)
-      // — that's fine: an HTTP-level auth failure is what we're testing.
+      // - that's fine: an HTTP-level auth failure is what we're testing.
       const reason = String(r.reason || "");
       const looksLikeAuth = /401|403|invalid_token|unauthor/i.test(reason);
       if (!looksLikeAuth) {
-        // Treat as success — the request reached the provider, just needed args
+        // Treat as success - the request reached the provider, just needed args
         const updated = await prisma.tenantIntegration.update({
           where: { id: tenantIntegration.id },
           data: { status: "CONNECTED" as any, lastTestedAt: new Date(), lastTestResult: true, lastError: null },
@@ -279,7 +279,7 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
   }
 });
 
-// POST /:slug/disconnect — Disconnect and delete tenant tools (cascade handles child rows)
+// POST /:slug/disconnect - Disconnect and delete tenant tools (cascade handles child rows)
 router.post("/:slug/disconnect", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -317,7 +317,7 @@ router.post("/:slug/disconnect", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /:slug/credentials — Update credentials (encrypted, in place)
+// PUT /:slug/credentials - Update credentials (encrypted, in place)
 router.put("/:slug/credentials", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -359,12 +359,12 @@ router.put("/:slug/credentials", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /:slug/crm-source — Opt this integration in/out as the tenant's CRM
+// PUT /:slug/crm-source - Opt this integration in/out as the tenant's CRM
 // source of truth. Today only Shopify supports this (it's an ECOMMERCE
 // integration a tenant may elect as their customer system of record). Sets
 // `config.useAsCrm` and invalidates the CRM resolver cache so the next bot
 // turn reads customer context from Shopify instead of any CRM-category
-// integration. Toggling OFF restores the default resolution order — it never
+// integration. Toggling OFF restores the default resolution order - it never
 // disturbs tenants who don't opt in.
 router.put("/:slug/crm-source", async (req: Request, res: Response) => {
   try {
@@ -409,7 +409,7 @@ router.put("/:slug/crm-source", async (req: Request, res: Response) => {
   }
 });
 
-// GET /:slug/tools?aiAgentId=… — List catalog tools with tenant activation
+// GET /:slug/tools?aiAgentId=… - List catalog tools with tenant activation
 // status, plus (when ?aiAgentId is passed) the per-agent permission state.
 // Used by the IntegrationDrawer in two contexts:
 //   - marketplace page (no aiAgentId) → toggles reflect TenantTool.isEnabled
@@ -482,7 +482,7 @@ router.get("/:slug/tools", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /:slug/tools/:toolSlug — Toggle tool enabled/disabled for tenant
+// PUT /:slug/tools/:toolSlug - Toggle tool enabled/disabled for tenant
 router.put("/:slug/tools/:toolSlug", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -558,7 +558,7 @@ router.put("/:slug/tools/:toolSlug", async (req: Request, res: Response) => {
 // as Leads and which acts as Contacts; without these, the schema fetcher
 // has nothing to describe and CRM-side filter rules can't run.
 
-// GET /:slug/monday-boards — list the operator's boards for the picker UI.
+// GET /:slug/monday-boards - list the operator's boards for the picker UI.
 router.get("/:slug/monday-boards", async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
@@ -582,7 +582,7 @@ router.get("/:slug/monday-boards", async (req: Request, res: Response) => {
   }
 });
 
-// PUT /:slug/audience-config — persist leadsBoardId / contactsBoardId.
+// PUT /:slug/audience-config - persist leadsBoardId / contactsBoardId.
 //
 // For Monday tenants, this maps the abstract "Leads"/"Contacts" modules
 // the audience builder uses onto concrete boards. The shared CRM client

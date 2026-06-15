@@ -82,7 +82,7 @@ export const messengerInboundAdapter: InboundAdapter = {
     // FB feed comment payload shape:
     //   entry[].changes[] = [{ field: "feed", value: { item: "comment", verb: "add"|"edit"|"remove",
     //                          comment_id, post_id, parent_id?, message, from: {id, name}, permalink_url, created_time } }]
-    // We only fire triggers on "add" — edits/removes/hides should not re-trigger
+    // We only fire triggers on "add" - edits/removes/hides should not re-trigger
     // a flow.
     const out: NormalizedCommentEvent[] = [];
     for (const entry of body.entry || []) {
@@ -93,7 +93,7 @@ export const messengerInboundAdapter: InboundAdapter = {
         if (v.item !== "comment" || v.verb !== "add") continue;
         if (!v.comment_id) continue;
         // Echo guard: skip when the page itself is the commenter (e.g. a public
-        // reply we just posted) — fromUserId === pageId means it's us.
+        // reply we just posted) - fromUserId === pageId means it's us.
         if (pageId && v.from?.id && String(v.from.id) === pageId) continue;
         const ts = typeof v.created_time === "number"
           ? v.created_time * 1000
@@ -281,7 +281,7 @@ export const messengerOutboundAdapter: OutboundAdapter = {
     text: string,
     quickReplies?: Array<{ id: string; title: string }>,
   ): Promise<{ messageId: string | null; recipientPsid: string | null } | null> {
-    // Messenger Private Reply — same shape as IG: recipient.comment_id, no
+    // Messenger Private Reply - same shape as IG: recipient.comment_id, no
     // messaging_type. Meta returns the recipient PSID so subsequent sends in
     // this run can use the regular DM endpoint with messaging_type=RESPONSE.
     // 7-day window enforced by Meta. Quick replies attach to the very first

@@ -7,7 +7,7 @@ INSERT INTO "integration_catalog"
   ("id", "slug", "name", "description", "category", "auth_type", "auth_schema", "is_published", "sort_order", "created_at", "updated_at")
 VALUES
   ('cat_returngo', 'returngo', 'ReturnGO',
-   'Returns & RMA management platform — refund/return transaction status and updates.',
+   'Returns & RMA management platform - refund/return transaction status and updates.',
    'ECOMMERCE', 'API_KEY',
    '{"fields":[{"key":"apiKey","label":"API Key","type":"password","required":true,"helpText":"ReturnGO → Settings → Integrations → API."},{"key":"shopName","label":"Store Domain","type":"text","required":true,"placeholder":"my-store.myshopify.com","helpText":"Your store domain. Multi-portal stores use my-store.myshopify.com@PortalName."}]}',
    true, 20, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)

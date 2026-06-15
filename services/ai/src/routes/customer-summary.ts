@@ -1,13 +1,13 @@
 /**
  * AI-generated customer brief.
  *
- * Persistent, customer-level behavioral intelligence — not a per-conversation
+ * Persistent, customer-level behavioral intelligence - not a per-conversation
  * summary. The brief is written by the post-chat subscriber + voice-postcall
  * worker at conversation close, and lives in `customer_briefs`. This route
  * just READS the persisted row (fast) and falls back to inline generation
  * only when the brief doesn't exist yet OR the caller forced a refresh.
  *
- * The on-demand LRU cache that used to live here is gone — the database row
+ * The on-demand LRU cache that used to live here is gone - the database row
  * is the cache. Conversation close events keep it fresh.
  */
 
@@ -54,7 +54,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
       res.status(404).json({ error: "conversation_not_found" });
       return;
     }
-    // Try the exact (channel, externalId) tuple first — the fast path that
+    // Try the exact (channel, externalId) tuple first - the fast path that
     // works when the contact was first ingested on the same channel as this
     // conversation. For voice calls that miss (the contact was usually
     // created earlier on WhatsApp / SMS / etc.), fall back to a phone-column
@@ -118,7 +118,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
       console.log(
         `[customer-summary] cache MISS conv=${conversationId} locale=${locale} ` +
         `personId=${hints.personId ?? "-"} crm=${hints.crmContactId ?? "-"} contactId=${hints.contactId ?? "-"} ` +
-        `— generating inline (one-time; subsequent panel opens will hit cache, worker events refresh it on close/hangup)`,
+        `- generating inline (one-time; subsequent panel opens will hit cache, worker events refresh it on close/hangup)`,
       );
     }
 
@@ -127,12 +127,12 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
     // conversation has closed).
     const identityKey = deriveIdentityKey(hints);
     if (!identityKey) {
-      // No identity anchor at all — we can't persist. Return a neutral
+      // No identity anchor at all - we can't persist. Return a neutral
       // briefing so the panel still renders.
       const payload: CustomerSummaryPayload = {
         ok: true,
         summary: locale === "he"
-          ? "לקוח חדש — אין אינטראקציות קודמות מתועדות."
+          ? "לקוח חדש - אין אינטראקציות קודמות מתועדות."
           : "New customer with no recorded prior interactions.",
         signals: [],
         generated_at: new Date().toISOString(),
@@ -154,7 +154,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req:
       const payload: CustomerSummaryPayload = {
         ok: true,
         summary: locale === "he"
-          ? "לקוח חדש — אין אינטראקציות קודמות מתועדות."
+          ? "לקוח חדש - אין אינטראקציות קודמות מתועדות."
           : "New customer with no recorded prior interactions.",
         signals: [],
         generated_at: new Date().toISOString(),

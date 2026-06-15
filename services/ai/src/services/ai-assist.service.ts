@@ -18,7 +18,7 @@ export interface ConversationContext {
   /**
    * Customer + conversation metadata for the copilot's "Customer &
    * Conversation Info" block. Sourced from the Conversation row by the
-   * route handler — keep optional so non-inbox callers still work.
+   * route handler - keep optional so non-inbox callers still work.
    * The provider treats every field as best-effort.
    */
   conversationMeta?: {
@@ -35,7 +35,7 @@ export interface ConversationContext {
   /**
    * Cross-channel customer memory bundle, loaded by
    * customer-context.service.loadCustomerContext when CRM identity is
-   * pinned for this conversation. Optional — when present, the provider
+   * pinned for this conversation. Optional - when present, the provider
    * folds it into the prompt as a "what we remember about this customer"
    * block (open issues, recent summaries, sentiment trend, CRM notes).
    *
@@ -59,7 +59,7 @@ export interface ConversationContext {
 /**
  * Runtime config carried alongside the conversation. The full agent record
  * travels here so the provider can call `buildAgentPrompt` with it on every
- * turn (no precomputed prompt — the builder produces fresh output per turn
+ * turn (no precomputed prompt - the builder produces fresh output per turn
  * using the runtime context the provider has access to).
  */
 export interface CopilotConfigData {
@@ -151,7 +151,7 @@ export function buildConfigFromAIAgent(agent: {
   const agentRecord: AgentRecord = {
     name: agent.name,
     role: agent.role,
-    // description removed per spec — see prompt-builder AgentRecord.
+    // description removed per spec - see prompt-builder AgentRecord.
     tone: agent.tone,
     style: agent.style,
     identity: agent.identity,

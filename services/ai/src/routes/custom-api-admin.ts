@@ -1,11 +1,11 @@
 /**
- * Custom API tool admin — CRUD + test + meta endpoints.
+ * Custom API tool admin - CRUD + test + meta endpoints.
  *
  *   GET    /custom-api-tools
  *   POST   /custom-api-tools
  *   PATCH  /custom-api-tools/:id
  *   DELETE /custom-api-tools/:id
- *   POST   /custom-api-tools/:id/test     — fire the request with a sample payload
+ *   POST   /custom-api-tools/:id/test     - fire the request with a sample payload
  *
  * ADMIN role required. Secrets are encrypted before storage and stripped
  * from every response.
@@ -16,7 +16,7 @@ import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole }
 import { executeCustomApiTool, packSecrets } from "../services/connectors/custom-api.service";
 
 const router = Router();
-// Path-scoped — see funnel-admin.ts for the rationale.
+// Path-scoped - see funnel-admin.ts for the rationale.
 router.use("/custom-api-tools", authenticate, resolveTenant, requireActiveTenant());
 
 const VALID_METHODS = new Set(["GET", "POST", "PUT", "PATCH", "DELETE"]);

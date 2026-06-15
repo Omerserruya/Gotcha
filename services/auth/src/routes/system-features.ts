@@ -15,7 +15,7 @@ import {
 } from "@chatcenter/shared";
 
 /**
- * SYSTEM_ADMIN — tenant feature management.
+ * SYSTEM_ADMIN - tenant feature management.
  *
  *   GET    /api/system/tenants/:tenantId/features            list all features + state for tenant
  *   PUT    /api/system/tenants/:tenantId/features/:feature   enable/disable a feature
@@ -29,7 +29,7 @@ import {
 const router = Router();
 router.use(crossTenantMiddleware);
 
-// ─── Feature registry (metadata only — no DB read) ─────────────
+// ─── Feature registry (metadata only - no DB read) ─────────────
 router.get(
   "/features",
   authenticate,

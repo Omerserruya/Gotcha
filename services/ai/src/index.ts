@@ -65,7 +65,7 @@ if (process.env.OPENAI_API_KEY) {
   ));
   console.log("AI provider: OpenAI initialized (model: %s)", process.env.OPENAI_DEFAULT_MODEL || "gpt-4o-mini");
 } else {
-  console.warn("AI provider: No OPENAI_API_KEY set — using stub provider");
+  console.warn("AI provider: No OPENAI_API_KEY set - using stub provider");
 }
 
 const config = { name: "ai-service", port: parseInt(process.env.PORT || "4006", 10) };
@@ -76,11 +76,11 @@ app.use("/api/knowledge-bases", knowledgeRoutes);
 app.use("/api/knowledge", knowledgeOauthRoutes);
 app.use("/api/system-chat", systemChatRoutes);
 app.use("/api/tools", toolRoutes);
-// CRM OAuth (Zoho) must mount BEFORE integrationRoutes — the latter applies
+// CRM OAuth (Zoho) must mount BEFORE integrationRoutes - the latter applies
 // `authenticate` to its entire router, which would reject Zoho's unauthenticated
 // /callback redirect. Public routes here validate a JWT state param instead.
 app.use("/api/integrations", crmOauthRoutes);
-// Calendar OAuth — same rationale as crmOauthRoutes: callback runs without
+// Calendar OAuth - same rationale as crmOauthRoutes: callback runs without
 // the dashboard's bearer token, so it must mount before integrationRoutes.
 app.use("/api/integrations", calendarOauthRoutes);
 app.use("/api/integrations", integrationRoutes);
@@ -136,7 +136,7 @@ startPostChatSubscriber();
 startIntelligenceLiveSubscriber();
 startLiveRunnerSupervisor();
 
-// Voice-flow runner — bridges live-call events into ChatbotFlow rows with
+// Voice-flow runner - bridges live-call events into ChatbotFlow rows with
 // channel=VOICE so admins manage call automations alongside chat flows.
 // See services/ai/src/services/voice-flow/voice-flow-runner.ts.
 import { startVoiceFlowRunner } from "./services/voice-flow/voice-flow-runner";
@@ -144,7 +144,7 @@ startVoiceFlowRunner();
 
 // Phase 5: Post-Call Mode A QA. Trigger enqueues a QA job on every
 // voice.session.ended; worker scores against persisted CallAnalysis.frames,
-// writes a QAScore row, emits qa.scored. Independent of the live path —
+// writes a QAScore row, emits qa.scored. Independent of the live path -
 // can fail without affecting active calls.
 startPostCallQAWorker();
 startPostCallQATrigger();

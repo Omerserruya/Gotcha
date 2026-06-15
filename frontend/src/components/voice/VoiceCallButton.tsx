@@ -34,7 +34,7 @@ export function VoiceCallButton({ to, contactName, conversationId, label }: Prop
       });
       // AGENT_FIRST: server is ringing the agent's mobile. Open the
       // workspace only when the channel toggle says so. Otherwise
-      // fire-and-forget — the agent's mobile rings, no UI needed.
+      // fire-and-forget - the agent's mobile rings, no UI needed.
       if (result && result.mode === "AGENT_FIRST" && result.openWorkspace && result.sessionId) {
         router.push(`/voice/${result.sessionId}`);
       }

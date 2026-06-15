@@ -48,7 +48,7 @@ function humanizeKey(key: string): string {
 }
 
 function formatValue(v: unknown): string {
-  if (v == null) return "—";
+  if (v == null) return "-";
   if (typeof v === "string") return v;
   if (typeof v === "number" || typeof v === "boolean") return String(v);
   if (Array.isArray(v)) return v.map(formatValue).join(", ");
@@ -89,7 +89,7 @@ export function ParamRows({ params }: { params: Record<string, unknown> }) {
   );
 }
 
-// Tool-specific previews — fall back to the generic ParamRows.
+// Tool-specific previews - fall back to the generic ParamRows.
 export function ToolPreview({
   tool,
   params,
@@ -160,7 +160,7 @@ function MessagePreview({ params }: { params: Record<string, unknown> }) {
   );
 }
 
-// Risk chip — reused across surfaces.
+// Risk chip - reused across surfaces.
 export function RiskChip({ level }: { level: "low" | "medium" | "high" }) {
   const tone =
     level === "high"
@@ -176,7 +176,7 @@ export function RiskChip({ level }: { level: "low" | "medium" | "high" }) {
 }
 
 // Resolve "requestedBy" string into a friendly label. The bot stores
-// "bot" / "flow:<id>" / "ai-agent:<id>" / "<userId>" — the list endpoint
+// "bot" / "flow:<id>" / "ai-agent:<id>" / "<userId>" - the list endpoint
 // already resolves user ids into a separate `requestedByName`, so the row
 // can pass that in here.
 export function formatRequestedBy(

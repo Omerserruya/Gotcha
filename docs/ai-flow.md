@@ -1,8 +1,8 @@
-# AI Flow — End-to-End
+# AI Flow - End-to-End
 
 How an AI Employee answers a customer (autonomous mode) and how the CoPilot helps a human agent. Covers prompt assembly, tool-calling, RAG, config resolution, and the debug surface.
 
-> **Architectural rule (2026-04 onward):** every LLM call lives in the **AI service**. The incoming-worker, comment-trigger walker, and any other surface that needs an LLM go through HTTP to the AI service — they do not import the OpenAI SDK directly. The single exception still pending migration is `services/auth/src/routes/onboarding.ts`.
+> **Architectural rule (2026-04 onward):** every LLM call lives in the **AI service**. The incoming-worker, comment-trigger walker, and any other surface that needs an LLM go through HTTP to the AI service - they do not import the OpenAI SDK directly. The single exception still pending migration is `services/auth/src/routes/onboarding.ts`.
 
 ---
 
@@ -17,7 +17,7 @@ Both share the same `AIAgent` row in the DB, but they assemble prompts different
 
 ---
 
-## 2. Autonomous bot — full call chain
+## 2. Autonomous bot - full call chain
 
 ### 2.1 Trigger paths into `processAIBot`
 
@@ -49,7 +49,7 @@ incoming-worker.processIncomingMessage(job)
    └────────────────────────────────────────┘
 ```
 
-`processAIBot` is the single entry point for "AI replies to customer" — three paths feed into it.
+`processAIBot` is the single entry point for "AI replies to customer" - three paths feed into it.
 
 ### 2.2 What the worker does (side effects only)
 
@@ -59,7 +59,7 @@ incoming-worker.processIncomingMessage(job)
 processAIBot(tenantId, conversationId, message, agentId?)
   1. Load conversation (+ channelAccount creds)
   2. Resolve aiAgentId (param → conversation.assignedAiAgentId)
-  3. Load AIAgent (lite slice — escalationMessage, max thresholds, status)
+  3. Load AIAgent (lite slice - escalationMessage, max thresholds, status)
   4. Build SendContext (channel, externalId, decrypted credentials)
   5. ── Pre-flight ────────────────────────────────────
      a. checkEscalationThresholds (max messages, max minutes)
@@ -127,7 +127,7 @@ The worker **never imports `openai`** anymore. It calls AI service for the reply
 
 ---
 
-## 3. CoPilot — full call chain
+## 3. CoPilot - full call chain
 
 ### 3.1 Trigger paths
 
@@ -167,16 +167,16 @@ The worker **never imports `openai`** anymore. It calls AI service for the reply
 | `copilotMode` | Instruction | Response format |
 |---|---|---|
 | `READY_MESSAGE` (default) | "Suggest 2-3 reply options the agent could send. JSON suggestions[]." | JSON `{ suggestions: [{text, confidence, type}] }` |
-| `CONTEXT_ONLY` | "Provide 2-4 brief insights — original reason, current need, sentiment, next step. JSON suggestions[] type:info." | JSON insight bullets |
+| `CONTEXT_ONLY` | "Provide 2-4 brief insights - original reason, current need, sentiment, next step. JSON suggestions[] type:info." | JSON insight bullets |
 | `CHAT` | "You are talking to the HUMAN AGENT, not the customer. Plain text, no JSON." | Plain markdown text |
 
 Mode is selected per request from `config.copilotMode` (set on the AI Agent record).
 
 ---
 
-## 4. Prompt assembly — the two builders
+## 4. Prompt assembly - the two builders
 
-### 4.1 Autonomous bot — `buildSystemPrompt(config)`
+### 4.1 Autonomous bot - `buildSystemPrompt(config)`
 
 `services/ai/src/services/ai-bot.service.ts`
 
@@ -186,7 +186,7 @@ Reads from the `AIAgent` row:
 
 | Field | Effect |
 |---|---|
-| `systemPrompt` (long text) | The base of the prompt — this is the big free-text block authors edit in AI Studio |
+| `systemPrompt` (long text) | The base of the prompt - this is the big free-text block authors edit in AI Studio |
 | `rules[]` | Appended as `Rules you must follow:\n- …` |
 | `identity.{role, responsibility, representationGuidelines[]}` | Appended as `Your role: …` block |
 | `toneConfig.{formalityLevel, empathyLevel, assertiveness, brandAlignment}` | Appended as `Tone guidelines:` |
@@ -196,9 +196,9 @@ Then **two hardcoded sections** are always appended:
 - `## Truthfulness & Knowledge Base Rules` (don't fabricate, base on KB, etc.)
 - `IMPORTANT: You are chatting directly with the customer.`
 
-**Tool schemas are NOT duplicated in the prompt** — they're sent only via the OpenAI `tools` field. The author should write tool *policy* (when to call which tool, in what order) inside `agent.systemPrompt`, NOT the schemas.
+**Tool schemas are NOT duplicated in the prompt** - they're sent only via the OpenAI `tools` field. The author should write tool *policy* (when to call which tool, in what order) inside `agent.systemPrompt`, NOT the schemas.
 
-### 4.2 CoPilot — `assemblePrompt("assist", …)`
+### 4.2 CoPilot - `assemblePrompt("assist", …)`
 
 `services/ai/src/services/prompt-assembler.service.ts`
 
@@ -217,11 +217,11 @@ Modern, opinionated builder. Order:
 
 Joined with `\n\n---\n\n`.
 
-> **\*Note:** The Tools section in `Shared Section` *currently duplicates* tool descriptions inside the prompt — even though the same tools are also passed via the API `tools[]` field. This is bloat (double-billing tokens, drift risk). Tracked as cleanup; remove `buildToolsSection()` from `prompt-assembler.service.ts:buildSharedSection()` to fix.
+> **\*Note:** The Tools section in `Shared Section` *currently duplicates* tool descriptions inside the prompt - even though the same tools are also passed via the API `tools[]` field. This is bloat (double-billing tokens, drift risk). Tracked as cleanup; remove `buildToolsSection()` from `prompt-assembler.service.ts:buildSharedSection()` to fix.
 
-For the agent autonomous mode, `assemblePrompt("agent", …)` adds an `[Autonomous Section]` (escalation rules) and `[Conversation Strategy]` instead of CoPilot Instructions — but **this path is currently NOT used** by the autonomous bot. The bot uses `buildSystemPrompt` (§4.1). A future migration could switch the bot to `assemblePrompt("agent")`; that's a behavior change and not done yet.
+For the agent autonomous mode, `assemblePrompt("agent", …)` adds an `[Autonomous Section]` (escalation rules) and `[Conversation Strategy]` instead of CoPilot Instructions - but **this path is currently NOT used** by the autonomous bot. The bot uses `buildSystemPrompt` (§4.1). A future migration could switch the bot to `assemblePrompt("agent")`; that's a behavior change and not done yet.
 
-### 4.3 Decision tree — which builder runs?
+### 4.3 Decision tree - which builder runs?
 
 ```
 Surface          | Builder
@@ -238,7 +238,7 @@ The fallback is in `services/ai/src/services/ai-assist.service.ts:buildConfigFro
 
 ---
 
-## 5. AI Agent resolution — which agent answers
+## 5. AI Agent resolution - which agent answers
 
 `services/ai/src/services/ai-assist.service.ts:getEffectiveCopilotConfig(tenantId, departmentId, role)`
 
@@ -253,13 +253,13 @@ The fallback is in `services/ai/src/services/ai-assist.service.ts:buildConfigFro
    → first AIAgent for tenant where status IN (ACTIVE, DRAFT), oldest first
 ```
 
-For the autonomous bot the resolution is different — the **Main Flow Canvas's `route_target { agent }` node decides** which agent to dispatch. Once dispatched, `conversation.assignedAiAgentId` is set so subsequent inbound messages re-enter the same agent without re-routing through the graph.
+For the autonomous bot the resolution is different - the **Main Flow Canvas's `route_target { agent }` node decides** which agent to dispatch. Once dispatched, `conversation.assignedAiAgentId` is set so subsequent inbound messages re-enter the same agent without re-routing through the graph.
 
 ---
 
-## 6. RAG — knowledge base retrieval
+## 6. RAG - knowledge base retrieval
 
-Retrieval is the **same code** from both autonomous bot and copilot — `services/ai/src/services/knowledge.service.ts:retrieveRelevantChunks(tenantId, query, limit=5)`.
+Retrieval is the **same code** from both autonomous bot and copilot - `services/ai/src/services/knowledge.service.ts:retrieveRelevantChunks(tenantId, query, limit=5)`.
 
 ```
 1. Embed query  →  openai.embeddings.create() via central ai.service
@@ -273,9 +273,9 @@ Retrieval is the **same code** from both autonomous bot and copilot — `service
 | Surface | Probe | Skip on |
 |---|---|---|
 | Autonomous bot | The current inbound message (always) | (always tries) |
-| CoPilot suggestions / chat | The last inbound message — only if `shouldSearchKB(msg)` is true | Greetings, thanks, "ok", emoji-only, etc. (regex skip-list) |
+| CoPilot suggestions / chat | The last inbound message - only if `shouldSearchKB(msg)` is true | Greetings, thanks, "ok", emoji-only, etc. (regex skip-list) |
 
-If chunks are returned, they're formatted into a `## Knowledge Base Context` markdown block and **appended to the system prompt** (not pushed as a separate user message — except in `chatWithAgent` which uses a fake user/assistant turn pair to inject KB).
+If chunks are returned, they're formatted into a `## Knowledge Base Context` markdown block and **appended to the system prompt** (not pushed as a separate user message - except in `chatWithAgent` which uses a fake user/assistant turn pair to inject KB).
 
 ---
 
@@ -286,7 +286,7 @@ If chunks are returned, they're formatted into a `## Knowledge Base Context` mar
 - **Autonomous bot:** `buildAgentToolsForAIAgent(tenantId, agentId, …)` from `@chatcenter/shared`
   - Static: `escalate_to_human`, `link_customer_identifier`
   - Dynamic: every `TenantTool` row that's `isEnabled` AND whose `TenantIntegration.status === "CONNECTED"`
-- **CoPilot:** `buildAgentTools({ identityLinking, escalation: true })` — only the 2 static helpers
+- **CoPilot:** `buildAgentTools({ identityLinking, escalation: true })` - only the 2 static helpers
 
 ### 7.2 OpenAI request shape
 
@@ -320,21 +320,21 @@ If the response has `tool_calls`:
 
 Capped at **3 rounds**. After 3 rounds with no final text, return `null` and the worker drops the turn.
 
-`dispatchToolCall` lives in `@chatcenter/shared/src/lib/agent-tools.ts` and handles routing by tool name — it's used by both autonomous-bot and copilot-chat paths.
+`dispatchToolCall` lives in `@chatcenter/shared/src/lib/agent-tools.ts` and handles routing by tool name - it's used by both autonomous-bot and copilot-chat paths.
 
 ---
 
-## 8. Debug surface — see what the LLM gets
+## 8. Debug surface - see what the LLM gets
 
-`services/ai/src/routes/ai-debug.ts` — mounted at `/api/ai-debug`.
+`services/ai/src/routes/ai-debug.ts` - mounted at `/api/ai-debug`.
 
-- `POST /api/ai-debug/jit` — SYSTEM_ADMIN only; mints a single-use, short-TTL token bound to a `tenantId` (and optional `agentId`).
+- `POST /api/ai-debug/jit` - SYSTEM_ADMIN only; mints a single-use, short-TTL token bound to a `tenantId` (and optional `agentId`).
 - `GET /api/ai-debug/prompt?tenantId=…&agentId=…&mode=agent|assist&conversationId=…&message=…`
   - Auth: `X-Debug-Key: $AI_DEBUG_KEY` header **or** `Authorization: Bearer <jit>`.
   - Returns: `{ tenant, agent, mode, context, systemPrompt, tools, messages, stringified }`.
   - **The exact `messages` and `tools` arrays the LLM would receive.**
 
-`mode=agent` calls the same `buildSystemPrompt` as production. `mode=assist` calls the same `assemblePrompt("assist")` as production. There's no drift — debug and runtime share one builder per mode.
+`mode=agent` calls the same `buildSystemPrompt` as production. `mode=assist` calls the same `assemblePrompt("assist")` as production. There's no drift - debug and runtime share one builder per mode.
 
 ---
 
@@ -383,6 +383,6 @@ Latency budget: typical round trip is ~2-4s for one round, ~5-8s when a tool is 
 ## 10. What changed in 2026-04 (migration notes)
 
 - **All OpenAI calls moved to AI service.** Worker no longer imports `openai`. The bot path now goes through `POST /api/ai-bot/reply`. The one-shot path (comment-trigger) goes through `POST /api/ai-bot/oneshot`.
-- **`services/incoming-worker/src/services/knowledge-retrieval.service.ts`** is now dead code — nothing imports it. Safe to delete.
-- **`services/auth/src/routes/onboarding.ts`** still has a direct OpenAI client — pending migration.
+- **`services/incoming-worker/src/services/knowledge-retrieval.service.ts`** is now dead code - nothing imports it. Safe to delete.
+- **`services/auth/src/routes/onboarding.ts`** still has a direct OpenAI client - pending migration.
 - **Debug route** (`/api/ai-debug/prompt`) added for inspecting the assembled prompt + tools before it hits OpenAI.

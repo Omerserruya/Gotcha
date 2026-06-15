@@ -109,7 +109,7 @@ export function LiveCallsSection() {
                     {formatPhone(s.customerNumber) || s.customerNumber}
                   </p>
                   <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
-                    {isRinging ? "—" : formatDuration(elapsed)}
+                    {isRinging ? "-" : formatDuration(elapsed)}
                   </span>
                 </div>
                 <div className="flex items-center gap-2 mt-1">

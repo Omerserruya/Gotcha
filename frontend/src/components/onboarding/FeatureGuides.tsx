@@ -1,6 +1,6 @@
 "use client";
 
-// FeatureGuides — the persistent, per-feature first-time guidance layer.
+// FeatureGuides - the persistent, per-feature first-time guidance layer.
 //
 // Unlike a one-shot tour, this is a standing layer: the FIRST time a user
 // opens a feature surface (Knowledge Base, AI Employees, Workflows,
@@ -28,7 +28,7 @@ interface Feature {
   steps: GuideStep[];
 }
 
-// Order matters — more specific paths first.
+// Order matters - more specific paths first.
 const FEATURES: Feature[] = [
   {
     key: "knowledge",
@@ -38,8 +38,8 @@ const FEATURES: Feature[] = [
         selector: '[data-tour="kb-add-source"]',
         title: ["Knowledge Base", "מאגר ידע"],
         body: [
-          "Click here to add your first source — a document, FAQ, or URL. Your AI answers from this.",
-          "לחצו כאן כדי להוסיף מקור ראשון — מסמך, שאלות נפוצות או קישור. ה-AI עונה לפי זה.",
+          "Click here to add your first source - a document, FAQ, or URL. Your AI answers from this.",
+          "לחצו כאן כדי להוסיף מקור ראשון - מסמך, שאלות נפוצות או קישור. ה-AI עונה לפי זה.",
         ],
       },
     ],
@@ -66,8 +66,8 @@ const FEATURES: Feature[] = [
         selector: '[data-tour="new-workflow"]',
         title: ["Workflows", "תהליכי עבודה"],
         body: [
-          "Click here to build a workflow — automate routing, actions and follow-ups.",
-          "לחצו כאן כדי לבנות תהליך — אוטומציה של ניתוב, פעולות ומעקבים.",
+          "Click here to build a workflow - automate routing, actions and follow-ups.",
+          "לחצו כאן כדי לבנות תהליך - אוטומציה של ניתוב, פעולות ומעקבים.",
         ],
       },
     ],
@@ -144,7 +144,7 @@ export function FeatureGuides() {
     return () => { window.removeEventListener("resize", onResize); window.removeEventListener("scroll", onResize, true); };
   }, [activeFeature, stepIdx, measure]);
 
-  // Retry locating the anchor (~4s) — it may mount after the route settles.
+  // Retry locating the anchor (~4s) - it may mount after the route settles.
   useEffect(() => {
     if (!activeFeature || !step) return;
     if (retryRef.current) window.clearInterval(retryRef.current);

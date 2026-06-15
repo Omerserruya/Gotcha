@@ -1,6 +1,6 @@
 "use client";
 
-// Onboarding — AI-first, two-gate activation.
+// Onboarding - AI-first, two-gate activation.
 //
 //   GATE 1  "We understood your business like this"  (auto website crawl →
 //           editable confirmation card)
@@ -42,7 +42,7 @@ const PACK_LABELS: Record<string, string> = {
   ecommerce: "E-commerce",
 };
 
-// After setup completes, land in the inbox — onboarding continues via the
+// After setup completes, land in the inbox - onboarding continues via the
 // sidebar mission panel, not a dedicated home page.
 const SETUP_HUB = "/conversations";
 
@@ -118,18 +118,18 @@ function SetupContent() {
   const [phase, setPhase] = useState<Phase>("loading");
   const [error, setError] = useState("");
 
-  // Gate 1 — understanding
+  // Gate 1 - understanding
   const [domain, setDomain] = useState("");
   const [crawling, setCrawling] = useState(false);
   const [u, setU] = useState<Understanding>({ name: "", industry: "", country: "", language: uiLocale || "en", description: "" });
   const [savingProfile, setSavingProfile] = useState(false);
   const crawledOnce = useRef(false);
   // Industry Intelligence Pack detected by the classifier (Customer
-  // Intelligence V2). Skippable — `loadPack` defaults on when a pack matches.
+  // Intelligence V2). Skippable - `loadPack` defaults on when a pack matches.
   const [detectedPack, setDetectedPack] = useState("");
   const [loadPack, setLoadPack] = useState(true);
 
-  // Gate 2 — connect
+  // Gate 2 - connect
   const [picked, setPicked] = useState<CoreSystemSlug | null>(null);
   const [shopDomain, setShopDomain] = useState("");
   const [fireberryToken, setFireberryToken] = useState("");
@@ -264,7 +264,7 @@ function SetupContent() {
         locale: u.language || undefined,
       });
       if (u.language && u.language !== uiLocale) { await setLocale(u.language as any).catch(() => {}); }
-      // Load the detected Industry Intelligence Pack (skippable). Best-effort —
+      // Load the detected Industry Intelligence Pack (skippable). Best-effort -
       // a failure here must not block onboarding; packs can be applied later
       // from Settings → Intelligence Fields.
       if (detectedPack && loadPack) {
@@ -303,7 +303,7 @@ function SetupContent() {
     }
   }
 
-  // Fireberry — API-token connect (no OAuth). Paste token → connect → finish.
+  // Fireberry - API-token connect (no OAuth). Paste token → connect → finish.
   async function connectFireberry() {
     if (!token) return;
     if (!fireberryToken.trim()) { setPicked("fireberry"); return; }
@@ -392,7 +392,7 @@ function SetupContent() {
     }
   }
 
-  // "Not now" — finish onboarding without a connected core system. The user
+  // "Not now" - finish onboarding without a connected core system. The user
   // can connect one later from the Setup Hub.
   async function skipConnect() {
     if (!token) return;
@@ -431,7 +431,7 @@ function SetupContent() {
 
         {error && <div className="mb-4 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{error}</div>}
 
-        {/* ── GATE 1 — Understanding ── */}
+        {/* ── GATE 1 - Understanding ── */}
         {phase === "understanding" && (
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-7 space-y-5">
             <div>
@@ -443,7 +443,7 @@ function SetupContent() {
               </p>
             </div>
 
-            {/* Domain row — lets the user retry the crawl on a different domain. */}
+            {/* Domain row - lets the user retry the crawl on a different domain. */}
             <div className="flex gap-2">
               <input
                 value={domain}
@@ -490,7 +490,7 @@ function SetupContent() {
               </div>
             </div>
 
-            {/* Detected Industry Intelligence Pack — skippable. */}
+            {/* Detected Industry Intelligence Pack - skippable. */}
             {detectedPack && PACK_LABELS[detectedPack] && (
               <label
                 className={
@@ -525,18 +525,18 @@ function SetupContent() {
               disabled={savingProfile || crawling || !u.name.trim() || !u.description.trim()}
               className="w-full py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition disabled:opacity-50 shadow-lg shadow-primary-500/25"
             >
-              {savingProfile ? (he ? "שומר…" : "Saving…") : (he ? "נכון — ממשיכים" : "Looks right →")}
+              {savingProfile ? (he ? "שומר…" : "Saving…") : (he ? "נכון - ממשיכים" : "Looks right →")}
             </button>
           </div>
         )}
 
-        {/* ── GATE 2 — Connect core system ── */}
+        {/* ── GATE 2 - Connect core system ── */}
         {phase === "connect" && (
           <div className="bg-white rounded-2xl shadow-lg border border-gray-100 p-7 space-y-5">
             <div>
               <h1 className="text-2xl font-bold text-gray-900">{he ? "חברו את מערכת הליבה שלכם" : "Connect your main business system"}</h1>
               <p className="text-sm text-gray-500 mt-1">
-                {he ? "זו תהיה מקור האמת של Gotcha על הלקוחות שלכם. בוחרים אחת — את השאר אפשר לחבר אחר כך." : "This becomes Gotcha's source of truth about your customers. Pick one — the rest come later."}
+                {he ? "זו תהיה מקור האמת של Gotcha על הלקוחות שלכם. בוחרים אחת - את השאר אפשר לחבר אחר כך." : "This becomes Gotcha's source of truth about your customers. Pick one - the rest come later."}
               </p>
             </div>
 
@@ -608,7 +608,7 @@ function SetupContent() {
             </div>
 
             <p className="text-xs text-gray-400 text-center">
-              {he ? "בוחרים מערכת אחת כדי שה-AI יכיר את הלקוחות שלכם. ערוצים ואינטגרציות נוספות — בהמשך, מתוך מרכז ההתקנה." : "Pick one system so the AI knows your customers. Channels and other integrations come later, from the Setup Hub."}
+              {he ? "בוחרים מערכת אחת כדי שה-AI יכיר את הלקוחות שלכם. ערוצים ואינטגרציות נוספות - בהמשך, מתוך מרכז ההתקנה." : "Pick one system so the AI knows your customers. Channels and other integrations come later, from the Setup Hub."}
             </p>
 
             <div className="flex items-center justify-between pt-1">
@@ -626,7 +626,7 @@ function SetupContent() {
                 disabled={connecting || skipping}
                 className="text-sm font-medium text-gray-500 hover:text-gray-700 transition disabled:opacity-50"
               >
-                {skipping ? (he ? "מסיים…" : "Finishing…") : (he ? "לא עכשיו — דלג" : "Not now — skip")}
+                {skipping ? (he ? "מסיים…" : "Finishing…") : (he ? "לא עכשיו - דלג" : "Not now - skip")}
               </button>
             </div>
           </div>
@@ -672,7 +672,7 @@ function SetupContent() {
 
             {atTableId && atFields.length > 0 && (
               <div className="space-y-3">
-                <p className="text-xs text-gray-400">{he ? "מפו לפחות אימייל או טלפון, ושם. הצענו ניחוש — תקנו אם צריך." : "Map at least Email or Phone, plus Name. We pre-filled a guess — fix anything that's off."}</p>
+                <p className="text-xs text-gray-400">{he ? "מפו לפחות אימייל או טלפון, ושם. הצענו ניחוש - תקנו אם צריך." : "Map at least Email or Phone, plus Name. We pre-filled a guess - fix anything that's off."}</p>
                 {AIRTABLE_FIELDS.map((cf) => (
                   <div key={cf.key}>
                     <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -683,7 +683,7 @@ function SetupContent() {
                       onChange={(e) => setAtMap({ ...atMap, [cf.key]: e.target.value })}
                       className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none text-sm"
                     >
-                      <option value="">{he ? "— ללא —" : "— none —"}</option>
+                      <option value="">{he ? "- ללא -" : "- none -"}</option>
                       {atFields.map((f) => <option key={f.id} value={f.name}>{f.name}</option>)}
                     </select>
                   </div>

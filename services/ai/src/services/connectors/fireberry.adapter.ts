@@ -1,5 +1,5 @@
 /**
- * Fireberry (formerly Powerlink) adapter — Israeli CRM.
+ * Fireberry (formerly Powerlink) adapter - Israeli CRM.
  *
  * Auth: STATIC API token (no OAuth). The tenant copies their token from
  * Fireberry → Settings → Integration → API Forms → "My Token" and pastes it
@@ -31,7 +31,7 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "fireberry.query_records",
     description: "Query Fireberry records of an object type, filtered by a field expression.",
-    whenToUse: "You need to find records by criteria — e.g. an account whose email or phone equals a value.",
+    whenToUse: "You need to find records by criteria - e.g. an account whose email or phone equals a value.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {

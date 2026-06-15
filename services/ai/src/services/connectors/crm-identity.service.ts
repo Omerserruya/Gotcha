@@ -11,7 +11,7 @@
  *   2+ matches → if a strong merge signal is present AND the vendor supports
  *                 merge, auto-merge the duplicates into the canonical row.
  *                 Otherwise surface `needs_approval` with the candidate list
- *                 so an operator resolves the conflict (CLAUDE.md rule #9 —
+ *                 so an operator resolves the conflict (CLAUDE.md rule #9 -
  *                 destructive/irreversible CRM actions stay approval-gated).
  *
  * Normalization is applied on BOTH the read path (before passing identifiers
@@ -45,7 +45,7 @@ export function normalizeEmail(raw: string | null | undefined): string | null {
 /**
  * Best-effort E.164. Strips spaces/dashes/parens; falls back to a region
  * country-code prefix when the number is in local format (starts with `0` or
- * is bare digits without a `+`). Library-free on purpose — for hard cases
+ * is bare digits without a `+`). Library-free on purpose - for hard cases
  * tenants can wire libphonenumber-js later, but the common cases (already
  * E.164, `+972 50 123-4567`, `(212) 555-1234`, `0501234567` with region IL)
  * resolve correctly here.
@@ -101,7 +101,7 @@ export function coerceSearchPhone(raw: string | null | undefined): string | null
  *
  * We hand the adapter every viable variant so a missing `+` or a CRM that
  * happens to store the national form doesn't make us miss an existing lead.
- * Duplicates and short strings are filtered. The list is small (≤6 items) —
+ * Duplicates and short strings are filtered. The list is small (≤6 items) -
  * the parallel adapter calls remain cheap.
  */
 export function phoneVariants(raw: string | null | undefined, defaultRegion?: string): string[] {
@@ -129,7 +129,7 @@ export function phoneVariants(raw: string | null | undefined, defaultRegion?: st
         out.add(`0${national}`);
       }
     } else {
-      // Unknown region — try every CC length (1-3). Best-effort fallback.
+      // Unknown region - try every CC length (1-3). Best-effort fallback.
       for (const len of [1, 2, 3]) {
         if (digits.length > len + 6) {
           const national = digits.slice(len);
@@ -139,7 +139,7 @@ export function phoneVariants(raw: string | null | undefined, defaultRegion?: st
       }
     }
 
-    // Last 7-9 digits — covers CRMs storing only the subscriber portion.
+    // Last 7-9 digits - covers CRMs storing only the subscriber portion.
     for (const n of [9, 8, 7]) {
       if (digits.length >= n) out.add(digits.slice(-n));
     }
@@ -165,7 +165,7 @@ export type StrongChannel =
  * try to find or enrich a CRM record. PSID/IGSID come from Meta webhooks;
  * `username` ships on Instagram Business Messaging payloads and is stable
  * (unlike PSID which can be reset when app permissions change). `display_name`
- * is the platform's profile-name claim — used for create-time naming only,
+ * is the platform's profile-name claim - used for create-time naming only,
  * never for matching.
  */
 export interface ChannelIdentity {
@@ -192,7 +192,7 @@ export interface IdentityHints {
  * Vendor-neutral custom field names per channel. The CRM tenant is expected to
  * have these defined; auto-provisioning is a Phase 2 concern. When the field
  * is missing in the CRM the search fails closed (no match) and writes silently
- * skip the property — neither blocks the main flow.
+ * skip the property - neither blocks the main flow.
  *
  * We intentionally use lower-snake keys; the Salesforce adapter appends `__c`
  * (the Salesforce custom-field suffix) at the adapter boundary.
@@ -227,7 +227,7 @@ export interface LinkOrCreateArgs {
   inbound_source?: string;
   /**
    * Operator-supplied fields that ride along to createLead when we end up
-   * creating — company name, first/last split, etc. These do NOT participate
+   * creating - company name, first/last split, etc. These do NOT participate
    * in the find/match flow.
    */
   create_overrides?: {
@@ -235,7 +235,7 @@ export interface LinkOrCreateArgs {
     first_name?: string;
     last_name?: string;
   };
-  /** Optional auto-merge gate. Default `false` — surfaces merge to operator. */
+  /** Optional auto-merge gate. Default `false` - surfaces merge to operator. */
   allow_auto_merge?: boolean;
 }
 
@@ -254,7 +254,7 @@ export async function linkOrCreateCrmContact(args: LinkOrCreateArgs): Promise<Li
   // For phone-derived channels (WhatsApp/SMS/voice), the external_id IS the
   // user's phone number. Without this fall-through, conversations that came
   // in with ONLY a channel identity (e.g. inbound WhatsApp where the operator
-  // never set a phone hint) would never search the CRM's normal Phone field —
+  // never set a phone hint) would never search the CRM's normal Phone field -
   // they'd only probe the channel-specific custom field, which most tenants
   // don't populate. Same logic for the email channel.
   if (!phone) {
@@ -301,7 +301,7 @@ export async function linkOrCreateCrmContact(args: LinkOrCreateArgs): Promise<Li
   }
   // Phone lookups: try every plausible variant of the number (with/without +,
   // national form with/without leading 0, last-7..9 digits). CRMs are wildly
-  // inconsistent in how they store phones — a single E.164 query produces
+  // inconsistent in how they store phones - a single E.164 query produces
   // false negatives, which is what was making known contacts show up as
   // "unmapped" in the chat side panel.
   if (phone || phoneRaw) {
@@ -322,7 +322,7 @@ export async function linkOrCreateCrmContact(args: LinkOrCreateArgs): Promise<Li
       });
     }
   } else if (channels.length > 0) {
-    console.warn("[crm-identity] adapter.findByCustomField not implemented — channel identifiers skipped", JSON.stringify({
+    console.warn("[crm-identity] adapter.findByCustomField not implemented - channel identifiers skipped", JSON.stringify({
       vendor: adapter.vendor,
       channels: channels.map((c) => `${c.channel}:${c.external_id}`),
     }));
@@ -468,7 +468,7 @@ async function createNew(
 }
 
 /**
- * Strong merge signal — only true when the multi-match almost certainly
+ * Strong merge signal - only true when the multi-match almost certainly
  * represents the same physical person:
  *   • All rows share the same email, OR
  *   • All rows share the same phone, OR
@@ -476,7 +476,7 @@ async function createNew(
  *     another carries the phone (the "split identity" case).
  *
  * Phone-only collision (family lines, shared business numbers) does NOT
- * count as a strong signal — those go to operator approval to avoid
+ * count as a strong signal - those go to operator approval to avoid
  * merging two real people who share a phone.
  */
 function hasStrongMergeSignal(

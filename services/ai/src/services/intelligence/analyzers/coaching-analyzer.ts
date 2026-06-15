@@ -2,7 +2,7 @@ import type { ConversationStateFrame } from "@chatcenter/shared";
 import type { TranscriptAnalyzer, AnalysisContext } from "./types";
 
 /**
- * Phase 5 (Mode A QA) — heuristic coaching scorer.
+ * Phase 5 (Mode A QA) - heuristic coaching scorer.
  *
  * Operates on persisted CallAnalysis.frames. Identifies coaching
  * opportunities the rep could have acted on:
@@ -75,7 +75,7 @@ export class CoachingAnalyzer
       }
     }
 
-    // 2. Sentiment trajectory — split frames in half, compare averages.
+    // 2. Sentiment trajectory - split frames in half, compare averages.
     const sentimentValues = frames
       .map((f) => f.sentiment?.customer)
       .filter((v): v is number => typeof v === "number");
@@ -106,7 +106,7 @@ export class CoachingAnalyzer
       }
     }
 
-    // 3. Ignored coaching hints — suggestedActions emitted across frames
+    // 3. Ignored coaching hints - suggestedActions emitted across frames
     //    but no follow-up "tag/note/action" tool was proposed afterwards
     //    is a heuristic signal.
     const totalSuggestions = frames.reduce(

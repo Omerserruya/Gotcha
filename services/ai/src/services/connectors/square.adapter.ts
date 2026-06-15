@@ -1,5 +1,5 @@
 /**
- * Square adapter — production-grade.
+ * Square adapter - production-grade.
  *
  * Auth: Square OAuth (Authorization Code grant). Tenants connect their
  * Square account. Tokens last 30 days; we refresh via /oauth2/token.
@@ -9,12 +9,12 @@
  *   config       = { environment: "production"|"sandbox", locationId? }
  *
  * Tools (top patterns for commerce + support):
- *   - square.search_customers      — by email/phone/name
- *   - square.create_customer       — add to address book
- *   - square.list_payments         — recent payments (filter by date/customer)
- *   - square.refund_payment        — refund a payment (full/partial)
- *   - square.create_payment_link   — Checkout Payment Link
- *   - square.list_orders           — recent orders for a location
+ *   - square.search_customers      - by email/phone/name
+ *   - square.create_customer       - add to address book
+ *   - square.list_payments         - recent payments (filter by date/customer)
+ *   - square.refund_payment        - refund a payment (full/partial)
+ *   - square.create_payment_link   - Checkout Payment Link
+ *   - square.list_orders           - recent orders for a location
  */
 
 import {
@@ -71,7 +71,7 @@ const TOOLS: ToolDefinition[] = [
     parameters: {
       type: "object",
       properties: {
-        begin_time_iso: { type: "string", description: "ISO datetime — default 30 days ago." },
+        begin_time_iso: { type: "string", description: "ISO datetime - default 30 days ago." },
         end_time_iso: { type: "string" },
         limit: { type: "number", description: "Default 20, max 100." },
       },
@@ -81,11 +81,11 @@ const TOOLS: ToolDefinition[] = [
     name: "square.refund_payment",
     description: "Refund a Square payment (full or partial).",
     whenToUse: "Customer is approved for a refund.",
-    whenNotToUse: "Speculative refunds — confirm policy first.",
+    whenNotToUse: "Speculative refunds - confirm policy first.",
     category: "WRITE",
     riskLevel: "HIGH",
-    sideEffects: "Issues a real refund — irreversible.",
-    idempotencyNotes: "idempotency_key derived from args — safe to retry.",
+    sideEffects: "Issues a real refund - irreversible.",
+    idempotencyNotes: "idempotency_key derived from args - safe to retry.",
     parameters: {
       type: "object",
       properties: {

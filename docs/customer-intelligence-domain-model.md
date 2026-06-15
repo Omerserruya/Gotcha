@@ -1,4 +1,4 @@
-# GOTCHA Customer Intelligence — Domain Model (V2)
+# GOTCHA Customer Intelligence - Domain Model (V2)
 
 > **Status:** Domain design. **No code, no migrations, no Prisma DSL.** Conceptual
 > entities, ownership, lifecycle, and storage strategy only.
@@ -40,23 +40,23 @@ authored.
 ```
 
 **Reuse vs new:**
-- `ConversationIntelligence` — **exists**, keep (minor additions).
-- `CustomerProfile` — **new** (can inherit `CustomerBrief`'s identity spine).
-- `Opportunity` — **new** (the keystone).
-- `FieldDefinition`/`Pack` — **new** (formalizes today's `summaryFields`).
-- `IntelligenceFact` — **new** (provenance/history log).
-- `CustomerBrief` — **exists**, demoted to a projection.
+- `ConversationIntelligence` - **exists**, keep (minor additions).
+- `CustomerProfile` - **new** (can inherit `CustomerBrief`'s identity spine).
+- `Opportunity` - **new** (the keystone).
+- `FieldDefinition`/`Pack` - **new** (formalizes today's `summaryFields`).
+- `IntelligenceFact` - **new** (provenance/history log).
+- `CustomerBrief` - **exists**, demoted to a projection.
 
 ---
 
 ## 2. Identity & keying (reuse what's there)
 
-The customer is resolved by the existing identity machinery — do **not** reinvent.
+The customer is resolved by the existing identity machinery - do **not** reinvent.
 
 - `CustomerProfile` is keyed by `identityKey` (the same cross-channel key
   `CustomerBrief` already uses: `(tenantId, identityKey)`), with optional
   `personId`, `contactId`, `crmContactId`, `crmObjectKind`.
-- One `CustomerProfile` per resolved identity per tenant — **language-neutral**
+- One `CustomerProfile` per resolved identity per tenant - **language-neutral**
   (unlike `CustomerBrief` which is per-locale). Locale-specific prose lives only in
   projections.
 - Identity merges (two channels → one person) merge the `CustomerProfile` and
@@ -65,7 +65,7 @@ The customer is resolved by the existing identity machinery — do **not** reinv
 
 ---
 
-## 3. Storage strategy — the key decision
+## 3. Storage strategy - the key decision
 
 Packs and custom fields are **dynamic**, so fixed columns are impossible. Three
 candidates:
@@ -102,7 +102,7 @@ IntelligenceFact (append-only)
 ```
 
 The snapshot is recomputed (or incrementally updated) whenever a new fact lands,
-applying §5 merge rules. **No fact is ever deleted** — superseded, never lost. This
+applying §5 merge rules. **No fact is ever deleted** - superseded, never lost. This
 is what structurally guarantees "a conversation can't destroy customer data."
 
 ---
@@ -111,7 +111,7 @@ is what structurally guarantees "a conversation can't destroy customer data."
 
 > Field tables are **conceptual** (name · type · scope/owner · notes), not a schema.
 
-### 4.1 CustomerProfile — durable, per-identity
+### 4.1 CustomerProfile - durable, per-identity
 
 | Field | Type | Notes |
 |---|---|---|
@@ -126,7 +126,7 @@ is what structurally guarantees "a conversation can't destroy customer data."
 `language`, `preferred_contact_time`, `communication_style`, `vip_tier`, `timezone`,
 `role_title`, `do_not_contact`. These **never** belong to a conversation or a deal.
 
-### 4.2 Opportunity — per-deal intelligence (the keystone)
+### 4.2 Opportunity - per-deal intelligence (the keystone)
 
 | Field | Type | Notes |
 |---|---|---|
@@ -143,13 +143,13 @@ is what structurally guarantees "a conversation can't destroy customer data."
 | openedAt, closedAt, lastActivityAt | DateTime | lifecycle |
 
 **Owned deal facts** (governed by `FieldDefinition` scope=opportunity): everything
-the industry packs describe — `event_date`, `guest_count`, `budget`, `kosher_level`,
+the industry packs describe - `event_date`, `guest_count`, `budget`, `kosher_level`,
 `order_number`, `property_type`, `desired_position`, plus `decision_maker`,
 `objections[]`, `quote_sent_at`, `estimated_value`.
 
-> This is where V1's "industry pack fields" actually live — **not** on the customer.
+> This is where V1's "industry pack fields" actually live - **not** on the customer.
 
-### 4.3 ConversationIntelligence — per-interaction (exists; small delta)
+### 4.3 ConversationIntelligence - per-interaction (exists; small delta)
 
 Keep the existing table (`summary`, `detectedIntent`, `sentiment`, `topics`,
 `resolutionOutcome`, `customerEffort`, `aiConfidence`). **Add**:
@@ -161,9 +161,9 @@ Keep the existing table (`summary`, `detectedIntent`, `sentiment`, `topics`,
 
 Conversation Intelligence stays **about the interaction**. Durable/deal facts it
 discovers are written as `IntelligenceFact` rows into the customer/opportunity scope
-— never owned here.
+- never owned here.
 
-### 4.4 FieldDefinition + Pack — scope-aware schema registry
+### 4.4 FieldDefinition + Pack - scope-aware schema registry
 
 Formalizes today's `PostConversationConfig.summaryFields` with two critical
 additions: **scope** and **lifecycle flags**.
@@ -183,7 +183,7 @@ additions: **scope** and **lifecycle flags**.
 | origin | enum | pack · custom · discovered |
 
 `Pack` = a named, versioned bundle of `FieldDefinition`s (system or tenant-cloned),
-exactly as in the Phase-1 spec — but field defs now carry scope.
+exactly as in the Phase-1 spec - but field defs now carry scope.
 
 ---
 
@@ -192,18 +192,18 @@ exactly as in the Phase-1 spec — but field defs now carry scope.
 When a new `IntelligenceFact` lands, the entity snapshot updates by these rules
 (folding the log):
 
-1. **Scope gate** — a fact may only target a field whose `FieldDefinition.scope`
+1. **Scope gate** - a fact may only target a field whose `FieldDefinition.scope`
    matches the fact's `entityType`. A conversation extractor producing a
    `customer`-scope field writes it to the **customer** entity, not the conversation.
-2. **Manual supremacy** — if the current snapshot value has `source=manual`, an LLM
+2. **Manual supremacy** - if the current snapshot value has `source=manual`, an LLM
    source never overwrites it (records a conflict instead).
-3. **Confidence + recency** — within the same source class, higher confidence wins;
+3. **Confidence + recency** - within the same source class, higher confidence wins;
    ties broken by `observedAt`.
-4. **Absence ≠ deletion** — a missing/omitted field in an extraction produces **no
+4. **Absence ≠ deletion** - a missing/omitted field in an extraction produces **no
    fact**, so it can never null an existing value.
-5. **Conflict capture** — cross-source disagreement (CRM 100k vs chat 120k) is
+5. **Conflict capture** - cross-source disagreement (CRM 100k vs chat 120k) is
    stored as an unresolved conflict surfaced in the UI, never silently merged.
-6. **Temporal validity** — facts past `validUntil` (e.g. an event date in the past)
+6. **Temporal validity** - facts past `validUntil` (e.g. an event date in the past)
    drop out of the active snapshot; the Opportunity may auto-archive.
 
 This is the formal answer to *"one conversation overwrites valuable customer data."*
@@ -222,9 +222,9 @@ Stored only when an edge **crosses entities**; within-entity facts stay as facts
 | `proposed_entity` | Opportunity → Entity(Venue/Product) | `Opportunity.relationships` |
 | `about_entity` | Opportunity → Entity | `Opportunity.relationships` |
 
-`Entity` (Venue, Product, Property) is a **light, optional** node — created only when
+`Entity` (Venue, Product, Property) is a **light, optional** node - created only when
 a thing is referenced across records and worth naming. Most "entities" remain plain
-typed fields. The graph the AI consumes is **walked and rendered at prompt-time** —
+typed fields. The graph the AI consumes is **walked and rendered at prompt-time** -
 no separate graph store (honors no-new-dep). Defer named-entity nodes until a
 concrete query needs them.
 
@@ -232,7 +232,7 @@ concrete query needs them.
 
 ## 7. Projection layer (generated read models)
 
-None of these is a source of truth — all are folds of §3–§6.
+None of these is a source of truth - all are folds of §3–§6.
 
 | Projection | Shape | Built from | Consumers |
 |---|---|---|---|
@@ -241,7 +241,7 @@ None of these is a source of truth — all are folds of §3–§6.
 | **ExecutiveSummary** | living narrative | Opportunity + timeline events | Snapshot header |
 | **Timeline** | event stream | IntelligenceFact log + messages + tasks | Snapshot "recent", analytics |
 
-`CustomerBrief` thus keeps doing exactly what it does today — it simply stops
+`CustomerBrief` thus keeps doing exactly what it does today - it simply stops
 pretending to be the canonical structured store.
 
 ---
@@ -288,12 +288,12 @@ human/AI can split or merge opportunities; facts re-parent with provenance intac
 
 | GOTCHA entity | CRM object | Fallback |
 |---|---|---|
-| CustomerProfile | Contact / Lead | — |
+| CustomerProfile | Contact / Lead | - |
 | Opportunity | **Deal / Opportunity** object | contact custom-fields if vendor has no deal object (Shopify, Airtable) → else synthetic |
-| Conversation | Activity / Note | — (this is the log entry we already write) |
+| Conversation | Activity / Note | - (this is the log entry we already write) |
 | Fact (`syncToCrm`) | mapped column on the owning object's CRM target | activity note (last resort) |
 
-This finally routes deal data to the **deal**, customer data to the **contact** —
+This finally routes deal data to the **deal**, customer data to the **contact** -
 the correction from V1 (which dumped everything on the contact). CRM stays a **sync
 target**; conflicts resolve in GOTCHA's favor (it holds the live truth).
 
@@ -313,7 +313,7 @@ target**; conflicts resolve in GOTCHA's favor (it holds the live truth).
 | discovery seed | `bonus_highlights` labels | one source of Discovery V2 candidates |
 | behavioral signals | BEL trust/friction/relationship | `CustomerProfile.behavioralSignals` |
 
-Nothing here requires a new service — all of it lives in `services/ai`
+Nothing here requires a new service - all of it lives in `services/ai`
 (intelligence) + the existing schema package, per `CLAUDE.md`.
 
 ---
@@ -324,7 +324,7 @@ Nothing here requires a new service — all of it lives in `services/ai`
 - **"How did we learn budget?"** → `IntelligenceFact` by `(entityId, fieldKey)`
   ordered by `observedAt`.
 - **Deal velocity / win rate / value forecast** → `Opportunity` rows by `stage`,
-  `status`, `openedAt/closedAt`, `estimatedValue` — proper typed columns, not blobs.
+  `status`, `openedAt/closedAt`, `estimatedValue` - proper typed columns, not blobs.
 - **Gap-completion rate** → expected vs present facts per Opportunity over time.
 - **Which missing field predicts loss** → join lost Opportunities to their gap
   history. This is only possible because facts are logged, not overwritten.
@@ -333,20 +333,20 @@ Nothing here requires a new service — all of it lives in `services/ai`
 
 ## 13. Open decisions (need sign-off before schema work)
 
-1. **Snapshot materialization** — recompute the entity `facts` snapshot on every
+1. **Snapshot materialization** - recompute the entity `facts` snapshot on every
    fact (simple) vs incremental update (faster, more code). Recommend: incremental
    with a periodic full-fold safety net.
-2. **Entity nodes** — ship `Opportunity.relationships` JSON only at first; defer a
+2. **Entity nodes** - ship `Opportunity.relationships` JSON only at first; defer a
    first-class `Entity` table until a query needs cross-opportunity entity joins.
-3. **Opportunity ↔ CRM deal** for deal-less vendors (Shopify/Airtable) — synthetic
+3. **Opportunity ↔ CRM deal** for deal-less vendors (Shopify/Airtable) - synthetic
    deal vs contact-field projection (recommend the latter initially).
-4. **CustomerProfile vs CustomerBrief coexistence** — introduce `CustomerProfile`
+4. **CustomerProfile vs CustomerBrief coexistence** - introduce `CustomerProfile`
    alongside and let `CustomerBrief` read from it, or migrate the brief generator to
    read the new model directly. Recommend coexist-then-cut-over.
-5. **Fact retention** — append-only log growth: keep full history vs compact
+5. **Fact retention** - append-only log growth: keep full history vs compact
    superseded facts older than N months into a summary. Recommend keep, revisit at
    scale.
-6. **Default scope for ambiguous fields** — when a discovered field's scope is
+6. **Default scope for ambiguous fields** - when a discovered field's scope is
    unclear (e.g. "address"), default to `customer` or force human choice at approve.
    Recommend force-choice at approval.
 

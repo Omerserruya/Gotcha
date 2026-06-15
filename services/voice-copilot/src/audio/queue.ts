@@ -1,5 +1,5 @@
 /**
- * BoundedAudioQueue — a fixed-capacity FIFO queue for decoded audio chunks.
+ * BoundedAudioQueue - a fixed-capacity FIFO queue for decoded audio chunks.
  * When full, the oldest entry is dropped and onDrop() is called before the
  * new chunk is enqueued (drop-oldest / back-pressure semantics).
  *

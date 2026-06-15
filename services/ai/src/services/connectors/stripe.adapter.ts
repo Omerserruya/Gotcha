@@ -1,5 +1,5 @@
 /**
- * Stripe adapter — production-grade.
+ * Stripe adapter - production-grade.
  *
  * Auth: Stripe Connect (OAuth) preferred; API key fallback supported by
  * accepting `secret_key` in credentials. Tokens come from /oauth/token
@@ -7,11 +7,11 @@
  *
  * Tools (highest-frequency real-world usage based on Stripe's docs +
  * commerce bot use-cases):
- *   - stripe.create_payment_link  — generate a checkout URL for a price
- *   - stripe.refund_payment       — refund a charge or PaymentIntent
- *   - stripe.get_customer         — look up by id or email
- *   - stripe.list_transactions    — recent charges for a customer
- *   - stripe.create_invoice       — issue an invoice (Connect or platform)
+ *   - stripe.create_payment_link  - generate a checkout URL for a price
+ *   - stripe.refund_payment       - refund a charge or PaymentIntent
+ *   - stripe.get_customer         - look up by id or email
+ *   - stripe.list_transactions    - recent charges for a customer
+ *   - stripe.create_invoice       - issue an invoice (Connect or platform)
  *
  * Idempotency: every write call sends an `Idempotency-Key` header derived
  * from (tenantId, conversationId, toolName, args). Stripe enforces idempotency
@@ -40,11 +40,11 @@ const TOOLS: ToolDefinition[] = [
     category: "WRITE",
     riskLevel: "MEDIUM",
     sideEffects: "Creates a public payment link the customer can use immediately.",
-    idempotencyNotes: "Uses Idempotency-Key derived from args — safe to retry.",
+    idempotencyNotes: "Uses Idempotency-Key derived from args - safe to retry.",
     parameters: {
       type: "object",
       properties: {
-        price_id: { type: "string", description: "Stripe Price id (price_…) — preferred path." },
+        price_id: { type: "string", description: "Stripe Price id (price_…) - preferred path." },
         amount: { type: "number", description: "Inline amount in MINOR units (e.g. cents). Used only if price_id is omitted." },
         currency: { type: "string", description: "ISO 4217 currency (USD, EUR, ILS…). Required if amount is set." },
         description: { type: "string", description: "Item description (used when creating an inline product)." },
@@ -55,11 +55,11 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "stripe.refund_payment",
     description: "Refund a Stripe charge or PaymentIntent (full or partial).",
-    whenToUse: "Customer is approved for a refund — either by policy or human approval.",
-    whenNotToUse: "Customer is just inquiring about refund eligibility — DO NOT refund speculatively.",
+    whenToUse: "Customer is approved for a refund - either by policy or human approval.",
+    whenNotToUse: "Customer is just inquiring about refund eligibility - DO NOT refund speculatively.",
     category: "WRITE",
     riskLevel: "HIGH",
-    sideEffects: "Issues a real refund — irreversible in 24h after capture.",
+    sideEffects: "Issues a real refund - irreversible in 24h after capture.",
     idempotencyNotes: "Uses Idempotency-Key derived from args. Same (charge_id, amount) → no duplicate refund.",
     parameters: {
       type: "object",
@@ -85,7 +85,7 @@ const TOOLS: ToolDefinition[] = [
       type: "object",
       properties: {
         customer_id: { type: "string", description: "cus_… id (preferred when known)." },
-        email: { type: "string", description: "Email — fallback lookup. May return multiple matches; first is returned." },
+        email: { type: "string", description: "Email - fallback lookup. May return multiple matches; first is returned." },
       },
     },
   },
@@ -111,7 +111,7 @@ const TOOLS: ToolDefinition[] = [
     category: "WRITE",
     riskLevel: "MEDIUM",
     sideEffects: "Creates a finalized invoice with the customer notified by email.",
-    idempotencyNotes: "Uses Idempotency-Key derived from args — re-runs are no-ops.",
+    idempotencyNotes: "Uses Idempotency-Key derived from args - re-runs are no-ops.",
     parameters: {
       type: "object",
       properties: {

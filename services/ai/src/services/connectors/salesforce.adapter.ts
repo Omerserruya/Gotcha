@@ -1,20 +1,20 @@
 /**
- * Salesforce adapter — production-grade.
+ * Salesforce adapter - production-grade.
  *
  * Auth: OAuth 2.0 Web Server flow. Salesforce returns an `instance_url`
  * with the token (each org has its own subdomain). We persist:
  *
  *   credentials = { accessToken, refreshToken, instanceUrl }
  *
- * Tokens are short-lived (~2 hours) — refresh via /services/oauth2/token.
+ * Tokens are short-lived (~2 hours) - refresh via /services/oauth2/token.
  *
  * Tools (top patterns from Sales Cloud / Service Cloud bots):
- *   - salesforce.search_records   — SOSL across an object
- *   - salesforce.get_record       — by Id (sObject)
- *   - salesforce.create_lead      — new Lead
- *   - salesforce.update_lead      — patch Lead fields
- *   - salesforce.create_case      — open a Service Cloud case
- *   - salesforce.log_task         — log a Task (call/email note)
+ *   - salesforce.search_records   - SOSL across an object
+ *   - salesforce.get_record       - by Id (sObject)
+ *   - salesforce.create_lead      - new Lead
+ *   - salesforce.update_lead      - patch Lead fields
+ *   - salesforce.create_case      - open a Service Cloud case
+ *   - salesforce.log_task         - log a Task (call/email note)
  *
  * API: REST v60.0 (`/services/data/v60.0`).
  */
@@ -138,7 +138,7 @@ const TOOLS: ToolDefinition[] = [
   {
     name: "salesforce.describe_fields",
     description: "Return the field schema for a Salesforce sObject (Lead, Contact).",
-    whenToUse: "Audience builder discovery — populates the filter-field picker with real fields, picklist values, and types.",
+    whenToUse: "Audience builder discovery - populates the filter-field picker with real fields, picklist values, and types.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {
@@ -238,7 +238,7 @@ const SalesforceAdapter: ProviderAdapter = {
         return await sfRequest(token, "GET", `${base}/sobjects/${encodeURIComponent(sobject)}/describe`);
       }
       case "search_with_criteria": {
-        // SOQL via /query?q=... — returns { totalSize, records: [...] }
+        // SOQL via /query?q=... - returns { totalSize, records: [...] }
         const sobject = String(args.sobject || "Lead");
         const limit = Math.min(2000, Number(args.limit ?? 200));
         const fields =

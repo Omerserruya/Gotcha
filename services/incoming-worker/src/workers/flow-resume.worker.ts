@@ -1,5 +1,5 @@
 /**
- * flow-resume worker — picks up delayed-resume jobs enqueued by the graph
+ * flow-resume worker - picks up delayed-resume jobs enqueued by the graph
  * walker (e.g. when a Wait node schedules a resume N seconds later) and calls
  * back into the flow executor with the stored resumeNodeId.
  *

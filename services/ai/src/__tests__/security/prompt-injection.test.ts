@@ -1,9 +1,9 @@
 /**
- * Integration test — confirms that customer/CRM/knowledge/memory text reaching
+ * Integration test - confirms that customer/CRM/knowledge/memory text reaching
  * the prompt builder is wrapped in `<untrusted source="…">…</untrusted>` and
  * that fake role markers are neutralised so the model treats them as DATA.
  *
- * No network, no DB — `buildAgentPrompt` is pure over its inputs.
+ * No network, no DB - `buildAgentPrompt` is pure over its inputs.
  */
 import { describe, it, expect } from "vitest";
 import {
@@ -48,7 +48,7 @@ function baseOpts(partial: Partial<BuildPromptOpts> = {}): BuildPromptOpts {
   };
 }
 
-describe("buildAgentPrompt — untrusted content sandboxing", () => {
+describe("buildAgentPrompt - untrusted content sandboxing", () => {
   it("wraps customer block with source='customer' and strips ###SYSTEM:", () => {
     const prompt = buildAgentPrompt(baseOpts({
       context: {
@@ -102,7 +102,7 @@ describe("buildAgentPrompt — untrusted content sandboxing", () => {
     }));
 
     expect(prompt).toMatch(/<untrusted source="memory">[\s\S]*<\/untrusted>/);
-    // Count the wrapper opens vs closes — they must balance per source.
+    // Count the wrapper opens vs closes - they must balance per source.
     // (The attacker's `</untrusted>` was inside the value and must be stripped,
     // leaving exactly one closing tag for the memory block.)
     const customerOpens = (prompt.match(/<untrusted source="memory">/g) || []).length;

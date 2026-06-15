@@ -15,7 +15,7 @@ CREATE TYPE "VoiceAuthType" AS ENUM ('BYO', 'TWILIO_CONNECT');
 ALTER TABLE "communication_channels"
   ADD COLUMN "auth_type" "VoiceAuthType" NOT NULL DEFAULT 'BYO';
 
--- 1:N — phone numbers discovered from Twilio per voice channel
+-- 1:N - phone numbers discovered from Twilio per voice channel
 CREATE TABLE "voice_channel_phone_numbers" (
   "id"               TEXT NOT NULL,
   "voice_channel_id" TEXT NOT NULL,

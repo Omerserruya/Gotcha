@@ -43,7 +43,7 @@ const KNOWN_TOOLS: Record<string, Omit<ToolDescriptor, "name">> = {
     autoExecuteAllowlist: [...ALL_MODES],
   },
   submit_suggestions: {
-    // Internal LLM-loop terminator — always safe.
+    // Internal LLM-loop terminator - always safe.
     mutating: false,
     requiresApproval: false,
     autoExecuteAllowlist: [...ALL_MODES],
@@ -99,7 +99,7 @@ export function getToolDescriptor(name: string): ToolDescriptor {
   const known = KNOWN_TOOLS[name];
   if (known) return { name, ...known };
   // Unknown tools default to mutating + requiresApproval. This is the
-  // load-bearing default — anything not registered cannot slip through
+  // load-bearing default - anything not registered cannot slip through
   // as auto-execute on any mode.
   return {
     name,

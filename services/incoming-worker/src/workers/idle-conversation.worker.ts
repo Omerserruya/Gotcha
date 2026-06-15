@@ -75,7 +75,7 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
             tool: ar.tool,
           },
         }).catch(() => {});
-        console.log(`[idle-check] Expired approval ${ar.id} — conversation ${ar.conversationId} routed to human`);
+        console.log(`[idle-check] Expired approval ${ar.id} - conversation ${ar.conversationId} routed to human`);
       } catch (err: any) {
         console.error(`[idle-check] Failed to expire approval ${ar.id}:`, err.message);
       }
@@ -87,7 +87,7 @@ async function processIdleConversations(job: Job<IdleConversationJob>): Promise<
   // ── Comment→DM 24h bridge expiry sweep ─────────────────
   // Conversations promoted from a comment trigger have a flowExpiresAt set
   // (24h from the private-reply DM). If the user never replies, the bridge
-  // is dead — Meta blocks further DMs. Close them proactively so they don't
+  // is dead - Meta blocks further DMs. Close them proactively so they don't
   // sit in inbox indefinitely waiting for an inbound that won't come.
   try {
     const expiredBridges = await prisma.conversation.findMany({

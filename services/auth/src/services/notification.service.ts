@@ -696,7 +696,7 @@ function waitlistWelcomeHtml(firstName: string, position: number): string {
  * Send welcome email to new waitlist subscriber.
  */
 export async function sendWaitlistWelcomeEmail(email: string, firstName: string, position: number): Promise<void> {
-  const subject = `You're in, ${firstName} — welcome to Gotcha. early access`;
+  const subject = `You're in, ${firstName} - welcome to Gotcha. early access`;
   const html = waitlistWelcomeHtml(firstName, position);
   const text = [
     `Hey ${firstName}!`,
@@ -704,13 +704,13 @@ export async function sendWaitlistWelcomeEmail(email: string, firstName: string,
     "Thanks for signing up for early access to Gotcha.",
     "",
     "What happens next:",
-    "1. We're building your command center — preparing the platform tailored to your business",
-    "2. A personal kickoff call — one of our team will reach out to schedule a Teams call",
-    "3. Welcome to the Gotcha standard — transform how your company communicates, starting day one",
+    "1. We're building your command center - preparing the platform tailored to your business",
+    "2. A personal kickoff call - one of our team will reach out to schedule a Teams call",
+    "3. Welcome to the Gotcha standard - transform how your company communicates, starting day one",
     "",
-    "In the meantime, hit reply if you have any questions — we read every message.",
+    "In the meantime, hit reply if you have any questions - we read every message.",
     "",
-    "— The Gotcha. Team",
+    "- The Gotcha. Team",
   ].join("\n");
 
   try {
@@ -735,7 +735,7 @@ export async function sendPasswordResetEmail(
   const resetUrl = `${frontendUrl}/login?resetToken=${token}`;
   const logoUrl = `${frontendUrl}/logo.png`;
 
-  const subject = `Reset your password — ${tenantName}`;
+  const subject = `Reset your password - ${tenantName}`;
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -843,7 +843,7 @@ export async function sendPasswordResetEmail(
     "",
     "If you didn't request this, you can safely ignore this email.",
     "",
-    "— The GOTCHA. Team",
+    "- The GOTCHA. Team",
   ].join("\n");
 
   const payload: NotificationPayload = {
@@ -1019,7 +1019,7 @@ export async function sendActivationConfirmation(tenantId: string): Promise<void
 //
 // Fires from POST /api/onboarding/invite-team. The link drops the
 // teammate straight into the workspace via the existing magic-link
-// verifier — no separate signup form for the email-targeted flow.
+// verifier - no separate signup form for the email-targeted flow.
 
 interface TeammateInviteArgs {
   email: string;

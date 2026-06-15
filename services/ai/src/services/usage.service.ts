@@ -11,7 +11,7 @@
  * - usage_logs (raw events)
  * - credit_transactions (credit impact)
  *
- * NO enforcement — tracking only for future billing.
+ * NO enforcement - tracking only for future billing.
  */
 
 import { prisma } from "@chatcenter/shared";
@@ -39,7 +39,7 @@ export interface UsageEvent {
 // For ai_tokens, quantity is the actual token count from the model response.
 // For message_sent, quantity is the number of messages (1).
 // For tool_call, quantity is the number of executions (1).
-// No artificial flat rates or credit conversions — raw data only.
+// No artificial flat rates or credit conversions - raw data only.
 
 export async function trackUsage(event: UsageEvent): Promise<void> {
   try {
@@ -50,14 +50,14 @@ export async function trackUsage(event: UsageEvent): Promise<void> {
         tenantId: event.tenantId,
         type: event.type,
         quantity: event.quantity,
-        tokensEquivalent: event.quantity, // actual tokens — no artificial conversion
+        tokensEquivalent: event.quantity, // actual tokens - no artificial conversion
         metadata: event.metadata || undefined,
       },
     });
 
     // Note: NO enforcement - we only track, never block
   } catch (err: any) {
-    // Never throw — usage tracking should never break business logic
+    // Never throw - usage tracking should never break business logic
     console.error("[usageService] Failed to track usage:", err.message);
   }
 }

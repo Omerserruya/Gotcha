@@ -1,5 +1,5 @@
 /**
- * Post-chat subscriber — runs the post-conversation pipeline whenever a
+ * Post-chat subscriber - runs the post-conversation pipeline whenever a
  * non-voice conversation is closed.
  *
  * Listens for `conversation:closed` on the shared event bus. Voice
@@ -35,7 +35,7 @@ async function handleClosed(evt: ServiceEvent): Promise<void> {
   const tenantId = evt.tenantId ?? data.tenantId;
   if (!tenantId) return;
 
-  // Skip voice conversations — they have their own pipeline.
+  // Skip voice conversations - they have their own pipeline.
   let channel = data.channel;
   if (!channel) {
     const row = await prisma.conversation.findUnique({
@@ -56,13 +56,13 @@ async function handleClosed(evt: ServiceEvent): Promise<void> {
   );
 
   // Refresh the persistent customer brief AFTER the per-conversation
-  // summary is on disk — that way loadCustomerContext sees this
+  // summary is on disk - that way loadCustomerContext sees this
   // conversation's analysis and the cross-channel brief reflects it.
   // Best-effort: a failure here MUST NOT block conversation close, so we
   // catch and log.
   // Resolve the tenant's system language so the persistent brief gets
   // generated in the right tongue (briefs are stored per-locale on the
-  // CustomerBrief table). Falls back to "en" on failure — non-fatal.
+  // CustomerBrief table). Falls back to "en" on failure - non-fatal.
   const briefLocaleInfo = await resolveEffectiveLocale({
     tenantId: String(tenantId),
   }).catch(() => null);
@@ -84,7 +84,7 @@ async function handleClosed(evt: ServiceEvent): Promise<void> {
 
   // Project the closed conversation as an activity into the tenant's CRM
   // (Zoho Note / HubSpot Note / Salesforce Task). This is what gives agents
-  // a "call log" entry per closed chat — duration, message count, summary,
+  // a "call log" entry per closed chat - duration, message count, summary,
   // sentiment, action items. The manual UI close path already calls this
   // via POST /api/crm/conversation/:id/sync-close. Bot- and idle-closed
   // conversations need it fired from here, otherwise they never log to CRM.

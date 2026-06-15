@@ -200,7 +200,7 @@ export function AgentsContent() {
           </button>
         </div>
 
-        {/* Agent List — Desktop table */}
+        {/* Agent List - Desktop table */}
         <div className="hidden md:block bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
           <table className="w-full text-sm">
             <thead className="bg-gray-50/80">
@@ -240,7 +240,7 @@ export function AgentsContent() {
                       {agent.departmentName ? (
                         <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-violet-50 text-violet-600 ring-1 ring-violet-200">{agent.departmentName}</span>
                       ) : (
-                        <span className="text-xs text-gray-300">—</span>
+                        <span className="text-xs text-gray-300">-</span>
                       )}
                     </td>
                     <td className="py-3.5 px-5">
@@ -308,7 +308,7 @@ export function AgentsContent() {
           )}
         </div>
 
-        {/* Side Panel — Create / Edit Agent */}
+        {/* Side Panel - Create / Edit Agent */}
         {panelOpen && (
           <div className="fixed inset-0 z-50 flex">
             <div className="absolute inset-0 bg-black/30 backdrop-blur-sm" onClick={closePanel} />
@@ -366,7 +366,7 @@ export function AgentsContent() {
                     />
                   </div>
 
-                  {/* Personal phone — used for FORWARD_TO_AGENT inbound mode
+                  {/* Personal phone - used for FORWARD_TO_AGENT inbound mode
                       on voice channels, and for the smart-callback bridge
                       (we recognize the agent when they call the business
                       number back from their mobile). Only editable in edit

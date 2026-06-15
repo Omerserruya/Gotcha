@@ -417,16 +417,22 @@ services:
     profiles:
       - migrate
 
-  # ─── Frontend ────────────────────────────────────────────
+  # ─── Frontend (dev: hot reload via `next dev`) ───────────
   frontend:
     build:
       context: ./frontend
-      dockerfile: Dockerfile
-      args:
-        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
-        NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
-        NEXT_PUBLIC_META_APP_ID: ${META_APP_ID:-}
-        NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+      dockerfile: Dockerfile.dev
+    # NEXT_PUBLIC_* are read at runtime by `next dev` (no rebuild needed).
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-}
+      NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
+      NEXT_PUBLIC_META_APP_ID: ${META_APP_ID:-}
+      NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+    # Bind-mount source for hot reload; keep container's node_modules/.next.
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
+      - /app/.next
 
 volumes:
   pgdata:

@@ -6,9 +6,9 @@
  *
  * Phase 1 ships a representative subset (sales, support, hebrew speech,
  * tool-usage, pipeline transitions). Phase 5 cutover will add the
- * remaining skills extracted from `prompt-builder.service.ts` —
+ * remaining skills extracted from `prompt-builder.service.ts` -
  * goals, decision-layer, playbook composition, execution contract,
- * tone-intensity, etc. — one per skill so the registry remains the
+ * tone-intensity, etc. - one per skill so the registry remains the
  * single source of truth.
  */
 

@@ -16,14 +16,14 @@ import { PlaybookCompliance } from "../../services/intelligence/analyzers/playbo
 import { CoachingAnalyzer } from "../../services/intelligence/analyzers/coaching-analyzer";
 
 /**
- * Phase 6 — Mode B (async post-call analysis) runner.
+ * Phase 6 - Mode B (async post-call analysis) runner.
  *
  * Two ingest paths (the doc's TranscriptSource abstraction is the linchpin):
  *   - "uploaded": the caller hands us the parsed TranscriptUtterance[]
  *   - "recording": we transcribe a URL via a WhisperClient
  *
  * V1 produces a SINGLE synthetic ConversationStateFrame from the transcript
- * — no LLM calls in V1. Aggregates basic stats (utterance count, speaker
+ * - no LLM calls in V1. Aggregates basic stats (utterance count, speaker
  * mix, total duration) into the frame. Phase 6.x will replace the synthetic
  * frame with a PostCallPromptAssembler + structured-output LLM call so the
  * resulting CallAnalysis is shape-equivalent to a live-mode analysis.
@@ -126,7 +126,7 @@ export async function runAsyncAnalysis(
     return { ok: false, reason: `stream_failed:${err?.message}` };
   }
 
-  // 4. Build a synthetic final frame. V1 — no LLM. Phase 6.x replaces this
+  // 4. Build a synthetic final frame. V1 - no LLM. Phase 6.x replaces this
   //    with a PostCallPromptAssembler call.
   const frame = buildSyntheticFinalFrame({
     conversationId,
@@ -135,7 +135,7 @@ export async function runAsyncAnalysis(
   await CallAnalysisStore.appendFrame(conversationId, frame);
 
   // 5. Run Phase 5 analyzers against the frame array. Heuristic-only in
-  //    V1 — output for an async run is shape-equivalent to a Mode A QA
+  //    V1 - output for an async run is shape-equivalent to a Mode A QA
   //    score, but with reduced signal because frames=[1] (vs many for
   //    live-mode replay). Documented limitation; LLM-augmented Phase 6.x
   //    will produce richer per-window frames.
@@ -167,7 +167,7 @@ export async function runAsyncAnalysis(
       rubricVersion: ASYNC_RUBRIC_VERSION,
       playbookComplianceScore: compliance.score,
       coachingScore: coachingResult.score,
-      riskScore: 0, // V1 — RiskDetector requires per-window frames
+      riskScore: 0, // V1 - RiskDetector requires per-window frames
       findings: [...compliance.findings, ...coachingResult.findings].slice(
         0,
         25,
@@ -241,7 +241,7 @@ function buildSyntheticFinalFrame(args: {
     risks: [],
     urgency: "low" as const,
     confidence: 0.3, // honest signal: V1 synthetic frame is low-confidence
-    // Custom fields below the schema are dropped by Zod parse — keeping
+    // Custom fields below the schema are dropped by Zod parse - keeping
     // surface details in `summary.text` is the right channel for V1.
   };
 }

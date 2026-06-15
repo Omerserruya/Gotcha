@@ -1,5 +1,5 @@
 /**
- * /api/agent — System Copilot HTTP surface.
+ * /api/agent - System Copilot HTTP surface.
  *
  *   POST /api/agent/run    → SSE stream of AgentRuntimeEvent (the loop)
  *   POST /api/agent/clear  → wipe memory for this operator

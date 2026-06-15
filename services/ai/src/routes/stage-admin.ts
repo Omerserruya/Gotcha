@@ -1,9 +1,9 @@
 /**
  * Stage transition admin routes.
  *
- *   POST /stage-transitions/conversations/:id/override   — manual stage change
- *   GET  /stage-transitions/conversations/:id            — audit log for a conversation
- *   GET  /stage-transitions/contacts/:id                 — audit log for a contact
+ *   POST /stage-transitions/conversations/:id/override   - manual stage change
+ *   GET  /stage-transitions/conversations/:id            - audit log for a conversation
+ *   GET  /stage-transitions/contacts/:id                 - audit log for a contact
  *
  * Mounted under `/api/stage-transitions` so the nginx routing doesn't
  * collide with `/api/conversations` (which proxies to the conversation
@@ -97,7 +97,7 @@ router.post(
 
     const contactId = await findContactIdFor(tenantId, conv);
 
-    // Vendor write — same path the post-call auto-advance uses, so the
+    // Vendor write - same path the post-call auto-advance uses, so the
     // CRM adapter / kind routing / activity logging stays consistent.
     let vendorOk = false;
     let vendorError: string | undefined;
@@ -134,7 +134,7 @@ router.post(
           data: { metadata: meta },
         });
       } catch (err: any) {
-        // Non-fatal — vendor is authoritative. Log only.
+        // Non-fatal - vendor is authoritative. Log only.
         console.warn(
           "[stage-admin] contact cache update failed (non-fatal):",
           err?.message,

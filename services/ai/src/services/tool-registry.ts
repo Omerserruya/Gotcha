@@ -1,5 +1,5 @@
 /**
- * Tool Registry — single source of truth for the AI tool surface.
+ * Tool Registry - single source of truth for the AI tool surface.
  *
  * Tools are classified into three exclusive kinds (OMC_EXECUTION_MAP):
  *
@@ -17,7 +17,7 @@
  *
  * `getAvailableTools(tenantId)` is the unifier: it merges the static
  * registry (system + action) with the dynamic per-tenant integration list.
- * The action planner must consume this function — not the raw exports —
+ * The action planner must consume this function - not the raw exports -
  * so it sees exactly the tools available for a given tenant/context.
  */
 
@@ -43,7 +43,7 @@ export interface ToolSpec {
    * Whether the action planner is allowed to emit this tool as a plan step.
    * Default true. Set to false for tools that exist only on the autonomous
    * conversational-bot surface (defined in packages/shared/src/lib/agent-tools.ts)
-   * — they still need a registry entry so admins can configure HITL in the
+   * - they still need a registry entry so admins can configure HITL in the
    * Settings → Tools page, but the action planner must not include them in
    * its prompt.
    */
@@ -51,7 +51,7 @@ export interface ToolSpec {
 }
 
 export const TOOL_REGISTRY: ToolSpec[] = [
-  // ─── SYSTEM (hidden — context gathering only) ──────────────
+  // ─── SYSTEM (hidden - context gathering only) ──────────────
   {
     name: "get_conversation",
     kind: "system",
@@ -80,7 +80,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     name: "resolve_identity",
     kind: "system",
     category: "identity",
-    description: "Find a contact by email, phone, or external id. Read-only — does NOT create.",
+    description: "Find a contact by email, phone, or external id. Read-only - does NOT create.",
     input: { email: "string?", phone: "string?", externalId: "string?", channel: "string?" },
     endpoint: "POST /api/identity/resolve",
   },
@@ -228,7 +228,7 @@ export const TOOL_REGISTRY: ToolSpec[] = [
     kind: "action",
     category: "messaging",
     description:
-      "Schedule a future WhatsApp TEMPLATE message — used by the bot when the send time falls outside " +
+      "Schedule a future WhatsApp TEMPLATE message - used by the bot when the send time falls outside " +
       "the WhatsApp 24h customer-service window.",
     input: {
       template_name: "string",
@@ -343,7 +343,7 @@ export async function getAvailableTools(
       endpoint: `tenantTool:${r.id}`,
     }));
   } catch (err) {
-    // DB may be unavailable in some unit tests — fall back to empty list
+    // DB may be unavailable in some unit tests - fall back to empty list
     // rather than fail the whole planner call. Audit at caller if needed.
     integrationTools = [];
   }
@@ -353,7 +353,7 @@ export async function getAvailableTools(
 
 /**
  * Build the human-readable tool section the planner injects into its system
- * prompt. Only action + integration tools are listed — system tools are
+ * prompt. Only action + integration tools are listed - system tools are
  * intentionally excluded so the LLM never emits them as steps.
  */
 export function renderPlannerTools(tools: AvailableTools): string {
@@ -365,32 +365,32 @@ export function renderPlannerTools(tools: AvailableTools): string {
       const schema = Object.entries(t.input)
         .map(([k, v]) => `${k}: ${v}`)
         .join(", ");
-      lines.push(`- ${t.name}(${schema}) — ${t.description}`);
+      lines.push(`- ${t.name}(${schema}) - ${t.description}`);
     }
   };
   const plannerActionTools = tools.actionTools.filter((t) => t.plannerEmittable !== false);
-  group("ACTION TOOLS (executable — mutate state via connectors)", plannerActionTools);
-  group("INTEGRATION TOOLS (tenant-scoped — executed via tool-execution.service.ts)", tools.integrationTools);
+  group("ACTION TOOLS (executable - mutate state via connectors)", plannerActionTools);
+  group("INTEGRATION TOOLS (tenant-scoped - executed via tool-execution.service.ts)", tools.integrationTools);
   return lines.join("\n");
 }
 
 /**
  * Context capabilities advertised to the planner so it knows what
- * information the system can retrieve on its behalf — WITHOUT offering
+ * information the system can retrieve on its behalf - WITHOUT offering
  * those as plan steps. The planner may reference them in its reasoning
  * (e.g. "I already have the contact via get_contact") but must not emit
  * them as ExecutionPlan steps.
  */
 export function renderSystemCapabilities(tools: AvailableTools): string {
   if (tools.systemTools.length === 0) return "";
-  const lines = ["\n## CONTEXT CAPABILITIES (read-only, pre-resolved — NEVER emit as steps)"];
+  const lines = ["\n## CONTEXT CAPABILITIES (read-only, pre-resolved - NEVER emit as steps)"];
   for (const t of tools.systemTools) {
     lines.push(`- ${t.name}: ${t.description}`);
   }
   return lines.join("\n");
 }
 
-/** Back-compat shim — delegates to the new unified path. */
+/** Back-compat shim - delegates to the new unified path. */
 export function renderToolRegistryForPrompt(): string {
   const actionTools = TOOL_REGISTRY.filter(
     (t) => t.kind === "action" && t.plannerEmittable !== false,
@@ -400,7 +400,7 @@ export function renderToolRegistryForPrompt(): string {
     const schema = Object.entries(t.input)
       .map(([k, v]) => `${k}: ${v}`)
       .join(", ");
-    lines.push(`- ${t.name}(${schema}) — ${t.description}`);
+    lines.push(`- ${t.name}(${schema}) - ${t.description}`);
   }
   return lines.join("\n");
 }

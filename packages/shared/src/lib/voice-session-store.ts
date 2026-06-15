@@ -1,5 +1,5 @@
 /**
- * Voice session persistence — wraps every VoiceCallSession write with
+ * Voice session persistence - wraps every VoiceCallSession write with
  * FSM-aware dual-write (state + legacy status), append-only stateHistory,
  * and atomic optimistic locks for claim/transition.
  *
@@ -85,7 +85,7 @@ export async function transitionVoiceCallSessionState(
 
   // Auto-handle cascade: when an OUTBOUND call to this customer reaches
   // ACTIVE, every MISSED inbound row for the same (tenant, customerNumber)
-  // gets `handledAt` stamped. The agent has actually picked up — those
+  // gets `handledAt` stamped. The agent has actually picked up - those
   // missed-call inbox rows are now stale. This is the server-side path
   // that closes the loop even when the callback came from the WhatsApp
   // template button (no browser involved, so localStorage couldn't help).
@@ -102,14 +102,14 @@ export async function transitionVoiceCallSessionState(
         data: { handledAt: new Date() },
       });
     } catch {
-      // Non-fatal — the inbox would still show the rows on next reload,
+      // Non-fatal - the inbox would still show the rows on next reload,
       // and the agent's explicit "Mark as handled" still works.
     }
   }
 
   // Broadcast the transition so live UIs (ActiveCallBar, IncomingCallBanner,
   // workspace page) drop/refresh the session without waiting on a reconcile.
-  // Without this, customer-side hangups never reach the browser — the DB row
+  // Without this, customer-side hangups never reach the browser - the DB row
   // is updated by Twilio webhooks but no socket event fires.
   try {
     await publishEvent({
@@ -136,7 +136,7 @@ export async function transitionVoiceCallSessionState(
       });
     }
   } catch {
-    // Best-effort — DB write already succeeded; the next reconcile will repair.
+    // Best-effort - DB write already succeeded; the next reconcile will repair.
   }
 
   return { ok: true, session };
@@ -162,7 +162,7 @@ export async function claimIncomingCall(
   const nextHistory = appendHistory(existing.stateHistory, "CONNECTING", "claimed");
   // Inbound rows are now pre-assigned to the channel's default agent at
   // ring time (so the right UI rings first). That agent must still be
-  // able to claim — accept either `null` (unassigned ring) OR
+  // able to claim - accept either `null` (unassigned ring) OR
   // `assignedAgentId === claimer` (pre-assigned to this agent). The
   // line 133 check above already rejects claims by a DIFFERENT agent.
   const claimed = await prisma.voiceCallSession.updateMany({
@@ -191,7 +191,7 @@ export async function claimIncomingCall(
     return { ok: false, reason: "not_ringing" };
   }
   const session = await prisma.voiceCallSession.findUniqueOrThrow({ where: { id: sessionId } });
-  // Best-effort presence write — never block the claim on presence row errors.
+  // Best-effort presence write - never block the claim on presence row errors.
   try {
     await markBusy(agentId, session.tenantId, session.id);
   } catch {

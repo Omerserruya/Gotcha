@@ -1,5 +1,5 @@
 /**
- * CRM OAuth routes — currently Zoho, extensible to Salesforce / HubSpot.
+ * CRM OAuth routes - currently Zoho, extensible to Salesforce / HubSpot.
  *
  * Mounted at /api/integrations BEFORE the authenticated `integrationRoutes`
  * router, so the public /callback path is not caught by the admin auth gate.
@@ -11,7 +11,7 @@
  *                                        302-redirects to the frontend.
  *
  * State JWT carries {tenantId, integrationSlug, userId} and is the only
- * trust anchor on the callback — so the callback is safe to leave public.
+ * trust anchor on the callback - so the callback is safe to leave public.
  */
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
@@ -107,7 +107,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
       scope: tokens.scope,
     };
 
-    // api_domain is per-user (region-specific) — persist on config.baseUrl so
+    // api_domain is per-user (region-specific) - persist on config.baseUrl so
     // tool-execution.service.ts can prefix relative endpoints correctly.
     const configPayload = {
       baseUrl: (tokens.api_domain || "https://www.zohoapis.com").replace(/\/$/, ""),

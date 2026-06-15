@@ -81,7 +81,7 @@ export function profileFor(tier: CopilotTier): CopilotProfile {
 }
 
 /**
- * React hook — returns the current profile + setter. Subscribes to a
+ * React hook - returns the current profile + setter. Subscribes to a
  * cross-component event so multiple CueLanesCard instances stay in sync
  * without prop drilling.
  */

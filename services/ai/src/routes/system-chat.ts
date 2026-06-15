@@ -4,7 +4,7 @@ import { prisma, authenticate, requireSystemAdmin } from "@chatcenter/shared";
 /**
  * System-chat routes manage a SYSTEM-ADMIN-ONLY private knowledge base.
  * The admin operates inside THEIR OWN tenant (the one their user row
- * belongs to) — they are NOT allowed to browse other tenants' KBs from
+ * belongs to) - they are NOT allowed to browse other tenants' KBs from
  * this surface. We resolve the tenant from the JWT claim and refuse
  * the request if it's missing. Fallback to `req.tenantId` from any
  * upstream middleware is deliberately NOT used here, because this
@@ -281,7 +281,7 @@ ${knowledgeContext ? `\n${knowledgeContext}` : "\nNo knowledge base documents ar
 // NOTE: these endpoints now read from `usage_logs` (the authoritative source)
 // filtered to `type = "ai_tokens"`, using the denormalized `feature`, `model`,
 // `promptTokens`, `completionTokens` columns added in the 20260414 migration.
-// The legacy `token_logs` table is retired — nothing writes to it.
+// The legacy `token_logs` table is retired - nothing writes to it.
 
 router.get("/token-usage", async (req: Request, res: Response) => {
   try {

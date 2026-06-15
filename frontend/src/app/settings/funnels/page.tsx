@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Funnel list — admin landing page for pipeline funnels.
+ * Funnel list - admin landing page for pipeline funnels.
  *
  * Per-tenant (with optional per-department scope). Clicking a row
  * navigates to /settings/funnels/[id] where the per-stage copilot

@@ -3,7 +3,7 @@
  *
  * The CRM playbook stage tells us "what step in the sales script are we on";
  * a Goal tells us "what data does the SYSTEM need to progress this lead".
- * Goals are deterministic and owned here — the LLM's frame.stage is a hint,
+ * Goals are deterministic and owned here - the LLM's frame.stage is a hint,
  * not the authority. See GoalStateMachine for the transition rules.
  */
 

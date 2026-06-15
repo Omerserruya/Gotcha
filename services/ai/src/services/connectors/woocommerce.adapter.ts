@@ -1,5 +1,5 @@
 /**
- * WooCommerce adapter — production-grade.
+ * WooCommerce adapter - production-grade.
  *
  * Auth: REST API consumer key + consumer secret (no OAuth). The store
  * URL is stored in `config.storeUrl` (e.g. "https://shop.example.com").
@@ -7,15 +7,15 @@
  * uses HTTP Basic auth with these values per Woo's standard auth flow.
  *
  * Tools (top support + sales use-cases on WooCommerce):
- *   - woocommerce.list_orders          — recent orders (filterable)
- *   - woocommerce.get_order            — single order detail
- *   - woocommerce.update_order_status  — change status (processing/completed/cancelled/refunded)
- *   - woocommerce.get_customer         — by id or email
- *   - woocommerce.search_customers     — by partial fields
- *   - woocommerce.list_products        — search by name
- *   - woocommerce.create_coupon        — issue a discount coupon (HIGH risk)
+ *   - woocommerce.list_orders          - recent orders (filterable)
+ *   - woocommerce.get_order            - single order detail
+ *   - woocommerce.update_order_status  - change status (processing/completed/cancelled/refunded)
+ *   - woocommerce.get_customer         - by id or email
+ *   - woocommerce.search_customers     - by partial fields
+ *   - woocommerce.list_products        - search by name
+ *   - woocommerce.create_coupon        - issue a discount coupon (HIGH risk)
  *
- * API: WC REST v3 — /wp-json/wc/v3/
+ * API: WC REST v3 - /wp-json/wc/v3/
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
@@ -54,7 +54,7 @@ const TOOLS: ToolDefinition[] = [
     name: "woocommerce.update_order_status",
     description: "Change the status of an existing WooCommerce order.",
     whenToUse: "Order needs a status transition (cancel, mark complete, etc.) and the action is approved.",
-    whenNotToUse: "You're guessing at status — confirm the customer's intent first.",
+    whenNotToUse: "You're guessing at status - confirm the customer's intent first.",
     category: "WRITE",
     riskLevel: "HIGH",
     sideEffects: "Updates the order status visible to merchant + customer; may trigger emails.",

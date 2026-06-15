@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Custom DB Query Tools — admin-defined parameterized SQL / Mongo queries the
+ * Custom DB Query Tools - admin-defined parameterized SQL / Mongo queries the
  * AI can call as `custom_db.<slug>`. Safer than the generic CRUD tools because
  * the admin pre-defines the exact query shape; the AI only fills in named
  * parameters that match `parameterSchema`.
@@ -42,7 +42,7 @@ interface FormState {
 const TEMPLATES_BY_PROVIDER: Record<string, { sample: string; schema: string; order: string }> = {
   postgresql: {
     sample: "SELECT id, email, total\nFROM orders\nWHERE buyer_email = $1\n  AND created_at >= $2\nORDER BY created_at DESC",
-    schema: '{\n  "type": "object",\n  "properties": {\n    "buyer_email": { "type": "string", "description": "Customer email" },\n    "since": { "type": "string", "description": "ISO date — orders since this date" }\n  },\n  "required": ["buyer_email"]\n}',
+    schema: '{\n  "type": "object",\n  "properties": {\n    "buyer_email": { "type": "string", "description": "Customer email" },\n    "since": { "type": "string", "description": "ISO date - orders since this date" }\n  },\n  "required": ["buyer_email"]\n}',
     order: "buyer_email, since",
   },
   aws_rds: {
@@ -219,7 +219,7 @@ export default function CustomDbToolsSection({ providerSlug }: { providerSlug: "
         <div>
           <h2 className="font-semibold text-gray-900">Custom Queries</h2>
           <p className="text-xs text-gray-500 mt-0.5">
-            Pre-canned {PROVIDER_LABELS[providerSlug]} queries the AI can call. Safer than generic table CRUD — you define the shape, the AI fills in parameters.
+            Pre-canned {PROVIDER_LABELS[providerSlug]} queries the AI can call. Safer than generic table CRUD - you define the shape, the AI fills in parameters.
           </p>
         </div>
         <button
@@ -238,7 +238,7 @@ export default function CustomDbToolsSection({ providerSlug }: { providerSlug: "
           <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
         </div>
       ) : tools.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No custom queries yet — click <strong>Add query</strong> to define one.</p>
+        <p className="text-sm text-gray-400 text-center py-6">No custom queries yet - click <strong>Add query</strong> to define one.</p>
       ) : (
         <div className="space-y-2">
           {tools.map((t) => (

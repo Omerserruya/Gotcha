@@ -1,19 +1,19 @@
 /**
- * Unified connector admin — OAuth + API-key + config + meta selectors
+ * Unified connector admin - OAuth + API-key + config + meta selectors
  * for every adapter shipped in services/ai/src/services/connectors/.
  *
- *   GET  /connectors/:slug/oauth/init        — start OAuth (returns auth URL)
- *   GET  /connectors/:slug/oauth/callback    — finish OAuth (302 redirect)
- *   POST /connectors/:slug/connect           — API-key style connect
- *   POST /connectors/:slug/config            — patch the integration `config` JSON
- *   POST /connectors/:slug/disconnect        — flip status to DISCONNECTED
- *   GET  /connectors/:slug/status            — cheap status read
- *   GET  /connectors/:slug/meta/:resource    — meta selectors (airtable bases/tables)
+ *   GET  /connectors/:slug/oauth/init        - start OAuth (returns auth URL)
+ *   GET  /connectors/:slug/oauth/callback    - finish OAuth (302 redirect)
+ *   POST /connectors/:slug/connect           - API-key style connect
+ *   POST /connectors/:slug/config            - patch the integration `config` JSON
+ *   POST /connectors/:slug/disconnect        - flip status to DISCONNECTED
+ *   GET  /connectors/:slug/status            - cheap status read
+ *   GET  /connectors/:slug/meta/:resource    - meta selectors (airtable bases/tables)
  *
  * Concrete OAuth flows:
  *   - stripe   (Stripe Connect)
  *   - hubspot
- *   - shopify  (per-shop — `shop` query param required on init)
+ *   - shopify  (per-shop - `shop` query param required on init)
  * API-key style:
  *   - airtable (PAT)
  *   - postgres / mongodb / aws_rds (connection string)
@@ -105,7 +105,7 @@ function postOAuthRedirect(slug: string, flow: string | undefined, query: Record
   return dashboardRedirect(slug, query);
 }
 
-// base64url encode (no padding) — used for OAuth2 PKCE (Airtable).
+// base64url encode (no padding) - used for OAuth2 PKCE (Airtable).
 function base64url(buf: Buffer): string {
   return buf.toString("base64").replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
@@ -257,7 +257,7 @@ router.get(
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
     const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, JWT_SECRET, { expiresIn: "10m" });
-    // Includes Leads scopes — they 403 silently for tenants on Pro/Starter
+    // Includes Leads scopes - they 403 silently for tenants on Pro/Starter
     // (no Leads object). Leaving them in keeps Enterprise install fast.
     const scope = [
       "crm.objects.contacts.read",
@@ -330,7 +330,7 @@ router.get(
     const redirect = process.env.SHOPIFY_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "shopify_oauth_not_configured" }); return; }
     // Forgiving normalization: users paste anything from "my-store" to
-    // "https://my-store.myshopify.com/admin/" — strip protocol, path, and
+    // "https://my-store.myshopify.com/admin/" - strip protocol, path, and
     // whitespace, then auto-append .myshopify.com if they only typed a slug.
     const raw = String(req.query.shop || "").trim().toLowerCase();
     const stripped = raw
@@ -602,11 +602,11 @@ router.post(
   },
 );
 
-// ─── Wix App OAuth (install flow — multi-tenant) ─────────────
+// ─── Wix App OAuth (install flow - multi-tenant) ─────────────
 //
 // CORRECT flow for "any Wix store owner connects their store to us":
 //   1. We send the user to https://www.wix.com/installer/install?appId=…
-//      &redirectUrl=…&state=… — Wix shows them a "Add to site" picker.
+//      &redirectUrl=…&state=… - Wix shows them a "Add to site" picker.
 //   2. After they pick a site + approve permissions, Wix redirects back to
 //      our callback with `?code=…&instanceId=<site-instance>&state=…`.
 //   3. We POST that code to https://www.wixapis.com/oauth/access
@@ -615,7 +615,7 @@ router.post(
 //
 // We persist `instanceId` on the integration so subsequent API calls can
 // reference the right Wix site. Refresh tokens are long-lived (Wix handles
-// expiry transparently — token expiry is ~5 minutes, refresh-token rotation
+// expiry transparently - token expiry is ~5 minutes, refresh-token rotation
 // is one-shot per refresh).
 
 router.get(
@@ -626,7 +626,7 @@ router.get(
     const redirect = process.env.WIX_REDIRECT_URI;
     if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured" }); return; }
     const state = jwt.sign({ tenantId: req.tenantId, provider: "wix" }, JWT_SECRET, { expiresIn: "10m" });
-    // Wix App install flow — NOT the headless `oauth/authorize` flow.
+    // Wix App install flow - NOT the headless `oauth/authorize` flow.
     const params = new URLSearchParams({
       appId,
       redirectUrl: redirect,
@@ -903,7 +903,7 @@ router.get(
 // ─── DB schema introspection ─────────────────────────────────
 //
 // POST endpoints (not GET) so connection strings stay out of access logs +
-// referer headers. Each handler accepts the connection string in the body —
+// referer headers. Each handler accepts the connection string in the body -
 // either freshly typed (during the connect form) or null to reuse what's
 // already stored on the tenant's CONNECTED integration.
 
@@ -1042,7 +1042,7 @@ router.post(
     const engine = String(req.body?.engine || "postgres").toLowerCase();
     try {
       if (engine === "mysql" || engine === "mariadb") {
-        // mysql2 is loaded lazily — avoids requiring it on Postgres-only deploys.
+        // mysql2 is loaded lazily - avoids requiring it on Postgres-only deploys.
         // eslint-disable-next-line @typescript-eslint/no-var-requires
         const m = require("mysql2/promise");
         const conn = await m.createConnection({

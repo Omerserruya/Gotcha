@@ -1,5 +1,5 @@
 /**
- * Notification engine — fan-out logic.
+ * Notification engine - fan-out logic.
  *
  * Pulled out of the dispatcher worker so it's pure-ish (DB + Redis only,
  * no BullMQ side-effects beyond enqueue) and unit-testable.
@@ -87,7 +87,7 @@ export function evaluateConditions(conditions: unknown, data: Record<string, unk
 
 function hashEventData(data: Record<string, unknown>): string {
   // Stable JSON.stringify isn't strictly required because we're hashing for
-  // approximate dedup, not equality — small key-order drift is acceptable.
+  // approximate dedup, not equality - small key-order drift is acceptable.
   // Use a sorted-keys shallow stringify to keep it deterministic across runs.
   const keys = Object.keys(data).sort();
   const sorted: Record<string, unknown> = {};
@@ -101,12 +101,12 @@ async function shouldDeliver(tenantId: string, eventType: string, data: Record<s
   const key = `notif:dedup:${tenantId}:${eventType}:${hashEventData(data)}`;
   try {
     const redis = getRedis();
-    // SET NX EX — atomic "claim if absent". Returns "OK" on first claim,
+    // SET NX EX - atomic "claim if absent". Returns "OK" on first claim,
     // null when the dedup key already exists.
     const ok = await (redis as any).set(key, "1", "EX", DEDUP_TTL_SECONDS, "NX");
     return ok === "OK" || ok === true;
   } catch (err: any) {
-    // If Redis is down, fail open — better to deliver duplicates than to
+    // If Redis is down, fail open - better to deliver duplicates than to
     // silently drop a high-value notification.
     console.warn("[notifications.dedup] redis check failed:", err?.message);
     return true;
@@ -134,12 +134,12 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   if (prefs.length === 0) return;
 
   // Department-scoped preferences override tenant-default ones for the same
-  // event type. If both exist, drop the tenant-default — the department row
+  // event type. If both exist, drop the tenant-default - the department row
   // is more specific and the operator clearly meant to override.
   const hasDeptScoped = prefs.some((p) => p.departmentId);
   const effective = hasDeptScoped ? prefs.filter((p) => p.departmentId) : prefs;
 
-  // 2. Dedup once per event payload — even if multiple prefs would match,
+  // 2. Dedup once per event payload - even if multiple prefs would match,
   //    we don't want to re-fire identical bursts.
   const ok = await shouldDeliver(event.tenantId, event.type, event.data);
   if (!ok) return;
@@ -154,7 +154,7 @@ export async function processEvent(event: SystemEvent): Promise<void> {
   const delivered = new Set<string>();
 
   for (const pref of effective) {
-    // Conditions filter — skip the pref if any condition fails.
+    // Conditions filter - skip the pref if any condition fails.
     if (!evaluateConditions(pref.conditions, event.data)) continue;
 
     const spec = (pref.recipients ?? {}) as RecipientSpec;
@@ -196,7 +196,7 @@ async function deliverChannel(opts: {
   try {
     if (channel === "in_app") {
       // Persist + publish on the shared event bus inline. Cheap and
-      // synchronous — the row is the dashboard's source of truth.
+      // synchronous - the row is the dashboard's source of truth.
       await createInAppNotification({
         tenantId: user.tenantId,
         userId: user.id,
@@ -226,7 +226,7 @@ async function deliverChannel(opts: {
     } else {
       // Unknown channel = forward-compat. Adding "slack"/"sms" later is a
       // single switch arm here, no schema change. We log and skip.
-      console.info(`[notifications] channel "${channel}" not implemented yet — skipped`);
+      console.info(`[notifications] channel "${channel}" not implemented yet - skipped`);
     }
   } catch (err: any) {
     console.warn(`[notifications.deliver] channel=${channel} userId=${user.id} failed:`, err?.message);

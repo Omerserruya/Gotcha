@@ -77,14 +77,14 @@ suggestions after every customer-final utterance.
 Because Twilio does **not** include `body.Caller` in conference status
 callbacks, agent vs. customer is resolved with a two-stage check:
 
-1. **`body.ParticipantLabel`** — set via `label: "customer"` when we dial the
+1. **`body.ParticipantLabel`** - set via `label: "customer"` when we dial the
    customer via `conferences.participants.create`. Authoritative when present.
-2. **CallSid comparison** — the agent's parent-leg CallSid (from `/outbound`)
+2. **CallSid comparison** - the agent's parent-leg CallSid (from `/outbound`)
    is stashed in Redis with the conference metadata. On `participant-join`,
    if `body.CallSid === meta.agentCallSid`, that's the agent.
 
 The resolved speaker is passed to the Media Stream via Twilio's native
-`parameter1.name=speaker` / `parameter1.value=agent|customer` fields —
+`parameter1.name=speaker` / `parameter1.value=agent|customer` fields -
 arrives as `customParameters` on the WS `start` frame. URL query strings
 were being stripped between Twilio and our nginx, hence the switch.
 
@@ -107,8 +107,8 @@ Per-session fan-out into two independent failure domains:
 
 Guarantees:
 - **Ordering** per-speaker preserved (single-threaded event loop + per-speaker seq).
-- **No shared await** between branches — slow Postgres does not stall Pub/Sub.
-- **Partials may be lost** (projection only). **Finals must not be lost** —
+- **No shared await** between branches - slow Postgres does not stall Pub/Sub.
+- **Partials may be lost** (projection only). **Finals must not be lost** -
   each final carries a stable `externalMessageId` = `voice:{callSid}:{speaker}:{seq}`.
 - **In-memory dedupe**: ReorderBuffer (`emittedFinalsSeq`) + Deepgram provider
   (`lastFinalText`) prevent duplicate rows within a session.
@@ -118,7 +118,7 @@ Guarantees:
 `ai-service` starts a `voice-copilot-subscriber` on boot that listens on the
 shared event bus. Every `voice.transcript` event with
 `isFinal && speaker === "customer"` calls `scheduleAssistTrigger(tenantId,
-conversationId)` — debounced 1500 ms. On fire:
+conversationId)` - debounced 1500 ms. On fire:
 
 1. Load conversation + last 20 messages from Postgres.
 2. Resolve effective copilot config (`getEffectiveCopilotConfig`).
@@ -144,21 +144,21 @@ to Postgres is still voice-copilot's StreamRouter.
 | `TWILIO_API_KEY_SID` / `TWILIO_API_KEY_SECRET` | (empty) | Browser-AccessToken signing key |
 | `TWILIO_TWIML_APP_SID` | (empty) | TwiML App the Voice-SDK Device dials into |
 | `TWILIO_CALLER_ID` | (empty) | E.164 caller-ID shown to customer |
-| `PUBLIC_BASE_URL` | `http://localhost` | Public HTTPS base — Twilio callbacks + WSS |
+| `PUBLIC_BASE_URL` | `http://localhost` | Public HTTPS base - Twilio callbacks + WSS |
 | `LOG_LEVEL` | `info` | pino level. `debug` shows `stt opened`, `stt reconnect`, per-frame audio counters |
 | `SESSION_TTL_SECONDS` | `900` | Redis session key TTL |
 | `RECONNECT_GRACE_MS` | `10000` | Grace before ending a disconnected session |
 | `MAX_CONCURRENT_SESSIONS` | `50` | Per-instance concurrency cap |
 
-## Outbound Calling — Twilio Console Setup
+## Outbound Calling - Twilio Console Setup
 
 Three objects in Twilio Console (plus the creds above):
 
-1. **Phone number** — Phone Numbers → Buy. Put into `TWILIO_CALLER_ID` (E.164).
-2. **API Key** — Account → API keys & tokens → Create (Standard). SID →
+1. **Phone number** - Phone Numbers → Buy. Put into `TWILIO_CALLER_ID` (E.164).
+2. **API Key** - Account → API keys & tokens → Create (Standard). SID →
    `TWILIO_API_KEY_SID`, Secret → `TWILIO_API_KEY_SECRET`. Never reuse the
    master auth token for browser-minted AccessTokens.
-3. **TwiML App** — Voice → TwiML → TwiML Apps → Create.
+3. **TwiML App** - Voice → TwiML → TwiML Apps → Create.
    - Voice Request URL: `${PUBLIC_BASE_URL}/api/voice-copilot/twiml/outbound` (POST).
    - Voice Status Callback URL: `${PUBLIC_BASE_URL}/api/voice-copilot/twiml/status` (POST, optional).
    - Copy the App SID into `TWILIO_TWIML_APP_SID`.
@@ -211,7 +211,7 @@ npm run dev                           # listens on :4007
   in-memory ReorderBuffer (`emittedFinalsSeq`) and Deepgram provider
   (`lastFinalText`) prevent duplicates.
 - **Logging**: pino (async, level-gated). Per-frame `console.log` was
-  removed — the old hot-path logging caused 10–15 s latency buildup on
+  removed - the old hot-path logging caused 10–15 s latency buildup on
   long calls.
 - **Graceful shutdown**: SIGTERM/SIGINT close the STT streams (which
   flush pending interims as finals), stop the WSS, then exit.

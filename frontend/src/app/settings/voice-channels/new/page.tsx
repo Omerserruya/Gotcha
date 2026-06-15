@@ -45,18 +45,18 @@ export default function NewVoiceChannelPage() {
 
   const [step, setStep] = useState<Step>(1);
 
-  // Step 1 — credentials form
+  // Step 1 - credentials form
   const [form, setForm] = useState<ByoForm>(EMPTY_FORM);
   const [byoSubmitting, setByoSubmitting] = useState(false);
   const [byoError, setByoError] = useState<string | null>(null);
   const [accountSidError, setAccountSidError] = useState<string | null>(null);
   const [showAuthToken, setShowAuthToken] = useState(false);
 
-  // Step 2 — discovered numbers
+  // Step 2 - discovered numbers
   const [channel, setChannel] = useState<VoiceChannel | null>(null);
   const [selectedNumberIds, setSelectedNumberIds] = useState<Set<string>>(new Set());
 
-  // Step 3 — activation
+  // Step 3 - activation
   const [progress, setProgress] = useState<ActivationProgress>({
     total: 0,
     done: 0,
@@ -225,7 +225,7 @@ export default function NewVoiceChannelPage() {
         </p>
       </div>
 
-      {/* Step 1 — BYO credentials form */}
+      {/* Step 1 - BYO credentials form */}
       {step === 1 && (
         <form
           onSubmit={handleByoSubmit}
@@ -325,7 +325,7 @@ export default function NewVoiceChannelPage() {
         </form>
       )}
 
-      {/* Step 2 — discovered numbers */}
+      {/* Step 2 - discovered numbers */}
       {step === 2 && channel && (
         <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6 space-y-5">
           <div>
@@ -410,7 +410,7 @@ export default function NewVoiceChannelPage() {
         </div>
       )}
 
-      {/* Step 3 — activation progress */}
+      {/* Step 3 - activation progress */}
       {step === 3 && channel && (
         <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm p-5 md:p-6 space-y-5">
           <h2 className="text-base font-semibold text-gray-900">
@@ -446,7 +446,7 @@ export default function NewVoiceChannelPage() {
               <ul className="list-disc ps-5 text-xs space-y-0.5">
                 {progress.failed.map((f) => (
                   <li key={f.id}>
-                    <span className="font-mono">{f.e164}</span> — {f.message}
+                    <span className="font-mono">{f.e164}</span> - {f.message}
                   </li>
                 ))}
               </ul>

@@ -7,7 +7,7 @@
 -- IF NOT EXISTS keeps this idempotent: safe to run even if a column was
 -- already hot-patched manually on a box.
 --
--- DELIBERATELY EXCLUDED (destructive drift — handle separately, with review):
+-- DELIBERATELY EXCLUDED (destructive drift - handle separately, with review):
 --   * DROP TABLE copilot_configs / department_copilot_configs / first_take_care_configs (data loss)
 --   * ALTER contacts.tags / opt_out_channels SET NOT NULL (fails on existing NULLs)
 --   * CREATE UNIQUE INDEX tenant_funnels_tenant_id_department_id_funnel_id_key (fails on dup data)

@@ -151,7 +151,7 @@ export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";
 
-// Shared CRM client — used by AI tools, outbound, broadcast, and any
+// Shared CRM client - used by AI tools, outbound, broadcast, and any
 // caller that needs CRM lookup/segmentation. Provider-agnostic.
 export {
   getConnectedCrm,
@@ -170,7 +170,7 @@ export type {
   CrmModuleSchema,
 } from "./lib/crm";
 
-// Audience resolver — explicit targeting for outbound/broadcast.
+// Audience resolver - explicit targeting for outbound/broadcast.
 export { resolveAudience, previewAudience } from "./lib/audience";
 export type {
   AudienceDefinition,
@@ -207,7 +207,7 @@ export {
   type StageExitCriteria,
 } from "./schemas/copilot-config";
 
-// AI Worker — unified config (Phase 0: types only)
+// AI Worker - unified config (Phase 0: types only)
 export {
   AIWorkerModeSchema,
   AISkillKindSchema,

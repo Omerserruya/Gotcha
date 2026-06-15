@@ -1,5 +1,5 @@
 /**
- * Action Contracts API helpers — CRUD over the tenant's ActionContract rows.
+ * Action Contracts API helpers - CRUD over the tenant's ActionContract rows.
  * Mirrors services/ai/src/routes/action-contracts-admin.ts.
  */
 

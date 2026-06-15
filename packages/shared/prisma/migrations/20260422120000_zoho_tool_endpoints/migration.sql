@@ -1,11 +1,11 @@
 -- Wire up Zoho CRM catalog tools with real API endpoints + input schemas.
 --
 -- Seeded by 20260312150000_marketplace_architecture with slug/category/method
--- only — endpoint and inputSchema were left NULL / empty, so tool-execution
+-- only - endpoint and inputSchema were left NULL / empty, so tool-execution
 -- refuses to dispatch them ("no endpoint configured"). This migration fills
 -- those in against Zoho CRM API v7.
 --
--- Endpoints are RELATIVE (start with "/") — tool-execution.service.ts will
+-- Endpoints are RELATIVE (start with "/") - tool-execution.service.ts will
 -- prepend TenantIntegration.config.baseUrl (the region-specific api_domain
 -- Zoho returns at token exchange time, e.g. https://www.zohoapis.com or
 -- https://www.zohoapis.eu). This lets the same catalog row work for every
@@ -15,7 +15,7 @@
 -- planner (which sees inputSchema in the tool surface). Zoho expects
 -- {"data":[{...}]} wrappers on writes.
 
--- contact_search — GET /crm/v7/Contacts/search
+-- contact_search - GET /crm/v7/Contacts/search
 -- Zoho accepts `email`, `phone`, or `word` query params.
 UPDATE "catalog_tools"
 SET
@@ -32,7 +32,7 @@ SET
   }'::jsonb
 WHERE "id" = 'tool_zoho_crm_contact_search';
 
--- create_lead — POST /crm/v7/Leads
+-- create_lead - POST /crm/v7/Leads
 -- Zoho requires Last_Name. Body shape: { data: [{ Last_Name, ... }] }.
 UPDATE "catalog_tools"
 SET
@@ -63,7 +63,7 @@ SET
   }'::jsonb
 WHERE "id" = 'tool_zoho_crm_create_lead';
 
--- update_deal — PUT /crm/v7/Deals/:id
+-- update_deal - PUT /crm/v7/Deals/:id
 -- `id` becomes the Zoho deal record id via the :param URL-substitution path.
 UPDATE "catalog_tools"
 SET

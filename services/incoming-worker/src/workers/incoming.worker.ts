@@ -90,7 +90,7 @@ async function fetchWhatsAppAvatar(phoneNumberId: string, contactWaId: string, a
     }
     return null;
   } catch {
-    // Profile picture not available (privacy settings) — silent fail
+    // Profile picture not available (privacy settings) - silent fail
     return null;
   }
 }
@@ -184,7 +184,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   if (existing) return;
 
   // Find or create conversation using channel-aware lookup.
-  // A closed conversation stays closed — the next inbound from the same
+  // A closed conversation stays closed - the next inbound from the same
   // customer starts a brand-new conversation. Reopening leaks stale state
   // (assignment, handoff, chatbot flow, escalation clock) and causes the
   // customer to hit whatever the previous session's terminal state was
@@ -309,7 +309,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     },
   });
 
-  // First-inbound language detection — populates Conversation.detectedLocale
+  // First-inbound language detection - populates Conversation.detectedLocale
   // once per thread. Drives suggested-reply language so drafts match the
   // customer regardless of the agent's system-language setting. Idempotent
   // and fire-and-forget; subsequent inbounds short-circuit at the read.
@@ -325,7 +325,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     }
   })();
 
-  // Universal identity-link hook — fires on every persisted INBOUND so the
+  // Universal identity-link hook - fires on every persisted INBOUND so the
   // same email/phone bridging works for AI bot, FlowCanvas, AND human-handled
   // chats (co-pilot mode). The conversation service owns idempotency, so a
   // duplicate fire from the flow-executor's Collect-Input call is a no-op.
@@ -435,12 +435,12 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           // Routed to department, conversation is WAITING for human
           return;
         }
-        // No rule matched — conversation stays in inbox for manual pickup
+        // No rule matched - conversation stays in inbox for manual pickup
       } else if (
         (conversation as any).handledBy === "ai_agent" ||
         (conversation as any).handledBy === "awaiting_approval"
       ) {
-        // Ongoing AI conversation — continue processing with AI bot.
+        // Ongoing AI conversation - continue processing with AI bot.
         // We keep the bot driving even while a HITL approval is still
         // pending: the AI service surfaces the pending approval to the
         // model and drops integration_* tools for that turn so the bot
@@ -453,7 +453,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
       } else if ((conversation as any).chatbotNodeId) {
         // Main FlowCanvas paused at Collect Input / Quick Reply.
         // First gate: 24h comment→DM bridge. If the bridge expired, Meta
-        // blocks further DMs — close the conversation, drop chatbot state,
+        // blocks further DMs - close the conversation, drop chatbot state,
         // do NOT send anything back. The inbound is dropped on the floor.
         const expiresAt = (conversation as any).flowExpiresAt as Date | null;
         if (expiresAt && expiresAt.getTime() < Date.now()) {
@@ -472,7 +472,7 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
           });
           return;
         }
-        // Within window — resume the graph walker. Clear the bridge marker:
+        // Within window - resume the graph walker. Clear the bridge marker:
         // once the user replied, the conversation is a normal DM and isn't
         // governed by the comment-DM expiry anymore.
         if (expiresAt) {
@@ -501,13 +501,13 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
  * Generic inbound-webhook handler. The webhook service authenticates the call,
  * resolves the WebhookTrigger by its URL token, and enqueues this job carrying
  * the raw JSON body. Here we run the linked workflow context-free: no
- * conversation, no customer — the payload is injected as flow variables under
+ * conversation, no customer - the payload is injected as flow variables under
  * `body` (n8n style), readable as `{{body.<field>}}` in downstream nodes.
  */
 async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void> {
   const { tenantId, workflowId, triggerId, payload, targetMode } = job.data;
 
-  // Mirror the message path's tenant gate — don't run flows for suspended /
+  // Mirror the message path's tenant gate - don't run flows for suspended /
   // inactive tenants.
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -528,8 +528,8 @@ async function processWebhookTrigger(job: Job<WebhookTriggerJob>): Promise<void>
 }
 
 // Dispatcher: same queue, multiple job names. Keeps DM, comment-trigger, and
-// webhook-trigger processing in one worker process — same Redis connection,
-// same DLQ, same concurrency budget — but each job kind has its own handler.
+// webhook-trigger processing in one worker process - same Redis connection,
+// same DLQ, same concurrency budget - but each job kind has its own handler.
 // Exported for unit tests that exercise the job-name routing without standing
 // up a real BullMQ worker.
 export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob | WebhookTriggerJob>): Promise<void> {
@@ -541,7 +541,7 @@ export async function dispatch(job: Job<IncomingMessageJob | IncomingCommentJob 
     await processWebhookTrigger(job as Job<WebhookTriggerJob>);
     return;
   }
-  // Default ("process") — DM / message path.
+  // Default ("process") - DM / message path.
   await processIncomingMessage(job as Job<IncomingMessageJob>);
 }
 

@@ -763,7 +763,7 @@ export default function KnowledgePage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-800">Google Drive</p>
-                                <p className="text-xs text-gray-400">{gdConnected ? "Connected — browse files" : "Connect to import docs"}</p>
+                                <p className="text-xs text-gray-400">{gdConnected ? "Connected - browse files" : "Connect to import docs"}</p>
                               </div>
                             </button>
                             <button
@@ -776,7 +776,7 @@ export default function KnowledgePage() {
                               </div>
                               <div className="flex-1 min-w-0">
                                 <p className="font-medium text-gray-800">Confluence</p>
-                                <p className="text-xs text-gray-400">{cfConnected ? "Connected — browse spaces" : "Connect to import wiki"}</p>
+                                <p className="text-xs text-gray-400">{cfConnected ? "Connected - browse spaces" : "Connect to import wiki"}</p>
                               </div>
                             </button>
                           </div>

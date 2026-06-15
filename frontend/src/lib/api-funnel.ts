@@ -1,5 +1,5 @@
 /**
- * Funnel API helpers — CRUD over the tenant's TenantFunnel rows.
+ * Funnel API helpers - CRUD over the tenant's TenantFunnel rows.
  *
  * Mirrors services/ai/src/routes/funnel-admin.ts. Token from AuthContext;
  * backend enforces ADMIN.
@@ -132,7 +132,7 @@ export function listFunnels(token: string, departmentId?: string | null) {
   return authedFetch<{ data: FunnelRow[] }>(`/api/funnels${qs}`, token);
 }
 
-/** Lightweight summary for selector dropdowns — caller doesn't need stages JSON. */
+/** Lightweight summary for selector dropdowns - caller doesn't need stages JSON. */
 export interface FunnelSummary {
   id: string;
   funnelId: string;

@@ -31,7 +31,7 @@ const DEFAULT_INTERNAL_KEY = "chatcenter-internal-2026";
 // URL triggers the AGENT_FIRST callback on their behalf. Token shape:
 //   base64url(JSON({sessionId, channelId, customerNumber, exp})) + "." + hex(hmac)
 // HMAC is over the base64url payload using INTERNAL_SERVICE_KEY as the
-// secret — same env var that already gates internal service-to-service
+// secret - same env var that already gates internal service-to-service
 // calls. Expiry is enforced server-side (default 7 days).
 const CALLBACK_TOKEN_TTL_SECONDS = 7 * 24 * 60 * 60;
 
@@ -147,8 +147,8 @@ export function createVoiceCallbackRouter(opts: {
     // Agent resolution order:
     //   1. Explicit `agentId` body param (smart-callback / missed-call
     //      callback when a specific agent is returning the call).
-    //   2. The channel's `agentFirstAgent` — dedicated to outbound.
-    //   3. The channel's `defaultAgent` — legacy fallback so channels
+    //   2. The channel's `agentFirstAgent` - dedicated to outbound.
+    //   3. The channel's `defaultAgent` - legacy fallback so channels
     //      configured before this field existed keep working.
     let agentRow: { id: string; phoneNumber: string | null } | null =
       channel.voiceChannel.agentFirstAgent ?? channel.voiceChannel.defaultAgent;
@@ -320,7 +320,7 @@ export function createVoiceCallbackRouter(opts: {
     });
     } catch (err: any) {
       logger.error({ err }, "callbacks.initiate: unhandled error");
-      // Express 4 doesn't auto-catch async-thrown errors — without this
+      // Express 4 doesn't auto-catch async-thrown errors - without this
       // the process exits on any Prisma/IO failure inside the handler.
       if (!res.headersSent) {
         res.status(500).json({ error: "initiate_failed", detail: err?.message });
@@ -537,7 +537,7 @@ export function createVoiceCallbackRouter(opts: {
     // The template is sent TO THE AGENT (not the customer). It tells
     // them "<customer> tried to reach you" with a one-tap callback
     // button that rings the agent's own mobile + bridges the customer.
-    // Use the channel's defaultAgent — the one the call rang first;
+    // Use the channel's defaultAgent - the one the call rang first;
     // assignedAgentId can be null when the fallback broadcast wave
     // fired before the call missed.
     const agentRow = channel.voiceChannel.defaultAgent;
@@ -546,7 +546,7 @@ export function createVoiceCallbackRouter(opts: {
       return;
     }
 
-    // Pick the tenant's active WhatsApp channel — same convention used
+    // Pick the tenant's active WhatsApp channel - same convention used
     // by Broadcast. If none exists we can't send a template.
     const waChannel = await prisma.channelAccount.findFirst({
       where: { tenantId: session.tenantId, channel: "WHATSAPP", isActive: true },
@@ -563,7 +563,7 @@ export function createVoiceCallbackRouter(opts: {
     // same person) then bridges in the customer.
     //
     // IMPORTANT: WhatsApp URL-button parameters supply only the dynamic
-    // SUFFIX that fills the template's `{{1}}` slot — the static prefix
+    // SUFFIX that fills the template's `{{1}}` slot - the static prefix
     // (https://…/callbacks/click/) lives on the approved template. If we
     // send the full URL here, WhatsApp ends up concatenating the prefix
     // with the full URL → `…/click/https://…/click/<token>`, breaking the
@@ -579,7 +579,7 @@ export function createVoiceCallbackRouter(opts: {
       "/api/voice-copilot/callbacks/click/" +
       callbackToken;
 
-    // Customer label for the template body parameter — prefer the
+    // Customer label for the template body parameter - prefer the
     // Contact display name, fall back to the bare phone number.
     const customerContact = await prisma.contact.findFirst({
       where: { tenantId: session.tenantId, phone: session.customerNumber, mergedIntoId: null },
@@ -606,7 +606,7 @@ export function createVoiceCallbackRouter(opts: {
     });
 
     // Approved template name lives in env so each tenant can override
-    // without a code change — the WABA template approval process is
+    // without a code change - the WABA template approval process is
     // tenant-account-bound.
     const templateName = process.env.MISSED_CALL_TEMPLATE_NAME || "missed_call_callback";
     const templateLanguage = process.env.MISSED_CALL_TEMPLATE_LANGUAGE || "en";
@@ -616,7 +616,7 @@ export function createVoiceCallbackRouter(opts: {
       conversationId: session.conversationId,
       channel: "WHATSAPP",
       channelAccountId: waChannel.id,
-      // RECIPIENT IS THE AGENT — not the customer. The template body
+      // RECIPIENT IS THE AGENT - not the customer. The template body
       // should read "<customerLabel> tried to reach you" via {{1}}.
       recipientExternalId: agentRow.phoneNumber,
       body: "",
@@ -638,7 +638,7 @@ export function createVoiceCallbackRouter(opts: {
           type: "button",
           sub_type: "url",
           index: "0",
-          // Token only — WABA fills the `{{1}}` slot in the template's
+          // Token only - WABA fills the `{{1}}` slot in the template's
           // URL with this value. See callbackUrlFull comment above.
           parameters: [{ type: "text", text: callbackToken }],
         },
@@ -727,7 +727,7 @@ export function createVoiceCallbackRouter(opts: {
     }
 
     // Step 2: create. Approved template content is intentionally
-    // generic — admins can change the BODY copy by editing it in
+    // generic - admins can change the BODY copy by editing it in
     // Meta Business Manager after first approval. The URL button is
     // the load-bearing part and must keep the {{1}} variable suffix
     // because we paste a fresh signed token there on each send.
@@ -745,7 +745,7 @@ export function createVoiceCallbackRouter(opts: {
           // Tap the URL button → server dials this agent's mobile, then
           // bridges the customer in once they pick up.
           type: "BODY",
-          text: "{{1}} tried to reach you. Tap below to call them back — we'll ring your phone first.",
+          text: "{{1}} tried to reach you. Tap below to call them back - we'll ring your phone first.",
           example: { body_text: [["Omer Serruya"]] },
         },
         {

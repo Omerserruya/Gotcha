@@ -36,14 +36,14 @@ ALTER TABLE "notification_preferences"
 CREATE INDEX "notification_preferences_tenant_id_event_type_idx"
   ON "notification_preferences" ("tenant_id", "event_type");
 
--- Partial unique index for the NULL department_id (tenant-default) case —
+-- Partial unique index for the NULL department_id (tenant-default) case -
 -- one row per (tenant_id, event_type). Mirrors the funnel_per_department
 -- migration, since Postgres 14 lacks NULLS NOT DISTINCT.
 CREATE UNIQUE INDEX "notification_preferences_tenant_id_null_dept_event_type_key"
   ON "notification_preferences" ("tenant_id", "event_type")
   WHERE "department_id" IS NULL;
 
--- Regular partial unique index for the explicit department case —
+-- Regular partial unique index for the explicit department case -
 -- one row per (tenant_id, department_id, event_type).
 CREATE UNIQUE INDEX "notification_preferences_tenant_id_department_id_event_type_key"
   ON "notification_preferences" ("tenant_id", "department_id", "event_type")

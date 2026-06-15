@@ -130,7 +130,7 @@ export interface ResolvedRecipient {
   /** Provider-native field map for the recipient (when source==="crm"
    *  and we resolved them via filter/rules). Used at broadcast
    *  materialize time to snapshot per-recipient template variable
-   *  values. Picked CRM chips don't carry this — only the snapshot
+   *  values. Picked CRM chips don't carry this - only the snapshot
    *  fields below. */
   raw?: Record<string, unknown>;
   source: "local" | "crm";
@@ -169,7 +169,7 @@ export async function resolveAudience(
   }
 
   if (audience.type === "saved") {
-    reasoning.push(`saved audience (${audience.audienceId}) — saved-audiences table not yet implemented`);
+    reasoning.push(`saved audience (${audience.audienceId}) - saved-audiences table not yet implemented`);
     return { recipients: [], total: 0, truncated: false, reasoning };
   }
 
@@ -177,12 +177,12 @@ export async function resolveAudience(
     return resolveFilter(tenantId, audience.rules, limit, reasoning, audience.module);
   }
 
-  // composite — union of chips + rules + (optional) everyone
+  // composite - union of chips + rules + (optional) everyone
   return resolveComposite(tenantId, audience, limit, reasoning);
 }
 
 /**
- * Preview wrapper — same as resolveAudience but always limits to 50 and
+ * Preview wrapper - same as resolveAudience but always limits to 50 and
  * is the canonical entry point the UI should call before letting the
  * operator press "Send".
  */
@@ -257,7 +257,7 @@ async function resolveFilter(
   // Partition rules by where they can be evaluated.
   //   - localRules:  rule.field exists on Contact (LOCAL_FIELD_MAP).
   //   - crmRules:    rule.field is CRM-side (Lead_Source, Stage, custom).
-  //   - identityRules: rule.field is name/phone/email/company — these can
+  //   - identityRules: rule.field is name/phone/email/company - these can
   //                    be evaluated *both* locally and via CRM identity
   //                    fan-out, so they belong to local AND drive CRM
   //                    identity lookup.
@@ -268,7 +268,7 @@ async function resolveFilter(
 
   // Local-side: only evaluate when there are local-applicable rules.
   // The previous implementation fell through to `{tenantId}` (matching
-  // every contact in the tenant) when no clauses applied — that was the
+  // every contact in the tenant) when no clauses applied - that was the
   // root cause of "Lead_Source = website" reporting the entire DB.
   let localRows: any[] = [];
   let localCount = 0;
@@ -300,7 +300,7 @@ async function resolveFilter(
   let total: number;
 
   if (localRules.length === 0 && crmOnlyRules.length === 0) {
-    // No usable rules at all — empty audience.
+    // No usable rules at all - empty audience.
     return {
       recipients: [],
       total: 0,
@@ -436,7 +436,7 @@ async function resolveComposite(
     !a.crmContacts?.length &&
     !a.rules
   ) {
-    reasoning.push("empty composite audience — no chips, rules, or everyone flag");
+    reasoning.push("empty composite audience - no chips, rules, or everyone flag");
   }
 
   return {
@@ -496,7 +496,7 @@ const CRM_IDENTITY_FIELDS = new Set(["name", "displayName", "phone", "email", "c
  * Translate a filter group into a Prisma `where` for the local Contact
  * model. Fields the local Contact doesn't carry (CRM-only fields like
  * `lifecycle_stage`, `industry`) emit a reasoning note and are skipped
- * locally — fan-out picks them up when the field is one of the basic
+ * locally - fan-out picks them up when the field is one of the basic
  * identity fields.
  */
 function buildLocalContactWhere(
@@ -512,7 +512,7 @@ function buildLocalContactWhere(
     const localField = LOCAL_FIELD_MAP[f.field];
     if (!localField) {
       if (!CRM_IDENTITY_FIELDS.has(f.field)) {
-        reasoning.push(`field "${f.field}" not on local Contact and not fanned out — only CRM-side filtering would apply`);
+        reasoning.push(`field "${f.field}" not on local Contact and not fanned out - only CRM-side filtering would apply`);
       }
       continue;
     }
@@ -551,7 +551,7 @@ function filterToPrismaClause(field: string, op: FilterOp, value: unknown): Reco
 }
 
 /**
- * CRM fan-out — delegates to the shared client's `searchByRules`, which
+ * CRM fan-out - delegates to the shared client's `searchByRules`, which
  * dispatches per-provider:
  *   - Zoho:       criteria string → /Leads/search & /Contacts/search
  *   - HubSpot:    filterGroups    → /objects/{leads,contacts}/search

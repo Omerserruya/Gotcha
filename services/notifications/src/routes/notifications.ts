@@ -1,7 +1,7 @@
 /**
  * In-app notification routes for the current logged-in user.
  *
- *   GET    /notifications           — list, paginated, ?unreadOnly=true
+ *   GET    /notifications           - list, paginated, ?unreadOnly=true
  *   POST   /notifications/:id/mark-read
  *   POST   /notifications/mark-all-read
  *   GET    /notifications/unread-count

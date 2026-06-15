@@ -33,20 +33,20 @@ function buildOnboardingSystemPrompt(locale: string): string {
   const lang = LOCALE_NAMES[locale] || "English";
   return `You are the onboarding assistant for ChatCenter. You are configuring the AI copilot for a business.
 
-IMPORTANT RULES — follow these exactly:
+IMPORTANT RULES - follow these exactly:
 1. You MUST respond ONLY with a valid JSON object. No text outside the JSON.
 2. Format: {"reply": "your message here", "readyToGenerate": false}
 3. You MUST write your reply in **${lang}**. All text in the "reply" field must be in ${lang}.
 4. On the VERY FIRST message, introduce yourself briefly, mention the business name and their departments from the context below, then ask your first question about communication tone.
 5. Ask ONE question at a time. Keep it short (2-4 sentences max).
 6. You need to understand these 4 things:
-   a) Communication tone — formal vs casual vs friendly
-   b) Agent workflow — when should conversations be transferred to a specialist or supervisor
-   c) Common customer topics — what do customers usually ask about
-   d) Restrictions — topics agents should never handle without supervisor approval
+   a) Communication tone - formal vs casual vs friendly
+   b) Agent workflow - when should conversations be transferred to a specialist or supervisor
+   c) Common customer topics - what do customers usually ask about
+   d) Restrictions - topics agents should never handle without supervisor approval
 7. After collecting answers on at least 3 of these areas, set "readyToGenerate": true and tell the user you're generating their configs.
-8. If the user says "skip", "just do it", "go ahead", "I don't care", or anything impatient — immediately set "readyToGenerate": true.
-9. Do NOT use emojis. Do NOT give generic greetings. Do NOT ask "how can I help you". You already know what to do — configure their AI.
+8. If the user says "skip", "just do it", "go ahead", "I don't care", or anything impatient - immediately set "readyToGenerate": true.
+9. Do NOT use emojis. Do NOT give generic greetings. Do NOT ask "how can I help you". You already know what to do - configure their AI.
 10. Do NOT mention buttons or UI elements.
 11. Use **bold** for emphasis in your replies.`;
 }
@@ -188,13 +188,13 @@ function fallbackReply(
 
   if (exchanges === 0) {
     return {
-      reply: `Hi! I'll help set up your AI copilot for **${ctx.organizationName}**.\n\nYou're in **${ctx.industry}** with ${ctx.departments.length} department(s): ${deptNames}.\n\nQuick question — **what communication style do your customers expect?** Formal, casual, or somewhere in between?`,
+      reply: `Hi! I'll help set up your AI copilot for **${ctx.organizationName}**.\n\nYou're in **${ctx.industry}** with ${ctx.departments.length} department(s): ${deptNames}.\n\nQuick question - **what communication style do your customers expect?** Formal, casual, or somewhere in between?`,
       readyToGenerate: false,
     };
   }
   if (exchanges === 1) {
     return {
-      reply: `Got it!\n\n**When should conversations be transferred to a specialist or supervisor?** For example — after a certain time, for specific topics, or when the customer requests it?`,
+      reply: `Got it!\n\n**When should conversations be transferred to a specialist or supervisor?** For example - after a certain time, for specific topics, or when the customer requests it?`,
       readyToGenerate: false,
     };
   }
@@ -206,12 +206,12 @@ function fallbackReply(
   }
   if (exchanges === 3) {
     return {
-      reply: `Thanks! Last one — **are there any topics that should always require supervisor approval?** (e.g. refunds, legal, complaints)\n\nIf nothing specific, just say "none".`,
+      reply: `Thanks! Last one - **are there any topics that should always require supervisor approval?** (e.g. refunds, legal, complaints)\n\nIf nothing specific, just say "none".`,
       readyToGenerate: false,
     };
   }
 
-  // 4+ exchanges — ready to generate
+  // 4+ exchanges - ready to generate
   return {
     reply: `I have a great picture of your needs now! Generating optimized AI configurations for **${deptNames}**...`,
     readyToGenerate: true,
@@ -225,13 +225,13 @@ function fallbackReplyHebrew(
 ): ChatReplyResult {
   if (exchanges === 0) {
     return {
-      reply: `שלום! אעזור לכם להגדיר את עוזר ה-AI עבור **${ctx.organizationName}**.\n\nאתם בתחום **${ctx.industry}** עם ${ctx.departments.length} מחלקות: ${deptNames}.\n\nשאלה ראשונה — **איזה סגנון תקשורת הלקוחות שלכם מצפים?** רשמי, ידידותי, או משהו באמצע?`,
+      reply: `שלום! אעזור לכם להגדיר את עוזר ה-AI עבור **${ctx.organizationName}**.\n\nאתם בתחום **${ctx.industry}** עם ${ctx.departments.length} מחלקות: ${deptNames}.\n\nשאלה ראשונה - **איזה סגנון תקשורת הלקוחות שלכם מצפים?** רשמי, ידידותי, או משהו באמצע?`,
       readyToGenerate: false,
     };
   }
   if (exchanges === 1) {
     return {
-      reply: `הבנתי!\n\n**מתי צריך להעביר שיחות למומחה או למנהל?** למשל — אחרי זמן מסוים, לנושאים ספציפיים, או כשהלקוח מבקש?`,
+      reply: `הבנתי!\n\n**מתי צריך להעביר שיחות למומחה או למנהל?** למשל - אחרי זמן מסוים, לנושאים ספציפיים, או כשהלקוח מבקש?`,
       readyToGenerate: false,
     };
   }
@@ -243,7 +243,7 @@ function fallbackReplyHebrew(
   }
   if (exchanges === 3) {
     return {
-      reply: `תודה! שאלה אחרונה — **האם יש נושאים שתמיד דורשים אישור מנהל?** (למשל: החזרים, משפטי, תלונות)\n\nאם אין משהו ספציפי, פשוט אמרו "אין".`,
+      reply: `תודה! שאלה אחרונה - **האם יש נושאים שתמיד דורשים אישור מנהל?** (למשל: החזרים, משפטי, תלונות)\n\nאם אין משהו ספציפי, פשוט אמרו "אין".`,
       readyToGenerate: false,
     };
   }
@@ -315,7 +315,7 @@ router.get("/status", requireRole("ADMIN"), async (req: Request, res: Response):
 });
 
 // ─── Step A: Save Business Profile ──────────────────────────
-// Minimal schema — only the two fields actually surfaced in Screen 1.
+// Minimal schema - only the two fields actually surfaced in Screen 1.
 // Legacy fields (industry, businessPriority, daily conversations, agents)
 // are kept on the model but defaulted server-side so a future settings
 // page can still surface them without forcing them through onboarding.
@@ -324,13 +324,13 @@ const businessProfileSchema = z.object({
   organizationName: z.string().min(1).max(200),
   businessDescription: z.string().min(1).max(2000),
   locale: z.string().min(2).max(10).optional(),
-  // Onboarding v2 — multi-select goals and the original domain the user
+  // Onboarding v2 - multi-select goals and the original domain the user
   // typed (so we can re-analyze later from settings without making them
   // retype it). Both optional so the legacy single-screen flow still
   // works against this endpoint.
   businessGoals: z.array(z.string().min(1).max(64)).max(6).optional(),
   websiteDomain: z.string().max(255).optional(),
-  // Onboarding refactor — structured business understanding confirmed by
+  // Onboarding refactor - structured business understanding confirmed by
   // the user on the single "We understood your business" card.
   industry: z.string().max(120).optional(),
   country: z.string().max(120).optional(),
@@ -651,7 +651,7 @@ router.post("/generate-configs", requireRole("ADMIN"), async (req: Request, res:
 //   1. Verify profile exists
 //   2. Auto-create a default "General" department if none exists
 //   3. Flip tenant.status = ACTIVE (so AppLayout stops redirecting to /setup)
-//   4. Fire-and-forget the AI config generation — the user enters the app
+//   4. Fire-and-forget the AI config generation - the user enters the app
 //      immediately; agents materialize within a few seconds in the background.
 
 router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
@@ -689,9 +689,9 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       return;
     }
 
-    // Onboarding refactor — the activation gate. Normally exactly ONE "system
+    // Onboarding refactor - the activation gate. Normally exactly ONE "system
     // of truth" (CRM or Shopify) is connected to finish onboarding. The user
-    // may also explicitly skip ("not now") — they can connect it later from
+    // may also explicitly skip ("not now") - they can connect it later from
     // the Setup Hub. Anything else stays non-linear in the Setup Hub.
     const skipCoreSystem = req.body?.skipCoreSystem === true;
     const coreSystem = await connectedCoreSystem(req.tenantId!);
@@ -933,7 +933,7 @@ async function connectedCoreSystem(tenantId: string): Promise<string | null> {
   return null;
 }
 
-// POST /core-system — record the chosen system of truth. For Shopify we flip
+// POST /core-system - record the chosen system of truth. For Shopify we flip
 // `config.useAsCrm` so the CRM resolver treats it as the source of truth
 // (mirrors the AI service's /integrations/shopify/crm-source toggle).
 const coreSystemSchema = z.object({
@@ -965,7 +965,7 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
   }
 });
 
-// GET /setup-map — the non-linear Setup Hub tiles + done flags, derived from
+// GET /setup-map - the non-linear Setup Hub tiles + done flags, derived from
 // real product signals (no manual check-offs). Tiles tagged stage:"later"
 // (Channels, extra Integrations) are shown but excluded from the headline
 // progress count.
@@ -1011,7 +1011,7 @@ router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Respons
   }
 });
 
-// GET/PATCH /guides — per-user first-time guidance state for the persistent
+// GET/PATCH /guides - per-user first-time guidance state for the persistent
 // onboarding layer. Available to ALL roles (agents get guidance too), so no
 // requireRole gate. State machine per feature: unseen -> snoozed | done.
 router.get("/guides", async (req: Request, res: Response): Promise<void> => {
@@ -1045,11 +1045,11 @@ router.patch("/guides", validate(guidePatchSchema), async (req: Request, res: Re
   }
 });
 
-// ─── Domain Analysis (Onboarding v2 — AI-suggested description) ──
+// ─── Domain Analysis (Onboarding v2 - AI-suggested description) ──
 //
 // Fetches the user's homepage and asks the LLM to produce a one-sentence
 // "what this business does" suggestion the user can confirm or edit.
-// Falls through to a structured failure response if either step fails —
+// Falls through to a structured failure response if either step fails -
 // the UI then shows the manual one-line input as fallback.
 
 const analyzeDomainSchema = z.object({
@@ -1088,7 +1088,7 @@ async function fetchHomepageText(origin: string, timeoutMs = 8000): Promise<stri
     const ct = r.headers.get("content-type") || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
     const html = await r.text();
-    // Cheap extraction — strip scripts/styles/tags, collapse whitespace,
+    // Cheap extraction - strip scripts/styles/tags, collapse whitespace,
     // cap to ~6KB so we don't blow the LLM context on huge pages.
     const stripped = html
       .replace(/<script[\s\S]*?<\/script>/gi, " ")
@@ -1156,7 +1156,7 @@ Rules:
 - "country": the country the business primarily operates in, in English (e.g. "Israel", "United States"). Best guess from language, TLD, addresses, currency. Empty string if unknown.
 - "language": the primary language of the site as an ISO-639-1 code ("en", "he", "ar", ...).
 - "description": 1-2 sentences in ${lang} describing WHAT THE BUSINESS DOES. No emojis, no marketing fluff, no mention of the homepage or this analysis.
-- "packSlug": the best-matching customer-intelligence pack for this business, EXACTLY one of: "event_hall" (wedding/event venues & halls), "real_estate" (property sales/rental/brokerage), "recruiting" (staffing/HR/job placement), "ecommerce" (online retail / order fulfillment). Use "" if none clearly fits — do not force a match.
+- "packSlug": the best-matching customer-intelligence pack for this business, EXACTLY one of: "event_hall" (wedding/event venues & halls), "real_estate" (property sales/rental/brokerage), "recruiting" (staffing/HR/job placement), "ecommerce" (online retail / order fulfillment). Use "" if none clearly fits - do not force a match.
 Set any field you cannot determine to an empty string. Do not invent specifics.`,
           },
           {
@@ -1215,8 +1215,8 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 // ─── Invite Teammates (Onboarding v2) ────────────────────────
 //
 // Two flavors:
-//   1. POST /invite-team   — array of emails, each gets a magic-link email
-//   2. POST /invite-link   — one shareable URL the admin can paste anywhere
+//   1. POST /invite-team   - array of emails, each gets a magic-link email
+//   2. POST /invite-link   - one shareable URL the admin can paste anywhere
 //
 // Both produce TenantInvite rows. Direct email invites also create a
 // placeholder User immediately so we can sign them in via the existing
@@ -1260,7 +1260,7 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           continue;
         }
 
-        // Create a placeholder user with a random password — they will
+        // Create a placeholder user with a random password - they will
         // log in via the magic link and can change it later from /settings.
         const tempPassword = crypto.randomBytes(24).toString("hex");
         const hashed = await bcrypt.hash(tempPassword, 12);
@@ -1348,7 +1348,7 @@ router.post("/invite-link", requireRole("ADMIN"), async (req: Request, res: Resp
   }
 });
 
-// Public route — used by the /join page to render tenant context before
+// Public route - used by the /join page to render tenant context before
 // the user fills the form. Auth NOT required.
 const publicRouter = Router();
 
@@ -1406,7 +1406,7 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
     let user;
 
     if (invite.userId) {
-      // Targeted invite — user row exists from invite-team. Just set
+      // Targeted invite - user row exists from invite-team. Just set
       // their real password + name and mark the invite accepted.
       user = await prisma.user.update({
         where: { id: invite.userId },
@@ -1414,7 +1414,7 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
         select: { id: true, email: true, name: true, role: true, tenantId: true },
       });
     } else {
-      // Open-link invite — create the user now. Reject if the email is
+      // Open-link invite - create the user now. Reject if the email is
       // already in this tenant (collision = ask them to log in instead).
       const existing = await prisma.user.findUnique({
         where: { tenantId_email: { tenantId: invite.tenantId, email: finalEmail } },
@@ -1442,7 +1442,7 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
       data: { acceptedAt: new Date(), userId: user.id },
     });
 
-    // Don't sign a session here — the /join page redirects to /login
+    // Don't sign a session here - the /join page redirects to /login
     // with the email pre-filled. Keeps this route stateless and simple.
     res.json({ data: { ok: true, tenantId: user.tenantId } });
   } catch (err) {

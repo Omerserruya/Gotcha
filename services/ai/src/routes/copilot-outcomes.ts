@@ -1,15 +1,15 @@
 /**
- * POST /api/copilot/cue-outcome — rep feedback on a live copilot cue.
+ * POST /api/copilot/cue-outcome - rep feedback on a live copilot cue.
  *
  * This is the write side of the trust loop:
  *   1. Persist the outcome (CopilotCueOutcome row).
- *   2. Release the cue from the live projector dedup map — accepted /
+ *   2. Release the cue from the live projector dedup map - accepted /
  *      rejected suppress for the rest of the call, ignored allows it to
  *      resurface once weight clears the threshold again.
  *   3. Trigger a fire-and-forget trust-weights refresh so the next surfaced
  *      cue picks up the new weight quickly (otherwise stale up to 5 min).
  *
- * Conversation ownership is enforced before any write — same pattern as
+ * Conversation ownership is enforced before any write - same pattern as
  * voice-assist.service (don't leak existence across tenants).
  */
 
@@ -65,7 +65,7 @@ router.post(
 
     await recordOutcome({ tenantId, ...parsed.data });
     cueProjector.release(conversationId, dedupKey, outcome);
-    // Don't block on weight refresh — the projector reads the cache on the
+    // Don't block on weight refresh - the projector reads the cache on the
     // next turn, which is debounced 1500ms by LiveCadence anyway.
     void trustWeights.refresh();
 

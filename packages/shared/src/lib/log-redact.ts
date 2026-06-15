@@ -25,7 +25,7 @@
 const PLACEHOLDER = "[REDACTED]";
 
 const STRING_PATTERNS: Array<{ name: string; re: RegExp; replace: string }> = [
-  // JWTs — three base64url segments separated by dots. The first must
+  // JWTs - three base64url segments separated by dots. The first must
   // start with "eyJ" which is `{"` base64url-encoded.
   {
     name: "jwt",
@@ -49,7 +49,7 @@ const STRING_PATTERNS: Array<{ name: string; re: RegExp; replace: string }> = [
     re: /\b(access_token|refresh_token|id_token|client_secret|api_key|apikey)\s*[:=]\s*"?[A-Za-z0-9._\-+/=]+"?/gi,
     replace: `$1=${PLACEHOLDER}`,
   },
-  // Email — masked to the first char of local + domain only
+  // Email - masked to the first char of local + domain only
   {
     name: "email",
     re: /\b([A-Za-z0-9])[A-Za-z0-9._%+-]*@([A-Za-z0-9.-]+\.[A-Za-z]{2,})\b/g,
@@ -111,7 +111,7 @@ function redactInner(value: unknown, depth: number, maxDepth: number, maxLength:
     return {
       name: value.name,
       message: redactString(value.message || "", maxLength),
-      // Stack frames sometimes include URLs with tokens — redact too.
+      // Stack frames sometimes include URLs with tokens - redact too.
       stack: value.stack ? redactString(value.stack, maxLength) : undefined,
     };
   }

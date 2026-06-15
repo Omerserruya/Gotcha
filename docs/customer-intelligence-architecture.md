@@ -3,7 +3,7 @@
 > **Status:** Design / architecture (no implementation). Source of truth for the
 > Customer Intelligence Platform direction.
 > **Author:** generated against the live codebase (2026-06-12).
-> **Constraint baseline:** `CLAUDE.md` — no new microservices, NEW LLM calls only
+> **Constraint baseline:** `CLAUDE.md` - no new microservices, NEW LLM calls only
 > in `services/ai`, no new dependencies, every user-facing change touches UI +
 > backend, sparse-patch contract preserved.
 
@@ -13,7 +13,7 @@
 
 GOTCHA is repositioned from a **messaging platform** to a **Customer Intelligence
 Platform**. The central domain object is no longer the *conversation* or the
-*message* — it is the **Customer Intelligence Object (CIO)**: one live, structured,
+*message* - it is the **Customer Intelligence Object (CIO)**: one live, structured,
 per-customer record that every channel enriches and every surface consumes.
 
 ```
@@ -119,7 +119,7 @@ CustomerIntelligence {
 Every structured value carries `{ value, confidence, source, extractedAt }` in
 `fieldConfidence`. `source ∈ { llm_live, llm_close, rule, manual, crm_inbound }`.
 **Manual edits always win** over LLM and are never overwritten by extraction
-(mirrors the sparse-patch / "never wipe prior data" rule —
+(mirrors the sparse-patch / "never wipe prior data" rule -
 `feedback_post_conversation_crm_merge`).
 
 ---
@@ -165,17 +165,17 @@ IndustryPack
   locale-neutral
 ```
 
-`SummaryFieldDef` is the **already-existing** shape — no new field schema needed:
+`SummaryFieldDef` is the **already-existing** shape - no new field schema needed:
 `{ key, label, description?, type: text|number|boolean|enum, options? }`
 (`post-conversation-config.service.ts:23`).
 
 ### 4.3 Seed packs (ship as `isSystem`)
 
-- **Event Hall** — `event_type, event_date, event_time, guest_count, budget, kosher_level(enum), outdoor_ceremony(bool), parking_required(bool), special_requests, bride_name, groom_name`
-- **Real Estate** — `property_type, rooms(number), budget, location, move_date, mortgage_required(bool)`
-- **Recruiting** — `desired_position, expected_salary, availability, experience_years(number), security_clearance(bool)`
-- **Ecommerce** — `order_number, order_status(enum), product, refund_requested(bool), shipping_issue(bool), delivery_date` (note: read paths can hydrate from the Shopify CRM adapter)
-- Generic Business — universal fields only.
+- **Event Hall** - `event_type, event_date, event_time, guest_count, budget, kosher_level(enum), outdoor_ceremony(bool), parking_required(bool), special_requests, bride_name, groom_name`
+- **Real Estate** - `property_type, rooms(number), budget, location, move_date, mortgage_required(bool)`
+- **Recruiting** - `desired_position, expected_salary, availability, experience_years(number), security_clearance(bool)`
+- **Ecommerce** - `order_number, order_status(enum), product, refund_requested(bool), shipping_issue(bool), delivery_date` (note: read paths can hydrate from the Shopify CRM adapter)
+- Generic Business - universal fields only.
 
 ### 4.4 Onboarding wiring (extends existing flow)
 
@@ -196,7 +196,7 @@ new customers. Packs are also browseable in the existing **Marketplace** surface
 ## 5. Custom Fields
 
 Tenants extend any pack with their own fields. This **already exists** as
-`PostConversationConfig.summaryFields` — the Custom Fields Builder is a UI over it.
+`PostConversationConfig.summaryFields` - the Custom Fields Builder is a UI over it.
 
 Field configuration (maps 1:1 to `SummaryFieldDef` + two new flags):
 
@@ -207,7 +207,7 @@ Field configuration (maps 1:1 to `SummaryFieldDef` + two new flags):
 | AI Extraction Enabled | new `aiExtract: boolean` (when true → key added to `allowedFields`) |
 | Sync To CRM | new `syncToCrm: boolean` (when true → key allowed into `crm_patch` mapping, §8) |
 
-`getSummarizerAllowedFields` already merges builtins + `summaryFields.map(key)` —
+`getSummarizerAllowedFields` already merges builtins + `summaryFields.map(key)` -
 the only change is honoring the `aiExtract`/`syncToCrm` flags when composing the
 allow-lists.
 
@@ -217,9 +217,9 @@ allow-lists.
 
 Two distinct summaries, both **projections** of the CIO (not the source):
 
-1. **Human summary** (`brief`) — 3-5 sentence behavioral briefing, already produced
+1. **Human summary** (`brief`) - 3-5 sentence behavioral briefing, already produced
    by `customer-brief.service.refreshCustomerBriefFromConversation`.
-2. **Executive summary** (`executiveSummary`, NEW) — a living operational narrative
+2. **Executive summary** (`executiveSummary`, NEW) - a living operational narrative
    regenerated on **business events**, not only at conversation close.
 
 ### 6.1 Regeneration triggers (event-driven)
@@ -244,12 +244,12 @@ lives in `services/ai` only.
 
 ## 7. Customer Timeline
 
-A unified, append-only event stream per customer — the substrate the executive
+A unified, append-only event stream per customer - the substrate the executive
 summary and analytics read from.
 
 ### 7.1 Source
 
-No new write path required for most of it — **derive** from existing rows:
+No new write path required for most of it - **derive** from existing rows:
 `Message`, `ConversationIntelligence`, `ToolExecution`, `ScheduledMessage`,
 `ApprovalRequest`, CRM `appendInteraction` activity, task/followup events. A thin
 `CustomerTimeline` read-model (view or lightweight table) keyed by `identityKey`
@@ -288,7 +288,7 @@ Each `summaryFields[]` entry with `syncToCrm: true` gets a per-vendor target
 column mapping (extends the existing per-vendor field maps in
 `crm-adapter.impl.ts`, e.g. Fireberry/Airtable `fieldMap`). Universal `status`
 maps to the vendor's lead-status field. **Never** push a raw note when a
-structured field exists for the same datum — enforce in the mapping layer.
+structured field exists for the same datum - enforce in the mapping layer.
 
 ### 8.2 Invariants (carried over)
 
@@ -306,7 +306,7 @@ structured field exists for the same datum — enforce in the mapping layer.
 The summarizer already emits `bonus_highlights` with **reusable snake_case
 labels** explicitly designed so "identical observations across calls can be
 counted later" (`post-conversation-summarizer.service.ts`). This is the discovery
-substrate — no new extraction needed.
+substrate - no new extraction needed.
 
 ### 9.2 Discovery loop (new, scheduled)
 
@@ -322,7 +322,7 @@ AND label NOT IN (existing summaryFields keys)
 Produces suggestions surfaced in the Fields Builder:
 
 ```
-Suggested field:  Outdoor Ceremony   — appeared in 72 conversations   [Approve]
+Suggested field:  Outdoor Ceremony   - appeared in 72 conversations   [Approve]
 ```
 
 Approve → append a `SummaryFieldDef` (type inferred from sampled values) to
@@ -333,7 +333,7 @@ conversations for the new key).
 
 ## 10. Inbox UI
 
-One component — `<CustomerIntelligenceCard>` — driven by the CIO read model,
+One component - `<CustomerIntelligenceCard>` - driven by the CIO read model,
 rendered identically everywhere it appears.
 
 ```
@@ -393,11 +393,11 @@ The CIO + Customer Timeline make analytics **structured-first** instead of
 text-mined.
 
 - **Field-level reports**: distributions over typed fields (avg `guest_count`,
-  `budget` by `event_type`, `status` funnel) — queryable because values are typed,
+  `budget` by `event_type`, `status` funnel) - queryable because values are typed,
   not buried in prose.
 - **Funnel/aging**: timeline status transitions → time-in-stage, stuck leads.
 - **Sentiment/urgency trends**: already in `ConversationIntelligence`
-  (`@@index` on sentiment/intent) — roll up to customer level via the CIO.
+  (`@@index` on sentiment/intent) - roll up to customer level via the CIO.
 - Feeds the existing analytics service via read models (no cross-service DB joins;
   go through APIs per `CLAUDE.md`).
 
@@ -452,38 +452,38 @@ gate by debounce + min-new-content to control cost.
 
 | Phase | Scope | Key files |
 |---|---|---|
-| **P1 — CIO + Packs** | Extend `CustomerBrief` (structured cols + migration); `IndustryPack` table + 3–4 seed packs; onboarding industry→pack confirm; Fields Builder UI over `summaryFields` (+`required`/`aiExtract`/`syncToCrm`). | `schema.prisma`, `onboarding.ts`, `post-conversation-config.*`, frontend settings |
-| **P2 — Live text extraction** | Incremental extractor on inbound → CIO merge (sparse, provenance); reconcile at close. | `services/ai` extractor, `post-chat-pipeline` |
-| **P3 — Intelligence Card** | `<CustomerIntelligenceCard>` from CIO read model; inbox + contact + CRM panel. | frontend, `crm-panel.ts` read model |
-| **P4 — Executive summary + Timeline** | Event-driven exec summary regen; `CustomerTimeline` read model. | `services/ai`, event subscribers |
-| **P5 — CRM mapping layer** | Per-vendor field maps for `syncToCrm` fields; enforce structured-over-note. | `crm-adapter.impl.ts`, `post-conversation-crm.service.ts` |
-| **P6 — Discovery Engine** | Scheduled `bonus_highlights` aggregation → suggested fields. | `services/ai` cron |
-| **P7 — Analytics + Automation** | Field-level reports; CIO triggers/conditions. | analytics/webhook via APIs |
+| **P1 - CIO + Packs** | Extend `CustomerBrief` (structured cols + migration); `IndustryPack` table + 3–4 seed packs; onboarding industry→pack confirm; Fields Builder UI over `summaryFields` (+`required`/`aiExtract`/`syncToCrm`). | `schema.prisma`, `onboarding.ts`, `post-conversation-config.*`, frontend settings |
+| **P2 - Live text extraction** | Incremental extractor on inbound → CIO merge (sparse, provenance); reconcile at close. | `services/ai` extractor, `post-chat-pipeline` |
+| **P3 - Intelligence Card** | `<CustomerIntelligenceCard>` from CIO read model; inbox + contact + CRM panel. | frontend, `crm-panel.ts` read model |
+| **P4 - Executive summary + Timeline** | Event-driven exec summary regen; `CustomerTimeline` read model. | `services/ai`, event subscribers |
+| **P5 - CRM mapping layer** | Per-vendor field maps for `syncToCrm` fields; enforce structured-over-note. | `crm-adapter.impl.ts`, `post-conversation-crm.service.ts` |
+| **P6 - Discovery Engine** | Scheduled `bonus_highlights` aggregation → suggested fields. | `services/ai` cron |
+| **P7 - Analytics + Automation** | Field-level reports; CIO triggers/conditions. | analytics/webhook via APIs |
 
 ---
 
 ## 17. Open decisions (need product sign-off)
 
-1. **Locale & structured fields** — confirm the "structured once per identity,
+1. **Locale & structured fields** - confirm the "structured once per identity,
    prose per locale" model (§2.1). Recommended.
-2. **CIO store** — confirmed: extend `CustomerBrief` (not a new table).
-3. **Live extraction cadence/cost** — debounce window + model tier for the
+2. **CIO store** - confirmed: extend `CustomerBrief` (not a new table).
+3. **Live extraction cadence/cost** - debounce window + model tier for the
    incremental text extractor (cost vs freshness).
-4. **CRM field-map ownership** — auto-map by name heuristics vs explicit per-field
+4. **CRM field-map ownership** - auto-map by name heuristics vs explicit per-field
    mapping UI for `syncToCrm` fields.
-5. **Backfill on new field approval** — re-extract recent conversations or
+5. **Backfill on new field approval** - re-extract recent conversations or
    forward-only.
-6. **Confidence display threshold** — when to show a field as "unconfirmed" in the
+6. **Confidence display threshold** - when to show a field as "unconfirmed" in the
    card and require human confirmation.
 
 ---
 
 ## 18. Guardrails carried from CLAUDE.md
 
-- No new microservice — all of this lives in existing services (`services/ai` owns
+- No new microservice - all of this lives in existing services (`services/ai` owns
   extraction + summaries; `auth`/onboarding owns packs config; CRM via adapters).
 - NEW LLM calls only in `services/ai`.
 - No new dependencies.
-- AI proposes/extracts; **services own state** — the CIO is read/enriched via
+- AI proposes/extracts; **services own state** - the CIO is read/enriched via
   service APIs, never cross-service DB joins.
 - Sparse-patch + manual-wins invariants are non-negotiable across every write path.

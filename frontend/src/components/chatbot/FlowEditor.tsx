@@ -31,7 +31,7 @@ import { DepartmentRouteNode } from "./nodes/DepartmentRouteNode";
 import { EndNode } from "./nodes/EndNode";
 // Unified node types shared with the Main Playbook. Authoring a sub-flow uses
 // the SAME palette and the SAME runtime walker (executeSubFlow), so everything
-// the main flow can do, a sub-flow can do — and vice-versa.
+// the main flow can do, a sub-flow can do - and vice-versa.
 import { ConditionGroupNode } from "../mainPlaybook/ConditionGroupNode";
 import { RouteTargetNode } from "../mainPlaybook/RouteTargetNode";
 import { SendMessageTextNode } from "../mainPlaybook/SendMessageTextNode";
@@ -55,7 +55,7 @@ import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
 
 const nodeTypes: NodeTypes = {
-  // Legacy types — still supported for existing flows
+  // Legacy types - still supported for existing flows
   start: StartNode,
   message: MessageNode,
   quick_reply: QuickReplyNode,
@@ -216,7 +216,7 @@ const NODE_PALETTE = [
       },
     ],
   },
-  // Unified palette — these are the same node types used by the Main Playbook.
+  // Unified palette - these are the same node types used by the Main Playbook.
   // They produce n8n-style flow graphs that the single graph walker executes
   // exactly as drawn. Prefer these for new sub-flows.
   {
@@ -698,7 +698,7 @@ interface Props {
 
 export function FlowEditor(props: Props) {
   // ReactFlowProvider so the side-panel Inspector (rendered as a sibling of
-  // <ReactFlow>) can call useReactFlow — VariableMentionInput needs it to
+  // <ReactFlow>) can call useReactFlow - VariableMentionInput needs it to
   // scan the canvas for available variables.
   return (
     <ReactFlowProvider>
@@ -720,10 +720,10 @@ function FlowEditorInner({ flowId, onBack, onCreated }: Props) {
   const [paletteOpen, setPaletteOpen] = useState(true);
   const reactFlowWrapper = useRef<HTMLDivElement>(null);
   const [reactFlowInstance, setReactFlowInstance] = useState<ReactFlowInstance | null>(null);
-  // Selection drives the side-panel Inspector (unified nodes only — the
+  // Selection drives the side-panel Inspector (unified nodes only - the
   // legacy `./nodes/*` set still uses inline editing for now).
   const [selectedNodeId, setSelectedNodeId] = useState<string | null>(null);
-  // Connected channels — feeds the channel_entry inspector picker.
+  // Connected channels - feeds the channel_entry inspector picker.
   const [channels, setChannels] = useState<any[]>([]);
   useEffect(() => {
     if (!token) return;

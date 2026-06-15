@@ -23,7 +23,7 @@ interface Contact {
 /**
  * Outbound dialer.
  *
- * This page is intentionally thin — it only collects the destination + notes,
+ * This page is intentionally thin - it only collects the destination + notes,
  * places the call via VoiceCallContext.placeCall, and then routes the user to
  * the unified /voice/[sessionId] workspace as soon as the VoiceCallSession
  * row exists. That workspace renders the same transcript stage + copilot
@@ -130,7 +130,7 @@ export default function OutboundCallPage() {
       // AGENT_FIRST: the server is REST-dialing the agent's mobile.
       // The browser isn't a participant. Navigate to the workspace
       // ONLY when the channel toggle wants it; otherwise stay on this
-      // page (fire-and-forget — agent isn't at the computer).
+      // page (fire-and-forget - agent isn't at the computer).
       if (placeResult && placeResult.mode === "AGENT_FIRST") {
         if (placeResult.openWorkspace && placeResult.sessionId) {
           router.push(`/voice/${placeResult.sessionId}`);

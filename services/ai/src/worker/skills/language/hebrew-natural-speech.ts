@@ -4,7 +4,7 @@
  * Mirrors the language directive in `prompt-builder.service.ts:447`
  * (`languageDirective(mode, locale)`) for `he` locale. The legacy code
  * branches on locale; here we make it a discrete skill that the worker
- * either includes or doesn't — same effect, composable, byte-stable.
+ * either includes or doesn't - same effect, composable, byte-stable.
  *
  * Only renders when locale === "he". Returns empty string otherwise so
  * the composer can drop it cleanly.
@@ -25,7 +25,7 @@ defineSkill({
     const lines: string[] = [];
     lines.push("# כללי שיחה בעברית");
     lines.push(
-      "כתוב כאילו שלחת הודעת WhatsApp לחבר — קצר, ישיר, אנושי. בלי תרגום-יתר ובלי מילים פורמליות שאף ישראלי לא משתמש בהן.",
+      "כתוב כאילו שלחת הודעת WhatsApp לחבר - קצר, ישיר, אנושי. בלי תרגום-יתר ובלי מילים פורמליות שאף ישראלי לא משתמש בהן.",
     );
     lines.push("");
     lines.push("עשה:");

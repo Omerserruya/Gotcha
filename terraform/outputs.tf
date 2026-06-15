@@ -1,10 +1,10 @@
 output "instance_id" {
-  description = "EC2 instance ID — useful for SSM Session Manager."
+  description = "EC2 instance ID - useful for SSM Session Manager."
   value       = aws_instance.app.id
 }
 
 output "instance_public_ip" {
-  description = "Auto-assigned public IPv4 (default VPC behavior). Use for initial cloudflared install only — don't expose it as a service entrypoint."
+  description = "Auto-assigned public IPv4 (default VPC behavior). Use for initial cloudflared install only - don't expose it as a service entrypoint."
   value       = aws_instance.app.public_ip
 }
 
@@ -34,7 +34,7 @@ output "ssm_parameter_prefix" {
 }
 
 output "ssm_session_command" {
-  description = "Shell in via SSM Session Manager — works with NO SSH key + NO open port 22. Requires `aws ssm` plugin (`brew install --cask session-manager-plugin` or apt equivalent)."
+  description = "Shell in via SSM Session Manager - works with NO SSH key + NO open port 22. Requires `aws ssm` plugin (`brew install --cask session-manager-plugin` or apt equivalent)."
   value       = "aws ssm start-session --target ${aws_instance.app.id} --region ${var.region}"
 }
 

@@ -6,7 +6,7 @@
  *
  * Reads `ctx.pipeline` (frozen session-start snapshot from the funnel
  * resolver). When the worker has no funnel attached, this skill renders
- * nothing — clean drop, no orphan section header.
+ * nothing - clean drop, no orphan section header.
  *
  * Authoritative source for stage data: TenantFunnel.stages[].copilot
  * via `stage-resolver.service.ts`.
@@ -33,7 +33,7 @@ defineSkill({
     }
     lines.push("");
     lines.push(
-      "Your job in this stage: drive the conversation toward the exit criteria. When the criteria are met, the post-call worker advances the funnel — you don't call a tool to transition.",
+      "Your job in this stage: drive the conversation toward the exit criteria. When the criteria are met, the post-call worker advances the funnel - you don't call a tool to transition.",
     );
 
     if (ctx.mode === "callpilot") {

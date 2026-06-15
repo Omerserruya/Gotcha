@@ -48,7 +48,7 @@ function renderBody() {
   );
 }
 
-describe("WebhookTriggerBody — dual target mode", () => {
+describe("WebhookTriggerBody - dual target mode", () => {
   beforeEach(() => {
     mocks.setWebhookTriggerMode.mockClear();
     mocks.setWebhookTriggerMode.mockResolvedValue({
@@ -103,7 +103,7 @@ describe("WebhookTriggerBody — dual target mode", () => {
         nodeId="wh_node_1"
       />,
     );
-    // No flow picker in connected mode — the user isn't forced to choose a flow.
+    // No flow picker in connected mode - the user isn't forced to choose a flow.
     expect(screen.queryByText("Run this flow")).not.toBeInTheDocument();
     // The trigger auto-anchors to its own canvas node id.
     await waitFor(() => expect(onChange).toHaveBeenCalledWith({ workflowId: "wh_node_1" }));
@@ -138,7 +138,7 @@ describe("webhook_trigger node validation", () => {
   });
 });
 
-describe("WebhookTriggerBody — How to use panel", () => {
+describe("WebhookTriggerBody - How to use panel", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
     Object.assign(navigator, {
@@ -195,7 +195,7 @@ describe("WebhookTriggerBody — How to use panel", () => {
     fireEvent.click(copyButtons[1]);
     await waitFor(() => expect(writeText).toHaveBeenCalledWith("s3cr3t-value"));
 
-    // curl copy — third copy button
+    // curl copy - third copy button
     fireEvent.click(copyButtons[2]);
     await waitFor(() => {
       const curlArg = writeText.mock.calls
@@ -206,7 +206,7 @@ describe("WebhookTriggerBody — How to use panel", () => {
   });
 });
 
-describe("WebhookTriggerBody — expected body fields editor", () => {
+describe("WebhookTriggerBody - expected body fields editor", () => {
   beforeEach(() => {
     mocks.setWebhookTriggerBodySchema.mockReset();
     mocks.setWebhookTriggerBodySchema.mockImplementation((_t, _id, bodySchema) =>
@@ -289,7 +289,7 @@ describe("WebhookTriggerBody — expected body fields editor", () => {
   });
 });
 
-describe("WebhookTriggerBody — field mapper", () => {
+describe("WebhookTriggerBody - field mapper", () => {
   beforeEach(async () => {
     const { getWebhookTrigger } = await import("@/lib/api");
     (getWebhookTrigger as ReturnType<typeof vi.fn>).mockResolvedValue({

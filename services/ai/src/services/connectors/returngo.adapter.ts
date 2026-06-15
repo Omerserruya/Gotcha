@@ -1,5 +1,5 @@
 /**
- * ReturnGO adapter — returns/RMA platform that fronts Shopify (and others) for
+ * ReturnGO adapter - returns/RMA platform that fronts Shopify (and others) for
  * post-purchase return management. Complements the Shopify adapter: Shopify's
  * GraphQL Returns object gives the native RMA status + reasons, while ReturnGO
  * owns the richer returns workflow + the financial transactions (refunds,
@@ -7,19 +7,19 @@
  * ReturnGO.
  *
  * Auth: API key. Two headers on every call:
- *   - `x-api-key`   — secret key from ReturnGO → Settings → Integrations → API
- *   - `x-shop-name` — the store, e.g. "my-store.myshopify.com" (multi-portal
+ *   - `x-api-key`   - secret key from ReturnGO → Settings → Integrations → API
+ *   - `x-shop-name` - the store, e.g. "my-store.myshopify.com" (multi-portal
  *     stores use "my-store.myshopify.com@PortalName").
  * Stored as credentials.apiKey + credentials.shopName. The API base defaults to
  * https://api.returngo.ai and is overridable via config.baseUrl for sandboxes.
  *
  * Confirmed REST surface (per ReturnGO API docs):
- *   - GET  /transactions              — list transactions by criteria
- *   - PUT  /transaction/{transactionId} — update a transaction (refund/payment status)
+ *   - GET  /transactions              - list transactions by criteria
+ *   - PUT  /transaction/{transactionId} - update a transaction (refund/payment status)
  * Rate limit: 2000/day, 5/sec (provider 429s surface as ok:false to the LLM).
  *
  * Tools return the RAW provider payload (plus a light, defensive normalization
- * where the shape is well-known) — we never fabricate fields the API didn't
+ * where the shape is well-known) - we never fabricate fields the API didn't
  * return.
  */
 
@@ -64,7 +64,7 @@ const TOOLS: ToolDefinition[] = [
     { ...orderSel, status: { type: "string", description: "Filter by transaction status." }, limit: { type: "number", description: "Default 20, max 100." } }),
   t("get_return_status", "READ", "LOW",
     "Summarize the latest return/refund transaction status for an order from ReturnGO.",
-    "Customer asks 'what's the status of my return/refund?' and ReturnGO is the returns platform. ReturnGO owns the return WORKFLOW; for the native order/refund state ALSO call shopify.get_returns + shopify.get_refund_status when available, and synthesize a single answer from both — neither source alone is complete.",
+    "Customer asks 'what's the status of my return/refund?' and ReturnGO is the returns platform. ReturnGO owns the return WORKFLOW; for the native order/refund state ALSO call shopify.get_returns + shopify.get_refund_status when available, and synthesize a single answer from both - neither source alone is complete.",
     { ...orderSel }),
   t("update_transaction", "WRITE", "HIGH",
     "Update a ReturnGO transaction (e.g. refund/payment status) by transaction id.",
@@ -98,7 +98,7 @@ const ReturnGoAdapter: ProviderAdapter = {
         if (!list.length) {
           return { order: args.order_id || args.order_name || args.email || null, transactions_count: 0, note: "No ReturnGO transactions found for this order." };
         }
-        // Defensive projection — only surface fields the payload actually has.
+        // Defensive projection - only surface fields the payload actually has.
         const summary = list.map((tx: any) => ({
           id: tx.id ?? tx.transactionId ?? null,
           type: tx.type ?? tx.transactionType ?? null,

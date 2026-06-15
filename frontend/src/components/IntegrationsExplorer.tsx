@@ -9,7 +9,7 @@ import { INTEGRATION_LOGOS } from "@/lib/integration-logos";
 import clsx from "clsx";
 
 /**
- * Tenant-scoped integrations explorer. Layout-agnostic — render inside
+ * Tenant-scoped integrations explorer. Layout-agnostic - render inside
  * AppLayout (top-level marketplace) or SettingsLayout (Settings →
  * Integrations). Both surfaces hit the SAME `/api/integrations` endpoint
  * and reflect the SAME `tenant_integrations` rows: connecting from one
@@ -60,7 +60,7 @@ export interface IntegrationsExplorerProps {
   title?: string;
   /** Optional category prefilter (e.g. "CRM" to show only CRMs). */
   initialCategory?: string;
-  /** When set, lock the explorer to a single category — the category
+  /** When set, lock the explorer to a single category - the category
    *  filter chips are hidden and the underlying list is filtered server-
    *  side at the rendering layer. Used by Settings → Integrations to
    *  show only CRM integrations and avoid surfacing the full marketplace
@@ -89,7 +89,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
             id: "virtual_custom_api",
             slug: "custom_api",
             name: "Custom API",
-            description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+            description: "Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
             category: "CUSTOM",
             authType: "CUSTOM",
             isPublished: true,
@@ -107,7 +107,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
       intg.name?.toLowerCase().includes(search.toLowerCase()) ||
       intg.description?.toLowerCase().includes(search.toLowerCase());
     // When the page is locked to a single category, ignore the local
-    // activeCategory state entirely — only that category's items pass.
+    // activeCategory state entirely - only that category's items pass.
     const effectiveCat = restrictToCategory ?? activeCategory;
     // An integration flagged `canActAsCrm` (e.g. Shopify, natively ECOMMERCE)
     // may be elected as the tenant's CRM source of truth, so it also passes the

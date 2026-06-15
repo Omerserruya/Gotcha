@@ -36,7 +36,7 @@ describe("SttConfigPanel", () => {
       expect(screen.queryByText("app.loading")).not.toBeInTheDocument();
     });
 
-    // Multiple comboboxes exist (provider + language) — use getAllByRole
+    // Multiple comboboxes exist (provider + language) - use getAllByRole
     const selects = screen.getAllByRole("combobox");
     expect(selects.length).toBeGreaterThanOrEqual(2);
 

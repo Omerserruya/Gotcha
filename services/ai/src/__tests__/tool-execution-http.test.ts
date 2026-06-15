@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * Phase 2 — integration tool dispatcher uses CatalogTool.endpoint/method
+ * Phase 2 - integration tool dispatcher uses CatalogTool.endpoint/method
  * and actually performs an HTTP call with credential injection.
  */
 
@@ -24,7 +24,7 @@ vi.mock("../services/audit.service", () => ({ logAudit: vi.fn().mockResolvedValu
 
 import { executeTool } from "../services/tool-execution.service";
 
-describe("tool-execution.service — integration HTTP dispatch", () => {
+describe("tool-execution.service - integration HTTP dispatch", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
@@ -69,7 +69,7 @@ describe("tool-execution.service — integration HTTP dispatch", () => {
     expect(cfg.data).toEqual({ email: "a@b.co", name: "A" });
   });
 
-  it("rejects missing required params from inputSchema — no silent fallback", async () => {
+  it("rejects missing required params from inputSchema - no silent fallback", async () => {
     prismaMock.tenantTool.findFirst.mockResolvedValue({
       id: "tt1",
       isEnabled: true,

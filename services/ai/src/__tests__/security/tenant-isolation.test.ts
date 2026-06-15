@@ -1,5 +1,5 @@
 /**
- * Tenant isolation regression — verifies the voice-sessions fix uses
+ * Tenant isolation regression - verifies the voice-sessions fix uses
  * `loadSessionForTenant` (tenantId-guarded) rather than a raw
  * `findUnique({ where: { id } })` that could leak across tenants.
  *
@@ -29,7 +29,7 @@ function readFileOrSkip(p: string): string | null {
   }
 }
 
-describe("voice-sessions.ts — tenant-scoped session lookup", () => {
+describe("voice-sessions.ts - tenant-scoped session lookup", () => {
   it("file exists at the expected path", () => {
     const src = readFileOrSkip(VOICE_SESSIONS_PATH);
     expect(src, `expected ${VOICE_SESSIONS_PATH} to exist`).toBeTruthy();
@@ -60,12 +60,12 @@ describe("voice-sessions.ts — tenant-scoped session lookup", () => {
 
   it("the gate query for voiceCopilotEnabled scopes to req.tenantId", () => {
     const src = readFileOrSkip(VOICE_SESSIONS_PATH)!;
-    // The tenant lookup is by-id, but the id IS req.tenantId — same property.
+    // The tenant lookup is by-id, but the id IS req.tenantId - same property.
     expect(src).toMatch(/tenant\.findUnique\(\{\s*where:\s*\{\s*id:\s*req\.tenantId!/);
   });
 });
 
-describe("embedded-chat.ts — public widget uses explicit cross-tenant marker on init", () => {
+describe("embedded-chat.ts - public widget uses explicit cross-tenant marker on init", () => {
   it("file exists", () => {
     const src = readFileOrSkip(EMBEDDED_CHAT_PATH);
     expect(src).toBeTruthy();

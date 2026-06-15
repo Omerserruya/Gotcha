@@ -10,7 +10,7 @@ import {
  * Subscribes to `voice.session.ended` (published by services/voice-copilot
  * StreamRouter on session teardown). Any other lifecycle event ignored.
  *
- * Idempotent at the queue layer via `jobId = qa:{conversationId}` — if the
+ * Idempotent at the queue layer via `jobId = qa:{conversationId}` - if the
  * session.ended event somehow fires twice for the same call (rare but
  * possible during voice-copilot reconnect storms), the second add is a
  * no-op rather than producing a duplicate score.

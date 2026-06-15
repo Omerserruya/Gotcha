@@ -366,10 +366,10 @@ code {
 </head>
 
 <body>
-    <h1 id="ai-flow--end-to-end">AI Flow — End-to-End</h1>
+    <h1 id="ai-flow--end-to-end">AI Flow - End-to-End</h1>
 <p>How an AI Employee answers a customer (autonomous mode) and how the CoPilot helps a human agent. Covers prompt assembly, tool-calling, RAG, config resolution, and the debug surface.</p>
 <blockquote>
-<p><strong>Architectural rule (2026-04 onward):</strong> every LLM call lives in the <strong>AI service</strong>. The incoming-worker, comment-trigger walker, and any other surface that needs an LLM go through HTTP to the AI service — they do not import the OpenAI SDK directly. The single exception still pending migration is <code>services/auth/src/routes/onboarding.ts</code>.</p>
+<p><strong>Architectural rule (2026-04 onward):</strong> every LLM call lives in the <strong>AI service</strong>. The incoming-worker, comment-trigger walker, and any other surface that needs an LLM go through HTTP to the AI service - they do not import the OpenAI SDK directly. The single exception still pending migration is <code>services/auth/src/routes/onboarding.ts</code>.</p>
 </blockquote>
 <hr>
 <h2 id="1-the-two-surfaces">1. The two surfaces</h2>
@@ -399,7 +399,7 @@ code {
 </table>
 <p>Both share the same <code>AIAgent</code> row in the DB, but they assemble prompts differently and the autonomous bot has access to integration tools while the copilot does not.</p>
 <hr>
-<h2 id="2-autonomous-bot--full-call-chain">2. Autonomous bot — full call chain</h2>
+<h2 id="2-autonomous-bot--full-call-chain">2. Autonomous bot - full call chain</h2>
 <h3 id="21-trigger-paths-into-processaibot">2.1 Trigger paths into <code>processAIBot</code></h3>
 <pre class="hljs"><code><div>Meta webhook (WA / IG / Messenger)
         ↓
@@ -427,13 +427,13 @@ incoming-worker.processIncomingMessage(job)
    │     (may dispatch to AI again)         │
    └────────────────────────────────────────┘
 </div></code></pre>
-<p><code>processAIBot</code> is the single entry point for &quot;AI replies to customer&quot; — three paths feed into it.</p>
+<p><code>processAIBot</code> is the single entry point for &quot;AI replies to customer&quot; - three paths feed into it.</p>
 <h3 id="22-what-the-worker-does-side-effects-only">2.2 What the worker does (side effects only)</h3>
 <p><code>services/incoming-worker/src/services/ai-bot.service.ts</code></p>
 <pre class="hljs"><code><div>processAIBot(tenantId, conversationId, message, agentId?)
   1. Load conversation (+ channelAccount creds)
   2. Resolve aiAgentId (param → conversation.assignedAiAgentId)
-  3. Load AIAgent (lite slice — escalationMessage, max thresholds, status)
+  3. Load AIAgent (lite slice - escalationMessage, max thresholds, status)
   4. Build SendContext (channel, externalId, decrypted credentials)
   5. ── Pre-flight ────────────────────────────────────
      a. checkEscalationThresholds (max messages, max minutes)
@@ -500,7 +500,7 @@ incoming-worker.processIncomingMessage(job)
 </li>
 </ul>
 <hr>
-<h2 id="3-copilot--full-call-chain">3. CoPilot — full call chain</h2>
+<h2 id="3-copilot--full-call-chain">3. CoPilot - full call chain</h2>
 <h3 id="31-trigger-paths">3.1 Trigger paths</h3>
 <table>
 <thead>
@@ -571,7 +571,7 @@ incoming-worker.processIncomingMessage(job)
 </tr>
 <tr>
 <td><code>CONTEXT_ONLY</code></td>
-<td>&quot;Provide 2-4 brief insights — original reason, current need, sentiment, next step. JSON suggestions[] type:info.&quot;</td>
+<td>&quot;Provide 2-4 brief insights - original reason, current need, sentiment, next step. JSON suggestions[] type:info.&quot;</td>
 <td>JSON insight bullets</td>
 </tr>
 <tr>
@@ -583,8 +583,8 @@ incoming-worker.processIncomingMessage(job)
 </table>
 <p>Mode is selected per request from <code>config.copilotMode</code> (set on the AI Agent record).</p>
 <hr>
-<h2 id="4-prompt-assembly--the-two-builders">4. Prompt assembly — the two builders</h2>
-<h3 id="41-autonomous-bot--buildsystempromptconfig">4.1 Autonomous bot — <code>buildSystemPrompt(config)</code></h3>
+<h2 id="4-prompt-assembly--the-two-builders">4. Prompt assembly - the two builders</h2>
+<h3 id="41-autonomous-bot--buildsystempromptconfig">4.1 Autonomous bot - <code>buildSystemPrompt(config)</code></h3>
 <p><code>services/ai/src/services/ai-bot.service.ts</code></p>
 <p>This is the <strong>legacy builder</strong>, preserved from the original worker code so production agents (e.g. &quot;Rotem&quot;) keep producing the same prompt they always have.</p>
 <p>Reads from the <code>AIAgent</code> row:</p>
@@ -598,7 +598,7 @@ incoming-worker.processIncomingMessage(job)
 <tbody>
 <tr>
 <td><code>systemPrompt</code> (long text)</td>
-<td>The base of the prompt — this is the big free-text block authors edit in AI Studio</td>
+<td>The base of the prompt - this is the big free-text block authors edit in AI Studio</td>
 </tr>
 <tr>
 <td><code>rules[]</code></td>
@@ -623,8 +623,8 @@ incoming-worker.processIncomingMessage(job)
 <li><code>## Truthfulness &amp; Knowledge Base Rules</code> (don't fabricate, base on KB, etc.)</li>
 <li><code>IMPORTANT: You are chatting directly with the customer.</code></li>
 </ul>
-<p><strong>Tool schemas are NOT duplicated in the prompt</strong> — they're sent only via the OpenAI <code>tools</code> field. The author should write tool <em>policy</em> (when to call which tool, in what order) inside <code>agent.systemPrompt</code>, NOT the schemas.</p>
-<h3 id="42-copilot--assembleprompt%22assist%22">4.2 CoPilot — <code>assemblePrompt(&quot;assist&quot;, …)</code></h3>
+<p><strong>Tool schemas are NOT duplicated in the prompt</strong> - they're sent only via the OpenAI <code>tools</code> field. The author should write tool <em>policy</em> (when to call which tool, in what order) inside <code>agent.systemPrompt</code>, NOT the schemas.</p>
+<h3 id="42-copilot--assembleprompt%22assist%22">4.2 CoPilot - <code>assemblePrompt(&quot;assist&quot;, …)</code></h3>
 <p><code>services/ai/src/services/prompt-assembler.service.ts</code></p>
 <p>Modern, opinionated builder. Order:</p>
 <pre class="hljs"><code><div>[CoPilot Instructions]   ← static MD: services/ai/src/prompts/copilot-instructions.md
@@ -638,10 +638,10 @@ incoming-worker.processIncomingMessage(job)
 </div></code></pre>
 <p>Joined with <code>\n\n---\n\n</code>.</p>
 <blockquote>
-<p><strong>*Note:</strong> The Tools section in <code>Shared Section</code> <em>currently duplicates</em> tool descriptions inside the prompt — even though the same tools are also passed via the API <code>tools[]</code> field. This is bloat (double-billing tokens, drift risk). Tracked as cleanup; remove <code>buildToolsSection()</code> from <code>prompt-assembler.service.ts:buildSharedSection()</code> to fix.</p>
+<p><strong>*Note:</strong> The Tools section in <code>Shared Section</code> <em>currently duplicates</em> tool descriptions inside the prompt - even though the same tools are also passed via the API <code>tools[]</code> field. This is bloat (double-billing tokens, drift risk). Tracked as cleanup; remove <code>buildToolsSection()</code> from <code>prompt-assembler.service.ts:buildSharedSection()</code> to fix.</p>
 </blockquote>
-<p>For the agent autonomous mode, <code>assemblePrompt(&quot;agent&quot;, …)</code> adds an <code>[Autonomous Section]</code> (escalation rules) and <code>[Conversation Strategy]</code> instead of CoPilot Instructions — but <strong>this path is currently NOT used</strong> by the autonomous bot. The bot uses <code>buildSystemPrompt</code> (§4.1). A future migration could switch the bot to <code>assemblePrompt(&quot;agent&quot;)</code>; that's a behavior change and not done yet.</p>
-<h3 id="43-decision-tree--which-builder-runs">4.3 Decision tree — which builder runs?</h3>
+<p>For the agent autonomous mode, <code>assemblePrompt(&quot;agent&quot;, …)</code> adds an <code>[Autonomous Section]</code> (escalation rules) and <code>[Conversation Strategy]</code> instead of CoPilot Instructions - but <strong>this path is currently NOT used</strong> by the autonomous bot. The bot uses <code>buildSystemPrompt</code> (§4.1). A future migration could switch the bot to <code>assemblePrompt(&quot;agent&quot;)</code>; that's a behavior change and not done yet.</p>
+<h3 id="43-decision-tree--which-builder-runs">4.3 Decision tree - which builder runs?</h3>
 <pre class="hljs"><code><div>Surface          | Builder
 ────────────────────────────────────────────────────────────
 Autonomous bot   | buildSystemPrompt   (§4.1)
@@ -653,7 +653,7 @@ CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;)
 </div></code></pre>
 <p>The fallback is in <code>services/ai/src/services/ai-assist.service.ts:buildConfigFromAIAgent()</code>.</p>
 <hr>
-<h2 id="5-ai-agent-resolution--which-agent-answers">5. AI Agent resolution — which agent answers</h2>
+<h2 id="5-ai-agent-resolution--which-agent-answers">5. AI Agent resolution - which agent answers</h2>
 <p><code>services/ai/src/services/ai-assist.service.ts:getEffectiveCopilotConfig(tenantId, departmentId, role)</code></p>
 <pre class="hljs"><code><div>1. departmentId set?
    → query RouterRule { tenantId, routeType: &quot;AI_AGENT&quot;, routeTarget: deptId, enabled }
@@ -664,10 +664,10 @@ CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;)
 3. Final fallback:
    → first AIAgent for tenant where status IN (ACTIVE, DRAFT), oldest first
 </div></code></pre>
-<p>For the autonomous bot the resolution is different — the <strong>Main Flow Canvas's <code>route_target { agent }</code> node decides</strong> which agent to dispatch. Once dispatched, <code>conversation.assignedAiAgentId</code> is set so subsequent inbound messages re-enter the same agent without re-routing through the graph.</p>
+<p>For the autonomous bot the resolution is different - the <strong>Main Flow Canvas's <code>route_target { agent }</code> node decides</strong> which agent to dispatch. Once dispatched, <code>conversation.assignedAiAgentId</code> is set so subsequent inbound messages re-enter the same agent without re-routing through the graph.</p>
 <hr>
-<h2 id="6-rag--knowledge-base-retrieval">6. RAG — knowledge base retrieval</h2>
-<p>Retrieval is the <strong>same code</strong> from both autonomous bot and copilot — <code>services/ai/src/services/knowledge.service.ts:retrieveRelevantChunks(tenantId, query, limit=5)</code>.</p>
+<h2 id="6-rag--knowledge-base-retrieval">6. RAG - knowledge base retrieval</h2>
+<p>Retrieval is the <strong>same code</strong> from both autonomous bot and copilot - <code>services/ai/src/services/knowledge.service.ts:retrieveRelevantChunks(tenantId, query, limit=5)</code>.</p>
 <pre class="hljs"><code><div>1. Embed query  →  openai.embeddings.create() via central ai.service
 2. Filter active KnowledgeBase rows for the tenant
 3. qdrant.search(&quot;knowledge_chunks&quot;, { vector, filter: tenantId + KB ids, limit })
@@ -690,12 +690,12 @@ CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;)
 </tr>
 <tr>
 <td>CoPilot suggestions / chat</td>
-<td>The last inbound message — only if <code>shouldSearchKB(msg)</code> is true</td>
+<td>The last inbound message - only if <code>shouldSearchKB(msg)</code> is true</td>
 <td>Greetings, thanks, &quot;ok&quot;, emoji-only, etc. (regex skip-list)</td>
 </tr>
 </tbody>
 </table>
-<p>If chunks are returned, they're formatted into a <code>## Knowledge Base Context</code> markdown block and <strong>appended to the system prompt</strong> (not pushed as a separate user message — except in <code>chatWithAgent</code> which uses a fake user/assistant turn pair to inject KB).</p>
+<p>If chunks are returned, they're formatted into a <code>## Knowledge Base Context</code> markdown block and <strong>appended to the system prompt</strong> (not pushed as a separate user message - except in <code>chatWithAgent</code> which uses a fake user/assistant turn pair to inject KB).</p>
 <hr>
 <h2 id="7-tool-calling-protocol">7. Tool-calling protocol</h2>
 <h3 id="71-tool-list">7.1 Tool list</h3>
@@ -706,7 +706,7 @@ CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;)
 <li>Dynamic: every <code>TenantTool</code> row that's <code>isEnabled</code> AND whose <code>TenantIntegration.status === &quot;CONNECTED&quot;</code></li>
 </ul>
 </li>
-<li><strong>CoPilot:</strong> <code>buildAgentTools({ identityLinking, escalation: true })</code> — only the 2 static helpers</li>
+<li><strong>CoPilot:</strong> <code>buildAgentTools({ identityLinking, escalation: true })</code> - only the 2 static helpers</li>
 </ul>
 <h3 id="72-openai-request-shape">7.2 OpenAI request shape</h3>
 <pre class="hljs"><code><div>openai.chat.completions.create({
@@ -732,12 +732,12 @@ CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;)
 3. Loop again so the model can write the final text reply
 </div></code></pre>
 <p>Capped at <strong>3 rounds</strong>. After 3 rounds with no final text, return <code>null</code> and the worker drops the turn.</p>
-<p><code>dispatchToolCall</code> lives in <code>@chatcenter/shared/src/lib/agent-tools.ts</code> and handles routing by tool name — it's used by both autonomous-bot and copilot-chat paths.</p>
+<p><code>dispatchToolCall</code> lives in <code>@chatcenter/shared/src/lib/agent-tools.ts</code> and handles routing by tool name - it's used by both autonomous-bot and copilot-chat paths.</p>
 <hr>
-<h2 id="8-debug-surface--see-what-the-llm-gets">8. Debug surface — see what the LLM gets</h2>
-<p><code>services/ai/src/routes/ai-debug.ts</code> — mounted at <code>/api/ai-debug</code>.</p>
+<h2 id="8-debug-surface--see-what-the-llm-gets">8. Debug surface - see what the LLM gets</h2>
+<p><code>services/ai/src/routes/ai-debug.ts</code> - mounted at <code>/api/ai-debug</code>.</p>
 <ul>
-<li><code>POST /api/ai-debug/jit</code> — SYSTEM_ADMIN only; mints a single-use, short-TTL token bound to a <code>tenantId</code> (and optional <code>agentId</code>).</li>
+<li><code>POST /api/ai-debug/jit</code> - SYSTEM_ADMIN only; mints a single-use, short-TTL token bound to a <code>tenantId</code> (and optional <code>agentId</code>).</li>
 <li><code>GET /api/ai-debug/prompt?tenantId=…&amp;agentId=…&amp;mode=agent|assist&amp;conversationId=…&amp;message=…</code>
 <ul>
 <li>Auth: <code>X-Debug-Key: $AI_DEBUG_KEY</code> header <strong>or</strong> <code>Authorization: Bearer &lt;jit&gt;</code>.</li>
@@ -746,7 +746,7 @@ CoPilot          | buildConfigFromAIAgent → assemblePrompt(&quot;assist&quot;)
 </ul>
 </li>
 </ul>
-<p><code>mode=agent</code> calls the same <code>buildSystemPrompt</code> as production. <code>mode=assist</code> calls the same <code>assemblePrompt(&quot;assist&quot;)</code> as production. There's no drift — debug and runtime share one builder per mode.</p>
+<p><code>mode=agent</code> calls the same <code>buildSystemPrompt</code> as production. <code>mode=assist</code> calls the same <code>assemblePrompt(&quot;assist&quot;)</code> as production. There's no drift - debug and runtime share one builder per mode.</p>
 <hr>
 <h2 id="9-end-to-end-timing-diagram-autonomous-bot">9. End-to-end timing diagram (autonomous bot)</h2>
 <pre class="hljs"><code><div>Customer (WhatsApp)
@@ -788,8 +788,8 @@ Customer receives the reply
 <h2 id="10-what-changed-in-2026-04-migration-notes">10. What changed in 2026-04 (migration notes)</h2>
 <ul>
 <li><strong>All OpenAI calls moved to AI service.</strong> Worker no longer imports <code>openai</code>. The bot path now goes through <code>POST /api/ai-bot/reply</code>. The one-shot path (comment-trigger) goes through <code>POST /api/ai-bot/oneshot</code>.</li>
-<li><strong><code>services/incoming-worker/src/services/knowledge-retrieval.service.ts</code></strong> is now dead code — nothing imports it. Safe to delete.</li>
-<li><strong><code>services/auth/src/routes/onboarding.ts</code></strong> still has a direct OpenAI client — pending migration.</li>
+<li><strong><code>services/incoming-worker/src/services/knowledge-retrieval.service.ts</code></strong> is now dead code - nothing imports it. Safe to delete.</li>
+<li><strong><code>services/auth/src/routes/onboarding.ts</code></strong> still has a direct OpenAI client - pending migration.</li>
 <li><strong>Debug route</strong> (<code>/api/ai-debug/prompt</code>) added for inspecting the assembled prompt + tools before it hits OpenAI.</li>
 </ul>
 

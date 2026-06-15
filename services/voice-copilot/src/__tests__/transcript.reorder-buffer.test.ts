@@ -30,7 +30,7 @@ describe("ReorderBuffer", () => {
     expect(out[1].seq).toBe(1);
   });
 
-  it("final supersedes partial at same seq — partial not re-emitted", () => {
+  it("final supersedes partial at same seq - partial not re-emitted", () => {
     const partial = makeTranscript({ seq: 0, isFinal: false, text: "hel" });
     const final = makeTranscript({ seq: 0, isFinal: true, text: "hello" });
 

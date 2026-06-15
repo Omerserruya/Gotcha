@@ -5,7 +5,7 @@ import type { FunnelConfig, FunnelStage } from "../funnel-config.service";
 /**
  * Resolve the active pipeline stage for a conversation.
  *
- * Lookup chain (CRM is authority — see CLAUDE.md "Services = Truth"):
+ * Lookup chain (CRM is authority - see CLAUDE.md "Services = Truth"):
  *   1. Fetch the customer's vendor CRM record (already-cached via
  *      crm-identity service / contact.metadata.crmContactId).
  *   2. Read the vendor's stage value (HubSpot lifecyclestage, Zoho Stage,
@@ -17,10 +17,10 @@ import type { FunnelConfig, FunnelStage } from "../funnel-config.service";
  *   5. Return null when no funnel is configured for the tenant/department.
  *
  * Funnel precedence (most-specific wins):
- *   1. Conversation's assigned AI agent (`ai_agents.funnel_id`) — lets a
+ *   1. Conversation's assigned AI agent (`ai_agents.funnel_id`) - lets a
  *      tenant pin a funnel directly to an AI Employee.
  *   2. Voice-channel override (`voice_channels.copilot_config.funnelId`)
- *      — different funnel per phone number.
+ *      - different funnel per phone number.
  *   3. Department-scoped funnel.
  *   4. Tenant-default funnel.
  *
@@ -31,7 +31,7 @@ import type { FunnelConfig, FunnelStage } from "../funnel-config.service";
 export interface ResolvedStage {
   funnel: FunnelConfig;
   stage: FunnelStage;
-  /** Where the active stage was sourced from — useful for diagnostics. */
+  /** Where the active stage was sourced from - useful for diagnostics. */
   source: "crm-match" | "crm-fallback-first" | "no-crm";
   /** The raw vendor stage value (when we read one). */
   vendorStage: string | null;
@@ -52,7 +52,7 @@ export async function resolveActiveStage(
     // Funnel lookup precedence (most-specific wins):
     //   1. Assigned AI agent's funnel (ai_agents.funnel_id).
     //   2. Voice-channel override (voice_channels.copilot_config.funnelId)
-    //      — lets a tenant run different funnels per phone number.
+    //      - lets a tenant run different funnels per phone number.
     //   3. Department-scoped funnel.
     //   4. Tenant-default funnel.
     let funnel: FunnelConfig | null = null;
@@ -148,7 +148,7 @@ export function resolveNextStage(
 /**
  * Read the funnel pinned to the conversation's assigned AI agent.
  * Returns TenantFunnel.id (cuid) or null. Highest precedence in the
- * resolver chain — set on the agent editor at /ai-studio/agents/[id].
+ * resolver chain - set on the agent editor at /ai-studio/agents/[id].
  */
 async function readAgentFunnelOverride(
   tenantId: string,
@@ -175,7 +175,7 @@ async function readAgentFunnelOverride(
 /**
  * Read the voice-channel's funnel override (when set on copilot_config).
  * Returns the TenantFunnel.id (cuid) or null. We resolve the channel via
- * the latest VoiceCallSession for this conversation — same chain
+ * the latest VoiceCallSession for this conversation - same chain
  * copilot-config-loader uses.
  */
 async function readChannelFunnelOverride(
@@ -206,7 +206,7 @@ async function readChannelFunnelOverride(
  * Read the vendor CRM stage value cached on the local Contact's metadata.
  * The crm-panel route writes it on every fetchCrmContext call.
  *
- * We do NOT call the vendor adapter directly here — the BEL must stay
+ * We do NOT call the vendor adapter directly here - the BEL must stay
  * cheap and we already paid the round-trip when the workspace opened.
  */
 async function readVendorStageForConversation(

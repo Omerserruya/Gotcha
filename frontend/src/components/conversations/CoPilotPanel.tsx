@@ -16,7 +16,7 @@ interface CoPilotPanelProps {
   isOpen?: boolean;
   conversation: any;
   messages: any[];
-  /** Rich CRM context envelope fetched once by ChatPanel — drives the Customer
+  /** Rich CRM context envelope fetched once by ChatPanel - drives the Customer
    *  Context section (identity, deals, tickets, open issues, sentiment trend). */
   crmContext?: CrmContextEnvelope | null;
   crmLoading?: boolean;
@@ -51,8 +51,8 @@ interface ThinkingStep {
 
 // NOTE: deriveConversationIntelligence() used to live here as a client-side
 // English-keyword regex fallback. It produced the "generic English placeholder
-// suggestions" that flashed before the real backend intelligence arrived —
-// regardless of tenant system language (Hebrew/Arabic/etc) — which the product
+// suggestions" that flashed before the real backend intelligence arrived -
+// regardless of tenant system language (Hebrew/Arabic/etc) - which the product
 // owner called "worst UX ever". Deleted. Downstream values (effectiveIntent,
 // effectiveSentiment, effectivePriority) now come from realIntelligence only.
 // When realIntelligence is null the sidebar shows a loading skeleton instead
@@ -60,13 +60,13 @@ interface ThinkingStep {
 
 /**
  * Detect the language the agent typed their question in so the AI reply
- * matches. We only look at the question's own characters — the UI locale
+ * matches. We only look at the question's own characters - the UI locale
  * is the fallback for short / ambiguous input (e.g. emoji-only or pure
  * numbers). Returns a BCP-47-ish code the backend understands.
  */
 function detectQuestionLocale(text: string): string | null {
   if (!text || text.trim().length < 2) return null;
-  // Hebrew & Arabic detect by Unicode block — most common non-English cases.
+  // Hebrew & Arabic detect by Unicode block - most common non-English cases.
   if (/[֐-׿]/.test(text)) return "he";
   if (/[؀-ۿݐ-ݿ]/.test(text)) return "ar";
   if (/[Ѐ-ӿ]/.test(text)) return "ru";
@@ -97,7 +97,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   //
   // ChatMsg.referenceQuote is the customer-quoted snippet the agent was asking
   // about (only set when the agent submitted via the "Ask Co-Pilot" handoff).
-  // It is rendered as a small gray reference block ABOVE the user bubble — it
+  // It is rendered as a small gray reference block ABOVE the user bubble - it
   // is NOT part of `content`, so the bubble itself shows only the agent's
   // question. The Context preamble is still woven into the outbound payload
   // (`msg`) so the backend AI sees the snippet.
@@ -108,7 +108,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
 
   // "Ask Co-Pilot on selection" handoff. Each new prefillQuote.version
   // switches the panel to chat mode and pins the quote as a REFERENCE banner
-  // above the composer — NOT as text in the textarea. The banner stays until
+  // above the composer - NOT as text in the textarea. The banner stays until
   // the agent dismisses it (X button), so they can fire multiple follow-up
   // questions about the same snippet. On submit, the quote is woven into the
   // outgoing message as a small "Context:" preamble so the AI sees what the
@@ -176,10 +176,10 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   const lastMessage = messages.length > 0 ? messages[messages.length - 1] : null;
   const lastIsOutbound = lastMessage?.direction === "OUTBOUND";
 
-  // realIntelligence populated asynchronously from the backend — no local
+  // realIntelligence populated asynchronously from the backend - no local
   // English-keyword fallback. Downstream effective* values are null-safe.
 
-  // Only show real AI suggestions — no demo/mock fallback
+  // Only show real AI suggestions - no demo/mock fallback
   const suggestions = aiSuggestions || [];
   const summary = aiSummary || null;
 
@@ -213,7 +213,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
 
   // Per-panel AbortController for the in-flight fetchAI round. When a new
   // customer message arrives during the 1.5s debounce window we abort the
-  // older fetch — without this, two concurrent fetchAI calls race and the
+  // older fetch - without this, two concurrent fetchAI calls race and the
   // slower one stomps the faster one's results into the panel.
   const fetchAbortRef = useRef<AbortController | null>(null);
 
@@ -231,7 +231,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
     // (services/ai/src/services/copilot-dedup.service.ts) collapses
     // concurrent calls for the same conversationId into one execution
     // AND short-circuits repeated requests sharing this id within 60s.
-    // A retried request reuses the same id (good — dedup applies). A
+    // A retried request reuses the same id (good - dedup applies). A
     // distinct user-meaningful trigger generates a fresh id.
     const requestInstanceId =
       typeof crypto !== "undefined" && (crypto as any).randomUUID
@@ -247,7 +247,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
       if (suggestionsRes?.data && suggestionsRes.data.length > 0) {
         const isStub = suggestionsRes.data.length === 1 && suggestionsRes.data[0].type === "info";
         if (isStub) {
-          // No AI employee configured — skip all other calls
+          // No AI employee configured - skip all other calls
           setAiConfigured(false);
           setAiLoading(false);
           return;
@@ -267,7 +267,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
 
       if (suggestionsRes?.copilotMode) setCopilotMode(suggestionsRes.copilotMode);
 
-      // AI is configured — now fetch intelligence + summary in parallel with real thinking steps
+      // AI is configured - now fetch intelligence + summary in parallel with real thinking steps
       setThinkingVisible(true);
       setAnalysisComplete(false);
       setVisibleStepIds(new Set(["read"]));
@@ -325,12 +325,12 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   // Debounce: hold for 1500ms after the last inbound. If another inbound
   // arrives within that window, the cleanup clears the prior timer AND
   // the next fetchAI() call aborts any still-running AbortController from
-  // the previous round — so we never end up with two concurrent fetches
+  // the previous round - so we never end up with two concurrent fetches
   // or a stale reply landing on top of a fresh one.
   useEffect(() => {
     if (messages.length > 0 && !lastIsOutbound) {
       const timer = setTimeout(() => {
-        // Abort the previous in-flight fetch BEFORE the new one starts —
+        // Abort the previous in-flight fetch BEFORE the new one starts -
         // fetchAI installs a fresh controller on entry, but doing it here
         // closes the window between "timer fires" and "fetchAI awaits".
         if (fetchAbortRef.current && !fetchAbortRef.current.signal.aborted) {
@@ -385,17 +385,17 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
     // When a reference quote is pinned, send it as a Context preamble so the
     // backend AI sees both the snippet the agent marked and the question
     // they're asking about it. The user-visible chat bubble shows ONLY the
-    // agent's question — the quote is stored on `referenceQuote` and rendered
+    // agent's question - the quote is stored on `referenceQuote` and rendered
     // as a separate gray reference block above the bubble.
     const pinnedQuote = referenceQuote;
     const msg = pinnedQuote
-      ? `Context — agent marked this customer text for reference:\n"${pinnedQuote}"\n\nAgent's question: ${agentQuestion}`
+      ? `Context - agent marked this customer text for reference:\n"${pinnedQuote}"\n\nAgent's question: ${agentQuestion}`
       : agentQuestion;
-    // Reply in whatever language the agent typed in — falls back to the UI
+    // Reply in whatever language the agent typed in - falls back to the UI
     // locale when the question is too short or ambiguous to detect.
     const replyLocale = detectQuestionLocale(agentQuestion) ?? locale;
     setChatInput("");
-    // Clear the pinned banner once the question is sent — the reference is
+    // Clear the pinned banner once the question is sent - the reference is
     // already carried on the user message (rendered as a gray label above the
     // bubble) so the input area resets for the next question. To re-attach
     // the same snippet, the agent re-selects it in the chat and clicks "Ask
@@ -423,7 +423,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
     }
   }
 
-  // Real backend intelligence only — no local keyword fallback. When
+  // Real backend intelligence only - no local keyword fallback. When
   // realIntelligence is null we leave effective* unset so the render path
   // can show a skeleton instead of fake localized-to-English data.
   const effectiveSentiment = realIntelligence?.sentiment ?? null;
@@ -455,7 +455,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   // When closed, keep the component mounted (so fetchAI effects continue to
   // populate the floating suggestion bubble in ChatPanel) but render nothing
   // visible. We intentionally do NOT use `display:none` because the panel
-  // is also a flex sibling — collapsing it via early-return preserves the
+  // is also a flex sibling - collapsing it via early-return preserves the
   // chat panel's flex layout exactly as if the panel had never been opened.
   if (!isOpen) {
     return <span data-copilot-hidden aria-hidden style={{ display: "none" }} />;
@@ -545,7 +545,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
         </div>
       </div>
 
-      {/* Tabs — hidden when no AI Employee */}
+      {/* Tabs - hidden when no AI Employee */}
       {aiConfigured !== false && <div className="flex bg-gray-50/50">
         <button
           onClick={() => setActiveTab("suggest")}
@@ -826,7 +826,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
               </div>
             </div>}
 
-            {/* Section 3: Customer Context — CRM-backed identity. Shows the
+            {/* Section 3: Customer Context - CRM-backed identity. Shows the
                 contact card, stage/owner, open issues, deals, tickets and a
                 sentiment trend strip. Falls back to conversation-only data
                 when CRM isn't connected or the customer hasn't been linked. */}
@@ -862,7 +862,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
               {chatMessages.map((msg, i) => (
                 <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
                   <div className="max-w-[85%]">
-                    {/* Reference block — only on user messages that were
+                    {/* Reference block - only on user messages that were
                         submitted with a pinned quote. Renders as small gray
                         text ABOVE the bubble with a return arrow that scrolls
                         the user back to the original snippet in the chat.
@@ -939,7 +939,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
             </div>
             {/* Chat input */}
             <div className="bg-gray-50/30 p-2.5">
-              {/* Reference banner — pinned customer quote forwarded by the
+              {/* Reference banner - pinned customer quote forwarded by the
                   ChatPanel "Ask Co-Pilot" selection action. Stays visible
                   across multiple questions so the agent can keep asking
                   about the same snippet. Dismiss with the × button. */}
@@ -1149,7 +1149,7 @@ function CustomerContextSection({
 
           {crmContext?.status === "no_crm_configured" && (
             <div className="text-[11px] text-amber-700 bg-amber-50 border border-amber-100 rounded-lg px-2.5 py-1.5">
-              {t("crmPanel.noCrm") || "No CRM connected — connect one under Settings → Integrations."}
+              {t("crmPanel.noCrm") || "No CRM connected - connect one under Settings → Integrations."}
             </div>
           )}
 
@@ -1201,7 +1201,7 @@ function CustomerContextSection({
             <div className="text-[11px] text-rose-600 bg-rose-50 border border-rose-100 rounded-lg px-2.5 py-1.5">{error}</div>
           )}
 
-          {/* Open issues — escalation-worthy, surface near the top of the section */}
+          {/* Open issues - escalation-worthy, surface near the top of the section */}
           {(crmContext?.open_issues?.length ?? 0) > 0 && (
             <div className="space-y-1.5">
               <div className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider">Open issues ({crmContext!.open_issues!.length})</div>
@@ -1282,7 +1282,7 @@ function CustomerContextSection({
             </div>
           )}
 
-          {/* Live sentiment from intent analysis — kept here so the agent sees
+          {/* Live sentiment from intent analysis - kept here so the agent sees
               both the historical trend and the right-now read in one place. */}
           {effectiveSentiment && (
             <div className="flex items-center justify-between pt-0.5">

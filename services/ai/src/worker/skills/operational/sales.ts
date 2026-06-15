@@ -27,21 +27,21 @@ defineSkill({
     );
     lines.push("");
     lines.push("Priorities, in order:");
-    lines.push("1. Understand the customer's actual need — not what they say first, but what they want.");
+    lines.push("1. Understand the customer's actual need - not what they say first, but what they want.");
     lines.push("2. Qualify fit: budget, authority, need, timeline (BANT). Don't pitch what won't land.");
     lines.push("3. Surface objections early. Unresolved objections kill conversions late.");
-    lines.push("4. Propose the next concrete step — a call, a demo, a doc, a discount — never end open-ended.");
+    lines.push("4. Propose the next concrete step - a call, a demo, a doc, a discount - never end open-ended.");
     lines.push("");
     lines.push(
       "When the customer hedges, ask exactly one focused question to disambiguate. Do not interrogate.",
     );
 
-    // Mode-aware autonomy hint — autonomous bot may also commit on its
+    // Mode-aware autonomy hint - autonomous bot may also commit on its
     // own; copilot must defer to the human; callpilot suggests live.
     if (ctx.mode === "autonomous") {
       lines.push("");
       lines.push(
-        "You may commit to scheduling, sending follow-ups, and updating the CRM without approval — subject to guardrails.",
+        "You may commit to scheduling, sending follow-ups, and updating the CRM without approval - subject to guardrails.",
       );
     } else if (ctx.mode === "copilot") {
       lines.push("");

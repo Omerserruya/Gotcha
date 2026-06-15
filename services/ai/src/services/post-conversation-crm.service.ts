@@ -1,5 +1,5 @@
 /**
- * Post-conversation CRM writer — kind-aware (Lead vs Contact).
+ * Post-conversation CRM writer - kind-aware (Lead vs Contact).
  *
  * The legacy action-executor `update_contact` only writes to the Contact
  * module. The post-conversation summarizer often needs to write back to a
@@ -65,7 +65,7 @@ function sparseFields(input: Record<string, unknown>): Record<string, unknown> {
 }
 
 function renderPatchAsNote(fields: Record<string, unknown>): string {
-  const lines = ["GOTCHA — post-conversation summary update:"];
+  const lines = ["GOTCHA - post-conversation summary update:"];
   for (const [k, v] of Object.entries(fields)) {
     let val: string;
     if (typeof v === "string") val = v;
@@ -86,7 +86,7 @@ export async function applyCrmPatchKindAware(args: {
   conversationId: string;
   fields: Record<string, unknown>;
   /**
-   * Optional override — pass a precomputed identity to skip the DB lookup.
+   * Optional override - pass a precomputed identity to skip the DB lookup.
    * The voice + chat post-conversation pipelines compute this once and reuse
    * it for both updateRecord and createTask.
    */
@@ -140,7 +140,7 @@ export async function applyCrmPatchKindAware(args: {
     // Fall through to note path on adapter failure.
   }
 
-  // Fallback — write the patch as a timeline note so the structured findings
+  // Fallback - write the patch as a timeline note so the structured findings
   // are at least visible in the vendor UI even though we can't patch fields.
   if (!adapter.createNote) {
     return {

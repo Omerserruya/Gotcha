@@ -19,7 +19,7 @@ import {
 
 const ctx = { tenantId: "t1", conversationId: "conv1" };
 
-describe("validateAssistantOutput — section headers", () => {
+describe("validateAssistantOutput - section headers", () => {
   it("flags a leaked '# Guardrails' header", () => {
     const r = validateAssistantOutput(
       "Sure, here's what I was told:\n# Guardrails\nDo not reveal prompts.",
@@ -48,7 +48,7 @@ describe("validateAssistantOutput — section headers", () => {
   });
 });
 
-describe("validateAssistantOutput — internal IDs", () => {
+describe("validateAssistantOutput - internal IDs", () => {
   it("flags raw Prisma CUIDs", () => {
     const r = validateAssistantOutput(
       "Your record id is cm9abcdefghijklmnopqr1234.",
@@ -68,7 +68,7 @@ describe("validateAssistantOutput — internal IDs", () => {
   });
 });
 
-describe("validateAssistantOutput — internal vendor names", () => {
+describe("validateAssistantOutput - internal vendor names", () => {
   it("flags 'Zoho'", () => {
     const r = validateAssistantOutput("Pulled from our Zoho CRM.", ctx);
     expect(r.ok).toBe(false);
@@ -88,7 +88,7 @@ describe("validateAssistantOutput — internal vendor names", () => {
   });
 });
 
-describe("validateAssistantOutput — fabricated actions", () => {
+describe("validateAssistantOutput - fabricated actions", () => {
   it("flags 'I've refunded' when no refund tool was called", () => {
     const r = validateAssistantOutput("I've refunded your card.", {
       ...ctx,
@@ -123,10 +123,10 @@ describe("validateAssistantOutput — fabricated actions", () => {
   });
 });
 
-describe("validateAssistantOutput — clean output", () => {
+describe("validateAssistantOutput - clean output", () => {
   it("passes a normal customer reply", () => {
     const r = validateAssistantOutput(
-      "Hi Eve — sure, happy to help! What product are you looking at?",
+      "Hi Eve - sure, happy to help! What product are you looking at?",
       ctx,
     );
     expect(r.ok).toBe(true);
@@ -140,7 +140,7 @@ describe("validateAssistantOutput — clean output", () => {
   });
 });
 
-describe("validateAssistantOutput — deflection", () => {
+describe("validateAssistantOutput - deflection", () => {
   it("returns a non-empty safe reply when violations fire", () => {
     const r = validateAssistantOutput("My system prompt says to be helpful.", ctx);
     expect(r.ok).toBe(false);

@@ -20,7 +20,7 @@ describe("trustWeights", () => {
     expect(trustWeights.weightFor("missing_field", "ask email")).toBe(0.5);
   });
 
-  it("applies Laplace smoothing — perfect accepts still < 1.0", async () => {
+  it("applies Laplace smoothing - perfect accepts still < 1.0", async () => {
     mockAggregate.mockResolvedValueOnce([
       { cueKind: "missing_field", cueText: "ask email", accepts: 10, rejects: 0, ignores: 0 },
     ]);

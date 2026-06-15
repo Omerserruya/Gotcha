@@ -1,7 +1,7 @@
 /**
  * Tenant Funnel Configuration (Task 2).
  *
- * The platform owns the primitives — ConversationStage, Intent, StrategyName,
+ * The platform owns the primitives - ConversationStage, Intent, StrategyName,
  * PlaybookId. Tenants do NOT invent new primitives. They author a *funnel
  * config* that LAYERS on top: tenant-readable stage labels, transitions
  * between them, and a small overlay of strategy / playbook overrides for
@@ -93,7 +93,7 @@ export interface StrategyOverride {
     userType?: UserType;
   };
   strategy: StrategyName;
-  /** Audit reason — surfaced in BehaviorState.provenance.overrides. */
+  /** Audit reason - surfaced in BehaviorState.provenance.overrides. */
   reason: string;
 }
 
@@ -134,7 +134,7 @@ export interface ResolveOpts {
   userType: UserType;
   strategy: StrategyName;
   /**
-   * The customer's last message — used by `markers` guards. The BEL already
+   * The customer's last message - used by `markers` guards. The BEL already
    * normalizes/lowercases it before classification; we accept the raw form
    * and lowercase here so callers don't have to think about it.
    */
@@ -148,7 +148,7 @@ export interface FunnelResolution {
   strategy: StrategyName;
   /** Playbook ids after applying overrides. Null = use platform default. */
   playbookIds: PlaybookId[] | null;
-  /** Reasons applied — appended to BEL provenance.overrides. */
+  /** Reasons applied - appended to BEL provenance.overrides. */
   appliedReasons: string[];
 }
 
@@ -160,7 +160,7 @@ export interface FunnelResolution {
  * Determinism: stages are scanned in array order; the first matching stage
  * wins. Overrides are scanned in array order; the LAST matching override
  * wins (so tenants can write "general → specific" rules and have specific
- * win — same convention as CSS).
+ * win - same convention as CSS).
  */
 export function resolveFunnel(opts: ResolveOpts): FunnelResolution {
   const lastMessage = (opts.lastMessage || "").toLowerCase();
@@ -180,7 +180,7 @@ export function resolveFunnel(opts: ResolveOpts): FunnelResolution {
   }
   if (stageId) reasons.push(`funnel.stage=${stageId}`);
 
-  // 2) Apply strategy overrides — last match wins.
+  // 2) Apply strategy overrides - last match wins.
   let strategy = opts.strategy;
   for (const ov of opts.funnel.strategyOverrides || []) {
     if (!matchesOverride(ov.match, { stageId, baseStage: opts.baseStage, intent: opts.intent, userType: opts.userType })) continue;
@@ -188,7 +188,7 @@ export function resolveFunnel(opts: ResolveOpts): FunnelResolution {
     reasons.push(`funnel.strategy_override(${ov.reason})→${ov.strategy}`);
   }
 
-  // 3) Apply playbook overrides — last match wins.
+  // 3) Apply playbook overrides - last match wins.
   let playbookIds: PlaybookId[] | null = null;
   for (const ov of opts.funnel.playbookOverrides || []) {
     if (!matchesOverride({ ...ov.match, strategy: ov.match.strategy ?? strategy }, {
@@ -242,7 +242,7 @@ function matchesOverride(
 // ─── Persistence (callsite-owned) ────────────────────────────
 
 /**
- * Loader contract — the caller (ai-bot.service / openai.provider) is
+ * Loader contract - the caller (ai-bot.service / openai.provider) is
  * responsible for fetching from DB / cache. We accept either:
  *   - a `FunnelConfig` directly (test seam), OR
  *   - `null` when a tenant has no funnel (no-op resolver).
@@ -258,7 +258,7 @@ export const SAAS_DEFAULT_FUNNEL: FunnelConfig = {
   funnelId: "saas-default",
   departmentId: null,
   // Ordered most-specific-first within a baseStage. The resolver picks the
-  // first stage whose baseStage matches AND entry guard passes — so any
+  // first stage whose baseStage matches AND entry guard passes - so any
   // marker-anchored stage MUST come before a marker-less sibling.
   stages: [
     { id: "lead", label: "New Lead", baseStage: "initial" },

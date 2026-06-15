@@ -3,8 +3,8 @@
  *
  * Runs AFTER the summarizer produces a structured summary, BEFORE the
  * action-executor consumes it. Two responsibilities:
- *   1. taskRules — append tenant-defined tasks when their `when` clause matches.
- *   2. crmRules  — merge tenant-defined CRM patches when their `when` clause
+ *   1. taskRules - append tenant-defined tasks when their `when` clause matches.
+ *   2. crmRules  - merge tenant-defined CRM patches when their `when` clause
  *      matches.
  *
  * Sparse-patch contract: rules only ADD entries.
@@ -39,14 +39,14 @@ function whenMatches(
   summary: PostConversationSummary,
   transcript: string,
 ): boolean {
-  // intent — either equals `when.intent` OR is in `when.intents[]`.
+  // intent - either equals `when.intent` OR is in `when.intents[]`.
   if (when.intent && summary.intent !== when.intent) return false;
   if (when.intents && when.intents.length > 0) {
     if (!summary.intent || !when.intents.includes(summary.intent)) return false;
   }
-  // sentiment — exact match if specified.
+  // sentiment - exact match if specified.
   if (when.sentiment && summary.sentiment !== when.sentiment) return false;
-  // keywords — case-insensitive substring on the transcript. ALL keywords
+  // keywords - case-insensitive substring on the transcript. ALL keywords
   // must appear (AND). Empty/missing array = no keyword constraint.
   if (when.keywords && when.keywords.length > 0) {
     const lower = transcript.toLowerCase();
@@ -93,7 +93,7 @@ export function applyPostConversationRules(
     applied.push({ ruleId: rule.id, kind: "task", why: "applied" });
   }
 
-  // CRM rules — never overwrite keys the AI populated.
+  // CRM rules - never overwrite keys the AI populated.
   const aiKeys = new Set(Object.keys(summary.crm_patch));
   const mentionedSet = new Set(out.mentioned_fields);
   for (const rule of config.crmRules) {

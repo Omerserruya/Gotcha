@@ -3,19 +3,19 @@
  *
  * Three caps stack:
  *
- *   1. Per-turn cap — hard ceiling on tokens spent in ONE bot turn,
+ *   1. Per-turn cap - hard ceiling on tokens spent in ONE bot turn,
  *      summed across all rounds of the tool-calling loop + any retry.
  *      Trips when the model keeps tool-calling and we keep paying.
  *
- *   2. Per-conversation cap — rolling total token spend for a single
+ *   2. Per-conversation cap - rolling total token spend for a single
  *      conversation, evaluated against `UsageLog` rows for that
  *      `metadata.conversationId`. Trips on long abuse threads.
  *
- *   3. Per-tenant daily cap — rolling 24h total token spend for the
+ *   3. Per-tenant daily cap - rolling 24h total token spend for the
  *      tenant. Last line of defence against bot/widget flooding.
  *
  * All three are configurable via env vars; sane defaults are baked in.
- * The enforcer is fail-open on DB errors — never block legitimate
+ * The enforcer is fail-open on DB errors - never block legitimate
  * traffic because of a transient lookup failure, but always abort and
  * audit when the in-memory per-turn counter trips.
  *
@@ -117,7 +117,7 @@ export function createTurnBudget(opts: CreateTurnBudgetOpts): TurnBudget {
 
 /**
  * Sum `UsageLog.tokensEquivalent` for the given scope. Resilient to schema
- * drift — falls back to `0` on any unexpected error. The audit doc is
+ * drift - falls back to `0` on any unexpected error. The audit doc is
  * the source of truth; budget enforcement is best-effort.
  */
 async function sumUsage(scope: { tenantId?: string; conversationId?: string; since?: Date }): Promise<number> {
@@ -127,7 +127,7 @@ async function sumUsage(scope: { tenantId?: string; conversationId?: string; sin
     if (scope.conversationId) where.metadata = { path: ["conversationId"], equals: scope.conversationId };
     if (scope.since) where.createdAt = { gte: scope.since };
     // The UsageLog model has `tokensEquivalent`, `promptTokens`, `completionTokens`.
-    // We sum `tokensEquivalent` — the denormalized total filled on every
+    // We sum `tokensEquivalent` - the denormalized total filled on every
     // aiService completion (there is no `tokensTotal` column).
     const agg = await (prisma as any).usageLog.aggregate({
       where,

@@ -20,7 +20,7 @@ export const webchatOutboundAdapter: OutboundAdapter = {
     _recipientId: string,
     _text: string
   ): Promise<string | null> {
-    // No external API to call — widget polls DB directly.
+    // No external API to call - widget polls DB directly.
     // Return a generated ID so the message record gets a valid externalMessageId.
     return `webchat_${Date.now()}_${crypto.randomBytes(4).toString("hex")}`;
   },

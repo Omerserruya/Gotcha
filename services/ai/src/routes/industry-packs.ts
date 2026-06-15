@@ -1,9 +1,9 @@
 /**
- * Industry Packs — catalog + apply API (Customer Intelligence V2, Phase 1).
+ * Industry Packs - catalog + apply API (Customer Intelligence V2, Phase 1).
  *
  * Routes (mounted at /api/industry-packs):
- *   GET  /         — list system packs + this tenant's cloned packs
- *   POST /apply    — body { slug } → clone the pack's scope-tagged field
+ *   GET  /         - list system packs + this tenant's cloned packs
+ *   POST /apply    - body { slug } → clone the pack's scope-tagged field
  *                    templates into per-tenant FieldDefinition rows and set
  *                    BusinessProfile.packSlug.
  *

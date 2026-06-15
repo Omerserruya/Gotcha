@@ -1,5 +1,5 @@
 /**
- * Live intelligence subscriber — Customer Intelligence V2, Phase 2.
+ * Live intelligence subscriber - Customer Intelligence V2, Phase 2.
  *
  * Subscribes to `message:new` and runs the lean live extractor on OPEN text
  * conversations, folding discovered fields into the V2 model in real time

@@ -30,7 +30,7 @@ interface FrameLike {
  *     exit-criteria field set.
  *   - Required questions checklist (heuristic: a transcript marker
  *     containing the question's key phrase counts as asked).
- *   - "Next: X" pill — the stage we're trying to advance to.
+ *   - "Next: X" pill - the stage we're trying to advance to.
  *
  * Hidden entirely when no funnel is configured (stage = null).
  */
@@ -159,7 +159,7 @@ export function StageProgressCard({ stage, conversationId, onStageChanged }: Pro
           <p className="text-[12px] text-gray-700 leading-snug mb-2.5">{stage.goal}</p>
         )}
 
-        {/* Progress bar — fills as required data fields land. */}
+        {/* Progress bar - fills as required data fields land. */}
         {totalCount > 0 && (
           <div className="mb-2.5">
             <div className="flex items-center justify-between mb-1">
@@ -207,7 +207,7 @@ export function StageProgressCard({ stage, conversationId, onStageChanged }: Pro
           </div>
         )}
 
-        {/* Exit signals — surface negative signals as warnings since they
+        {/* Exit signals - surface negative signals as warnings since they
             block the transition entirely. */}
         {stage.exit_criteria?.negativeSignals && stage.exit_criteria.negativeSignals.length > 0 && (
           <div className="mt-2 pt-2 border-t border-gray-100">
@@ -227,7 +227,7 @@ export function StageProgressCard({ stage, conversationId, onStageChanged }: Pro
           </div>
         )}
 
-        {/* Manual override — collapsed by default. Reps use this when the
+        {/* Manual override - collapsed by default. Reps use this when the
             post-call automation hasn't fired yet (still mid-call) or to
             correct a wrong auto-advance. Writes immediately to the CRM
             via the same vendor adapter path. */}

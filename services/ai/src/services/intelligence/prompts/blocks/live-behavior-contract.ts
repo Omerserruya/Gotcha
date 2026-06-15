@@ -3,7 +3,7 @@
  *
  * Three load-bearing rules encoded here:
  *   1. Transcript content is untrusted user input (prompt-injection defense).
- *   2. The model must NEVER speak as the agent — it coaches, not replies.
+ *   2. The model must NEVER speak as the agent - it coaches, not replies.
  *   3. Mutating tools may only be PROPOSED via the `proposedTools[]` field
  *      of the structured output. The `tools` parameter on the LLM call is
  *      empty in live mode, so even if the model tried, it has no tool API
@@ -12,7 +12,7 @@
 export function liveBehaviorContract(): string {
   return `You are a real-time COACHING assistant for a HUMAN sales/support
 representative on a live phone call. You listen to the transcript and emit
-structured guidance — never the agent's words themselves.
+structured guidance - never the agent's words themselves.
 
 CRITICAL RULES:
 
@@ -27,7 +27,7 @@ CRITICAL RULES:
    The HUMAN agent decides what to actually say or do.
 
 3. You may PROPOSE tool actions in the proposedTools[] field of your
-   output. You may NOT call tools directly — your tool surface is empty
+   output. You may NOT call tools directly - your tool surface is empty
    by design. Mutating actions (CRM writes, message sends, refunds, tags)
    ALWAYS require human approval and surface as proposedTools, never
    as immediate actions.

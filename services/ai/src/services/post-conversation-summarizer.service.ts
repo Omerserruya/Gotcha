@@ -4,15 +4,15 @@
  * Runs once at end-of-conversation (voice hang-up or chat closed) and produces
  * a STRUCTURED summary the post-conversation pipeline can act on:
  *   - finalSummary text (still human-readable, for the workspace card)
- *   - sparse crm_patch (ONLY fields actually discussed in this conversation —
+ *   - sparse crm_patch (ONLY fields actually discussed in this conversation -
  *     never touch CRM fields the customer/agent did not mention)
  *   - suggested_tasks   (free-form proposals, surfaced for approval)
  *   - suggested_followup (defers turn into schedule_followup proposals)
  *   - status_change      (optional lead-status transition)
  *
  * The sparse-patch contract is enforced in two layers:
- *   1. Prompt — the LLM is told to OMIT any field not explicitly discussed.
- *   2. Validation — we strip null/empty values before persisting, and we
+ *   1. Prompt - the LLM is told to OMIT any field not explicitly discussed.
+ *   2. Validation - we strip null/empty values before persisting, and we
  *      require mentioned_fields[] to cover every key in crm_patch.
  */
 
@@ -45,7 +45,7 @@ export interface StatusChange {
  * tenant's structured template (`summaryFields`). The business owner sees
  * these under the freestyle summary; humans decide whether to promote a
  * recurring `label` into the template later. Bonus items are NEVER written
- * to the CRM — they live in `CallAnalysis.meta.structured.bonus_highlights`
+ * to the CRM - they live in `CallAnalysis.meta.structured.bonus_highlights`
  * only, so the sparse-patch invariant is preserved.
  */
 export interface BonusHighlight {
@@ -53,7 +53,7 @@ export interface BonusHighlight {
   label: string;
   /** The concrete value or quote, e.g. "Salesforce" or "Thursday afternoon". */
   value: string;
-  /** Why this matters — one short sentence. */
+  /** Why this matters - one short sentence. */
   reason: string;
 }
 
@@ -115,7 +115,7 @@ export interface PostConversationSummary {
   stage_transition_suggestion: StageTransitionSuggestion | null;
   /**
    * Free-form items the LLM flagged as important but that fall outside the
-   * tenant's structured template. Surface-only — never written to CRM, so
+   * tenant's structured template. Surface-only - never written to CRM, so
    * the sparse-patch invariant for `crm_patch` is preserved.
    */
   bonus_highlights: BonusHighlight[];
@@ -137,20 +137,20 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
     "You are a post-conversation analyst. The customer interaction has ENDED.",
     "Your job is to produce a STRUCTURED JSON summary that downstream automations consume.",
     "",
-    "CRITICAL — SPARSE PATCH RULE:",
+    "CRITICAL - SPARSE PATCH RULE:",
     "- The CRM record already holds information from prior conversations.",
     "- You MUST ONLY include fields in `crm_patch` that were EXPLICITLY discussed in THIS conversation.",
-    "- If the customer did not mention their budget in this conversation, do NOT include 'budget' in crm_patch — even if it would be useful.",
+    "- If the customer did not mention their budget in this conversation, do NOT include 'budget' in crm_patch - even if it would be useful.",
     "- Missing/omitted keys = leave the existing record untouched. Never null out a field to 'clear' it.",
     "- Every key in `crm_patch` MUST also appear in `mentioned_fields`.",
     "",
-    "Output JSON shape (return EXACTLY this shape — omit a key by setting it to null or []):",
+    "Output JSON shape (return EXACTLY this shape - omit a key by setting it to null or []):",
     "{",
     '  "summary": "2-4 sentence plain-text summary of what happened",',
     '  "sentiment": "positive" | "neutral" | "negative" | "mixed" | null,',
     '  "intent": "short label e.g. pricing_inquiry, support_complaint, ready_to_buy, ..." | null,',
     '  "mentioned_fields": ["budget", "timeline", ...],',
-    '  "crm_patch": { /* sparse — only keys from mentioned_fields */ },',
+    '  "crm_patch": { /* sparse - only keys from mentioned_fields */ },',
     '  "suggested_tasks": [ { "subject": "...", "body": "...", "priority": "low|normal|high|urgent", "reason": "why" } ],',
     '  "suggested_followup": { "send_at_iso": "ISO-8601", "message": "ready-to-send text", "reason": "why" } | null,',
     '  "status_change": { "to": "qualified|disqualified|nurture|...", "reason": "why" } | null,',
@@ -172,7 +172,7 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
     "- Tasks should be specific and actionable ('Send Q3 pricing PDF to Acme'), not vague ('follow up').",
     "",
     "BONUS HIGHLIGHTS RULE (important for the freestyle/template separation):",
-    "- `crm_patch` is for STRUCTURED template slots only — never put anything outside the allowed keys there.",
+    "- `crm_patch` is for STRUCTURED template slots only - never put anything outside the allowed keys there.",
     "- Use `bonus_highlights` for anything materially important the business owner should know that DOESN'T fit the template:",
     "  • a competitor the customer mentioned",
     "  • a specific objection or concern",
@@ -181,7 +181,7 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
     "  • an opportunity (upsell signal, referral mention)",
     "- DO NOT use `bonus_highlights` for trivia ('greeted politely', 'said hello'). Keep it material.",
     "- `label` MUST be a short snake_case key (so identical observations across calls can be counted later).",
-    "- Empty list is fine — most calls won't have bonus items.",
+    "- Empty list is fine - most calls won't have bonus items.",
     "- A bonus highlight is NEVER also in crm_patch. If it belongs in the template, it goes ONLY in crm_patch.",
   ];
 
@@ -198,7 +198,7 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
       stageBlock.push(`- STAGE GOAL: ${stage!.currentStageGoal}`);
     }
     stageBlock.push(
-      `- CANDIDATE NEXT STAGES (only pick \`to\` from this set; null means "do not advance"): ${candList || "(none — keep null)"}.`,
+      `- CANDIDATE NEXT STAGES (only pick \`to\` from this set; null means "do not advance"): ${candList || "(none - keep null)"}.`,
       "- `stage_transition_suggestion` MUST be `null` UNLESS the transcript shows direct evidence that the exit criteria were satisfied.",
       "- `confidence` must reflect strength of evidence. <0.75 → the system will route this for human review.",
       "- `evidence` MUST include at least one short transcript quote OR a CRM field this conversation populated. No evidence → suggestion is rejected.",
@@ -237,11 +237,11 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
   if (hasExisting) {
     lines.push(
       "",
-      "DEDUP RULE — already-covered actions:",
+      "DEDUP RULE - already-covered actions:",
       "- Below is the list of tasks and scheduled follow-ups that were ALREADY created during this conversation (by the bot or a human agent).",
       "- Compare your proposed `suggested_tasks` and `suggested_followup` to that list by INTENT, not by literal wording.",
-      "- A task like 'Send pricing PDF' is the SAME as 'Email Q3 pricing document' — DO NOT propose it again.",
-      "- A scheduled callback at the same approximate time covers any follow-up you'd otherwise suggest — do NOT propose a duplicate.",
+      "- A task like 'Send pricing PDF' is the SAME as 'Email Q3 pricing document' - DO NOT propose it again.",
+      "- A scheduled callback at the same approximate time covers any follow-up you'd otherwise suggest - do NOT propose a duplicate.",
       "- ONLY suggest tasks/follow-ups that are NOT covered by the existing list.",
       "- If everything is already covered, return `suggested_tasks: []` and `suggested_followup: null`.",
     );
@@ -254,7 +254,7 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
   if (locale && locale !== "en") {
     lines.push(
       "",
-      `LANGUAGE — write ALL human-facing text in: ${locale}.`,
+      `LANGUAGE - write ALL human-facing text in: ${locale}.`,
       "Localized fields:",
       "  • `summary`",
       "  • `suggested_followup.message` AND `suggested_followup.reason`",
@@ -262,7 +262,7 @@ function buildSystemPrompt({ allowedFields, locale, existingActionItems, stage }
       "  • every `bonus_highlights[].value` AND `.reason`  (but KEEP `.label` in snake_case English so observations can be grouped across tenants)",
       "  • `stage_transition_suggestion.reason`",
       "  • `status_change.reason`",
-      "Keep machine-readable enums (`sentiment`, `intent`, `status_change.to`, `priority`, snake_case labels, CRM keys in `crm_patch`) in English — these are not human-facing copy.",
+      "Keep machine-readable enums (`sentiment`, `intent`, `status_change.to`, `priority`, snake_case labels, CRM keys in `crm_patch`) in English - these are not human-facing copy.",
     );
   }
   return lines.join("\n");
@@ -406,11 +406,11 @@ function validateAndCoerce(
     }
   }
 
-  // ── bonus_highlights — surface-only, never CRM-written ──
+  // ── bonus_highlights - surface-only, never CRM-written ──
   // Lossy on purpose: trim count to keep the workspace card readable, and
   // drop entries with no label/value. Keys are normalized to snake_case so
   // identical observations across calls can be counted later. We DO NOT
-  // cross-check against crm_patch keys — the prompt forbids overlap, and
+  // cross-check against crm_patch keys - the prompt forbids overlap, and
   // if the LLM duplicates anyway, the structured slot remains
   // authoritative; the bonus is just an extra free-form mirror.
   const bonusRaw = Array.isArray(obj.bonus_highlights) ? obj.bonus_highlights : [];
@@ -429,7 +429,7 @@ function validateAndCoerce(
     if (bonus_highlights.length >= 8) break;
   }
 
-  // ── stage_transition_suggestion — strict validation ──
+  // ── stage_transition_suggestion - strict validation ──
   // Reject anything outside the candidate set. Reject when evidence is
   // empty (the LLM didn't justify) or confidence is malformed. The
   // advance-worker further gates by threshold + evidence so even a
@@ -588,7 +588,7 @@ function renderExistingActionItemsBlock(items?: ExistingActionItems): string | n
   if (hasTasks) {
     lines.push("", "Tasks already created during this conversation:");
     for (const t of items.tasks) {
-      const detail = t.body ? ` — ${t.body}` : "";
+      const detail = t.body ? ` - ${t.body}` : "";
       lines.push(`- ${t.subject}${detail}`);
     }
   }

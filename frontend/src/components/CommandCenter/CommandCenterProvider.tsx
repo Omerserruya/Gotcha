@@ -103,7 +103,7 @@ export function CommandCenterProvider({ children }: { children: React.ReactNode 
       e.preventDefault();
       e.stopPropagation();
       setIsOpen((v) => !v);
-      // Don't block typing of the literal "k" — we only grabbed Cmd/Ctrl+K.
+      // Don't block typing of the literal "k" - we only grabbed Cmd/Ctrl+K.
       void isTypingTarget;
     }
     window.addEventListener("keydown", onKey, { capture: true });

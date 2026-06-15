@@ -29,7 +29,7 @@ export function isUnifiedWorkerEnabled(site: CutoverSite): boolean {
   return enabled.includes(site);
 }
 
-/** Test helper — same behaviour as the env var without env mutation. */
+/** Test helper - same behaviour as the env var without env mutation. */
 export function isUnifiedWorkerEnabledFor(
   site: CutoverSite,
   rawFlag: string | undefined,

@@ -42,7 +42,7 @@ The text below is the PRIMARY source of truth for this turn. It overrides your g
 Rules:
 1. Treat the content below as authoritative. If it answers the question, use it.
 2. Prefer the wording, numbers, and definitions found here over anything you "remember".
-3. If the answer is NOT covered here, say so plainly — do not guess, do not infer beyond the text, do not fabricate names, prices, dates, links, or policies.
+3. If the answer is NOT covered here, say so plainly - do not guess, do not infer beyond the text, do not fabricate names, prices, dates, links, or policies.
 4. Do not contradict this content. If two sources here disagree, surface the disagreement instead of picking one silently.
 5. When you use a fact from a specific source, you may reference it by its title or number; never invent sources.
 6. Information NOT present here is treated as unknown for this turn.

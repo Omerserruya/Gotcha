@@ -139,7 +139,7 @@ async function main() {
   }
   const fs = await import("fs");
   fs.writeFileSync(`/app/audit-out-${process.env.TAG || "v1"}.json`, JSON.stringify(results, null, 2));
-  console.log(`[sim] done — ${results.length} scenarios → /app/audit-out.json`);
+  console.log(`[sim] done - ${results.length} scenarios → /app/audit-out.json`);
   await prisma.$disconnect();
   process.exit(0);
 }

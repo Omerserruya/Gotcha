@@ -133,11 +133,11 @@ export function CallRightPanel({ sessionId, conversationId }: Props) {
 
   const contact = context?.contact;
   const customerLabel =
-    contact?.displayName || contact?.externalId || contact?.phone || "—";
+    contact?.displayName || contact?.externalId || contact?.phone || "-";
 
   return (
     <div className="flex-1 min-h-0 flex flex-col bg-gray-50">
-      {/* Pinned customer header — keeps name + phone in view regardless of
+      {/* Pinned customer header - keeps name + phone in view regardless of
           which tab is active. Skinny so it doesn't steal vertical space. */}
       <div className="px-4 py-2.5 bg-white border-b border-gray-100 flex items-center gap-2.5 shrink-0">
         <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-600 text-white flex items-center justify-center text-xs font-semibold shrink-0">
@@ -174,7 +174,7 @@ export function CallRightPanel({ sessionId, conversationId }: Props) {
         </div>
       </div>
 
-      {/* Tab strip — sticky so it doesn't scroll away. */}
+      {/* Tab strip - sticky so it doesn't scroll away. */}
       <div className="px-2 pt-2 pb-0 bg-gray-50 border-b border-gray-100 flex items-center gap-1 shrink-0">
         <TabButton
           active={tab === "live"}
@@ -197,7 +197,7 @@ export function CallRightPanel({ sessionId, conversationId }: Props) {
         />
       </div>
 
-      {/* Tab body — each tab scrolls independently so a long history card
+      {/* Tab body - each tab scrolls independently so a long history card
           can't push live cues off-screen. */}
       <div className="flex-1 min-h-0 overflow-y-auto">
         {tab === "live" && (
@@ -213,7 +213,7 @@ export function CallRightPanel({ sessionId, conversationId }: Props) {
         )}
         {tab === "customer" && (
           <div className="p-3 flex flex-col gap-2.5">
-            {/* AI customer brief — persistent cross-conversation behavioral
+            {/* AI customer brief - persistent cross-conversation behavioral
                 summary. Same source as the chat CRM panel's brief card so
                 the rep sees one unified view of this customer regardless of
                 channel. Lazily generated on first load if nothing is on

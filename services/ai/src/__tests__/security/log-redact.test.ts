@@ -1,12 +1,12 @@
 /**
  * Unit tests for `packages/shared/src/lib/log-redact.ts`.
  *
- * Pure function — no mocks required.
+ * Pure function - no mocks required.
  */
 import { describe, it, expect } from "vitest";
 import { redact } from "@chatcenter/shared";
 
-describe("redact — JWT", () => {
+describe("redact - JWT", () => {
   it("masks a JWT token by prefix", () => {
     const jwt =
       "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c";
@@ -26,7 +26,7 @@ describe("redact — JWT", () => {
   });
 });
 
-describe("redact — Authorization headers", () => {
+describe("redact - Authorization headers", () => {
   it("masks a Bearer token in an Authorization header literal", () => {
     const out = redact("GET /v1/x → 401 Authorization: Bearer abcdef1234567890");
     expect(out as string).toContain("Authorization: Bearer [REDACTED]");
@@ -39,7 +39,7 @@ describe("redact — Authorization headers", () => {
   });
 });
 
-describe("redact — OAuth params", () => {
+describe("redact - OAuth params", () => {
   it("masks access_token / refresh_token / client_secret in URL-ish strings", () => {
     const out = redact(
       "POST /token?access_token=abc123&refresh_token=def456&client_secret=ghi789",
@@ -50,7 +50,7 @@ describe("redact — OAuth params", () => {
   });
 });
 
-describe("redact — PII", () => {
+describe("redact - PII", () => {
   it("masks email addresses to first-char + domain", () => {
     const out = redact("user ada@example.com logged in");
     expect(out as string).not.toContain("ada@example.com");
@@ -70,7 +70,7 @@ describe("redact — PII", () => {
   });
 });
 
-describe("redact — innocuous text", () => {
+describe("redact - innocuous text", () => {
   it("passes through harmless content unchanged", () => {
     const out = redact("the build succeeded in 12s");
     expect(out).toBe("the build succeeded in 12s");
@@ -87,7 +87,7 @@ describe("redact — innocuous text", () => {
   });
 });
 
-describe("redact — object recursion", () => {
+describe("redact - object recursion", () => {
   it("masks sensitive keys at any depth", () => {
     const out = redact({
       url: "/api/x",

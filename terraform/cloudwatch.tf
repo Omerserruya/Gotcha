@@ -1,6 +1,6 @@
 # ── Daily EBS snapshots via Data Lifecycle Manager ────────────────────
 # DLM is the managed, free way to do scheduled snapshots. Targets any
-# volume tagged `Snapshot = "daily"` — the root volume in ec2.tf carries
+# volume tagged `Snapshot = "daily"` - the root volume in ec2.tf carries
 # that tag, so any extra data volumes added later are picked up
 # automatically once tagged.
 
@@ -21,7 +21,7 @@ resource "aws_dlm_lifecycle_policy" "daily" {
       create_rule {
         interval      = 24
         interval_unit = "HOURS"
-        times         = ["03:00"] # UTC — pick a low-traffic hour
+        times         = ["03:00"] # UTC - pick a low-traffic hour
       }
 
       retain_rule {
@@ -40,7 +40,7 @@ resource "aws_dlm_lifecycle_policy" "daily" {
 
 resource "aws_cloudwatch_metric_alarm" "cpu_high" {
   alarm_name          = "${local.name_prefix}-cpu-high"
-  alarm_description   = "EC2 CPU > 70% for 15min — sustained load; consider sizing up."
+  alarm_description   = "EC2 CPU > 70% for 15min - sustained load; consider sizing up."
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 3
   metric_name         = "CPUUtilization"
@@ -57,7 +57,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
 
 resource "aws_cloudwatch_metric_alarm" "status_check" {
   alarm_name          = "${local.name_prefix}-status-check-failed"
-  alarm_description   = "Instance failed status check — likely needs reboot or restore."
+  alarm_description   = "Instance failed status check - likely needs reboot or restore."
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "StatusCheckFailed"
@@ -76,7 +76,7 @@ resource "aws_cloudwatch_metric_alarm" "status_check" {
 # user_data installs + configures the agent (see user_data.sh).
 resource "aws_cloudwatch_metric_alarm" "disk_high" {
   alarm_name          = "${local.name_prefix}-disk-high"
-  alarm_description   = "Root filesystem > 80% — EBS gp3 is filling; prune Docker / extend volume."
+  alarm_description   = "Root filesystem > 80% - EBS gp3 is filling; prune Docker / extend volume."
   comparison_operator = "GreaterThanThreshold"
   evaluation_periods  = 2
   metric_name         = "disk_used_percent"

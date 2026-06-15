@@ -42,12 +42,12 @@ function recordPendingHandle(
   try {
     const raw = localStorage.getItem(PENDING_HANDLE_KEY);
     // Tolerate the legacy { [newSessionId]: missedSessionId } shape from
-    // older bundles — they'll naturally be overwritten as new entries
+    // older bundles - they'll naturally be overwritten as new entries
     // get written in the new { missedSessionId, customerNumber } form.
     const map = raw ? (JSON.parse(raw) as Record<string, string | PendingHandleEntry>) : {};
     map[newSessionId] = { missedSessionId, customerNumber } satisfies PendingHandleEntry;
     localStorage.setItem(PENDING_HANDLE_KEY, JSON.stringify(map));
-  } catch { /* quota or parse fail — degrade silently */ }
+  } catch { /* quota or parse fail - degrade silently */ }
 }
 
 function addDismissedPhone(phone: string | null | undefined) {
@@ -108,7 +108,7 @@ export function MissedCallsSection() {
   const { t } = useI18n();
   const flags = useVoiceFlags();
   const router = useRouter();
-  // Browser dialer fallback for IN_PLATFORM outbound channels — the
+  // Browser dialer fallback for IN_PLATFORM outbound channels - the
   // /missed/:id/callback endpoint only handles AGENT_FIRST; on 409 we
   // route through this instead so the agent doesn't have to navigate
   // away to the conversation page.
@@ -116,7 +116,7 @@ export function MissedCallsSection() {
 
   const [sessions, setSessions] = useState<MissedVoiceSession[]>([]);
   const [dismissed, setDismissed] = useState<Set<string>>(() => loadIdSet(DISMISS_KEY));
-  // Phone-level dismissal — populated whenever a callback answers
+  // Phone-level dismissal - populated whenever a callback answers
   // successfully (Voice page writes here too). Hides every session in
   // the inbox sharing that number, even those that arrive AFTER the
   // dismissal as long as the agent hasn't deliberately re-engaged.
@@ -126,7 +126,7 @@ export function MissedCallsSection() {
   const [busyId, setBusyId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "ok" | "err" | "info"; text: string } | null>(null);
   // IN_PLATFORM callbacks don't get the new outbound sessionId back from
-  // placeCall — it's only knowable after Twilio webhooks fire and the row
+  // placeCall - it's only knowable after Twilio webhooks fire and the row
   // is created. Stash the missed-id + conversationId here and let the
   // effect below watch `allLive` for the new outbound row; when it shows
   // up, navigate to the Voice workspace and mark the missed row handled.
@@ -143,7 +143,7 @@ export function MissedCallsSection() {
       const res = await getMissedVoiceSessions(token);
       setSessions(res.data || []);
     } catch {
-      // Best-effort — section just stays empty on failure.
+      // Best-effort - section just stays empty on failure.
     }
   }, [token]);
 
@@ -162,7 +162,7 @@ export function MissedCallsSection() {
     const onMaybeMissed = (data: unknown) => {
       const d = (data ?? {}) as { state?: string; to?: string };
       const val = String(d.state || d.to || "").toUpperCase();
-      // Refetch on every terminal transition — keeps the section in sync
+      // Refetch on every terminal transition - keeps the section in sync
       // without filtering edge cases (un-dismiss after recall, etc.).
       if (val === "MISSED" || val === "ENDED" || val === "FAILED" || val === "") {
         reload();
@@ -200,7 +200,7 @@ export function MissedCallsSection() {
   );
   // Group by customer phone so repeated missed calls from the same person
   // collapse into a single row with a count badge instead of stacking the
-  // inbox. Sessions without a customerNumber (rare — number suppressed
+  // inbox. Sessions without a customerNumber (rare - number suppressed
   // or unresolved) each get their own group keyed by id so they remain
   // visible. Within a group, the most-recent session is the "leader" and
   // its row is what the agent clicks.
@@ -245,7 +245,7 @@ export function MissedCallsSection() {
   function dismiss(id: string) {
     const target = sessions.find((s) => s.id === id);
     const groupPhone = target?.customerNumber ?? null;
-    // Optimistic local hide first — server cascade is fire-and-forget.
+    // Optimistic local hide first - server cascade is fire-and-forget.
     setDismissed((prev) => {
       const next = new Set(prev);
       if (groupPhone) {
@@ -267,7 +267,7 @@ export function MissedCallsSection() {
     }
     // Server-side cascade: stamp `handledAt` on every MISSED row for the
     // same customer phone, so other agents / other browsers / the next
-    // page reload all see it as handled too. Best-effort — local hide
+    // page reload all see it as handled too. Best-effort - local hide
     // already happened.
     if (token) {
       handleMissedVoiceSession(token, id).catch((err) => {
@@ -285,7 +285,7 @@ export function MissedCallsSection() {
       const result = await callbackMissedVoiceSession(token, s.id);
       flash("ok", t("voice.missedCalls.callbackStarted"));
       markSeen(s.id);
-      // Don't dismiss yet — the Voice page will mark it handled when the
+      // Don't dismiss yet - the Voice page will mark it handled when the
       // session actually reaches ACTIVE (customer picked up). If the
       // callback isn't answered the row stays in the inbox.
       const newSessionId = result?.data?.sessionId;
@@ -293,7 +293,7 @@ export function MissedCallsSection() {
         recordPendingHandle(newSessionId, s.id, s.customerNumber);
         router.push(`/voice/${newSessionId}`);
       } else {
-        // No id returned (degenerate AGENT_FIRST path) — fall back to the
+        // No id returned (degenerate AGENT_FIRST path) - fall back to the
         // conversation page so the agent at least sees the right thread.
         router.push(`/conversations?id=${s.conversationId}`);
       }
@@ -331,7 +331,7 @@ export function MissedCallsSection() {
             contactName: s.contact?.displayName ?? undefined,
             conversationId: newConversationId,
           });
-          // CRITICAL: mirrors /app/outbound/call/page.tsx — the AI service's
+          // CRITICAL: mirrors /app/outbound/call/page.tsx - the AI service's
           // /voice/start endpoint is what creates the Conversation row.
           // Without this, /twiml/outbound silently fails on a FK violation
           // when trying to insert the VoiceCallSession (conversationId FK
@@ -382,7 +382,7 @@ export function MissedCallsSection() {
   // from "placeCall returns" → /voice/[sessionId] open: watch `allLive`
   // for a session with matching conversationId, then navigate. The
   // VoiceSessionsProvider already subscribes to voice.session.created
-  // and upserts new rows into allLive — no extra socket listener needed.
+  // and upserts new rows into allLive - no extra socket listener needed.
   useEffect(() => {
     if (!pendingNav) return;
     const match = allLive.find((s) => s.conversationId === pendingNav.conversationId);
@@ -579,7 +579,7 @@ function MissedCallDetailDrawer(props: {
   );
 
   function formatWhen(iso: string | null): string {
-    if (!iso) return "—";
+    if (!iso) return "-";
     try {
       return new Date(iso).toLocaleString(locale, {
         hour: "2-digit", minute: "2-digit",
@@ -671,7 +671,7 @@ function MissedCallDetailDrawer(props: {
               <div className="space-y-2.5">
                 <p className="text-sm text-gray-800 leading-relaxed">{brief.brief}</p>
 
-                {/* Signals — short "remember this" phrases */}
+                {/* Signals - short "remember this" phrases */}
                 {brief.signals.length > 0 && (
                   <div>
                     <p className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-1">
@@ -732,7 +732,7 @@ function MissedCallDetailDrawer(props: {
             )}
           </section>
 
-          {/* CRM details — custom fields + last interaction */}
+          {/* CRM details - custom fields + last interaction */}
           <section>
             <h3 className="text-[10px] font-semibold uppercase tracking-widest text-gray-500 mb-2">
               {t("voice.missedCalls.sectionCrm")}
@@ -784,7 +784,7 @@ function MissedCallDetailDrawer(props: {
                     {c.aiSummary ? (
                       <p className="text-xs text-gray-700 leading-relaxed">{c.aiSummary}</p>
                     ) : (
-                      <p className="text-xs text-gray-400 italic">—</p>
+                      <p className="text-xs text-gray-400 italic">-</p>
                     )}
                   </li>
                 ))}

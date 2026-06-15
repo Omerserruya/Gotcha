@@ -10,7 +10,7 @@ import { runQA } from "./qa-runner";
  * BullMQ worker for the post-call QA queue.
  *
  * One job per conversation. The worker calls `runQA` which is idempotent
- * at the QAScore level — re-running on the same conversation produces a
+ * at the QAScore level - re-running on the same conversation produces a
  * new QAScore row with a fresh `scoredAt` (preserves audit history). Phase
  * 5 doesn't dedupe at the queue layer; if dedup is needed later, BullMQ's
  * `jobId` can be set to `qa:${conversationId}:${rubricVersion}`.
@@ -29,7 +29,7 @@ export function startPostCallQAWorker(): Worker<PostCallQAJobData> {
       const data = job.data;
       if (!data || !data.conversationId || !data.tenantId) {
         console.warn(
-          "[post-call.qa] malformed job payload — skipped",
+          "[post-call.qa] malformed job payload - skipped",
           job.id,
         );
         return;
@@ -37,7 +37,7 @@ export function startPostCallQAWorker(): Worker<PostCallQAJobData> {
       const result = await runQA(data);
       if (!result.ok) {
         // Non-actionable failures (mode mismatch, no frames) are logged but
-        // not thrown — they're not retryable. Real errors throw and BullMQ
+        // not thrown - they're not retryable. Real errors throw and BullMQ
         // applies retry/backoff.
         console.info(
           "[post-call.qa] skipped",

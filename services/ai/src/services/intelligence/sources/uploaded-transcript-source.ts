@@ -6,7 +6,7 @@ import type { TranscriptSource } from "./transcript-source";
  *
  * The caller (Phase 6 post-call worker) pre-parses external transcript text
  * into TranscriptUtterance[] and constructs this source. The analysis runner
- * consumes it identically to a live source — no special-casing per mode.
+ * consumes it identically to a live source - no special-casing per mode.
  */
 export class UploadedTranscriptSource implements TranscriptSource {
   readonly mode = "async" as const;

@@ -79,7 +79,7 @@ describe("session registry", () => {
       worker: makeWorker(),
       profile: makeProfile(),
     });
-    expect(a).toBe(b); // same object reference — frozen, not rebuilt
+    expect(a).toBe(b); // same object reference - frozen, not rebuilt
   });
 
   it("computes a stable fingerprint across two cold opens with same inputs", () => {
@@ -143,7 +143,7 @@ describe("session registry", () => {
     expect(() => assertPrefixStability(result)).toThrow(/DRIFT/);
   });
 
-  it("frozen pipeline snapshot survives — re-opening with mutated profile pipeline is ignored", () => {
+  it("frozen pipeline snapshot survives - re-opening with mutated profile pipeline is ignored", () => {
     const profile1 = makeProfile({
       sessionId: "sess-pip",
       pipeline: { currentStageId: "discovery", currentStageLabel: "Discovery" },

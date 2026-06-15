@@ -7,7 +7,7 @@ import { z } from "zod";
  * LivePromptAssembler so every voice channel can carry its own goals,
  * required questions, data-collection fields, persona, and output language.
  *
- * Empty `{}` means "use platform defaults" — every field is optional so we
+ * Empty `{}` means "use platform defaults" - every field is optional so we
  * can introduce new dimensions without migrating existing rows.
  */
 export const CopilotQuestionSchema = z.object({
@@ -41,7 +41,7 @@ export const CopilotConfigSchema = z.object({
   dataFields: z.array(CopilotDataFieldSchema).default([]),
   /**
    * Per-channel funnel override. When set, calls answered on this voice
-   * channel use this specific TenantFunnel for stage resolution — taking
+   * channel use this specific TenantFunnel for stage resolution - taking
    * precedence over the department-scoped funnel lookup. Lets a tenant
    * run different funnels per phone number (e.g. inbound sales vs.
    * inbound support) without splitting departments. Stores the
@@ -58,14 +58,14 @@ export const CopilotConfigSchema = z.object({
    * The unified worker's `workerConfigFromAgent()` shim reads the
    * referenced AIAgent so the SAME employee that runs the tenant's
    * chat / copilot turns also drives call-pilot. The call-pilot
-   * skill layer is added at runtime via `mode='callpilot'` — no
+   * skill layer is added at runtime via `mode='callpilot'` - no
    * separate config blob.
    */
   aiAgentId: z.string().optional(),
 });
 export type CopilotConfig = z.infer<typeof CopilotConfigSchema>;
 
-/** Empty config — used when a channel has no override. */
+/** Empty config - used when a channel has no override. */
 export const EMPTY_COPILOT_CONFIG: CopilotConfig = {
   questions: [],
   dataFields: [],

@@ -7,7 +7,7 @@ INSERT INTO "integration_catalog"
   ("id", "slug", "name", "description", "category", "auth_type", "auth_schema", "is_published", "sort_order", "created_at", "updated_at")
 VALUES
   ('cat_fireberry', 'fireberry', 'Fireberry',
-   'Israeli CRM (formerly Powerlink) — accounts, contacts and leads as your source of truth.',
+   'Israeli CRM (formerly Powerlink) - accounts, contacts and leads as your source of truth.',
    'CRM', 'API_KEY',
    '{"required":["tokenid"],"fields":[{"key":"tokenid","label":"API Token","type":"password","required":true,"helpText":"Fireberry → Settings → Integration → API Forms → My Token."}]}',
    true, 6, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP)

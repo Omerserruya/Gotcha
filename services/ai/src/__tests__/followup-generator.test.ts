@@ -18,7 +18,7 @@ vi.mock("@chatcenter/shared", () => ({
 
 vi.mock("../services/ai.service", () => ({
   generateResponse: vi.fn().mockResolvedValue({
-    content: JSON.stringify({ body: "Just checking in — still need a hand?", reason: "stale 24h" }),
+    content: JSON.stringify({ body: "Just checking in - still need a hand?", reason: "stale 24h" }),
     usage: { input_tokens: 5, output_tokens: 12, total_tokens: 17 },
   }),
 }));

@@ -371,7 +371,7 @@ function ChannelsPageContent() {
         <p className="text-sm text-gray-500 mt-1">{t("channels.subtitle")}</p>
       </div>
 
-      {/* Onboarding nudge — only when connect_channel mission is active */}
+      {/* Onboarding nudge - only when connect_channel mission is active */}
       <ChannelsOnboardingBanner />
 
       {/* Toast message */}
@@ -386,14 +386,14 @@ function ChannelsPageContent() {
         </div>
       )}
 
-      {/* Post-connect routing nudge — sends the user into the main workflow with
+      {/* Post-connect routing nudge - sends the user into the main workflow with
           the new channel entry focused + highlighted, ready to wire to an AI
           employee / team / subflow. */}
       {routingCta && (
         <div className="flex items-center gap-3 bg-violet-50 border border-violet-200 rounded-xl px-4 py-3">
           <span className="w-7 h-7 rounded-lg bg-violet-100 text-violet-600 flex items-center justify-center shrink-0">✓</span>
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-violet-900">{t("channels.routingCtaTitle") || "Channel connected — set up what happens to its messages"}</p>
+            <p className="text-sm font-medium text-violet-900">{t("channels.routingCtaTitle") || "Channel connected - set up what happens to its messages"}</p>
             <p className="text-xs text-violet-500">{t("channels.routingCtaSub") || "Route it to an AI employee, a team, or a subflow."}</p>
           </div>
           <button

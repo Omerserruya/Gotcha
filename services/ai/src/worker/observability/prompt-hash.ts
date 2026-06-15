@@ -9,10 +9,10 @@
  * This module:
  *   1. Hashes the cacheable prefix (SYSTEM_CORE + SESSION_PROFILE)
  *   2. Provides an in-memory map of "last seen hash per sessionId"
- *   3. Asserts the hash hasn't drifted on each call — dev throws,
+ *   3. Asserts the hash hasn't drifted on each call - dev throws,
  *      prod logs a structured warning so we can alert on it
  *
- * The map is process-local. That's fine — if the same conversation gets
+ * The map is process-local. That's fine - if the same conversation gets
  * served by a different process, both processes will compute the same
  * hash on first call and OpenAI's cache will still hit (the cache lives
  * server-side at OpenAI, not in our process).
@@ -38,7 +38,7 @@ export function fingerprintPrefix(
   h.update("\n----\n");
   h.update(sessionProfile);
   return {
-    hash: h.digest("hex").slice(0, 32), // 128 bits — plenty for collision
+    hash: h.digest("hex").slice(0, 32), // 128 bits - plenty for collision
     systemCoreBytes: Buffer.byteLength(systemCore, "utf8"),
     sessionProfileBytes: Buffer.byteLength(sessionProfile, "utf8"),
   };
@@ -52,7 +52,7 @@ const MAX_TRACKED_SESSIONS = 10_000; // prevent unbounded growth
 export interface HashDriftResult {
   sessionId: string;
   hash: string;
-  /** First time we've seen this session — no prior hash to compare. */
+  /** First time we've seen this session - no prior hash to compare. */
   firstSeen: boolean;
   /** True iff the hash differs from a previously-recorded one. */
   drifted: boolean;
@@ -69,7 +69,7 @@ export interface HashDriftResult {
  *   - Subsequent call with different hash → drifted=true
  *
  * Callers decide what to do on drift (throw in dev, log+alert in prod).
- * This function never throws — it's pure observability.
+ * This function never throws - it's pure observability.
  */
 export function recordPrefixFingerprint(
   sessionId: string,
@@ -106,7 +106,7 @@ export function recordPrefixFingerprint(
 /**
  * Assert no drift. Throws in non-production environments so unit /
  * integration tests catch the bug at the source. In production, logs a
- * structured warning and returns — never blocks the live AI call.
+ * structured warning and returns - never blocks the live AI call.
  */
 export function assertPrefixStability(result: HashDriftResult): void {
   if (!result.drifted) return;

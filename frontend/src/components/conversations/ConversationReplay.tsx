@@ -48,7 +48,7 @@ function detectSentiment(text: string): { label: string; color: string } {
 function detectTools(text: string): { name: string; result: string; success: boolean }[] {
   const t = text.toLowerCase();
   const tools: { name: string; result: string; success: boolean }[] = [];
-  if (t.includes("order") || t.includes("#")) tools.push({ name: "Order Lookup", result: "Order found — delivered", success: true });
+  if (t.includes("order") || t.includes("#")) tools.push({ name: "Order Lookup", result: "Order found - delivered", success: true });
   if (t.includes("refund") || t.includes("return")) tools.push({ name: "Knowledge Base Search", result: "Found: Return Policy", success: true });
   if (t.includes("account") || t.includes("name")) tools.push({ name: "Customer Lookup", result: "Customer profile loaded", success: true });
   if (t.includes("price") || t.includes("plan")) tools.push({ name: "Knowledge Base Search", result: "Found: Pricing Plans", success: true });
@@ -355,7 +355,7 @@ export function ConversationReplay({ conversation, messages, onClose }: Conversa
             </svg>
             <span className="text-[10px] text-gray-600">
               {avgResponse > 0 && avgResponse < 120000
-                ? "Fast response time — within SLA target"
+                ? "Fast response time - within SLA target"
                 : "Response time could be improved"
               }
             </span>
@@ -374,7 +374,7 @@ export function ConversationReplay({ conversation, messages, onClose }: Conversa
                 <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
               </svg>
               <span className="text-[10px] text-gray-600">
-                Longer-than-average conversation ({messages.length} messages) — consider automating common steps
+                Longer-than-average conversation ({messages.length} messages) - consider automating common steps
               </span>
             </div>
           )}

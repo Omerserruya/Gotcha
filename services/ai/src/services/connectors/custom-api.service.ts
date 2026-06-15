@@ -1,8 +1,8 @@
 /**
  * Custom API tool runtime.
  *
- *   - listCustomApiTools(tenantId)  — for the bot's tool surface
- *   - executeCustomApiTool({...})   — called by the dispatcher when the
+ *   - listCustomApiTools(tenantId)  - for the bot's tool surface
+ *   - executeCustomApiTool({...})   - called by the dispatcher when the
  *     LLM picks a tool whose name is `custom.<slug>`
  *
  * Security guardrails:
@@ -86,7 +86,7 @@ export async function executeCustomApiTool(opts: {
 
   const allowedHosts: string[] = Array.isArray(tool.allowedHosts) ? tool.allowedHosts : [];
   if (allowedHosts.length === 0) {
-    return { ok: false, reason: "domain_whitelist_empty — set allowedHosts before enabling this tool" };
+    return { ok: false, reason: "domain_whitelist_empty - set allowedHosts before enabling this tool" };
   }
   if (!allowedHosts.some((h) => h.toLowerCase() === url.hostname.toLowerCase())) {
     return { ok: false, reason: `domain_not_allowed:${url.hostname}` };

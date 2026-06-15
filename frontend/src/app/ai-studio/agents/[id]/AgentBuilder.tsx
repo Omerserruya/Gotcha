@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * AgentBuilder — the dynamic, conversational AI-Employee creation surface.
+ * AgentBuilder - the dynamic, conversational AI-Employee creation surface.
  *
  * Left: a chat with the builder agent (speaks the platform language). Right:
  * a live draft preview that fills in as the agent captures decisions, PLUS a
@@ -42,7 +42,7 @@ interface ChatMsg { role: "user" | "assistant"; content: string }
 
 const FUNNEL_ROLES = new Set(["sales", "sdr", "recruiting"]);
 
-// Transient "agent is doing X" labels — [en, he].
+// Transient "agent is doing X" labels - [en, he].
 const TOOL_LABELS: Record<string, [string, string]> = {
   set_company_overview: ["Capturing company overview", "מתעד את סקירת החברה"],
   set_identity: ["Naming the employee", "נותן שם לעובד"],
@@ -161,7 +161,7 @@ export default function AgentBuilder({
   }, [agentId, token]);
 
   // Persist the optional refinements (name / flow / guardrails) then advance to
-  // the Tools step. Everything here is optional — Skip just advances without
+  // the Tools step. Everything here is optional - Skip just advances without
   // saving. `onDone` runs after a successful save so the step can move on.
   const saveRefinements = useCallback(async (
     refine: { name?: string; conversationFlow?: Array<{ action: string; details?: string }>; customGuardrails?: string[] },
@@ -181,7 +181,7 @@ export default function AgentBuilder({
     }
   }, [agentId, token, L]);
 
-  // Conversational config is "done enough" to move to the KB/Tools steps —
+  // Conversational config is "done enough" to move to the KB/Tools steps -
   // knowledge is NOT part of this (it's collected in the KB step).
   const configComplete = !!draft
     && !!draft.name.trim() && draft.name !== "Untitled AI Employee"
@@ -352,7 +352,7 @@ export default function AgentBuilder({
                   onClick={goToKbStep}
                   className="bg-violet-50 border border-violet-200 rounded-2xl rounded-tl-sm px-4 py-3 text-sm font-medium text-violet-700 hover:bg-violet-100 transition text-left"
                 >
-                  {L("Looks good — let's add Knowledge & Tools →", "נראה טוב — נוסיף ידע וכלים ←")}
+                  {L("Looks good - let's add Knowledge & Tools →", "נראה טוב - נוסיף ידע וכלים ←")}
                 </button>
               </div>
             )}
@@ -398,7 +398,7 @@ export default function AgentBuilder({
             )}
           </div>
 
-          {/* Input — only during the conversational step. Once we move to the
+          {/* Input - only during the conversational step. Once we move to the
               KB/Tools steps the actions live inside the step cards. */}
           {wizardStep === "chat" && (
             <div className="shrink-0 border-t border-gray-100 p-3 bg-white">
@@ -558,7 +558,7 @@ function DraftPreview({ draft, missing, L }: { draft: BuilderDraftSnapshot; miss
       <Row label={L("Knowledge", "ידע")} done={draft.knowledge.length > 0} required={draft.knowledge.length === 0}>
         {draft.knowledge.length
           ? <div className="flex flex-wrap gap-1">{draft.knowledge.map((k) => <Chip key={k.id}>{k.name}</Chip>)}</div>
-          : <Dim>{L("required — attach at least one", "חובה — צרפו לפחות אחד")}</Dim>}
+          : <Dim>{L("required - attach at least one", "חובה - צרפו לפחות אחד")}</Dim>}
       </Row>
 
       {missing.length > 0 && (
@@ -594,7 +594,7 @@ function StepKnowledge({ kbs, attached, loading, busyId, onToggle, onCreate, onN
         </div>
         <button onClick={onCreate} className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Create / upload", "+ צור / העלה")}</button>
       </div>
-      <p className="text-xs text-gray-500">{L("Attach at least one knowledge base — the AI answers from it. Required.", "צרפו לפחות מאגר ידע אחד — ה-AI עונה ממנו. חובה.")}</p>
+      <p className="text-xs text-gray-500">{L("Attach at least one knowledge base - the AI answers from it. Required.", "צרפו לפחות מאגר ידע אחד - ה-AI עונה ממנו. חובה.")}</p>
       {loading ? (
         <div className="h-8 rounded-lg bg-gray-100 animate-pulse" />
       ) : kbs.length === 0 ? (
@@ -618,7 +618,7 @@ function StepKnowledge({ kbs, attached, loading, busyId, onToggle, onCreate, onN
   );
 }
 
-// Step 2 — optional refinements: name, conversation flow, custom guardrails.
+// Step 2 - optional refinements: name, conversation flow, custom guardrails.
 // Everything here is skippable; the builder may have pre-filled some of it over
 // chat, so we seed from the live draft. Skip advances without saving.
 function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
@@ -660,7 +660,7 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
       <div>
         <div className="text-[11px] uppercase tracking-wide text-violet-500">{L("Step 2 of 3", "שלב 2 מתוך 3")}</div>
         <h4 className="text-sm font-semibold text-gray-900">{L("Refine (optional)", "שיוף (רשות)")}</h4>
-        <p className="text-xs text-gray-500 mt-0.5">{L("Fine-tune the name, a step-by-step flow, and hard guardrails — or skip and do it later.", "כווננו את השם, תסריט שלב-אחר-שלב וכללים נוקשים — או דלגו ועשו זאת בהמשך.")}</p>
+        <p className="text-xs text-gray-500 mt-0.5">{L("Fine-tune the name, a step-by-step flow, and hard guardrails - or skip and do it later.", "כווננו את השם, תסריט שלב-אחר-שלב וכללים נוקשים - או דלגו ועשו זאת בהמשך.")}</p>
       </div>
 
       {/* Name */}
@@ -669,7 +669,7 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
         <input
           value={name}
           onChange={(e) => setName(e.target.value)}
-          placeholder={L("e.g. Maya — Support", "למשל מאיה — תמיכה")}
+          placeholder={L("e.g. Maya - Support", "למשל מאיה - תמיכה")}
           className={inputCls}
         />
       </div>
@@ -681,7 +681,7 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
           <button type="button" onClick={addFlow} className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Add step", "+ הוסף שלב")}</button>
         </div>
         {flow.length === 0 ? (
-          <p className="text-xs text-gray-400">{L("No scripted flow — the employee improvises from its goal.", "אין תסריט — העובד מאלתר לפי המטרה.")}</p>
+          <p className="text-xs text-gray-400">{L("No scripted flow - the employee improvises from its goal.", "אין תסריט - העובד מאלתר לפי המטרה.")}</p>
         ) : (
           <div className="space-y-2">
             {flow.map((s, i) => (
@@ -787,7 +787,7 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
         </div>
         <a href="/integrations" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Connect", "+ חבר")}</a>
       </div>
-      <p className="text-xs text-gray-500">{L("Grant the actions this employee may take. Optional — add more later.", "הענקת הפעולות שהעובד יכול לבצע. רשות — אפשר להוסיף בהמשך.")}</p>
+      <p className="text-xs text-gray-500">{L("Grant the actions this employee may take. Optional - add more later.", "הענקת הפעולות שהעובד יכול לבצע. רשות - אפשר להוסיף בהמשך.")}</p>
       {loading ? (
         <div className="h-8 rounded-lg bg-gray-100 animate-pulse" />
       ) : tools.length === 0 ? (
@@ -807,7 +807,7 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
             const attachedCount = items.filter((t) => attached.has(t.tenantToolId)).length;
             return (
               <div key={integration} className="space-y-1.5">
-                {/* Category header — integration icon + name + selected count */}
+                {/* Category header - integration icon + name + selected count */}
                 <div className="flex items-center gap-2 px-0.5">
                   <IntegrationIcon name={integration} size={18} />
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 truncate">{integration}</span>
@@ -838,7 +838,7 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
         <button onClick={onBack} disabled={finishing} className="text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50">← {L("Back", "חזרה")}</button>
         <button onClick={onFinish} disabled={finishing}
           className="px-4 py-2 rounded-xl text-sm font-medium bg-violet-600 hover:bg-violet-700 text-white transition disabled:opacity-50">
-          {finishing ? L("Generating…", "מייצר…") : L("Finish — generate readiness", "סיום — בדיקת מוכנות")} →
+          {finishing ? L("Generating…", "מייצר…") : L("Finish - generate readiness", "סיום - בדיקת מוכנות")} →
         </button>
       </div>
     </div>
@@ -1052,7 +1052,7 @@ function KnowledgeModal({ token, agentId, onClose, onAttached, L }: {
           ) : (
             <div className="space-y-4">
               <div className="rounded-lg bg-emerald-50 border border-emerald-200 px-3 py-2 text-sm text-emerald-700">
-                {L("Knowledge base created and attached. Add content below — or close and continue.", "מאגר הידע נוצר וצורף. הוסיפו תוכן למטה — או סגרו והמשיכו.")}
+                {L("Knowledge base created and attached. Add content below - or close and continue.", "מאגר הידע נוצר וצורף. הוסיפו תוכן למטה - או סגרו והמשיכו.")}
               </div>
 
               <div className="flex gap-2">

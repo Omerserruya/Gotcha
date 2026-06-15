@@ -61,7 +61,7 @@ export function __clearRegistryForTests(): void {
  *  - Fragments joined with a stable separator
  *  - Missing skill ids are reported via `missing` (NOT silently dropped)
  *
- * The output is byte-stable for a given `(ctx, skillIds)` — this is the
+ * The output is byte-stable for a given `(ctx, skillIds)` - this is the
  * load-bearing property for OpenAI prefix caching.
  */
 export function composeSkills(

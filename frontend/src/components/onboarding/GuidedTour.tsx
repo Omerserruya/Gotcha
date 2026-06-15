@@ -1,6 +1,6 @@
 "use client";
 
-// GuidedTour — first-time end-to-end walkthrough for new tenants.
+// GuidedTour - first-time end-to-end walkthrough for new tenants.
 //
 // Behavior:
 //   • Triggers when localStorage["onboarding.launchTour"] === "1" OR the
@@ -45,7 +45,7 @@ const STEPS: TourStep[] = [
     title: ["Welcome aboard.", "ברוכים הבאים"],
     body: [
       "Let's set up your first AI Employee end-to-end. It takes about a minute.",
-      "ניצור יחד את עובד ה-AI הראשון שלכם — לוקח דקה.",
+      "ניצור יחד את עובד ה-AI הראשון שלכם - לוקח דקה.",
     ],
     cta: ["Start the tour", "התחל את הסיור"],
   },
@@ -95,8 +95,8 @@ const STEPS: TourStep[] = [
     selector: '[data-tour="nav-conversations"]',
     title: ["Send your first reply", "שלחו את התגובה הראשונה"],
     body: [
-      "Open Conversations to send a real test reply from your new AI Employee — that completes onboarding.",
-      "פתחו 'שיחות' ושלחו תגובת בדיקה אמיתית מהעובד החדש — זה משלים את ההצטרפות.",
+      "Open Conversations to send a real test reply from your new AI Employee - that completes onboarding.",
+      "פתחו 'שיחות' ושלחו תגובת בדיקה אמיתית מהעובד החדש - זה משלים את ההצטרפות.",
     ],
     advanceOnClick: true,
     placement: "right",
@@ -197,7 +197,7 @@ export function GuidedTour() {
     };
   }, [active, stepIdx, pathname, measure]);
 
-  // Retry locating the target for up to ~4s — covers transitions
+  // Retry locating the target for up to ~4s - covers transitions
   // where the target isn't mounted yet (e.g. navigated route).
   useEffect(() => {
     if (!active || !step?.selector) return;
@@ -351,7 +351,7 @@ export function GuidedTour() {
         <div className="absolute inset-0 bg-black/55 backdrop-blur-[3px] pointer-events-auto" />
       )}
 
-      {/* Popup — anchored next to the spotlight when there is one, otherwise
+      {/* Popup - anchored next to the spotlight when there is one, otherwise
           pinned to the bottom-right so welcome/done screens don't block the
           page. Width is capped tight so the popup doesn't crowd panels. */}
       <div

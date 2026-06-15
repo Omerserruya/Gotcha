@@ -42,7 +42,7 @@ router.post("/generate-configs", authenticate, resolveTenant, requireRole("ADMIN
           name: a.name,
           role: a.role,
           status: a.status,
-          // descriptionPreview removed — description column dropped per spec.
+          // descriptionPreview removed - description column dropped per spec.
           hasIdentity: !!a.identity,
           hasGoals: !!a.goals,
           hasTone: !!a.toneConfig,
@@ -140,7 +140,7 @@ router.post("/intent", (req: Request, res: Response, next) => {
               .filter((v) => intentList.includes(v));
           }
         } catch {
-          // ignore parse errors — fallthrough to keyword heuristic below
+          // ignore parse errors - fallthrough to keyword heuristic below
         }
       }
       if (matches.length === 0 && raw && !raw.startsWith("[")) {
@@ -151,7 +151,7 @@ router.post("/intent", (req: Request, res: Response, next) => {
       }
       console.log(`[intent] batch message="${String(message).substring(0, 50)}" intents=${JSON.stringify(intentList)} matches=${JSON.stringify(matches)}`);
     } catch (err: any) {
-      // AI unavailable — keyword fallback per intent.
+      // AI unavailable - keyword fallback per intent.
       const msgLower = String(message).toLowerCase();
       matches = intentList.filter((i) => msgLower.includes(i.toLowerCase()));
       console.log(`[intent] AI unavailable (${err.message}); keyword fallback matches=${JSON.stringify(matches)}`);
@@ -225,7 +225,7 @@ router.post("/compose", async (req: Request, res: Response) => {
     const sys: string[] = [
       "You are a senior customer-engagement copywriter inside ChatCenter.",
       "Draft the text of a single outbound message from the operator's instruction.",
-      "Output ONLY the message body — no JSON, no surrounding quotes, no prefaces like 'Here is…', no sign-off disclaimers.",
+      "Output ONLY the message body - no JSON, no surrounding quotes, no prefaces like 'Here is…', no sign-off disclaimers.",
       "Keep it natural, clear, and on-brand. Do not invent facts, prices, dates, links, names, or order numbers that were not provided.",
     ];
     if (channel) sys.push(`The message will be sent via ${channel}. Match the medium's conventions (short, no markdown on WhatsApp/SMS).`);
@@ -264,7 +264,7 @@ router.post("/compose", async (req: Request, res: Response) => {
     }
 
     if (currentDraft && typeof currentDraft === "string" && currentDraft.trim()) {
-      blocks.push(`## Current draft (refine — keep what works, rewrite what's off)\n${currentDraft.trim()}`);
+      blocks.push(`## Current draft (refine - keep what works, rewrite what's off)\n${currentDraft.trim()}`);
     }
 
     blocks.push(`## Operator instruction\n${instruction.trim()}`);
@@ -296,7 +296,7 @@ router.post("/compose", async (req: Request, res: Response) => {
 });
 
 router.get("/:conversationId/suggestions", async (req: Request, res: Response) => {
-  // Request-instance ID — accepted from the client to dedup retries and
+  // Request-instance ID - accepted from the client to dedup retries and
   // double-fires. Falls back to a server-generated id so legacy clients
   // (no header / no query param) still get concurrency dedup, just not
   // idempotency dedup.
@@ -322,7 +322,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
 
         const copilotConfig = await aiService.getEffectiveCopilotConfig(tenantId, (conversation as any).departmentId);
 
-        // No AI Employee configured — return stub so frontend shows "not configured"
+        // No AI Employee configured - return stub so frontend shows "not configured"
         if (!copilotConfig) {
           return {
             status: 200,
@@ -331,7 +331,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
         }
 
         // Resolve department + assigned-agent names for the copilot's
-        // "Customer & Conversation Info" block. Best-effort — copilot still
+        // "Customer & Conversation Info" block. Best-effort - copilot still
         // works without these.
         let departmentName: string | undefined;
         let assignedAgentName: string | undefined;
@@ -356,7 +356,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
           console.warn("[suggestions] meta lookup failed:", err.message);
         }
 
-        // Suggested replies should track the CUSTOMER's language —
+        // Suggested replies should track the CUSTOMER's language -
         // resolveConversationLocale returns Conversation.detectedLocale if
         // present, else falls back to the system effective locale. An
         // explicit `?locale=` query string overrides for ad-hoc preview.
@@ -394,7 +394,7 @@ router.get("/:conversationId/suggestions", async (req: Request, res: Response) =
       },
     });
 
-    // Structured log line — required by Fix #5 (observability). One
+    // Structured log line - required by Fix #5 (observability). One
     // line per request so log-grepping by conversationId works.
     console.log(JSON.stringify({
       tag: "copilot.suggestions",
@@ -444,7 +444,7 @@ router.get("/:conversationId/summary", async (req: Request, res: Response) => {
       return;
     }
 
-    // The AI summary is agent-facing — should track the SYSTEM language,
+    // The AI summary is agent-facing - should track the SYSTEM language,
     // not the customer's. Per-agent override wins; otherwise tenant
     // default; otherwise "en". Explicit query-string override still
     // honored for ad-hoc preview.
@@ -624,7 +624,7 @@ router.post("/:conversationId/tools/execute", async (req: Request, res: Response
 
 /**
  * Bridge endpoint for adapter-framework providers (HubSpot, Salesforce,
- * Monday, etc.) — they aren't HTTP-catalog tools, so the shared CRM client
+ * Monday, etc.) - they aren't HTTP-catalog tools, so the shared CRM client
  * in `packages/shared/lib/crm.ts` reaches them through this endpoint.
  *
  * Body: { toolFunctionName: "hubspot.search_with_criteria", args: {...} }
@@ -690,7 +690,7 @@ router.post("/:conversationId/score", async (req: Request, res: Response) => {
   }
 });
 
-// F8.4 — business policy admin API (UI-neutral)
+// F8.4 - business policy admin API (UI-neutral)
 router.get(
   "/policy",
   authenticate,
@@ -718,7 +718,7 @@ router.put(
   },
 );
 
-// F7.2/F7.5 — compact customer state object (decisions, summaries, tags)
+// F7.2/F7.5 - compact customer state object (decisions, summaries, tags)
 router.get(
   "/customer-state/:contactId",
   authenticate,
@@ -736,7 +736,7 @@ router.get(
   },
 );
 
-// F6.3 — generate a contextual follow-up for a stale conversation
+// F6.3 - generate a contextual follow-up for a stale conversation
 router.post(
   "/:conversationId/followup",
   authenticate,

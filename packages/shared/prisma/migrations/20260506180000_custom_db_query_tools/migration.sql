@@ -1,4 +1,4 @@
--- Custom DB query tools — tenant-defined SQL/Mongo queries the AI invokes
+-- Custom DB query tools - tenant-defined SQL/Mongo queries the AI invokes
 -- as `custom_db.<slug>`. Safer than generic CRUD because the admin defines
 -- the exact shape; AI only fills in named params.
 

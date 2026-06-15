@@ -125,7 +125,7 @@ describe("LiveMonitoringPanel", () => {
 
     unmount();
 
-    // Advance timer — interval should NOT fire after unmount
+    // Advance timer - interval should NOT fire after unmount
     await act(async () => {
       vi.advanceTimersByTime(10000);
       await Promise.resolve();

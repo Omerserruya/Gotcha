@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * SchedulePicker — the "send now / send later" control for the broadcast wizard.
+ * SchedulePicker - the "send now / send later" control for the broadcast wizard.
  *
  * UX brief:
  *   - Default to "Send now" because the most common newsletter action is
@@ -34,7 +34,7 @@ function toLocalInput(d: Date): string {
 
 function relativeFromNow(target: Date): string {
   const ms = target.getTime() - Date.now();
-  if (ms <= 0) return "—";
+  if (ms <= 0) return "-";
   const totalMin = Math.round(ms / 60000);
   if (totalMin < 60) return `${totalMin}m`;
   const h = Math.floor(totalMin / 60);
@@ -66,7 +66,7 @@ export function SchedulePicker({ sendNow, scheduledAt, onChangeSendNow, onChange
       d.setDate(d.getDate() + 1);
       d.setHours(9, 0, 0, 0);
     } else {
-      // next Monday — if today is Monday, jump 7 days
+      // next Monday - if today is Monday, jump 7 days
       const day = d.getDay(); // 0=Sun, 1=Mon
       const offset = day === 1 ? 7 : (1 - day + 7) % 7 || 7;
       d.setDate(d.getDate() + offset);

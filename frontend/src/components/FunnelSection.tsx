@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Funnel editor — embedded inside the AI employee configuration page.
+ * Funnel editor - embedded inside the AI employee configuration page.
  *
  * Funnels are scoped per department (or tenant-default when departmentId is
  * null). A Department picker at the top switches between scopes; the list
@@ -55,7 +55,7 @@ interface Department {
   name: string;
 }
 
-/** No props — the department scope is picked inside this component. */
+/** No props - the department scope is picked inside this component. */
 export interface FunnelSectionProps {}
 
 export default function FunnelSection(_props: FunnelSectionProps) {
@@ -72,7 +72,7 @@ export default function FunnelSection(_props: FunnelSectionProps) {
     if (!token) return;
     getDepartments(token)
       .then((r) => setDepartments(r.data || []))
-      .catch(() => { /* non-fatal — picker will only show "Tenant default" */ });
+      .catch(() => { /* non-fatal - picker will only show "Tenant default" */ });
   }, [token]);
 
   async function refresh() {
@@ -284,7 +284,7 @@ function Editor(props: {
           <h3 className="text-lg font-medium">
             {props.initial
               ? `Edit funnel: ${props.initial.funnelId}`
-              : `New funnel — ${props.departmentName}`}
+              : `New funnel - ${props.departmentName}`}
           </h3>
           {!props.initial && (
             <button className="text-xs text-blue-600" onClick={loadTemplate}>Load SaaS template</button>
@@ -305,7 +305,7 @@ function Editor(props: {
         )}
 
         <fieldset className="border rounded p-3 space-y-2">
-          <legend className="text-sm font-medium px-1">Stages <span className="text-xs text-gray-500">(order matters — first match wins)</span></legend>
+          <legend className="text-sm font-medium px-1">Stages <span className="text-xs text-gray-500">(order matters - first match wins)</span></legend>
           {stages.length === 0 && <div className="text-xs text-gray-400 italic">No stages yet.</div>}
           {stages.map((s, idx) => (
             <div key={idx} className="border rounded p-2 space-y-1.5 bg-gray-50">

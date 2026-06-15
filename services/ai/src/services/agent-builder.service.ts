@@ -1,5 +1,5 @@
 /**
- * AI Employee Builder — a goal-driven configuration agent.
+ * AI Employee Builder - a goal-driven configuration agent.
  *
  * Replaces the old static "cold Q&A" wizard. Instead of dumping six fixed
  * answers into a single `generate` call, this is a real multi-turn
@@ -9,13 +9,13 @@
  * builds a sales funnel, then fills personalization, escalation,
  * conversation flow, rules, and optionally attaches knowledge + tools.
  *
- * The draft IS a real `DRAFT` AIAgent row — its `id` is the builder session
+ * The draft IS a real `DRAFT` AIAgent row - its `id` is the builder session
  * id. Each builder tool PATCHes that row and the loop emits a `draft_update`
  * event carrying a fresh snapshot, so the frontend live-preview fills in as
  * the conversation progresses. Nothing here flips the row to ACTIVE; that
  * happens on the explicit Save (review step) via the normal PATCH route.
  *
- * Modeled on `agent-runtime.service.ts` (the System Copilot loop) — same
+ * Modeled on `agent-runtime.service.ts` (the System Copilot loop) - same
  * stream/event-sink contract, different tool surface + system prompt.
  */
 
@@ -32,7 +32,7 @@ import { isBrandArchetype } from "./brand-archetypes";
 
 const MAX_ROUNDS = 6;
 
-// Roles whose conversations advance through pipeline stages — a funnel
+// Roles whose conversations advance through pipeline stages - a funnel
 // binding is REQUIRED at save time (mirrors ai-agents.ts FUNNEL_REQUIRED_ROLES).
 // Only for these roles does the builder surface the funnel tools.
 const FUNNEL_ROLES = new Set(["sales", "sdr", "recruiting"]);
@@ -48,7 +48,7 @@ const ROLE_GOAL_FALLBACK: Record<string, string> = {
   customer_support: "Resolve each customer's issue quickly and clearly, or escalate cleanly when you can't.",
   billing: "Answer billing and payment questions accurately and route disputes safely.",
   booking: "Help every customer book the right slot and confirm the details.",
-  research: "Answer the customer's question accurately from available knowledge — never guess.",
+  research: "Answer the customer's question accurately from available knowledge - never guess.",
   sales: "Qualify the lead and move them toward the next pipeline stage.",
   sdr: "Qualify inbound leads and book the next step.",
   recruiting: "Screen candidates and advance the right ones.",
@@ -79,7 +79,7 @@ export type BuilderEventSink = (event: BuilderEvent) => void | Promise<void>;
 export interface BuilderRunInput {
   tenantId: string;
   userId: string;
-  /** The DRAFT AIAgent.id — also the builder session id. */
+  /** The DRAFT AIAgent.id - also the builder session id. */
   agentId: string;
   message: string;
   /** Platform UI language the admin is using (e.g. "he"). The builder
@@ -125,7 +125,7 @@ export async function loadDraftSnapshot(
   if (!a) return null;
 
   // Explicit `select` (not `include`) so we never pull the per-agent Tier-2
-  // columns (description/usageRule) — some environments lag the migration
+  // columns (description/usageRule) - some environments lag the migration
   // that added them, and we don't need them for the live preview anyway.
   const toolRows = await prisma.agentToolPermission.findMany({
     where: { tenantId, aiAgentId: agentId, isAllowed: true },
@@ -189,7 +189,7 @@ export function draftReadiness(d: BuilderDraftSnapshot): { ready: boolean; missi
   } else if (!d.goal || !d.goal.trim()) {
     missing.push("goal");
   }
-  // Knowledge is mandatory — an AI employee with no knowledge base has nothing
+  // Knowledge is mandatory - an AI employee with no knowledge base has nothing
   // grounded to answer from. At least one KB must be attached before save.
   if (!d.knowledge || d.knowledge.length === 0) missing.push("knowledge");
   return { ready: missing.length === 0, missing };
@@ -202,55 +202,55 @@ const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עבר�
 function systemPrompt(snapshot: BuilderDraftSnapshot, locale?: string): string {
   const isFunnelRole = FUNNEL_ROLES.has(snapshot.role.toLowerCase());
   const langName = LANG_NAMES[(locale || "en").toLowerCase()] || "English";
-  return `You are the **AI Employee Builder** — a proactive configuration consultant inside the GOTCHA platform. You are NOT a customer-facing bot and NOT a copilot. You interview a business ADMIN and assemble one complete, consistent AI Employee configuration for them.
+  return `You are the **AI Employee Builder** - a proactive configuration consultant inside the GOTCHA platform. You are NOT a customer-facing bot and NOT a copilot. You interview a business ADMIN and assemble one complete, consistent AI Employee configuration for them.
 
-# Language — STRICT
+# Language - STRICT
 - Write EVERY message you send to the admin in **${langName}**. The greeting and all your replies must be in ${langName}, regardless of the language the admin types in.
 - You may write the captured config VALUES (goal text, rules, etc.) in ${langName} too so they read naturally for this business.
 
 # Your GOAL
 Produce a finished AI Employee config by the end of the conversation: name → role → goal → (pipeline, only if sales-type) → personalization → escalation rules → **then OFFER the optional refinements: conversation flow, business rules/guardrails, brand voice**. Knowledge & tools are chosen by the admin in a separate step (do NOT collect them over chat). Every decision is captured by calling a builder tool, which updates the live draft.
 
-# The company is ALREADY KNOWN — do NOT ask about it
+# The company is ALREADY KNOWN - do NOT ask about it
 - We already know the business from onboarding: ${snapshot.companyOverview ? `"${snapshot.companyOverview}"` : "(on file)"}.
 - Do NOT ask what the company does, who it serves, or for a description. Do NOT call \`set_company_overview\` unless the admin explicitly corrects a wrong detail.
-- OPEN by asking what THIS specific AI employee is for — its purpose and goal — then continue with role, personalization, escalation, flow and rules.
+- OPEN by asking what THIS specific AI employee is for - its purpose and goal - then continue with role, personalization, escalation, flow and rules.
 
-# How to work — BALANCED proactivity
+# How to work - BALANCED proactivity
 - Drive the conversation. Ask ONE focused question at a time, in the admin's language.
-- Infer sensible defaults from what they tell you — do NOT interrogate every field. When you infer something, briefly confirm it rather than asking from scratch.
+- Infer sensible defaults from what they tell you - do NOT interrogate every field. When you infer something, briefly confirm it rather than asking from scratch.
 - BUT: when an answer is ambiguous, contradictory, or a REQUIRED field is missing, you MUST ask a clarifying question. Never invent a goal, a role, an escalation rule, or pipeline stages the admin did not actually choose or clearly imply.
 - After each answer, call the matching tool(s) immediately so the draft stays in sync. You may call several tools in one turn when the admin gave you several facts at once.
 - Keep moving toward completeness. Periodically tell the admin what's still missing.
 
 # Naming
-- EARLY in the conversation, ask the admin what to name this employee. It's their call — but skippable: if they say "you decide" or skip it, propose a fitting name and confirm. Don't make them think one up. A name is required to finish, but the admin should never feel blocked by it — always offer one. Capture with \`set_identity\`. Never leave it as "Untitled AI Employee".
+- EARLY in the conversation, ask the admin what to name this employee. It's their call - but skippable: if they say "you decide" or skip it, propose a fitting name and confirm. Don't make them think one up. A name is required to finish, but the admin should never feel blocked by it - always offer one. Capture with \`set_identity\`. Never leave it as "Untitled AI Employee".
 
-# Role & goal — every employee MUST have a goal AND success criteria
+# Role & goal - every employee MUST have a goal AND success criteria
 - Pick the role with \`set_role\`. Valid roles: ${ALL_ROLES.join(", ")}.
-- Roles **sales, sdr, recruiting** are PIPELINE roles — they require a funnel (see below) and the funnel drives the goal.
+- Roles **sales, sdr, recruiting** are PIPELINE roles - they require a funnel (see below) and the funnel drives the goal.
 - For ALL roles you MUST set \`set_success_criteria\`, and for non-pipeline roles you MUST also \`set_goal\`.
-- Do NOT leave goal or success criteria blank, and do NOT make the admin dictate them word-for-word. INFER them from the company overview + role, propose a concrete one-liner, and confirm ("Sounds like the goal is X — good?"). If the admin is brief or says "you decide", set sensible values yourself and move on.
+- Do NOT leave goal or success criteria blank, and do NOT make the admin dictate them word-for-word. INFER them from the company overview + role, propose a concrete one-liner, and confirm ("Sounds like the goal is X - good?"). If the admin is brief or says "you decide", set sensible values yourself and move on.
 
 # Pipeline (ONLY for sales / sdr / recruiting)
 ${isFunnelRole
   ? `This is a pipeline role. You MUST attach a funnel:
 - First call \`list_funnels\` and offer the admin the existing ones to pick from. If one fits, \`attach_funnel\`.
 - If none fit, design a new one WITH the admin (stage labels + order, each anchored to a base stage: ${BASE_STAGES.join(", ")}), then \`create_funnel\` (which attaches it).
-- Confirm stage names with the admin before creating — don't invent a pipeline they didn't describe.`
-  : `The CURRENT role is not a pipeline role, so do NOT ask about a sales pipeline or funnel. If — and only if — you change the role to sales/sdr/recruiting, funnel tools become available and you must attach one.`}
+- Confirm stage names with the admin before creating - don't invent a pipeline they didn't describe.`
+  : `The CURRENT role is not a pipeline role, so do NOT ask about a sales pipeline or funnel. If - and only if - you change the role to sales/sdr/recruiting, funnel tools become available and you must attach one.`}
 
 # Personalization & escalation
-- \`set_personalization\`: languages, persona, and brand voice. Do NOT ask about tone or writing style — humanlike behavior is governed centrally by the platform Personality skill, not per-agent. Confirm the languages the employee should speak and (optionally) gender/persona.
+- \`set_personalization\`: languages, persona, and brand voice. Do NOT ask about tone or writing style - humanlike behavior is governed centrally by the platform Personality skill, not per-agent. Confirm the languages the employee should speak and (optionally) gender/persona.
 - \`set_escalation\`: when to hand off to a human + the hand-off message. Ask the admin for their real triggers; offer common ones but let them choose.
 
-# Optional refinements — OFFER each, let the admin SKIP
-Before you finalize, proactively OFFER these three, one at a time. Frame each as optional ("want to set this up, or skip it for now?") and move on the INSTANT the admin skips or says "you decide". NEVER block \`finalize\` on them, and never nag — offer once, accept a skip.
+# Optional refinements - OFFER each, let the admin SKIP
+Before you finalize, proactively OFFER these three, one at a time. Frame each as optional ("want to set this up, or skip it for now?") and move on the INSTANT the admin skips or says "you decide". NEVER block \`finalize\` on them, and never nag - offer once, accept a skip.
 - **Conversation flow** (\`set_conversation_flow\`): the tactical step sequence the employee follows. Offer to draft one from the goal; skip if they don't want a scripted flow.
 - **Business rules / guardrails** (\`set_rules\`): hard limits like "never promise refunds" or "never quote a price without a formal quote". Suggest a couple that fit their business; skip if they have none.
-- **Brand voice** (\`set_personalization\` with \`brand_archetype\`): the archetype shaping HOW the employee sounds — pace, warmth, vocabulary. Options: \`trusted_advisor\` (measured, credible), \`high_energy_coach\` (short, motivating), \`luxury_concierge\` (refined, formal), \`beauty_consultant\` (warm, expressive), or \`neutral\` (default). Suggest the one that fits their brand and confirm; skip to leave it neutral.
+- **Brand voice** (\`set_personalization\` with \`brand_archetype\`): the archetype shaping HOW the employee sounds - pace, warmth, vocabulary. Options: \`trusted_advisor\` (measured, credible), \`high_energy_coach\` (short, motivating), \`luxury_concierge\` (refined, formal), \`beauty_consultant\` (warm, expressive), or \`neutral\` (default). Suggest the one that fits their brand and confirm; skip to leave it neutral.
 
-# Knowledge & tools — handled OUTSIDE this chat
+# Knowledge & tools - handled OUTSIDE this chat
 - Do NOT ask about, list, or attach knowledge bases or tools over chat. The admin selects Knowledge and Tools as cards in a dedicated step right after this conversation. Skip those topics entirely.
 
 # Finishing
@@ -312,7 +312,7 @@ function buildBuilderTools(role: string): Array<Record<string, unknown>> {
       type: "object", required: ["successCriteria"],
       properties: { successCriteria: { type: "string" } },
     }),
-    fn("set_personalization", "Set languages and persona. Send only the fields you're changing. (Tone and writing style are NOT configurable — the platform Personality skill governs humanlike behavior centrally.)", {
+    fn("set_personalization", "Set languages and persona. Send only the fields you're changing. (Tone and writing style are NOT configurable - the platform Personality skill governs humanlike behavior centrally.)", {
       type: "object",
       properties: {
         languages: {
@@ -324,7 +324,7 @@ function buildBuilderTools(role: string): Array<Record<string, unknown>> {
           properties: {
             gender: { type: "string", enum: ["male", "female", "neutral"] },
             warmth: { type: "string" }, humor: { type: "string" },
-            // Brand Voice archetype — shapes HOW the employee sounds (pace,
+            // Brand Voice archetype - shapes HOW the employee sounds (pace,
             // warmth, vocabulary), layered on the central Personality skill.
             // Pick the one matching the brand; omit/neutral for no strong flavor.
             brand_archetype: {
@@ -437,7 +437,7 @@ export async function runBuilder(input: BuilderRunInput, onEvent: BuilderEventSi
     tenantId: input.tenantId,
     userId: input.userId,
     sessionId: input.agentId,
-    // Bound the transcript fed back to the LLM each turn — keeps per-turn
+    // Bound the transcript fed back to the LLM each turn - keeps per-turn
     // token cost flat no matter how long the interview runs.
     limit: 40,
   });
@@ -548,7 +548,7 @@ export async function runBuilder(input: BuilderRunInput, onEvent: BuilderEventSi
     // updated draft (and, if the role changed, the new tool surface).
     chatMessages[0] = { role: "system", content: systemPrompt(snapshot, input.locale) };
 
-    // Don't hard-stop on finalize — let the model take one more turn to give
+    // Don't hard-stop on finalize - let the model take one more turn to give
     // the admin a closing line. The `finalized` event already fired, so the
     // UI's Review & Save is unlocked regardless of what it says next. The
     // natural no-tool-calls exit (or MAX_ROUNDS) ends the loop.
@@ -604,7 +604,7 @@ async function dispatchBuilderTool(
         const isFunnel = FUNNEL_ROLES.has(role);
         return {
           mutated: true, summary: `role=${role}`,
-          toModel: { ok: true, role, requiresFunnel: isFunnel, note: isFunnel ? "Pipeline role — you must attach a funnel (list_funnels / create_funnel)." : "Non-pipeline role — set a one-sentence goal." },
+          toModel: { ok: true, role, requiresFunnel: isFunnel, note: isFunnel ? "Pipeline role - you must attach a funnel (list_funnels / create_funnel)." : "Non-pipeline role - set a one-sentence goal." },
         };
       }
 
@@ -622,7 +622,7 @@ async function dispatchBuilderTool(
       }
 
       case "set_personalization": {
-        // Tone + style intentionally NOT handled here — humanlike behavior is
+        // Tone + style intentionally NOT handled here - humanlike behavior is
         // governed centrally by the platform Personality skill, not per-agent.
         const data: any = {};
         if (args.languages && typeof args.languages === "object") {
@@ -762,7 +762,7 @@ async function dispatchBuilderTool(
       case "attach_funnel": {
         const funnelDbId = String(args.funnelId || "");
         const f = await (prisma as any).tenantFunnel.findFirst({ where: { id: funnelDbId, tenantId }, select: { id: true } });
-        if (!f) return { ok: false, summary: "funnel not found", toModel: { ok: false, error: "funnel not found — pass the funnel row id from list_funnels" } };
+        if (!f) return { ok: false, summary: "funnel not found", toModel: { ok: false, error: "funnel not found - pass the funnel row id from list_funnels" } };
         await prisma.aIAgent.update({ where: { id: agentId }, data: { funnelId: funnelDbId } });
         return { mutated: true, summary: "funnel attached", toModel: { ok: true } };
       }
@@ -792,7 +792,7 @@ async function dispatchBuilderTool(
           return { mutated: true, summary: `funnel '${slug}' created`, toModel: { ok: true, funnelId: row.id, stages: stages.length } };
         } catch (err: any) {
           if (/Unique/i.test(err?.message || "")) {
-            return { ok: false, summary: "slug exists", toModel: { ok: false, error: `funnelId '${slug}' already exists — pick another slug or attach the existing one via list_funnels.` } };
+            return { ok: false, summary: "slug exists", toModel: { ok: false, error: `funnelId '${slug}' already exists - pick another slug or attach the existing one via list_funnels.` } };
           }
           throw err;
         }
@@ -800,7 +800,7 @@ async function dispatchBuilderTool(
 
       case "finalize": {
         // Safety net: guarantee the required fields are filled even if the
-        // model forgot — infer goal + success criteria from the role/overview
+        // model forgot - infer goal + success criteria from the role/overview
         // so the employee is never finalized half-configured.
         const snap = await loadDraftSnapshot(tenantId, agentId);
         let synthesized = false;

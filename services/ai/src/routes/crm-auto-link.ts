@@ -5,11 +5,11 @@
  * Triggered by the incoming-worker every time a customer's text/IG/WA
  * message includes a phone or email. The flow is:
  *
- *   1. Load the conversation (channel + customerExternalId — the platform
+ *   1. Load the conversation (channel + customerExternalId - the platform
  *      identity, e.g. an Instagram PSID).
  *   2. Build IdentityHints combining the platform identity (as a channel
  *      hint) with the extracted phone/email.
- *   3. Call `linkOrCreateCrmContact` in `search_only` mode — finds an
+ *   3. Call `linkOrCreateCrmContact` in `search_only` mode - finds an
  *      existing Lead/Contact in the tenant's CRM matching the phone/email
  *      or any of the gotcha_psid_* custom fields. Never creates a new
  *      record automatically; new-lead creation stays a human decision.
@@ -93,7 +93,7 @@ router.post("/resolve-identifiers", async (req: Request, res: Response) => {
       ? meta.crmObjectKind
       : null;
     if (!crmContactId || !crmObjectKind) {
-      // No CRM link — still surface local phone/email so the History walk
+      // No CRM link - still surface local phone/email so the History walk
       // can do best-effort identifier matching off the platform contact.
       res.json({
         ok: false,
@@ -168,7 +168,7 @@ router.post("/auto-link-identifier", async (req: Request, res: Response) => {
       res.status(400).json({ error: "tenantId, conversationId required" });
       return;
     }
-    // identifier is OPTIONAL — for phone-derived channels (WA/SMS/voice) the
+    // identifier is OPTIONAL - for phone-derived channels (WA/SMS/voice) the
     // conversation's customerExternalId IS the phone, and
     // linkOrCreateCrmContact's channels[] fall-through picks it up.
     if (identifier && identifier.type !== "email" && identifier.type !== "phone") {
@@ -207,7 +207,7 @@ router.post("/auto-link-identifier", async (req: Request, res: Response) => {
           }]
         : [],
     };
-    // Hint guard — if neither identifier NOR a strong channel external_id is
+    // Hint guard - if neither identifier NOR a strong channel external_id is
     // available, linkOrCreateCrmContact would refuse with "no_identifiers".
     // Bail early with a clear reason so the caller can see why we skipped.
     if (!hints.email && !hints.phone && hints.channels.length === 0) {
@@ -246,7 +246,7 @@ router.post("/auto-link-identifier", async (req: Request, res: Response) => {
       // pointer. This is what lets cross-channel history join work: the
       // History walk OR's on phone= / email= across all local Contacts,
       // so an IG-linked record now shares phone with the WA-linked one.
-      // Only WRITES when the local field is empty — never overwrites a
+      // Only WRITES when the local field is empty - never overwrites a
       // value the user/tenant set manually.
       const crmPhone = outcome.contact.phone ?? null;
       const crmEmail = outcome.contact.email ?? null;

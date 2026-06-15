@@ -1,17 +1,17 @@
 /**
- * Post-Conversation Config — tenant-level schema for the post-conversation
+ * Post-Conversation Config - tenant-level schema for the post-conversation
  * summarizer + rule engine.
  *
  * Source of truth: `PostConversationConfig` Prisma model (one row per
- * tenant, JSON `data` column). Mirrors the pattern in policy.service.ts —
+ * tenant, JSON `data` column). Mirrors the pattern in policy.service.ts -
  * DB authoritative, in-process cache as fallback only.
  *
  * Three sections:
  *   - summaryFields: extra CRM slots the LLM should try to populate
  *                    (fed into the summarizer as allowedFields).
- *   - taskRules:    "if X then create task Y" — applied by the rule
+ *   - taskRules:    "if X then create task Y" - applied by the rule
  *                    engine AFTER the summarizer runs.
- *   - crmRules:     "if X then patch CRM with Y" — same.
+ *   - crmRules:     "if X then patch CRM with Y" - same.
  *
  * Sparse-patch semantics (see feedback memory): rules only ADD to the
  * sparse crm_patch and ADD tasks. They never overwrite the prior CRM
@@ -25,7 +25,7 @@ export interface SummaryFieldDef {
   key: string;
   label: string;
   description?: string;
-  /** "text" | "number" | "boolean" | "enum" — extend as needed. */
+  /** "text" | "number" | "boolean" | "enum" - extend as needed. */
   type?: string;
   /** Enum-style allowed values, if `type === "enum"`. */
   options?: string[];
@@ -33,7 +33,7 @@ export interface SummaryFieldDef {
 
 export interface TaskRule {
   id: string;
-  /** Trigger conditions — all listed conditions must match (AND). */
+  /** Trigger conditions - all listed conditions must match (AND). */
   when: {
     intent?: string;          // e.g. "pricing_objection"
     intents?: string[];        // any-of (OR within this field)
@@ -119,7 +119,7 @@ export async function getPostConversationConfig(
     }
     if (row === null) return DEFAULT_POST_CONVERSATION_CONFIG;
   } catch {
-    // DB unavailable — fall through to cache.
+    // DB unavailable - fall through to cache.
   }
   return cache.get(tenantId) ?? DEFAULT_POST_CONVERSATION_CONFIG;
 }
@@ -175,7 +175,7 @@ export async function getSummarizerAllowedFields(tenantId: string): Promise<stri
   const custom = cfg.summaryFields.map((f) => f.key);
 
   // Scope-aware registry (V2). Best-effort: a DB hiccup must not break the
-  // summarizer — fall back to builtins + legacy summaryFields.
+  // summarizer - fall back to builtins + legacy summaryFields.
   let registry: string[] = [];
   try {
     const defs = await (prisma as any).fieldDefinition.findMany({
@@ -184,7 +184,7 @@ export async function getSummarizerAllowedFields(tenantId: string): Promise<stri
     });
     registry = defs.map((d: { key: string }) => d.key);
   } catch {
-    /* ignore — registry not available */
+    /* ignore - registry not available */
   }
 
   return Array.from(new Set([...builtins, ...custom, ...registry]));

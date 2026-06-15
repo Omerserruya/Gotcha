@@ -1,4 +1,4 @@
-# 🧠 OMC Execution Map — SYSTEM-LEVEL (Feature-Agnostic)
+# 🧠 OMC Execution Map - SYSTEM-LEVEL (Feature-Agnostic)
 
 ---
 

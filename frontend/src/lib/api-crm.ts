@@ -1,5 +1,5 @@
 /**
- * CRM Panel API helpers — talk to /api/crm on the AI service.
+ * CRM Panel API helpers - talk to /api/crm on the AI service.
  *
  * Backend routes live in services/ai/src/routes/crm-panel.ts.
  * Mounted via nginx at /api/crm.
@@ -119,7 +119,7 @@ export interface CrmActiveStage {
   } | null;
   /** Next stage in the funnel (or null when this is terminal / unresolved). */
   next: { id: string; label: string } | null;
-  /** Every stage in the active funnel — populates the manual-override dropdown. */
+  /** Every stage in the active funnel - populates the manual-override dropdown. */
   all_stages: Array<{ id: string; label: string; crmValue: string | null }>;
 }
 
@@ -140,7 +140,7 @@ export interface CrmContextEnvelope {
   sentiment_trend?: ("positive" | "neutral" | "negative" | "unknown")[];
   /** Active funnel stage for this customer (drives live copilot + post-call eval). */
   active_stage?: CrmActiveStage | null;
-  /** Set when status === "needs_approval" — operator must pick the survivor. */
+  /** Set when status === "needs_approval" - operator must pick the survivor. */
   candidates?: CrmContactSummary[];
   /** Reason from the identity service (e.g. weak_merge_signal, merge_not_available). */
   link_reason?: string;

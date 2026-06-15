@@ -30,7 +30,7 @@ import {
 } from "./provider";
 import { logger as rootLogger } from "../lib/logger";
 
-// Shared child-logger — per-call hot-path logs go through pino (async, level-gated)
+// Shared child-logger - per-call hot-path logs go through pino (async, level-gated)
 // instead of synchronous console.log which blocks stdout and caused 10–15 s
 // latency growth on long calls.
 const log = rootLogger.child({ module: "deepgram" });
@@ -38,18 +38,18 @@ const log = rootLogger.child({ module: "deepgram" });
 interface PerSpeakerChannel {
   client: LiveClient;
   seq: number;
-  /** Dedupe guard — skip emitting a final whose text exactly matches the last one. */
+  /** Dedupe guard - skip emitting a final whose text exactly matches the last one. */
   lastFinalText: string;
-  /** Latest interim text — flushed on UtteranceEnd or silence-flush timer. */
+  /** Latest interim text - flushed on UtteranceEnd or silence-flush timer. */
   pendingInterimText: string;
-  /** Silence-flush timer — if no new partial for SILENCE_FLUSH_MS, commit pending. */
+  /** Silence-flush timer - if no new partial for SILENCE_FLUSH_MS, commit pending. */
   flushTimer: ReturnType<typeof setTimeout> | null;
   partialCb: ((t: Transcript) => void) | null;
   finalCb: ((t: Transcript) => void) | null;
   errorCb: ((e: SttError) => void) | null;
   keepalive: ReturnType<typeof setInterval> | null;
   open: boolean;
-  /** True once `close()` is called — no more sends, no reconnect attempts. */
+  /** True once `close()` is called - no more sends, no reconnect attempts. */
   closed: boolean;
   /**
    * Frames received before the Deepgram socket is OPEN. Drained in order on
@@ -61,14 +61,14 @@ interface PerSpeakerChannel {
   reconnectAttempts: number;
   /** Info-once marker so we know Deepgram actually returned something. */
   firstTranscriptLogged: boolean;
-  /** Running count of audio frames sent — sampled log every SEND_LOG_EVERY. */
+  /** Running count of audio frames sent - sampled log every SEND_LOG_EVERY. */
   framesSent: number;
 }
 
 /** If no partial arrives for this long, commit the pending interim as final. */
 const SILENCE_FLUSH_MS = 1200;
 
-/** Pre-open buffer cap — drop-oldest beyond this. ≈ 4 s of 20 ms frames. */
+/** Pre-open buffer cap - drop-oldest beyond this. ≈ 4 s of 20 ms frames. */
 const PRE_OPEN_BUFFER_MAX = 200;
 const RECONNECT_BASE_MS = 500;
 const RECONNECT_MAX_MS = 5_000;
@@ -104,7 +104,7 @@ export class DeepgramSTTProvider implements STTProvider {
         if (!ch || ch.closed) return;
         const ab = pcm.buffer.slice(pcm.byteOffset, pcm.byteOffset + pcm.byteLength) as ArrayBuffer;
         if (ch.open) {
-          // Live path — send immediately. Deepgram's WS buffers internally;
+          // Live path - send immediately. Deepgram's WS buffers internally;
           // adding our own pacing was slower than the Twilio producer rate
           // and caused runaway queue lag.
           try { ch.client.send(ab); } catch { /* surfaces via Error */ }
@@ -116,12 +116,12 @@ export class DeepgramSTTProvider implements STTProvider {
           }
           return;
         }
-        // Deepgram WS still opening (or reconnecting) — buffer with drop-oldest.
+        // Deepgram WS still opening (or reconnecting) - buffer with drop-oldest.
         if (ch.preOpenBuffer.length >= PRE_OPEN_BUFFER_MAX) {
           ch.preOpenBuffer.shift();
           if (!ch.overflowLogged) {
             ch.overflowLogged = true;
-            log.warn({ speaker }, "pre-open overflow — dropping oldest frames");
+            log.warn({ speaker }, "pre-open overflow - dropping oldest frames");
           }
         }
         ch.preOpenBuffer.push(ab);
@@ -133,7 +133,7 @@ export class DeepgramSTTProvider implements STTProvider {
           if (ch.keepalive) clearInterval(ch.keepalive);
           if (ch.flushTimer) { clearTimeout(ch.flushTimer); ch.flushTimer = null; }
           // Force-commit any pending interim as a final so the last utterance
-          // survives the hangup — otherwise the building line on the UI dies
+          // survives the hangup - otherwise the building line on the UI dies
           // mid-word and never lands in the message list.
           const pending = ch.pendingInterimText.trim();
           if (pending && pending !== ch.lastFinalText) {
@@ -242,7 +242,7 @@ function attachHandlers(
     } else {
       ch.pendingInterimText = text;
       emit(ch, speaker, text, false, confidence);
-      // Arm silence flush — if no new partial arrives within SILENCE_FLUSH_MS
+      // Arm silence flush - if no new partial arrives within SILENCE_FLUSH_MS
       // we treat the current interim as a final. Catches Hebrew telephony
       // cases where Deepgram's native `is_final` / `UtteranceEnd` are sluggish.
       ch.flushTimer = setTimeout(() => {

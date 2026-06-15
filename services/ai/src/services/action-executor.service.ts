@@ -5,7 +5,7 @@ import { getCrmConnector, getMessagingConnector } from "./connectors/types";
 import { makeScheduleMeetingHandler } from "./schedule-handler.service";
 
 /**
- * Internal HTTP helper — calls the conversation service over the service
+ * Internal HTTP helper - calls the conversation service over the service
  * mesh. CONVERSATION_SERVICE_URL is required in production; in tests it
  * defaults to a local value so mocks (undici MSW, or `global.fetch`
  * overrides) can intercept.
@@ -95,13 +95,13 @@ export interface ExecutionResult {
 }
 
 /**
- * F3.5 — Safe execution wrapper.
+ * F3.5 - Safe execution wrapper.
  *
  * Historical: this function used to hardcode a HIGH_RISK_TOOLS list.
  * That list was incomplete (missing merge_contacts, schedule_broadcast,
  * etc.) and couldn't express tenant overrides. It has been replaced by
  * validateActionAsync() below which calls the unified evaluateToolGate()
- * from @chatcenter/shared — a single entry point that reads
+ * from @chatcenter/shared - a single entry point that reads
  * TenantToolPermission per (tenantId, toolName) and falls back to a
  * well-known INTERNAL_HIGH_RISK_DEFAULTS set.
  *
@@ -115,7 +115,7 @@ export interface ExecutionResult {
  * Parse a subset of ISO 8601 durations: P[nD]T[nH][nM]. Returns ms or
  * null on parse failure. Sufficient for follow-up windows ("PT2H",
  * "P1D", "P2D"). Duplicated from packages/shared/src/lib/agent-tools.ts
- * — the shared copy is module-local. Keep these two in sync.
+ * - the shared copy is module-local. Keep these two in sync.
  */
 function parseIso8601DurationMs(input: string): number | null {
   const m = /^P(?:(\d+)D)?(?:T(?:(\d+)H)?(?:(\d+)M)?)?$/.exec(input.trim());
@@ -147,7 +147,7 @@ export async function validateActionAsync(
 ): Promise<{ ok: true } | { ok: false; reason: string; gate?: ToolGateResult }> {
   if (!action.tool) return { ok: false, reason: "missing tool" };
   // Planner-declared risk level still forces approval even if the tenant
-  // permission says ALLOW — the LLM flagged it as risky for a reason.
+  // permission says ALLOW - the LLM flagged it as risky for a reason.
   if (action.riskLevel === "high" && (!opts.approved || !opts.approvedBy)) {
     return { ok: false, reason: "planner-declared high-risk action requires approval" };
   }
@@ -164,9 +164,9 @@ export async function validateActionAsync(
 }
 
 /**
- * F3.2 — Action executor. Dispatches a PlannedAction and writes an
+ * F3.2 - Action executor. Dispatches a PlannedAction and writes an
  * immutable audit log (AuditLog). Service connectors (F3.3 CRM, F3.4
- * messaging) are stubbed — integrations service handles real dispatch.
+ * messaging) are stubbed - integrations service handles real dispatch.
  */
 export interface ExecutorContext {
   actorId?: string;
@@ -198,7 +198,7 @@ export async function executeAction(
     return { tool: action.tool, ok: false, skipped: true, skipReason: failure.reason };
   }
 
-  // F8 — policy enforcement gate (hard)
+  // F8 - policy enforcement gate (hard)
   const policy = await getPolicy(tenantId);
   const policyGate = validateAgainstPolicy(policy, { tool: action.tool, params: action.params });
   if (!("ok" in policyGate) || policyGate.ok !== true) {
@@ -217,7 +217,7 @@ export async function executeAction(
     switch (action.tool) {
       case "tag_contact": {
         const { contactId, tags } = action.params as { contactId: string; tags: string[] };
-        // Tenant-scoped lookup — prevents cross-tenant mutation if an id leaks.
+        // Tenant-scoped lookup - prevents cross-tenant mutation if an id leaks.
         const existing = await prisma.contact.findFirst({ where: { id: contactId, tenantId } });
         if (!existing) throw new Error("contact not found");
         const merged = Array.from(
@@ -385,7 +385,7 @@ export async function executeAction(
         break;
       }
       case "create_broadcast": {
-        // POST /api/broadcasts — requires name, channel, channelAccountId.
+        // POST /api/broadcasts - requires name, channel, channelAccountId.
         // The planner passes whatever it produced; missing fields return
         // a loud 400 from the downstream route and propagate here.
         const r = await callConversationService("POST", "/api/broadcasts", action.params, {
@@ -398,7 +398,7 @@ export async function executeAction(
       }
       case "schedule_broadcast": {
         // Existing broadcasts route supports PATCH with { scheduledAt }
-        // on DRAFT/SCHEDULED rows — that is the real "schedule" op.
+        // on DRAFT/SCHEDULED rows - that is the real "schedule" op.
         const { broadcastId, scheduleAt } = action.params as {
           broadcastId: string;
           scheduleAt: string;
@@ -473,7 +473,7 @@ export async function executeAction(
       case "generate_followup": {
         // F6.3 as a first-class tool. Calls the existing LLM-powered
         // generator directly (no HTTP hop) so cron, planner, and bot
-        // engine all share the same code path. Returns a draft — the
+        // engine all share the same code path. Returns a draft - the
         // caller decides whether to send_message / schedule_followup.
         const { generateFollowup } = await import("./followup-generator.service");
         const p = action.params as { conversationId?: string; maxMessages?: number };
@@ -491,7 +491,7 @@ export async function executeAction(
         break;
       }
       case "schedule_followup": {
-        // Direct DB insert of a ScheduledMessage row — the same model
+        // Direct DB insert of a ScheduledMessage row - the same model
         // scheduled.worker.ts polls every 30s. This IS the real path:
         // the worker picks up PENDING rows whose scheduledAt has elapsed
         // and enqueues them into outgoingMessageQueue.
@@ -514,9 +514,9 @@ export async function executeAction(
         };
         const body = (p.body ?? p.message ?? "").toString();
         // Three accepted shapes for "when":
-        //   1. `scheduleAt` — internal executor-native ISO timestamp
-        //   2. `send_at_iso` — original LLM tool arg (absolute ISO timestamp)
-        //   3. `delay_iso8601` — original LLM tool arg (ISO8601 duration like "P1D", "PT2H")
+        //   1. `scheduleAt` - internal executor-native ISO timestamp
+        //   2. `send_at_iso` - original LLM tool arg (absolute ISO timestamp)
+        //   3. `delay_iso8601` - original LLM tool arg (ISO8601 duration like "P1D", "PT2H")
         // The autonomous-bot dispatcher in packages/shared/src/lib/agent-tools.ts
         // accepts all three; this approval-resume path used to drop
         // `delay_iso8601` on the floor, which made every approved follow-up
@@ -568,7 +568,7 @@ export async function executeAction(
           });
           if (!acct) {
             throw new Error(
-              `no active channelAccount for channel ${channel} — pass channelAccountId explicitly`,
+              `no active channelAccount for channel ${channel} - pass channelAccountId explicitly`,
             );
           }
           channelAccountId = acct.id;
@@ -614,7 +614,7 @@ export async function executeAction(
         const aiAgentId = (conv as any)?.assignedAiAgentId as string | null | undefined;
         if (!aiAgentId) {
           throw new Error(
-            `schedule_meeting: conversation ${p.conversationId} has no assignedAiAgentId — cannot resolve calendar adapter`,
+            `schedule_meeting: conversation ${p.conversationId} has no assignedAiAgentId - cannot resolve calendar adapter`,
           );
         }
         const handler = makeScheduleMeetingHandler({ tenantId, aiAgentId });
@@ -628,7 +628,7 @@ export async function executeAction(
           notes: p.notes,
         });
         if (!result.ok) {
-          // INVALID / PROPOSE / generic failure — surface the reason to
+          // INVALID / PROPOSE / generic failure - surface the reason to
           // the audit row and bubble up as a non-ok ExecutionResult so the
           // approvals dispatch logs the real cause.
           const reason =

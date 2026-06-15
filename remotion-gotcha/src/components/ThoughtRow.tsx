@@ -29,7 +29,7 @@ export const ThoughtRow: React.FC<{
   const {fps} = useVideoConfig();
   if (localFrame < appearFrame) return null;
 
-  // Phase 1: dot (0..8) — ring scale impact then fill at +8
+  // Phase 1: dot (0..8) - ring scale impact then fill at +8
   const dotRaw = spring({
     frame: localFrame - appearFrame,
     fps,

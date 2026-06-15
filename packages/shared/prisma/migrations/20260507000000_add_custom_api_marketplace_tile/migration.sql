@@ -20,7 +20,7 @@ UPDATE "integration_catalog" SET
   "auth_type" = 'CUSTOM',
   "auth_schema" = '{}',
   "config_schema" = '{}',
-  "description" = 'Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.',
+  "description" = 'Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.',
   "is_published" = true,
   "updated_at" = CURRENT_TIMESTAMP
 WHERE "slug" = 'custom_api';
@@ -39,7 +39,7 @@ INSERT INTO "integration_catalog" (
   'cat_custom_api',
   'custom_api',
   'Custom API',
-  'Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.',
+  'Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.',
   'CUSTOM',
   'CUSTOM',
   '{}',

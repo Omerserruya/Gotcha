@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Broadcasts page — newsletter / mass-message composer.
+ * Broadcasts page - newsletter / mass-message composer.
  *
  * 3-step wizard (Compose → Audience → Schedule & send) with the audience
  * step doing the heavy lifting: chips + schema-aware rules + live count
@@ -867,7 +867,7 @@ export default function BroadcastsPage() {
                           audienceLoading
                             ? t("outbound.broadcasts.liveCountLoading")
                             : audienceCount === null
-                              ? "—"
+                              ? "-"
                               : String(audienceCount)
                         }
                       />
@@ -966,7 +966,7 @@ function toLocalInput(d: Date): string {
 /**
  * Best-effort restore of an AudienceState from a persisted audience
  * definition. Filter rules come back without their human labels (the
- * schema endpoint owns those) — the rule editor will repopulate
+ * schema endpoint owns those) - the rule editor will repopulate
  * label/type when the operator clicks the field.
  */
 function audienceFromDefinition(def: any): AudienceState | null {
@@ -990,7 +990,7 @@ function audienceFromDefinition(def: any): AudienceState | null {
   };
 
   // Legacy "manual" and "pick" definitions both surface as Smart mode in
-  // the new UI — the unified Find&Filter screen handles chips-only just
+  // the new UI - the unified Find&Filter screen handles chips-only just
   // fine, so there's no reason to expose two near-identical tabs.
   if (def.type === "manual" && Array.isArray(def.contactIds)) {
     out.mode = "smart";
@@ -1217,7 +1217,7 @@ function TemplateMediaHeader({
     <div className="rounded-xl border border-amber-100 bg-amber-50/40 p-3 space-y-2">
       <div className="text-xs font-semibold text-amber-900">Campaign {lower}</div>
       <div className="text-[11px] text-amber-700/80">
-        This template uses an {lower} header. Set a public URL — it will be sent as the live {lower} to every recipient in this campaign.
+        This template uses an {lower} header. Set a public URL - it will be sent as the live {lower} to every recipient in this campaign.
       </div>
       <input
         type="url"
@@ -1239,7 +1239,7 @@ function TemplateMediaHeader({
 // ─── Template body preview ────────────────────────────────────────────────────
 
 /** Renders the template body with each {{var}} substituted by the operator's
- *  current mapping — static value, the literal CRM field name (so the user
+ *  current mapping - static value, the literal CRM field name (so the user
  *  can see what will be filled in per recipient), or the declared sample
  *  value when nothing is mapped yet. Pure read-only display. */
 function TemplatePreview({

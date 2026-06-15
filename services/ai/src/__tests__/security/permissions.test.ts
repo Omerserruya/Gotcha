@@ -1,5 +1,5 @@
 /**
- * Two-layer permission resolver — unit tests for
+ * Two-layer permission resolver - unit tests for
  * `packages/shared/src/lib/permissions.ts`.
  *
  * Resolution rules under test (in priority order):
@@ -69,14 +69,14 @@ beforeEach(() => {
   setUserRoleFeatures([]);
 });
 
-describe("hasFeature — SYSTEM_ADMIN bypass", () => {
+describe("hasFeature - SYSTEM_ADMIN bypass", () => {
   it("returns true even when tenant has feature disabled", async () => {
     setTenantFeatures([{ feature: FEATURES.AUTO_BUY, enabled: false }]);
     expect(await hasFeature(SYSADMIN, FEATURES.AUTO_BUY)).toBe(true);
   });
 });
 
-describe("hasFeature — tenant layer", () => {
+describe("hasFeature - tenant layer", () => {
   it("denies any user when tenant has the feature disabled", async () => {
     setTenantFeatures([{ feature: FEATURES.AUTO_BUY, enabled: false }]);
     expect(await hasFeature(ADMIN_USER, FEATURES.AUTO_BUY)).toBe(false);
@@ -96,14 +96,14 @@ describe("hasFeature — tenant layer", () => {
   });
 });
 
-describe("hasFeature — ADMIN role", () => {
+describe("hasFeature - ADMIN role", () => {
   it("grants every tenant-enabled feature without explicit grant", async () => {
     setTenantFeatures([{ feature: FEATURES.AUTO_BUY, enabled: true }]);
     expect(await hasFeature(ADMIN_USER, FEATURES.AUTO_BUY)).toBe(true);
   });
 });
 
-describe("hasFeature — AGENT default access", () => {
+describe("hasFeature - AGENT default access", () => {
   it("denies a default-none feature without role/user grant", async () => {
     setTenantFeatures([{ feature: FEATURES.AUTO_BUY, enabled: true }]);
     setUserRoleFeatures([]);
@@ -123,7 +123,7 @@ describe("hasFeature — AGENT default access", () => {
   });
 });
 
-describe("hasFeature — user-level overrides", () => {
+describe("hasFeature - user-level overrides", () => {
   it("explicit user grant beats a missing role grant", async () => {
     setTenantFeatures([{ feature: FEATURES.AUTO_BUY, enabled: true }]);
     setUserRoleFeatures([]);

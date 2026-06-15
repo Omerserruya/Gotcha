@@ -38,7 +38,7 @@ describe("GoalStateMachine", () => {
   it("never regresses", () => {
     sm.advance(cid, { fullName: "A", email: "a@x.com" });
     expect(sm.current(cid)).toBe("qualify");
-    // Lead state "loses" name (e.g. CRM glitch) — must not drop back.
+    // Lead state "loses" name (e.g. CRM glitch) - must not drop back.
     expect(sm.advance(cid, {})).toBe("qualify");
   });
 

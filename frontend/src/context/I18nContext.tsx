@@ -51,7 +51,7 @@ const LOCALE_API = "/api/agents/me/locale";
 const TENANT_LOCALE_API = "/api/agents/settings/locale";
 // LocalStorage is now ONLY used as a render-warm hint so the page doesn't
 // flash English while we wait for the server resolver. The server value
-// is authoritative — when it disagrees, we adopt it and overwrite.
+// is authoritative - when it disagrees, we adopt it and overwrite.
 const LOCALE_CACHE_KEY = "locale";
 
 function isLocale(value: unknown): value is Locale {
@@ -86,7 +86,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         setLocaleState(saved);
         setTranslations(getTranslation(saved));
       }
-    } catch { /* localStorage unavailable — keep default */ }
+    } catch { /* localStorage unavailable - keep default */ }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
   const [tenantDefault, setTenantDefault] = useState<Locale | null>(null);
@@ -141,7 +141,17 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
   const setLocale = useCallback(
     async (nextLocale: Locale | null) => {
       const token = readTokenFromStorage();
-      if (!token) throw new Error("not_authenticated");
+      if (!token) {
+        // Anonymous visitor (e.g. the public landing page): there's no agent
+        // to persist an override for, so switch locale locally only. This is
+        // what powers the EN/HE toggle on the marketing site.
+        const eff = nextLocale ?? "en";
+        setLocaleState(eff);
+        setTranslations(getTranslation(eff));
+        setUserOverride(nextLocale);
+        try { window.localStorage.setItem(LOCALE_CACHE_KEY, eff); } catch { /* noop */ }
+        return;
+      }
       const prevEffective = locale;
       const prevOverride = userOverride;
       // Optimistic UI: assume server will accept.
@@ -158,14 +168,14 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
         });
         if (!res.ok) {
           // Surface the server's error code/message instead of a generic
-          // "locale_save_failed" — otherwise the user can't tell whether the
+          // "locale_save_failed" - otherwise the user can't tell whether the
           // value was unsupported, the backend is down, or the migration
           // hasn't been applied.
           let detail = `HTTP ${res.status}`;
           try {
             const body = await res.json();
             if (body?.error) detail = String(body.error);
-          } catch { /* response wasn't JSON — keep the status code */ }
+          } catch { /* response wasn't JSON - keep the status code */ }
           console.warn(`[I18nContext] PUT ${LOCALE_API} failed: ${detail}`);
           throw new Error(detail);
         }
@@ -204,7 +214,7 @@ export function I18nProvider({ children }: { children: React.ReactNode }) {
           try {
             const body = await res.json();
             if (body?.error) detail = String(body.error);
-          } catch { /* response wasn't JSON — keep the status code */ }
+          } catch { /* response wasn't JSON - keep the status code */ }
           console.warn(`[I18nContext] PUT ${TENANT_LOCALE_API} failed: ${detail}`);
           throw new Error(detail);
         }

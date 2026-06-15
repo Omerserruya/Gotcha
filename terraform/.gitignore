@@ -1,4 +1,4 @@
-# Local state — move to S3 backend in versions.tf when ready
+# Local state - move to S3 backend in versions.tf when ready
 *.tfstate
 *.tfstate.*
 *.tfstate.backup

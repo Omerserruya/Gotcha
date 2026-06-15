@@ -1,4 +1,4 @@
-# Backups bucket — nightly pg_dump + uploads tarball. Random suffix so the
+# Backups bucket - nightly pg_dump + uploads tarball. Random suffix so the
 # name is globally unique without coordination.
 
 resource "random_id" "bucket_suffix" {
@@ -22,7 +22,7 @@ resource "aws_s3_bucket_public_access_block" "backups" {
 resource "aws_s3_bucket_versioning" "backups" {
   bucket = aws_s3_bucket.backups.id
   versioning_configuration {
-    # Off — backups are append-only by date; versioning would double storage
+    # Off - backups are append-only by date; versioning would double storage
     # without saving anything we can't recover via daily files.
     status = "Suspended"
   }

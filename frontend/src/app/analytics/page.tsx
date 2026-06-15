@@ -80,10 +80,10 @@ const DEMO_DEPARTMENT_DATA = [
 ];
 
 const DEMO_INSIGHTS = [
-  { id: "1", title: "Order tracking queries are surging", description: "\"Where is my order?\" has been asked 312 times this period — 78% handled by AI. Creating an automated flow could reduce agent load by ~15%.", type: "automation", impact: "high", metric: "312 queries/period" },
+  { id: "1", title: "Order tracking queries are surging", description: "\"Where is my order?\" has been asked 312 times this period - 78% handled by AI. Creating an automated flow could reduce agent load by ~15%.", type: "automation", impact: "high", metric: "312 queries/period" },
   { id: "2", title: "Refund flow can be partially automated", description: "198 refund requests this period. 45% handled by AI. Adding a Shopify refund tool could automate simple refunds under $50.", type: "integration", impact: "high", metric: "198 requests/period" },
-  { id: "3", title: "Password reset is fully automatable", description: "121 password reset requests — 95% already handled by AI. Converting to a self-service flow would eliminate agent involvement entirely.", type: "automation", impact: "medium", metric: "121 requests/period" },
-  { id: "4", title: "Instagram response time below target", description: "Average response time on WhatsApp is 35s, well within SLA. But Instagram DMs average 55s — consider prioritizing Instagram queue.", type: "optimization", impact: "medium", metric: "55s avg on Instagram" },
+  { id: "3", title: "Password reset is fully automatable", description: "121 password reset requests - 95% already handled by AI. Converting to a self-service flow would eliminate agent involvement entirely.", type: "automation", impact: "medium", metric: "121 requests/period" },
+  { id: "4", title: "Instagram response time below target", description: "Average response time on WhatsApp is 35s, well within SLA. But Instagram DMs average 55s - consider prioritizing Instagram queue.", type: "optimization", impact: "medium", metric: "55s avg on Instagram" },
 ];
 
 const DEMO_TREND_DATA = Array.from({ length: 14 }, (_, i) => ({

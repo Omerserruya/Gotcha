@@ -1,5 +1,5 @@
 /**
- * Live field extraction — Customer Intelligence V2, Phase 2.
+ * Live field extraction - Customer Intelligence V2, Phase 2.
  *
  * A LEAN, incremental extractor for OPEN text conversations: it reads the
  * transcript-so-far and pulls values for the tenant's allowed intelligence
@@ -22,7 +22,7 @@ function stripFences(s: string): string {
 
 /**
  * Extract sparse field values from the current transcript. Returns [] on any
- * failure (best-effort — never throws into the live path).
+ * failure (best-effort - never throws into the live path).
  */
 export async function extractFieldsLive(params: {
   tenantId: string;
@@ -46,7 +46,7 @@ export async function extractFieldsLive(params: {
 
   const system = [
     "You extract structured CRM/intelligence field values from a customer conversation.",
-    "Respond ONLY with a JSON object — no prose, no code fences.",
+    "Respond ONLY with a JSON object - no prose, no code fences.",
     "Include a key ONLY if its value was EXPLICITLY stated or clearly implied in THIS conversation.",
     "OMIT any field not discussed. Never guess. An omitted field is better than a wrong one.",
     `Allowed keys (use ONLY these): ${allowedFields.join(", ")}`,

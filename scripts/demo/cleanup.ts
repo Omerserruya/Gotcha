@@ -1,5 +1,5 @@
 /**
- * Demo cleanup — reset state for a fresh rehearsal.
+ * Demo cleanup - reset state for a fresh rehearsal.
  *
  * Deletes (for the demo tenant only):
  *   - The demo WhatsApp conversation + its messages
@@ -11,7 +11,7 @@
  * Leaves alone:
  *   - Zoho Lead records already created (cleanup would require Zoho API access;
  *     the demo doesn't re-create leads with the same IDs so residue is harmless)
- *   - Agent config tweaks (systemPrompt, maxAutonomousMinutes) — pass
+ *   - Agent config tweaks (systemPrompt, maxAutonomousMinutes) - pass
  *     --restore-agent to revert those too.
  */
 import { PrismaClient } from "@prisma/client";

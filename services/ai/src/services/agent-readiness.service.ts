@@ -6,7 +6,7 @@
  * business, its role/goal, its attached knowledge, and its granted tools),
  * then judge how well it's covered and where the gaps are.
  *
- * One JSON-mode LLM call (lives in services/ai — the only service allowed to
+ * One JSON-mode LLM call (lives in services/ai - the only service allowed to
  * make new LLM calls). The score is computed deterministically from the
  * per-question coverage so it can't drift with the model's mood.
  */
@@ -153,11 +153,11 @@ ${kbBlock}
 ${toolBlock}
 
 ## Your task
-Generate 28–36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale — not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
+Generate 28–36 realistic questions a real customer would ask THIS employee, given the business, industry and the employee's role. Cover the full spread: high-frequency everyday questions, edge cases, awkward/angry customers, pricing, logistics, policy, and post-sale - not just easy ones. Do not pad with near-duplicates; each question must be meaningfully distinct.
 
 For EACH question decide:
 - coverage: "full" (answerable now from the knowledge above and/or an available tool), "partial" (only some of it is covered, or it needs data we don't clearly have), or "none" (cannot be handled).
-- gapType: if not full, the single biggest missing thing — "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration we don't have, e.g. order lookup, shipping, refund), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
+- gapType: if not full, the single biggest missing thing - "knowledge" (missing info/policy/FAQ), "tool" (needs an action/integration we don't have, e.g. order lookup, shipping, refund), or "data" (needs structured business data, e.g. price list, size/measurement table, product catalog). Use "none" only when coverage is "full".
 - reason: one short sentence in ${lang}.
 
 Then produce "recommendations": concrete, deduplicated fixes for the gaps you found. Each has a "type" from: "add_knowledge", "connect_tool", "add_business_data", "add_faq", "create_workflow", "other". Examples: add shipping provider integration, upload return policy, add size/measurement table, add product catalog, connect Shopify orders, add FAQ content, create refund workflow. title + detail in ${lang}.

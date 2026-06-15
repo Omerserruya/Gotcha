@@ -4,7 +4,7 @@ import crypto from "crypto";
 /**
  * JWT signing secret.
  *
- * In production we refuse to start with the placeholder — the previous
+ * In production we refuse to start with the placeholder - the previous
  * fallback (`"change-me"`) meant a missing env var silently produced a
  * verifiable token any attacker could forge. Dev/test still gets the
  * placeholder so the toolchain boots without env wiring.

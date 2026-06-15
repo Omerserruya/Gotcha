@@ -9,7 +9,7 @@ const baseIdentity = {
   customer: { hasContact: true, contactLifecycle: "customer" as const, priorConversationCount: 5 },
 };
 
-describe("BehaviorEngine — user_type resolution", () => {
+describe("BehaviorEngine - user_type resolution", () => {
   it("emits unknown when no contact exists", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -47,7 +47,7 @@ describe("BehaviorEngine — user_type resolution", () => {
   });
 });
 
-describe("BehaviorEngine — conversation_stage", () => {
+describe("BehaviorEngine - conversation_stage", () => {
   it("messageCount<=1 → initial", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -85,7 +85,7 @@ describe("BehaviorEngine — conversation_stage", () => {
   });
 });
 
-describe("BehaviorEngine — strategy decision matrix", () => {
+describe("BehaviorEngine - strategy decision matrix", () => {
   it("agent + new_lead + initial → QUALIFY", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -197,7 +197,7 @@ describe("BehaviorEngine — strategy decision matrix", () => {
   });
 });
 
-describe("BehaviorEngine — overrides", () => {
+describe("BehaviorEngine - overrides", () => {
   it("urgency=high + support intent → RESOLVE override", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -235,7 +235,7 @@ describe("BehaviorEngine — overrides", () => {
   });
 });
 
-describe("BehaviorEngine — autonomy degradation", () => {
+describe("BehaviorEngine - autonomy degradation", () => {
   it("agent + low confidence (intent=unclear) → gated", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -268,7 +268,7 @@ describe("BehaviorEngine — autonomy degradation", () => {
   });
 });
 
-describe("BehaviorEngine — outputContract derivation", () => {
+describe("BehaviorEngine - outputContract derivation", () => {
   it("agent mode → REPLY", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -317,7 +317,7 @@ describe("BehaviorEngine — outputContract derivation", () => {
   });
 });
 
-describe("BehaviorEngine — allowedActions derivation (BEL is the only filter)", () => {
+describe("BehaviorEngine - allowedActions derivation (BEL is the only filter)", () => {
   it("QUALIFY exposes ask_question + crm_read + identity_link, NOT create_lead", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -388,7 +388,7 @@ describe("BehaviorEngine — allowedActions derivation (BEL is the only filter)"
   });
 });
 
-describe("BehaviorEngine — requiredActions enforcement", () => {
+describe("BehaviorEngine - requiredActions enforcement", () => {
   it("escalation gate → MUST escalate_to_human", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -454,7 +454,7 @@ describe("BehaviorEngine — requiredActions enforcement", () => {
   });
 });
 
-describe("BehaviorEngine — playbook selection", () => {
+describe("BehaviorEngine - playbook selection", () => {
   it("price-objection markers + objection stage → price_objection playbook", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -515,7 +515,7 @@ describe("BehaviorEngine — playbook selection", () => {
   });
 });
 
-describe("BehaviorEngine — KB gating (BEL-controlled)", () => {
+describe("BehaviorEngine - KB gating (BEL-controlled)", () => {
   it("QUALIFY (knowledgeRetrieval=skip) → shouldRetrieveKB=false even on rich text", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -546,7 +546,7 @@ describe("BehaviorEngine — KB gating (BEL-controlled)", () => {
     expect(shouldRetrieveKB(s, "how does the routing work?")).toBe(true);
   });
 
-  it("CONVERT (knowledgeRetrieval=when_relevant) — short greeting → false", () => {
+  it("CONVERT (knowledgeRetrieval=when_relevant) - short greeting → false", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
@@ -557,7 +557,7 @@ describe("BehaviorEngine — KB gating (BEL-controlled)", () => {
   });
 });
 
-describe("BehaviorEngine — ownership signal (Task 1)", () => {
+describe("BehaviorEngine - ownership signal (Task 1)", () => {
   it("no identifier in message → ownership none, confidence 0", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -648,7 +648,7 @@ describe("BehaviorEngine — ownership signal (Task 1)", () => {
   });
 });
 
-describe("BehaviorEngine — funnel integration (Task 2)", () => {
+describe("BehaviorEngine - funnel integration (Task 2)", () => {
   it("funnel-less call leaves strategy + playbooks alone", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -685,7 +685,7 @@ describe("BehaviorEngine — funnel integration (Task 2)", () => {
   });
 });
 
-describe("BehaviorEngine — closure posture (Task 4)", () => {
+describe("BehaviorEngine - closure posture (Task 4)", () => {
   it("default mid-flight → posture=open, no closure required", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -754,7 +754,7 @@ describe("BehaviorEngine — closure posture (Task 4)", () => {
     expect(s.requiredActions).not.toContain("close_conversation");
   });
 
-  it("escalate_now beats closure — escalate_to_human wins", () => {
+  it("escalate_now beats closure - escalate_to_human wins", () => {
     const s = computeBehaviorState({
       mode: "agent",
       identity: baseIdentity.newLead,
@@ -775,7 +775,7 @@ describe("BehaviorEngine — closure posture (Task 4)", () => {
   });
 });
 
-describe("BehaviorEngine — provenance + determinism", () => {
+describe("BehaviorEngine - provenance + determinism", () => {
   it("populates provenance for every axis", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -794,7 +794,7 @@ describe("BehaviorEngine — provenance + determinism", () => {
     expect(s.provenance.playbookIds).not.toBe("");
   });
 
-  it("is deterministic — same inputs produce same outputs", () => {
+  it("is deterministic - same inputs produce same outputs", () => {
     const input = {
       mode: "agent" as const,
       identity: baseIdentity.newLead,
@@ -806,9 +806,9 @@ describe("BehaviorEngine — provenance + determinism", () => {
   });
 });
 
-// ─── Behavioral signals (PHASE 1 — observe-only) ─────────────
+// ─── Behavioral signals (PHASE 1 - observe-only) ─────────────
 
-describe("BehaviorEngine — relationshipStrength", () => {
+describe("BehaviorEngine - relationshipStrength", () => {
   it("first-time customer (no contact) → low", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -863,7 +863,7 @@ describe("BehaviorEngine — relationshipStrength", () => {
   });
 });
 
-describe("BehaviorEngine — customerTrust", () => {
+describe("BehaviorEngine - customerTrust", () => {
   it("skeptical language → low", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -922,7 +922,7 @@ describe("BehaviorEngine — customerTrust", () => {
   });
 });
 
-describe("BehaviorEngine — customerFriction", () => {
+describe("BehaviorEngine - customerFriction", () => {
   it("escalation/handoff flag → high (deterministic)", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -986,7 +986,7 @@ describe("BehaviorEngine — customerFriction", () => {
   });
 });
 
-describe("BehaviorEngine — signals: provenance, determinism, degradation", () => {
+describe("BehaviorEngine - signals: provenance, determinism, degradation", () => {
   it("every signal carries level, confidence, reason", () => {
     const s = computeBehaviorState({
       mode: "agent",
@@ -1040,7 +1040,7 @@ describe("BehaviorEngine — signals: provenance, determinism, degradation", () 
     expect(a.customerFriction).toEqual(b.customerFriction);
   });
 
-  it("PHASE 1 — friction signal alone does NOT alter strategy/tone/escalation", () => {
+  it("PHASE 1 - friction signal alone does NOT alter strategy/tone/escalation", () => {
     // Identical inputs except one carries high-friction language (no flags).
     // Observe-only: strategy, tone, and escalation must be unchanged.
     const base = {
@@ -1053,8 +1053,8 @@ describe("BehaviorEngine — signals: provenance, determinism, degradation", () 
       ...base,
       request: {
         ...base.request,
-        recentInboundTexts: ["this is ridiculous", "this is awful — what's the price?"],
-        lastMessage: "this is awful — what's the price?",
+        recentInboundTexts: ["this is ridiculous", "this is awful - what's the price?"],
+        lastMessage: "this is awful - what's the price?",
       },
     });
     expect(frustrated.customerFriction.level).toBe("high"); // read changed…

@@ -9,18 +9,18 @@ import type { WebhookTriggerJob } from "@chatcenter/shared";
 
 const router = Router();
 
-// Header carrying the shared secret. Basic auth only at this stage — no HMAC
+// Header carrying the shared secret. Basic auth only at this stage - no HMAC
 // signature / IP allowlist yet (see WebhookTrigger model notes).
 const SECRET_HEADER = "x-webhook-secret";
 
-// Inbound webhook triggers arrive without a user JWT — the trigger (and its
+// Inbound webhook triggers arrive without a user JWT - the trigger (and its
 // tenant) is resolved purely by the unguessable path `token`. That lookup is a
 // legitimate cross-tenant query, so enable the Prisma tenant-guard opt-out for
 // this router, exactly like the provider webhook router does. Safe because the
 // route verifies the shared secret before emitting anything.
 router.use(crossTenantMiddleware);
 
-// Constant-time secret comparison — avoids leaking the secret via timing.
+// Constant-time secret comparison - avoids leaking the secret via timing.
 function secretMatches(provided: string, expected: string): boolean {
   const a = Buffer.from(provided);
   const b = Buffer.from(expected);
@@ -34,7 +34,7 @@ function secretMatches(provided: string, expected: string): boolean {
  * Generic inbound webhook entrypoint that fronts the WebhookTrigger model.
  * Authenticates the call and dispatches an event to incoming-worker over the
  * existing BullMQ "incoming-messages" transport. Running the flow / variable
- * injection happens downstream (ticket 3) — this route only authenticates and
+ * injection happens downstream (ticket 3) - this route only authenticates and
  * enqueues, forwarding the raw JSON body intact.
  *
  *  - unknown token            → 404

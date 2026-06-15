@@ -59,7 +59,7 @@ export interface EmitEventInput {
 /**
  * Enqueue a SystemEvent for downstream notification fan-out.
  *
- * Never throws — wraps every step in try/catch and logs at warn level.
+ * Never throws - wraps every step in try/catch and logs at warn level.
  * Returns void so callers don't accidentally await side-effects.
  */
 export async function emitEvent(input: EmitEventInput): Promise<void> {
@@ -95,7 +95,7 @@ export async function emitEvent(input: EmitEventInput): Promise<void> {
  * its own try/catch so a notification path issue can never propagate.
  *
  * Use this from ai-bot.service.ts, behavior-engine consumers, action
- * contracts, etc. — anywhere a sync hot path can't await even a queue.add().
+ * contracts, etc. - anywhere a sync hot path can't await even a queue.add().
  */
 export function tryEmit(input: EmitEventInput): void {
   setImmediate(() => {

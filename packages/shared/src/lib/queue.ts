@@ -53,7 +53,7 @@ export interface IncomingMessageJob {
 }
 
 // Comment-trigger job. Shares the "incoming-messages" BullMQ queue with the
-// existing message processor (one worker, two job names) — discriminated by
+// existing message processor (one worker, two job names) - discriminated by
 // job.name = "process-comment". Comments are NOT messages: no Conversation
 // row, no Message row; they fan out into 0..N flow runs based on which
 // comment_trigger nodes target this post.
@@ -77,7 +77,7 @@ export interface IncomingCommentJob {
 // with the message + comment paths (one worker, discriminated by
 // job.name = "webhook-trigger"). Emitted by services/webhook when an
 // authenticated POST /webhooks/:token arrives. Carries the caller's raw JSON
-// body untouched in `payload` — looking up the customer, running the flow, and
+// body untouched in `payload` - looking up the customer, running the flow, and
 // variable injection all happen downstream (ticket 3), not at ingest.
 export interface WebhookTriggerJob {
   triggerId: string;
@@ -106,7 +106,7 @@ export interface OutgoingMessageJob {
   retryCount?: number;
   mediaUrl?: string;
   fileName?: string;
-  // Broadcast linkage — when set, the outgoing worker writes the send result
+  // Broadcast linkage - when set, the outgoing worker writes the send result
   // back to the BroadcastRecipient row and updates broadcast counters.
   broadcastId?: string;
   broadcastRecipientId?: string;
@@ -148,10 +148,10 @@ export interface ScheduledMessageJob {
 export interface FlowResumeJob {
   tenantId: string;
   conversationId: string;
-  // "main" | ChatbotFlow.id — which graph to resume
+  // "main" | ChatbotFlow.id - which graph to resume
   flowKind: "main" | "sub";
   flowId?: string;
-  // Node to resume AT — the walker restarts from here
+  // Node to resume AT - the walker restarts from here
   resumeNodeId: string;
   // Inbound channel (used to pick adapter / channel_entry when re-entering)
   channel: string;
@@ -175,7 +175,7 @@ export function createWorker<T>(
   // Every worker legitimately operates across tenants (polling due
   // scheduled messages, idle conversations, channel health, etc). Wrap
   // each job in `withCrossTenantAccess` so the Prisma tenant-guard is
-  // disabled for background worker work — the work is trusted,
+  // disabled for background worker work - the work is trusted,
   // tenant-scoped at the data level, and has no user to derive tenant
   // context from. Individual job processors are still responsible for
   // passing the correct tenantId when writing rows.

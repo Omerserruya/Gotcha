@@ -1,5 +1,5 @@
 /**
- * Autonomous AI bot — worker side.
+ * Autonomous AI bot - worker side.
  *
  * After the 2026-04 refactor, this module DOES NOT call OpenAI directly.
  * The LLM call, prompt assembly, tool-calling loop, and KB retrieval all
@@ -69,7 +69,7 @@ export async function processAIBot(
   // Resolution order (graph is source of truth):
   //   1. Explicit `aiAgentId` argument (graph dispatched this call).
   //   2. `conversation.assignedAiAgentId` (set by a prior graph dispatch).
-  // No legacy RouterRule fallback — if the graph never picked an agent for
+  // No legacy RouterRule fallback - if the graph never picked an agent for
   // this conversation, the AI bot does nothing and the conversation stays
   // unassigned for a human to claim.
   let resolvedAgentId: string | null = aiAgentId || null;
@@ -78,7 +78,7 @@ export async function processAIBot(
   }
   if (!resolvedAgentId) return false;
 
-  // Validate the agent row before we round-trip — this catches "agent
+  // Validate the agent row before we round-trip - this catches "agent
   // deleted but assignedAiAgentId still set" without burning a network call.
   const agentLite = await prisma.aIAgent.findUnique({
     where: { id: resolvedAgentId },
@@ -98,7 +98,7 @@ export async function processAIBot(
     return true;
   }
 
-  // Pre-check: explicit human request — short-circuits the LLM call.
+  // Pre-check: explicit human request - short-circuits the LLM call.
   if (isHumanRequest(incomingMessage)) {
     await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
     return true;
@@ -127,14 +127,14 @@ export async function processAIBot(
     );
     result = res.data as AIBotReplyResult;
   } catch (err: any) {
-    // 499 — AI service aborted the in-flight LLM call because a newer
+    // 499 - AI service aborted the in-flight LLM call because a newer
     // inbound for this conversation showed up. The newer job will produce
     // the reply; this job exits quietly. Critical: NO escalation, NO
-    // error-level log — that would create the same "answering per message"
+    // error-level log - that would create the same "answering per message"
     // noise we're trying to suppress.
     if (err.response?.status === 499 || err.response?.data?.aborted) {
       console.log(
-        `[AI-Bot] reply aborted conv=${conversationId} (newer turn took over) — dropping this job's reply`,
+        `[AI-Bot] reply aborted conv=${conversationId} (newer turn took over) - dropping this job's reply`,
       );
       return false;
     }
@@ -142,7 +142,7 @@ export async function processAIBot(
     return false;
   }
 
-  // Side-effect: pause for human approval. Don't reply — set state, audit,
+  // Side-effect: pause for human approval. Don't reply - set state, audit,
   // and send a short bridge ack so the customer isn't left hanging while a
   // human reviews the pending tool call.
   if (result.awaitingApproval) {
@@ -171,7 +171,7 @@ export async function processAIBot(
     try {
       // Bridge-ack: a brief "give me a moment" while the human approves
       // the gated tool. Generated via AI oneshot so it lands in the
-      // customer's language and stays in-character — never says "team
+      // customer's language and stays in-character - never says "team
       // will reach out" since the bot is still the one handling the
       // conversation.
       let ack: string | null = null;
@@ -191,13 +191,13 @@ export async function processAIBot(
           .reverse()
           .join("\n");
         const userInput =
-          `[INTERNAL CONTEXT — do not echo to the customer]\n` +
+          `[INTERNAL CONTEXT - do not echo to the customer]\n` +
           `Customer's recent messages (oldest → newest):\n${inboundSample || incomingMessage}\n\n` +
           `Customer's latest message: "${incomingMessage}"\n\n` +
           `TASK: Send ONE very short reply (max one sentence) to acknowledge the customer and tell them you're handling their request right now.\n` +
           `Rules:\n` +
           `- Detect the language from the FIRST customer message above (or any earlier non-trivial message). Reply in THAT language. If any message contains Hebrew characters, the language is Hebrew. Do not default to English.\n` +
-          `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies a handoff — you are handling this yourself.\n` +
+          `- Do NOT say "a team member will reach out", "we'll get back to you", or anything that implies a handoff - you are handling this yourself.\n` +
           `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
           `- Tone: warm, brief, like a human typing a quick "give me a sec".\n`;
         const oneshotRes = await axios.post(
@@ -306,7 +306,7 @@ export async function processAIBot(
 
   // If the bot called close_conversation this turn, the dispatcher already
   // flipped the conversation row to CLOSED (see agent-tools.ts close handler)
-  // but it is "side-effect free" by design — the caller publishes the
+  // but it is "side-effect free" by design - the caller publishes the
   // downstream event. Without this, the post-chat subscriber (which feeds
   // summary, CRM patch, Customer Brief refresh, tasks, follow-ups) never
   // fires for bot-initiated closes.
@@ -360,7 +360,7 @@ function buildSendContext(conversation: any): SendContext | null {
     channel: conversation.channel,
     channelAccountExternalId: conversation.channelAccount.externalId,
     // Spread ALL decrypted fields (not just accessToken/appSecret) so channel
-    // flags like `igLogin` survive — the Instagram adapter needs it to pick the
+    // flags like `igLogin` survive - the Instagram adapter needs it to pick the
     // graph.instagram.com host instead of graph.facebook.com.
     credentials: { ...creds },
     recipientId: conversation.customerExternalId,
@@ -428,7 +428,7 @@ async function escalateToHuman(
   // Generate the customer-facing handoff message via AI so it lands in
   // the conversation's language (Hebrew/English/Arabic/…) and stays in
   // the agent's voice. Falls back to the agent's configured static
-  // `escalationMessage` if the oneshot fails — never block the actual
+  // `escalationMessage` if the oneshot fails - never block the actual
   // escalation just because copywriting hiccupped.
   const escalationMessage = await generateEscalationHandoff(
     tenantId,
@@ -495,7 +495,7 @@ async function escalateToHuman(
  * less (an emoji, "ok", a number).
  *
  * Falls back to the agent's configured static `escalationMessage` when
- * the oneshot fails — never block the actual handoff because copywriting
+ * the oneshot fails - never block the actual handoff because copywriting
  * hiccupped. The agent-level static remains the safety net that ships in
  * a known language and tone.
  */
@@ -521,7 +521,7 @@ async function generateEscalationHandoff(
     if (!inboundSample) return fallback;
 
     const userInput =
-      `[INTERNAL CONTEXT — do not echo to the customer]\n` +
+      `[INTERNAL CONTEXT - do not echo to the customer]\n` +
       `Customer's recent messages (oldest → newest):\n${inboundSample}\n\n` +
       `TASK: Send ONE short reply (max one sentence) telling the customer that you're connecting them with a human team member who will continue from here.\n` +
       `Rules:\n` +

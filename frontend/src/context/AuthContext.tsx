@@ -56,7 +56,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   // Broadcast token transitions so providers that live OUTSIDE AuthProvider
-  // (e.g., I18nProvider — kept above us so it doesn't remount the voice
+  // (e.g., I18nProvider - kept above us so it doesn't remount the voice
   // tree on locale re-renders) can re-hydrate without subscribing to this
   // context. Skipped on the very first render before localStorage hydrates.
   const tokenBroadcastInitRef = useRef(false);

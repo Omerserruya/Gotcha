@@ -39,7 +39,7 @@ vi.mock("@chatcenter/shared", () => ({
   prisma: prismaMock,
   getRedis: () => redisMock,
   publishEvent: publishEventMock,
-  // Middleware stubs — ai-assist.ts imports these at module load
+  // Middleware stubs - ai-assist.ts imports these at module load
   authenticate: (_req: any, _res: any, next: any) => next(),
   resolveTenant: (_req: any, _res: any, next: any) => next(),
   requireActiveTenant: () => (_req: any, _res: any, next: any) => next(),
@@ -176,8 +176,8 @@ describe("POST /api/ai-assist/voice", () => {
         ]),
       }),
     );
-    // triggerAssist is async — publishEvent fires after debounce; verify createMany was called
-    // (the actual setTimeout fires outside this test, which is fine — we verify scheduling path)
+    // triggerAssist is async - publishEvent fires after debounce; verify createMany was called
+    // (the actual setTimeout fires outside this test, which is fine - we verify scheduling path)
   });
 
   // ─── Test 2: Only partials → persists, does NOT trigger assist ───────────────────────────
@@ -200,7 +200,7 @@ describe("POST /api/ai-assist/voice", () => {
     expect(res.body.processed).toBe(2);
     expect(res.body.deduped).toBe(0);
     // No customer final → redis debounce set should NOT have been called for assist
-    // (pipeline.set is for per-msg dedupe, not debounce — debounce redis.set only on customer final)
+    // (pipeline.set is for per-msg dedupe, not debounce - debounce redis.set only on customer final)
     expect(prismaMock.message.createMany).toHaveBeenCalled();
   });
 

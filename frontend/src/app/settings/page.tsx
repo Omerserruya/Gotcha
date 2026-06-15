@@ -244,7 +244,7 @@ export default function SettingsPage() {
         setLocaleMessage(t("settings.language.saved"));
       } catch (err: any) {
         // Show the actual server reason (e.g. "unsupported_locale",
-        // "failed_to_set_locale") so the user — and we, while debugging —
+        // "failed_to_set_locale") so the user - and we, while debugging -
         // can tell what went wrong instead of just "try again".
         const reason = err?.message ? ` (${err.message})` : "";
         setLocaleMessage(`${t("settings.language.saveFailed")}${reason}`);
@@ -274,7 +274,7 @@ export default function SettingsPage() {
     [setTenantDefault, t],
   );
 
-  // Language card — shown to EVERY user (including non-admin agents).
+  // Language card - shown to EVERY user (including non-admin agents).
   // Tenant-default row is admin-only inside the card; agents see only
   // their personal override row.
   const languageCard = (
@@ -367,7 +367,7 @@ export default function SettingsPage() {
 
       {languageCard}
 
-      {/* AI Guardrails — quick links to the F8 policy + F4 tool gate admin surfaces. */}
+      {/* AI Guardrails - quick links to the F8 policy + F4 tool gate admin surfaces. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <a
           href="/settings/policy"
@@ -410,7 +410,7 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* Default phone country — used to E.164-normalize bare phone
+      {/* Default phone country - used to E.164-normalize bare phone
           numbers ("0501234567" → "+972501234567") when materializing
           broadcast recipients. */}
       <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
@@ -741,7 +741,7 @@ export default function SettingsPage() {
                                 onChange={(e) => updateDay(day, "open", e.target.value)}
                                 className="text-sm border border-gray-200 rounded-lg px-2 py-1.5 bg-white"
                               />
-                              <span className="text-xs text-gray-400">—</span>
+                              <span className="text-xs text-gray-400">-</span>
                               <input
                                 type="time"
                                 value={dayConfig.close || "18:00"}

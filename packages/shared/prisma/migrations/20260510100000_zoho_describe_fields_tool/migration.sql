@@ -17,7 +17,7 @@ INSERT INTO "catalog_tools"
 VALUES
   ('tool_zoho_crm_describe_fields', 'describe_fields', 'cat_zoho_crm',
    'Describe Fields',
-   'Return the field schema (name/label/type/picklist values) for a Zoho module — Leads, Contacts, Accounts, or Deals.',
+   'Return the field schema (name/label/type/picklist values) for a Zoho module - Leads, Contacts, Accounts, or Deals.',
    'READ', 'LOW', true, 99, 'GET', '/crm/v7/settings/fields',
    '{
      "type": "object",

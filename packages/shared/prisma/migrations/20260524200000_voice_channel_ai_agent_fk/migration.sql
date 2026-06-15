@@ -10,7 +10,7 @@
 --      SetNull-on-delete to `ai_agents.id`.
 --   2. Backfills the column from any existing `copilot_config->>'aiAgentId'`
 --      values. We DO NOT validate the referenced agent exists at the SQL
---      level — the FK constraint will fail if a stale id is present; if
+--      level - the FK constraint will fail if a stale id is present; if
 --      that happens in a real environment we drop the bad value to keep
 --      the migration green.
 --   3. Strips `aiAgentId` from the JSONB blob after backfill so we don't

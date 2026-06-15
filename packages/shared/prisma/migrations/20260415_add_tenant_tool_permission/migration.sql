@@ -12,7 +12,7 @@
 -- row via the unified evaluatePolicies() entry point (to be added in a
 -- subsequent task).
 --
--- Default row policy: no row = "use system default" — internal low-risk
+-- Default row policy: no row = "use system default" - internal low-risk
 -- tools are enabled without approval; internal high-risk tools (refunds,
 -- merges, broadcasts) get seeded with requiresApproval=true on tenant
 -- provisioning.

@@ -23,7 +23,7 @@ function isTab(value: string | null): value is Tab {
 // Real connected tools come from the /api/integrations response
 // (shape: [{name, slug, tenantConnection:{status}, catalogTools:[{name, riskLevel, tenantTool:{isEnabled}}]}]).
 // The hardcoded MOCK_TOOLS list that used to live here has been replaced with
-// live data — see the "connectedIntegrations" derivation inside SkillsTab.
+// live data - see the "connectedIntegrations" derivation inside SkillsTab.
 
 // ─── Stat card ────────────────────────────────────────────────
 function StatCard({ icon, label, value, sub, color }: {
@@ -188,7 +188,7 @@ function TeamTab({ t }: { t: (key: string) => string }) {
           );
         })}
 
-        {/* New member placeholder — always first when no agents */}
+        {/* New member placeholder - always first when no agents */}
         <Link
           href="/ai-studio/agents/new"
           data-tour="create-ai-employee-empty"
@@ -232,7 +232,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
   const router = useRouter();
   const [flows, setFlows] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
-  // Main Playbook node count — surfaces actual flow-canvas content rather
+  // Main Playbook node count - surfaces actual flow-canvas content rather
   // than the legacy RouterRule count (those are a separate, sibling system).
   // Excludes the synthetic `trigger_section_header` decorations.
   const [mainPlaybookNodeCount, setMainPlaybookNodeCount] = useState(0);
@@ -477,7 +477,7 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
           </div>
         ) : knowledgeBases.map((src, i) => {
           const status = src.status?.toLowerCase() || "synced";
-          const lastSync = src.updatedAt ? new Date(src.updatedAt).toLocaleDateString() : "—";
+          const lastSync = src.updatedAt ? new Date(src.updatedAt).toLocaleDateString() : "-";
           return (
           <div
             key={src.id}
@@ -592,7 +592,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
             id: "virtual_custom_api",
             slug: "custom_api",
             name: "Custom API",
-            description: "Define your own HTTP tools — Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
+            description: "Define your own HTTP tools - Postman-style request builder. Each tool exposes one API call to the AI as custom.<slug>.",
             category: "CUSTOM",
             authType: "CUSTOM",
             isPublished: true,
@@ -654,7 +654,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
 
       {subView === "connected" ? (
         <>
-          {/* Connected tools — derived from real marketplace data */}
+          {/* Connected tools - derived from real marketplace data */}
           {(() => {
             const connected = integrations
               .filter((intg: any) => intg.tenantConnection?.status === "CONNECTED")

@@ -1,5 +1,5 @@
 /**
- * Action Orchestrator — Layer 3.
+ * Action Orchestrator - Layer 3.
  *
  * Single tool-execution boundary. Every system (Chat, Live, Post-Call)
  * funnels actions through `submit()`. Direct imports of the tool registry

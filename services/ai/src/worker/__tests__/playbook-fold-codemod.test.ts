@@ -1,10 +1,10 @@
 /**
- * Codemod unit tests — exercise the pure merge logic without DB.
+ * Codemod unit tests - exercise the pure merge logic without DB.
  *
  * The codemod's DB I/O is one statement (the findMany + update). The
  * RISKY part is the merge: idempotency, dedup, overflow detection. We
  * factor that out via a re-export here and assert its behaviour
- * directly — running the full codemod requires a Prisma + Postgres
+ * directly - running the full codemod requires a Prisma + Postgres
  * harness which lives in integration tests.
  */
 
@@ -75,7 +75,7 @@ describe("playbook-fold merge", () => {
     ]);
   });
 
-  it("is idempotent — second merge is a no-op", () => {
+  it("is idempotent - second merge is a no-op", () => {
     const first = mergeStage(
       { id: "s1" },
       { requiredFields: ["budget"], exitCriteria: "Done" },

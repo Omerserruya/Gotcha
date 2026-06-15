@@ -4,7 +4,7 @@ import type { TranscriptAnalyzer } from "./types";
 /**
  * Summarizer thin wrapper.
  *
- * The main-turn frame leaves `summary` null in Phase 3 — the rolling
+ * The main-turn frame leaves `summary` null in Phase 3 - the rolling
  * summary is written by a side path (Tier B updater) on a slower cadence.
  * Phase 5/6 may run a finalizer summarizer that DOES populate `summary`
  * with kind="final"; this analyzer's contract works for both.

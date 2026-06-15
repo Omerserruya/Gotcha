@@ -15,7 +15,7 @@ const META_APP_ID = process.env.META_APP_ID || process.env.FACEBOOK_APP_ID || ""
  *   2. POST /{upload-session-id}  with body = file bytes              → handle
  *
  * Returns null (with a console.warn) on any failure so the caller can fall
- * back to submitting without the example — Meta will still reject media
+ * back to submitting without the example - Meta will still reject media
  * templates without it, but the failure is at the Meta layer and surfaced
  * by the existing 400 path rather than throwing here.
  */
@@ -64,7 +64,7 @@ async function uploadMediaForTemplateExample(
     }
     const sessionId = String(sessJson.id);
 
-    // 3. Stream the bytes (single chunk — example files are small).
+    // 3. Stream the bytes (single chunk - example files are small).
     const upRes = await fetch(`${FB_API_URL}/${sessionId}`, {
       method: "POST",
       headers: {
@@ -207,7 +207,7 @@ function buildMetaComponents(template: any, mediaHeaderHandle?: string | null) {
         ...(headerExample ? { example: headerExample } : {}),
       });
     } else {
-      // MEDIA headers — Meta requires example.header_handle with a handle
+      // MEDIA headers - Meta requires example.header_handle with a handle
       // from the Resumable Upload API. The caller uploads the example URL
       // (stored on the template's headerContent) before calling us and
       // passes the resulting handle here.
@@ -229,7 +229,7 @@ function buildMetaComponents(template: any, mediaHeaderHandle?: string | null) {
 
   if (template.footer) components.push({ type: "FOOTER", text: template.footer });
 
-  // BUTTONS — Meta accepts up to 3 buttons in a template. QUICK_REPLY is
+  // BUTTONS - Meta accepts up to 3 buttons in a template. QUICK_REPLY is
   // the common case for "tap to re-open the 24h window" flows; URL and
   // PHONE_NUMBER are also supported. Mixed types are NOT allowed: all
   // QUICK_REPLY OR all URL/PHONE_NUMBER (Meta enforces this and will

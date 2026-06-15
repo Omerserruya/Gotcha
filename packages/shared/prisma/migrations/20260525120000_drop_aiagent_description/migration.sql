@@ -1,7 +1,7 @@
 -- Spec violation removal: drop AIAgent.description.
 --
 -- The spec ("AI Worker Unification") removes the `description` field per
--- agent/config — agent identity is fully expressed through structured
+-- agent/config - agent identity is fully expressed through structured
 -- fields (role, persona, tone, identity, behavioralAnchors, etc.) and the
 -- free-text description was bypassing the structured-prompt contract.
 --

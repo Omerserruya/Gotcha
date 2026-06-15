@@ -12,18 +12,18 @@ import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
 import TestChatModal from "@/components/TestChatModal";
-// FunnelSection import removed — funnels are now managed at /settings/funnels.
+// FunnelSection import removed - funnels are now managed at /settings/funnels.
 // The agent is funnel-guided at runtime via resolveActiveStage; there is no
 // per-agent funnel override config to edit on this page.
 import ActionContractsSection from "@/components/ActionContractsSection";
 import AgentBuilder from "./AgentBuilder";
 
 // ─── Types ────────────────────────────────────────────────────
-// (Tone type removed — personality is governed by the platform skill now.)
+// (Tone type removed - personality is governed by the platform skill now.)
 type AgentRole = "customer_support" | "sales" | "sdr" | "recruiting" | "booking" | "billing" | "research" | "custom";
 
 // Roles for which a funnel binding is REQUIRED at save time (server
-// enforces this too — see services/ai/src/routes/ai-agents.ts).
+// enforces this too - see services/ai/src/routes/ai-agents.ts).
 const FUNNEL_REQUIRED_ROLES: AgentRole[] = ["sales", "sdr", "recruiting"];
 function roleRequiresFunnel(role: AgentRole | string): boolean {
   return (FUNNEL_REQUIRED_ROLES as string[]).includes(String(role));
@@ -47,7 +47,7 @@ interface Tool {
   // Per-agent semantics (Tier 2). Both optional; null = use catalog defaults.
   description?: string;  // what this tool means FOR THIS AGENT
   usageRule?: string;    // when/how to use FOR THIS AGENT
-  expanded?: boolean;    // local UI state — show the per-agent editor
+  expanded?: boolean;    // local UI state - show the per-agent editor
 }
 
 interface KnowledgeSource {
@@ -77,7 +77,7 @@ interface ConversationFlowStep {
 interface AgentFormData {
   name: string;
   role: AgentRole;
-  // description field removed per spec — agent identity is fully
+  // description field removed per spec - agent identity is fully
   // expressed through structured fields (role, persona, identity,
   // behavioralAnchors, etc.). Free-text description was bypassing
   // the structured-prompt contract.
@@ -106,7 +106,7 @@ interface AgentFormData {
   conversationFlow: ConversationFlowStep[];
   customGuardrails: string[];
   // Full persona JSON ({ gender, traits, brand_archetype, … }). Kept whole so a
-  // brand_archetype edit doesn't wipe gender/traits set elsewhere — the PATCH
+  // brand_archetype edit doesn't wipe gender/traits set elsewhere - the PATCH
   // route replaces the whole persona object.
   persona: Record<string, unknown>;
 }
@@ -251,14 +251,14 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   persona: {},
 };
 
-// Brand Voice archetypes — keys MUST match services/ai/src/services/brand-archetypes.ts.
+// Brand Voice archetypes - keys MUST match services/ai/src/services/brand-archetypes.ts.
 // "" = no strong flavor (renderer resolves it to the neutral default).
 const BRAND_ARCHETYPE_OPTIONS: { value: string; en: string; he: string }[] = [
   { value: "", en: "Neutral / Professional (default)", he: "ניטרלי / מקצועי (ברירת מחדל)" },
-  { value: "trusted_advisor", en: "Trusted Advisor — measured, credible, no hype", he: "יועץ מהימן — שקול, אמין, בלי הייפ" },
-  { value: "high_energy_coach", en: "High-Energy Coach — short, fast, motivating", he: "מאמן אנרגטי — קצר, מהיר, מניע לפעולה" },
-  { value: "luxury_concierge", en: "Luxury Concierge — refined, formal, deliberate", he: "קונסיירז' יוקרתי — מעודן, רשמי, מדוד" },
-  { value: "beauty_consultant", en: "Beauty Consultant — warm, intimate, expressive", he: "יועצת יופי — חמה, אישית, אקספרסיבית" },
+  { value: "trusted_advisor", en: "Trusted Advisor - measured, credible, no hype", he: "יועץ מהימן - שקול, אמין, בלי הייפ" },
+  { value: "high_energy_coach", en: "High-Energy Coach - short, fast, motivating", he: "מאמן אנרגטי - קצר, מהיר, מניע לפעולה" },
+  { value: "luxury_concierge", en: "Luxury Concierge - refined, formal, deliberate", he: "קונסיירז' יוקרתי - מעודן, רשמי, מדוד" },
+  { value: "beauty_consultant", en: "Beauty Consultant - warm, intimate, expressive", he: "יועצת יופי - חמה, אישית, אקספרסיבית" },
 ];
 
 // ─── Small shared components ───────────────────────────────────
@@ -362,7 +362,7 @@ export default function AgentEditorPage() {
       })
       .catch((err: any) => {
         console.error("Failed to load agent:", err);
-        // Surface 404 / 500 instead of silently bouncing — the redirect
+        // Surface 404 / 500 instead of silently bouncing - the redirect
         // was hiding a real backend error (P2022 on missing columns)
         // from operators trying to debug prod.
         const msg = err?.message || err?.error || "Failed to load AI Employee.";
@@ -712,12 +712,12 @@ export default function AgentEditorPage() {
               </select>
               <p className="text-xs text-gray-400 mt-1">
                 {roleRequiresFunnel(form.role)
-                  ? "Pipeline role — funnel binding is required below."
-                  : "Outcome role — goal text is required below."}
+                  ? "Pipeline role - funnel binding is required below."
+                  : "Outcome role - goal text is required below."}
               </p>
             </div>
 
-            {/* Goal — always rendered into the system prompt. Required for
+            {/* Goal - always rendered into the system prompt. Required for
                 non-funnel roles, optional but recommended for funnel roles. */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -738,7 +738,7 @@ export default function AgentEditorPage() {
               </p>
             </div>
 
-            {/* Success criteria — measurable conditions that indicate "done". */}
+            {/* Success criteria - measurable conditions that indicate "done". */}
             <div className="mb-4">
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Success criteria
@@ -773,13 +773,13 @@ export default function AgentEditorPage() {
               <p className="text-xs text-gray-400 mt-1">{t("aiStudio.agents.editor.setup.departmentHint")}</p>
             </div>
 
-            {/* description textarea removed — the agent's identity is fully
+            {/* description textarea removed - the agent's identity is fully
                 expressed through Personality (tone/style), Identity object,
                 Behavioral anchors, and Custom guardrails below. Free-text
                 description was bypassing the structured-prompt contract. */}
           </SectionCard>
 
-          {/* Personality (tone + style) section removed — humanlike behavior
+          {/* Personality (tone + style) section removed - humanlike behavior
               is now governed centrally by the platform Personality skill
               (services/ai/src/prompts/personality.md), not per-agent toggles.
               The tone/style fields remain on the record for back-compat but are
@@ -787,13 +787,13 @@ export default function AgentEditorPage() {
 
               Brand Voice IS the sanctioned per-agent voice dial: it shapes HOW
               the employee sounds (pace/warmth/vocabulary), layered on top of the
-              central Personality skill — it never changes WHAT it does. */}
+              central Personality skill - it never changes WHAT it does. */}
           <SectionCard
             title={locale === "he" ? "קול המותג" : "Brand Voice"}
             subtitle={
               locale === "he"
-                ? "ארכיטיפ שמעצב איך העובד נשמע — קצב, חום ואוצר מילים. נשען על מנגנון האישיות המרכזי, לא מחליף אותו."
-                : "An archetype that shapes how this employee sounds — pace, warmth, vocabulary. Layered on the central Personality skill; it never overrides strategy or guardrails."
+                ? "ארכיטיפ שמעצב איך העובד נשמע - קצב, חום ואוצר מילים. נשען על מנגנון האישיות המרכזי, לא מחליף אותו."
+                : "An archetype that shapes how this employee sounds - pace, warmth, vocabulary. Layered on the central Personality skill; it never overrides strategy or guardrails."
             }
           >
             <label className="block text-xs font-medium text-gray-500 mb-1.5">
@@ -888,7 +888,7 @@ export default function AgentEditorPage() {
                               onChange={(e) => patch({
                                 tools: form.tools.map((tt) => tt.id === tool.id ? { ...tt, description: e.target.value } : tt)
                               })}
-                              placeholder="What this tool means FOR THIS AGENT. E.g. &quot;Schedule a follow-up call with the SDR team — not used for customer support tickets.&quot;"
+                              placeholder="What this tool means FOR THIS AGENT. E.g. &quot;Schedule a follow-up call with the SDR team - not used for customer support tickets.&quot;"
                               rows={2}
                               className="w-full px-3 py-2 bg-white border border-gray-200 rounded-lg text-xs focus:ring-2 focus:ring-violet-200 focus:border-violet-300 outline-none transition resize-none"
                             />
@@ -983,7 +983,7 @@ export default function AgentEditorPage() {
           </SectionCard>
 
           {/* ── Section 5: Funnel binding ──
-              The agent IS funnel-guided at runtime — `resolveActiveStage`
+              The agent IS funnel-guided at runtime - `resolveActiveStage`
               runs on every turn (chat + voice) and injects the current
               stage's goal, required questions, data fields, and exit
               criteria into the prompt. Picker below pins a specific
@@ -1000,7 +1000,7 @@ export default function AgentEditorPage() {
             }
             subtitle={
               roleRequiresFunnel(form.role)
-                ? "Pipeline this AI employee runs — REQUIRED for this role."
+                ? "Pipeline this AI employee runs - REQUIRED for this role."
                 : "Pipeline this AI employee runs. Blank = use the department/tenant default."
             }
           >
@@ -1016,14 +1016,14 @@ export default function AgentEditorPage() {
             >
               <option value="">
                 {roleRequiresFunnel(form.role)
-                  ? "— Select a funnel (required) —"
+                  ? "- Select a funnel (required) -"
                   : "Use department / tenant default"}
               </option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.funnelId}
                   {f.departmentId ? "" : " (tenant default)"}
-                  {f.isActive ? "" : " — inactive"}
+                  {f.isActive ? "" : " - inactive"}
                   {" · "}{f.stageCount} stages
                 </option>
               ))}
@@ -1044,7 +1044,7 @@ export default function AgentEditorPage() {
           {/* ── Section 6: Action Contracts (deterministic tool chains) ── */}
           <SectionCard
             title="Action Contracts"
-            subtitle="When a business action fires, the bot is forced to call specific tools — no skipping, no reordering."
+            subtitle="When a business action fires, the bot is forced to call specific tools - no skipping, no reordering."
           >
             <ActionContractsSection />
           </SectionCard>
@@ -1314,7 +1314,7 @@ export default function AgentEditorPage() {
         </div>
       </div>
 
-      {/* Integration Drawer (inline — no navigation) */}
+      {/* Integration Drawer (inline - no navigation) */}
       <IntegrationDrawer
         isOpen={showSkillsPanel}
         aiAgentId={id !== "new" ? id : undefined}
@@ -1322,7 +1322,7 @@ export default function AgentEditorPage() {
           setShowSkillsPanel(false);
           // Refresh both the marketplace list (drawer UI) AND this agent's
           // tool list. The Skills section under the agent is scoped to
-          // AgentToolPermission — NOT to every tenant-enabled tool — so we
+          // AgentToolPermission - NOT to every tenant-enabled tool - so we
           // re-read the agent from the backend rather than rebuilding from
           // the marketplace response (which would wipe per-agent grants
           // on the next save).
@@ -1349,7 +1349,7 @@ export default function AgentEditorPage() {
         }}
       />
 
-      {/* Knowledge Drawer (inline — no navigation) */}
+      {/* Knowledge Drawer (inline - no navigation) */}
       <KnowledgeDrawer
         isOpen={showKnowledgePanel}
         onClose={() => setShowKnowledgePanel(false)}

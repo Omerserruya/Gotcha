@@ -13,7 +13,7 @@
  *
  * Determinism contract: the snapshot returned here MUST be stable for
  * the session's lifetime. Late-arriving CRM updates (a rep editing the
- * deal mid-call) do NOT mutate the snapshot — they flow in via a tool
+ * deal mid-call) do NOT mutate the snapshot - they flow in via a tool
  * result outside the cached prefix.
  */
 
@@ -34,7 +34,7 @@ export interface ResolvePipelineArgs {
 /**
  * Resolve and freeze the pipeline snapshot for a session.
  *
- * Returns `undefined` when the tenant has no funnel configured — callers
+ * Returns `undefined` when the tenant has no funnel configured - callers
  * should treat that as "no pipeline section" rather than an error. The
  * `pipeline_transitions` skill drops cleanly when the snapshot is absent.
  */
@@ -61,7 +61,7 @@ export function snapshotFromResolved(resolved: ResolvedStage): PipelineSnapshot 
 }
 
 /**
- * Diagnostic source label — useful for observability dashboards to
+ * Diagnostic source label - useful for observability dashboards to
  * track how often we fall back to first-stage vs match a vendor value.
  * Not part of the prompt; logged with the session profile.
  */

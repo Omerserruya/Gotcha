@@ -1,9 +1,9 @@
--- Customer Intelligence V2 — Phase 1 foundation.
+-- Customer Intelligence V2 - Phase 1 foundation.
 -- See docs/customer-intelligence-domain-model.md.
 --
 -- ADDITIVE + idempotent: new enums, new tables, one nullable column on
 -- business_profiles. Safe to run against a drifted dev DB (IF NOT EXISTS /
--- guarded DO blocks). No backfill required — all new columns are
+-- guarded DO blocks). No backfill required - all new columns are
 -- nullable or defaulted.
 
 -- ── Enums (idempotent via DO guards; CREATE TYPE has no IF NOT EXISTS) ──

@@ -1,11 +1,11 @@
 /**
- * Generator — produces a structured AIAgent configuration for a department
+ * Generator - produces a structured AIAgent configuration for a department
  * from the tenant's BusinessProfile + Department settings.
  *
  * This module owns the *normalization* layer: it maps free-form business
  * data into enumerated identity / goals / tone / behavioral / persona
  * structures the platform understands. The runtime prompt is assembled
- * later by `prompt-builder.service.ts` using these fields directly — no
+ * later by `prompt-builder.service.ts` using these fields directly - no
  * pre-baked `systemPrompt` is stored.
  */
 
@@ -229,7 +229,7 @@ export async function generateAgentConfig(
   };
 
   // The runtime prompt is built from these structured fields by
-  // `prompt-builder.service.ts` — no pre-baked systemPrompt is stored.
+  // `prompt-builder.service.ts` - no pre-baked systemPrompt is stored.
   const agentData = {
     identity: JSON.parse(JSON.stringify(config.identity)),
     goals: JSON.parse(JSON.stringify(config.goals)),
@@ -255,7 +255,7 @@ export async function generateAgentConfig(
         tenantId,
         name: `${department.name} AI Employee`,
         role: "customer_support",
-        // description column dropped per spec — identity is expressed via
+        // description column dropped per spec - identity is expressed via
         // structured fields (identity, persona, behavioralAnchors, etc).
         ...agentData,
       },

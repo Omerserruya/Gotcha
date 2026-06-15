@@ -6,9 +6,17 @@ import { useRouter } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
 import type { Locale } from "@/i18n";
 import JsonLd from "@/components/JsonLd";
-import MessageFlowSection from "@/components/landing/MessageFlowSection";
+import CustomerStorySection from "@/components/landing/CustomerStorySection";
 import SolutionsSection from "@/components/landing/SolutionsSection";
+import CtaForm from "@/components/landing/CtaForm";
 import FeaturesSection from "@/components/landing/FeaturesSection";
+
+// CRMs / tools shown in the gray scrolling marquee under the channels section.
+const INTEGRATION_MARQUEE = [
+  "HubSpot", "Salesforce", "Pipedrive", "Zoho CRM", "Fireberry", "Airtable",
+  "ReturnGO", "Shopify", "WooCommerce", "BigCommerce", "Stripe", "PayPal",
+  "Monday", "Zendesk", "Intercom", "Slack", "Google Calendar", "Calendly",
+];
 
 /* ───── Scroll Story: Platform Config ───── */
 
@@ -559,7 +567,7 @@ function ProductMockup() {
 
       {/* App UI */}
       <div className="flex h-56 sm:h-72">
-        {/* Sidebar — icon nav */}
+        {/* Sidebar - icon nav */}
         <div className="hidden sm:flex flex-col w-12 bg-gray-50/80 border-e border-gray-100 items-center py-3 gap-1">
           <div className="w-7 h-7 rounded-lg bg-primary-500/15 flex items-center justify-center mb-2">
             <div className="w-3.5 h-3.5 rounded bg-primary-500/40" />
@@ -962,18 +970,15 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
 
         <div className="max-w-[1240px] mx-auto w-full flex flex-col lg:flex-row items-center gap-8 sm:gap-12 lg:gap-16 relative z-10">
           {/* Text side */}
-          <div className={`flex-1 max-w-xl text-center lg:text-start ${isRtl ? "lg:order-2" : ""}`}>
-            <h1 className="landing-fade-in mb-4 sm:mb-5">
-              <span className="block text-[clamp(1.7rem,5vw,3.2rem)] font-light leading-[1.12] tracking-[-0.03em] text-black">
+          <div className={`flex-1 max-w-2xl text-center lg:text-start ${isRtl ? "lg:order-2" : ""}`}>
+            <h1 className="landing-fade-in mb-12 sm:mb-14">
+              <span className="block text-balance text-[clamp(1.7rem,5vw,3.2rem)] font-light leading-[1.12] tracking-[-0.03em] text-black line-clamp-2">
                 {t("landing.hero.title1")}
               </span>
-              <span className="block text-[clamp(1.15rem,3.5vw,2rem)] font-extralight leading-[1.2] tracking-[-0.02em] text-[#9a9a9a] mt-3 sm:mt-4">
+              <span className="block text-[clamp(1.15rem,3.5vw,2rem)] font-extralight leading-[1.2] tracking-[-0.02em] text-[#9a9a9a] mt-5 sm:mt-7">
                 {t("landing.hero.title2")}
               </span>
             </h1>
-            <p className="text-[15px] sm:text-[17px] leading-[1.7] font-light text-[#9a9a9a] mb-8 sm:mb-10 landing-fade-in landing-delay-1">
-              {t("landing.hero.subtitle")}
-            </p>
             <div className="flex flex-wrap gap-3 landing-fade-in landing-delay-2 justify-center lg:justify-start">
               <Link
                 href="/early-access"
@@ -1012,6 +1017,15 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
             <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed">
               {t("landing.hero.channelsSubtitle")}
             </p>
+
+            {/* Meta-approved Tech Provider trust badge */}
+            <div className="mt-7 inline-flex items-center gap-2.5 rounded-full bg-white border border-gray-200 shadow-sm px-4 py-2">
+              <img src="https://www.google.com/s2/favicons?domain=meta.com&sz=64" alt="Meta" className="w-[18px] h-[18px] object-contain shrink-0" />
+              <span className="text-[13px] font-medium text-gray-700">{t("landing.hero.metaBadge")}</span>
+              <svg viewBox="0 0 24 24" className="w-[18px] h-[18px] text-[#0866FF] shrink-0" fill="currentColor" aria-hidden="true">
+                <path d="M12 1.8 4.2 4.7v6c0 4.8 3.3 8.7 7.8 10.7 4.5-2 7.8-5.9 7.8-10.7v-6L12 1.8Zm-1.1 13.3-3-3 1.4-1.4 1.6 1.6 3.8-3.8 1.4 1.4-5.2 5.2Z" />
+              </svg>
+            </div>
           </div>
 
           {/* Channels converge visual */}
@@ -1024,6 +1038,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
               { name: "Gmail", logo: "/icons/gm.png", color: "#EA4335" },
               { name: "Outlook", logo: "/icons/ol.png", color: "#0078D4" },
               { name: "Slack", logo: "/icons/slk.png", color: "#4A154B" },
+              { name: "Phone Calls", logo: "/icons/twilio.svg", color: "#F22F46" },
             ].map((channel) => (
               <div
                 key={channel.name}
@@ -1036,11 +1051,30 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
               </div>
             ))}
           </div>
+
+          {/* Integrations marquee - works with every CRM & tool (gray, scrolling) */}
+          <div className="mt-16 sm:mt-20">
+            <p className="text-center text-[13px] text-gray-400 mb-7">{t("landing.hero.integrationsLabel")}</p>
+            <div className="landing-marquee" style={{ ["--marquee-speed" as string]: "70s" } as React.CSSProperties}>
+              <div className="landing-marquee-track">
+                {[0, 1, 2, 3].map((rep) => (
+                  <div key={rep} className="flex items-center shrink-0" aria-hidden={rep > 0}>
+                    {INTEGRATION_MARQUEE.map((name) => (
+                      <span key={name} className="flex items-center whitespace-nowrap text-[15px] sm:text-lg font-medium text-gray-300">
+                        <span className="px-5 sm:px-8">{name}</span>
+                        <span className="text-gray-200">•</span>
+                      </span>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       </section>
 
       {/* ───── How It Works: Message Flow Visualization ───── */}
-      <MessageFlowSection t={t as (key: string) => string} isRtl={isRtl} />
+      <CustomerStorySection t={t as (key: string) => string} isRtl={isRtl} />
 
       {/* ───── Features: Interactive Tabs ───── */}
       <FeaturesSection t={t as (key: string) => string} isRtl={isRtl} />
@@ -1067,24 +1101,8 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
         </div>
       </section>
 
-      {/* ───── CTA ───── */}
-      <section className="py-20 sm:py-36 px-4 sm:px-6">
-        <div className="max-w-2xl mx-auto text-center">
-          <h2 className="text-[clamp(1.5rem,3.5vw,2.5rem)] font-semibold tracking-[-0.03em] leading-[1.15] mb-5">
-            {t("landing.cta.title")}
-          </h2>
-          <p className="text-[#9a9a9a] text-[15px] sm:text-base leading-relaxed mb-10">
-            {t("landing.cta.subtitle")}
-          </p>
-          <Link
-            href="/early-access"
-            className="inline-flex px-10 py-4 text-[15px] font-semibold text-white bg-primary-500 rounded-2xl hover:bg-primary-600 transition-all duration-200 hover:scale-[1.02]"
-            style={{ boxShadow: "0 4px 20px rgba(124,92,252,0.25)" }}
-          >
-            {t("landing.cta.button")}
-          </Link>
-        </div>
-      </section>
+      {/* ───── CTA: embedded early-access form ───── */}
+      <CtaForm t={t as (key: string, vars?: Record<string, string>) => string} isRtl={isRtl} />
 
       {/* ───── Footer ───── */}
       <footer className="py-10 sm:py-14 px-4 sm:px-12 lg:px-20 bg-[#fafafa]">
@@ -1093,7 +1111,7 @@ export default function LandingPage({ forcedLocale }: { forcedLocale?: Locale })
             <div className="max-w-xs">
               <Logo />
               <p className="mt-4 text-[13px] text-[#b0b0b0] leading-relaxed">
-                {t("landing.hero.subtitle").slice(0, 80)}...
+                {t("landing.hero.title1")}
               </p>
             </div>
 

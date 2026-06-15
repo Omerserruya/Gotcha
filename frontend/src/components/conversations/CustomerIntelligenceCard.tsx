@@ -6,7 +6,7 @@ import { useI18n } from "@/context/I18nContext";
 import { getCustomerSnapshot, type CustomerSnapshot, type SnapshotFact, type SnapshotOpportunity } from "@/lib/gotcha-api";
 
 /**
- * Customer Intelligence Card (V2, Phase 3) — the Snapshot projection rendered
+ * Customer Intelligence Card (V2, Phase 3) - the Snapshot projection rendered
  * in the conversation Context Panel: WHO / WHAT (per-opportunity) / MISSING /
  * NEXT / NARRATIVE. Generated from CustomerProfile + Opportunity +
  * ConversationIntelligence + the gap engine.
@@ -81,7 +81,7 @@ export function CustomerIntelligenceCard({ conversationId }: { conversationId?: 
         {snap.who.sentiment && <Badge tone={snap.who.sentiment === "negative" ? "red" : snap.who.sentiment === "positive" ? "green" : "gray"}>{snap.who.sentiment}</Badge>}
       </div>
 
-      {/* WHAT — opportunities */}
+      {/* WHAT - opportunities */}
       {snap.opportunities.map((o) => (
         <OpportunityBlock key={o.id} opp={o} he={he} />
       ))}
@@ -174,7 +174,7 @@ function FactChip({ fact, he }: { fact: SnapshotFact; he: boolean }) {
         "inline-flex items-center gap-1 text-[11px] px-1.5 py-0.5 rounded-md border bg-white " +
         (fact.uncertain ? "border-dashed border-gray-300 text-gray-500" : "border-gray-200 text-gray-700")
       }
-      title={fact.uncertain ? (he ? "לא מאומת — כדאי לוודא" : "Unconfirmed — verify") : `${fact.source}`}
+      title={fact.uncertain ? (he ? "לא מאומת - כדאי לוודא" : "Unconfirmed - verify") : `${fact.source}`}
     >
       <span className="text-gray-400">{fact.label}:</span>
       <span className="font-medium">{fmtValue(fact, he)}</span>

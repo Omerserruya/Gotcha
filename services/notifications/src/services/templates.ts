@@ -2,10 +2,10 @@
  * Notification templates per SystemEventType.
  *
  * Templates render to a {title, body} pair used both for in-app rows and
- * the email subject + body. Bilingual (EN/HE) — we tag both in the same
+ * the email subject + body. Bilingual (EN/HE) - we tag both in the same
  * payload, separated by a divider, mirroring the dashboard's i18n convention.
  *
- * Templates are pure functions of `event.data` — no I/O. The dispatcher
+ * Templates are pure functions of `event.data` - no I/O. The dispatcher
  * passes `event.data` straight through; missing fields show "n/a".
  */
 
@@ -16,7 +16,7 @@ export interface RenderedTemplate {
   title: string;
   /** Plain-text body. The email worker wraps this in HTML. */
   body: string;
-  /** Optional dashboard link — used as `link` on the InAppNotification row. */
+  /** Optional dashboard link - used as `link` on the InAppNotification row. */
   link?: string;
 }
 
@@ -37,7 +37,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       body:
         `An AI agent is requesting approval to run ${tool}.\n` +
         (summary ? `Reason: ${summary}\n` : "") +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `נדרש אישור להפעלת הכלי ${tool}.${summary ? ` סיבה: ${summary}` : ""}`,
       link: e.metadata.conversationId
         ? `/conversations/${e.metadata.conversationId}`
@@ -52,7 +52,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `New lead: ${name}`,
       body:
         `A new lead was created${value ? ` with estimated value ${value}` : ""}.\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `נוצר ליד חדש: ${name}${value ? ` (ערך משוער ${value})` : ""}.`,
       link: "/contacts",
     };
@@ -64,7 +64,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `Meeting scheduled${at ? ` for ${at}` : ""}`,
       body:
         `A meeting was successfully scheduled${at ? ` for ${at}` : ""}.\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `נקבעה פגישה${at ? ` ל-${at}` : ""}.`,
       link: e.metadata.conversationId
         ? `/conversations/${e.metadata.conversationId}`
@@ -78,7 +78,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `Discount applied${amount ? `: ${amount}` : ""}`,
       body:
         `A discount was applied to a customer order.${amount ? ` Amount: ${amount}.` : ""}\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `הוחל הנחה${amount ? `: ${amount}` : ""}.`,
       link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined,
     };
@@ -90,7 +90,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `Refund issued${amount ? `: ${amount}` : ""}`,
       body:
         `A refund was issued.${amount ? ` Amount: ${amount}.` : ""}\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `הונפק החזר${amount ? ` בסך ${amount}` : ""}.`,
       link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined,
     };
@@ -102,7 +102,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `Conversation escalated`,
       body:
         `A conversation was escalated to a human. Reason: ${reason}.\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `שיחה הועברה לנציג אנושי. סיבה: ${reason}.`,
       link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined,
     };
@@ -115,7 +115,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `High-value lead detected: ${name}`,
       body:
         `A high-value lead was detected (estimated ${value}).\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `זוהה ליד בעל ערך גבוה: ${name} (משוער ${value}).`,
       link: "/contacts",
     };
@@ -127,7 +127,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `Payment failed`,
       body:
         `A customer payment failed.${reason ? ` Reason: ${reason}.` : ""}\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `תשלום נכשל${reason ? `. סיבה: ${reason}` : ""}.`,
       link: e.metadata.conversationId ? `/conversations/${e.metadata.conversationId}` : undefined,
     };
@@ -139,7 +139,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
       title: `Critical system error`,
       body:
         `A critical system error was reported: ${msg}\n` +
-        `\n— Hebrew —\n` +
+        `\n- Hebrew -\n` +
         `שגיאת מערכת קריטית: ${msg}.`,
       link: "/system/health",
     };
@@ -149,12 +149,12 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
 export function renderTemplate(event: SystemEvent): RenderedTemplate {
   const fn = TEMPLATES[event.type];
   if (fn) return fn(event);
-  // Fallback for unknown event types — shouldn't happen but stay safe.
+  // Fallback for unknown event types - shouldn't happen but stay safe.
   return {
     title: `Notification: ${event.type}`,
     body:
       `Event ${event.type} fired.\nData: ${safe(event.data, "{}")}.\n` +
-      `\n— Hebrew —\n` +
+      `\n- Hebrew -\n` +
       `התקבלה התראה: ${event.type}.`,
   };
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 
 /**
- * Phase 3 — BusinessPolicy persistence: write → "restart" (module reset,
+ * Phase 3 - BusinessPolicy persistence: write → "restart" (module reset,
  * cache cleared) → read still returns the persisted shape via the DB.
  */
 
@@ -22,12 +22,12 @@ vi.mock("@chatcenter/shared", () => ({
   prisma: { businessPolicy: businessPolicyMock },
 }));
 
-describe("policy.service — DB persistence", () => {
+describe("policy.service - DB persistence", () => {
   beforeEach(() => {
     dbStore.clear();
     businessPolicyMock.findUnique.mockClear();
     businessPolicyMock.upsert.mockClear();
-    vi.resetModules(); // simulate "restart" — fresh import = fresh cache
+    vi.resetModules(); // simulate "restart" - fresh import = fresh cache
   });
 
   it("setPolicy writes through to DB via upsert", async () => {
@@ -39,7 +39,7 @@ describe("policy.service — DB persistence", () => {
   });
 
   it("getPolicy after 'restart' reads from DB, not stale cache", async () => {
-    // Round 1 — write
+    // Round 1 - write
     {
       const { setPolicy } = await import("../services/policy.service");
       await setPolicy("tenant-r", { maxDiscountPercent: 33 });

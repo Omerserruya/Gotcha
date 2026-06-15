@@ -1,7 +1,7 @@
 /**
  * Tenant funnel-config loader.
  *
- * The BEL must stay pure — no I/O. This repo is the only place that touches
+ * The BEL must stay pure - no I/O. This repo is the only place that touches
  * Prisma to fetch a tenant's `FunnelConfig`. Callers (ai-bot.service) load
  * the funnel BEFORE invoking computeBehaviorState() and pass it in.
  *
@@ -14,7 +14,7 @@
  * Resolution order:
  *   1. Department-scoped active funnel (departmentId = given value).
  *   2. Tenant-default active funnel (departmentId IS NULL).
- *   3. null — BEL behaves as if no funnel existed.
+ *   3. null - BEL behaves as if no funnel existed.
  *
  * Failure mode: any error or missing config → returns `null`.
  */
@@ -23,7 +23,7 @@ import { prisma } from "@chatcenter/shared";
 import type { FunnelConfig } from "./funnel-config.service";
 
 const cache = new Map<string, { value: FunnelConfig | null; expiresAt: number }>();
-const TTL_MS = 60_000; // 60s — keep BEL hot path cheap.
+const TTL_MS = 60_000; // 60s - keep BEL hot path cheap.
 
 export async function loadFunnelForTenant(opts: {
   tenantId: string;
@@ -67,7 +67,7 @@ export async function loadFunnelForTenant(opts: {
       if (validateFunnel(candidate)) value = candidate;
     }
   } catch (err: any) {
-    // Pre-migration: prisma.tenantFunnel may not exist yet — degrade silently.
+    // Pre-migration: prisma.tenantFunnel may not exist yet - degrade silently.
     if (!/Unknown arg|Cannot read|undefined.*findFirst/.test(err?.message || "")) {
       console.warn("[funnel-config.repo] load failed (non-fatal):", err?.message);
     }
@@ -81,7 +81,7 @@ export async function loadFunnelForTenant(opts: {
 /**
  * Load a specific funnel by its TenantFunnel.id, scoped to the tenant.
  * Used by the stage-resolver when a voice channel pins a specific funnel
- * via copilotConfig.funnelId — bypasses the department-based fallback
+ * via copilotConfig.funnelId - bypasses the department-based fallback
  * chain. Same fail-soft contract as loadFunnelForTenant.
  */
 export async function loadFunnelById(opts: {

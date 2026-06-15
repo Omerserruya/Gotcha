@@ -1,4 +1,4 @@
-# ChatCenter — Production Deploy Guide
+# ChatCenter - Production Deploy Guide
 
 End-to-end runbook: from a fresh AWS account to a live production system on a single EC2.
 
@@ -11,7 +11,7 @@ End-to-end runbook: from a fresh AWS account to a live production system on a si
 ```
 Internet
    ↓
-Cloudflare (DNS + TLS + WAF + DDoS — free tier)
+Cloudflare (DNS + TLS + WAF + DDoS - free tier)
    ↓
 Cloudflare Tunnel (outbound, no inbound ports)
    ↓
@@ -20,11 +20,11 @@ AWS EC2 (t4g.large, ARM, default VPC, no public-facing services)
        ├─ nginx (gateway)
        ├─ 8 services: auth, conversation, webhook, analytics, chatbot, ai, voice-copilot, notifications
        ├─ 2 workers: incoming, outgoing
-       ├─ frontend (static Next.js export served by nginx — no Node runtime)
+       ├─ frontend (static Next.js export served by nginx - no Node runtime)
        ├─ db (Postgres 16) + redis + qdrant
        └─ uploads volume (local EBS)
 
-Docker images: Docker Hub — single repo, one tag per service (`gotcha:auth-<sha>`, `gotcha:ai-<sha>`, …)
+Docker images: Docker Hub - single repo, one tag per service (`gotcha:auth-<sha>`, `gotcha:ai-<sha>`, …)
 Backups: nightly pg_dump + uploads tar → S3, daily EBS snapshots via DLM (7-day retention)
 Secrets: SSM Parameter Store (SecureString)
 Shell access: SSH (your key) OR SSM Session Manager (zero open ports)
@@ -41,13 +41,13 @@ Shell access: SSH (your key) OR SSM Session Manager (zero open ports)
 | Docker + buildx | `brew install docker` + `docker buildx create --use`. On Ubuntu: `sudo apt-get install docker-buildx-plugin` (buildx isn't bundled). |
 | `jq` | `brew install jq` / `apt-get install jq` |
 | SSM Session Manager plugin (optional) | `brew install --cask session-manager-plugin` |
-| Docker Hub account | https://hub.docker.com — **one repo** holds everything (each service is a separate tag). Free plan is enough. |
+| Docker Hub account | https://hub.docker.com - **one repo** holds everything (each service is a separate tag). Free plan is enough. |
 | Cloudflare account | with your domain |
 | AWS account | with root login |
 
 ---
 
-## Step 1 — Give Terraform AWS permissions
+## Step 1 - Give Terraform AWS permissions
 
 ### 1.1 Create an IAM user (AWS Console)
 
@@ -59,13 +59,13 @@ Shell access: SSH (your key) OR SSM Session Manager (zero open ports)
 | Console access | **No** (CLI-only) |
 | Permissions option | **Attach policies directly** |
 
-### 1.2 Attach permissions — pick A or B
+### 1.2 Attach permissions - pick A or B
 
-**Option A — Simple (recommended for your stage)**
+**Option A - Simple (recommended for your stage)**
 - ✅ `PowerUserAccess` (AWS-managed)
 - ✅ `IAMFullAccess` (AWS-managed, needed because PowerUser doesn't include IAM)
 
-**Option B — Tightly scoped** (production-correct)
+**Option B - Tightly scoped** (production-correct)
 
 Click **Create inline policy → JSON** and paste:
 
@@ -158,7 +158,7 @@ Name it `gotcha-terraform-policy`.
 
 User → **Security credentials** → **Create access key** → use case **Command Line Interface (CLI)** → Create.
 
-⚠️ Copy both **Access key ID** + **Secret access key** — you'll never see the secret again.
+⚠️ Copy both **Access key ID** + **Secret access key** - you'll never see the secret again.
 
 ### 1.4 Configure your laptop
 
@@ -179,21 +179,21 @@ aws sts get-caller-identity
 
 ---
 
-## Step 2 — Provision AWS infra with Terraform
+## Step 2 - Provision AWS infra with Terraform
 
 ```bash
 cd /home/ocs/projects/ChatCenter/terraform
 cp terraform.tfvars.example terraform.tfvars
 ```
 
-Edit `terraform.tfvars` — pick your SSH option:
+Edit `terraform.tfvars` - pick your SSH option:
 
 ```hcl
-# (A) RECOMMENDED — Terraform creates the AWS key pair from your local public key
+# (A) RECOMMENDED - Terraform creates the AWS key pair from your local public key
 ssh_public_key_path = "~/.ssh/id_ed25519.pub"
 allowed_ssh_cidrs   = ["1.2.3.4/32"]   # find with: curl -4 ifconfig.me
 
-# (C) NO SSH — rely on SSM Session Manager (leave above commented out)
+# (C) NO SSH - rely on SSM Session Manager (leave above commented out)
 ```
 
 No SSH key yet?
@@ -221,7 +221,7 @@ terraform output -raw backup_bucket       # S3 backups bucket
 
 ---
 
-## Step 3 — Set up Docker Hub
+## Step 3 - Set up Docker Hub
 
 ### 3.1 Create an access token
 
@@ -249,11 +249,11 @@ The EC2 IAM role already has read access to `/gotcha/prod/*`.
 
 > ⚠️ **Prefix + region must match.** The instance role can only read `/${project}/${env}/*` (i.e. `/gotcha/prod/*`, see `terraform/iam.tf`) **in the region the box runs in (`il-central-1`)**. A param written to the wrong prefix or region → `AccessDeniedException` or the box never sees it. To update an existing param, add `--overwrite`.
 
-> **Public images?** Skip 3.2 — no login needed on the EC2.
+> **Public images?** Skip 3.2 - no login needed on the EC2.
 
 ---
 
-## Step 4 — Build & push images to Docker Hub
+## Step 4 - Build & push images to Docker Hub
 
 All images go into **one Docker Hub repo**. Each service becomes a tag inside that repo:
 `docker.io/<you>/<repo>:auth-<sha>`, `…:ai-<sha>`, `…:frontend-<sha>`, plus a rolling `<svc>-latest`.
@@ -269,7 +269,7 @@ echo "dckr_pat_xxxxx" | docker login -u <your-dockerhub-username> --password-std
 # Required env
 export REGISTRY=docker.io/<your-dockerhub-username>   # registry host + namespace
 export REPO=gotcha                                # the ONE repo to push everything into
-export PLATFORM=linux/arm64                           # ⚠️ t4g.large is ARM — match it!
+export PLATFORM=linux/arm64                           # ⚠️ t4g.large is ARM - match it!
 export TAG=$(git rev-parse --short HEAD)              # or v1.0.0
 
 # Frontend build-args (baked into the static export at build time)
@@ -292,43 +292,43 @@ TAG=v0.1.0 ./scripts/docker-publish.sh                  # pin a version tag
 PLATFORM=linux/arm64,linux/amd64 ./scripts/docker-publish.sh   # multi-arch (~2× build time)
 ```
 
-⚠️ `linux/arm64` is essential — the EC2 is Graviton (t4g.*). Without it: `exec format error` on the box.
+⚠️ `linux/arm64` is essential - the EC2 is Graviton (t4g.*). Without it: `exec format error` on the box.
 
 ---
 
-## Step 5 — Shell into the EC2
+## Step 5 - Shell into the EC2
 
 The box has **no open port 22 and no public service IP** (Cloudflare Tunnel dials out), so you reach it
-through **SSM**. Two ways — set up Option A once; keep Option B as the always-works fallback.
+through **SSM**. Two ways - set up Option A once; keep Option B as the always-works fallback.
 
-### Option A — SSH over an SSM tunnel (recommended)
+### Option A - SSH over an SSM tunnel (recommended)
 
-Gives you a normal `ubuntu` shell **plus** `scp`/`rsync`/port-forwarding — all tunneled through SSM,
+Gives you a normal `ubuntu` shell **plus** `scp`/`rsync`/port-forwarding - all tunneled through SSM,
 still zero open ports. Needs the `session-manager-plugin` locally.
 
 **One-time setup:**
 
 1. Add your laptop's public key to the box (run once, from inside Option B's raw SSM session):
    ```bash
-   # on the box — paste the contents of your ~/.ssh/id_ed25519.pub:
+   # on the box - paste the contents of your ~/.ssh/id_ed25519.pub:
    sudo -u ubuntu bash -c 'mkdir -p ~ubuntu/.ssh && echo "PASTE_YOUR_PUBLIC_KEY" >> ~ubuntu/.ssh/authorized_keys && chmod 600 ~ubuntu/.ssh/authorized_keys'
    ```
 
-2. Teach local SSH to tunnel through SSM — append to `~/.ssh/config` (then `chmod 600 ~/.ssh/config`):
+2. Teach local SSH to tunnel through SSM - append to `~/.ssh/config` (then `chmod 600 ~/.ssh/config`):
    ```sshconfig
    host i-* mi-*
      ProxyCommand sh -c "aws ssm start-session --target %h --document-name AWS-StartSSHSession --parameters 'portNumber=%p' --region il-central-1 --profile gotcha"
      User ubuntu
    ```
 
-**Connect** — use the **instance id** as the hostname (the `host i-*` pattern triggers the tunnel):
+**Connect** - use the **instance id** as the hostname (the `host i-*` pattern triggers the tunnel):
 ```bash
 ssh -i ~/.ssh/id_ed25519 ubuntu@$(terraform -chdir=terraform output -raw instance_id)
 ```
 
-### Option B — raw SSM session (fallback, always works)
+### Option B - raw SSM session (fallback, always works)
 
-No SSH key or config needed — works even if Option A breaks.
+No SSH key or config needed - works even if Option A breaks.
 ```bash
 aws ssm start-session --target $(terraform -chdir=terraform output -raw instance_id) --region il-central-1 --profile gotcha
 sudo -u ubuntu -i
@@ -351,13 +351,13 @@ DH_TOKEN=$(aws ssm get-parameter --name /gotcha/prod/DOCKERHUB_TOKEN --with-decr
 echo "$DH_TOKEN" | docker login -u "$DH_USER" --password-stdin
 ```
 
-That writes `~/.docker/config.json` — persistent across reboots.
+That writes `~/.docker/config.json` - persistent across reboots.
 
 ---
 
-## Step 6 — Copy deploy files + write `.env`
+## Step 6 - Copy deploy files + write `.env`
 
-The box runs **images** — it does **not** need the source tree. It needs only two host files:
+The box runs **images** - it does **not** need the source tree. It needs only two host files:
 `docker-compose.prod.yml` (what `docker compose` reads) and `.env` (Compose auto-loads it from the
 working dir for `${VAR}` substitution). All volumes are named Docker volumes and the nginx/gateway
 config is baked into the image, so nothing else has to be on the host.
@@ -408,12 +408,12 @@ aws s3 cp "s3://$BUCKET/deploy/.env" .
 
 > 🔁 **Future config changes** (compose or `.env`): re-run `./scripts/push-deploy.sh`, then on the box
 > `docker compose -f docker-compose.prod.yml up -d`. Image/code changes still go through Docker Hub
-> (Step 4) — this push is only for the two host files.
+> (Step 4) - this push is only for the two host files.
 
 Required values in `.env`:
 
 ```bash
-# Registry — what you pushed in Step 4
+# Registry - what you pushed in Step 4
 REGISTRY=docker.io/<your-dockerhub-username>
 REPO=gotcha
 TAG=<the tag you pushed>
@@ -422,7 +422,7 @@ TAG=<the tag you pushed>
 POSTGRES_PASSWORD=$(openssl rand -hex 16)
 DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@db:5432/whatsapp_cc
 
-# Security (generate fresh — never reuse dev values)
+# Security (generate fresh - never reuse dev values)
 JWT_SECRET=$(openssl rand -hex 32)
 CHANNEL_ENCRYPTION_KEY=$(openssl rand -hex 32)
 INTERNAL_SERVICE_KEY=$(openssl rand -hex 32)
@@ -448,10 +448,10 @@ OAUTH_REDIRECT_URI=https://app.yourdomain.com/api/channels/oauth/callback
 
 ---
 
-## Step 7 — Wire up Cloudflare Tunnel
+## Step 7 - Wire up Cloudflare Tunnel
 
 ```bash
-cloudflared tunnel login                                  # opens browser auth URL — open it
+cloudflared tunnel login                                  # opens browser auth URL - open it
 cloudflared tunnel create prod
 cloudflared tunnel route dns prod app.yourdomain.com
 cloudflared tunnel route dns prod voice.yourdomain.com    # for Twilio Media Streams
@@ -482,7 +482,7 @@ Why a dedicated `voice.` subdomain → skips nginx, lower WSS latency for Twilio
 
 ---
 
-## Step 8 — Start the app
+## Step 8 - Start the app
 
 ```bash
 cd /opt/chatcenter
@@ -501,10 +501,10 @@ docker compose -f docker-compose.prod.yml logs -f --tail=50
 
 ---
 
-## Step 9 — Verify
+## Step 9 - Verify
 
 ```bash
-# From your laptop — health endpoint via Cloudflare
+# From your laptop - health endpoint via Cloudflare
 curl -i https://app.yourdomain.com/health
 # expect: 200 + {"status":"ok","service":"gateway"}
 
@@ -512,7 +512,7 @@ curl -i https://app.yourdomain.com/health
 open https://app.yourdomain.com
 ```
 
-Then in the AWS Console: check **CloudWatch → Alarms** — should be 3 alarms in `OK` state.
+Then in the AWS Console: check **CloudWatch → Alarms** - should be 3 alarms in `OK` state.
 
 ---
 
@@ -520,7 +520,7 @@ Then in the AWS Console: check **CloudWatch → Alarms** — should be 3 alarms 
 
 Once the box is running, future deploys are 2 steps:
 
-### Local — build + push
+### Local - build + push
 ```bash
 export REGISTRY=docker.io/<user>
 export REPO=gotcha
@@ -532,7 +532,7 @@ docker login
 SERVICES=ai,frontend ./scripts/docker-publish.sh
 ```
 
-### EC2 — pull + restart
+### EC2 - pull + restart
 ```bash
 ssh -i ~/.ssh/id_ed25519 ubuntu@$(terraform -chdir=terraform output -raw instance_id)   # SSH-over-SSM
 cd /opt/chatcenter
@@ -543,7 +543,7 @@ docker compose -f docker-compose.prod.yml up -d
 ```
 
 > If you changed `docker-compose.prod.yml` or `.env` locally, push them first with
-> `./scripts/push-deploy.sh` (see Step 6) — then run the pull + restart above.
+> `./scripts/push-deploy.sh` (see Step 6) - then run the pull + restart above.
 
 > Want to automate this? Add `.github/workflows/deploy.yml` that builds on `push to main` and SSMs into the box to pull + restart. Ask and I'll generate it.
 
@@ -570,12 +570,12 @@ docker compose -f docker-compose.prod.yml up -d
 | Symptom | Fix |
 |---|---|
 | `pull access denied` on private image | `docker login` on EC2 was never run, or token expired. Re-run the SSM-fetch + `docker login` block from Step 5. |
-| `AccessDeniedException` reading an SSM param, or box never sees a new value | Param is in the wrong prefix/region. It must be under `/gotcha/prod/*` **and** in `il-central-1` (where the box reads). Re-`put-parameter` with the right `--name`/`--region` (`--overwrite` to replace). Note SSM is **pull-based** — after updating a param you must re-fetch + restart the app for the new value to take effect. |
+| `AccessDeniedException` reading an SSM param, or box never sees a new value | Param is in the wrong prefix/region. It must be under `/gotcha/prod/*` **and** in `il-central-1` (where the box reads). Re-`put-parameter` with the right `--name`/`--region` (`--overwrite` to replace). Note SSM is **pull-based** - after updating a param you must re-fetch + restart the app for the new value to take effect. |
 | `toomanyrequests` from Docker Hub | Free tier limits anonymous pulls. Login fixes it (200/6h authed; unlimited on Pro). |
 | `exec format error` | Image built for amd64. Rebuild with `PLATFORM=linux/arm64 ./scripts/docker-publish.sh`. |
 | `unknown flag: --name` when running publish script | Buildx plugin not installed. `sudo apt-get install docker-buildx-plugin` then re-run. |
 | `invalid reference format` pushing image | `REGISTRY` includes the repo name (e.g. `omerserruya/gotcha`). It should be only `docker.io/omerserruya`; the repo goes in `REPO`. |
-| `cloudflared` won't connect | `sudo journalctl -u cloudflared -f` — usually wrong tunnel ID in `config.yml`. |
+| `cloudflared` won't connect | `sudo journalctl -u cloudflared -f` - usually wrong tunnel ID in `config.yml`. |
 | Frontend shows wrong API URL | `NEXT_PUBLIC_*` is baked at build time. Rebuild + push the frontend image with the right `--build-arg`. |
 | `voice.yourdomain.com` drops mid-call | Cloudflare proxy WSS sometimes flakes on Twilio. Set `voice.` to **DNS-only (grey cloud)**, keep `app.` proxied. |
 | Postgres OOM-killed | The 2GB swap in `user_data.sh` usually catches this. If recurring → bump to `t4g.xlarge` ($98/mo) or split Postgres to RDS. |
@@ -632,7 +632,7 @@ Migrate to ECS + RDS + ElastiCache when **any** trigger fires:
 | Geo-redundancy / multi-region sold | Single AZ won't cut it |
 | Compliance: RPO < 24h or HA required | Need Multi-AZ RDS |
 
-The migration path is clean because your services are already stateless — only the stateful trio (Postgres → RDS, Redis → ElastiCache, Qdrant → bigger box) needs to move out.
+The migration path is clean because your services are already stateless - only the stateful trio (Postgres → RDS, Redis → ElastiCache, Qdrant → bigger box) needs to move out.
 
 ---
 
@@ -662,7 +662,7 @@ The migration path is clean because your services are already stateless — only
 
 ---
 
-**TL;DR — first deploy timing:**
+**TL;DR - first deploy timing:**
 
 | Phase | Time |
 |---|---|

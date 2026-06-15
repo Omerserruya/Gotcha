@@ -27,7 +27,7 @@ const CHANNEL_CONFIG: Record<string, {
   templateOnly: boolean;
   description: string;
 }> = {
-  // Meta channels (Facebook / Instagram / Messenger) intentionally absent —
+  // Meta channels (Facebook / Instagram / Messenger) intentionally absent -
   // they don't support business-initiated outbound (Meta only allows DMs
   // inside a 24h messaging window after a user-initiated message). Listing
   // them here would let agents start chats that the platform then rejects.
@@ -117,7 +117,7 @@ export function NewConversationPanel({ onClose, onCreated }: Props) {
     getChannelAccounts(token)
       .then((res) => {
         const accounts = Array.isArray(res) ? res : (res as any)?.data || [];
-        // Only show active & connected accounts. Hide Meta channels —
+        // Only show active & connected accounts. Hide Meta channels -
         // Facebook/Instagram/Messenger DMs cannot be initiated by the
         // business; outbound is restricted to user-initiated 24h messaging
         // windows, so these never belong in a new-conversation picker.

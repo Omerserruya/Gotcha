@@ -6,7 +6,7 @@
  * without touching the audit writer.
  *
  * Behaviour contract:
- *   - Never throws. Audit failures are non-fatal — the vendor CRM patch
+ *   - Never throws. Audit failures are non-fatal - the vendor CRM patch
  *     would already be written by the time we get here.
  *   - Source is fixed to "AUTO" because the worker is the autonomous
  *     decision maker; MANUAL (rep override) and REVIEW_TASK (below

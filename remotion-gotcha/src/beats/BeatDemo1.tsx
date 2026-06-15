@@ -138,7 +138,7 @@ export const BeatDemo1: React.FC = () => {
         </div>
       </div>
 
-      {/* RIGHT ZONE — Reasoning Panel */}
+      {/* RIGHT ZONE - Reasoning Panel */}
       <div
         style={{
           position: 'absolute',
@@ -183,7 +183,7 @@ export const BeatDemo1: React.FC = () => {
             background: C.border,
           }}
         />
-        {/* Rows — stagger 45 */}
+        {/* Rows - stagger 45 */}
         <ThoughtRow
           text="Intent detected: order_status_check"
           iconColor={C.indigo}

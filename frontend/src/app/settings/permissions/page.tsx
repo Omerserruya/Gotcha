@@ -626,9 +626,9 @@ function UserRow({
       const grantsRes = await getUserGrants(token, user.id);
       setGrants(grantsRes.data);
       // Role assignments aren't returned by getUserGrants; we infer them
-      // from the tenant roles list — each role row has `_count.assignments`
+      // from the tenant roles list - each role row has `_count.assignments`
       // but not WHO. So we leave assignedRoleIds empty and let the user
-      // click to assign — the API is idempotent.
+      // click to assign - the API is idempotent.
       setAssignedRoleIds(new Set());
     } catch (err) {
       console.error("Failed to load user permissions:", err);
@@ -737,7 +737,7 @@ function UserRow({
               <div>
                 <p className="text-xs font-semibold text-gray-700 mb-2">Assigned roles</p>
                 {roles.length === 0 ? (
-                  <p className="text-xs text-gray-400">No custom roles defined — create one in the Roles tab.</p>
+                  <p className="text-xs text-gray-400">No custom roles defined - create one in the Roles tab.</p>
                 ) : (
                   <div className="flex flex-wrap gap-2">
                     {roles.map((r) => {
@@ -760,7 +760,7 @@ function UserRow({
                   </div>
                 )}
                 <p className="text-[10px] text-gray-400 mt-1">
-                  Click to assign/unassign. Toggling is idempotent — re-click to confirm if the chip state
+                  Click to assign/unassign. Toggling is idempotent - re-click to confirm if the chip state
                   drifts from server state on first load.
                 </p>
               </div>
@@ -769,7 +769,7 @@ function UserRow({
               <div>
                 <p className="text-xs font-semibold text-gray-700 mb-2">Per-feature overrides</p>
                 <p className="text-[11px] text-gray-400 mb-2">
-                  Overrides beat role grants. Use sparingly — prefer role-based access.
+                  Overrides beat role grants. Use sparingly - prefer role-based access.
                 </p>
                 <div className="space-y-1.5">
                   {features.map((f) => {

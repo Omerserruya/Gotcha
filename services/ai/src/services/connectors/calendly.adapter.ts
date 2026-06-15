@@ -6,9 +6,9 @@
  *     a Calendly Event Type, and Calendly enforces the host's availability
  *     itself (working hours, buffer, etc.) on its scheduling page.
  *   - The API exposes:
- *       GET /scheduled_events           — list booked events (use as busy)
- *       GET /event_types/{uuid}/available_times  — list available slots
- *       POST /scheduling_links          — generate a one-time invite URL
+ *       GET /scheduled_events           - list booked events (use as busy)
+ *       GET /event_types/{uuid}/available_times  - list available slots
+ *       POST /scheduling_links          - generate a one-time invite URL
  *
  * Practical contract for this adapter:
  *   - findBusy(): pulls the user's `scheduled_events` in [from, to] and
@@ -19,7 +19,7 @@
  *     it as `joinUrl`. The customer follows the link, Calendly hosts the
  *     pick-time UI, and webhooks notify us of the actual booking.
  *
- * This is the right shape for a chat-bot integration — most teams already
+ * This is the right shape for a chat-bot integration - most teams already
  * use Calendly for the front door, and the bot's job is to send the link
  * with confidence the customer will see real availability.
  */
@@ -89,7 +89,7 @@ export class CalendlyAdapter implements CalendarAdapter {
       throw new Error("CalendlyAdapter requires eventTypeUri to create scheduling links");
     }
 
-    // One-time scheduling link — Calendly invalidates it after first use.
+    // One-time scheduling link - Calendly invalidates it after first use.
     // 7-day expiry is a sane default; the bot follow-up tool can refresh
     // the link if needed.
     const body = {

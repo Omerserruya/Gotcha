@@ -25,7 +25,7 @@ function formatPhone(num: string): string {
 }
 
 /**
- * Phase 1 GLOBAL SINGLETON — mounted ONCE at the providers tree. Renders
+ * Phase 1 GLOBAL SINGLETON - mounted ONCE at the providers tree. Renders
  * only when an active session is assigned to THIS agent (per the singleton
  * invariant in VoiceSessionsContext). Hidden on the dedicated workspace
  * route (`/voice/:id`) to avoid double-controls.
@@ -45,7 +45,7 @@ export function ActiveCallBar() {
   const [tick, setTick] = useState(0);
 
   // Re-render once per second so the mm:ss timer ticks without leaning on
-  // any specific session field. Cheap — bound to the bar's lifecycle.
+  // any specific session field. Cheap - bound to the bar's lifecycle.
   useEffect(() => {
     if (!live) return;
     const id = setInterval(() => setTick((t) => t + 1), 1000);
@@ -57,7 +57,7 @@ export function ActiveCallBar() {
   if (flags.loading) return null;
   if (!flags.voiceInboxUiEnabled) return null;
   if (!live) return null;
-  // Suppress on the dedicated workspace — its header already shows the controls.
+  // Suppress on the dedicated workspace - its header already shows the controls.
   if (pathname?.startsWith(`/voice/${live.id}`)) return null;
 
   const isLocalDevice = voice.state !== "idle" && voice.state !== "ended";
@@ -72,7 +72,7 @@ export function ActiveCallBar() {
     if (!live) return;
     try {
       if (isLocalDevice) voice.hangup();
-      // Always notify the server too — twilio webhook may already have
+      // Always notify the server too - twilio webhook may already have
       // marked the session terminal but we want to be defensive.
       await hangupSession(live.id);
     } catch {

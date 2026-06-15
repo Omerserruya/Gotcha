@@ -9,7 +9,7 @@
  * clean label/value pairs), policy context, last two messages inline,
  * and approve / reject actions.
  *
- * See memory/bug_f4_approval_wrong_surface.md — this is the surface
+ * See memory/bug_f4_approval_wrong_surface.md - this is the surface
  * approval was always meant to live on.
  */
 import { useEffect, useMemo, useState } from "react";
@@ -391,7 +391,7 @@ export default function ApprovalCard({ token, conversationId, onResolved }: Prop
             <textarea
               value={rejectReason}
               onChange={(e) => setRejectReason(e.target.value)}
-              placeholder="Why are you rejecting? (required — used to craft the bot's fallback reply)"
+              placeholder="Why are you rejecting? (required - used to craft the bot's fallback reply)"
               className="w-full text-[12px] p-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-rose-200 focus:border-rose-300"
               rows={2}
               dir="auto"

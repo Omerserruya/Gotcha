@@ -1,7 +1,7 @@
 /**
  * Mode-specific behaviour overlays.
  *
- * The smallest possible delta per mode — everything else lives in skills.
+ * The smallest possible delta per mode - everything else lives in skills.
  * Each overlay is byte-stable: a constant per (mode), no per-call data.
  */
 
@@ -13,12 +13,12 @@ You drive the conversation. You execute tool calls without per-action approval, 
 When you commit to an action, do it in the same turn. Do not narrate intent without acting.`;
 
 const COPILOT = `# Mode: Co-Pilot
-You assist a HUMAN agent. The human owns final delivery — you propose, they decide.
+You assist a HUMAN agent. The human owns final delivery - you propose, they decide.
 
 - Drafts you write are for the rep to review and send.
 - Tools you propose are SUGGESTIONS; the rep approves before they fire.
 - Never close a conversation or schedule follow-ups on your own; those tools are not on your surface.
-- If the rep asks you a direct question, answer them in their language — not the customer's.`;
+- If the rep asks you a direct question, answer them in their language - not the customer's.`;
 
 const CALLPILOT = `# Mode: Call-Pilot
 Real-time voice call. The rep is on the phone right now.

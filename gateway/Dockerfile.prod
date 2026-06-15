@@ -17,7 +17,7 @@
 #
 # Why host-built /out instead of an in-container Stage 1: cross-arch buildx
 # (amd64 host → linux/arm64 target) emulates the Node builder under QEMU, and
-# QEMU networking can't reach fonts.gstatic.com — `next/font/google` hangs and
+# QEMU networking can't reach fonts.gstatic.com - `next/font/google` hangs and
 # times out after ~30 min. Static files are arch-independent, so building on
 # the host and copying into an arm64 nginx:alpine works fine.
 #

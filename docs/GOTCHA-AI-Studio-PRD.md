@@ -1,4 +1,4 @@
-# GOTCHA AI Studio — Product Requirements Document
+# GOTCHA AI Studio - Product Requirements Document
 
 **Version:** 1.0
 **Date:** 2026-03-13
@@ -8,7 +8,7 @@
 
 ## Executive Summary
 
-GOTCHA AI Studio is a unified workspace where businesses configure everything related to AI behavior — agents, conversation flows, routing, knowledge, and tools — from one place. The experience is designed for non-technical business owners, inspired by the simplicity of Notion, the visual power of n8n, and the automation clarity of Zapier.
+GOTCHA AI Studio is a unified workspace where businesses configure everything related to AI behavior - agents, conversation flows, routing, knowledge, and tools - from one place. The experience is designed for non-technical business owners, inspired by the simplicity of Notion, the visual power of n8n, and the automation clarity of Zapier.
 
 ---
 
@@ -42,7 +42,7 @@ GOTCHA AI Studio is a unified workspace where businesses configure everything re
 ### How Components Interact
 
 1. **Message arrives** from any channel (WhatsApp, Instagram, Web Chat)
-2. **AI Router** evaluates the message — determines intent, checks rules
+2. **AI Router** evaluates the message - determines intent, checks rules
 3. Router sends the conversation to one of:
    - An **AI Agent** (autonomous handling)
    - A **Flow** (structured step-by-step)
@@ -62,7 +62,7 @@ AI Studio is the central hub where all AI behavior is configured. It replaces th
 
 ### Problem It Solves
 
-Today, configuring AI in GOTCHA requires navigating multiple pages — copilot settings per department, bot flow mode, knowledge base settings. A business owner cannot easily understand "what does my AI do?" AI Studio answers that question in one screen.
+Today, configuring AI in GOTCHA requires navigating multiple pages - copilot settings per department, bot flow mode, knowledge base settings. A business owner cannot easily understand "what does my AI do?" AI Studio answers that question in one screen.
 
 ### UX Design
 
@@ -113,19 +113,19 @@ Agents are AI personas that represent roles in the business. Each agent has a sp
 
 ### Problem It Solves
 
-Currently GOTCHA has a single AI behavior configured per department. Businesses need multiple specialized AI personas — a support agent that's empathetic and careful, a sales agent that's enthusiastic and proactive, a booking agent that's efficient and structured.
+Currently GOTCHA has a single AI behavior configured per department. Businesses need multiple specialized AI personas - a support agent that's empathetic and careful, a sales agent that's enthusiastic and proactive, a booking agent that's efficient and structured.
 
 ### UX Design
 
 **Agent List View:**
 Cards in a grid layout. Each card shows:
 - Agent avatar (auto-generated or uploaded)
-- Agent name ("Maya — Support Agent")
+- Agent name ("Maya - Support Agent")
 - Status badge (Active / Draft / Paused)
 - Quick stats: conversations handled today, satisfaction score
 - Edit / Duplicate / Delete actions
 
-**Agent Editor — Form-Based, Not Prompt-Based:**
+**Agent Editor - Form-Based, Not Prompt-Based:**
 
 Instead of a raw text prompt, users configure agents through structured sections:
 
@@ -158,7 +158,7 @@ Instead of a raw text prompt, users configure agents through structured sections
 +------------------------------------------+
 | [x] Order Lookup (Shopify)               |
 | [x] Track Shipment (Shopify)             |
-| [ ] Process Refund (Shopify) — HIGH RISK |
+| [ ] Process Refund (Shopify) - HIGH RISK |
 | [x] Customer Lookup (HubSpot)            |
 | [+] Add more tools...                   |
 +------------------------------------------+
@@ -166,7 +166,7 @@ Instead of a raw text prompt, users configure agents through structured sections
 +------------------------------------------+
 | Knowledge                               |
 +------------------------------------------+
-| [x] FAQ — General Support               |
+| [x] FAQ - General Support               |
 | [x] Return Policy Document              |
 | [x] Product Catalog                     |
 | [+] Add knowledge source...             |
@@ -188,8 +188,8 @@ Instead of a raw text prompt, users configure agents through structured sections
 | Channels                                 |
 +------------------------------------------+
 | Active on:                               |
-| [x] WhatsApp — Main Number              |
-| [x] Instagram — @gotchastore            |
+| [x] WhatsApp - Main Number              |
+| [x] Instagram - @gotchastore            |
 | [ ] Web Chat                            |
 +------------------------------------------+
 ```
@@ -228,7 +228,7 @@ A visual drag-and-drop flow builder where users create structured conversation p
 
 ### Problem It Solves
 
-Some conversations need structure — onboarding sequences, lead qualification, appointment booking. Pure AI is too unpredictable for these. Pure scripted flows are too rigid. The Flow Builder lets users combine both.
+Some conversations need structure - onboarding sequences, lead qualification, appointment booking. Pure AI is too unpredictable for these. Pure scripted flows are too rigid. The Flow Builder lets users combine both.
 
 ### UX Design
 
@@ -342,7 +342,7 @@ The AI Router is the intelligent traffic controller that decides what happens wh
 
 ### Problem It Solves
 
-Currently routing is basic — either everything goes to AI or everything goes to human agents. Businesses need smart routing: sales inquiries to the sales agent, support issues to the support agent, VIP customers directly to humans, after-hours to a specific flow.
+Currently routing is basic - either everything goes to AI or everything goes to human agents. Businesses need smart routing: sales inquiries to the sales agent, support issues to the support agent, VIP customers directly to humans, after-hours to a specific flow.
 
 ### UX Design
 
@@ -438,7 +438,7 @@ Tools are actions that AI agents can perform by connecting to external systems. 
 
 ### Problem It Solves
 
-AI agents need to do more than just chat — they need to check orders, look up customer data, book appointments, process refunds. Tools bridge the gap between conversation and action.
+AI agents need to do more than just chat - they need to check orders, look up customer data, book appointments, process refunds. Tools bridge the gap between conversation and action.
 
 ### UX Design
 
@@ -612,7 +612,7 @@ Co-Pilot is the AI assistance mode for human agents working in the inbox. It pro
 
 ### Problem It Solves
 
-Even with AI agents, many conversations require human handling. Co-Pilot makes human agents faster and more consistent by providing AI-drafted replies, relevant knowledge, and customer context — without taking over the conversation.
+Even with AI agents, many conversations require human handling. Co-Pilot makes human agents faster and more consistent by providing AI-drafted replies, relevant knowledge, and customer context - without taking over the conversation.
 
 ### UX Design
 
@@ -632,7 +632,7 @@ Even with AI agents, many conversations require human handling. Co-Pilot makes h
 +------------------------------------------+
 | Suggested Reply:                         |
 | "Hi Sarah! I checked your order          |
-| #12345 — it's currently in transit       |
+| #12345 - it's currently in transit       |
 | and should arrive by Thursday.           |
 | Is there anything else I can help        |
 | with?"                                   |
@@ -643,7 +643,7 @@ Even with AI agents, many conversations require human handling. Co-Pilot makes h
 | Customer Context:                        |
 | Name: Sarah Johnson                      |
 | Orders: 12 (VIP customer)               |
-| Last order: #12345 — In Transit          |
+| Last order: #12345 - In Transit          |
 | Sentiment: Neutral                       |
 +------------------------------------------+
 | Relevant Knowledge:                      |
@@ -694,7 +694,7 @@ A toggle in the inbox header per conversation or department:
 
 ### What It Is
 
-Interactive Messages are structured UI elements that AI agents and flows can send within conversations — buttons, quick replies, carousels, and forms that customers tap instead of typing.
+Interactive Messages are structured UI elements that AI agents and flows can send within conversations - buttons, quick replies, carousels, and forms that customers tap instead of typing.
 
 ### Problem It Solves
 
@@ -810,25 +810,25 @@ Free-text conversations are slow and error-prone. When a customer needs to choos
 
 ## Implementation Priority
 
-### Phase 1 — Foundation (Weeks 1-4)
+### Phase 1 - Foundation (Weeks 1-4)
 - AI Studio shell with navigation tabs
 - Agent editor (form-based, replacing current copilot config)
 - Router with basic rules (intent + keyword)
 - Knowledge sources migration (existing KB into new UI)
 
-### Phase 2 — Flow Builder (Weeks 5-8)
+### Phase 2 - Flow Builder (Weeks 5-8)
 - Visual canvas with core nodes (Send, Quick Reply, Condition, AI Agent)
 - Flow templates (3 starter templates)
 - Flow simulator/tester
 - Interactive messages (Quick Reply Buttons)
 
-### Phase 3 — Intelligence (Weeks 9-12)
+### Phase 3 - Intelligence (Weeks 9-12)
 - Advanced router conditions (sentiment, customer attributes)
 - Co-Pilot enhancements (confidence scores, context panel)
 - Tool execution logging and analytics
 - Knowledge gap detection
 
-### Phase 4 — Polish (Weeks 13-16)
+### Phase 4 - Polish (Weeks 13-16)
 - Flow analytics (drop-off rates)
 - Agent versioning and rollback
 - Custom tool builder

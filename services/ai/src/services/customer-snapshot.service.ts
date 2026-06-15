@@ -1,11 +1,11 @@
 /**
- * Customer Snapshot — Customer Intelligence V2, Phase 3.
+ * Customer Snapshot - Customer Intelligence V2, Phase 3.
  *
  * The primary read projection over the three-domain model: WHO (CustomerProfile
  * + signals), WHAT (open Opportunities + their facts), NOW (last conversation),
  * MISSING (the gap engine), NEXT (opportunity.nextAction), NARRATIVE (the
  * behavioral brief prose). It is a generated fold of CustomerProfile /
- * Opportunity / ConversationIntelligence / FieldDefinition — never a source of
+ * Opportunity / ConversationIntelligence / FieldDefinition - never a source of
  * truth (docs/customer-intelligence-domain-model.md §7, v2 §7).
  *
  * The Missing-Information engine (v2 §5): a field is "missing" when it's
@@ -238,7 +238,7 @@ export async function buildCustomerSnapshot(params: {
     .sort((a, b) => IMPORTANCE_RANK[a.importance] - IMPORTANCE_RANK[b.importance])
     .slice(0, 8);
 
-  // ── NARRATIVE (behavioral brief prose — best-effort projection) ──
+  // ── NARRATIVE (behavioral brief prose - best-effort projection) ──
   let narrative: string | null = null;
   if (identity) {
     const brief = await getCustomerBrief({

@@ -2,11 +2,11 @@
  * Calendar OAuth routes (Task 3).
  *
  * Endpoints:
- *   GET  /oauth/google-calendar/init       — start Google OAuth, returns auth URL
- *   GET  /oauth/google-calendar/callback   — finish exchange, persist CalendarAccount
- *   GET  /oauth/calendly/init              — start Calendly OAuth
- *   GET  /oauth/calendly/callback          — finish exchange
- *   POST /api/calendar/disconnect          — revoke local row (status=DISCONNECTED)
+ *   GET  /oauth/google-calendar/init       - start Google OAuth, returns auth URL
+ *   GET  /oauth/google-calendar/callback   - finish exchange, persist CalendarAccount
+ *   GET  /oauth/calendly/init              - start Calendly OAuth
+ *   GET  /oauth/calendly/callback          - finish exchange
+ *   POST /api/calendar/disconnect          - revoke local row (status=DISCONNECTED)
  *
  * State carries `{ tenantId, aiAgentId, userId }` signed with JWT_SECRET so
  * the callback can persist the right CalendarAccount row.
@@ -41,7 +41,7 @@ const GOOGLE_SCOPES = [
   "email",
 ].join(" ");
 
-// The marketplace UI calls /api/integrations/oauth/{catalog_slug}/init —
+// The marketplace UI calls /api/integrations/oauth/{catalog_slug}/init -
 // the catalog slug for this provider is `google_calendar` (underscore).
 // We accept BOTH the marketplace path and the dashed alias so direct callers
 // (Scheduler settings page) and the marketplace flow both work.
@@ -246,7 +246,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
     }
     const tokens: any = await tokenRes.json();
 
-    // Resolve the user URI — Calendly needs it to scope scheduled-event reads.
+    // Resolve the user URI - Calendly needs it to scope scheduled-event reads.
     let userUri = "";
     let accountEmail: string | null = null;
     try {
@@ -327,7 +327,7 @@ router.post(
  *   1. The aiAgentId provided in the query (Scheduler settings page).
  *   2. Tenant.defaultAgentId (when present).
  *   3. The first AI agent for the tenant (deterministic order).
- *   4. null — caller returns 400.
+ *   4. null - caller returns 400.
  */
 async function resolveAiAgentId(tenantId: string, fromQuery: string): Promise<string | null> {
   if (fromQuery) return fromQuery;
@@ -364,7 +364,7 @@ async function markMarketplaceConnected(
       where: { slug: catalogSlug },
       select: { id: true },
     });
-    if (!catalog?.id) return; // catalog row not seeded yet — nothing to mirror
+    if (!catalog?.id) return; // catalog row not seeded yet - nothing to mirror
 
     await (prisma as any).tenantIntegration.upsert({
       where: { tenantId_integrationId: { tenantId, integrationId: catalog.id } },
@@ -374,7 +374,7 @@ async function markMarketplaceConnected(
         lastTestedAt: new Date(),
         lastTestResult: true,
         lastError: null,
-        // Don't store tokens here — they live on CalendarAccount, encrypted.
+        // Don't store tokens here - they live on CalendarAccount, encrypted.
         // We just keep an empty credentials blob to satisfy the column.
         credentials: { provider: catalogSlug, accountEmail: accountEmail ?? null },
       },

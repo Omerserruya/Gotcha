@@ -50,7 +50,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   // CRM context is fetched once at the chat level and fed to both the Co-Pilot
   // (identity / deals / tickets / open issues) and the Context panel (activity
   // / CRM notes / recent summaries). The old standalone CRM panel was removed
-  // — one less button, no surface duplication.
+  // - one less button, no surface duplication.
   const [crmContext, setCrmContext] = useState<CrmContextEnvelope | null>(null);
   const [crmLoading, setCrmLoading] = useState(false);
   const [attachedFiles, setAttachedFiles] = useState<File[]>([]);
@@ -64,7 +64,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   const [askSelection, setAskSelection] = useState<{ text: string; x: number; y: number } | null>(null);
   // When the agent clicks "Ask Co-Pilot", we forward the quoted text to the
   // CoPilot panel as a prefill. The panel switches to its chat tab and seeds
-  // the composer with a quoted block — the agent types their question and hits
+  // the composer with a quoted block - the agent types their question and hits
   // send. Versioned so the same quote can be re-sent if the agent clicks twice.
   const [askPrefill, setAskPrefill] = useState<{ quote: string; version: number } | null>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -132,7 +132,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
 
   // Single CRM context fetch shared by Co-Pilot (identity/deals/tickets/issues)
   // and Context panel (activity/notes/summaries). Refetches on conversation
-  // change. Failures are silent — both panels gracefully show conversation-only
+  // change. Failures are silent - both panels gracefully show conversation-only
   // data when CRM isn't connected.
   const refetchCrm = useCallback(async () => {
     if (!token || !conversationId) return;
@@ -171,7 +171,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
   // Mobile constraint: the panel is `fixed inset-0` and takes the whole screen,
   // so auto-opening hides the chat. Only auto-open on desktop (md+). On mobile
   // the AI still runs in the background and surfaces via the floating suggestion
-  // bubble above the input — the agent taps it to expand the full panel.
+  // bubble above the input - the agent taps it to expand the full panel.
   const hasAutoOpenedRef = useRef<string | null>(null);
   useEffect(() => {
     if (messages.length > 0 && hasAutoOpenedRef.current !== conversationId) {
@@ -232,7 +232,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       }
     };
 
-    // Copilot annotation event — used to drop intent-signal chips under a
+    // Copilot annotation event - used to drop intent-signal chips under a
     // customer message after the suggestion call finishes analysing it.
     const handleMessageUpdate = (data: any) => {
       if (data.conversationId !== conversationId) return;
@@ -352,7 +352,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
       await closeConversation(token, conversationId);
       setShowCloseConfirm(false);
       fetchConversation();
-      // Best-effort CRM sync — summary + engagement projected to the linked
+      // Best-effort CRM sync - summary + engagement projected to the linked
       // CRM contact. Failures must NOT block close.
       syncCloseToCrm(token, conversationId).catch((err) => {
         console.warn("[ChatPanel] CRM close-sync failed:", err?.message || err);
@@ -529,7 +529,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               </div>
             </div>
           )}
-          {/* F4: in-conversation approval card — shown when the bot
+          {/* F4: in-conversation approval card - shown when the bot
               hit a REQUIRE_APPROVAL tool and paused waiting for a
               human. Polls /api/approvals itself. */}
           {token && <ApprovalCard token={token} conversationId={conversationId} />}
@@ -599,7 +599,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         {/* Input area */}
         {canSend ? (
           <div className="px-2 md:px-4 pb-3 md:pb-4 pt-2 bg-[var(--bg-chat)] relative">
-            {/* Smart AI Suggestion Popup — floating overlay.
+            {/* Smart AI Suggestion Popup - floating overlay.
                 Shown whenever co-pilot has a high-confidence suggestion, regardless
                 of whether the full panel is open. On mobile this is the *only* AI
                 surface visible until the agent taps "All Suggestions" to expand. */}
@@ -713,7 +713,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 </svg>
               </button>
 
-              {/* AI compose trigger — panel opens above the input */}
+              {/* AI compose trigger - panel opens above the input */}
               <AIComposeTrigger compact />
 
               {/* Text input */}
@@ -751,7 +751,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         )}
       </div>
 
-      {/* Context Panel (formerly History) — past conversations + CRM activity
+      {/* Context Panel (formerly History) - past conversations + CRM activity
           + CRM notes + AI summaries + local notes. CRM data is reused from the
           chat-level fetch so opening this panel is instant. */}
       {historyOpen && (
@@ -764,7 +764,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         />
       )}
 
-      {/* Floating "Ask Co-Pilot" action — shown when the agent marks any text
+      {/* Floating "Ask Co-Pilot" action - shown when the agent marks any text
           inside an inbound customer message. Click → opens CoPilot panel with
           the quote pre-filled in the chat composer. */}
       {askSelection && (
@@ -794,7 +794,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         </button>
       )}
 
-      {/* Co-Pilot Panel — always mounted while a conversation is loaded so the
+      {/* Co-Pilot Panel - always mounted while a conversation is loaded so the
           suggestion + intelligence fetch runs in the background even when the
           panel is closed. Visibility is controlled by `isOpen`; when closed it
           renders nothing visually but its effects keep the floating

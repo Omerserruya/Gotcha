@@ -13,7 +13,7 @@ export function requireActiveTenant() {
     }
 
     // Every request on a tenant-scoped route MUST have a resolved tenant
-    // context by this point — even SYSTEM_ADMINs. This is the backstop
+    // context by this point - even SYSTEM_ADMINs. This is the backstop
     // against the silent-cross-tenant-read bug: if req.tenantId is
     // undefined, Prisma drops `where: { tenantId }` filters and returns
     // everyone's data. Fail loudly.
@@ -24,7 +24,7 @@ export function requireActiveTenant() {
 
     // System admins bypass the ACTIVE-status check (so they can operate
     // on pending/suspended tenants for recovery) BUT they still need a
-    // resolved tenant — that was already enforced above.
+    // resolved tenant - that was already enforced above.
     if (req.user.role === "SYSTEM_ADMIN") {
       next();
       return;
@@ -58,14 +58,14 @@ export function requireActiveTenant() {
 }
 
 /**
- * Middleware variant for endpoints that must be reachable DURING onboarding —
+ * Middleware variant for endpoints that must be reachable DURING onboarding -
  * notably connecting the "source of truth" core system (CRM / Shopify), which
  * is itself the activation event. Permits ACTIVE and PENDING_ONBOARDING
  * tenants, but still rejects PENDING_ADMIN_SETUP and SUSPENDED. System admins
  * bypass the status check (but still need a resolved tenant).
  *
  * Without this, the onboarding "connect your CRM" step would 403 with
- * "Tenant is not active" — a chicken-and-egg, since connecting is what flips
+ * "Tenant is not active" - a chicken-and-egg, since connecting is what flips
  * the tenant to ACTIVE.
  */
 export function requireOnboardingOrActiveTenant() {

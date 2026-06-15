@@ -1,5 +1,5 @@
 /**
- * Frontend API helpers for the live call copilot — distinct from /lib/api.ts
+ * Frontend API helpers for the live call copilot - distinct from /lib/api.ts
  * to keep the voice surface area contained.
  */
 
@@ -19,7 +19,7 @@ export interface CueOutcomePayload {
 
 /**
  * Record a rep's reaction to a copilot cue. Fire-and-forget at the call
- * site — feedback is value-add, never load-bearing. The server returns 200
+ * site - feedback is value-add, never load-bearing. The server returns 200
  * on success or 4xx on validation; we still resolve so the UI can move on.
  */
 export async function postCueOutcome(
@@ -34,11 +34,11 @@ export async function postCueOutcome(
         Authorization: `Bearer ${token}`,
       },
       body: JSON.stringify(payload),
-      // keepalive lets the request survive a tab close — handy because the
+      // keepalive lets the request survive a tab close - handy because the
       // most common "ignored" path is the rep hanging up before clicking.
       keepalive: true,
     });
   } catch {
-    // Swallow — see header comment.
+    // Swallow - see header comment.
   }
 }

@@ -1,5 +1,5 @@
 /**
- * VERIFICATION MODE — assume nothing works until proven.
+ * VERIFICATION MODE - assume nothing works until proven.
  *
  * Each adapter is exercised with a fetch mock that captures the request and
  * returns a real-shape provider response. We assert:
@@ -184,7 +184,7 @@ describe("Shopify adapter", () => {
 });
 
 // ─── Wix ─────────────────────────────────────────────────────
-// Wix temporarily disabled at the registry — re-enable by uncommenting
+// Wix temporarily disabled at the registry - re-enable by uncommenting
 // the import in services/ai/src/services/connectors/index.ts.
 
 describe.skip("Wix adapter", () => {
@@ -196,7 +196,7 @@ describe.skip("Wix adapter", () => {
     expect(calls[0].url).toBe("https://www.wixapis.com/ecom/v1/orders/search");
     expect(calls[0].init.method).toBe("POST");
     // BUG CHECK: Wix OAuth tokens require "Bearer " prefix (verified against Wix REST docs).
-    // Our adapter currently sends just the token — flag this in the report.
+    // Our adapter currently sends just the token - flag this in the report.
     expect((calls[0].init.headers as any).Authorization).toBeDefined();
   });
 });
@@ -265,7 +265,7 @@ describe("PayPal adapter", () => {
 
   it("EDGE missing capture_id returns adapter error before HTTP", async () => {
     mockFetch(async () => ok({}));
-    // capture_id is a required param — adapter relies on schema, but the
+    // capture_id is a required param - adapter relies on schema, but the
     // dispatcher itself validates loosely. Provider would 400.
     const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "paypal.refund_capture", args: { amount: 5 } as any });
     // Adapter does not validate schema; provider call hits encodeURIComponent("undefined")
@@ -274,7 +274,7 @@ describe("PayPal adapter", () => {
 });
 
 // ─── Square ──────────────────────────────────────────────────
-// Square temporarily disabled at the registry — re-enable by uncommenting
+// Square temporarily disabled at the registry - re-enable by uncommenting
 // the import in services/ai/src/services/connectors/index.ts.
 
 describe.skip("Square adapter", () => {
@@ -398,9 +398,9 @@ describe("Airtable adapter", () => {
   });
 });
 
-// ─── Postgres / MongoDB / AWS RDS — allowlist enforcement ────
+// ─── Postgres / MongoDB / AWS RDS - allowlist enforcement ────
 
-describe("Postgres adapter — table allowlist enforcement", () => {
+describe("Postgres adapter - table allowlist enforcement", () => {
   it("BLOCKS read on table not in allowReads", async () => {
     mockConnected("postgres", { connectionString: "postgres://x" }, { allowReads: ["customers"], allowWrites: [] });
     const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "postgres.query_table", args: { table: "secrets" } });
@@ -431,7 +431,7 @@ describe("Postgres adapter — table allowlist enforcement", () => {
   });
 });
 
-describe("MongoDB adapter — collection allowlist enforcement", () => {
+describe("MongoDB adapter - collection allowlist enforcement", () => {
   it("BLOCKS read on collection not in allowReads", async () => {
     mockConnected("mongodb", { connectionString: "mongodb://x" }, { dbName: "db", allowReads: ["orders"], allowWrites: [] });
     const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "mongodb.find_documents", args: { collection: "secrets" } });
@@ -454,7 +454,7 @@ describe("MongoDB adapter — collection allowlist enforcement", () => {
   });
 });
 
-describe("AWS RDS adapter — table allowlist enforcement", () => {
+describe("AWS RDS adapter - table allowlist enforcement", () => {
   it("BLOCKS read on table not in allowReads (postgres engine)", async () => {
     mockConnected("aws_rds", { connectionString: "postgres://instance.rds.amazonaws.com/db" }, { engine: "postgres", allowReads: ["customers"], allowWrites: [] });
     const r = await executeAdapterTool({ tenantId: "t1", toolFunctionName: "aws_rds.query_table", args: { table: "secrets" } });
@@ -547,7 +547,7 @@ describe("Adapter rate limiter (token bucket)", () => {
     expect(denied).toBe(1);
   });
 
-  it("rate buckets are per-(tenant, provider) — different tenants don't starve each other", async () => {
+  it("rate buckets are per-(tenant, provider) - different tenants don't starve each other", async () => {
     const { __resetRateLimits } = await import("../services/connectors/integration-framework");
     __resetRateLimits();
     mockConnected("stripe", { accessToken: "sk" });
@@ -556,7 +556,7 @@ describe("Adapter rate limiter (token bucket)", () => {
       const r = await executeAdapterTool({ tenantId: "tenant-A", toolFunctionName: "stripe.get_customer", args: { customer_id: `c${i}` } });
       expect(r.ok).toBe(true);
     }
-    // tenant-B has its own bucket — first call must succeed.
+    // tenant-B has its own bucket - first call must succeed.
     const r2 = await executeAdapterTool({ tenantId: "tenant-B", toolFunctionName: "stripe.get_customer", args: { customer_id: "x" } });
     expect(r2.ok).toBe(true);
   });

@@ -1,27 +1,27 @@
 /**
- * Shopify adapter — production-grade, full support surface.
+ * Shopify adapter - production-grade, full support surface.
  *
  * Auth: Shopify Admin OAuth. Each tenant connects ONE shop; the shop domain
  * lives in `config.shopDomain` (e.g. "my-store.myshopify.com"). Offline
  * access tokens don't expire; we detect 401 and mark the connection ERROR.
  *
  * Two roles:
- *   1. ECOMMERCE integration — the rich tool surface below (customer, orders,
+ *   1. ECOMMERCE integration - the rich tool surface below (customer, orders,
  *      fulfillment, discounts, products, returns) the AI employee can call.
- *   2. CRM source of truth (opt-in) — a thin CRM projection lives in
+ *   2. CRM source of truth (opt-in) - a thin CRM projection lives in
  *      crm-adapter.impl.ts (ShopifyCRMAdapter) and reuses the customer tools
  *      here. See crm-adapter-resolver (config.useAsCrm).
  *
- * Coverage notes — a few requested capabilities are NOT available through the
+ * Coverage notes - a few requested capabilities are NOT available through the
  * REST Admin API (or live in a separate product) and would silently mislead
  * if we faked them. Those tools are real catalog entries but DEGRADE
  * GRACEFULLY: they throw a clear, LLM-readable reason instead of inventing a
  * result. Specifically:
- *   - Customer SEGMENTS membership add/remove — Shopify segments are dynamic,
+ *   - Customer SEGMENTS membership add/remove - Shopify segments are dynamic,
  *     query-defined (GraphQL `segments`). You can't imperatively add/remove a
  *     member. We point the model at customer TAGS (add_tag/remove_tag) as the
  *     supported proxy.
- *   - EDIT ORDER / ORDER TIMELINE / RESEND CONFIRMATION — GraphQL `orderEdit`
+ *   - EDIT ORDER / ORDER TIMELINE / RESEND CONFIRMATION - GraphQL `orderEdit`
  *     / events API / no REST endpoint. Degrade gracefully.
  *
  * API: 2024-04 REST endpoints, plus the GraphQL Admin API for the Returns/RMA
@@ -133,7 +133,7 @@ const TOOLS: ToolDefinition[] = [
   t("cancel_order", "ACTION", "HIGH", "Cancel an order (optionally refund + restock).",
     "Customer requests cancellation AND you have approval.",
     { ...P.orderSel, reason: { type: "string", enum: ["customer", "fraud", "inventory", "declined", "other"] }, refund: { type: "boolean" }, restock: { type: "boolean" } }, undefined,
-    { sideEffects: "Cancels the order — may trigger a refund. Irreversible." }),
+    { sideEffects: "Cancels the order - may trigger a refund. Irreversible." }),
   t("send_invoice", "ACTION", "MEDIUM", "Send/resend the order invoice email to the customer.",
     "Customer didn't receive their invoice / needs the payment link again.",
     { ...P.orderSel, to: { type: "string", description: "Override recipient email." } }),
@@ -164,7 +164,7 @@ const TOOLS: ToolDefinition[] = [
   t("create_discount_code", "WRITE", "HIGH", "Create a percentage-off discount code.",
     "Customer is offered a documented discount AND you have approval.",
     { code: { type: "string" }, percentage: { type: "number" }, usage_limit: { type: "number" }, ends_at_iso: { type: "string" } }, ["code", "percentage"],
-    { sideEffects: "Creates a real discount — affects revenue." }),
+    { sideEffects: "Creates a real discount - affects revenue." }),
   t("create_one_time_coupon", "WRITE", "HIGH", "Create a single-use coupon code.",
     "You owe the customer a one-off coupon.",
     { code: { type: "string" }, percentage: { type: "number" }, ends_at_iso: { type: "string" } }, ["code", "percentage"],
@@ -177,8 +177,8 @@ const TOOLS: ToolDefinition[] = [
     "A coupon must be deactivated.", { code: { type: "string" } }, ["code"],
     { sideEffects: "Ends the discount immediately." }),
 
-  // ── Segments (graceful — tags are the supported proxy) ──
-  t("list_segments", "READ", "LOW", "List customer segments (GraphQL — degrades gracefully).",
+  // ── Segments (graceful - tags are the supported proxy) ──
+  t("list_segments", "READ", "LOW", "List customer segments (GraphQL - degrades gracefully).",
     "You want the store's segments. Prefer customer tags for membership ops.", { limit: { type: "number" } }),
   t("check_segment_membership", "READ", "LOW", "Check whether a customer is in a segment (degrades gracefully).",
     "You want to know a customer's segment. Prefer get_customer_tags.", { ...P.customerSel, segment: { type: "string" } }),
@@ -201,9 +201,9 @@ const TOOLS: ToolDefinition[] = [
 
   // ── Returns (refund status is REST; Returns/RMA object is GraphQL) ──
   t("get_refund_status", "READ", "LOW", "Get refunds recorded against an order (Shopify's native refund record).",
-    "Customer asks 'has my refund been processed?'. This is the money movement in Shopify. If returngo.* tools are also available, ALSO call returngo.get_return_status — combine both for the full refund/return picture.", P.orderSel),
-  t("get_returns", "READ", "LOW", "List Shopify Returns (RMAs) for an order with status + line items (GraphQL — Shopify's native return object).",
-    "Customer asks about a return request / 'what's the status of my return?'. This is Shopify's native RMA. If returngo.* tools are also available, ALSO call returngo.get_return_status and synthesize both — neither source alone is complete.", P.orderSel),
+    "Customer asks 'has my refund been processed?'. This is the money movement in Shopify. If returngo.* tools are also available, ALSO call returngo.get_return_status - combine both for the full refund/return picture.", P.orderSel),
+  t("get_returns", "READ", "LOW", "List Shopify Returns (RMAs) for an order with status + line items (GraphQL - Shopify's native return object).",
+    "Customer asks about a return request / 'what's the status of my return?'. This is Shopify's native RMA. If returngo.* tools are also available, ALSO call returngo.get_return_status and synthesize both - neither source alone is complete.", P.orderSel),
   t("get_return_reason", "READ", "LOW", "Get the per-line return reason(s) for an order's returns (GraphQL).",
     "You need why a customer returned an item. Pair with returngo.get_return_status when ReturnGO is the returns platform.", P.orderSel),
 
@@ -611,7 +611,7 @@ const ShopifyAdapter: ProviderAdapter = {
       }
       case "get_returns": {
         // Real RMA data via the GraphQL Admin API. Requires the `read_returns`
-        // OAuth scope — stores connected before that scope was requested throw
+        // OAuth scope - stores connected before that scope was requested throw
         // a clear access_denied that prompts a re-connect.
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
@@ -795,7 +795,7 @@ async function createDiscount(ctx: Ctx, opts: { code: string; percentage: number
 
 // ─── GraphQL (Returns / RMA) ────────────────────────────────
 //
-// The Shopify Returns object has no REST endpoint — it only exists on the
+// The Shopify Returns object has no REST endpoint - it only exists on the
 // GraphQL Admin API. We use it for get_returns / get_return_reason. Needs the
 // `read_returns` scope (requested in the OAuth init); older connections that
 // predate it get a clear access_denied that points at re-connecting.
@@ -862,7 +862,7 @@ async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string,
   if (Array.isArray(j.errors) && j.errors.length) {
     const msg = j.errors.map((e: any) => e?.message).filter(Boolean).join("; ");
     if (/access denied|read_returns|not approved|requires merchant approval/i.test(msg)) {
-      throw new Error(`shopify_graphql_access_denied: ${msg.slice(0, 160)} — re-connect Shopify to grant the read_returns scope.`);
+      throw new Error(`shopify_graphql_access_denied: ${msg.slice(0, 160)} - re-connect Shopify to grant the read_returns scope.`);
     }
     throw new Error(`shopify_graphql_error: ${msg.slice(0, 200)}`);
   }

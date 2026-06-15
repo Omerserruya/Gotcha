@@ -16,19 +16,19 @@
  *   copilot, AND voice. Voice channels get a new `ai_agent_id` FK
  *   (Phase 6 migration), and the old `copilot_config` columns are
  *   migrated onto the agent. The call-pilot "skill layer" is just
- *   `mode=callpilot` selecting different skill renders — no separate
+ *   `mode=callpilot` selecting different skill renders - no separate
  *   config blob.
  *
  *   Until the migration runs, `workerConfigFromLegacy` keeps the
  *   transitional path: if a voice call has no `ai_agent_id` yet on its
  *   channel, the call site can still pass `channelConfig` and we'll
  *   fold it in. After Phase 6 migrates, every voice channel carries
- *   an `ai_agent_id` and the channelConfig path goes unused — then
+ *   an `ai_agent_id` and the channelConfig path goes unused - then
  *   gets deleted.
  *
  * What this shim is NOT:
- *   - It does NOT call the worker — that's up to the call site
- *   - It does NOT decide whether the feature flag is on — that's the
+ *   - It does NOT call the worker - that's up to the call site
+ *   - It does NOT decide whether the feature flag is on - that's the
  *     call site's job (see `cutover-flag.ts`)
  */
 
@@ -52,7 +52,7 @@ export interface LegacyAgentRecord {
   id?: string;
   tenantId?: string;
   name?: string;
-  // description field removed per spec — agent identity is fully
+  // description field removed per spec - agent identity is fully
   // expressed through structured fields (role, persona, identity, etc.).
   tone?: string | null;
   persona?: unknown;
@@ -62,7 +62,7 @@ export interface LegacyAgentRecord {
   /**
    * Skill IDs the operator picked for this employee. Phase 5 cutover
    * uses these to compose the prompt. Today's `AIAgent` schema doesn't
-   * carry this column yet — call sites resolve a default skill set
+   * carry this column yet - call sites resolve a default skill set
    * from the employee's role/department until Phase 6 adds the column.
    */
   skillIds?: string[];
@@ -71,7 +71,7 @@ export interface LegacyAgentRecord {
 }
 
 /**
- * TRANSITIONAL — only used while voice channels still carry an
+ * TRANSITIONAL - only used while voice channels still carry an
  * embedded `copilot_config` JSONB blob (pre Phase 6 migration). Once
  * the migration runs and `voice_channels.ai_agent_id` is populated,
  * call sites stop passing this and use `workerConfigFromAgent` instead.
@@ -109,8 +109,8 @@ export interface ShimContext {
 /**
  * Build an `AIWorkerConfig` from an `AIAgent` row and the runtime mode.
  *
- * This is the POST-MIGRATION canonical path. Every call site — chat,
- * copilot, and voice (after voice channels carry `ai_agent_id`) — uses
+ * This is the POST-MIGRATION canonical path. Every call site - chat,
+ * copilot, and voice (after voice channels carry `ai_agent_id`) - uses
  * this. The voice-specific behavior comes entirely from `mode=callpilot`
  * + the skills the agent has configured; no separate voice config blob.
  *
@@ -165,7 +165,7 @@ export function workerConfigFromAgent(args: {
  * The caller passes the legacy `copilot_config` blob; we project it
  * onto an agent-like record so the worker sees the same shape.
  *
- * **Deleted in Phase 6 cleanup** — once every voice channel has been
+ * **Deleted in Phase 6 cleanup** - once every voice channel has been
  * migrated to reference an AIAgent, no caller ever takes this path.
  */
 export function workerConfigFromLegacy(args: {
@@ -209,7 +209,7 @@ export function workerConfigFromLegacy(args: {
  * Build a session profile from the call-site context.
  *
  * NO TIMESTAMPS land in the rendered profile (`session-profile-builder.ts`
- * drops them) — `capturedAt` is logged but not in the prefix.
+ * drops them) - `capturedAt` is logged but not in the prefix.
  */
 export function sessionProfileFromContext(ctx: ShimContext): AIWorkerSessionProfile {
   return {

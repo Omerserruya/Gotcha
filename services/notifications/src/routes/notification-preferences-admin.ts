@@ -1,10 +1,10 @@
 /**
  * NotificationPreference admin CRUD.
  *
- *   GET    /notification-preferences          — list (optionally ?departmentId=...)
- *   POST   /notification-preferences          — create
- *   PATCH  /notification-preferences/:id      — update
- *   DELETE /notification-preferences/:id      — delete
+ *   GET    /notification-preferences          - list (optionally ?departmentId=...)
+ *   POST   /notification-preferences          - create
+ *   PATCH  /notification-preferences/:id      - update
+ *   DELETE /notification-preferences/:id      - delete
  *
  * ADMIN role required.
  *
@@ -118,7 +118,7 @@ router.post("/notification-preferences", requireRole("ADMIN"), async (req: Reque
   if (condErr) { res.status(400).json({ error: condErr }); return; }
 
   const departmentId = b.departmentId != null ? String(b.departmentId) : null;
-  // Validate department belongs to tenant if provided — prevents cross-tenant
+  // Validate department belongs to tenant if provided - prevents cross-tenant
   // FK by way of a stale id from another tenant's UI.
   if (departmentId) {
     const exists = await (prisma as any).department.findFirst({

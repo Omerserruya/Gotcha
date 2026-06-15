@@ -9,7 +9,7 @@ import { channelOf, type ChannelTarget } from "./channels";
  * tenant-admin). Eliminates accidental tenant-wide broadcasts of agent-only
  * events like coaching hints.
  *
- * The bus envelope `{event, tenantId, data}` is unchanged — we only
+ * The bus envelope `{event, tenantId, data}` is unchanged - we only
  * augment `data` with the resolved channel string.
  */
 export async function publishConvEvent(

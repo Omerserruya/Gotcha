@@ -234,7 +234,7 @@ describe("SessionStore (in-memory mock)", () => {
 
   it("refreshTtl calls expire on the session key", async () => {
     await store.create(makeRecord(), 900);
-    // No error — just verify it doesn't throw
+    // No error - just verify it doesn't throw
     await expect(store.refreshTtl("t1", "c1", 900)).resolves.toBeUndefined();
   });
 
@@ -310,7 +310,7 @@ describe("SessionStore (in-memory mock)", () => {
     const claimed = await store.reaperHandoff("t1", "c1", 200_000, 120_000);
     expect(claimed).toBe(true);
 
-    // Now state is "ended" — calling again returns false
+    // Now state is "ended" - calling again returns false
     const again = await store.reaperHandoff("t1", "c1", 200_000, 120_000);
     expect(again).toBe(false);
   });

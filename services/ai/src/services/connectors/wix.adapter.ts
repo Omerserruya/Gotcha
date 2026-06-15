@@ -1,17 +1,17 @@
 /**
- * Wix adapter — production-grade.
+ * Wix adapter - production-grade.
  *
  * Auth: Wix Headless OAuth (server-side). Each tenant connects ONE site;
  * the site id is stored in `config.siteId`. Wix issues access tokens that
- * expire in ~5 minutes — we refresh via the standard OAuth refresh flow.
+ * expire in ~5 minutes - we refresh via the standard OAuth refresh flow.
  *
  * Tools (top use-cases for support + sales bots on Wix Stores + CRM):
- *   - wix.list_orders       — recent eCommerce orders (filterable by email/status)
- *   - wix.get_order         — single order detail
- *   - wix.list_products     — store products (search by name)
- *   - wix.get_product       — single product detail
- *   - wix.search_contacts   — CRM contact lookup
- *   - wix.create_contact    — add a CRM contact
+ *   - wix.list_orders       - recent eCommerce orders (filterable by email/status)
+ *   - wix.get_order         - single order detail
+ *   - wix.list_products     - store products (search by name)
+ *   - wix.get_product       - single product detail
+ *   - wix.search_contacts   - CRM contact lookup
+ *   - wix.create_contact    - add a CRM contact
  *
  * APIs:
  *   - eCommerce v1:    https://www.wixapis.com/ecom/v1

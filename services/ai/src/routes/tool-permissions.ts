@@ -10,7 +10,7 @@ import {
 import { getAvailableTools, TOOL_REGISTRY } from "../services/tool-registry";
 
 /**
- * F4/F8 — Per-tenant tool permissions (HITL + enable/disable).
+ * F4/F8 - Per-tenant tool permissions (HITL + enable/disable).
  *
  * GET  /api/tool-permissions            → list every tool visible to this
  *                                         tenant (internal registry +
@@ -138,7 +138,7 @@ router.get("/", async (req: Request, res: Response) => {
     };
 
     // Read-only system tools (get_conversation, list_recent_messages, …) are
-    // pre-resolved context gatherers — they never mutate state, so they have
+    // pre-resolved context gatherers - they never mutate state, so they have
     // no HITL meaning. Exclude them from the settings page.
     for (const spec of available.actionTools) push(spec);
     for (const spec of available.integrationTools) push(spec);
@@ -176,7 +176,7 @@ router.put("/:toolName", async (req: Request, res: Response) => {
     const { enabled, requiresApproval, approverRole, expiresAfterMin, allowModification } =
       req.body ?? {};
 
-    // Integration tools store their HITL override on TenantTool.configOverrides.hitlPolicy —
+    // Integration tools store their HITL override on TenantTool.configOverrides.hitlPolicy -
     // that's where the gate reads it from. Writing to TenantToolPermission for an
     // integration tool would silently no-op against the gate.
     if (isIntegration) {

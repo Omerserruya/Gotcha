@@ -1,15 +1,15 @@
 -- System-language plumbing.
 --
---   tenants.default_locale       — admin-set, applies to everyone in the org
+--   tenants.default_locale       - admin-set, applies to everyone in the org
 --                                  who hasn't overridden their own.
---   users.locale                 — per-agent override; NULL means inherit
+--   users.locale                 - per-agent override; NULL means inherit
 --                                  from tenants.default_locale.
---   conversations.detected_locale — auto-detected from the first inbound
+--   conversations.detected_locale - auto-detected from the first inbound
 --                                  message (heuristic + LLM fallback).
 --                                  Drives suggested-reply language when
 --                                  it should track the customer.
 --
--- All three new columns are safe to add with defaults / NULL — no backfill
+-- All three new columns are safe to add with defaults / NULL - no backfill
 -- needed. The application code reads with fallbacks
 -- (user.locale ?? tenant.default_locale ?? 'en').
 

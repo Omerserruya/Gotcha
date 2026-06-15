@@ -37,7 +37,7 @@ Replace `gotcha.co.il` with your actual host below.
 
 ### Scopes / capabilities
 
-Stripe Connect doesn't use OAuth scope strings — what the connected account can do is set by the **capabilities** you request when onboarding the account. For our adapter you need at minimum:
+Stripe Connect doesn't use OAuth scope strings - what the connected account can do is set by the **capabilities** you request when onboarding the account. For our adapter you need at minimum:
 
 - `card_payments` (creates payment links)
 - `transfers` (if you take a platform fee)
@@ -54,7 +54,7 @@ STRIPE_REDIRECT_URI=https://gotcha.co.il/api/connectors/stripe/oauth/callback
 
 ### Gotchas
 
-- Stripe matches the redirect URI **byte-for-byte** — trailing slashes, http vs https, all matter
+- Stripe matches the redirect URI **byte-for-byte** - trailing slashes, http vs https, all matter
 - For dev/staging, register a separate Connect Client ID against your test-mode Stripe account
 
 ---
@@ -73,7 +73,7 @@ STRIPE_REDIRECT_URI=https://gotcha.co.il/api/connectors/stripe/oauth/callback
    - `crm.objects.contacts.write`
    - `crm.objects.deals.read`
    - `crm.objects.deals.write`
-   - `crm.objects.leads.read` *(Sales Hub Enterprise only — see note below)*
+   - `crm.objects.leads.read` *(Sales Hub Enterprise only - see note below)*
    - `crm.objects.leads.write` *(Sales Hub Enterprise only)*
    - `oauth`
 
@@ -87,7 +87,7 @@ The dedicated Leads object is **Sales Hub Enterprise only**. If your test accoun
 - Leave Leads scopes unchecked, OR
 - Use a Sales Hub Enterprise developer test account
 
-The marketplace UI will still show Lead tools to all tenants — the LLM gets a graceful 403 → `ok:false` and pivots to `create_contact`.
+The marketplace UI will still show Lead tools to all tenants - the LLM gets a graceful 403 → `ok:false` and pivots to `create_contact`.
 
 ### .env
 
@@ -119,11 +119,11 @@ HUBSPOT_REDIRECT_URI=https://gotcha.co.il/api/connectors/hubspot/oauth/callback
 
 Already requested by `services/ai/src/routes/connectors-admin.ts`:
 
-- `read_orders` — list orders
-- `write_orders` — note + tag orders
-- `read_customers` — get customer
-- `write_discounts` — create discount codes
-- `read_products` — (future)
+- `read_orders` - list orders
+- `write_orders` - note + tag orders
+- `read_customers` - get customer
+- `write_discounts` - create discount codes
+- `read_products` - (future)
 
 If you change this list in the partner dashboard, also update the `scopes` constant in `connectors-admin.ts` so the OAuth init asks for them.
 
@@ -137,17 +137,17 @@ SHOPIFY_REDIRECT_URI=https://gotcha.co.il/api/connectors/shopify/oauth/callback
 
 ### Gotchas
 
-- Shopify install URL must include the tenant's shop domain — the marketplace UI prompts the admin for it (`my-store.myshopify.com`) before kicking off OAuth
+- Shopify install URL must include the tenant's shop domain - the marketplace UI prompts the admin for it (`my-store.myshopify.com`) before kicking off OAuth
 - You can't connect a *development store* to a non-published app unless you add the store under **Test on development store**
 - For production, you'll eventually want to submit the app for review (read-only data tools don't require it; write tools do)
 
 ---
 
-## 4. Wix (Wix App — install flow)
+## 4. Wix (Wix App - install flow)
 
-> **IMPORTANT — read this first.** Wix has two OAuth-shaped flows. For *multi-tenant SaaS* like Gotcha (any Wix store owner connects their store), you **MUST** use the **Wix App install flow**, NOT "Headless OAuth". Headless OAuth is only for *your own* Wix sites/projects.
+> **IMPORTANT - read this first.** Wix has two OAuth-shaped flows. For *multi-tenant SaaS* like Gotcha (any Wix store owner connects their store), you **MUST** use the **Wix App install flow**, NOT "Headless OAuth". Headless OAuth is only for *your own* Wix sites/projects.
 >
-> The install flow URL is `https://www.wix.com/installer/install?appId=…&redirectUrl=…&state=…` — the user picks one of *their* sites, approves permissions, and Wix sends back a `code` + `instanceId` (the site identifier). Our backend exchanges the code for an access token scoped to that instance.
+> The install flow URL is `https://www.wix.com/installer/install?appId=…&redirectUrl=…&state=…` - the user picks one of *their* sites, approves permissions, and Wix sends back a `code` + `instanceId` (the site identifier). Our backend exchanges the code for an access token scoped to that instance.
 
 ### Steps
 
@@ -156,7 +156,7 @@ SHOPIFY_REDIRECT_URI=https://gotcha.co.il/api/connectors/shopify/oauth/callback
 3. Choose: **"Build apps for Wix users"** (NOT "Headless"). This gives you a Wix App that other Wix users can install on their sites.
 4. App name: e.g. *Gotcha AI*
 5. Left sidebar → **App Settings → URLs / Endpoints**:
-   - **App URL**: `https://gotcha.co.il` (where Wix users land after install — your dashboard)
+   - **App URL**: `https://gotcha.co.il` (where Wix users land after install - your dashboard)
    - **Redirect URL**: `https://gotcha.co.il/api/connectors/wix/oauth/callback`
 6. Left sidebar → **Permissions** → **+ Add Permissions**, add:
    - **Wix Stores** → `Read Stores`, `Read Orders`
@@ -179,7 +179,7 @@ WIX_REDIRECT_URI=https://gotcha.co.il/api/connectors/wix/oauth/callback
 
 1. Tenant clicks **Connect Wix** in your marketplace
 2. Browser → `https://www.wix.com/installer/install?appId=<APP_ID>&redirectUrl=<callback>&state=<jwt>`
-3. Wix shows: "Add **Gotcha AI** to which site?" — tenant picks
+3. Wix shows: "Add **Gotcha AI** to which site?" - tenant picks
 4. Wix shows the permission consent screen → tenant approves
 5. Wix redirects to your callback with `?code=…&instanceId=<site-instance>&state=…`
 6. Your backend POSTs the code to `https://www.wixapis.com/oauth/access` and persists the access/refresh tokens + the `instanceId` of the picked site
@@ -187,8 +187,8 @@ WIX_REDIRECT_URI=https://gotcha.co.il/api/connectors/wix/oauth/callback
 
 ### Gotchas
 
-- The **App ID** is what fills `WIX_CLIENT_ID` — Wix sometimes shows it as "Client ID" or "App ID" in different parts of the console. They're the same value
-- "Headless OAuth" mode in the Wix console (the option you saw earlier) is for a different use case — apps where YOU own the Wix project. Don't use it for multi-tenant
+- The **App ID** is what fills `WIX_CLIENT_ID` - Wix sometimes shows it as "Client ID" or "App ID" in different parts of the console. They're the same value
+- "Headless OAuth" mode in the Wix console (the option you saw earlier) is for a different use case - apps where YOU own the Wix project. Don't use it for multi-tenant
 - App distribution: while testing you can install on your own sites without publishing. For real customers you eventually want to **submit the app to the Wix App Market** (left sidebar → **App Market Listing** → fill the listing → submit). But you can also distribute privately by sharing the install URL directly
 - `instanceId` is **per-site**. If a tenant has 3 Wix sites and connects to one, your tokens only work for that site. Connecting another site means another OAuth round → another integration row
 
@@ -217,7 +217,7 @@ Already requested:
 - `INVOICES_READ` `INVOICES_WRITE`
 - `MERCHANT_PROFILE_READ`
 
-These are also configurable on the OAuth tab — make sure they're enabled in the dev console.
+These are also configurable on the OAuth tab - make sure they're enabled in the dev console.
 
 ### .env
 
@@ -229,7 +229,7 @@ SQUARE_REDIRECT_URI=https://gotcha.co.il/api/connectors/square/oauth/callback
 
 ### Gotchas
 
-- Square has **separate Application IDs** for Sandbox vs Production — pick one per env. The same pair of vars works for both; the marketplace UI lets the tenant pick which environment to target via a dropdown
+- Square has **separate Application IDs** for Sandbox vs Production - pick one per env. The same pair of vars works for both; the marketplace UI lets the tenant pick which environment to target via a dropdown
 - Tenants must select a **default location** in their config (auto-selected from the first location returned by `/v2/locations` if not set)
 
 ---
@@ -250,10 +250,10 @@ SQUARE_REDIRECT_URI=https://gotcha.co.il/api/connectors/square/oauth/callback
      - `Manage user data via APIs (api)`
      - `Perform requests at any time (refresh_token, offline_access)`
    - **Require Secret for Web Server Flow**: ✓ checked
-5. **Distribution State**: set to **Global** — this is what lets users from *other* Salesforce orgs OAuth into your app. Without it, only users in *your* Salesforce org can install.
+5. **Distribution State**: set to **Global** - this is what lets users from *other* Salesforce orgs OAuth into your app. Without it, only users in *your* Salesforce org can install.
 6. Save (5–10 min for Salesforce to propagate the new app)
-7. **Important second pass — open the app → Manage → Edit Policies → OAuth Policies**:
-   - **Permitted Users**: set to **"All users may self-authorize"** — without this, external admins would need to pre-approve specific users in their org before OAuth works
+7. **Important second pass - open the app → Manage → Edit Policies → OAuth Policies**:
+   - **Permitted Users**: set to **"All users may self-authorize"** - without this, external admins would need to pre-approve specific users in their org before OAuth works
    - **IP Relaxation**: leave at default (`Enforce IP restrictions`) unless you have a known issue
 8. Back to the app overview → **Manage Consumer Details** (re-auth required) → copy:
    - **Consumer Key** → `SALESFORCE_CLIENT_ID`
@@ -269,9 +269,9 @@ SALESFORCE_REDIRECT_URI=https://gotcha.co.il/api/connectors/salesforce/oauth/cal
 
 ### Gotchas
 
-- Salesforce returns an `instance_url` with the access token — each tenant has their own subdomain (`https://acme.my.salesforce.com`). Our adapter persists this per-tenant and uses it for every API call
+- Salesforce returns an `instance_url` with the access token - each tenant has their own subdomain (`https://acme.my.salesforce.com`). Our adapter persists this per-tenant and uses it for every API call
 - The marketplace UI lets the tenant pick **login.salesforce.com** (production) vs **test.salesforce.com** (sandbox) before OAuth init
-- After saving the Connected App, Salesforce can take **up to 10 minutes** before it accepts OAuth requests against it — be patient
+- After saving the Connected App, Salesforce can take **up to 10 minutes** before it accepts OAuth requests against it - be patient
 
 ---
 
@@ -302,8 +302,8 @@ MONDAY_REDIRECT_URI=https://gotcha.co.il/api/connectors/monday/oauth/callback
 
 ### Gotchas
 
-- After OAuth completes, the marketplace shows a **board selector** — the admin picks the default board the AI will create items in. This is stored as `config.defaultBoardId`
-- Monday's API key tokens are also accepted (`Authorization: <token>` without `Bearer`) — useful for testing without OAuth
+- After OAuth completes, the marketplace shows a **board selector** - the admin picks the default board the AI will create items in. This is stored as `config.defaultBoardId`
+- Monday's API key tokens are also accepted (`Authorization: <token>` without `Bearer`) - useful for testing without OAuth
 
 ---
 
@@ -323,7 +323,7 @@ MONDAY_REDIRECT_URI=https://gotcha.co.il/api/connectors/monday/oauth/callback
 
 - App registration: https://developer.calendly.com → **My Apps**
 - Redirect URI: `https://gotcha.co.il/api/integrations/oauth/calendly/callback` *(legacy path)*
-- Scopes: handled implicitly — you ship a unified scope set
+- Scopes: handled implicitly - you ship a unified scope set
 
 ---
 
@@ -339,7 +339,7 @@ The same Google OAuth client used for Gmail also handles Calendar.
 
 ---
 
-## 11. PayPal — no platform-side OAuth needed
+## 11. PayPal - no platform-side OAuth needed
 
 PayPal uses **client-credentials** at the **tenant** level: each tenant pastes their own `client_id` + `client_secret` from their own PayPal Developer account into the marketplace UI. No platform-wide app registration needed.
 
@@ -358,7 +358,7 @@ To test:
 
 ---
 
-## 12. WooCommerce — no OAuth (consumer key/secret)
+## 12. WooCommerce - no OAuth (consumer key/secret)
 
 WooCommerce REST API uses HTTP Basic auth with a **consumer key + consumer secret** the tenant generates inside their WooCommerce admin. No platform-side app needed.
 
@@ -377,7 +377,7 @@ To test:
 
 ---
 
-## 13. Airtable — Personal Access Token (no OAuth)
+## 13. Airtable - Personal Access Token (no OAuth)
 
 Each tenant generates their own PAT at https://airtable.com/create/tokens.
 
@@ -391,7 +391,7 @@ After pasting the PAT, the marketplace UI fetches the tenant's bases → tables,
 
 ---
 
-## 14. PostgreSQL / MongoDB / AWS RDS — connection strings
+## 14. PostgreSQL / MongoDB / AWS RDS - connection strings
 
 No OAuth. Each tenant pastes their own DB connection string + an **allowlist** of tables (Postgres/RDS) or collections (MongoDB) the AI may read/write.
 
@@ -418,7 +418,7 @@ For RDS, an additional **Engine** dropdown picks `postgres` | `mysql` | `mariadb
 3. Open the marketplace at `https://gotcha.co.il/integrations`
 4. For each provider, click the card → **Connect with OAuth** (or fill the API-key form for non-OAuth providers)
 5. Approve the install at the provider's screen → you'll be redirected back with a `?status=connected` indicator
-6. Tools appear in the integration detail page — toggle them on to expose to your AI agents
+6. Tools appear in the integration detail page - toggle them on to expose to your AI agents
 
 ---
 
@@ -430,7 +430,7 @@ For each connected integration, click **Test Connection** in the marketplace car
 - Token refresh works (for OAuth providers)
 - Provider returned a 2xx response
 
-A red error includes the provider's exact failure message — usually a missing scope or a misconfigured redirect URI.
+A red error includes the provider's exact failure message - usually a missing scope or a misconfigured redirect URI.
 
 ---
 
@@ -442,7 +442,7 @@ A red error includes the provider's exact failure message — usually a missing 
 | `redirect_uri_mismatch` | Provider's allowed list doesn't include this exact URI | Re-check the URI byte-for-byte (https/http, trailing slash) |
 | `invalid_scope` | Asked for a scope the app doesn't have | Add it in the provider's dev console + re-install |
 | `bad_state` (from our callback) | OAuth state JWT expired (>10 min) | Re-click Connect to start a fresh flow |
-| `not_connected:<slug>` (from a tool call) | Token expired and refresh failed | Marketplace card will show ERROR — tenant clicks Reconnect |
+| `not_connected:<slug>` (from a tool call) | Token expired and refresh failed | Marketplace card will show ERROR - tenant clicks Reconnect |
 | `rate_limited:<slug>:retry_after_ms=...` | More than 10 calls/sec/provider | LLM will pivot; no action needed |
 
 ---

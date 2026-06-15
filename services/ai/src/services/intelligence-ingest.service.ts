@@ -1,5 +1,5 @@
 /**
- * Intelligence Ingest — Customer Intelligence V2, Phase 2.
+ * Intelligence Ingest - Customer Intelligence V2, Phase 2.
  *
  * The write path that turns extracted conversation fields into the V2 model:
  * routes each (key, value) by its `FieldDefinition.scope` into the right
@@ -264,7 +264,7 @@ export async function ingestConversationFacts(params: {
   ): Promise<Record<string, FactSnapshotEntry>> {
     const next = { ...snapshot };
     for (const it of items) {
-      // Append-only log (always — full history).
+      // Append-only log (always - full history).
       await (prisma as any).intelligenceFact.create({
         data: {
           tenantId, entityType, entityId, fieldKey: it.key,

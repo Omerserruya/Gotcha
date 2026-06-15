@@ -22,8 +22,8 @@ import {
  * Settings → Intelligence Fields (Customer Intelligence V2, Phase 1).
  *
  * The Fields Builder over the scope-aware FieldDefinition registry. Each field
- * declares the SCOPE it owns — customer (durable, per-person), opportunity
- * (per-deal), or conversation (per-interaction) — the core anti-overwrite
+ * declares the SCOPE it owns - customer (durable, per-person), opportunity
+ * (per-deal), or conversation (per-interaction) - the core anti-overwrite
  * mechanic. Industry Packs seed scope-tagged fields in one click.
  */
 

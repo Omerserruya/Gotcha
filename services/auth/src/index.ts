@@ -37,7 +37,7 @@ app.use("/api/system", systemFeatureRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
 app.use("/api/onboarding", onboardingRoutes);
-// Public invite endpoints — viewable / acceptable WITHOUT auth so a
+// Public invite endpoints - viewable / acceptable WITHOUT auth so a
 // teammate who clicked the link can land on /join, see the tenant
 // name, and create their account. Tenant is identified via the
 // signed-random token, not the bearer header.

@@ -7,9 +7,9 @@
  * exists, the resolver throws `NoActiveVoiceChannelError`.
  *
  * Two resolver shapes are exported:
- *   - `createVoiceProviderResolver` — tenant-keyed lookup, used by paths
+ *   - `createVoiceProviderResolver` - tenant-keyed lookup, used by paths
  *     where the agent's tenant is the natural anchor (token, twiml).
- *   - `createResolveProviderByChannelId` — channel-keyed lookup, used by
+ *   - `createResolveProviderByChannelId` - channel-keyed lookup, used by
  *     inbound webhooks where the channel id is resolved from `To` before
  *     the provider is built.
  *

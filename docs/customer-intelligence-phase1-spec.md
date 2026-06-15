@@ -1,6 +1,6 @@
-# Phase 1 Implementation Spec — CIO Foundation + Industry Packs
+# Phase 1 Implementation Spec - CIO Foundation + Industry Packs
 
-> **Design only — no source edits.** Build-ready spec for Phase 1 of
+> **Design only - no source edits.** Build-ready spec for Phase 1 of
 > `docs/customer-intelligence-architecture.md`.
 > **Goal:** promote `CustomerBrief` to the Customer Intelligence Object (CIO),
 > add an Industry Pack catalog, wire onboarding business-type → pack, and ship a
@@ -17,7 +17,7 @@ onboarding pack detection + confirm; Fields Builder UI over `PostConversationCon
 
 **Out (later phases):** live text extraction (P2), the card (P3), executive summary
 & timeline (P4), CRM field-map (P5), Discovery Engine (P6). P1 only **defines and
-stores** the structured shape — nothing reads/writes `universalFields`/`industryFields`
+stores** the structured shape - nothing reads/writes `universalFields`/`industryFields`
 at runtime yet beyond CRUD.
 
 ---
@@ -77,8 +77,8 @@ Add three optional fields (additive; `isSummaryFieldDef` still valid):
 
 ```ts
 required?:  boolean;   // UI hint; not enforced server-side in P1
-aiExtract?: boolean;   // default true — include key in allowedFields
-syncToCrm?: boolean;   // default true — allow into crm_patch mapping (P5)
+aiExtract?: boolean;   // default true - include key in allowedFields
+syncToCrm?: boolean;   // default true - allow into crm_patch mapping (P5)
 ```
 
 `getSummarizerAllowedFields` change: filter custom keys by `aiExtract !== false`
@@ -118,13 +118,13 @@ Seed is idempotent (upsert by `(null, slug)`).
 ### 4.2 Fields Builder (reuse existing config route)
 
 `GET /` and `PUT /` on the post-conversation-config router already exist
-(`routes/post-conversation-config.ts:27,44`). No new endpoint — the Fields Builder
+(`routes/post-conversation-config.ts:27,44`). No new endpoint - the Fields Builder
 UI reads/writes `summaryFields` through them. Validation extended for the 3 flags.
 
 ### 4.3 Gateway
 
 Add `/api/industry-packs` to **both** nginx templates
-(`gateway/nginx.prod.conf.template` + `nginx/nginx.conf.template`) — standard
+(`gateway/nginx.prod.conf.template` + `nginx/nginx.conf.template`) - standard
 ai-service prefix, no special buffering. (Per `project_ai_employee_readiness` note:
 new AI routes must be covered in both templates.)
 
@@ -197,11 +197,11 @@ Mirror the in-wizard `StepRefine`/`KnowledgeModal` styling for consistency.
 
 ## 9. Decisions needed before P1 build
 
-1. **Locale storage** for structured fields — confirm "default-locale row holds
+1. **Locale storage** for structured fields - confirm "default-locale row holds
    structured; prose per-locale" (recommended) vs a dedicated `locale="*"` row.
 2. **Pack apply = merge vs replace** when a tenant re-applies/switches packs
    (recommended: merge + mark pack-origin keys so a later "remove pack" is clean).
-3. **Field-key namespacing** — allow pack and custom keys to collide? (recommended:
+3. **Field-key namespacing** - allow pack and custom keys to collide? (recommended:
    reserve pack keys, suffix custom collisions).
 4. Whether `required` is purely a UI hint in P1 or also gates readiness somewhere
    (recommended: UI-only in P1).

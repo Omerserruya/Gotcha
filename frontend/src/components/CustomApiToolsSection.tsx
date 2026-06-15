@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Custom API Tools — Postman-style builder for tenant-defined HTTP tools.
+ * Custom API Tools - Postman-style builder for tenant-defined HTTP tools.
  *
  * Each tool the admin defines here surfaces to the AI as `custom.<slug>` with
  * the full LLM contract (description, whenToUse, whenNotToUse, parameters).
@@ -196,7 +196,7 @@ export default function CustomApiToolsSection() {
       isActive: s.isActive,
       timeoutMs: Number(s.timeoutMs) || 10000,
     };
-    // Only send `secrets` when at least one field is filled — preserves existing
+    // Only send `secrets` when at least one field is filled - preserves existing
     // server-side secrets when editing without re-entering them.
     if (Object.keys(secrets).length > 0) payload.secrets = secrets;
     return payload;
@@ -274,7 +274,7 @@ export default function CustomApiToolsSection() {
           <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
         </div>
       ) : tools.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-6">No custom tools yet — click <strong>Add tool</strong> to create your first.</p>
+        <p className="text-sm text-gray-400 text-center py-6">No custom tools yet - click <strong>Add tool</strong> to create your first.</p>
       ) : (
         <div className="space-y-2">
           {tools.map((t) => (
@@ -313,7 +313,7 @@ export default function CustomApiToolsSection() {
                 <Field label="Slug" required help="Tool will be exposed to the AI as `custom.<slug>`. Lowercase, no spaces.">
                   <input className={INPUT_CLS} value={editing.slug} onChange={(e) => setEditing({ ...editing, slug: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "_") })} placeholder="lookup_order" disabled={!!editing.id} />
                 </Field>
-                <Field label="Description" required help="Short — what the tool does.">
+                <Field label="Description" required help="Short - what the tool does.">
                   <textarea className={INPUT_CLS} rows={2} value={editing.description} onChange={(e) => setEditing({ ...editing, description: e.target.value })} placeholder="Look up an order in our internal API." />
                 </Field>
                 <Field label="When to use" required help="Plain English: 'Use this tool when ...'. The AI reads this to decide.">
@@ -427,7 +427,7 @@ export default function CustomApiToolsSection() {
               {/* Schema */}
               <Section title="Parameters schema" subtitle="JSON Schema (OpenAI function-calling shape) describing the args the AI passes in.">
                 <textarea rows={8} className={INPUT_CLS + " font-mono text-xs"} value={editing.parametersJson} onChange={(e) => setEditing({ ...editing, parametersJson: e.target.value })} />
-                <Field label="Response fields" help="Optional — comma-separated dotted paths to project from the response. Empty returns the full body.">
+                <Field label="Response fields" help="Optional - comma-separated dotted paths to project from the response. Empty returns the full body.">
                   <input className={INPUT_CLS} value={editing.responseFieldsCsv} onChange={(e) => setEditing({ ...editing, responseFieldsCsv: e.target.value })} placeholder="data.id, data.status, data.total" />
                 </Field>
               </Section>

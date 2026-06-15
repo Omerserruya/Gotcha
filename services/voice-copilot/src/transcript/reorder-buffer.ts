@@ -15,13 +15,13 @@ export class ReorderBuffer {
 
   ingest(t: Transcript): void {
     if (t.seq <= this.highWatermark && !t.isFinal) {
-      // Late partial — drop
+      // Late partial - drop
       return;
     }
 
     if (t.isFinal) {
       if (this.emittedFinalsSeq.has(t.seq)) {
-        // Duplicate final — dedupe
+        // Duplicate final - dedupe
         return;
       }
       this.emittedFinalsSeq.add(t.seq);

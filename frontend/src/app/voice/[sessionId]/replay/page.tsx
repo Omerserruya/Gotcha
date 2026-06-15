@@ -11,7 +11,7 @@ import { readReplay, type TimelineEvent } from "@/lib/cue-recorder";
  * the live call) and lets the rep / manager scrub through:
  *   - transcript progression
  *   - frame transitions (version + stage + intent)
- *   - cue emissions (with state — shown / accepted / dismissed / ignored)
+ *   - cue emissions (with state - shown / accepted / dismissed / ignored)
  *   - timing relative to call start
  *
  * No network calls. Pure client-side replay of buffered events.
