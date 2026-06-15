@@ -17,7 +17,7 @@ variable "region" {
 }
 
 variable "instance_type" {
-  description = "EC2 instance type. ARM (t4g.*) is ~20% cheaper than x86 — keep ARM unless an image stops supporting it."
+  description = "EC2 instance type. ARM (t4g.*) is ~20% cheaper than x86 - keep ARM unless an image stops supporting it."
   type        = string
   default     = "t4g.large"
 }
@@ -29,7 +29,7 @@ variable "root_volume_size_gb" {
 }
 
 variable "ssh_public_key_path" {
-  description = "Path to your local SSH public key (e.g. ~/.ssh/id_ed25519.pub). When set, Terraform creates the AWS key pair from it and attaches it to the instance. Recommended path — no manual AWS Console steps."
+  description = "Path to your local SSH public key (e.g. ~/.ssh/id_ed25519.pub). When set, Terraform creates the AWS key pair from it and attaches it to the instance. Recommended path - no manual AWS Console steps."
   type        = string
   default     = ""
 }
@@ -41,13 +41,13 @@ variable "key_pair_name" {
 }
 
 variable "allowed_ssh_cidrs" {
-  description = "CIDR blocks allowed to SSH (port 22). Set to [\"<your-ip>/32\"] — find your IP with `curl ifconfig.me`. Empty = SG blocks port 22 entirely (use SSM Session Manager instead)."
+  description = "CIDR blocks allowed to SSH (port 22). Set to [\"<your-ip>/32\"] - find your IP with `curl ifconfig.me`. Empty = SG blocks port 22 entirely (use SSM Session Manager instead)."
   type        = list(string)
   default     = []
 }
 
 variable "snapshot_retention_days" {
-  description = "Daily EBS snapshot retention. 7 days is the default — bump for compliance."
+  description = "Daily EBS snapshot retention. 7 days is the default - bump for compliance."
   type        = number
   default     = 7
 }

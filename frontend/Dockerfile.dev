@@ -1,0 +1,21 @@
+# Dev image - runs `next dev` with hot reload.
+# Source is bind-mounted via docker-compose; node_modules/.next live in
+# anonymous volumes so the host doesn't shadow the container's installed deps.
+FROM node:20-alpine
+
+WORKDIR /app
+
+ENV NEXT_TELEMETRY_DISABLED=1
+# Make file-watching reliable inside Docker (bind mounts don't always emit
+# native fs events on Linux/macOS hosts).
+ENV WATCHPACK_POLLING=true
+ENV CHOKIDAR_USEPOLLING=true
+
+COPY package.json package-lock.json* ./
+RUN npm install
+
+COPY . .
+
+EXPOSE 3000
+
+CMD ["npm", "run", "dev"]
