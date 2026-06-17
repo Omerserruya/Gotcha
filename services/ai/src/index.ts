@@ -31,6 +31,7 @@ import crmPanelRoutes from "./routes/crm-panel";
 import postConversationConfigRoutes from "./routes/post-conversation-config";
 import industryPacksRoutes from "./routes/industry-packs";
 import fieldDefinitionsRoutes from "./routes/field-definitions";
+import intelligenceReviewsRoutes from "./routes/intelligence-reviews";
 import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
@@ -110,6 +111,7 @@ app.use("/api/crm", crmPanelRoutes);
 app.use("/api/post-conversation-config", postConversationConfigRoutes);
 app.use("/api/industry-packs", industryPacksRoutes);
 app.use("/api/field-definitions", fieldDefinitionsRoutes);
+app.use("/api/intelligence-reviews", intelligenceReviewsRoutes);
 app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
@@ -154,6 +156,12 @@ startPostCallQATrigger();
 // pasted transcripts via UploadedTranscriptSource; recording-URL ingest
 // requires a WhisperClient implementation (Phase 6.x).
 startPostCallAnalyzeWorker();
+
+// Knowledge-base auto-sync: hourly background re-sync of connected Google Drive
+// / Confluence sources. Change-aware (skips unchanged pages/files) so it only
+// re-embeds what actually changed. See services/knowledge-sync.service.ts.
+import { startKnowledgeSyncScheduler } from "./services/knowledge-sync.service";
+startKnowledgeSyncScheduler();
 
 startService(app, config);
 export { app };

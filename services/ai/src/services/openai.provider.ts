@@ -496,12 +496,15 @@ export class OpenAIProvider implements AIProvider {
           {
             role: "system",
             content:
-              "Summarize this customer conversation concisely as bullet points (2-4 key points). Structure:\n" +
-              "• **Why they contacted**: the customer's original reason/intent from their first message\n" +
-              "• **What they need now**: what the customer is asking for or waiting on right now (from their latest message)\n" +
-              "• **Status**: where things stand (resolved, pending, escalated, etc.)\n" +
-              "• **Next step**: what the agent should do next\n" +
-              "Be brief - one line per point." + langInstruction,
+              "You are a CRM analyst summarizing a customer conversation for the sales/support team.\n" +
+              "Read the WHOLE conversation and infer the customer's REAL intent - do NOT take the opening word literally. " +
+              "Someone who opens with \"support\"/\"תמיכה\" but then asks what the product does, what it can do, and how it works is doing PRODUCT DISCOVERY / PRE-SALES, not support. Classify by what they actually explored, not the first word.\n\n" +
+              "Write concise bullet points with this structure:\n" +
+              "• **Why they reached out**: the customer's true underlying intent across the whole conversation (e.g. exploring the product, evaluating a specific capability, a real support issue, pricing). Be specific about the topic.\n" +
+              "• **What they asked**: the concrete questions or topics they explored, as a short sub-list when there were several.\n" +
+              "• **Status**: where things stand from the CUSTOMER's side (e.g. exploring, asked X and awaiting an answer, ready to buy, issue resolved). A human agent reads this AFTER claiming the conversation - they ARE the human now handling it - so never phrase status as \"waiting to be connected to a human agent\" or \"needs to be handed off\"; describe what the customer actually needs next.\n" +
+              "• **Opportunity**: any sales/expansion signal - interest in a capability, evaluation intent, buying signal. Write \"none clear\" if genuinely absent. Do NOT invent one.\n\n" +
+              "Rules: ground every point in what was actually said - never fabricate. Don't mislabel a discovery/evaluation chat as \"support\". Keep it brief." + langInstruction,
           },
           { role: "user", content: messagesText },
         ],
@@ -537,6 +540,38 @@ export class OpenAIProvider implements AIProvider {
       return JSON.parse(content);
     } catch {
       return { intent: "unknown", confidence: 0, entities: [] };
+    }
+  }
+
+  async classifySentiment(text: string): Promise<{ sentiment: string; score: number }> {
+    if (!text?.trim()) return { sentiment: "neutral", score: 0 };
+    try {
+      const result = await generateResponse({
+        tenantId: "",
+        model: this.defaultModel,
+        messages: [
+          {
+            role: "system",
+            content:
+              'Read the customer\'s messages and judge their overall sentiment toward the company/product across the whole conversation. ' +
+              'Return JSON: { "sentiment": "positive"|"neutral"|"negative"|"mixed", "score": number from -1 (very negative) to 1 (very positive) }. ' +
+              'An engaged, curious customer asking lots of questions is "positive". Only "negative" when they express real frustration, complaint, or dissatisfaction. Judge the substance, not the politeness words.',
+          },
+          { role: "user", content: text },
+        ],
+        temperature: 0,
+        maxTokens: 64,
+        responseFormat: { type: "json_object" },
+        metadata: { type: "sentiment" },
+      });
+      const content = result.content;
+      if (!content) return { sentiment: "neutral", score: 0 };
+      const parsed = JSON.parse(content);
+      const sentiment = ["positive", "neutral", "negative", "mixed"].includes(parsed.sentiment) ? parsed.sentiment : "neutral";
+      const score = typeof parsed.score === "number" ? Math.max(-1, Math.min(1, parsed.score)) : 0;
+      return { sentiment, score };
+    } catch {
+      return { sentiment: "neutral", score: 0 };
     }
   }
 
@@ -609,12 +644,14 @@ export class OpenAIProvider implements AIProvider {
       chatContactId = contact?.id;
     }
     // Copilot CHAT - advisory to the human agent. Same gating as
-    // suggestResponse: NEVER expose close_conversation / schedule_followup,
-    // otherwise the LLM closes the live conversation while the agent is just
-    // asking it a question.
+    // suggestResponse: NEVER expose close_conversation / schedule_followup /
+    // escalate_to_human. The agent asking the copilot a question must never
+    // cause a real side-effect on the conversation they already own - closing
+    // it, scheduling a follow-up, or escalating it. The human IS the human
+    // agent; escalation is their manual decision, not the copilot's.
     const chatTools = buildAgentTools({
       identityLinking: !!chatContactId,
-      escalation: true,
+      escalation: false,
       closure: false,
       followup: false,
     });

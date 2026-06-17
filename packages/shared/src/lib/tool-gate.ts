@@ -75,7 +75,11 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   schedule_broadcast:          { mode: "always" },
   schedule_followup:           { mode: "always" },
   schedule_followup_template:  { mode: "always" },
-  schedule_meeting:            { mode: "always" },
+  // Risk-based, not blanket HITL: a booking is reversible (cancel_event) and is
+  // a core autonomous action, so short meetings auto-book and only longer ones
+  // need a human nod. Tune per tenant via TenantToolPermission, or widen the
+  // condition (e.g. contains(args.meeting_type, 'enterprise')).
+  schedule_meeting:            { mode: "on_condition", condition: "args.duration_minutes > 60" },
   merge_contacts:              { mode: "always" },
   update_contact:              { mode: "always" },
   update_crm:                  { mode: "always" },

@@ -41,6 +41,8 @@ export interface ExtractedField {
   key: string;
   value: unknown;
   confidence?: number;
+  /** Verbatim snippet from the conversation that justifies this value. */
+  evidence?: string | null;
 }
 
 export interface FactSnapshotEntry {
@@ -49,6 +51,7 @@ export interface FactSnapshotEntry {
   source: FactSourceName;
   observedAt: string;       // ISO
   conversationId?: string | null;
+  evidence?: string | null;
 }
 
 export interface IngestResult {
@@ -58,7 +61,26 @@ export interface IngestResult {
   opportunityId?: string | null;
   written: number;          // facts that landed (snapshot changed)
   logged: number;           // IntelligenceFact rows appended
+  reviewed: number;         // routed to the human-review queue
   skipped: number;          // empty/unknown-key/scope-rejected
+}
+
+// ── Conflict-resolution policy constants ──
+// Default minimum confidence to auto-apply a value when a field declares no
+// threshold of its own. Below this → human review.
+const GLOBAL_CONFIDENCE_FLOOR = 0.6;
+// A NEW, DIFFERENT value must beat the current confidence by this margin to
+// overwrite automatically; otherwise the conflict goes to human review.
+const CONFLICT_MARGIN = 0.15;
+
+type MergeDecision =
+  | { action: "apply"; entry: FactSnapshotEntry }
+  | { action: "review"; reason: "low_confidence" | "conflict" }
+  | { action: "ignore" };
+
+function valuesEqual(a: unknown, b: unknown): boolean {
+  if (a === b) return true;
+  try { return JSON.stringify(a) === JSON.stringify(b); } catch { return false; }
 }
 
 // ── Value coercion by field type ──
@@ -183,17 +205,50 @@ async function resolveOpenOpportunity(tenantId: string, profileId: string, type:
 }
 
 /**
- * Apply the merge policy to one snapshot slot. Returns the next entry, or null
- * if the existing value should be kept (no change).
+ * Conflict-resolution decision for one snapshot slot. Documented policy:
+ *
+ *   1. Manual supremacy   - a human-entered value always wins and is never sent
+ *                           to review; a non-manual source never overwrites it.
+ *   2. Low confidence     - a value below the field's threshold NEVER auto-writes;
+ *                           it is queued for human review (reason=low_confidence).
+ *   3. First value        - no current value + above threshold → apply.
+ *   4. Agreement          - same value as current → refresh confidence/recency.
+ *   5. Conflict           - a DIFFERENT value:
+ *        • overwrite ONLY if clearly more confident (≥ current + CONFLICT_MARGIN);
+ *        • otherwise keep the current value and queue the new one for review
+ *          (reason=conflict) - the "keep both, let a human decide" path.
+ *
+ * History/provenance is preserved regardless: every applied value appends an
+ * IntelligenceFact row, so the full timeline is reconstructable per field.
  */
-function mergeSlot(current: FactSnapshotEntry | undefined, next: FactSnapshotEntry): FactSnapshotEntry | null {
-  if (!current) return next;
-  if (current.source === "manual" && next.source !== "manual") return null; // manual supremacy
-  if (next.source === "manual") return next;
-  // both non-manual: higher confidence wins; tie → newer observedAt
-  if (next.confidence > current.confidence) return next;
-  if (next.confidence === current.confidence && next.observedAt >= current.observedAt) return next;
-  return null;
+export function decideMerge(
+  current: FactSnapshotEntry | undefined,
+  next: FactSnapshotEntry,
+  threshold: number,
+): MergeDecision {
+  // (1) Manual edits are sacred.
+  if (next.source === "manual") return { action: "apply", entry: next };
+  if (current?.source === "manual") return { action: "ignore" };
+
+  // (2) Low-confidence guess never auto-writes.
+  if (next.confidence < threshold) return { action: "review", reason: "low_confidence" };
+
+  // (3) First confident value.
+  if (!current) return { action: "apply", entry: next };
+
+  // (4) Agreement - strengthen recency/confidence, no conflict.
+  if (valuesEqual(current.value, next.value)) {
+    if (next.confidence > current.confidence || next.observedAt >= current.observedAt) {
+      return { action: "apply", entry: next };
+    }
+    return { action: "ignore" };
+  }
+
+  // (5) Conflict - overwrite only when clearly more confident, else review.
+  if (next.confidence >= current.confidence + CONFLICT_MARGIN) {
+    return { action: "apply", entry: next };
+  }
+  return { action: "review", reason: "conflict" };
 }
 
 /**
@@ -211,39 +266,55 @@ export async function ingestConversationFacts(params: {
   const { tenantId, conversationId, fields, source } = params;
   const defConf = params.defaultConfidence ?? (source === "llm_live" ? 0.6 : 0.8);
 
-  if (!fields?.length) return { ok: true, written: 0, logged: 0, skipped: 0 };
+  if (!fields?.length) return { ok: true, written: 0, logged: 0, reviewed: 0, skipped: 0 };
 
   const identity = await resolveIdentity(tenantId, conversationId);
-  if (!identity) return { ok: false, reason: "no-identity", written: 0, logged: 0, skipped: fields.length };
+  if (!identity) return { ok: false, reason: "no-identity", written: 0, logged: 0, reviewed: 0, skipped: fields.length };
 
-  // Load the tenant's field registry (key → scope/type).
+  // Load the tenant's field registry (key → scope/type/threshold).
   const defs = await (prisma as any).fieldDefinition.findMany({
     where: { tenantId },
-    select: { key: true, scope: true, type: true },
+    select: { key: true, scope: true, type: true, confidenceThreshold: true },
   });
-  const defByKey = new Map<string, { scope: FieldScope; type: string }>(
-    defs.map((d: any) => [d.key, { scope: String(d.scope).toLowerCase() as FieldScope, type: d.type }]),
+  const defByKey = new Map<string, { scope: string; type: string; threshold: number }>(
+    defs.map((d: any) => [
+      d.key,
+      {
+        scope: String(d.scope).toLowerCase(),
+        type: d.type,
+        threshold: typeof d.confidenceThreshold === "number" ? d.confidenceThreshold : GLOBAL_CONFIDENCE_FLOOR,
+      },
+    ]),
   );
 
   const profile = await upsertCustomerProfile(tenantId, identity);
 
   // Partition incoming fields by scope (skip unknown keys + empty values).
-  const byScope: Record<FieldScope, Array<{ key: string; value: unknown; confidence: number; type: string }>> = {
-    customer: [], opportunity: [], conversation: [],
-  };
+  // A REVIEW_REQUIRED (or any non-routable) scope is parked: we never guess
+  // where its value belongs, so it is skipped until a human assigns a real
+  // scope in the Fields Builder.
+  type ScopedItem = { key: string; value: unknown; confidence: number; type: string; threshold: number; evidence: string | null };
+  const byScope: Record<FieldScope, ScopedItem[]> = { customer: [], opportunity: [], conversation: [] };
   let skipped = 0;
   for (const f of fields) {
     const def = defByKey.get(f.key);
     if (!def) { skipped++; continue; }                 // unknown key → Discovery's job (P6)
+    if (def.scope !== "customer" && def.scope !== "opportunity" && def.scope !== "conversation") {
+      skipped++; continue;                              // REVIEW_REQUIRED / unroutable → park
+    }
     const value = coerceValue(f.value, def.type);
     if (isEmpty(value)) { skipped++; continue; }        // absence ≠ deletion
-    byScope[def.scope].push({ key: f.key, value, confidence: f.confidence ?? defConf, type: def.type });
+    byScope[def.scope as FieldScope].push({
+      key: f.key, value, confidence: f.confidence ?? defConf, type: def.type,
+      threshold: def.threshold, evidence: f.evidence ?? null,
+    });
   }
 
   const observedAt = new Date();
   const observedIso = observedAt.toISOString();
   let written = 0;
   let logged = 0;
+  let reviewed = 0;
 
   // Resolve an opportunity only if we have opportunity-scoped facts to write.
   let opportunity: any = null;
@@ -255,32 +326,84 @@ export async function ingestConversationFacts(params: {
     opportunity = await resolveOpenOpportunity(tenantId, profile.id, type);
   }
 
-  // Helper: append fact rows + fold a snapshot map.
+  // Helper: route each item via the conflict-resolution policy. Applied values
+  // append an IntelligenceFact (the accepted-value timeline / history) and fold
+  // the snapshot; uncertain or conflicting values are queued for human review
+  // instead of touching the snapshot.
   async function applyScope(
     entityType: "CUSTOMER" | "OPPORTUNITY" | "CONVERSATION",
     entityId: string,
     snapshot: Record<string, FactSnapshotEntry>,
-    items: Array<{ key: string; value: unknown; confidence: number }>,
+    items: ScopedItem[],
   ): Promise<Record<string, FactSnapshotEntry>> {
     const next = { ...snapshot };
     for (const it of items) {
-      // Append-only log (always - full history).
-      await (prisma as any).intelligenceFact.create({
-        data: {
-          tenantId, entityType, entityId, fieldKey: it.key,
-          value: it.value as any, confidence: it.confidence,
-          source: SOURCE_TO_PRISMA[source] as any,
-          observedAt, conversationId,
-        },
-      });
-      logged++;
       const candidate: FactSnapshotEntry = {
-        value: it.value, confidence: it.confidence, source, observedAt: observedIso, conversationId,
+        value: it.value, confidence: it.confidence, source,
+        observedAt: observedIso, conversationId, evidence: it.evidence,
       };
-      const merged = mergeSlot(next[it.key], candidate);
-      if (merged) { next[it.key] = merged; written++; }
+      const decision = decideMerge(next[it.key], candidate, it.threshold);
+
+      if (decision.action === "apply") {
+        // Append-only log = accepted-value history with full provenance.
+        await (prisma as any).intelligenceFact.create({
+          data: {
+            tenantId, entityType, entityId, fieldKey: it.key,
+            value: it.value as any, confidence: it.confidence,
+            source: SOURCE_TO_PRISMA[source] as any,
+            evidence: it.evidence, observedAt, conversationId,
+          },
+        });
+        logged++;
+        next[it.key] = decision.entry;
+        written++;
+      } else if (decision.action === "review") {
+        await queueReview({
+          entityType, entityId, fieldKey: it.key,
+          proposedValue: it.value, currentValue: next[it.key]?.value ?? null,
+          confidence: it.confidence, evidence: it.evidence,
+          reason: decision.reason,
+        });
+        reviewed++;
+      }
+      // action === "ignore" → nothing.
     }
     return next;
+  }
+
+  // Create (or refresh) a PENDING review row for an uncertain/conflicting value.
+  // De-dupes on (entity, field): the newest proposal replaces an older pending
+  // one so the queue never stacks duplicates for the same slot.
+  async function queueReview(r: {
+    entityType: "CUSTOMER" | "OPPORTUNITY" | "CONVERSATION";
+    entityId: string;
+    fieldKey: string;
+    proposedValue: unknown;
+    currentValue: unknown;
+    confidence: number;
+    evidence: string | null;
+    reason: "low_confidence" | "conflict";
+  }): Promise<void> {
+    const existing = await (prisma as any).intelligenceReview.findFirst({
+      where: { tenantId, entityType: r.entityType, entityId: r.entityId, fieldKey: r.fieldKey, status: "PENDING" },
+      select: { id: true },
+    }).catch(() => null);
+    const data = {
+      proposedValue: r.proposedValue as any,
+      currentValue: (r.currentValue ?? null) as any,
+      confidence: r.confidence,
+      evidence: r.evidence,
+      reason: r.reason,
+      source: SOURCE_TO_PRISMA[source] as any,
+      conversationId,
+    };
+    if (existing) {
+      await (prisma as any).intelligenceReview.update({ where: { id: existing.id }, data }).catch(() => {});
+    } else {
+      await (prisma as any).intelligenceReview.create({
+        data: { tenantId, entityType: r.entityType, entityId: r.entityId, fieldKey: r.fieldKey, status: "PENDING", ...data },
+      }).catch(() => {});
+    }
   }
 
   // CUSTOMER scope → CustomerProfile.facts
@@ -308,6 +431,6 @@ export async function ingestConversationFacts(params: {
     ok: true,
     profileId: profile.id,
     opportunityId: opportunity?.id ?? null,
-    written, logged, skipped,
+    written, logged, reviewed, skipped,
   };
 }

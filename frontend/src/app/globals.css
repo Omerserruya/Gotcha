@@ -52,6 +52,21 @@
   filter: drop-shadow(0 0 4px var(--edge-color-active));
 }
 
+/* Bigger, easier-to-grab connection handles (the dots on each node). */
+.react-flow__handle {
+  width: 13px;
+  height: 13px;
+  border-width: 2px;
+}
+.react-flow__handle:hover {
+  box-shadow: 0 0 0 4px rgba(99, 102, 241, 0.18);
+}
+/* Selected edge - thicker + highlighted so it's clear what the ✕ deletes. */
+.react-flow__edge.selected .react-flow__edge-path {
+  stroke: var(--edge-color-active, #6366f1) !important;
+  stroke-width: 2.5px !important;
+}
+
 html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;

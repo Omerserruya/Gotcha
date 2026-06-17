@@ -257,23 +257,44 @@ router.get(
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
     const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, JWT_SECRET, { expiresIn: "10m" });
-    // Includes Leads scopes - they 403 silently for tenants on Pro/Starter
-    // (no Leads object). Leaving them in keeps Enterprise install fast.
-    const scope = [
+    // HubSpot enforces an EXACT scope contract between the install URL and the
+    // app's configured scopes (HubSpot dashboard → Auth → Scopes):
+    //   1. Every scope the app marks "Required" must appear in the install URL,
+    //      else: "provided scopes are missing [...]".
+    //   2. Every scope in the install URL must be configured on the app (required
+    //      OR optional), else: "mismatch between the scopes in the install URL
+    //      and the app's configured scopes".
+    // Because that list lives in the HubSpot dashboard (not here), it is
+    // env-overridable so it can be aligned WITHOUT a rebuild. Set HUBSPOT_SCOPES
+    // (space- or comma-separated) to the app's exact required scopes; optionally
+    // set HUBSPOT_OPTIONAL_SCOPES for app-optional ones. `oauth` is always added.
+    // Default = every object the HubSpot adapter actually uses: contacts,
+    // companies, deals, and leads (the adapter has create_lead/update_lead/
+    // get_lead/search_leads via /crm/v3/objects/leads). Leads scopes 403 silently
+    // for tenants without the Leads object (Pro/Starter) - harmless. Appointments
+    // is intentionally NOT here: the adapter has no appointments calls.
+    const DEFAULT_SCOPES = [
       "crm.objects.contacts.read",
       "crm.objects.contacts.write",
+      "crm.objects.companies.read",
+      "crm.objects.companies.write",
       "crm.objects.deals.read",
       "crm.objects.deals.write",
       "crm.objects.leads.read",
       "crm.objects.leads.write",
-      "oauth",
-    ].join(" ");
+    ];
+    const parseScopes = (raw: string | undefined): string[] =>
+      (raw ?? "").split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);
+    const required = process.env.HUBSPOT_SCOPES ? parseScopes(process.env.HUBSPOT_SCOPES) : DEFAULT_SCOPES;
+    const scope = Array.from(new Set([...required, "oauth"])).join(" ");
+    const optionalScopes = parseScopes(process.env.HUBSPOT_OPTIONAL_SCOPES);
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirect,
       scope,
       state,
     });
+    if (optionalScopes.length) params.set("optional_scope", optionalScopes.join(" "));
     res.json({ url: `https://app.hubspot.com/oauth/authorize?${params.toString()}` });
   },
 );

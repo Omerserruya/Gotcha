@@ -221,20 +221,32 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
       },
     });
 
-    const tools = toolPermissions.map(tp => ({
-      id: tp.tenantTool.catalogTool.id,
-      tenantToolId: tp.tenantToolId,
-      name: tp.tenantTool.catalogTool.name,
-      slug: tp.tenantTool.catalogTool.slug,
-      risk: tp.tenantTool.catalogTool.riskLevel,
-      integration: tp.tenantTool.tenantIntegration.integration.name,
-      enabled: tp.isAllowed,
-      requireApproval: tp.requireApproval,
-      // Per-agent semantics (Tier 2). NULL when the operator hasn't
-      // customized - composeToolDescription falls back to catalog defaults.
-      description: (tp as any).description ?? null,
-      usageRule: (tp as any).usageRule ?? null,
-    }));
+    // Dedupe by tenantToolId: one tenant-tool is one logical tool. Duplicate
+    // permission rows can exist (the unique key includes the NULLABLE
+    // departmentId, and Postgres treats NULLs as distinct, so a department-less
+    // re-assign inserts a second row). Collapse them so the UI never shows the
+    // same action twice. Keep the first (lowest id wins via createdAt order).
+    const seenTenantTool = new Set<string>();
+    const tools = toolPermissions
+      .filter((tp) => {
+        if (seenTenantTool.has(tp.tenantToolId)) return false;
+        seenTenantTool.add(tp.tenantToolId);
+        return true;
+      })
+      .map(tp => ({
+        id: tp.tenantTool.catalogTool.id,
+        tenantToolId: tp.tenantToolId,
+        name: tp.tenantTool.catalogTool.name,
+        slug: tp.tenantTool.catalogTool.slug,
+        risk: tp.tenantTool.catalogTool.riskLevel,
+        integration: tp.tenantTool.tenantIntegration.integration.name,
+        enabled: tp.isAllowed,
+        requireApproval: tp.requireApproval,
+        // Per-agent semantics (Tier 2). NULL when the operator hasn't
+        // customized - composeToolDescription falls back to catalog defaults.
+        description: (tp as any).description ?? null,
+        usageRule: (tp as any).usageRule ?? null,
+      }));
 
     res.json({
       data: {
@@ -428,6 +440,20 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
         message: `Role \`${merged.role}\` requires a funnel binding.`,
       });
       return;
+    }
+
+    // Saving from the editor means the creation wizard is finished - clear the
+    // resumable progress pointer so the agent leaves the "resume setup" list
+    // and is treated as a fully-configured employee.
+    const wasIncompleteWizard = existing.status === "DRAFT" && (existing as any).builderStep != null;
+    updateData.builderStep = null;
+
+    // Only mark the employee ACTIVE once the creation wizard actually
+    // completes (was an incomplete DRAFT, now being saved). Guarded so a
+    // PAUSED agent edited later is never silently reactivated, and so an
+    // explicit status sent in the body still wins.
+    if (wasIncompleteWizard && !Object.prototype.hasOwnProperty.call(updateData, "status")) {
+      updateData.status = "ACTIVE";
     }
 
     const agent = await prisma.aIAgent.update({

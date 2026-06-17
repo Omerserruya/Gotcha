@@ -187,9 +187,9 @@ export async function buildAgentSystemPrompt(rawAgent: any): Promise<string> {
  */
 const HUMAN_HANDOFF_PATTERNS = [
   // English - explicit request
-  /\b(speak|talk|connect|chat|transfer|put me through)\s+(to|with|me)\s+(a\s+)?(human|agent|person|someone|rep|representative)\b/i,
-  /\b(can\s+i|i\s+(?:want|need|wanna|would like))\s+(to\s+)?(speak|talk|chat)\s+(to|with)\s+(a\s+)?(human|agent|person|someone|rep)\b/i,
-  /\b(give|get|connect)\s+me\s+(to\s+)?(a\s+)?(human|agent|person|rep)\b/i,
+  /\b(speak|talk|connect|chat|transfer|put me through)\s+(to|with|me)\s+(?:to\s+)?(?:an?\s+|the\s+)?(human|agent|person|someone|rep|representative)\b/i,
+  /\b(can\s+i|i\s+(?:want|need|wanna|would like))\s+(to\s+)?(speak|talk|chat)\s+(to|with)\s+(?:an?\s+|the\s+)?(human|agent|person|someone|rep)\b/i,
+  /\b(give|get|connect)\s+me\s+(?:to\s+)?(?:an?\s+|the\s+)?(human|agent|person|rep)\b/i,
   /\bnot\s+a\s+bot\b/i,
   // Hebrew - explicit request only. Word boundaries via space/start/end.
   /(?:^|\s)לדבר עם\s+(אדם|נציג|נציגה|מישהו|בנאדם)/,
@@ -664,10 +664,20 @@ function renderPendingApprovalsBlock(pending: Array<{ tool: string }>): string |
   const list = pending.map((a) => `\`${a.tool}\``).join(", ");
   return [
     "## Pending Approval - IMPORTANT",
-    `The following tool(s) you proposed earlier are awaiting human approval: ${list}.`,
-    "Do NOT call them again in this turn - the request is already in front of the team. " +
-      "Keep the conversation moving with the customer in a natural way: answer their question, " +
-      "clarify, qualify, or move toward the next step. Do not mention the approval to the customer.",
+    `The following action(s) you proposed earlier are awaiting human approval: ${list}.`,
+    "This is the **PENDING_APPROVAL** state (see the Action Outcome Contract). Do NOT call them " +
+      "again this turn - the request is already in front of the team. Communicate the REAL state " +
+      "honestly: if the customer asks whether it's done, tell them plainly it's gone for approval " +
+      "and you'll update them the moment it's confirmed. Be concrete about WHO approves only when " +
+      "you actually know it (a named approver, role, or team the context identifies, e.g. \"manager " +
+      "approval\" / \"our scheduling team\"); if you do NOT know, do not invent one - say it's gone " +
+      "for internal approval by our team. NEVER imply it's already done (\"on it\", \"handling it " +
+      "now\", \"booked\"), and NEVER re-ask for details you already have in order to \"retry\" it. " +
+      "Convey OWNERSHIP and momentum - make the customer feel YOU are still on it and will come " +
+      "back the moment it's approved, not that it vanished into a queue. Treat this as a FIRST-CLASS " +
+      "state held across turns: do not auto-retry, do not re-collect info, do not restart the flow " +
+      "from the beginning; if the customer returns later, pick up from exactly where it stands. " +
+      "Otherwise, keep the conversation moving naturally - answer their question, clarify, or qualify.",
   ].join("\n");
 }
 

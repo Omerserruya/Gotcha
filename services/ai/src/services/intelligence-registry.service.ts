@@ -17,7 +17,7 @@
 import { prisma } from "@chatcenter/shared";
 
 // ── Public DTO shapes (frontend-friendly, lowercase) ──
-export type FieldScope = "customer" | "opportunity" | "conversation";
+export type FieldScope = "customer" | "opportunity" | "conversation" | "review_required";
 export type FieldTypeName = "text" | "number" | "boolean" | "enum" | "date" | "entity_ref";
 export type FieldOriginName = "pack" | "custom" | "discovered";
 
@@ -30,6 +30,9 @@ export interface FieldDefinitionDTO {
   scope: FieldScope;
   options: string[];
   required: boolean;
+  examples: string[];
+  negativeExamples: string[];
+  confidenceThreshold?: number | null;
   stageRelevance: string[];
   aiExtract: boolean;
   syncToCrm: boolean;
@@ -66,6 +69,7 @@ const TYPE_TO_PRISMA: Record<FieldTypeName, string> = {
 };
 const SCOPE_TO_PRISMA: Record<FieldScope, string> = {
   customer: "CUSTOMER", opportunity: "OPPORTUNITY", conversation: "CONVERSATION",
+  review_required: "REVIEW_REQUIRED",
 };
 const ORIGIN_TO_PRISMA: Record<FieldOriginName, string> = {
   pack: "PACK", custom: "CUSTOM", discovered: "DISCOVERED",
@@ -94,6 +98,9 @@ function toFieldDTO(row: any): FieldDefinitionDTO {
     scope: scopeFromPrisma(row.scope),
     options: Array.isArray(row.options) ? row.options : [],
     required: !!row.required,
+    examples: Array.isArray(row.examples) ? row.examples : [],
+    negativeExamples: Array.isArray(row.negativeExamples) ? row.negativeExamples : [],
+    confidenceThreshold: typeof row.confidenceThreshold === "number" ? row.confidenceThreshold : null,
     stageRelevance: Array.isArray(row.stageRelevance) ? row.stageRelevance : [],
     aiExtract: row.aiExtract !== false,
     syncToCrm: row.syncToCrm !== false,
@@ -136,6 +143,9 @@ export interface FieldInput {
   stageRelevance?: string[];
   aiExtract?: boolean;
   syncToCrm?: boolean;
+  examples?: string[];
+  negativeExamples?: string[];
+  confidenceThreshold?: number | null;
   crmFieldMap?: Record<string, unknown> | null;
   origin?: FieldOriginName;
   packSlug?: string | null;
@@ -187,6 +197,23 @@ export function validateFieldInput(
   }
   if (input.aiExtract !== undefined) out.aiExtract = !!input.aiExtract;
   if (input.syncToCrm !== undefined) out.syncToCrm = !!input.syncToCrm;
+  if (input.examples !== undefined) {
+    if (!Array.isArray(input.examples)) return { ok: false, error: "examples must be a string array" };
+    out.examples = input.examples.map((s) => String(s).trim()).filter(Boolean).slice(0, 8);
+  }
+  if (input.negativeExamples !== undefined) {
+    if (!Array.isArray(input.negativeExamples)) return { ok: false, error: "negativeExamples must be a string array" };
+    out.negativeExamples = input.negativeExamples.map((s) => String(s).trim()).filter(Boolean).slice(0, 5);
+  }
+  if (input.confidenceThreshold !== undefined) {
+    if (input.confidenceThreshold === null) {
+      out.confidenceThreshold = null;
+    } else {
+      const n = Number(input.confidenceThreshold);
+      if (!Number.isFinite(n) || n < 0 || n > 1) return { ok: false, error: "confidenceThreshold must be between 0 and 1" };
+      out.confidenceThreshold = n;
+    }
+  }
   if (input.crmFieldMap !== undefined) out.crmFieldMap = input.crmFieldMap;
   if (input.origin !== undefined) out.origin = input.origin;
   if (input.packSlug !== undefined) out.packSlug = input.packSlug;
@@ -206,6 +233,9 @@ function toPrismaWrite(value: Partial<FieldInput>): Record<string, unknown> {
   if (value.stageRelevance !== undefined) data.stageRelevance = value.stageRelevance as any;
   if (value.aiExtract !== undefined) data.aiExtract = value.aiExtract;
   if (value.syncToCrm !== undefined) data.syncToCrm = value.syncToCrm;
+  if (value.examples !== undefined) data.examples = value.examples as any;
+  if (value.negativeExamples !== undefined) data.negativeExamples = value.negativeExamples as any;
+  if (value.confidenceThreshold !== undefined) data.confidenceThreshold = value.confidenceThreshold as any;
   if (value.crmFieldMap !== undefined) data.crmFieldMap = value.crmFieldMap as any;
   if (value.origin !== undefined) data.origin = ORIGIN_TO_PRISMA[value.origin] as any;
   if (value.packSlug !== undefined) data.packSlug = value.packSlug;
@@ -345,4 +375,65 @@ export async function keyExists(tenantId: string, key: string, exceptId?: string
     select: { id: true },
   });
   return !!row;
+}
+
+// ── Legacy summaryFields → FieldDefinition backfill (Phase 2 migration) ──
+export interface BackfillResult {
+  tenantId: string;
+  created: string[];   // field keys newly created in REVIEW_REQUIRED scope
+  existed: string[];   // keys that already had a FieldDefinition (left untouched)
+}
+
+/**
+ * Idempotent, SAFE migration of a tenant's legacy `PostConversationConfig.
+ * summaryFields` into the scope-aware registry. Each legacy key with no existing
+ * FieldDefinition is created with scope=REVIEW_REQUIRED - NEVER auto-assigned to
+ * Opportunity - so a human must consciously pick the real scope in the Fields
+ * Builder before the value is ever routed/written. Incorrect scope is worse than
+ * manual review. Re-running is a no-op (keys that exist are skipped).
+ */
+export async function backfillSummaryFieldsToRegistry(tenantId: string): Promise<BackfillResult> {
+  const created: string[] = [];
+  const existed: string[] = [];
+
+  const cfg = await (prisma as any).postConversationConfig.findUnique({
+    where: { tenantId },
+    select: { summaryFields: true },
+  }).catch(() => null);
+
+  const summaryFields: Array<{ key?: string; label?: string; description?: string | null }> =
+    Array.isArray(cfg?.summaryFields) ? cfg.summaryFields : [];
+
+  for (const f of summaryFields) {
+    const key = normalizeKey(f?.key);
+    if (!key || !KEY_RE.test(key)) continue;
+    if (await keyExists(tenantId, key)) { existed.push(key); continue; }
+    await prisma.fieldDefinition.create({
+      data: {
+        tenantId,
+        key,
+        label: String(f?.label || key),
+        description: f?.description ?? null,
+        type: "TEXT" as any,
+        scope: "REVIEW_REQUIRED" as any,   // ← never auto-Opportunity
+        origin: "CUSTOM" as any,
+        aiExtract: true,
+        syncToCrm: true,
+        crmFieldMap: { default: key } as any,
+      } as any,
+    }).catch(() => { /* race / unique - treat as existed */ });
+    created.push(key);
+  }
+
+  return { tenantId, created, existed };
+}
+
+/** Backfill every tenant that has legacy summaryFields. */
+export async function backfillAllTenants(): Promise<BackfillResult[]> {
+  const configs = await (prisma as any).postConversationConfig.findMany({ select: { tenantId: true } }).catch(() => []);
+  const out: BackfillResult[] = [];
+  for (const c of configs as Array<{ tenantId: string }>) {
+    out.push(await backfillSummaryFieldsToRegistry(c.tenantId));
+  }
+  return out;
 }

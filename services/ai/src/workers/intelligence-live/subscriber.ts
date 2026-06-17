@@ -16,7 +16,7 @@
  */
 
 import { prisma, subscribeToEvents, type ServiceEvent } from "@chatcenter/shared";
-import { getSummarizerAllowedFields } from "../../services/post-conversation-config.service";
+import { getExtractionFieldSpecs } from "../../services/post-conversation-config.service";
 import { extractFieldsLive } from "../../services/intelligence-live-extract.service";
 import { ingestConversationFacts } from "../../services/intelligence-ingest.service";
 
@@ -48,14 +48,14 @@ async function runExtraction(conversationId: string, tenantId: string): Promise<
   if ((conv.channel as unknown as string) === "VOICE") return;
   if (String(conv.status) === "CLOSED" || String(conv.status) === "RESOLVED") return;
 
-  const allowedFields = await getSummarizerAllowedFields(tenantId);
-  const fields = await extractFieldsLive({ tenantId, conversationId, allowedFields });
+  const specs = await getExtractionFieldSpecs(tenantId);
+  const fields = await extractFieldsLive({ tenantId, conversationId, fields: specs });
   if (!fields.length) return;
 
   const res = await ingestConversationFacts({
     tenantId, conversationId, fields, source: "llm_live",
   });
-  console.log(`[intel-live] conv=${conversationId} extracted=${fields.length} written=${res.written} opp=${res.opportunityId ? 1 : 0}`);
+  console.log(`[intel-live] conv=${conversationId} extracted=${fields.length} written=${res.written} reviewed=${res.reviewed} opp=${res.opportunityId ? 1 : 0}`);
 }
 
 function schedule(conversationId: string, tenantId: string, isInbound: boolean): void {

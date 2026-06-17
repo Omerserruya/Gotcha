@@ -685,7 +685,10 @@
       "integrations": "Integrations",
       "policy": "Policy",
       "tools": "Tools",
-      "voiceCopilot": "Voice Copilot"
+      "voiceCopilot": "Voice Copilot",
+      "intelligence": "Intelligence",
+      "funnels": "Pipeline funnels",
+      "permissions": "Roles & permissions"
     },
     "voiceChannels": {
       "title": "Voice channels",
@@ -728,7 +731,8 @@
         "deleting": "Disabling…",
         "deleteConfirm": "This will disable the channel and completely stop receiving calls. Continue?",
         "outboundProvisioningFailed": "Outbound dialing isn't fully configured - inbound calls still work.",
-        "retryProvisioning": "Retry provisioning"
+        "retryProvisioning": "Retry provisioning",
+        "aiEmployeeSaved": "AI Employee saved."
       },
       "wizard": {
         "backLink": "Back to voice channels",
@@ -1040,6 +1044,10 @@
       "thursday": "Thursday",
       "friday": "Friday",
       "saturday": "Saturday"
+    },
+    "integrations": {
+      "crmTitle": "CRM Integrations",
+      "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) — or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM."
     }
   },
   "outbound": {
@@ -2270,7 +2278,8 @@
     "usedByDepartments": "Used by {count} departments",
     "categoryShipping": "Shipping",
     "categoryProjectManagement": "Project Management",
-    "categoryCalendar": "Calendar"
+    "categoryCalendar": "Calendar",
+    "subtitle": "Connect external services to power your AI agents"
   },
   "usage": {
     "title": "Usage",

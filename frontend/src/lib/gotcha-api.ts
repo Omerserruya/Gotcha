@@ -187,6 +187,8 @@ export interface BuilderDraftSnapshot {
   name: string;
   role: string;
   status: string;
+  /** Wizard progress: "chat"|"kb"|"refine"|"tools" while incomplete, null once done. */
+  builderStep: string | null;
   companyOverview: string | null;
   goal: string | null;
   successCriteria: string | null;
@@ -216,12 +218,33 @@ export type BuilderSSEEvent =
   | { type: "error"; message: string }
   | { type: "close" };
 
-export function builderStart(token: string, departmentId?: string | null, locale?: string) {
-  return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string } }>(
+export function builderStart(token: string, departmentId?: string | null, locale?: string, forceNew?: boolean) {
+  return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string; resumed?: boolean } }>(
     "POST",
     "/api/ai-agents/builder/start",
     token,
-    { departmentId: departmentId ?? null, locale },
+    { departmentId: departmentId ?? null, locale, forceNew: !!forceNew },
+  );
+}
+
+// Persist wizard progress so an abandoned session resumes from this step.
+export function builderSaveStep(token: string, agentId: string, step: string) {
+  return req<{ data: { ok: boolean; step: string } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/step`,
+    token,
+    { step },
+  );
+}
+
+// Finish the wizard: clears the resume pointer and promotes DRAFT → ACTIVE so
+// the hand-off lands in the editor (not back in the builder).
+export function builderComplete(token: string, agentId: string) {
+  return req<{ data: { ok: boolean } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/complete`,
+    token,
+    {},
   );
 }
 
@@ -259,6 +282,15 @@ export function builderToggleKnowledge(token: string, agentId: string, knowledge
     { knowledgeBaseId, attach },
   );
 }
+// Attach/detach many tools at once (Select all / per-category select-all).
+export function builderToggleToolsBulk(token: string, agentId: string, tenantToolIds: string[], attach: boolean) {
+  return req<{ data: { draft: BuilderDraftSnapshot } }>(
+    "POST",
+    `/api/ai-agents/builder/${agentId}/tools/bulk`,
+    token,
+    { tenantToolIds, attach },
+  );
+}
 
 // Optional creation-wizard refinements (name / conversation flow / guardrails).
 // Saved deterministically from the dedicated wizard step. Send only the fields
@@ -267,6 +299,8 @@ export interface BuilderRefinements {
   name?: string;
   conversationFlow?: Array<{ id?: string; action: string; details?: string }>;
   customGuardrails?: string[];
+  /** Brand-voice archetype key (persona.brand_archetype). "" clears it. */
+  brandArchetype?: string;
 }
 export function builderSaveRefinements(token: string, agentId: string, refinements: BuilderRefinements) {
   return req<{ data: { draft: BuilderDraftSnapshot } }>(
@@ -571,7 +605,7 @@ export function updateToolPermission(
 
 // ─── Customer Intelligence V2 - Industry Packs + Field Registry ──
 
-export type FieldScope = "customer" | "opportunity" | "conversation";
+export type FieldScope = "customer" | "opportunity" | "conversation" | "review_required";
 export type FieldTypeName = "text" | "number" | "boolean" | "enum" | "date" | "entity_ref";
 export type FieldOriginName = "pack" | "custom" | "discovered";
 
@@ -590,6 +624,9 @@ export interface FieldDefinition {
   crmFieldMap?: Record<string, unknown> | null;
   origin: FieldOriginName;
   packSlug?: string | null;
+  examples?: string[];
+  negativeExamples?: string[];
+  confidenceThreshold?: number | null;
 }
 
 export interface PackFieldTemplate {
@@ -707,4 +744,37 @@ export function getCustomerSnapshot(token: string, opts: { conversationId?: stri
   if (opts.conversationId) q.set("conversationId", opts.conversationId);
   if (opts.identityKey) q.set("identityKey", opts.identityKey);
   return req<{ ok: boolean; snapshot: CustomerSnapshot }>("GET", `/api/customer-snapshot?${q.toString()}`, token);
+}
+
+// ─── Customer Intelligence V2 - Review Queue ─────────────────
+
+export interface IntelligenceReview {
+  id: string;
+  entityType: string;
+  entityId: string;
+  fieldKey: string;
+  proposedValue: unknown;
+  currentValue: unknown;
+  confidence: number;
+  evidence: string | null;
+  reason: string;
+  status: string;
+  conversationId: string | null;
+  createdAt: string;
+}
+
+export function listIntelligenceReviews(token: string) {
+  return req<{ reviews: IntelligenceReview[]; pending: number }>(
+    "GET",
+    "/api/intelligence-reviews",
+    token,
+  );
+}
+
+export function approveIntelligenceReview(token: string, id: string) {
+  return req("POST", `/api/intelligence-reviews/${encodeURIComponent(id)}/approve`, token);
+}
+
+export function rejectIntelligenceReview(token: string, id: string) {
+  return req("POST", `/api/intelligence-reviews/${encodeURIComponent(id)}/reject`, token);
 }

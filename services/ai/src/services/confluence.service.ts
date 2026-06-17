@@ -1,5 +1,5 @@
 import { prisma } from "@chatcenter/shared";
-import { processDocument } from "./embedding.service";
+import { upsertSyncedDocument } from "./embedding.service";
 
 interface ConfluenceIntegration {
   id: string;
@@ -112,7 +112,10 @@ export async function listPages(
   return (data.results || []).map((p: any) => ({ id: p.id, title: p.title }));
 }
 
-export async function fetchPageContent(integration: ConfluenceIntegration, pageId: string): Promise<string> {
+export async function fetchPageContent(
+  integration: ConfluenceIntegration,
+  pageId: string
+): Promise<{ content: string; version: number }> {
   const data = await confluenceFetch(
     integration,
     `/wiki/api/v2/pages/${pageId}?body-format=storage`
@@ -120,7 +123,7 @@ export async function fetchPageContent(integration: ConfluenceIntegration, pageI
 
   const html = data.body?.storage?.value || "";
   // Strip HTML tags to get plain text
-  return html
+  const content = html
     .replace(/<[^>]+>/g, " ")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
@@ -129,41 +132,35 @@ export async function fetchPageContent(integration: ConfluenceIntegration, pageI
     .replace(/&quot;/g, '"')
     .replace(/\s+/g, " ")
     .trim();
+  // Confluence bumps version.number on every edit - our change marker.
+  return { content, version: Number(data.version?.number || 0) };
 }
 
 export async function syncSpace(
   integration: ConfluenceIntegration,
   spaceKey: string
-): Promise<{ imported: number }> {
+): Promise<{ imported: number; updated: number; skipped: number }> {
   const pages = await listPages(integration, spaceKey);
-  let imported = 0;
+  let imported = 0, updated = 0, skipped = 0;
 
   for (const page of pages) {
     try {
-      const content = await fetchPageContent(integration, page.id);
+      const { content, version } = await fetchPageContent(integration, page.id);
       if (!content) continue;
 
-      const doc = await prisma.knowledgeDocument.create({
-        data: {
-          knowledgeBaseId: integration.knowledgeBaseId,
-          tenantId: integration.tenantId,
-          title: page.title,
-          content,
-          sourceType: "confluence",
-          sourceUrl: `https://api.atlassian.com/ex/confluence/${integration.credentials.cloudId}/wiki/spaces/${spaceKey}/pages/${page.id}`,
-          status: "pending",
-          metadata: {
-            integrationId: integration.id,
-            confluencePageId: page.id,
-            spaceKey,
-          },
-        },
+      const outcome = await upsertSyncedDocument({
+        knowledgeBaseId: integration.knowledgeBaseId,
+        tenantId: integration.tenantId,
+        title: page.title,
+        content,
+        sourceType: "confluence",
+        sourceUrl: `https://api.atlassian.com/ex/confluence/${integration.credentials.cloudId}/wiki/spaces/${spaceKey}/pages/${page.id}`,
+        changeKey: String(version),
+        metadata: { integrationId: integration.id, confluencePageId: page.id, spaceKey },
       });
-
-      processDocument(doc.id).catch((err) => {
-        console.error(`[Confluence] Failed to process page ${page.id}:`, err.message);
-      });
-      imported++;
+      if (outcome === "created") imported++;
+      else if (outcome === "updated") updated++;
+      else skipped++;
     } catch (err: any) {
       console.error(`[Confluence] Failed to import page ${page.title}:`, err.message);
     }
@@ -180,5 +177,5 @@ export async function syncSpace(
     },
   });
 
-  return { imported };
+  return { imported, updated, skipped };
 }

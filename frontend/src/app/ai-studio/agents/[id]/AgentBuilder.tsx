@@ -16,10 +16,13 @@ import { logoForIntegration } from "@/lib/integration-logos";
 import { useI18n } from "@/context/I18nContext";
 import {
   builderStart,
+  builderSaveStep,
+  builderComplete,
   builderRunStream,
   builderGetDraft,
   builderGetOptions,
   builderToggleTool,
+  builderToggleToolsBulk,
   builderToggleKnowledge,
   builderSaveRefinements,
   builderReadinessTest,
@@ -41,6 +44,17 @@ import {
 interface ChatMsg { role: "user" | "assistant"; content: string }
 
 const FUNNEL_ROLES = new Set(["sales", "sdr", "recruiting"]);
+
+// Brand Voice archetypes - keys MUST match services/ai/src/services/brand-archetypes.ts
+// and the editor's BRAND_ARCHETYPE_OPTIONS (ai-studio/agents/[id]/page.tsx).
+// "" = neutral default. Persisted on persona.brand_archetype.
+const BRAND_ARCHETYPE_OPTIONS: { value: string; en: string; he: string }[] = [
+  { value: "", en: "Neutral / Professional (default)", he: "ניטרלי / מקצועי (ברירת מחדל)" },
+  { value: "trusted_advisor", en: "Trusted Advisor — measured, credible, no hype", he: "יועץ מהימן — שקול, אמין, בלי הייפ" },
+  { value: "high_energy_coach", en: "High-Energy Coach — short, fast, motivating", he: "מאמן אנרגטי — קצר, מהיר, מניע לפעולה" },
+  { value: "luxury_concierge", en: "Luxury Concierge — refined, formal, deliberate", he: "קונסיירז' יוקרתי — מעודן, רשמי, מדוד" },
+  { value: "beauty_consultant", en: "Beauty Consultant — warm, intimate, expressive", he: "יועצת יופי — חמה, אישית, אקספרסיבית" },
+];
 
 // Transient "agent is doing X" labels - [en, he].
 const TOOL_LABELS: Record<string, [string, string]> = {
@@ -67,10 +81,15 @@ export default function AgentBuilder({
   token,
   departmentId,
   onCancel,
+  resumeAgentId,
+  resumeStep,
 }: {
   token: string;
   departmentId?: string | null;
   onCancel: () => void;
+  /** When set, resume an existing incomplete DRAFT instead of starting fresh. */
+  resumeAgentId?: string;
+  resumeStep?: "chat" | "kb" | "refine" | "tools";
 }) {
   const router = useRouter();
   const { locale } = useI18n();
@@ -111,19 +130,61 @@ export default function AgentBuilder({
     requestAnimationFrame(() => inputRef.current?.focus());
   }, []);
 
-  // Bootstrap the builder session once.
+  // Bootstrap the builder session once. Resumes an incomplete DRAFT (either
+  // passed explicitly via resumeAgentId, or the one /start hands back when it
+  // finds the tenant's most-recent unfinished wizard) at its saved step.
   useEffect(() => {
     if (startedRef.current || !token) return;
     startedRef.current = true;
-    builderStart(token, departmentId ?? null, locale)
-      .then((res) => {
-        setAgentId(res.data.agentId);
-        setDraft(res.data.draft);
-        setMessages([{ role: "assistant", content: res.data.greeting }]);
-      })
-      .catch((e) => setError(e?.message || L("Failed to start the builder.", "ההפעלה נכשלה.")))
-      .finally(() => { setStarting(false); focusInput(); });
-  }, [token, departmentId, locale, L, focusInput]);
+
+    const resumeInto = async (id: string, step: string, snapshot: BuilderDraftSnapshot | null, greeting: string) => {
+      setAgentId(id);
+      if (snapshot) setDraft(snapshot);
+      const s = (["chat", "kb", "refine", "tools"].includes(step) ? step : "chat") as typeof wizardStep;
+      setWizardStep(s);
+      setMessages([{ role: "assistant", content: greeting }]);
+      if (s !== "chat") {
+        try {
+          const r = await builderGetOptions(token, id);
+          setOptTools(r.data.tools);
+          setOptKbs(r.data.knowledgeBases);
+        } catch { /* keep empty */ }
+      }
+    };
+    const resumeGreeting = L("Welcome back — let's pick up where we left off.", "ברוכים השבים — נמשיך מהמקום שבו עצרנו.");
+
+    (async () => {
+      try {
+        if (resumeAgentId) {
+          const r = await builderGetDraft(token, resumeAgentId);
+          const d = r.data.draft;
+          await resumeInto(resumeAgentId, resumeStep || d.builderStep || "chat", d, resumeGreeting);
+        } else {
+          const res = await builderStart(token, departmentId ?? null, locale);
+          const d = res.data.draft;
+          if (res.data.resumed && d.builderStep && d.builderStep !== "chat") {
+            await resumeInto(res.data.agentId, d.builderStep, d, resumeGreeting);
+          } else {
+            setAgentId(res.data.agentId);
+            setDraft(d);
+            setMessages([{ role: "assistant", content: res.data.greeting }]);
+          }
+        }
+      } catch (e: any) {
+        setError(e?.message || L("Failed to start the builder.", "ההפעלה נכשלה."));
+      } finally {
+        setStarting(false);
+        focusInput();
+      }
+    })();
+  }, [token, departmentId, locale, L, focusInput, resumeAgentId, resumeStep]);
+
+  // Persist wizard progress on every step change so an abandoned session can
+  // resume from exactly here. Skipped until the draft id exists / while booting.
+  useEffect(() => {
+    if (!agentId || starting) return;
+    builderSaveStep(token, agentId, wizardStep).catch(() => {});
+  }, [wizardStep, agentId, token, starting]);
 
   // Keep the input focused whenever it's interactive (incl. after send/enter).
   useEffect(() => {
@@ -160,11 +221,20 @@ export default function AgentBuilder({
     catch { /* ignore */ } finally { setToggleBusy(null); }
   }, [agentId, token]);
 
+  // Bulk attach/detach (Select all / per-category select-all). No-op if the
+  // list is empty so the buttons can stay enabled without guarding everywhere.
+  const toggleToolsBulk = useCallback(async (ids: string[], attach: boolean) => {
+    if (!agentId || ids.length === 0) return;
+    setToggleBusy("tools:bulk");
+    try { const r = await builderToggleToolsBulk(token, agentId, ids, attach); setDraft(r.data.draft); }
+    catch { /* ignore */ } finally { setToggleBusy(null); }
+  }, [agentId, token]);
+
   // Persist the optional refinements (name / flow / guardrails) then advance to
   // the Tools step. Everything here is optional - Skip just advances without
   // saving. `onDone` runs after a successful save so the step can move on.
   const saveRefinements = useCallback(async (
-    refine: { name?: string; conversationFlow?: Array<{ action: string; details?: string }>; customGuardrails?: string[] },
+    refine: { name?: string; conversationFlow?: Array<{ action: string; details?: string }>; customGuardrails?: string[]; brandArchetype?: string },
     onDone: () => void,
   ) => {
     if (!agentId) { onDone(); return; }
@@ -252,8 +322,13 @@ export default function AgentBuilder({
     }
   }, [input, agentId, streaming, token, locale, he, L, focusInput, goToKbStep]);
 
-  function goReview() {
-    if (agentId) router.push(`/ai-studio/agents/${agentId}`);
+  // Hand the finished wizard off to the editor. Finalize first (clear the
+  // resume pointer + promote DRAFT → ACTIVE) so the editor page renders the
+  // real editor instead of re-entering the builder at the last saved step.
+  async function goReview() {
+    if (!agentId) return;
+    try { await builderComplete(token, agentId); } catch { /* editor save is a backstop */ }
+    router.push(`/ai-studio/agents/${agentId}`);
   }
 
   // After the KB modal attaches/creates a KB: re-read the draft (so the
@@ -390,6 +465,7 @@ export default function AgentBuilder({
                 loading={optLoading}
                 busyId={toggleBusy}
                 onToggle={toggleTool}
+                onBulkToggle={toggleToolsBulk}
                 onBack={() => setWizardStep("refine")}
                 onFinish={runReadiness}
                 finishing={testing}
@@ -626,11 +702,13 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
   saving: boolean;
   onBack: () => void;
   onSkip: () => void;
-  onSave: (refine: { name?: string; conversationFlow: Array<{ action: string; details?: string }>; customGuardrails: string[] }) => void;
+  onSave: (refine: { name?: string; conversationFlow: Array<{ action: string; details?: string }>; customGuardrails: string[]; brandArchetype: string }) => void;
   L: Tr;
 }) {
   const seedName = draft.name && draft.name !== "Untitled AI Employee" ? draft.name : "";
   const [name, setName] = useState(seedName);
+  const seedArchetype = typeof (draft.persona as any)?.brand_archetype === "string" ? (draft.persona as any).brand_archetype : "";
+  const [archetype, setArchetype] = useState<string>(seedArchetype);
   const [flow, setFlow] = useState<Array<{ action: string; details: string }>>(
     (draft.conversationFlow || []).map((s) => ({ action: s.action || "", details: s.details || "" })),
   );
@@ -650,7 +728,7 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
       .map((s) => ({ action: s.action.trim(), details: s.details.trim() }))
       .filter((s) => s.action);
     const customGuardrails = rules.map((r) => r.trim()).filter(Boolean);
-    onSave({ name: name.trim() || undefined, conversationFlow, customGuardrails });
+    onSave({ name: name.trim() || undefined, conversationFlow, customGuardrails, brandArchetype: archetype });
   };
 
   const inputCls = "w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-violet-200 focus:border-violet-300 transition";
@@ -672,6 +750,22 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
           placeholder={L("e.g. Maya - Support", "למשל מאיה - תמיכה")}
           className={inputCls}
         />
+      </div>
+
+      {/* Brand voice / personalization - shapes HOW the employee sounds.
+          Mirrors the editor's Brand Voice control (persona.brand_archetype). */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-medium text-gray-700">{L("Brand voice", "קול המותג")}</label>
+        <select
+          value={archetype}
+          onChange={(e) => setArchetype(e.target.value)}
+          className={inputCls}
+        >
+          {BRAND_ARCHETYPE_OPTIONS.map((opt) => (
+            <option key={opt.value || "neutral"} value={opt.value}>{L(opt.en, opt.he)}</option>
+          ))}
+        </select>
+        <p className="text-[11px] text-gray-400">{L("Shapes pace, warmth and vocabulary - layered on the central personality, never changes what it does.", "מעצב קצב, חום ואוצר מילים - נשען על האישיות המרכזית, לא משנה את מה שהוא עושה.")}</p>
       </div>
 
       {/* Conversation flow */}
@@ -748,12 +842,13 @@ function StepRefine({ draft, saving, onBack, onSkip, onSave, L }: {
   );
 }
 
-function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinish, finishing, L }: {
+function StepTools({ tools, attached, loading, busyId, onToggle, onBulkToggle, onBack, onFinish, finishing, L }: {
   tools: BuilderOptionTool[];
   attached: Set<string>;
   loading: boolean;
   busyId: string | null;
   onToggle: (id: string, attach: boolean) => void;
+  onBulkToggle: (ids: string[], attach: boolean) => void;
   onBack: () => void;
   onFinish: () => void;
   finishing: boolean;
@@ -778,6 +873,10 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
   const activeFilter = filter !== "all" && !integrations.includes(filter) ? "all" : filter;
   const visibleGroups = activeFilter === "all" ? groups : groups.filter(([name]) => name === activeFilter);
 
+  const bulkBusy = busyId === "tools:bulk";
+  const allIds = useMemo(() => tools.map((t) => t.tenantToolId), [tools]);
+  const allSelected = allIds.length > 0 && allIds.every((id) => attached.has(id));
+
   return (
     <div className="ml-11 bg-white border border-violet-200 rounded-2xl p-4 shadow-sm space-y-3">
       <div className="flex items-center justify-between">
@@ -787,7 +886,19 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
         </div>
         <a href="/integrations" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700">{L("+ Connect", "+ חבר")}</a>
       </div>
-      <p className="text-xs text-gray-500">{L("Grant the actions this employee may take. Optional - add more later.", "הענקת הפעולות שהעובד יכול לבצע. רשות - אפשר להוסיף בהמשך.")}</p>
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-xs text-gray-500">{L("Grant the actions this employee may take. Optional - add more later.", "הענקת הפעולות שהעובד יכול לבצע. רשות - אפשר להוסיף בהמשך.")}</p>
+        {!loading && tools.length > 0 && (
+          <button
+            type="button"
+            onClick={() => onBulkToggle(allIds, !allSelected)}
+            disabled={bulkBusy}
+            className="shrink-0 text-xs font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50"
+          >
+            {allSelected ? L("Clear all", "נקה הכל") : L("Select all tools", "בחר את כל הכלים")}
+          </button>
+        )}
+      </div>
       {loading ? (
         <div className="h-8 rounded-lg bg-gray-100 animate-pulse" />
       ) : tools.length === 0 ? (
@@ -805,15 +916,25 @@ function StepTools({ tools, attached, loading, busyId, onToggle, onBack, onFinis
           <div className="space-y-3 max-h-[22rem] overflow-y-auto pr-1 -mr-1">
           {visibleGroups.map(([integration, items]) => {
             const attachedCount = items.filter((t) => attached.has(t.tenantToolId)).length;
+            const catIds = items.map((t) => t.tenantToolId);
+            const catAllSelected = attachedCount === items.length;
             return (
               <div key={integration} className="space-y-1.5">
-                {/* Category header - integration icon + name + selected count */}
+                {/* Category header - integration icon + name + selected count + per-category select-all */}
                 <div className="flex items-center gap-2 px-0.5">
                   <IntegrationIcon name={integration} size={18} />
                   <span className="text-[11px] font-semibold uppercase tracking-wide text-gray-500 truncate">{integration}</span>
                   <span className="ml-auto text-[10px] tabular-nums text-gray-400">
                     {attachedCount > 0 ? `${attachedCount}/${items.length}` : items.length}
                   </span>
+                  <button
+                    type="button"
+                    onClick={() => onBulkToggle(catIds, !catAllSelected)}
+                    disabled={bulkBusy}
+                    className="text-[10px] font-medium text-violet-600 hover:text-violet-700 disabled:opacity-50"
+                  >
+                    {catAllSelected ? L("Clear", "נקה") : L("Select all", "בחר הכל")}
+                  </button>
                 </div>
                 <div className="space-y-1.5">
                   {items.map((t) => (

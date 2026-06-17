@@ -459,9 +459,17 @@ router.post("/tenants/:id/users", authenticate, requireSystemAdmin(), validate(c
   }
 });
 
-// ─── Toggle User Active Status ───────────────────────────────
+// ─── Update User (SysAdmin: name, email, password, role, active) ──
 
-router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+const updateUserSchema = z.object({
+  name: z.string().min(1).max(120).optional(),
+  email: z.string().email().optional(),
+  password: z.string().min(8).max(200).optional(),
+  role: z.enum(["ADMIN", "AGENT"]).optional(),
+  isActive: z.boolean().optional(),
+});
+
+router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), validate(updateUserSchema), async (req: Request, res: Response): Promise<void> => {
   try {
     const user = await prisma.user.findFirst({
       where: { id: req.params.userId as string, tenantId: req.params.id as string },
@@ -471,10 +479,29 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), a
       return;
     }
 
-    const { isActive, role } = req.body;
+    const { isActive, role, name, email, password } = req.body;
     const data: any = {};
     if (typeof isActive === "boolean") data.isActive = isActive;
-    if (role && ["ADMIN", "AGENT"].includes(role)) data.role = role;
+    // Never alter a SYSTEM_ADMIN's role through the tenant-scoped endpoint.
+    if (role && ["ADMIN", "AGENT"].includes(role) && user.role !== "SYSTEM_ADMIN") data.role = role;
+    if (typeof name === "string" && name.trim()) data.name = name.trim();
+    if (typeof email === "string" && email.trim()) {
+      const nextEmail = email.trim();
+      if (nextEmail !== user.email) {
+        const clash = await prisma.user.findFirst({
+          where: { tenantId: req.params.id as string, email: nextEmail, id: { not: user.id } },
+          select: { id: true },
+        });
+        if (clash) {
+          res.status(409).json({ error: "Another user in this tenant already uses this email" });
+          return;
+        }
+        data.email = nextEmail;
+      }
+    }
+    if (typeof password === "string" && password.length >= 8) {
+      data.password = await bcrypt.hash(password, SALT_ROUNDS);
+    }
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -486,6 +513,39 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), a
   } catch (err) {
     console.error("Update user error:", err);
     res.status(500).json({ error: "Failed to update user" });
+  }
+});
+
+// ─── Delete User (SysAdmin) ──────────────────────────────────
+
+router.delete("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const currentUserId = (req as any).user?.userId as string | undefined;
+    const user = await prisma.user.findFirst({
+      where: { id: req.params.userId as string, tenantId: req.params.id as string },
+      select: { id: true, role: true, name: true },
+    });
+    if (!user) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    if (user.role === "SYSTEM_ADMIN") {
+      res.status(400).json({ error: "Cannot delete a system admin user" });
+      return;
+    }
+    if (currentUserId && user.id === currentUserId) {
+      res.status(400).json({ error: "You cannot delete your own account" });
+      return;
+    }
+
+    // User relations cascade / SetNull at the DB level (conversations →
+    // assignedAgentId SetNull, departmentMember → Cascade), so a single
+    // delete cleans up cleanly.
+    await prisma.user.delete({ where: { id: user.id } });
+    res.json({ data: { deleted: true, userId: user.id, name: user.name } });
+  } catch (err) {
+    console.error("Delete user error:", err);
+    res.status(500).json({ error: "Failed to delete user" });
   }
 });
 

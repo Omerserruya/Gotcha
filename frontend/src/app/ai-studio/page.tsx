@@ -6,7 +6,7 @@ import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow } from "@/lib/api";
+import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow, deleteAIAgent } from "@/lib/api";
 import { INTEGRATION_LOGOS, logoForIntegration } from "@/lib/integration-logos";
 import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
@@ -86,13 +86,34 @@ function TeamTab({ t }: { t: (key: string) => string }) {
   const [loading, setLoading] = useState(true);
   const [testAgent, setTestAgent] = useState<{ id: string; name: string } | null>(null);
 
-  useEffect(() => {
+  const load = useCallback(() => {
     if (!token) return;
     getAIAgents(token)
       .then((res) => setAgents(res.data || []))
       .catch(() => setAgents([]))
       .finally(() => setLoading(false));
   }, [token]);
+
+  useEffect(() => { load(); }, [load]);
+
+  // An INCOMPLETE wizard draft (status DRAFT + a saved builderStep) is shown in
+  // a separate "Continue setup" strip and kept OUT of the employees grid, so
+  // abandoned wizards never look like real, usable AI employees.
+  const isIncompleteDraft = (a: any) =>
+    String(a.status || "").toUpperCase() === "DRAFT" && !!a.builderStep;
+  const incompleteDrafts = agents.filter(isIncompleteDraft);
+  const employees = agents.filter((a) => !isIncompleteDraft(a));
+
+  async function discardDraft(id: string, name: string) {
+    if (!token) return;
+    if (!confirm(`Discard this unfinished AI employee${name ? ` ("${name}")` : ""}? This removes the draft.`)) return;
+    try {
+      await deleteAIAgent(token, id);
+      load();
+    } catch (e) {
+      console.error("Discard draft failed:", e);
+    }
+  }
 
   return (
     <div>
@@ -118,8 +139,48 @@ function TeamTab({ t }: { t: (key: string) => string }) {
           <div className="w-8 h-8 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
         </div>
       ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-        {agents.map((agent) => {
+      <>
+        {incompleteDrafts.length > 0 && (
+          <div className="mb-5 rounded-2xl border border-amber-200 bg-amber-50/40 p-4">
+            <div className="flex items-center gap-2 mb-3 flex-wrap">
+              <span className="text-sm font-semibold text-amber-700">Continue setup</span>
+              <span className="text-xs text-amber-600/80">
+                {incompleteDrafts.length} unfinished {incompleteDrafts.length === 1 ? "employee" : "employees"} — resume where you stopped, or discard.
+              </span>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {incompleteDrafts.map((d) => (
+                <div key={d.id} className="bg-white rounded-xl border border-amber-200 p-4 flex flex-col gap-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-9 h-9 rounded-lg bg-gradient-to-br from-amber-300 to-amber-500 flex items-center justify-center text-white font-bold shrink-0">
+                      {(d.name || "?").charAt(0)}
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-gray-900 truncate">{d.name || "Untitled AI Employee"}</p>
+                      <p className="text-[11px] text-amber-600 capitalize">Draft · step: {d.builderStep}</p>
+                    </div>
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={() => router.push(`/ai-studio/agents/${d.id}`)}
+                      className="flex-1 py-1.5 rounded-lg bg-violet-600 text-white text-xs font-medium hover:bg-violet-700 transition"
+                    >
+                      Resume
+                    </button>
+                    <button
+                      onClick={() => discardDraft(d.id, d.name)}
+                      className="py-1.5 px-3 rounded-lg bg-gray-50 text-red-500 text-xs font-medium hover:bg-red-50 transition"
+                    >
+                      Discard
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        {employees.map((agent) => {
           const channels: string[] = typeof agent.channels === "string"
             ? (() => { try { return JSON.parse(agent.channels); } catch { return []; } })()
             : (agent.channels || []);
@@ -194,7 +255,7 @@ function TeamTab({ t }: { t: (key: string) => string }) {
           data-tour="create-ai-employee-empty"
           className={clsx(
             "bg-white rounded-2xl border-2 border-dashed border-gray-200 p-5 flex flex-col items-center justify-center gap-3 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer",
-            agents.length === 0 ? "col-span-full min-h-[200px]" : "min-h-[160px]"
+            employees.length === 0 ? "col-span-full min-h-[200px]" : "min-h-[160px]"
           )}
         >
           <div className="w-12 h-12 rounded-xl bg-violet-50 flex items-center justify-center">
@@ -207,7 +268,8 @@ function TeamTab({ t }: { t: (key: string) => string }) {
             <p className="text-xs text-gray-400 mt-1">{t("aiStudio.team.addMemberHint")}</p>
           </div>
         </Link>
-      </div>
+        </div>
+      </>
       )}
 
       {testAgent && token && (

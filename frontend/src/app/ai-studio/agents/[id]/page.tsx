@@ -339,6 +339,9 @@ export default function AgentEditorPage() {
   const [saved, setSaved] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
+  // Set when the loaded agent is an INCOMPLETE wizard draft - we then resume
+  // the builder at this step instead of dropping the user into the full editor.
+  const [resumeStep, setResumeStep] = useState<string | null>(null);
   const [customRuleInput, setCustomRuleInput] = useState("");
   const [showCustomRuleInput, setShowCustomRuleInput] = useState(false);
   const [departments, setDepartments] = useState<any[]>([]);
@@ -358,6 +361,13 @@ export default function AgentEditorPage() {
       .then((res) => {
         if (res.data) {
           setForm(mapApiToForm(res.data));
+          // Incomplete wizard draft → resume the builder at its saved step.
+          const status = String(res.data.status || "").toUpperCase();
+          if (status === "DRAFT" && res.data.builderStep) {
+            setResumeStep(String(res.data.builderStep));
+          } else {
+            setResumeStep(null);
+          }
         }
       })
       .catch((err: any) => {
@@ -575,6 +585,21 @@ export default function AgentEditorPage() {
     return (
       <AppLayout>
         <AgentBuilder token={token || ""} onCancel={() => router.push("/ai-studio")} />
+      </AppLayout>
+    );
+  }
+
+  // Incomplete wizard draft → resume the builder at its saved step instead of
+  // the full editor, so the user continues exactly where they stopped.
+  if (resumeStep) {
+    return (
+      <AppLayout>
+        <AgentBuilder
+          token={token || ""}
+          resumeAgentId={id}
+          resumeStep={resumeStep as "chat" | "kb" | "refine" | "tools"}
+          onCancel={() => router.push("/ai-studio")}
+        />
       </AppLayout>
     );
   }

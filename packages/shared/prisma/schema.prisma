@@ -407,6 +407,13 @@ model AIAgent {
   role                String        @default("customer_support") // customer_support, sales, booking, billing, custom
   avatarColor         String        @default("#7c5cfc") @map("avatar_color")
   status              AIAgentStatus @default(DRAFT)
+  // Creation-wizard progress. Set to "chat" when the builder creates the
+  // DRAFT, advanced through chat→kb→refine→tools as the admin proceeds, and
+  // cleared (null) once the agent is saved from the editor (= wizard done).
+  // An INCOMPLETE wizard draft is `status=DRAFT AND builderStep IS NOT NULL`:
+  // those are surfaced as "resume setup" and excluded from the active
+  // employees list, so abandoned sessions never pollute the account.
+  builderStep         String?       @map("builder_step")
   tone                String        @default("professional") // professional, friendly, casual, formal
   languages           Json          @default("{\"english\":true}") // { english: bool, hebrew: bool, arabic: bool }
   style               Json          @default("{}") // { useEmojis, concise, useFirstName, proactive }
@@ -2946,6 +2953,12 @@ enum IntelligenceScope {
   CUSTOMER
   OPPORTUNITY
   CONVERSATION
+  // Migration-safety scope: a field whose true scope could not be determined
+  // automatically (e.g. backfilled from legacy summaryFields). The ingest
+  // layer NEVER routes/writes a REVIEW_REQUIRED field - it is parked until a
+  // human assigns a real scope in the Fields Builder. Incorrect scope is worse
+  // than manual review.
+  REVIEW_REQUIRED
 }
 
 enum FieldType {
@@ -3081,6 +3094,16 @@ model FieldDefinition {
   scope       IntelligenceScope @default(OPPORTUNITY)
   options     Json              @default("[]") // enum values
   required    Boolean           @default(false)
+  // Few-shot extraction hints shown to the LLM: array of plain strings, e.g.
+  // ["around 300 guests", "we're 250 people"]. Sharpen extraction accuracy.
+  examples       Json    @default("[]")
+  // Phrases that look similar but must NOT fill this field (optional). Kills
+  // common false positives. Array of plain strings.
+  negativeExamples Json  @default("[]") @map("negative_examples")
+  // Minimum extraction confidence (0-1) before a value is auto-applied. Below
+  // this, the value is routed to the human-review queue instead of the CRM.
+  // null → tenant/global default applies.
+  confidenceThreshold Float? @map("confidence_threshold")
   // Stages where the field is expected (Missing-Info engine).
   stageRelevance Json    @default("[]") @map("stage_relevance")
   aiExtract      Boolean @default(true) @map("ai_extract")
@@ -3110,6 +3133,10 @@ model IntelligenceFact {
   value      Json
   confidence Float             @default(1)
   source     FactSource
+  // Verbatim snippet from the source conversation that justifies this value,
+  // e.g. "We provide healthcare services". The provenance the UI shows so users
+  // trust AI-generated intelligence. Null for non-conversational sources.
+  evidence   String?
   observedAt DateTime          @default(now()) @map("observed_at")
 
   conversationId String?   @map("conversation_id")
@@ -3122,4 +3149,42 @@ model IntelligenceFact {
   @@index([tenantId, entityType, entityId])
   @@index([tenantId, entityType, entityId, fieldKey])
   @@map("intelligence_facts")
+}
+
+enum IntelligenceReviewStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// Human-review queue for uncertain intelligence updates. The ingest layer
+// routes a value here (instead of auto-applying it) when its confidence is
+// below the field threshold, OR when it CONFLICTS with a confidently-held
+// current value. A human approves (→ applied as a MANUAL fact) or rejects.
+// This is what keeps low-confidence AI guesses out of the CRM.
+model IntelligenceReview {
+  id         String            @id @default(cuid())
+  tenantId   String            @map("tenant_id")
+  entityType IntelligenceScope @map("entity_type")
+  entityId   String            @map("entity_id")
+  fieldKey   String            @map("field_key")
+
+  proposedValue Json    @map("proposed_value")
+  currentValue  Json?   @map("current_value")
+  confidence    Float   @default(0)
+  evidence      String?
+  // Why it landed in review: "low_confidence" | "conflict" | "scope_review".
+  reason        String
+
+  status     IntelligenceReviewStatus @default(PENDING)
+  source     FactSource
+  conversationId String? @map("conversation_id")
+
+  resolvedAt DateTime? @map("resolved_at")
+  resolvedBy String?   @map("resolved_by") // userId
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, status])
+  @@index([tenantId, entityType, entityId])
+  @@map("intelligence_reviews")
 }

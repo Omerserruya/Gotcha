@@ -224,6 +224,12 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4o-mini}
+      # Set OPENAI_LOG=debug to log the FULL outbound OpenAI request (system
+      # prompt + messages + tool schemas) and response to stdout. Off by default.
+      OPENAI_LOG: ${OPENAI_LOG:-}
+      # Debug-only: with NODE_OPTIONS set, the inspect-deep preload stops Node
+      # from truncating the OPENAI_LOG output to [Array]/[Object]. Off by default.
+      NODE_OPTIONS: ${AI_NODE_OPTIONS:-}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-text-embedding-3-small}
       RAG_CHUNK_SIZE: ${RAG_CHUNK_SIZE:-500}
       RAG_CHUNK_OVERLAP: ${RAG_CHUNK_OVERLAP:-50}
@@ -271,9 +277,15 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
-      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
+      # Must match the receivers' INTERNAL_SERVICE_KEY default below — the AI sends
+      # this token and authenticate() accepts either. Empty default desyncs them.
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatcenter-internal-2026}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
+    # Debug-only: provides the inspect-deep preload referenced by NODE_OPTIONS.
+    # Harmless when NODE_OPTIONS is unset (the file just isn't loaded).
+    volumes:
+      - ./tools:/app/tools:ro
     depends_on:
       db:
         condition: service_healthy

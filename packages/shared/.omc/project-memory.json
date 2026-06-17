@@ -139,6 +139,12 @@
       "type": "file"
     },
     {
+      "path": "package.json",
+      "accessCount": 2,
+      "lastAccessed": 1781700826220,
+      "type": "file"
+    },
+    {
       "path": "prisma/migrations/20260409120000_add_conversation_flow_and_custom_guardrails/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1775724158051,
@@ -190,6 +196,18 @@
       "path": "prisma/migrations/20260613000000_customer_intelligence_v2_phase1/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1781339702118,
+      "type": "file"
+    },
+    {
+      "path": "prisma/migrations/20260617000000_ci_phase2_attribution_review/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1781685828024,
+      "type": "file"
+    },
+    {
+      "path": "prisma/seed-packs.ts",
+      "accessCount": 1,
+      "lastAccessed": 1781700811508,
       "type": "file"
     }
   ],

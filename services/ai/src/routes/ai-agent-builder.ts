@@ -55,7 +55,7 @@ async function resolveLocale(tenantId: string, bodyLocale: unknown): Promise<str
 router.post("/start", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
-    const { departmentId, locale } = req.body || {};
+    const { departmentId, locale, forceNew } = req.body || {};
     const lang = await resolveLocale(tenantId, locale);
 
     // The company is already known from onboarding - seed it onto the draft so
@@ -67,22 +67,38 @@ router.post("/start", async (req: Request, res: Response) => {
     const companyOverview = (profile?.businessDescription || "").trim();
     const orgName = (profile?.organizationName || "").trim();
 
-    const agent = await prisma.aIAgent.create({
-      data: {
-        tenantId,
-        name: "Untitled AI Employee",
-        role: "customer_support",
-        status: "DRAFT",
-        departmentId: departmentId || null,
-        ...(companyOverview ? { identity: { companyOverview } } : {}),
-      },
-    });
+    // Resume the tenant's most-recent INCOMPLETE wizard draft instead of
+    // spawning a new orphan every time "New AI Employee" is opened. This is
+    // what keeps abandoned sessions from polluting the account. `forceNew`
+    // lets the caller explicitly start a second one.
+    let agent = forceNew
+      ? null
+      : await prisma.aIAgent.findFirst({
+          where: { tenantId, status: "DRAFT", builderStep: { not: null } },
+          orderBy: { updatedAt: "desc" },
+        });
+    const resumed = !!agent;
+
+    if (!agent) {
+      agent = await prisma.aIAgent.create({
+        data: {
+          tenantId,
+          name: "Untitled AI Employee",
+          role: "customer_support",
+          status: "DRAFT",
+          builderStep: "chat",
+          departmentId: departmentId || null,
+          ...(companyOverview ? { identity: { companyOverview } } : {}),
+        },
+      });
+    }
 
     const draft = await loadDraftSnapshot(tenantId, agent.id);
     res.status(201).json({
       data: {
         agentId: agent.id,
         draft,
+        resumed,
         greeting: buildGreeting(lang, orgName),
       },
     });
@@ -163,6 +179,45 @@ router.post("/:id/tool", async (req: Request, res: Response) => {
   }
 });
 
+// POST /:id/tools/bulk - attach/detach many tools at once (Select all /
+// per-category select-all in the wizard). Validates ids against the tenant,
+// then flips them in two queries instead of one round-trip per tool.
+router.post("/:id/tools/bulk", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const { tenantToolIds, attach } = req.body || {};
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+
+    const requested = Array.isArray(tenantToolIds) ? tenantToolIds.map(String) : [];
+    if (requested.length > 0) {
+      // Only act on tools that genuinely belong to this tenant.
+      const valid = await prisma.tenantTool.findMany({ where: { tenantId, id: { in: requested } }, select: { id: true } });
+      const ids = valid.map((v) => v.id);
+      if (ids.length > 0) {
+        if (attach !== false) {
+          await prisma.agentToolPermission.createMany({
+            data: ids.map((id) => ({ tenantId, aiAgentId: agentId, tenantToolId: id, isAllowed: true })),
+            skipDuplicates: true,
+          });
+          // Flip any rows that already existed but were disabled.
+          await prisma.agentToolPermission.updateMany({
+            where: { tenantId, aiAgentId: agentId, tenantToolId: { in: ids } },
+            data: { isAllowed: true },
+          });
+        } else {
+          await prisma.agentToolPermission.deleteMany({ where: { tenantId, aiAgentId: agentId, tenantToolId: { in: ids } } });
+        }
+      }
+    }
+    res.json({ data: { draft: await loadDraftSnapshot(tenantId, agentId) } });
+  } catch (err: any) {
+    console.error("Builder bulk tools error:", err);
+    res.status(500).json({ error: "Failed to update tools" });
+  }
+});
+
 // POST /:id/knowledge - attach/detach one knowledge base to the draft.
 router.post("/:id/knowledge", async (req: Request, res: Response) => {
   try {
@@ -198,11 +253,24 @@ router.post("/:id/refinements", async (req: Request, res: Response) => {
     const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
-    const { name, conversationFlow, customGuardrails } = req.body || {};
+    const { name, conversationFlow, customGuardrails, brandArchetype } = req.body || {};
     const data: any = {};
 
     if (typeof name === "string" && name.trim()) {
       data.name = name.trim().slice(0, 120);
+    }
+
+    // Brand voice / personalization: an archetype that shapes HOW the employee
+    // sounds. Stored on persona.brand_archetype, merged so we never wipe other
+    // persona keys (gender/traits) - mirrors the editor's Brand Voice control.
+    if (typeof brandArchetype === "string") {
+      const cur = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { persona: true } });
+      const persona: Record<string, unknown> =
+        cur?.persona && typeof cur.persona === "object" ? { ...(cur.persona as any) } : {};
+      const v = brandArchetype.trim().slice(0, 60);
+      if (v) persona.brand_archetype = v;
+      else delete persona.brand_archetype;
+      data.persona = Object.keys(persona).length ? persona : null;
     }
 
     if (Array.isArray(conversationFlow)) {
@@ -232,6 +300,56 @@ router.post("/:id/refinements", async (req: Request, res: Response) => {
   } catch (err: any) {
     console.error("Builder refinements error:", err);
     res.status(500).json({ error: "Failed to save refinements" });
+  }
+});
+
+// ─── Persist wizard progress (resumable creation) ───────────
+// The frontend posts the current step on every transition so an abandoned
+// session can be resumed from exactly where the admin stopped. Only moves
+// the pointer while the agent is still a DRAFT - never resurrects a
+// completed/active agent back into the wizard.
+const BUILDER_STEPS = new Set(["chat", "kb", "refine", "tools"]);
+router.post("/:id/step", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const step = String(req.body?.step || "");
+    if (!BUILDER_STEPS.has(step)) {
+      res.status(400).json({ error: "invalid step" });
+      return;
+    }
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+    if (agent.status === "DRAFT") {
+      await prisma.aIAgent.update({ where: { id: agentId }, data: { builderStep: step } });
+    }
+    res.json({ data: { ok: true, step } });
+  } catch (err: any) {
+    console.error("Builder step error:", err);
+    res.status(500).json({ error: "Failed to save step" });
+  }
+});
+
+// ─── Complete the creation wizard ───────────────────────────
+// Called when the wizard hands the admin off to the editor (readiness panel
+// "Save live" / "Skip to editor"). Clears the resumable progress pointer so
+// the editor renders instead of re-entering the builder, and promotes the
+// finished employee DRAFT → ACTIVE. PAUSED/ACTIVE agents keep their status
+// (only the step pointer is cleared) so this can't reactivate a paused agent.
+router.post("/:id/complete", async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true } });
+    if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+    await prisma.aIAgent.update({
+      where: { id: agentId },
+      data: { builderStep: null, ...(agent.status === "DRAFT" ? { status: "ACTIVE" as const } : {}) },
+    });
+    res.json({ data: { ok: true } });
+  } catch (err: any) {
+    console.error("Builder complete error:", err);
+    res.status(500).json({ error: "Failed to complete builder" });
   }
 });
 

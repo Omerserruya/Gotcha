@@ -1,6 +1,6 @@
 import { prisma } from "@chatcenter/shared";
 import { parseFile } from "./file-parser.service";
-import { processDocument } from "./embedding.service";
+import { upsertSyncedDocument } from "./embedding.service";
 
 interface DriveIntegration {
   id: string;
@@ -187,15 +187,17 @@ export async function fetchFileContent(
 export async function syncFiles(
   integration: DriveIntegration,
   fileIds: string[]
-): Promise<{ imported: number }> {
-  let imported = 0;
+): Promise<{ imported: number; updated: number; skipped: number }> {
+  let imported = 0, updated = 0, skipped = 0;
 
   // Get file metadata for all requested files
   for (const fileId of fileIds) {
     try {
+      // `modifiedTime` is the change marker: re-sync skips files untouched
+      // since the last import instead of re-embedding them.
       const metaRes = await driveFetch(
         integration,
-        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType&supportsAllDrives=true`
+        `https://www.googleapis.com/drive/v3/files/${fileId}?fields=id,name,mimeType,modifiedTime&supportsAllDrives=true`
       );
       if (!metaRes.ok) continue;
       const fileMeta: any = await metaRes.json();
@@ -208,7 +210,7 @@ export async function syncFiles(
           .map((c: DriveFile) => c.id);
         if (childIds.length > 0) {
           const sub = await syncFiles(integration, childIds);
-          imported += sub.imported;
+          imported += sub.imported; updated += sub.updated; skipped += sub.skipped;
         }
         continue;
       }
@@ -216,27 +218,19 @@ export async function syncFiles(
       const content = await fetchFileContent(integration, fileId, fileMeta.mimeType);
       if (!content) continue;
 
-      const doc = await prisma.knowledgeDocument.create({
-        data: {
-          knowledgeBaseId: integration.knowledgeBaseId,
-          tenantId: integration.tenantId,
-          title: fileMeta.name,
-          content,
-          sourceType: "google_drive",
-          sourceUrl: `https://drive.google.com/file/d/${fileId}`,
-          status: "pending",
-          metadata: {
-            integrationId: integration.id,
-            driveFileId: fileId,
-            mimeType: fileMeta.mimeType,
-          },
-        },
+      const outcome = await upsertSyncedDocument({
+        knowledgeBaseId: integration.knowledgeBaseId,
+        tenantId: integration.tenantId,
+        title: fileMeta.name,
+        content,
+        sourceType: "google_drive",
+        sourceUrl: `https://drive.google.com/file/d/${fileId}`,
+        changeKey: String(fileMeta.modifiedTime || ""),
+        metadata: { integrationId: integration.id, driveFileId: fileId, mimeType: fileMeta.mimeType },
       });
-
-      processDocument(doc.id).catch((err) => {
-        console.error(`[GoogleDrive] Failed to process file ${fileId}:`, err.message);
-      });
-      imported++;
+      if (outcome === "created") imported++;
+      else if (outcome === "updated") updated++;
+      else skipped++;
     } catch (err: any) {
       console.error(`[GoogleDrive] Failed to import file ${fileId}:`, err.message);
     }
@@ -253,5 +247,5 @@ export async function syncFiles(
     },
   });
 
-  return { imported };
+  return { imported, updated, skipped };
 }

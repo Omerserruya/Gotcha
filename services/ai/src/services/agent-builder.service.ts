@@ -95,6 +95,8 @@ export interface BuilderDraftSnapshot {
   name: string;
   role: string;
   status: string;
+  /** Wizard progress: "chat"|"kb"|"refine"|"tools" while incomplete, null once done. */
+  builderStep: string | null;
   companyOverview: string | null;
   goal: string | null;
   successCriteria: string | null;
@@ -157,6 +159,7 @@ export async function loadDraftSnapshot(
     name: a.name,
     role: a.role,
     status: a.status,
+    builderStep: (a as any).builderStep ?? null,
     companyOverview: typeof identity.companyOverview === "string" ? identity.companyOverview : null,
     goal: a.goal ?? null,
     successCriteria: a.successCriteria ?? null,

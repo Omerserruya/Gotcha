@@ -24,12 +24,11 @@ const settingsNav: SettingsNavItem[] = [
   { href: "/settings/integrations", labelKey: "settings.nav.integrations", icon: IntegrationsIcon },
   { href: "/settings/usage", labelKey: "nav.usage", icon: UsageIcon },
   { href: "/settings/policy", labelKey: "settings.nav.policy", icon: PolicyIcon },
-  { href: "/settings/post-conversation", label: "Post-Conversation", icon: PolicyIcon },
-  { href: "/settings/intelligence-fields", label: "Intelligence Fields", icon: IntelligenceIcon },
+  { href: "/settings/intelligence", labelKey: "settings.nav.intelligence", icon: IntelligenceIcon },
   { href: "/settings/tools", labelKey: "settings.nav.tools", icon: ToolsIcon },
   { href: "/settings/voice-channels", labelKey: "settings.nav.voiceChannels", icon: VoiceChannelsIcon, voiceOnly: true },
-  { href: "/settings/funnels", label: "Pipeline funnels", icon: FunnelIcon },
-  { href: "/settings/permissions", label: "Roles & permissions", icon: PermissionsIcon },
+  { href: "/settings/funnels", labelKey: "settings.nav.funnels", icon: FunnelIcon },
+  { href: "/settings/permissions", labelKey: "settings.nav.permissions", icon: PermissionsIcon },
   { href: "/settings/notifications", labelKey: "notifications.title", icon: NotificationsIcon },
 ];
 

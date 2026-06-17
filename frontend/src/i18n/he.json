@@ -685,7 +685,10 @@
       "integrations": "אינטגרציות",
       "policy": "מדיניות",
       "tools": "כלים",
-      "voiceCopilot": "Voice Copilot"
+      "voiceCopilot": "Voice Copilot",
+      "intelligence": "מודיעין",
+      "funnels": "משפכי פייפליין",
+      "permissions": "תפקידים והרשאות"
     },
     "voiceChannels": {
       "title": "ערוצי קול",
@@ -728,7 +731,8 @@
         "deleting": "משבית…",
         "deleteConfirm": "פעולה זו תשבית את הערוץ ותפסיק לחלוטין את קליטת השיחות. להמשיך?",
         "outboundProvisioningFailed": "חיוג יוצא אינו מוגדר במלואו - שיחות נכנסות עדיין עובדות.",
-        "retryProvisioning": "נסה שוב"
+        "retryProvisioning": "נסה שוב",
+        "aiEmployeeSaved": "עובד ה-AI נשמר."
       },
       "wizard": {
         "backLink": "חזרה לערוצי קול",
@@ -1040,6 +1044,10 @@
       "thursday": "חמישי",
       "friday": "שישי",
       "saturday": "שבת"
+    },
+    "integrations": {
+      "crmTitle": "אינטגרציות CRM",
+      "crmSubtitle": "חברו את ה-CRM שלכם (Zoho, HubSpot, Salesforce, Monday) — או השתמשו ב-Shopify כמקור האמת. בונה הקהלים, השידורים והעברות ה-AI של הפלטפורמה קוראים מה-CRM המחובר."
     }
   },
   "outbound": {
@@ -2271,7 +2279,8 @@
     "usedByDepartments": "בשימוש על ידי {count} מחלקות",
     "categoryShipping": "משלוחים",
     "categoryProjectManagement": "ניהול פרויקטים",
-    "categoryCalendar": "לוח שנה"
+    "categoryCalendar": "לוח שנה",
+    "subtitle": "חברו שירותים חיצוניים כדי להפעיל את סוכני ה-AI שלכם"
   },
   "usage": {
     "title": "צריכה",

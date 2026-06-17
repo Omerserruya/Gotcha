@@ -285,13 +285,21 @@ router.post("/integrations/:intId/confluence/sync", async (req: Request, res: Re
     const { spaceKeys } = req.body;
     if (!spaceKeys?.length) { res.status(400).json({ error: "spaceKeys required" }); return; }
 
-    let totalImported = 0;
+    // Remember the selected spaces + turn on auto-sync so the hourly scheduler
+    // knows what to refresh. Mutate the in-memory config too, so syncSpace's own
+    // config write (lastSyncAt) preserves these keys instead of dropping them.
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    const newConfig = { ...cfg, spaceKeys, autoSync: cfg.autoSync ?? true };
+    await prisma.knowledgeIntegration.update({ where: { id: integration.id }, data: { config: newConfig } });
+    (integration as any).config = newConfig;
+
+    let totalImported = 0, totalUpdated = 0, totalSkipped = 0;
     for (const key of spaceKeys) {
       const result = await confluenceService.syncSpace(integration as any, key);
-      totalImported += result.imported;
+      totalImported += result.imported; totalUpdated += result.updated; totalSkipped += result.skipped;
     }
 
-    res.json({ data: { imported: totalImported } });
+    res.json({ data: { imported: totalImported, updated: totalUpdated, skipped: totalSkipped } });
   } catch (err: any) {
     console.error("Confluence sync error:", err.message);
     res.status(500).json({ error: "Failed to sync" });
@@ -346,11 +354,41 @@ router.post("/integrations/:intId/drive/sync", async (req: Request, res: Respons
     const { fileIds } = req.body;
     if (!fileIds?.length) { res.status(400).json({ error: "fileIds required" }); return; }
 
+    // Remember the selected files + turn on auto-sync (see Confluence note above).
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    const newConfig = { ...cfg, fileIds, autoSync: cfg.autoSync ?? true };
+    await prisma.knowledgeIntegration.update({ where: { id: integration.id }, data: { config: newConfig } });
+    (integration as any).config = newConfig;
+
     const result = await googleDriveService.syncFiles(integration as any, fileIds);
     res.json({ data: result });
   } catch (err: any) {
     console.error("Drive sync error:", err.message);
     res.status(500).json({ error: "Failed to sync" });
+  }
+});
+
+// ─── Auto-sync toggle ─────────────────────────────────────────
+// Enable/disable the hourly background re-sync for one integration. Stored on
+// config.autoSync; the scheduler only refreshes integrations where it's not
+// explicitly false and that have a persisted selection (spaceKeys / fileIds).
+router.patch("/integrations/:intId/auto-sync", async (req: Request, res: Response) => {
+  try {
+    const integration = await prisma.knowledgeIntegration.findFirst({
+      where: { id: String(req.params.intId), tenantId: req.tenantId! },
+    });
+    if (!integration) { res.status(404).json({ error: "Integration not found" }); return; }
+
+    const enabled = req.body?.enabled !== false; // default ON
+    const cfg = (integration.config && typeof integration.config === "object" ? integration.config : {}) as Record<string, unknown>;
+    await prisma.knowledgeIntegration.update({
+      where: { id: integration.id },
+      data: { config: { ...cfg, autoSync: enabled } },
+    });
+    res.json({ data: { autoSync: enabled } });
+  } catch (err: any) {
+    console.error("Auto-sync toggle error:", err.message);
+    res.status(500).json({ error: "Failed to update auto-sync" });
   }
 });
 

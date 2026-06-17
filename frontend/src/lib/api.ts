@@ -676,8 +676,12 @@ export function createTenantUser(token: string, tenantId: string, data: { email:
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users`, { token, method: "POST", body: JSON.stringify(data) });
 }
 
-export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string }) {
+export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string; name?: string; email?: string; password?: string }) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "PATCH", body: JSON.stringify(data) });
+}
+
+export function deleteTenantUser(token: string, tenantId: string, userId: string) {
+  return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "DELETE" });
 }
 
 export function resendOnboardingLink(token: string, tenantId: string) {
@@ -1094,6 +1098,13 @@ export function getDriveSharedDrives(token: string, intId: string) {
 export function syncDriveFiles(token: string, intId: string, fileIds: string[]) {
   return apiFetch<{ data: any }>(`/api/knowledge/integrations/${intId}/drive/sync`, {
     token, method: "POST", body: JSON.stringify({ fileIds }),
+  });
+}
+
+// Enable/disable hourly background auto-sync for a connected source.
+export function setKnowledgeIntegrationAutoSync(token: string, intId: string, enabled: boolean) {
+  return apiFetch<{ data: { autoSync: boolean } }>(`/api/knowledge/integrations/${intId}/auto-sync`, {
+    token, method: "PATCH", body: JSON.stringify({ enabled }),
   });
 }
 

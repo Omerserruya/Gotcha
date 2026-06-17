@@ -404,15 +404,33 @@ async function checkEscalationThresholds(
   return false;
 }
 
+// A bare keyword like "נציג"/"agent"/"representative" is NOT a handoff request:
+// it fires on questions ABOUT agents ("how many agents do you support?",
+// "מה קורה כשזה מגיע לנציג?"). This short-circuits the LLM, so it must detect
+// the customer's INTENT to reach a human - i.e. an ask/request verb paired with
+// the human noun - not the noun alone. Mirrors the AI service's
+// detectHumanHandoff() (services/ai/src/services/ai-bot.service.ts).
+//
+// \b doesn't work for Hebrew in JS (non-ASCII aren't word chars), so Hebrew
+// patterns anchor on whitespace/start/end instead.
+const HUMAN_HANDOFF_PATTERNS: RegExp[] = [
+  // English - explicit request to be connected to a person.
+  // `(?:an?\s+|the\s+)?` tolerates "a/an/the agent" (and no article).
+  /\b(speak|talk|connect|chat|transfer|put me through)\s+(to|with|me)\s+(?:to\s+)?(?:an?\s+|the\s+)?(human|agent|person|someone|rep|representative)\b/i,
+  /\b(can\s+i|i\s+(?:want|need|wanna|would like))\s+(to\s+)?(speak|talk|chat)\s+(to|with)\s+(?:an?\s+|the\s+)?(human|agent|person|someone|rep)\b/i,
+  /\b(give|get|connect)\s+me\s+(?:to\s+)?(?:an?\s+|the\s+)?(human|agent|person|rep)\b/i,
+  /\bnot\s+a\s+bot\b/i,
+  // Hebrew - explicit request only
+  /(?:^|\s)לדבר עם\s+(אדם|נציג|נציגה|מישהו|בנאדם)/,
+  /(?:^|\s)תעבירו? אותי\s+(?:ל|אל)\s*(אדם|נציג|נציגה|מישהו)/,
+  /(?:^|\s)(?:אני רוצה|אני צריך|תן לי|תני לי|אפשר)\s+(?:לדבר עם\s+)?(אדם|נציג|נציגה|בנאדם|אנושי)(?:\s|$|[.,!?])/,
+  /(?:^|\s)נציג\s+(אנושי|אמיתי|בבקשה)(?:\s|$|[.,!?])/,
+  /(?:^|\s)(אדם|בנאדם)\s+(אמיתי|אנושי)(?:\s|$|[.,!?])/,
+];
 function isHumanRequest(message: string): boolean {
-  const lower = message.toLowerCase().trim();
-  const humanKeywords = [
-    "speak to a human", "talk to a human", "human agent", "real person",
-    "speak to someone", "talk to someone", "agent please", "representative",
-    "speak to agent", "talk to agent", "transfer me", "connect me",
-    "נציג", "נציג אנושי", "לדבר עם נציג", "אדם אמיתי",
-  ];
-  return humanKeywords.some((kw) => lower.includes(kw));
+  if (!message) return false;
+  for (const re of HUMAN_HANDOFF_PATTERNS) if (re.test(message)) return true;
+  return false;
 }
 
 async function escalateToHuman(

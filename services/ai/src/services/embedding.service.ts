@@ -35,6 +35,60 @@ export function chunkDocument(text: string, chunkSize = CHUNK_SIZE, overlap = CH
   return chunks;
 }
 
+/**
+ * Create-or-update a document that originates from an external sync source
+ * (Google Drive, Confluence). Keyed by (knowledgeBaseId, sourceUrl) so a given
+ * source page/file maps to exactly ONE document - re-syncing never duplicates.
+ *
+ * `changeKey` is an opaque version marker (Drive modifiedTime, Confluence
+ * version number). When it matches what we stored last time the document is
+ * left untouched (no re-embed, no LLM cost). When it differs - or the document
+ * is new - the content is (re)written and re-embedded via processDocument.
+ *
+ * Returns the outcome so callers can report imported/updated/skipped counts.
+ */
+export async function upsertSyncedDocument(params: {
+  knowledgeBaseId: string;
+  tenantId: string;
+  title: string;
+  content: string;
+  sourceType: string;
+  sourceUrl: string;
+  changeKey: string;
+  metadata?: Record<string, unknown>;
+}): Promise<"created" | "updated" | "skipped"> {
+  const { knowledgeBaseId, tenantId, title, content, sourceType, sourceUrl, changeKey } = params;
+  const metadata = { ...(params.metadata || {}), syncChangeKey: changeKey };
+
+  const existing = await prisma.knowledgeDocument.findFirst({
+    where: { knowledgeBaseId, tenantId, sourceUrl },
+    select: { id: true, metadata: true },
+  });
+
+  if (existing) {
+    const prevKey = (existing.metadata as any)?.syncChangeKey;
+    // Unchanged at the source - nothing to do (avoids needless re-embedding).
+    if (prevKey && changeKey && prevKey === changeKey) return "skipped";
+
+    await prisma.knowledgeDocument.update({
+      where: { id: existing.id },
+      data: { title, content, sourceType, metadata, status: "pending" },
+    });
+    await processDocument(existing.id).catch((err) => {
+      console.error(`[KnowledgeSync] Failed to re-embed ${existing.id}:`, err.message);
+    });
+    return "updated";
+  }
+
+  const doc = await prisma.knowledgeDocument.create({
+    data: { knowledgeBaseId, tenantId, title, content, sourceType, sourceUrl, status: "pending", metadata },
+  });
+  await processDocument(doc.id).catch((err) => {
+    console.error(`[KnowledgeSync] Failed to embed ${doc.id}:`, err.message);
+  });
+  return "created";
+}
+
 export async function processDocument(documentId: string): Promise<void> {
   const document = await prisma.knowledgeDocument.findUnique({
     where: { id: documentId },

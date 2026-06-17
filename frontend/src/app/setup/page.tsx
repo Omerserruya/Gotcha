@@ -72,8 +72,8 @@ const SYSTEMS: Array<{
   { slug: "hubspot", name: "HubSpot", group: "CRM", value: ["Your deals & contacts live here", "העסקאות והאנשי-קשר שלכם נמצאים כאן"], logo: "https://cdn.worldvectorlogo.com/logos/hubspot.svg" },
   { slug: "salesforce", name: "Salesforce", group: "CRM", value: ["Your CRM records live here", "רשומות ה-CRM שלכם נמצאות כאן"], logo: "https://cdn.worldvectorlogo.com/logos/salesforce-2.svg" },
   { slug: "zoho_crm", name: "Zoho", group: "CRM", value: ["Your contacts & leads live here", "אנשי הקשר והלידים שלכם נמצאים כאן"], logo: "https://cdn.worldvectorlogo.com/logos/zoho-1.svg" },
-  { slug: "fireberry", name: "Fireberry", group: "CRM", value: ["Your accounts & contacts live here", "החשבונות ואנשי הקשר שלכם נמצאים כאן"], logo: "https://www.fireberry.com/favicon.ico" },
-  { slug: "airtable", name: "Airtable", group: "Database", value: ["Your contacts base lives here", "בסיס אנשי הקשר שלכם נמצא כאן"], logo: "https://cdn.worldvectorlogo.com/logos/airtable.svg" },
+  { slug: "fireberry", name: "Fireberry", group: "CRM", value: ["Your accounts & contacts live here", "החשבונות ואנשי הקשר שלכם נמצאים כאן"], logo: "https://www.google.com/s2/favicons?domain=fireberry.com&sz=64" },
+  { slug: "airtable", name: "Airtable", group: "Database", value: ["Your contacts base lives here", "בסיס אנשי הקשר שלכם נמצא כאן"], logo: "https://cdn.simpleicons.org/airtable/FCB400" },
   { slug: "shopify", name: "Shopify", group: "Store", value: ["Your orders & customers live here", "ההזמנות והלקוחות שלכם נמצאים כאן"], logo: "https://cdn.worldvectorlogo.com/logos/shopify.svg" },
 ];
 
@@ -135,6 +135,7 @@ function SetupContent() {
   const [fireberryToken, setFireberryToken] = useState("");
   const [connecting, setConnecting] = useState(false);
   const [skipping, setSkipping] = useState(false);
+  const [systemQuery, setSystemQuery] = useState("");
 
   // Airtable mapping (post-OAuth) state.
   const [atBases, setAtBases] = useState<AirtableMeta[]>([]);
@@ -540,8 +541,19 @@ function SetupContent() {
               </p>
             </div>
 
+            <input
+              value={systemQuery}
+              onChange={(e) => setSystemQuery(e.target.value)}
+              placeholder={he ? "חיפוש מערכת…" : "Search systems…"}
+              className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none"
+            />
+
             <div className="grid sm:grid-cols-2 gap-3">
-              {SYSTEMS.map((s) => {
+              {SYSTEMS.filter((s) => {
+                const q = systemQuery.trim().toLowerCase();
+                if (!q) return true;
+                return s.name.toLowerCase().includes(q) || s.group.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q);
+              }).map((s) => {
                 const active = picked === s.slug;
                 return (
                   <div key={s.slug}>
@@ -556,9 +568,23 @@ function SetupContent() {
                       }
                     >
                       <div className="flex items-center gap-3 mb-2">
-                        <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 p-1.5 flex items-center justify-center">
+                        <div className="w-10 h-10 rounded-xl bg-white border border-gray-100 p-1.5 flex items-center justify-center relative">
                           {/* eslint-disable-next-line @next/next/no-img-element */}
-                          <img src={s.logo} alt={s.name} className="w-full h-full object-contain" />
+                          <img
+                            src={s.logo}
+                            alt={s.name}
+                            className="w-full h-full object-contain"
+                            onError={(e) => {
+                              const img = e.currentTarget;
+                              img.style.display = "none";
+                              const fb = img.nextElementSibling as HTMLElement | null;
+                              if (fb) fb.style.display = "flex";
+                            }}
+                          />
+                          {/* Fallback shown only if the logo fails to load, so the option never renders icon-less. */}
+                          <span className="absolute inset-0 hidden items-center justify-center text-sm font-bold text-gray-500">
+                            {s.name.charAt(0)}
+                          </span>
                         </div>
                         <div>
                           <div className="font-semibold text-gray-900">{s.name}</div>
@@ -606,6 +632,13 @@ function SetupContent() {
                 );
               })}
             </div>
+
+            {systemQuery.trim() && SYSTEMS.filter((s) => {
+              const q = systemQuery.trim().toLowerCase();
+              return s.name.toLowerCase().includes(q) || s.group.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q);
+            }).length === 0 && (
+              <p className="text-sm text-gray-400 text-center py-2">{he ? "לא נמצאה מערכת תואמת" : "No matching system"}</p>
+            )}
 
             <p className="text-xs text-gray-400 text-center">
               {he ? "בוחרים מערכת אחת כדי שה-AI יכיר את הלקוחות שלכם. ערוצים ואינטגרציות נוספות - בהמשך, מתוך מרכז ההתקנה." : "Pick one system so the AI knows your customers. Channels and other integrations come later, from the Setup Hub."}

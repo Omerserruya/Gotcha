@@ -326,7 +326,28 @@ export async function getAvailableTools(
       },
       include: { catalogTool: true },
     });
-    integrationTools = rows.map((r: any) => ({
+    // Guard: the generic executor (tool-execution.service.ts) hard-fails any
+    // catalog tool with no `endpoint` ("has no endpoint configured"). Such
+    // rows are misconfigured stubs (e.g. the seeded calendar tools
+    // create_event/list_events) — exposing them can ONLY ever fail and traps
+    // the bot into calling a dead tool instead of the real path (calendar
+    // booking goes through `schedule_meeting` → GoogleCalendarAdapter, not a
+    // generic HTTP endpoint). Drop them from the surface so the model never
+    // sees a tool it cannot successfully call.
+    const usableRows = rows.filter(
+      (r: any) => typeof r.catalogTool?.endpoint === "string" && r.catalogTool.endpoint.trim().length > 0,
+    );
+    const droppedNoEndpoint = rows.length - usableRows.length;
+    if (droppedNoEndpoint > 0) {
+      console.warn(
+        `[tool-registry] tenant=${tenantId} dropped ${droppedNoEndpoint} enabled catalog tool(s) with no endpoint ` +
+          `from the bot surface: ${rows
+            .filter((r: any) => !(typeof r.catalogTool?.endpoint === "string" && r.catalogTool.endpoint.trim()))
+            .map((r: any) => r.catalogTool?.slug)
+            .join(", ")}. Fix the catalog seed or disable these tenant tools.`,
+      );
+    }
+    integrationTools = usableRows.map((r: any) => ({
       name: `integration.${r.catalogTool.slug}`,
       kind: "integration" as const,
       category: "meta" as const,

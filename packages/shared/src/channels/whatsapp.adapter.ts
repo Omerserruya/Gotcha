@@ -10,6 +10,33 @@ import type {
 
 const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
 
+/**
+ * Convert common Markdown to WhatsApp's own formatting so the message reads
+ * like a human typed it - not an AI emitting raw Markdown. WhatsApp bold is a
+ * SINGLE asterisk (`*bold*`); Markdown's `**bold**` renders as literal
+ * asterisks ("****") in the app, which is the dead giveaway we're fixing.
+ *
+ * Mapping: `**x**`/`__x__` → `*x*` (bold), `# heading` → `*heading*`,
+ * `[label](url)` → `label (url)`, `` `code` `` → `code`. Markdown italic
+ * (`*x*`) is left alone - it already maps to WhatsApp bold and the models
+ * rarely emit single-asterisk italic.
+ */
+export function formatWhatsAppText(text: string): string {
+  if (!text) return text;
+  return text
+    // Links: [label](https://…) → label (https://…)
+    .replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, "$1 ($2)")
+    // Bold: **x** / __x__ → *x*  (run before any single-* handling)
+    .replace(/\*\*([^*\n]+?)\*\*/g, "*$1*")
+    .replace(/__([^_\n]+?)__/g, "*$1*")
+    // ATX headings (#, ##, …) → bold line
+    .replace(/^\s{0,3}#{1,6}\s+(.+?)\s*#*$/gm, "*$1*")
+    // Inline code `x` → x
+    .replace(/`([^`\n]+?)`/g, "$1")
+    // Collapse 3+ blank lines that Markdown spacing can introduce
+    .replace(/\n{3,}/g, "\n\n");
+}
+
 // Pulls the most useful human-readable error out of a WhatsApp/Graph API axios failure.
 function extractWaError(err: any): string {
   const data = err?.response?.data;
@@ -158,7 +185,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
     try {
       const response = await axios.post(
         `${WA_API_URL}/${accountExternalId}/messages`,
-        { messaging_product: "whatsapp", to: recipientId, type: "text", text: { body: text } },
+        { messaging_product: "whatsapp", to: recipientId, type: "text", text: { body: formatWhatsAppText(text) } },
         { headers: { Authorization: `Bearer ${credentials.accessToken}`, "Content-Type": "application/json" } }
       );
       return response.data?.messages?.[0]?.id || null;
@@ -180,7 +207,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
         {
           messaging_product: "whatsapp", to: recipientId, type: "interactive",
           interactive: {
-            type: "button", body: { text: bodyText },
+            type: "button", body: { text: formatWhatsAppText(bodyText) },
             action: { buttons: buttons.slice(0, 3).map((b) => ({ type: "reply", reply: { id: b.id, title: b.title } })) },
           },
         },

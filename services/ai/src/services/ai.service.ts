@@ -177,6 +177,43 @@ function recordAndAssertPrefix(
   return { hash, drift: false, isFirstCall: false };
 }
 
+// OpenAI requires tool function names to match ^[a-zA-Z0-9_-]+$ - but adapter
+// tools are named `<provider>.<tool>` (e.g. "hubspot.create_lead"), and the dot
+// is load-bearing for dispatch routing. Sanitize names for the API call (dots →
+// "__", any other illegal char → "_") and map them back on the returned tool
+// calls so downstream dispatch still sees the original dotted name. A single
+// bad name otherwise 400s the WHOLE completion (the bot can't reply at all).
+const ILLEGAL_TOOL_NAME_CHARS = /[^a-zA-Z0-9_-]/g;
+function sanitizeToolName(name: string): string {
+  return name.replace(/\./g, "__").replace(ILLEGAL_TOOL_NAME_CHARS, "_");
+}
+function sanitizeToolsForOpenAI(
+  tools: any[],
+): { tools: any[]; nameMap: Map<string, string> } {
+  const nameMap = new Map<string, string>();
+  let changed = false;
+  const out = tools.map((t) => {
+    const orig = t?.function?.name;
+    if (typeof orig !== "string") return t;
+    const safe = sanitizeToolName(orig);
+    if (safe === orig) return t;
+    changed = true;
+    nameMap.set(safe, orig);
+    return { ...t, function: { ...t.function, name: safe } };
+  });
+  return { tools: changed ? out : tools, nameMap };
+}
+function restoreToolCallNames(
+  toolCalls: any[] | undefined,
+  nameMap: Map<string, string> | null,
+): any[] | undefined {
+  if (!toolCalls || !nameMap || nameMap.size === 0) return toolCalls;
+  return toolCalls.map((tc) => {
+    const orig = tc?.function?.name ? nameMap.get(tc.function.name) : undefined;
+    return orig ? { ...tc, function: { ...tc.function, name: orig } } : tc;
+  });
+}
+
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
   const model = params.model || defaultModel;
@@ -198,8 +235,11 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   if (params.responseFormat) {
     requestParams.response_format = params.responseFormat;
   }
+  let toolNameMap: Map<string, string> | null = null;
   if (params.tools && params.tools.length > 0) {
-    (requestParams as any).tools = params.tools;
+    const s = sanitizeToolsForOpenAI(params.tools);
+    (requestParams as any).tools = s.tools;
+    toolNameMap = s.nameMap.size > 0 ? s.nameMap : null;
     if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
   }
 
@@ -249,7 +289,10 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   }
 
   const content = response.choices[0]?.message?.content || "";
-  const rawToolCalls = (response.choices[0]?.message as any)?.tool_calls as any[] | undefined;
+  const rawToolCalls = restoreToolCallNames(
+    (response.choices[0]?.message as any)?.tool_calls as any[] | undefined,
+    toolNameMap,
+  );
 
   // Track usage (fire-and-forget, never block the response)
   trackAIUsage({
@@ -369,8 +412,11 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   if (params.sessionId) {
     (requestParams as any).user = params.sessionId;
   }
+  let toolNameMap: Map<string, string> | null = null;
   if (params.tools && params.tools.length > 0) {
-    (requestParams as any).tools = params.tools;
+    const s = sanitizeToolsForOpenAI(params.tools);
+    (requestParams as any).tools = s.tools;
+    toolNameMap = s.nameMap.size > 0 ? s.nameMap : null;
     if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
   }
 
@@ -410,13 +456,16 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     }
   }
 
-  const finalToolCalls = Object.values(toolCallAcc)
-    .filter((s) => s.id && s.function.name)
-    .map((s) => ({
-      id: s.id!,
-      type: "function" as const,
-      function: { name: s.function.name!, arguments: s.function.arguments || "{}" },
-    }));
+  const finalToolCalls = restoreToolCallNames(
+    Object.values(toolCallAcc)
+      .filter((s) => s.id && s.function.name)
+      .map((s) => ({
+        id: s.id!,
+        type: "function" as const,
+        function: { name: s.function.name!, arguments: s.function.arguments || "{}" },
+      })),
+    toolNameMap,
+  )!;
 
   // Same fire-and-forget tracking + audit as the non-streaming path.
   trackAIUsage({

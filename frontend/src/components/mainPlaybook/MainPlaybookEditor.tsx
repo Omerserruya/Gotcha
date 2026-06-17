@@ -12,6 +12,7 @@ import ReactFlow, {
   Background,
   BackgroundVariant,
   NodeTypes,
+  EdgeTypes,
   Panel,
   MarkerType,
   ReactFlowInstance,
@@ -59,6 +60,16 @@ import { NodeInspector } from "./NodeInspector";
 import { TRIGGER_TYPES, isTriggerNode } from "./trigger-types";
 import { TriggerCardNode } from "./TriggerCardNode";
 import { TriggerSectionHeaderNode } from "./TriggerSectionHeaderNode";
+import { DeletableEdge } from "./DeletableEdge";
+
+// ─── Edge types ────────────────────────────────────────────────
+// All edges render through DeletableEdge so a selected edge shows a ✕ to
+// unlink the two nodes. Aliased under "bezier" too, because saved canvases
+// and onConnect both create edges with type "bezier".
+const edgeTypes: EdgeTypes = {
+  deletable: DeletableEdge,
+  bezier: DeletableEdge,
+};
 
 // ─── Node types ────────────────────────────────────────────────
 const nodeTypes: NodeTypes = {
@@ -1192,14 +1203,20 @@ function MainPlaybookEditorInner({ onBack }: Props) {
       // Delete / Backspace work without a modifier - and without requiring
       // ReactFlow to have focus - so the popup-selected node is deletable.
       if (k === "delete" || k === "backspace") {
-        const { nodes: ns, selectedNodeId: sid } = stateRef.current;
+        const { nodes: ns, edges: es, selectedNodeId: sid } = stateRef.current;
         const targetIds = new Set(ns.filter(isSelectedFor).map((n) => n.id));
-        if (targetIds.size === 0) return;
+        // Selected edges are removed too, so the user can click an edge and
+        // hit Delete to unlink two nodes (the ✕ on the edge does the same).
+        const selectedEdgeIds = new Set(es.filter((ed) => ed.selected).map((ed) => ed.id));
+        if (targetIds.size === 0 && selectedEdgeIds.size === 0) return;
         e.preventDefault();
-        setNodes((nds) => nds.filter((n) => !targetIds.has(n.id)));
+        if (targetIds.size > 0) setNodes((nds) => nds.filter((n) => !targetIds.has(n.id)));
         setEdges((eds) =>
           eds.filter(
-            (ed) => !targetIds.has(ed.source) && !targetIds.has(ed.target),
+            (ed) =>
+              !selectedEdgeIds.has(ed.id) &&
+              !targetIds.has(ed.source) &&
+              !targetIds.has(ed.target),
           ),
         );
         if (sid && targetIds.has(sid)) setSelectedNodeId(null);
@@ -1552,6 +1569,7 @@ function MainPlaybookEditorInner({ onBack }: Props) {
               );
             }}
             nodeTypes={nodeTypes}
+            edgeTypes={edgeTypes}
             connectionLineType={"bezier" as any}
             defaultEdgeOptions={{
               type: "bezier",

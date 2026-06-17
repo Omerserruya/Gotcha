@@ -24,6 +24,7 @@ import {
   getDriveFiles,
   getDriveSharedDrives,
   syncDriveFiles,
+  setKnowledgeIntegrationAutoSync,
   getAgents,
   getDepartments,
 } from "@/lib/api";
@@ -345,6 +346,17 @@ export default function KnowledgePage() {
       await loadIntegrations();
     } catch (err) {
       console.error("Failed to disconnect:", err);
+    }
+  }
+
+  async function handleToggleAutoSync(int: Integration) {
+    if (!token) return;
+    const next = int.config?.autoSync === false; // currently off → turn on
+    try {
+      await setKnowledgeIntegrationAutoSync(token, int.id, next);
+      await loadIntegrations();
+    } catch (err) {
+      console.error("Failed to toggle auto-sync:", err);
     }
   }
 
@@ -942,6 +954,18 @@ export default function KnowledgePage() {
                               </div>
                             </div>
                             <div className="flex items-center gap-1.5 shrink-0">
+                              <button
+                                onClick={() => handleToggleAutoSync(int)}
+                                title="Re-sync this source automatically every hour when it changes"
+                                className={clsx(
+                                  "px-2.5 py-1.5 rounded-xl text-xs font-medium transition border",
+                                  int.config?.autoSync !== false
+                                    ? "bg-green-50 text-green-700 border-green-200 hover:bg-green-100"
+                                    : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                                )}
+                              >
+                                {int.config?.autoSync !== false ? "Auto-sync: On" : "Auto-sync: Off"}
+                              </button>
                               <button
                                 onClick={() => handleBrowse(int)}
                                 className="bg-violet-50 text-violet-700 hover:bg-violet-100 px-3 py-1.5 rounded-xl text-xs font-medium transition"

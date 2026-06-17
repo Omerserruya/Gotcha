@@ -1,6 +1,7 @@
 "use client";
 
 import IntegrationsExplorer from "@/components/IntegrationsExplorer";
+import { useI18n } from "@/context/I18nContext";
 
 /**
  * Settings → Integrations. Locked to category=CRM (plus any integration
@@ -14,10 +15,11 @@ import IntegrationsExplorer from "@/components/IntegrationsExplorer";
  * marketplace immediately.
  */
 export default function SettingsIntegrationsPage() {
+  const { t } = useI18n();
   return (
     <IntegrationsExplorer
-      title="CRM Integrations"
-      subtitle="Connect your CRM (Zoho, HubSpot, Salesforce, Monday) - or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM."
+      title={t("settings.integrations.crmTitle")}
+      subtitle={t("settings.integrations.crmSubtitle")}
       restrictToCategory="CRM"
     />
   );
