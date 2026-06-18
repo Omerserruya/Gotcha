@@ -11,6 +11,7 @@
 import OpenAI from "openai";
 import { trackAIUsage } from "@chatcenter/shared";
 import { logAudit } from "./audit.service";
+import { stablePrefixOf } from "./prompt-builder.service";
 
 // ─── Types ──────────────────────────────────────────────────
 
@@ -244,12 +245,16 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   }
 
   // Compute + compare the per-session system-prompt-prefix hash BEFORE the
-  // API call so any drift is logged even if the call throws. The "prefix"
-  // is the first system message (the per-agent + per-conv stable blocks).
+  // API call so any drift is logged even if the call throws. We hash ONLY the
+  // STABLE prefix (BLOCK 1 + BLOCK 2) - NOT the per-turn block, which is fresh
+  // every message and would otherwise make the hash "drift" every turn even
+  // when the cacheable prefix is perfectly stable. `stablePrefixOf` strips the
+  // final per-turn block; single-block system prompts hash in full.
   let prefixAssertion: { hash: string; drift: boolean; isFirstCall: boolean } | null = null;
   if (params.sessionId) {
     const firstSystem = params.messages.find((m: any) => m.role === "system");
-    const systemPrefix = typeof firstSystem?.content === "string" ? firstSystem.content : "";
+    const systemContent = typeof firstSystem?.content === "string" ? firstSystem.content : "";
+    const systemPrefix = systemContent ? stablePrefixOf(systemContent) : "";
     if (systemPrefix) {
       prefixAssertion = recordAndAssertPrefix(params.sessionId, systemPrefix);
     }

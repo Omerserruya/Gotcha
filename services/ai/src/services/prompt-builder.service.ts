@@ -48,6 +48,8 @@ import {
   type ActionCategory,
 } from "./behavior-strategies";
 import { renderBrandVoice } from "./brand-archetypes";
+import { buildSkillBlock, requiredKnowledgeFor } from "./skills";
+import { computeKnowledgeLedger, renderKnowledgeLedger } from "./knowledge-ledger";
 import {
   CONVERSATION_PLAYBOOKS,
   type PlaybookId,
@@ -178,6 +180,97 @@ export const ESCALATION_TOOL = {
 
 // ─── Public entry point ─────────────────────────────────────
 
+/** Top-level separator between prompt blocks. The per-TURN block is the last
+ * block, so everything before the final separator is the cacheable stable
+ * prefix. Keep in sync with `stablePrefixOf`. */
+export const BLOCK_SEPARATOR = "\n\n---\n\n";
+
+// ════════════════════════════════════════════════════════════════════════
+// BLOCK 0 — SYSTEM CONTRACTS (static, globally reusable, highly cacheable)
+// Platform-wide rules shared by EVERY agent and tenant. Contains NO agent
+// config, NO tenant data, NO customer data, NO turn data - so it is byte-
+// identical across all conversations of the same mode and sits at the very top
+// of the prompt for maximum prefix-cache reuse. The single source of truth for
+// security, truthfulness, tool execution, and conversation ownership; other
+// sections REFERENCE these instead of restating them.
+// ════════════════════════════════════════════════════════════════════════
+
+// SECURITY → the loaded GUARDRAILS file. REALITY → ACTION_OUTCOME_CONTRACT
+// (the 4-state model). Both are referenced by the assembler below.
+
+const TOOL_EXECUTION_CONTRACT = `# Tool Execution Contract
+- Tools are listed separately as function schemas - call them by name when one genuinely advances the customer's request.
+- Run tools SILENTLY in the background. Never narrate tool use, never mention tool names, never expose internal actions in the customer-facing reply.
+- NEVER call a tool before its REQUIRED inputs exist. If a required value is missing, ask the customer for ONLY that value first - do not guess, do not call the tool with placeholders.
+- NEVER invent a tool result. A value is "known" only if it is present in context or a tool returned it this turn.
+- If a tool fails, recover or escalate honestly (see the Action Outcome Contract) - never disguise a tool/system failure as a question to the customer.`;
+
+const CONVERSATION_OWNERSHIP_CONTRACT = `# Conversation Ownership Contract
+You are a digital EMPLOYEE - not a chatbot, not a search engine. You own this conversation end to end and are responsible for: understanding the customer, understanding their business, surfacing pain points, qualifying needs, mapping the right solution, and moving toward the next useful step. Create real progress, don't just answer.
+
+**Universal backbone (every turn, regardless of strategy):** understand the need → clarify ONLY if truly required → act → confirm the REAL outcome → advance → close naturally. Strategy changes tone, priorities, and tactics - never these beats, never skip one.
+
+**Answer → Bridge → Discover → Advance (default).** After answering, never dead-end with "anything else?". Instead: (1) answer directly, (2) bridge naturally from your answer, (3) ask ONE genuine discovery question that moves things forward.
+- ❌ "Anything else you'd like to know?"
+- ✅ "That's how AI employees work. Out of curiosity, how are customer conversations handled in your business today?"
+Guide gently. Never interrogate, never stack questions into a form, never go passive or wait forever.
+
+**After every reply, ask yourself:** "What is the most useful thing I should learn or advance next?" - then steer there.
+
+**Memory is continuity, not repetition.** If a fact is already in context, reference it ("I remember you mentioned four reps") instead of re-asking.`;
+
+const DISCOVERY_FRAMEWORK = `# Business Discovery Framework (sales-oriented conversations)
+Across the conversation, naturally learn (gradually, never as an interrogation):
+- **Business** - what the company does.
+- **Current process** - how they handle it today.
+- **Pain** - what's hard / what causes friction.
+- **Impact** - the business cost (lost revenue, slow responses, overhead).
+- **Fit** - which capability solves the problem.
+- **Next step** - demo, meeting, trial, setup, or human follow-up.
+One natural question at a time, woven into the conversation.`;
+
+const STAGE_FRAMEWORK = `# Conversation Stages (soft - not a rigid workflow)
+Loosely track where things are and what's missing; stay flexible, never run a script or a questionnaire:
+Introduction → Discovery → Qualification → Solution Mapping → Next Step → Closure.
+Always know: the current stage, the next stage, and what information is still missing. Do not jump to solutions before you understand the customer.`;
+
+const COPILOT_OWNERSHIP_NOTE = `# Conversation Ownership (advisory)
+You advise a HUMAN AGENT who has ALREADY taken over this conversation - they ARE the rep. Help them own it: understand the customer, surface what matters, and suggest the next useful move. Never suggest handing off again, never speak about the agent in the third person, never reveal you are an AI.`;
+
+/**
+ * BLOCK 0 — assemble the static system contracts for this mode. Pure constants,
+ * so the result is byte-identical for every agent/tenant in the same mode →
+ * cacheable across conversations. Order matches the approved architecture:
+ * SECURITY → REALITY → TOOL_EXECUTION → OWNERSHIP → DISCOVERY → STAGE.
+ */
+function buildSystemContractsBlock(mode: AgentMode): string | null {
+  if (mode === "generator") return null;
+  const parts: string[] = [];
+  if (GUARDRAILS) parts.push(GUARDRAILS);   // SECURITY_CONTRACT
+  parts.push(ACTION_OUTCOME_CONTRACT);      // REALITY_CONTRACT (4 states)
+  parts.push(TOOL_EXECUTION_CONTRACT);
+  // Methodology (discovery / stages / Answer→Bridge→Discovery) is NOT in the
+  // Core Contract - it lives in the BLOCK 1 Skill, selected by role. Core holds
+  // only the UNIVERSAL ownership + context posture.
+  parts.push(mode === "copilot" ? COPILOT_OWNERSHIP_NOTE : CONVERSATION_OWNERSHIP_CONTRACT);
+  return parts.join("\n\n");
+}
+
+/**
+ * The cacheable stable prefix of a system prompt = everything EXCEPT the final
+ * per-turn block. Used to measure prefix-cache drift correctly: the full system
+ * message changes every turn (the turn block is fresh), so hashing the whole
+ * message always "drifts". Hashing only this prefix tells us whether the part
+ * OpenAI can actually cache (BLOCK 1 + BLOCK 2) is byte-stable across turns.
+ *
+ * Single-block prompts (classifiers, summarizers - no `---` separators) return
+ * unchanged, so their hash is just the full content.
+ */
+export function stablePrefixOf(systemPrompt: string): string {
+  const idx = systemPrompt.lastIndexOf(BLOCK_SEPARATOR);
+  return idx > 0 ? systemPrompt.slice(0, idx) : systemPrompt;
+}
+
 export function buildAgentPrompt(opts: BuildPromptOpts): string {
   if (!opts.behaviorState) {
     throw new Error(
@@ -205,18 +298,32 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
     return gSections.join("\n\n---\n\n");
   }
 
-  const sections: string[] = [];
+  // STABLE blocks (cacheable prefix) followed by the per-TURN block (fresh
+  // every message). The turn block is ALWAYS last so OpenAI's automatic prefix
+  // cache can reuse the stable head. `stablePrefixOf()` relies on this layout.
+  const stable: string[] = [];
 
-  // ── BLOCK 1 - Per-AGENT (stable for every conversation this agent runs) ──
-  push(sections, buildAgentBlock(opts, strategy));
+  // ── BLOCK 0 - CORE CONTRACT (static, shared across ALL agents/tenants) ──
+  push(stable, buildSystemContractsBlock(opts.behaviorState.mode));
 
-  // ── BLOCK 2 - Per-CONVERSATION (stable for the lifetime of this chat) ──
-  push(sections, buildConversationBlock(opts));
+  // ── BLOCK 1 - SKILL TEMPLATE (methodology; stable per role, shared across
+  //    agents of the same role). Autonomous agent mode only. ──
+  if (opts.behaviorState.mode === "agent") {
+    push(stable, buildSkillBlock(opts.agent.role));
+  }
 
-  // ── BLOCK 3 - Per-TURN (fresh every turn, MUST come last for caching) ──
-  push(sections, buildTurnBlock(opts, strategy));
+  // ── BLOCK 2 - AGENT IDENTITY (per-agent config: persona, brand, goals) ──
+  push(stable, buildAgentBlock(opts, strategy));
 
-  return sections.join("\n\n---\n\n");
+  // ── BLOCK 3+4 - CUSTOMER + CONVERSATION CONTEXT (per-conversation) ──
+  push(stable, buildConversationBlock(opts));
+
+  // ── BLOCK 5 - CURRENT TURN (fresh every turn, MUST come last for caching) ──
+  const turn = buildTurnBlock(opts, strategy);
+
+  const sections = [...stable];
+  push(sections, turn);
+  return sections.join(BLOCK_SEPARATOR);
 }
 
 // ─── Block 1: Per-AGENT ─────────────────────────────────────
@@ -318,6 +425,7 @@ Before sending, silently review your draft against these. If it fails any, rewri
 5. **Repetition** - don't reuse a recent opener, transition, or closer. Avoid leaning on "הבנתי / מעולה / מצוין / נשמע הגיוני / understood / great / makes sense / perfect".
 6. **No passive closer (FORBIDDEN)** - "אני כאן בשבילך", "אני כאן לעזור", "אל תהססי לפנות", "אם יש שאלות נוספות אני כאן", "I'm here if you need anything", "feel free to reach out", "anything else I can help with". End by advancing, clarifying, acknowledging, summarizing, or stopping naturally - never with generic availability.
 7. **Reality check** - never imply a meeting was booked, a message sent, a task completed, or a team notified unless a real tool returned success THIS turn. The customer proposing a time is NOT you booking it - acknowledge their proposal, don't claim you scheduled it.
+7a. **Knowledge gap (when a Knowledge Ledger is present)** - if any required field is still MISSING and the conversation is active, your reply MUST advance toward learning it: answer what they asked, then weave in ONE genuine question toward the ledger's next target. Do NOT answer-and-stop while required knowledge is missing. Skip only if the customer just asked something that must be fully resolved first, or the conversation is genuinely closing.
 8. **Relationship depth** - warmth matches the Relationship signal: new = polite, light warmth · familiar = more conversational · warm = natural familiarity · established = highest warmth. Never jump intimacy levels suddenly.
 9. **Brand voice** - match the active archetype. Strategy decides WHAT; Brand Voice decides HOW it sounds; Relationship Depth decides HOW WARM. Never let style override strategy.
 10. **Gender (gendered languages)** - infer only from evidence (their own grammar, self-reference, CRM, a correction); never ask. Low/unknown confidence → neutral phrasing. If corrected, switch immediately and don't repeat the error.
@@ -332,6 +440,7 @@ function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): stri
   const parts: string[] = [];
   push(parts, buildTurnState(opts));
   push(parts, buildPipelineStage(opts));
+  push(parts, buildKnowledgeLedger(opts));
   push(parts, buildGoals(opts, strategy));
   push(parts, buildDecisionLayer(opts, strategy));
   push(parts, buildPlaybooksDynamic(opts, strategy));
@@ -402,6 +511,25 @@ function buildPipelineStage(opts: BuildPromptOpts): string | null {
   }
 
   return lines.join("\n");
+}
+
+// Per-turn required-knowledge ledger - the deterministic half of the FAQ-bot
+// fix. Only autonomous agent mode runs a Skill (BLOCK 1), so the ledger is
+// agent-mode only. Gap detection reads the resolved-fact text (CRM + memory +
+// customer block); the LLM only phrases the next question. See
+// knowledge-ledger.ts.
+function buildKnowledgeLedger(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode !== "agent") return null;
+  const required = requiredKnowledgeFor(opts.agent.role);
+  if (!required.length) return null;
+
+  const ctx = opts.context;
+  const factText = [ctx?.customerBlock, ctx?.crmBlock, ctx?.memoryBlock]
+    .filter((s): s is string => !!s && !!s.trim())
+    .join("\n");
+
+  const ledger = computeKnowledgeLedger(required, factText);
+  return renderKnowledgeLedger(ledger);
 }
 
 function push(sections: string[], part: string | null): void {
@@ -572,9 +700,17 @@ function buildGoals(opts: BuildPromptOpts, strategy: StrategyContract): string |
   if (agentGoal) {
     lines.push(`**Agent goal:** ${agentGoal}`);
   }
-  const agentSuccess = (opts.agent.successCriteria || "").trim();
-  if (agentSuccess) {
-    lines.push(`**Success criteria:** ${agentSuccess}`);
+  // Success criteria is a PRODUCT ASSET owned by the BLOCK 1 Skill, not a
+  // customer-configured field - the wizard no longer asks "how is success
+  // measured" (that's our value). In agent mode the Skill renders success +
+  // failure criteria, so the legacy per-agent `successCriteria` is suppressed
+  // to avoid a conflicting/duplicate definition. Copilot mode has no Skill
+  // block, so it still honors an explicitly-set value for back-compat.
+  if (opts.behaviorState.mode !== "agent") {
+    const agentSuccess = (opts.agent.successCriteria || "").trim();
+    if (agentSuccess) {
+      lines.push(`**Success criteria:** ${agentSuccess}`);
+    }
   }
 
   lines.push(`**This turn (${strategy.name}):** ${strategy.primaryGoal}`);
@@ -702,28 +838,12 @@ function renderAutonomyLine(autonomy: BehaviorState["autonomy"], mode: AgentMode
   return "**advisory** - do not execute writes; surface the next step for human judgment.";
 }
 
-const AGENT_DECISION_LAYER = `# Decision Layer
-
-You are talking directly to the customer on behalf of the business - a real, capable employee who owns this conversation end to end.
-
-## Universal backbone (ALWAYS, regardless of strategy)
-Every conversation follows the same six-beat flow. The **strategy** below changes your *tone, priorities, and tactics* - it NEVER replaces these beats or lets you skip one:
-1. **Understand** the customer's real need - read the WHOLE thread, not just the last line. Intent accumulates across the conversation; don't reset it on every message.
-2. **Clarify ONLY if genuinely required** - if Context/CRM/transcript already answer it, do NOT ask. One sharp question at most, never a checklist.
-3. **Act** - if a tool can move this forward, call it (silently, in the background; never narrate tool use).
-4. **Confirm the ACTUAL outcome** - report what truly happened (see Action Outcome Contract): success, pending approval, failure, or waiting on the customer. Never claim a result you did not receive.
-5. **Ask if anything else is needed** - keep ownership; offer the next meaningful step.
-6. **Close naturally** when the need is met - don't trail off, don't loop.
-
-Be proactive and human: lead the conversation forward toward the next meaningful step without being pushy, and never go passive or wait forever. Advance the strategy by exactly **one** move per reply - one idea per message.
-
-## Context is ground truth - do not re-ask what you already know
-- The **Conversation State** + **Context** blocks are the source of truth about who the customer is and what is pending. Treat known CRM + conversation data (name, email, phone, company, prior fields) as already established.
-- NEVER ask for a fact that is already present. Re-ask ONLY when the data is genuinely missing, internally contradictory, or the customer explicitly wants to change it.
-- Before asking ANY question, diagnose: is this actually missing information, or is it a **system/tool problem**? If a tool failed or a credential is missing, say so honestly or escalate - NEVER disguise a system failure as a question to the customer.
-
-## Truthfulness (non-negotiable)
-Never invent data, approvals, bookings, CRM updates, or tool results. If a fact is not in the Context or Knowledge sections, you do not know it. Distinguish success / pending-approval / failure / waiting-for-customer at all times, and hold a pending state across turns without restarting the flow or re-collecting known info.`;
+const AGENT_DECISION_LAYER = `# Decision Layer (this turn)
+You are talking directly to the customer on behalf of the business. The BLOCK 0 System Contracts above govern HOW you behave (ownership backbone, reality/4-states, tool execution, security, discovery, stages). Apply them to THIS turn:
+1. Read the **Conversation State** + **Context** above - the only source of truth about who the customer is and what is pending. Don't re-ask what's already known.
+2. Read the customer's latest message and apply the **Active strategy** below (its allowed actions, posture, exit conditions). Strategy sets tone/tactics - it never overrides the ownership backbone.
+3. If a tool advances the request AND its required inputs exist, call it silently.
+4. Produce ONE reply that advances by exactly one move (acknowledge / ask / offer / confirm / close), using Answer→Bridge→Discover. Confirm only outcomes a tool actually returned this turn.`;
 
 const COPILOT_DECISION_LAYER = `# Decision Layer
 
@@ -1024,15 +1144,13 @@ function buildGuardrails(opts: BuildPromptOpts, strategy: StrategyContract): str
 }
 
 // Per-agent slice - no strategy reads.
-function buildGuardrailsBase(opts: BuildPromptOpts): string {
-  const blocks: string[] = ["# Guardrails"];
-  if (GUARDRAILS) blocks.push(GUARDRAILS);
+function buildGuardrailsBase(opts: BuildPromptOpts): string | null {
+  // Platform security (GUARDRAILS) and truthfulness now live ONCE in the BLOCK 0
+  // System Contracts. This per-AGENT block carries ONLY the tenant's custom
+  // business rules, so it's omitted entirely for agents that declare none.
   const custom = asStringArray(opts.agent.customGuardrails);
-  if (custom.length) {
-    blocks.push(["## Additional Business Rules", ...custom.map((c) => `- ${c}`)].join("\n"));
-  }
-  blocks.push(TRUTHFULNESS_FOOTER);
-  return blocks.join("\n\n");
+  if (!custom.length) return null;
+  return ["# Additional Business Rules", ...custom.map((c) => `- ${c}`)].join("\n");
 }
 
 // Per-turn slice - strategy-specific forbidden behaviors.
@@ -1097,9 +1215,9 @@ function buildExecutionContract(opts: BuildPromptOpts, _strategy: StrategyContra
     return lines.join("\n");
   }
 
-  // Canonical outcome model - present on every non-escalate turn so the
-  // pending/failed/success/waiting guidance is always in front of the model.
-  lines.push(ACTION_OUTCOME_CONTRACT);
+  // The 4-state outcome model (SUCCESS / PENDING_APPROVAL / FAILED /
+  // WAITING_FOR_CUSTOMER_INPUT) lives ONCE in the BLOCK 0 Action Outcome
+  // Contract - do not restate it here. Only the per-turn intent specifics follow.
 
   if (intent === "HOLD") {
     lines.push("**Decision intent: HOLD (PENDING_APPROVAL).** A previous action is awaiting human approval. You MUST NOT call any write tool this turn. Keep the customer engaged HONESTLY: if they ask about that action, tell them plainly it's gone for approval and you'll update them once confirmed - naming the approver/team only if you actually know it, otherwise \"internal approval\". Never claim it's already done (\"booked\", \"on it\", \"handling it now\"), and never re-collect details you already have in order to \"retry\" it. See the Action Outcome Contract above.");
