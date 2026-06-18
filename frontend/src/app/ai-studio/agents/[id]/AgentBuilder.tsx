@@ -609,9 +609,10 @@ function DraftPreview({ draft, missing, L }: { draft: BuilderDraftSnapshot; miss
         </Row>
       )}
 
-      <Row label={L("Success", "הצלחה")} done={!!draft.successCriteria}>
-        {draft.successCriteria ? <span className="text-gray-600">{draft.successCriteria}</span> : <Dim>{L("optional", "רשות")}</Dim>}
-      </Row>
+      {/* Success criteria is a PRODUCT ASSET owned by the role's Skill, not a
+          customer-configured field. The wizard no longer asks "how is success
+          measured" - that's our value, defined per Skill (see services/ai
+          skills.ts). Row intentionally removed. */}
 
       <Row label={L("Escalation", "הסלמה")} done={draft.escalationRules.length > 0}>
         {draft.escalationRules.length
