@@ -50,6 +50,7 @@ import {
   renderMemoryBlock,
 } from "./conversation-memory.service";
 import { loadFunnelForTenant } from "./funnel-config.repo";
+import { missingContractInputs } from "./tool-contracts";
 import { makeScheduleMeetingHandler } from "./schedule-handler.service";
 import { listCustomApiTools, executeCustomApiTool } from "./connectors/custom-api.service";
 import { executeAdapterTool, listAdapters } from "./connectors/integration-framework";
@@ -316,6 +317,31 @@ function actionCategoriesForTool(toolName: string): ActionCategory[] {
  *     `close_conversation` is, because it is the unambiguous "done"
  *     signal across tenants.
  */
+/**
+ * Required-input gate: returns the tool's schema-`required` fields that are
+ * MISSING from the model's call. OpenAI does NOT enforce `required`, so a tool
+ * can be called with a half-formed argument set (e.g. refund_order with no
+ * order_id). This is the structural backstop behind the BLOCK 0 Tool Execution
+ * Contract: a write never fires until its genuinely-required inputs exist.
+ *
+ * Uses each tool's own JSON-schema `required` array - so tools that are designed
+ * to be callable with minimal args (e.g. schedule_meeting, which lets the server
+ * propose slots) are intentionally NOT over-constrained here.
+ */
+export function missingRequiredArgs(
+  toolName: string,
+  args: Record<string, unknown>,
+  tools: any[],
+): string[] {
+  const tool = (tools || []).find((t) => t?.function?.name === toolName);
+  const required = tool?.function?.parameters?.required;
+  if (!Array.isArray(required) || required.length === 0) return [];
+  return required.filter((k: string) => {
+    const v = (args as any)?.[k];
+    return v === undefined || v === null || (typeof v === "string" && v.trim() === "");
+  });
+}
+
 function checkExitCriteriaGate(
   toolName: string,
   stageContext: StageContextForPrompt | undefined,
@@ -1354,6 +1380,41 @@ async function generateAIBotReplyInner(
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
         try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+
+        // Required-input gate - structurally refuse to execute a tool before its
+        // schema-required inputs exist (OpenAI does not enforce `required`). The
+        // model gets a tool result telling it to collect the missing values
+        // first, so a half-formed write never fires. See BLOCK 0 Tool Execution.
+        // Two sources of required inputs, unioned: (1) the tool's own JSON
+        // schema `required` (covers well-formed core tools), and (2) the Tool
+        // Contract registry (defense-in-depth for integration/catalog tools
+        // whose per-tenant schemas we don't control - see tool-contracts.ts).
+        const schemaMissing = missingRequiredArgs(toolName, toolArgs, tools as any[]);
+        const contractGateInputs = missingContractInputs(toolName, toolArgs);
+        const missingInputs = Array.from(
+          new Set([...schemaMissing, ...contractGateInputs.missing]),
+        );
+        if (missingInputs.length > 0) {
+          const collect =
+            contractGateInputs.strategy === "ask_all" || missingInputs.length === 1
+              ? `Ask the customer for the missing values (${missingInputs.join(", ")})`
+              : `Ask the customer for ONE missing value at a time (start with: ${missingInputs[0]})`;
+          const gateContent = JSON.stringify({
+            ok: false,
+            error: "missing_required_inputs",
+            missing_inputs: missingInputs,
+            instruction: `Do NOT call ${toolName} yet. ${collect}, then call it once you have them.`,
+          });
+          toolCallLog.push({
+            tool: toolName,
+            args: toolArgs,
+            result: gateContent,
+            decision: "missing_required_inputs",
+            sideEffect: "missing_required_inputs",
+          });
+          chatMessages.push({ role: "tool", tool_call_id: tc.id, content: gateContent });
+          continue;
+        }
 
         // Exit-criteria gate - refuse to close the conversation until
         // the resolved funnel stage's `mustHaveFields` have evidence.

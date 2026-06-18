@@ -80,6 +80,14 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   // need a human nod. Tune per tenant via TenantToolPermission, or widen the
   // condition (e.g. contains(args.meeting_type, 'enterprise')).
   schedule_meeting:            { mode: "on_condition", condition: "args.duration_minutes > 60" },
+  // Financial actions - approval is MANDATORY per CLAUDE.md §9 (refunds,
+  // discounts). Floored to `always`; do NOT relax to a threshold that would
+  // auto-execute small amounts. Tenants may only tighten, never loosen, via
+  // TenantToolPermission. The on_condition pattern (see schedule_meeting) is
+  // reserved for REVERSIBLE actions only.
+  issue_refund:                { mode: "always" },
+  refund:                      { mode: "always" },
+  apply_discount:              { mode: "always" },
   merge_contacts:              { mode: "always" },
   update_contact:              { mode: "always" },
   update_crm:                  { mode: "always" },
