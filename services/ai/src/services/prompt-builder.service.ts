@@ -62,6 +62,7 @@ import {
   renderLeadIdentityLedger,
 } from "./objectives";
 import { buildBookingCapabilityBlock } from "./booking-guard.service";
+import { buildToolRulesBlock } from "./tool-rules";
 import {
   CONVERSATION_PLAYBOOKS,
   type PlaybookId,
@@ -399,6 +400,12 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
   // so up front. The runtime booking fail-safe enforces it regardless of prompt.
   if (opts.behaviorState.mode === "agent" && opts.calendarBookable === false) {
     push(parts, buildBookingCapabilityBlock(false));
+  }
+  // Capability-conditional Tool Rules - auto-loaded by live capability. For a
+  // BOOKABLE agent this injects the hard "never claim/agree/say-you'll-check a
+  // time until schedule_meeting confirms it this turn" rule (the omer fix).
+  if (opts.behaviorState.mode === "agent") {
+    push(parts, buildToolRulesBlock({ calendarBookable: opts.calendarBookable }));
   }
   push(parts, buildGuardrailsBase(opts));
   if (parts.length === 0) return null;

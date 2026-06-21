@@ -213,7 +213,7 @@ function objectiveComplete(
 // PROMOTES booking when identity is ALSO captured, so a false positive can't
 // skip lead capture.
 const MEETING_INTENT_RE =
-  /\b(meeting|meet|call|demo|zoom|schedule|booking|book a|appointment|availability|calendar)\b|פגיש|להיפגש|לתאם|זימון|יומן|דמו|(מתי).{0,12}(פנוי|אפשר|נוכל|מתאים)|פנוי\b/i;
+  /\b(meeting|meet|call|demo|zoom|schedule|set\s*up\s+a|booking|book a|appointment|availability|calendar)\b|פגיש|להיפגש|לתאם|לקבוע|נקבע|נדבר|זימון|יומן|דמו|(מתי).{0,12}(פנוי|אפשר|נוכל|מתאים)|פנוי\b/i;
 
 function customerRequestedMeeting(factText: string): boolean {
   return MEETING_INTENT_RE.test(factText);
@@ -221,6 +221,14 @@ function customerRequestedMeeting(factText: string): boolean {
 
 // Lead identity = a name AND a way to reach them. Reuses the ledger matcher so
 // it reads the same fact text everything else does.
+// Value patterns so identity is detected from real VALUES, not just the English
+// hint words. A Hebrew chat (or a verbatim email/phone) never contains the token
+// "email"/"phone", which wrongly read as "no way to reach them" and blocked the
+// BOOK_MEETING promotion (observed: omer gave an email + had a WhatsApp number,
+// yet the agent kept qualifying and never offered to book).
+const CONTACT_EMAIL_RE = /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/;
+const CONTACT_PHONE_RE = /\+?\d[\d\s().-]{6,}\d/;
+
 function leadIdentityReady(factText: string): boolean {
   const ledger = computeKnowledgeLedger(
     [
@@ -229,7 +237,10 @@ function leadIdentityReady(factText: string): boolean {
     ],
     factText,
   );
-  return !ledger.hasMissingRequired;
+  const known = (k: string) => ledger.entries.find((e) => e.key === k)?.known ?? false;
+  // Contact is ready when the hint word OR a real email/phone VALUE is present.
+  const hasContact = known("contact") || CONTACT_EMAIL_RE.test(factText) || CONTACT_PHONE_RE.test(factText);
+  return known("name") && hasContact;
 }
 
 /**

@@ -789,10 +789,79 @@ export async function generateAIBotReply(opts: {
  * Fail-soft: any error returns undefined (the ledger just falls back to the
  * CRM/memory snapshots, i.e. prior behavior).
  */
+/**
+ * Per-turn, language-aware resolution of the role's required-knowledge fields.
+ *
+ * Why this exists: the Knowledge Ledger + Objective Engine decide a field is
+ * "known" by matching its English key/sourceHints (e.g. `business_type`,
+ * `industry`) as substrings of the resolved-fact text. For a brand-new prospect
+ * the structured/persisted layer is empty, so matching falls back to the
+ * VERBATIM transcript — which is in the customer's language. A Hebrew answer
+ * ("פלטפורמה לניהול מלאי") never contains the English token `business_type`, so
+ * the field stayed permanently "missing" and the objective froze in GENERATE_LEAD
+ * (observed live with omer: never reached BOOK_MEETING, looped, lost context).
+ *
+ * This reads the customer's messages in ANY language and returns the fields they
+ * have actually provided, KEYED — emitted into the fact block so the ledger
+ * matches on the literal key regardless of phrasing/language. Cheap model, JSON
+ * output, fail-soft (any error → empty, i.e. prior behavior).
+ */
+async function resolveSessionKnowledge(opts: {
+  tenantId: string;
+  conversationId: string;
+  fields: Array<{ key: string; label: string }>;
+  inboundTexts: string[];
+  signal?: AbortSignal;
+}): Promise<Array<{ key: string; value: string }>> {
+  if (!opts.fields.length || !opts.inboundTexts.length) return [];
+  const fieldList = opts.fields.map((f) => `- ${f.key}: ${f.label}`).join("\n");
+  const transcript = opts.inboundTexts.map((t) => `- "${t}"`).join("\n");
+  try {
+    const resp = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: `${opts.conversationId}:knowledge-resolve`,
+      model: "gpt-4o-mini",
+      temperature: 0,
+      maxTokens: 400,
+      responseFormat: { type: "json_object" },
+      signal: opts.signal,
+      metadata: { type: "ai_bot_knowledge_resolve", conversationId: opts.conversationId },
+      messages: [
+        {
+          role: "system",
+          content:
+            "You read a customer's messages (in ANY language) and decide which of the listed facts they have ALREADY provided a concrete value for. " +
+            'Return JSON exactly: {"facts":[{"key":"<one of the given field keys>","value":"<short English summary of what they said>"}]}. ' +
+            "Include a field ONLY if the customer stated a real value for it — NOT if they merely asked about it, declined, or it is still unknown. " +
+            "Use the EXACT field keys given; omit every field not yet provided. If none are provided, return {\"facts\":[]}.",
+        },
+        { role: "user", content: `Fields to look for:\n${fieldList}\n\nCustomer messages:\n${transcript}` },
+      ],
+    });
+    const parsed = JSON.parse(resp.content || "{}");
+    const validKeys = new Set(opts.fields.map((f) => f.key));
+    const out: Array<{ key: string; value: string }> = [];
+    const facts = Array.isArray(parsed?.facts) ? parsed.facts : [];
+    for (const f of facts) {
+      if (f && typeof f.key === "string" && validKeys.has(f.key) && f.value != null && String(f.value).trim()) {
+        out.push({ key: f.key, value: String(f.value).trim().slice(0, 120) });
+      }
+    }
+    return out;
+  } catch (err: any) {
+    if (isAbortError(err)) throw err;
+    console.warn("[ai-bot] knowledge-resolve failed (fail-soft):", err?.message);
+    return [];
+  }
+}
+
 async function buildSessionFactsBlock(opts: {
   tenantId: string;
   conversationId: string;
   messages: Array<{ direction?: string; body?: string | null }>;
+  /** Role's required-knowledge fields, for per-turn language-aware resolution. */
+  knowledgeFields?: Array<{ key: string; label: string }>;
+  signal?: AbortSignal;
 }): Promise<string | undefined> {
   const parts: string[] = [];
 
@@ -822,15 +891,34 @@ async function buildSessionFactsBlock(opts: {
   }
 
   // (2) Verbatim recent customer utterances (immediate, this session).
-  const inbound = opts.messages
+  const inboundMsgs = opts.messages
     .filter((m) => m.direction === "INBOUND" && !!m.body && !!m.body.trim())
-    .slice(-10)
-    .map((m) => `- "${(m.body as string).trim().slice(0, 200)}"`);
-  if (inbound.length) {
+    .slice(-12)
+    .map((m) => (m.body as string).trim().slice(0, 200));
+  if (inboundMsgs.length) {
     parts.push(
       "## What the customer said this conversation (verbatim — treat as known facts)\n" +
-        inbound.join("\n"),
+        inboundMsgs.map((t) => `- "${t}"`).join("\n"),
     );
+  }
+
+  // (3) Language-aware KEYED resolution of the role's required-knowledge fields.
+  // Makes a Hebrew/any-language answer satisfy the (English-keyed) Knowledge
+  // Ledger + Objective Engine so objectives actually progress. Fail-soft.
+  if (opts.knowledgeFields?.length && inboundMsgs.length) {
+    const resolved = await resolveSessionKnowledge({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      fields: opts.knowledgeFields,
+      inboundTexts: inboundMsgs,
+      signal: opts.signal,
+    });
+    if (resolved.length) {
+      parts.push(
+        "## Facts established this conversation (keyed — treat as known, do NOT re-ask)\n" +
+          resolved.map((f) => `- ${f.key}: ${f.value}`).join("\n"),
+      );
+    }
   }
 
   return parts.length ? parts.join("\n\n") : undefined;
@@ -1069,6 +1157,8 @@ async function generateAIBotReplyInner(
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     messages,
+    knowledgeFields: requiredKnowledgeFor(config.role),
+    signal,
   });
 
   // ── Build system prompt ────────────────────────────────
