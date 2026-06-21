@@ -37,6 +37,46 @@ export interface ScheduleHandlerOpts {
   aiAgentId: string;
 }
 
+/**
+ * Map a meeting_type the model invented (from the customer's wording, e.g.
+ * "demo", "intro call", "דמו") to the most appropriate CONFIGURED meeting type.
+ * Returns null only when there's no reasonable match AND more than one type
+ * exists (so the model is asked to pick explicitly).
+ *
+ * Strategy, most→least confident:
+ *   1. exactly one configured type  → use it (it's the only thing bookable);
+ *   2. case-insensitive exact slug/name match;
+ *   3. substring overlap either direction (slug/name ⊂ requested or vice-versa);
+ *   4. an intro/discovery/demo synonym in the request → a configured type whose
+ *      slug/name reads as an intro/discovery/demo/consult call.
+ */
+export function snapMeetingType(
+  requested: string | undefined,
+  rows: Array<{ slug: string; name: string; durationMinutes: number }>,
+): { slug: string; name: string; durationMinutes: number } | null {
+  if (!rows.length) return null;
+  if (rows.length === 1) return rows[0];
+  const q = String(requested ?? "").toLowerCase().trim();
+  if (!q) return null;
+  const norm = (s: string) => s.toLowerCase().trim();
+
+  let m = rows.find((r) => norm(r.slug) === q || norm(r.name) === q);
+  if (m) return m;
+
+  m = rows.find(
+    (r) => q.includes(norm(r.slug)) || norm(r.slug).includes(q) || q.includes(norm(r.name)),
+  );
+  if (m) return m;
+
+  const INTRO_REQUEST = /(demo|intro|discovery|kickoff|call|meeting|chat|consult|sync|דמו|היכרות|הכרות|שיחה|פגיש|ייעוץ)/i;
+  const INTRO_TYPE = /(demo|intro|discovery|kickoff|call|consult|sync|דמו|היכרות|הכרות|שיחה|ייעוץ)/i;
+  if (INTRO_REQUEST.test(q)) {
+    m = rows.find((r) => INTRO_TYPE.test(`${r.slug} ${r.name}`));
+    if (m) return m;
+  }
+  return null;
+}
+
 export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
   return async function scheduleMeeting(args: ScheduleMeetingArgs): Promise<ScheduleMeetingResult> {
     const t0 = Date.now();
@@ -47,11 +87,32 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
     );
 
     // 1) Load the meeting type - drives policy + duration sanity check.
-    const mt = await (prisma as any).meetingType.findUnique({
+    let mt = await (prisma as any).meetingType.findUnique({
       where: { tenantId_slug: { tenantId: opts.tenantId, slug: args.meeting_type } } as any,
     });
     if (!mt || !mt.isActive) {
-      // Hydrate the valid set so the model can recover instead of giving up.
+      // Hydrate the valid set. The model often invents a slug from the
+      // customer's wording (observed live: "demo" when the only configured type
+      // is `discovery_call`), then re-asks or gives up. Rather than reject, SNAP
+      // to the most appropriate configured type so the booking proceeds.
+      const validRows: Array<{ slug: string; name: string; durationMinutes: number }> =
+        await (prisma as any).meetingType.findMany({
+          where: { tenantId: opts.tenantId, isActive: true },
+          select: { slug: true, name: true, durationMinutes: true },
+        });
+      const snapped = snapMeetingType(args.meeting_type, validRows);
+      if (snapped) {
+        console.warn(
+          `[schedule_handler] meeting_type "${args.meeting_type}" not found → snapped to "${snapped.slug}" (${snapped.name})`,
+        );
+        mt = await (prisma as any).meetingType.findUnique({
+          where: { tenantId_slug: { tenantId: opts.tenantId, slug: snapped.slug } } as any,
+        });
+      }
+    }
+    if (!mt || !mt.isActive) {
+      // Still no usable type (no configured types, or genuinely ambiguous among
+      // several) — surface the valid set so the model can pick explicitly.
       const validRows: Array<{ slug: string; name: string; durationMinutes: number }> =
         await (prisma as any).meetingType.findMany({
           where: { tenantId: opts.tenantId, isActive: true },

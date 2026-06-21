@@ -493,8 +493,11 @@ export const SCHEDULE_MEETING_TOOL = {
         meeting_type: {
           type: "string",
           description:
-            "Tenant-defined meeting type slug (e.g. 'discovery_call', 'demo', 'consultation'). " +
-            "Each type has its own working hours / buffer policy.",
+            "Slug of one of the business's CONFIGURED meeting types. Do NOT invent a value from the " +
+            "customer's wording: if they say 'demo'/'call'/'meeting'/'intro' and that is not an exact " +
+            "configured slug, pass the CLOSEST configured type (e.g. their request for a 'demo' → a " +
+            "'discovery_call' type). The server snaps to the nearest configured type and, if there is " +
+            "only one, uses it. Each type has its own working hours / buffer policy.",
         },
         requested_at_iso: {
           type: "string",
