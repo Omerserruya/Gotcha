@@ -214,6 +214,38 @@ function restoreToolCallNames(
     return orig ? { ...tc, function: { ...tc.function, name: orig } } : tc;
   });
 }
+// Same constraint, history side. After a tool round, callers echo the prior
+// assistant message back to us with its `tool_calls` carrying the RESTORED
+// dotted name (e.g. "google_calendar.check_availability") - because dispatch
+// routing needs the dotted form. But that name now rides in `messages[].
+// tool_calls[].function.name`, which OpenAI validates against the SAME
+// ^[a-zA-Z0-9_-]+$ pattern as the tools array. An un-sanitized dotted name
+// here 400s the follow-up completion ("not retryable") - the tool ran, but the
+// bot can never turn the result into a reply, so the turn dies silently. Mirror
+// the tools-array sanitization on the outgoing messages. tool_call_id (not the
+// name) is what links assistant tool_calls to their tool results, so renaming
+// is protocol-safe. Idempotent: already-"__" names are unchanged, preserving
+// prefix-cache byte stability.
+function sanitizeMessagesForOpenAI(messages: any[]): any[] {
+  let changed = false;
+  const out = messages.map((m) => {
+    const toolCalls = m?.tool_calls;
+    if (!Array.isArray(toolCalls) || toolCalls.length === 0) return m;
+    let msgChanged = false;
+    const safeCalls = toolCalls.map((tc: any) => {
+      const name = tc?.function?.name;
+      if (typeof name !== "string") return tc;
+      const safe = sanitizeToolName(name);
+      if (safe === name) return tc;
+      msgChanged = true;
+      return { ...tc, function: { ...tc.function, name: safe } };
+    });
+    if (!msgChanged) return m;
+    changed = true;
+    return { ...m, tool_calls: safeCalls };
+  });
+  return changed ? out : messages;
+}
 
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
@@ -222,7 +254,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
 
   const requestParams: OpenAI.ChatCompletionCreateParamsNonStreaming = {
     model,
-    messages: params.messages,
+    messages: sanitizeMessagesForOpenAI(params.messages),
     temperature: params.temperature ?? 0.7,
     max_tokens: params.maxTokens ?? 1024,
   };
@@ -408,7 +440,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
 
   const requestParams: OpenAI.ChatCompletionCreateParamsStreaming = {
     model,
-    messages: params.messages,
+    messages: sanitizeMessagesForOpenAI(params.messages),
     temperature: params.temperature ?? 0.7,
     max_tokens: params.maxTokens ?? 1024,
     stream: true,

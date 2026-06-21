@@ -13,7 +13,13 @@
  * Spec rule #3: KB retrieval is gated ONLY by `shouldRetrieveKB(state, ...)`.
  */
 
-import { prisma, buildAgentToolsForAIAgent, dispatchToolCall } from "@chatcenter/shared";
+import {
+  prisma,
+  buildAgentToolsForAIAgent,
+  dispatchToolCall,
+  INTEGRATION_CREATE_LEAD_TOOL,
+  INTEGRATION_CREATE_CONTACT_TOOL,
+} from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
@@ -29,7 +35,10 @@ import {
   auditBudgetAbort,
 } from "./cost-budget.service";
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
-import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.service";
+import { prefetchCrmContext, renderCrmContextBlock, invalidateCrmPrefetch } from "./crm-prefetch.service";
+import { getCrmAdapter } from "./connectors/crm-adapter-resolver";
+import type { CrmVendor } from "./connectors/crm-adapter.types";
+import { resolveIdentity } from "./intelligence-ingest.service";
 import { resolveActiveStage } from "./intelligence/stage-resolver.service";
 import type { StageContextForPrompt } from "./intelligence/prompts/blocks/copilot-config-block";
 import {
@@ -51,7 +60,27 @@ import {
 } from "./conversation-memory.service";
 import { loadFunnelForTenant } from "./funnel-config.repo";
 import { missingContractInputs } from "./tool-contracts";
+import { computeProspectState } from "./prospect-state";
+import {
+  selectActiveObjective,
+  isPassiveCloser,
+  isNonAdvancingReply,
+  customerIsClosing,
+  buildCloserCorrective,
+} from "./objectives";
+import { roleToSkill, requiredKnowledgeFor } from "./skills";
+import { computeKnowledgeLedger } from "./knowledge-ledger";
 import { makeScheduleMeetingHandler } from "./schedule-handler.service";
+import { computeCalendarCapability, type CalendarCapabilityDetail } from "./calendar-capability.service";
+import { getCompanyContext, type CompanyContext } from "./company-context.service";
+import {
+  detectBookingCommitment,
+  detectBookingClaim,
+  buildBookingFailsafeCorrective,
+  buildFabricatedBookingCorrective,
+  detectRedundantInfoRequest,
+  buildRedundantInfoCorrective,
+} from "./booking-guard.service";
 import { listCustomApiTools, executeCustomApiTool } from "./connectors/custom-api.service";
 import { executeAdapterTool, listAdapters } from "./connectors/integration-framework";
 import {
@@ -154,6 +183,7 @@ function toAgentRecord(row: any): AgentRecord {
     toneConfig: row.toneConfig,
     behavioral: row.behavioral,
     persona: row.persona,
+    salesContext: row.salesContext,
     conversationFlow: row.conversationFlow,
     customGuardrails: row.customGuardrails,
     escalationRules: row.escalationRules,
@@ -631,22 +661,9 @@ function extractRecentEmail(messages: Array<{ direction: string; body: string | 
  * but having a transcript-anchored fallback means the bot doesn't re-ask
  * for the phone when it's already in the channel metadata.
  */
-/**
- * True iff the AI agent has at least one CONNECTED calendar (Google or
- * Calendly). Drives whether `schedule_meeting` is exposed in the tool
- * surface - surfacing it without a backend would let the model promise
- * meeting times it cannot actually book.
- */
-async function hasConnectedCalendarFor(tenantId: string, aiAgentId: string): Promise<boolean> {
-  try {
-    const count = await (prisma as any).calendarAccount.count({
-      where: { tenantId, aiAgentId, status: "CONNECTED" },
-    });
-    return count > 0;
-  } catch {
-    return false;
-  }
-}
+// Calendar booking capability is computed by computeCalendarCapability()
+// (calendar-capability.service.ts) — a single three-valued signal that gates
+// schedule_meeting surfacing, the prompt fail-safe, and the output validator.
 
 function pickKnownIdentifier(conv: any, kind: "email" | "phone"): string | undefined {
   if (kind === "phone") {
@@ -756,6 +773,69 @@ export async function generateAIBotReply(opts: {
   } finally {
     turn.end();
   }
+}
+
+/**
+ * Build the live-conversation fact block fed into the Knowledge Ledger +
+ * Objective Engine (via ContextSlot.sessionFactsBlock). Two layers:
+ *
+ *   1. Structured persisted facts (CustomerProfile.facts) — keyed, so the
+ *      ledger matches them language-independently (e.g. `business_type`). These
+ *      accumulate as the live extractor folds conversation facts into the V2
+ *      model, so a fact stated earlier in the conversation counts on later
+ *      turns regardless of phrasing/language.
+ *   2. Verbatim recent customer utterances — immediate, same-turn. Anything the
+ *      customer literally typed (emails, company names, channels, explicit
+ *      terms) becomes part of the resolved-fact text the SAME turn it's said.
+ *
+ * Fail-soft: any error returns undefined (the ledger just falls back to the
+ * CRM/memory snapshots, i.e. prior behavior).
+ */
+async function buildSessionFactsBlock(opts: {
+  tenantId: string;
+  conversationId: string;
+  messages: Array<{ direction?: string; body?: string | null }>;
+}): Promise<string | undefined> {
+  const parts: string[] = [];
+
+  // (1) Structured facts already extracted/persisted for this person.
+  try {
+    const identity = await resolveIdentity(opts.tenantId, opts.conversationId);
+    if (identity) {
+      const profile = await (prisma as any).customerProfile
+        .findUnique({
+          where: { tenantId_identityKey: { tenantId: opts.tenantId, identityKey: identity.identityKey } },
+          select: { facts: true },
+        })
+        .catch(() => null);
+      const facts = (profile?.facts ?? {}) as Record<string, { value?: unknown }>;
+      const lines = Object.entries(facts)
+        .filter(([, v]) => v && v.value != null && String(v.value).trim() !== "")
+        .map(([k, v]) => `- ${k}: ${String(v.value).slice(0, 120)}`);
+      if (lines.length) {
+        parts.push(
+          "## Facts already known about this customer (treat as established — do NOT re-ask)\n" +
+            lines.join("\n"),
+        );
+      }
+    }
+  } catch {
+    /* non-fatal — fall through to transcript layer */
+  }
+
+  // (2) Verbatim recent customer utterances (immediate, this session).
+  const inbound = opts.messages
+    .filter((m) => m.direction === "INBOUND" && !!m.body && !!m.body.trim())
+    .slice(-10)
+    .map((m) => `- "${(m.body as string).trim().slice(0, 200)}"`);
+  if (inbound.length) {
+    parts.push(
+      "## What the customer said this conversation (verbatim — treat as known facts)\n" +
+        inbound.join("\n"),
+    );
+  }
+
+  return parts.length ? parts.join("\n\n") : undefined;
 }
 
 async function generateAIBotReplyInner(
@@ -981,6 +1061,18 @@ async function generateAIBotReplyInner(
     locale: detectLocale(messages.map((m) => m.body || "")),
   });
 
+  // ── Live-conversation facts (Objective Engine fix) ──────────────
+  // The Knowledge Ledger + Objective Engine match against resolved-fact text.
+  // Before this, that text was ONLY the CRM/memory/customer snapshots, so a
+  // brand-new prospect who answered every question still read as knowing
+  // nothing → objectives stuck forever (real WhatsApp regression). Feed in what
+  // the customer ACTUALLY said this session so progression reflects reality.
+  const sessionFactsBlock = await buildSessionFactsBlock({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+    messages,
+  });
+
   // ── Build system prompt ────────────────────────────────
   const ctxSlot: ContextSlot = {
     customerBlock: renderCustomerInfoBlock(conversation),
@@ -989,12 +1081,24 @@ async function generateAIBotReplyInner(
     pendingApprovalsBlock: renderPendingApprovalsBlock(pendingApprovals),
     whatsappWindowBlock: followupFacts.whatsappWindowBlock,
     templatesBlock: followupFacts.templatesBlock,
+    sessionFactsBlock,
   };
 
   // ── Tool surface - single source of truth: state.allowedActions ──
   // Build it BEFORE the prompt so we can pass the actual function names
   // into the Execution Contract's capability whitelist.
-  const hasConnectedCalendar = await hasConnectedCalendarFor(opts.tenantId, config.id);
+  // Single calendar-capability signal (NO_CALENDAR / CALENDAR_CONNECTED /
+  // CALENDAR_CONNECTED_AND_BOOKABLE). schedule_meeting is surfaced ONLY when
+  // bookable; the same signal feeds the prompt fail-safe + output validator so
+  // a non-bookable agent can never agree to a time.
+  const calendarCapability: CalendarCapabilityDetail = await computeCalendarCapability(
+    opts.tenantId,
+    config.id,
+  );
+  const hasConnectedCalendar = calendarCapability.bookable;
+  // Company identity inherited from the tenant BusinessProfile - so the agent
+  // always knows who it works for and what the company does/sells.
+  const companyContext: CompanyContext | null = await getCompanyContext(opts.tenantId);
   const agentToolCtx: AgentToolContext = {
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
@@ -1039,6 +1143,37 @@ async function generateAIBotReplyInner(
       });
       if (r.ok) return { ok: true, result: r.output ?? r };
       return { ok: false, reason: r.skipReason || r.error || "create_task_failed" };
+    },
+    runCreateLead: async ({ kind, name, email, phone, company, notes }) => {
+      // Vendor-neutral create: resolve the tenant's source-of-truth CRM and let
+      // its adapter map fields. Works uniformly for HubSpot/Salesforce/Zoho/
+      // Airtable/Fireberry/Shopify; a tenant with no real CRM gets a stub
+      // adapter and a clean `no_crm_configured` the bot can pivot from.
+      try {
+        const adapter = await getCrmAdapter(opts.tenantId);
+        if (adapter.capabilities.is_stub) {
+          return { ok: false, reason: "no_crm_configured" };
+        }
+        const r = await adapter.createLead({
+          display_name: name,
+          email,
+          phone,
+          company,
+          source: "ai_bot",
+          custom: notes ? { notes } : undefined,
+        });
+        if (r.ok) {
+          // The new row changes what crm-prefetch returns next turn; drop the
+          // cache so the dedup strip sees the customer as existing and switches
+          // the bot to update/note tools.
+          try { invalidateCrmPrefetch(opts.tenantId, opts.conversationId); } catch { /* non-fatal */ }
+          return { ok: true, id: r.id, kind: r.kind, vendor: adapter.vendor };
+        }
+        return { ok: false, reason: r.reason || "create_lead_failed" };
+      } catch (err: any) {
+        console.warn("[ai-bot] runCreateLead failed:", err?.message);
+        return { ok: false, reason: err?.message || "create_lead_failed" };
+      }
     },
     runAdapterTool: async ({ toolFunctionName, args }) => {
       const result = await executeAdapterTool({
@@ -1234,6 +1369,39 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] adapter tool surface failed:", err?.message);
   }
 
+  // ── Unified semantic lead/contact creation ──
+  // Collapse every vendor's raw create path (adapter `<slug>.create_record` /
+  // `create_lead` / `create_contact` / `create_item`, and the auto-surfaced
+  // governed `integration_create_*` catalog tools) into ONE vendor-neutral pair
+  // routed through the resolved CRMAdapter. This gives Airtable/Fireberry/etc.
+  // the same lead-creation UX as HubSpot and guarantees correct per-vendor field
+  // mapping. Governance is preserved: we only surface the semantic tools when a
+  // raw create path WAS already enabled for the resolved source-of-truth CRM, so
+  // an operator who never enabled "create" still gets no create tool.
+  try {
+    const adapter = await getCrmAdapter(opts.tenantId);
+    if (!adapter.capabilities.is_stub) {
+      const VENDOR_TO_SLUG: Record<CrmVendor, string> = {
+        hubspot: "hubspot", salesforce: "salesforce", zoho: "zoho_crm", shopify: "shopify",
+        fireberry: "fireberry", airtable: "airtable", pipedrive: "pipedrive", monday: "monday",
+        custom_api: "custom_api", custom_db: "custom_db",
+      };
+      const slug = VENDOR_TO_SLUG[adapter.vendor] ?? adapter.vendor;
+      const isRawCreate = (n: string): boolean =>
+        n === `${slug}.create_record` || n === `${slug}.create_lead` ||
+        n === `${slug}.create_contact` || n === `${slug}.create_item` ||
+        n === "integration_create_lead" || n === "integration_create_contact" ||
+        n === "integration_create_record";
+      const hadRawCreate = (tools as any[]).some((t) => isRawCreate(t?.function?.name || ""));
+      if (hadRawCreate) {
+        tools = (tools as any[]).filter((t) => !isRawCreate(t?.function?.name || ""));
+        tools.push(INTEGRATION_CREATE_LEAD_TOOL, INTEGRATION_CREATE_CONTACT_TOOL);
+      }
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] unified CRM create-tool surface failed:", err?.message);
+  }
+
   // Surface-level CRM strip - when crm-prefetch finds an existing lead or
   // contact, the prompt builder injects a note telling the LLM that
   // create_lead/create_contact have been removed. That note is necessary
@@ -1300,6 +1468,15 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] stage resolution failed (non-fatal):", err?.message);
   }
 
+  // CRM presence flags → Prospect State + Objective Engine. `crmBlock` is set
+  // only when the external CRM returned a record, so its absence is the
+  // authoritative "NEW_PROSPECT" signal (internal Contact rows don't count).
+  const crmFlags = {
+    hasLead: crmHasLead,
+    hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
+    isCustomer: crmHasCustomer,
+  };
+
   const systemPrompt = buildAgentPrompt({
     behaviorState,
     agent: toAgentRecord(config),
@@ -1307,6 +1484,9 @@ async function generateAIBotReplyInner(
     knowledge: { block: kbBlock },
     toolFunctionNames,
     stageContext,
+    crm: crmFlags,
+    calendarBookable: calendarCapability.bookable,
+    company: companyContext ?? undefined,
   });
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
@@ -1675,6 +1855,24 @@ async function generateAIBotReplyInner(
   // satisfied or we've burned our retry. After the retry, we accept
   // whatever the model returns and log the violation for later analysis.
   const unmetRequired = computeUnmetRequiredActions(behaviorState.requiredActions, toolFunctionNames, toolCallLog);
+  // Silent BACKGROUND CRM writes (create lead/contact/deal, tag, note, update)
+  // must NOT be force-injected mid-turn. Forcing "call create_lead NOW" makes
+  // the model fire it with empty args before it has the data, and any failure
+  // (missing scopes, validation) then gets surfaced to the customer and derails
+  // the conversation ("there was a technical problem creating your lead"). These
+  // are best-effort: the model calls them naturally once it has the fields, and
+  // the post-conversation pipeline is the backstop. Only NON-background unmet
+  // actions (e.g. identity_link) are force-retried.
+  const SILENT_BACKGROUND_ACTIONS = new Set<string>([
+    "create_lead",
+    "create_contact",
+    "create_deal",
+    "update_record",
+    "add_note",
+    "tag",
+    "log_activity",
+  ]);
+  const unmetToForce = unmetRequired.filter((u) => !SILENT_BACKGROUND_ACTIONS.has(String(u.action)));
 
   // ── Action Contract violations (tool-name level) ──────────────
   // After the dispatch loop, recompute pending tools per contract using
@@ -1705,15 +1903,15 @@ async function generateAIBotReplyInner(
   }
 
   if (
-    (unmetRequired.length > 0 || contractViolations.length > 0) &&
+    (unmetToForce.length > 0 || contractViolations.length > 0) &&
     !awaitingApproval &&
     !pendingEscalation &&
     !budget.exceededTurnCap()
   ) {
     const reasonParts: string[] = [];
-    if (unmetRequired.length) {
+    if (unmetToForce.length) {
       reasonParts.push(
-        `Missing required tools: ${unmetRequired.map((u) => `\`${u.toolName}\` (for \`${u.action}\`)`).join(", ")}.`,
+        `Missing required tools: ${unmetToForce.map((u) => `\`${u.toolName}\` (for \`${u.action}\`)`).join(", ")}.`,
       );
     }
     if (contractViolations.length) {
@@ -1842,6 +2040,337 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // ── Objective-completeness gate (block passive closers) ─────────
+  // Programmatic enforcement of "never end a live conversation while a
+  // revenue objective is incomplete". Prompt instructions alone don't stop
+  // the model (proven by the real WhatsApp regression). If the model tried to
+  // passive-close while an objective with blockPassiveClose is still open AND
+  // the customer didn't actually say goodbye, regenerate ONCE with a
+  // corrective that forces a forward move. Skipped during approval/escalation
+  // handoffs and when the per-turn budget is spent.
+  // Decision context — computed once, used by BOTH the gate and the trace log
+  // below. Cheap, pure string-matching; safe even when replyText is null.
+  const decisionFactText = [ctxSlot.customerBlock, ctxSlot.crmBlock, ctxSlot.memoryBlock, ctxSlot.sessionFactsBlock]
+    .filter((s): s is string => !!s && !!s.trim())
+    .join("\n");
+  const decisionProspectState = computeProspectState({
+    hasLead: crmHasLead,
+    hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
+    isCustomer: crmHasCustomer,
+  });
+  const decisionObjStatus = selectActiveObjective(config.role, decisionProspectState, decisionFactText);
+  // Non-advancing = passive closer ("anything else?") OR generic opener ("how
+  // can I help?"). Both stall a revenue objective; both trigger the regen gate.
+  const replyWasPassiveCloser = isNonAdvancingReply(replyText);
+  let passiveCloseRegenerated = false;
+
+  // Committed-action guard. If a side-effecting action tool actually SUCCEEDED
+  // this turn (booking created, lead/contact/deal created, proposal sent), the
+  // correct reply is to CONFIRM that outcome per the Action Outcome Contract -
+  // NOT to pivot to an earlier objective. The passive-closer/objective regen
+  // otherwise classifies a post-booking reply as "non-advancing for
+  // GENERATE_LEAD" and rewrites it into a discovery question, so the meeting
+  // gets booked on the calendar but the customer is never told (observed live:
+  // schedule_meeting ok:true → regen produced "what type of business?"). Skip
+  // the objective regen when a real side effect landed.
+  const COMMITTED_ACTION_TOOLS =
+    /(schedule_meeting|create_lead|create_contact|create_deal|create_record|create_item|integration_create_|schedule_followup|send_proposal)/;
+  const committedActionThisTurn = toolCallLog.some((c) => {
+    if (c.decision !== "executed" && c.decision !== "executed_on_retry") return false;
+    if (!COMMITTED_ACTION_TOOLS.test(String(c.tool))) return false;
+    const r = typeof c.result === "string" ? c.result : "";
+    return /"ok"\s*:\s*true/.test(r);
+  });
+
+  // NOTE: this gate is deliberately NOT subject to budget.exceededTurnCap().
+  // The per-turn cap is runaway-protection for unbounded tool loops; these
+  // autonomous prompts are large enough that the FIRST generation alone often
+  // exceeds it, which would silently disable the quality regen on every turn.
+  // The corrective regen is a SINGLE bounded call (guarded by the flag) and is
+  // quality-critical, so it runs regardless; conversation/tenant-day caps still
+  // protect against abuse at preflight.
+  if (
+    replyText &&
+    !awaitingApproval &&
+    !pendingEscalation &&
+    replyWasPassiveCloser &&
+    !committedActionThisTurn &&
+    !customerIsClosing(opts.incomingMessage) &&
+    decisionObjStatus &&
+    decisionObjStatus.objective.blockPassiveClose
+  ) {
+    console.warn(
+      `[ai-bot] passive-closer blocked: objective=${decisionObjStatus.objective.id} incomplete (missing=${decisionObjStatus.missingRequired.join(",") || "criteria"}). Regenerating.`,
+    );
+    chatMessages.push({ role: "assistant", content: replyText });
+    chatMessages.push({ role: "user", content: buildCloserCorrective(decisionObjStatus) });
+    // Regenerate WITHOUT tools so the model must return forward-moving text
+    // (a discovery question / next-step proposal), not a half-handled call.
+    const regen = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
+      model,
+      messages: chatMessages,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 1024,
+      metadata: { type: "ai_bot_objective_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
+    });
+    totalTokens += regen.usage.total_tokens || 0;
+    budget.addUsage(regen.usage.total_tokens || 0);
+    if (regen.content?.trim()) replyText = regen.content.trim();
+    passiveCloseRegenerated = true;
+    toolCallLog.push({
+      tool: "__objective_gate__",
+      args: { objective: decisionObjStatus.objective.id, missing: decisionObjStatus.missingRequired },
+      result: "regenerated_to_avoid_passive_close",
+      decision: "objective_incomplete",
+      sideEffect: "objective_gate_regenerated",
+    });
+  }
+
+  // ── Booking fail-safe gate ──────────────────────────────────────
+  // When the agent is NOT bookable, schedule_meeting was never surfaced, so a
+  // successful booking is impossible this turn. If the draft reply still
+  // commits to a day/time (or implies a booking), regenerate ONCE with a
+  // corrective — prompt text alone does not reliably stop this (the Saturday
+  // regression). Bookable agents are unaffected; their "claimed booking with no
+  // tool" case is covered by the fabricated-action output validator.
+  let bookingFailsafeRegenerated = false;
+  const bookingCommitment = detectBookingCommitment(replyText);
+  if (
+    replyText &&
+    !awaitingApproval &&
+    !pendingEscalation &&
+    // Single bounded quality regen — exempt from the per-turn cap (see the
+    // passive-closer gate note above).
+    !calendarCapability.bookable &&
+    bookingCommitment.matched
+  ) {
+    console.warn(
+      `[ai-bot] booking-failsafe blocked: capability=${calendarCapability.capability} ` +
+        `committed="${bookingCommitment.phrase}". Regenerating.`,
+    );
+    chatMessages.push({ role: "assistant", content: replyText });
+    chatMessages.push({
+      role: "user",
+      content: buildBookingFailsafeCorrective(
+        calendarCapability.capability === "NO_CALENDAR" ? "no_calendar" : "not_bookable",
+      ),
+    });
+    const regen = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
+      model,
+      messages: chatMessages,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 1024,
+      metadata: { type: "ai_bot_booking_failsafe_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
+    });
+    totalTokens += regen.usage.total_tokens || 0;
+    budget.addUsage(regen.usage.total_tokens || 0);
+    if (regen.content?.trim()) replyText = regen.content.trim();
+    bookingFailsafeRegenerated = true;
+    toolCallLog.push({
+      tool: "__booking_failsafe__",
+      args: { capability: calendarCapability.capability, committed: bookingCommitment.phrase },
+      result: "regenerated_to_avoid_unbookable_commitment",
+      decision: "not_bookable",
+      sideEffect: "booking_failsafe_regenerated",
+    });
+  }
+
+  // ── Bookable-agent fabricated-booking guard ─────────────────────
+  // A BOOKABLE agent's draft claims a meeting is booked/locked/confirmed, but
+  // no schedule_meeting actually SUCCEEDED this turn → the customer would be
+  // told a meeting exists that doesn't (observed live: "הפגישה מחר ב-16:00
+  // סגורה!" with zero schedule_meeting calls + no calendar event). The
+  // non-bookable failsafe above never covers this (it's bookable), and the
+  // output validator's fabrication patterns are too narrow. Regenerate ONCE
+  // WITH tools so the model can actually book now; execute any schedule_meeting
+  // it emits and let a final pass report the REAL outcome. Only fires when a
+  // booking was CLAIMED but not made, so it can't disturb a real booking.
+  let fabricatedBookingRegenerated = false;
+  // Use the CLAIM detector (booking asserted DONE), NOT detectBookingCommitment
+  // (which also matches proposals like "let's schedule - what day?"), so this
+  // guard fires only on a false "it's booked" claim, never on a normal "what
+  // time works?" reply.
+  const bookingClaim = detectBookingClaim(replyText);
+  const bookedOkThisTurn = toolCallLog.some(
+    (c) =>
+      c.tool === "schedule_meeting" &&
+      (c.decision === "executed" || c.decision === "executed_on_retry") &&
+      /"ok"\s*:\s*true/.test(typeof c.result === "string" ? c.result : ""),
+  );
+  if (
+    replyText &&
+    !awaitingApproval &&
+    !pendingEscalation &&
+    calendarCapability.bookable &&
+    bookingClaim.matched &&
+    !bookedOkThisTurn
+  ) {
+    console.warn(
+      `[ai-bot] fabricated-booking blocked: reply claims booking ("${bookingClaim.phrase}") ` +
+        `but no schedule_meeting succeeded this turn. Regenerating with tools.`,
+    );
+    chatMessages.push({ role: "assistant", content: replyText });
+    chatMessages.push({ role: "user", content: buildFabricatedBookingCorrective() });
+    const regen = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
+      model,
+      messages: chatMessages,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 1024,
+      tools: tools as any[],
+      metadata: { type: "ai_bot_fabricated_booking_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
+    });
+    totalTokens += regen.usage.total_tokens || 0;
+    budget.addUsage(regen.usage.total_tokens || 0);
+    const regenToolCalls = regen.toolCalls;
+    if (regenToolCalls && regenToolCalls.length > 0) {
+      chatMessages.push({ role: "assistant", content: regen.content || "", tool_calls: regenToolCalls });
+      for (const tc of regenToolCalls) {
+        const toolName = tc.function?.name || "unknown";
+        let toolArgs: Record<string, unknown> = {};
+        try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        const exec = await getActionOrchestrator().submit(
+          {
+            id: randomUUID(),
+            conversationId: agentToolCtx.conversationId ?? "",
+            tenantId: agentToolCtx.tenantId,
+            proposedBy: { mode: "chat", system: "ai-bot:fabricated-booking" },
+            actor: { agentId: "" },
+            tool: toolName,
+            args: toolArgs,
+            rationale: "ai-bot fabricated-booking forced tool call",
+            urgency: "low",
+          },
+          () =>
+            dispatchToolCall(
+              { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+              agentToolCtx,
+            ),
+        );
+        const result = unwrapToolExec(tc.id, toolName, exec);
+        toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: undefined });
+        chatMessages.push({ role: "tool", tool_call_id: result.toolCallId, content: result.content });
+      }
+      const finalResp = await generateResponse({
+        tenantId: opts.tenantId,
+        sessionId: opts.conversationId,
+        model,
+        messages: chatMessages,
+        temperature: config.temperature ?? 0.7,
+        maxTokens: config.maxTokens ?? 1024,
+        tools: tools as any[],
+        metadata: { type: "ai_bot_fabricated_booking_final", conversationId: opts.conversationId, aiAgentId: config.id },
+        signal,
+      });
+      totalTokens += finalResp.usage.total_tokens || 0;
+      budget.addUsage(finalResp.usage.total_tokens || 0);
+      if (finalResp.content?.trim()) replyText = finalResp.content.trim();
+    } else if (regen.content?.trim()) {
+      // No tool call even after the corrective → at minimum drop the false claim.
+      replyText = regen.content.trim();
+    }
+    fabricatedBookingRegenerated = true;
+    toolCallLog.push({
+      tool: "__fabricated_booking_guard__",
+      args: { claimed: bookingClaim.phrase },
+      result: "regenerated_to_avoid_fabricated_booking",
+      decision: "fabricated_booking",
+      sideEffect: "fabricated_booking_regenerated",
+    });
+  }
+
+  // ── Redundant info-request gate ─────────────────────────────────
+  // The customer just gave an email/phone/time but the draft re-asks for it.
+  // Prompt rules don't reliably stop this; regenerate once to confirm + advance.
+  let redundantContactRegenerated = false;
+  const redundantInfo = detectRedundantInfoRequest(opts.incomingMessage, replyText);
+  if (
+    replyText &&
+    !awaitingApproval &&
+    !pendingEscalation &&
+    redundantInfo.matched
+  ) {
+    console.warn(
+      `[ai-bot] redundant-info blocked: customer already provided ${redundantInfo.items.join("+")}. Regenerating.`,
+    );
+    chatMessages.push({ role: "assistant", content: replyText });
+    chatMessages.push({ role: "user", content: buildRedundantInfoCorrective(redundantInfo.items) });
+    const regen = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
+      model,
+      messages: chatMessages,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 1024,
+      metadata: { type: "ai_bot_redundant_info_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
+    });
+    totalTokens += regen.usage.total_tokens || 0;
+    budget.addUsage(regen.usage.total_tokens || 0);
+    if (regen.content?.trim()) replyText = regen.content.trim();
+    redundantContactRegenerated = true;
+    toolCallLog.push({
+      tool: "__redundant_info__",
+      args: { provided: redundantInfo.items },
+      result: "regenerated_to_avoid_reasking_provided_info",
+      decision: "already_provided",
+      sideEffect: "redundant_info_regenerated",
+    });
+  }
+
+  // NOTE: a self-repetition regen gate was tried here and REMOVED — pushing the
+  // model off a near-duplicate reply made it over-correct into giving up /
+  // escalating ("I'll transfer you to the team"), which is far worse than a
+  // mildly repetitive but on-track reply. Repetition is handled softly by the
+  // QUALITY_CONTRACT instead; do not reintroduce a hard regen for it.
+
+  // ── Conversation decision trace ─────────────────────────────────
+  // One structured line per generation so live tests can validate exactly
+  // which role/skill/objective drove the reply and what was still missing.
+  // Grep with: docker compose logs -f ai | grep decision-trace
+  try {
+    const knowledgeMissing = computeKnowledgeLedger(
+      requiredKnowledgeFor(config.role),
+      decisionFactText,
+    ).entries.filter((e) => !e.known && e.importance === "required").map((e) => e.key);
+    console.log(
+      "[ai-bot][decision-trace] " +
+        JSON.stringify({
+          conversationId: opts.conversationId,
+          agentId: config.id,
+          agentName: config.name,
+          role: config.role,
+          skill: roleToSkill(config.role),
+          strategy: behaviorState.strategy,
+          prospectState: decisionProspectState,
+          activeObjective: decisionObjStatus?.objective.id ?? "ALL_COMPLETE",
+          objectiveStep: decisionObjStatus
+            ? `${decisionObjStatus.stepIndex + 1}/${decisionObjStatus.chain.length}`
+            : "-",
+          objectiveMissing: decisionObjStatus?.missingRequired ?? [],
+          knowledgeMissing,
+          replyWasPassiveCloser,
+          passiveCloseRegenerated,
+          calendarCapability: calendarCapability.capability,
+          bookingFailsafeRegenerated,
+          redundantContactRegenerated,
+          finalReplyPassiveCloser: isNonAdvancingReply(replyText),
+          awaitingApproval: !!awaitingApproval,
+          escalated: !!pendingEscalation,
+        }),
+    );
+  } catch (err: any) {
+    console.warn("[ai-bot] decision-trace log failed:", err?.message);
+  }
+
   // Audit - full BehaviorState + tool calls.
   prisma.auditLog.create({
     data: {
@@ -1946,9 +2475,13 @@ export async function generateAIBotOneshot(opts: {
     request: { lastMessage: opts.userInput, messageCount: 1 },
   });
 
+  // Even one-shot replies represent the company - inherit its identity.
+  const oneshotCompany = await getCompanyContext(opts.tenantId);
+
   const systemPrompt = buildAgentPrompt({
     behaviorState: oneshotState,
     agent: toAgentRecord(config),
+    company: oneshotCompany ?? undefined,
   });
 
   const model = config.model || "gpt-4o-mini";

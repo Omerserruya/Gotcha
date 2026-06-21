@@ -66,14 +66,18 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
         reason: `unknown_meeting_type:${args.meeting_type}. Valid options: ${validSlugs.join(" | ") || "none configured"}.`,
       };
     }
+    // Duration is OWNED by the meeting type server-side (used as
+    // mt.durationMinutes everywhere below); the model's `duration_minutes` arg
+    // is advisory only and impossible for it to reliably guess. Rejecting the
+    // whole booking when the model's guess differs blocked every booking where
+    // it picked a different number (observed live: model sent 15 for a 30-min
+    // discovery_call → duration_mismatch → no booking ever completed). Log the
+    // divergence for observability, then proceed with the authoritative value.
     if (Number(mt.durationMinutes) !== Number(args.duration_minutes)) {
       console.warn(
-        `[schedule_handler] duration_mismatch tool=${args.duration_minutes} mt=${mt.durationMinutes}`,
+        `[schedule_handler] duration override: model said ${args.duration_minutes}min, ` +
+          `using meeting_type ${mt.durationMinutes}min (authoritative)`,
       );
-      return {
-        ok: false,
-        reason: `duration_mismatch:tool_said_${args.duration_minutes}_meeting_type_${mt.durationMinutes}`,
-      };
     }
     console.log(
       `[schedule_handler] mt_loaded id=${mt.id} tz=${mt.agentTimezone} ` +
