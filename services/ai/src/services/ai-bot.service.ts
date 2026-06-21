@@ -76,8 +76,11 @@ import { getCompanyContext, type CompanyContext } from "./company-context.servic
 import {
   detectBookingCommitment,
   detectBookingClaim,
+  detectBookingAssertion,
+  isBookingAssertionUngrounded,
   buildBookingFailsafeCorrective,
-  buildFabricatedBookingCorrective,
+  buildBookingGroundingCorrective,
+  buildBookingGroundingFallback,
   detectRedundantInfoRequest,
   buildRedundantInfoCorrective,
 } from "./booking-guard.service";
@@ -2196,44 +2199,59 @@ async function generateAIBotReplyInner(
     });
   }
 
-  // ── Bookable-agent fabricated-booking guard ─────────────────────
-  // A BOOKABLE agent's draft claims a meeting is booked/locked/confirmed, but
-  // no schedule_meeting actually SUCCEEDED this turn → the customer would be
-  // told a meeting exists that doesn't (observed live: "הפגישה מחר ב-16:00
-  // סגורה!" with zero schedule_meeting calls + no calendar event). The
-  // non-bookable failsafe above never covers this (it's bookable), and the
-  // output validator's fabrication patterns are too narrow. Regenerate ONCE
-  // WITH tools so the model can actually book now; execute any schedule_meeting
-  // it emits and let a final pass report the REAL outcome. Only fires when a
-  // booking was CLAIMED but not made, so it can't disturb a real booking.
-  let fabricatedBookingRegenerated = false;
-  // Use the CLAIM detector (booking asserted DONE), NOT detectBookingCommitment
-  // (which also matches proposals like "let's schedule - what day?"), so this
-  // guard fires only on a false "it's booked" claim, never on a normal "what
-  // time works?" reply.
+  // ── Booking-grounding gate (bookable agents) ────────────────────
+  // A bookable agent must never invent calendar truth. Whether a day/time is
+  // free, allowed, in the past, or on a non-working day is known ONLY via a
+  // `schedule_meeting` call. Any draft that asserts a booking is DONE, agrees
+  // to / proposes a concrete time, or STATES availability must be GROUNDED in a
+  // schedule_meeting result this turn:
+  //   - a "done" claim needs a COMMITTED booking (a real calendar event);
+  //   - proposing a time / stating availability is also satisfied by real
+  //     proposed slots a schedule_meeting result returned this turn.
+  // Observed live (omer): the model invented Saturday availability, accepted a
+  // past time (14:00 "today" at 15:15), AND claimed "I booked 14:00" — all with
+  // ZERO schedule_meeting calls, so working-hours / min-notice / past-time /
+  // freeBusy validation was entirely bypassed and the replies contradicted each
+  // other. When ungrounded, regenerate ONCE forcing the tool so its REAL result
+  // drives the reply; if the model STILL free-texts an ungrounded time, fall
+  // back to a deterministic safe reply (invents nothing). This subsumes the old
+  // fabricated-booking guard (a "done" claim is just one assertion kind) and
+  // adds the deterministic backstop the LLM-only fallback was missing.
   const bookingClaim = detectBookingClaim(replyText);
-  // Ledger-driven consistency verdict. The Turn Outcome Ledger is the single
-  // source of truth: `fabricated_claim` = the reply asserts a booking is done
-  // but NO customer-facing booking committed this turn; `unconfirmed_commit` = a
-  // customer-facing outcome DID commit but the draft doesn't confirm it. This
-  // replaces the old per-tool `bookedOkThisTurn` regex over result strings.
+  // Kept for the unconfirmed-commit gate below (committed-but-unconfirmed).
   const replyConsistency = evaluateReplyConsistency(ledger, replyText, {
     bookingClaimMatched: bookingClaim.matched,
     replyNonAdvancing: isNonAdvancingReply(replyText),
   });
+  // "Grounding" helpers: a committed customer-facing booking, or a
+  // schedule_meeting result this turn that returned real proposed alternatives.
+  const hasCommittedBooking = () =>
+    ledger.customerFacingCommitted().some((e) => e.kind === "booking");
+  const hasProposedSlots = () =>
+    toolCallLog.some(
+      (c) => c.tool === "schedule_meeting" && /proposedSlotsIso/.test(typeof c.result === "string" ? c.result : ""),
+    );
+  const ungroundedAssertion = (reply: string | null) =>
+    isBookingAssertionUngrounded(detectBookingAssertion(reply), {
+      committedBooking: hasCommittedBooking(),
+      proposedSlots: hasProposedSlots(),
+    });
+
+  let bookingGroundingRegenerated = false;
+  const assertion = detectBookingAssertion(replyText);
   if (
     replyText &&
     !awaitingApproval &&
     !pendingEscalation &&
     calendarCapability.bookable &&
-    replyConsistency.status === "fabricated_claim"
+    ungroundedAssertion(replyText)
   ) {
     console.warn(
-      `[ai-bot] fabricated-booking blocked: reply claims booking ("${bookingClaim.phrase}") ` +
-        `but the ledger has no committed customer-facing booking this turn. Regenerating with tools.`,
+      `[ai-bot] booking-grounding blocked: reply asserts ${assertion.kind} ("${assertion.phrase}") ` +
+        `with no schedule_meeting grounding this turn. Regenerating with tools.`,
     );
     chatMessages.push({ role: "assistant", content: replyText });
-    chatMessages.push({ role: "user", content: buildFabricatedBookingCorrective() });
+    chatMessages.push({ role: "user", content: buildBookingGroundingCorrective() });
     const regen = await generateResponse({
       tenantId: opts.tenantId,
       sessionId: opts.conversationId,
@@ -2242,7 +2260,7 @@ async function generateAIBotReplyInner(
       temperature: config.temperature ?? 0.7,
       maxTokens: config.maxTokens ?? 1024,
       tools: tools as any[],
-      metadata: { type: "ai_bot_fabricated_booking_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      metadata: { type: "ai_bot_booking_grounding_regen", conversationId: opts.conversationId, aiAgentId: config.id },
       signal,
     });
     totalTokens += regen.usage.total_tokens || 0;
@@ -2259,11 +2277,11 @@ async function generateAIBotReplyInner(
             id: randomUUID(),
             conversationId: agentToolCtx.conversationId ?? "",
             tenantId: agentToolCtx.tenantId,
-            proposedBy: { mode: "chat", system: "ai-bot:fabricated-booking" },
+            proposedBy: { mode: "chat", system: "ai-bot:booking-grounding" },
             actor: { agentId: "" },
             tool: toolName,
             args: toolArgs,
-            rationale: "ai-bot fabricated-booking forced tool call",
+            rationale: "ai-bot booking-grounding forced tool call",
             urgency: "low",
           },
           () =>
@@ -2285,23 +2303,37 @@ async function generateAIBotReplyInner(
         temperature: config.temperature ?? 0.7,
         maxTokens: config.maxTokens ?? 1024,
         tools: tools as any[],
-        metadata: { type: "ai_bot_fabricated_booking_final", conversationId: opts.conversationId, aiAgentId: config.id },
+        metadata: { type: "ai_bot_booking_grounding_final", conversationId: opts.conversationId, aiAgentId: config.id },
         signal,
       });
       totalTokens += finalResp.usage.total_tokens || 0;
       budget.addUsage(finalResp.usage.total_tokens || 0);
       if (finalResp.content?.trim()) replyText = finalResp.content.trim();
     } else if (regen.content?.trim()) {
-      // No tool call even after the corrective → at minimum drop the false claim.
       replyText = regen.content.trim();
     }
-    fabricatedBookingRegenerated = true;
+    bookingGroundingRegenerated = true;
+
+    // Deterministic backstop. If the regenerated reply STILL asserts an
+    // ungrounded time/availability/booking (the model refused the tool and kept
+    // free-texting — exactly what bit omer), strip it to a safe reply that
+    // invents nothing rather than ship the lie. Never trust a second LLM pass to
+    // self-correct a fabrication.
+    const postAssertion = detectBookingAssertion(replyText);
+    if (ungroundedAssertion(replyText)) {
+      const isHe = /[֐-׿]/.test(replyText || opts.incomingMessage || "");
+      console.warn(
+        `[ai-bot] booking-grounding fallback: reply still asserts ${postAssertion.kind} ` +
+          `("${postAssertion.phrase}") with no grounding after regen — using deterministic safe reply.`,
+      );
+      replyText = buildBookingGroundingFallback(isHe);
+    }
     toolCallLog.push({
-      tool: "__fabricated_booking_guard__",
-      args: { claimed: bookingClaim.phrase },
-      result: "regenerated_to_avoid_fabricated_booking",
-      decision: "fabricated_booking",
-      sideEffect: "fabricated_booking_regenerated",
+      tool: "__booking_grounding_gate__",
+      args: { asserted: assertion.kind, phrase: assertion.phrase },
+      result: "regenerated_to_ground_booking_statement",
+      decision: "booking_ungrounded",
+      sideEffect: "booking_grounding_regenerated",
     });
   }
 
@@ -2315,7 +2347,7 @@ async function generateAIBotReplyInner(
   // Skipped when the fabricated-booking guard already regenerated this turn.
   let unconfirmedCommitRegenerated = false;
   if (
-    !fabricatedBookingRegenerated &&
+    !bookingGroundingRegenerated &&
     !awaitingApproval &&
     !pendingEscalation &&
     replyConsistency.status === "unconfirmed_commit"

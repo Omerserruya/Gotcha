@@ -2,6 +2,9 @@ import { describe, it, expect } from "vitest";
 import {
   detectBookingClaim,
   detectBookingCommitment,
+  detectAvailabilityAssertion,
+  detectBookingAssertion,
+  isBookingAssertionUngrounded,
 } from "../services/booking-guard.service";
 
 // Regression protection for the bookable-agent fabricated-booking guard.
@@ -85,5 +88,94 @@ describe("detectBookingCommitment — Hebrew \\b regression", () => {
   });
   it("ignores a plain Hebrew question", () => {
     expect(detectBookingCommitment("איזה יום מתאים לך?").matched).toBe(false);
+  });
+});
+
+// ── Booking-grounding gate detectors (the omer regression) ──────────────
+// Live bug: a BOOKABLE agent invented Saturday availability, accepted a past
+// time, and claimed a booking — all with ZERO schedule_meeting calls. The
+// grounding gate fires on any of: claim / commitment / availability assertion.
+
+describe("detectAvailabilityAssertion — invented availability (must MATCH)", () => {
+  const positives = [
+    "יש לי זמן פנוי ביום שבת לשיחה של 30 דקות. באיזה שעה נוח לך?", // omer: invented free Saturday
+    "אני פנוי מחר בבוקר",
+    "יש לי שעה פנויה ביום ראשון",
+    "I have free time on Saturday",
+    "I'm available tomorrow",
+    "I have a slot at 10:00",
+  ];
+  for (const p of positives) {
+    it(`matches: ${p.slice(0, 36)}`, () => {
+      expect(detectAvailabilityAssertion(p).matched).toBe(true);
+    });
+  }
+});
+
+describe("detectAvailabilityAssertion — must NOT match neutral replies", () => {
+  const negatives = [
+    "איזה יום ושעה נוחים לך?",            // asking for preference — no asserted availability
+    "What day and time works for you?",
+    "תודה רבה, אעדכן אותך בהקדם",
+  ];
+  for (const n of negatives) {
+    it(`ignores: ${n.slice(0, 36)}`, () => {
+      expect(detectAvailabilityAssertion(n).matched).toBe(false);
+    });
+  }
+});
+
+describe("detectBookingAssertion — unified, returns the kind", () => {
+  it("classifies a done-claim as 'claim'", () => {
+    const r = detectBookingAssertion("היי עומר, קבעתי שיחה ל-14:00 היום, אבל אני צריך את האימייל שלך");
+    expect(r.matched).toBe(true);
+    expect(r.kind).toBe("claim");
+  });
+  it("classifies invented availability as 'availability'", () => {
+    const r = detectBookingAssertion("יש לי זמן פנוי ביום שבת לשיחה של 30 דקות");
+    expect(r.matched).toBe(true);
+    expect(r.kind).toBe("availability");
+  });
+  it("classifies agreeing to a concrete time as 'commitment'", () => {
+    const r = detectBookingAssertion("מעולה, נתראה ביום שני בשעה 10:00");
+    expect(r.matched).toBe(true);
+    expect(["commitment", "availability"]).toContain(r.kind);
+  });
+  it("does NOT fire on a neutral ask for preference (so a grounded flow isn't disturbed)", () => {
+    expect(detectBookingAssertion("איזה יום ושעה נוחים לך? אבדוק זמינות ואחזור אליך").matched).toBe(false);
+  });
+});
+
+describe("isBookingAssertionUngrounded — the gate decision (deterministic)", () => {
+  const none = { committedBooking: false, proposedSlots: false };
+  const proposed = { committedBooking: false, proposedSlots: true };
+  const committed = { committedBooking: true, proposedSlots: false };
+
+  it("omer bug 2: 'I booked 14:00' with NO committed event → ungrounded (gate fires)", () => {
+    const a = detectBookingAssertion("היי עומר, קבעתי שיחה ל-14:00 היום");
+    expect(isBookingAssertionUngrounded(a, none)).toBe(true);
+    expect(isBookingAssertionUngrounded(a, proposed)).toBe(true); // a DONE claim needs a real event, not just proposed slots
+    expect(isBookingAssertionUngrounded(a, committed)).toBe(false); // grounded by a real event
+  });
+
+  it("omer bug 1: invented Saturday availability with no schedule_meeting → ungrounded", () => {
+    const a = detectBookingAssertion("יש לי זמן פנוי ביום שבת לשיחה של 30 דקות");
+    expect(isBookingAssertionUngrounded(a, none)).toBe(true);
+    expect(isBookingAssertionUngrounded(a, proposed)).toBe(false); // real proposed slots ground an availability statement
+  });
+
+  it("relaying REAL proposed slots is grounded (gate must NOT disturb it)", () => {
+    const a = detectBookingAssertion("יש לי 09:00, 10:00, 11:00 פנויים מחר");
+    expect(isBookingAssertionUngrounded(a, proposed)).toBe(false);
+  });
+
+  it("a confirmed booking reply is grounded", () => {
+    const a = detectBookingAssertion("קבעתי לך שיחה מחר ב-10:00");
+    expect(isBookingAssertionUngrounded(a, committed)).toBe(false);
+  });
+
+  it("a neutral reply is never ungrounded", () => {
+    const a = detectBookingAssertion("איזה יום מתאים לך?");
+    expect(isBookingAssertionUngrounded(a, none)).toBe(false);
   });
 });

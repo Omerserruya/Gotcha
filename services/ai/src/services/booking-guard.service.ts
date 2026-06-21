@@ -82,6 +82,83 @@ export function detectBookingClaim(
   return { matched: false };
 }
 
+// AVAILABILITY-assertion patterns: the assistant states (positively) that a
+// time/day is FREE/AVAILABLE, or offers a concrete slot. A bookable agent must
+// never invent this — availability is only known via a schedule_meeting call.
+// Observed live (omer): "יש לי זמן פנוי ביום שבת" with zero schedule_meeting
+// calls, then flip-flopping. `\b`-free for Hebrew (see note above).
+const AVAILABILITY_ASSERTION_PATTERNS: RegExp[] = [
+  // English — "I have free/available/a slot/an opening"
+  /\b(i|we)\s+(have|have\s+got|'?ve\s+got|got)\b[^.!?\n]*\b(free|available|availabilit\w*|open\b|a\s+slot|an?\s+opening|time\s+(slot|available))\b/i,
+  /\b(i'?m|we'?re|i\s+am|we\s+are)\s+(free|available|open)\b/i,
+  /\b(free|available|open)\b[^.!?\n]{0,30}\b(on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today)\b/i,
+  /\bi\s+(have|can\s+offer|can\s+do|could\s+do)\b[^.!?\n]{0,20}\b\d{1,2}(:\d{2})?\s*(am|pm)?\b/i,
+  // Hebrew — "I have free/available time", "I'm free on <day/time>"
+  /יש\s+לי\s+(זמן\s+)?(פנוי|זמין)/,
+  /אני\s+(פנוי|זמין)/,
+  /(פנוי|זמין)\s+(ביום|בשעה|מחר|היום|ב-?\d)/,
+  /יש\s+לי\s+(שעה|שעות|זמן|חלון)\s+(פנוי|פנויה|פנויות|זמין)/,
+  /(זמינות|פנוי(ות)?)\s+(ביום|מחר|היום|הקרוב|בשעה)/,
+];
+
+/** True when the reply ASSERTS availability (states a free time/day or offers a
+ * concrete slot). Combined with claim/commitment to drive the booking-grounding
+ * gate — a bookable agent may only state availability that came from a
+ * schedule_meeting result this turn. */
+export function detectAvailabilityAssertion(
+  reply: string | null | undefined,
+): BookingCommitmentMatch {
+  if (!reply || !reply.trim()) return { matched: false };
+  for (const re of AVAILABILITY_ASSERTION_PATTERNS) {
+    const m = reply.match(re);
+    if (m) return { matched: true, phrase: m[0].trim() };
+  }
+  return { matched: false };
+}
+
+export type BookingAssertionKind = "claim" | "commitment" | "availability";
+export interface BookingAssertionMatch {
+  matched: boolean;
+  kind?: BookingAssertionKind;
+  phrase?: string;
+}
+
+/**
+ * Any statement that must be grounded in a schedule_meeting call: a booking
+ * CLAIM (asserts done), a COMMITMENT (agrees to / proposes a concrete time), or
+ * an AVAILABILITY assertion (states a free slot). Returned `kind` lets the
+ * caller require the right grounding: a "claim" needs a committed event; a
+ * "commitment"/"availability" is satisfied by real proposed slots too.
+ */
+export function detectBookingAssertion(
+  reply: string | null | undefined,
+): BookingAssertionMatch {
+  const claim = detectBookingClaim(reply);
+  if (claim.matched) return { matched: true, kind: "claim", phrase: claim.phrase };
+  const commit = detectBookingCommitment(reply);
+  if (commit.matched) return { matched: true, kind: "commitment", phrase: commit.phrase };
+  const avail = detectAvailabilityAssertion(reply);
+  if (avail.matched) return { matched: true, kind: "availability", phrase: avail.phrase };
+  return { matched: false };
+}
+
+/**
+ * Decision for the booking-grounding gate: is this asserted reply UNGROUNDED
+ * given what `schedule_meeting` produced this turn? Pure so it can be unit-tested
+ * deterministically (the live LLM can't be forced to fabricate on demand).
+ *   - a "done" claim is grounded ONLY by a committed booking (a real event);
+ *   - proposing a time / stating availability is ALSO grounded by real proposed
+ *     slots a schedule_meeting result returned this turn.
+ */
+export function isBookingAssertionUngrounded(
+  assertion: BookingAssertionMatch,
+  ctx: { committedBooking: boolean; proposedSlots: boolean },
+): boolean {
+  if (!assertion.matched) return false;
+  if (assertion.kind === "claim") return !ctx.committedBooking;
+  return !(ctx.committedBooking || ctx.proposedSlots);
+}
+
 export interface BookingCommitmentMatch {
   matched: boolean;
   phrase?: string;
@@ -199,6 +276,36 @@ export function buildFabricatedBookingCorrective(): string {
     `If you are missing the day/time, do NOT claim it's booked — ask for the exact day/time to lock it. ` +
     `Reply in the customer's language. Never imply a booking that did not actually happen.`
   );
+}
+
+/**
+ * Corrective for the booking-grounding gate: the draft asserted a specific time,
+ * stated availability, or claimed a booking, but NO `schedule_meeting` call this
+ * turn justifies it. Availability and validity (working hours, minimum notice,
+ * past times, busy slots) are known ONLY through `schedule_meeting` — the model
+ * must never invent them. Forces the tool so the REAL result drives the reply.
+ */
+export function buildBookingGroundingCorrective(): string {
+  return (
+    `**STOP — you stated a time, availability, or booking that no tool verified this turn.** ` +
+    `You do NOT know the calendar yourself: whether a day/time is free, allowed, in the past, or on a non-working day is known ONLY by calling \`schedule_meeting\`. ` +
+    `Never say a slot is available/booked, agree to a time, or say a day "doesn't work" from your own guessing. ` +
+    `Do this now: if you have the meeting type + an explicit future day/time + the customer's email, CALL \`schedule_meeting\` and let its result speak — on success confirm it; if it returns proposed alternatives, relay THOSE exact times and ask the customer to pick; if the time is invalid/in the past, tell them honestly and offer the proposed times. ` +
+    `If you are missing the day/time or email, do NOT invent availability — ask for what's missing. ` +
+    `Reply in the customer's language. One move only.`
+  );
+}
+
+/**
+ * Deterministic, last-resort safe reply when the model STILL asserts an
+ * ungrounded time/availability/booking after the grounding regen (it refused to
+ * call the tool and kept free-texting). Invents nothing: acknowledges and asks
+ * for the customer's preferred day/time so the next turn can ground it.
+ */
+export function buildBookingGroundingFallback(isHebrew: boolean): string {
+  return isHebrew
+    ? "אשמח לתאם לך פגישה. מה היום והשעה שנוחים לך? אבדוק את הזמינות בפועל ואחזור אליך עם אישור."
+    : "I'd be glad to set up a meeting. What day and time generally work for you? I'll check real availability and come back to confirm.";
 }
 
 /**
