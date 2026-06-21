@@ -88,12 +88,19 @@ export async function loadConnection(opts: { tenantId: string; slug: string }): 
   status: string;
   expiresAt: Date | null;
 } | null> {
+  // Load CONNECTED *or* ERROR integrations. An OAuth integration whose access
+  // token merely expired latches to ERROR, but it is recoverable via its refresh
+  // token — excluding ERROR here is what created the deadlock (ERROR → never
+  // loaded → never refreshed → stays ERROR forever). We load it and let
+  // ensureFreshToken / the 401-retry recover it. DISCONNECTED stays excluded.
+  // Prefer a CONNECTED row when both somehow exist (CONNECTED < ERROR lexically).
   const ti = await (prisma as any).tenantIntegration.findFirst({
     where: {
       tenantId: opts.tenantId,
-      status: "CONNECTED",
+      status: { in: ["CONNECTED", "ERROR"] },
       integration: { slug: opts.slug },
     },
+    orderBy: { status: "asc" },
     include: { integration: true },
   });
   if (!ti) return null;
@@ -158,9 +165,19 @@ export async function ensureFreshToken(opts: {
   tenantIntegrationId: string;
   credentials: Record<string, any>;
   adapter: ProviderAdapter;
+  /** Refresh regardless of expiry buffer (used by the 401-retry path and to
+   * recover an integration that latched to ERROR). */
+  force?: boolean;
+  /** Current integration status; when "ERROR", a successful refresh recovers
+   * it to CONNECTED so the tool surfaces again next turn. */
+  currentStatus?: string;
 }): Promise<Record<string, any>> {
   const expiresAt = opts.credentials?.expiresAt ? new Date(opts.credentials.expiresAt) : null;
-  const needsRefresh = expiresAt && expiresAt.getTime() - Date.now() < TOKEN_REFRESH_BUFFER_MS;
+  // `expiresAt - now < buffer` is also true for an ALREADY-expired token
+  // (negative diff), so an expired token refreshes on use, not just one nearing
+  // expiry. `force` covers the case where we have no/garbled expiry or are
+  // recovering from a 401.
+  const needsRefresh = opts.force || (expiresAt ? expiresAt.getTime() - Date.now() < TOKEN_REFRESH_BUFFER_MS : false);
   if (!needsRefresh || !opts.adapter.refreshTokens || !opts.credentials.refreshToken) {
     return opts.credentials;
   }
@@ -174,8 +191,15 @@ export async function ensureFreshToken(opts: {
       scope: fresh.scope || opts.credentials.scope,
     };
     await persistCredentials({ tenantIntegrationId: opts.tenantIntegrationId, credentials: next });
+    // Self-heal: a successful refresh proves the integration works again.
+    if (opts.currentStatus === "ERROR") {
+      await setConnectionStatus({ tenantIntegrationId: opts.tenantIntegrationId, status: "CONNECTED" });
+      console.log(`[integration-framework] recovered ${opts.adapter.slug} ERROR→CONNECTED via token refresh`);
+    }
     return next;
   } catch (err: any) {
+    // Only a refresh FAILURE (e.g. revoked/invalid refresh token) is a real,
+    // unrecoverable error — a mere access-token expiry is handled above.
     await setConnectionStatus({
       tenantIntegrationId: opts.tenantIntegrationId,
       status: "ERROR",
@@ -334,14 +358,30 @@ export async function executeAdapterTool(opts: {
     return { ok: false, reason };
   }
 
-  const fresh = await ensureFreshToken({
-    tenantIntegrationId: conn.tenantIntegrationId,
-    credentials: conn.credentials,
-    adapter,
-  });
-
+  // Proactively refresh on use. Force a refresh when the integration was ERROR
+  // so a recoverable (expired-token) integration self-heals on first use.
+  let fresh: Record<string, any>;
   try {
-    const result = await adapter.execute({
+    fresh = await ensureFreshToken({
+      tenantIntegrationId: conn.tenantIntegrationId,
+      credentials: conn.credentials,
+      adapter,
+      force: conn.status === "ERROR",
+      currentStatus: conn.status,
+    });
+  } catch (err: any) {
+    // Refresh itself failed (revoked/invalid refresh token) — unrecoverable.
+    const reason = (err?.message || "token_refresh_failed").slice(0, 240);
+    await auditAdapterCall({
+      tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
+      toolFunctionName: opts.toolFunctionName, args: opts.args, ok: false, reason,
+      durationMs: Date.now() - start,
+    });
+    return { ok: false, reason };
+  }
+
+  const runExecute = (creds: Record<string, any>) =>
+    adapter.execute({
       ctx: {
         tenantId: opts.tenantId,
         tenantIntegrationId: conn.tenantIntegrationId,
@@ -350,9 +390,40 @@ export async function executeAdapterTool(opts: {
       },
       toolName,
       args: opts.args,
-      credentials: fresh,
+      credentials: creds,
       config: conn.config,
     });
+  // Lenient 401/expiry detection (superset of the original `/401|unauthorized|
+  // invalid.*token/`). NB: a bare `\b401\b` does NOT match "hubspot_401" (an
+  // underscore is a word char, so there's no boundary before the digits) — match
+  // 401 as a substring instead, as adapters embed it in messages like that.
+  const isAuthError = (m: string) => /401|unauthorized|invalid.*token|token.*expired|expired.*token|expired_authentication/i.test(m);
+
+  try {
+    let result: unknown;
+    try {
+      result = await runExecute(fresh);
+    } catch (err: any) {
+      const message = err?.message || "execution_failed";
+      if (!isAuthError(message)) throw err;
+      // Auth error on a fresh-looking token → the access token expired between
+      // the proactive check and the call. Force one refresh + retry. Only if
+      // THIS also fails do we mark the integration ERROR.
+      console.warn(`[integration-framework] ${slug} auth error, refreshing + retrying once: ${message.slice(0, 120)}`);
+      const refreshed = await ensureFreshToken({
+        tenantIntegrationId: conn.tenantIntegrationId,
+        credentials: fresh,
+        adapter,
+        force: true,
+        currentStatus: conn.status,
+      });
+      result = await runExecute(refreshed);
+    }
+    // Success. If the integration was ERROR and we never had to refresh (token
+    // was already valid), recover the status now.
+    if (conn.status === "ERROR") {
+      await setConnectionStatus({ tenantIntegrationId: conn.tenantIntegrationId, status: "CONNECTED" });
+    }
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: true,
@@ -361,7 +432,7 @@ export async function executeAdapterTool(opts: {
     return { ok: true, result };
   } catch (err: any) {
     const message = err?.message || "execution_failed";
-    if (/401|unauthorized|invalid.*token/i.test(message)) {
+    if (isAuthError(message)) {
       await setConnectionStatus({
         tenantIntegrationId: conn.tenantIntegrationId,
         status: "ERROR",

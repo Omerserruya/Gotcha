@@ -116,14 +116,21 @@ async function resolveFromDb(tenantId: string): Promise<CrmVendor | null> {
       return "shopify";
     }
 
-    // 2. First CONNECTED TenantIntegration with a CRM slug.
+    // 2. First CONNECTED (or recoverable ERROR) TenantIntegration with a CRM
+    //    slug. ERROR is included so an OAuth CRM whose access token merely
+    //    expired still resolves to its real adapter — otherwise it returns the
+    //    NoOp stub, `integration_create_lead` never surfaces, the adapter is
+    //    never used, and the expired token is never refreshed (a deadlock). On
+    //    first use the framework refreshes the token and recovers status to
+    //    CONNECTED. `orderBy status asc` prefers a CONNECTED row over an ERROR
+    //    one when a tenant has multiple CRMs. DISCONNECTED stays excluded.
     const ti = await (prisma as any).tenantIntegration.findFirst({
       where: {
         tenantId,
-        status: "CONNECTED",
+        status: { in: ["CONNECTED", "ERROR"] },
         integration: { slug: { in: CRM_VENDOR_SLUGS } },
       },
-      orderBy: { createdAt: "asc" },
+      orderBy: [{ status: "asc" }, { createdAt: "asc" }],
       include: { integration: true },
     });
     if (!ti) return null;
