@@ -76,6 +76,23 @@ export interface AgentToolContext {
     body: string;
     priority?: "low" | "normal" | "high" | "urgent";
   }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
+  /**
+   * Unified lead/contact creation runner. Set by ai-bot.service, backed by the
+   * per-tenant CRMAdapter (crm-adapter-resolver). The dispatcher routes the
+   * vendor-neutral `integration_create_lead` / `integration_create_contact`
+   * tools here so EVERY source-of-truth CRM (HubSpot, Salesforce, Zoho,
+   * Airtable, Fireberry, …) shares one create path with correct per-vendor
+   * field mapping - instead of the model driving a raw `<vendor>.create_record`.
+   * shared/agent-tools stays decoupled from the AI service's connector layer.
+   */
+  runCreateLead?: (opts: {
+    kind: "lead" | "contact";
+    name?: string;
+    email?: string;
+    phone?: string;
+    company?: string;
+    notes?: string;
+  }) => Promise<{ ok: boolean; id?: string; kind?: string; vendor?: string; reason?: string }>;
 }
 
 export interface ScheduleMeetingArgs {
@@ -379,6 +396,48 @@ export const CREATE_TASK_TOOL = {
   },
 };
 
+// Vendor-neutral CRM lead/contact creation. The bot NEVER picks a CRM - the AI
+// service resolves the tenant's source-of-truth CRM and maps fields. This is the
+// ONLY create path surfaced to the model; raw `<vendor>.create_record` /
+// `create_lead` tools are stripped for the resolved CRM so there's no ambiguity.
+const _CRM_CREATE_PROPS = {
+  name: { type: "string", description: "The person's full name, exactly as they gave it. Do not invent." },
+  email: { type: "string", description: "Their email - only if they actually provided one this conversation." },
+  phone: { type: "string", description: "Their phone - only if known (the conversation's own channel number counts)." },
+  company: { type: "string", description: "Their company / business name, if mentioned." },
+  notes: { type: "string", description: "One short line on what they want / why they reached out." },
+} as const;
+
+export const INTEGRATION_CREATE_LEAD_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "integration_create_lead",
+    description:
+      "Create a NEW lead in the business's CRM (whichever CRM is connected as the source of truth - " +
+      "HubSpot, Salesforce, Zoho, Airtable, Fireberry, etc.). The system routes to the correct CRM and " +
+      "maps the fields automatically - you do NOT choose the CRM and you do NOT need to know which one it is.\n" +
+      "Call this SILENTLY (never narrate CRM/lead/record to the customer) once you know who the person is and " +
+      "how to reach them. Provide everything you've genuinely learned - at minimum a name AND an email or phone.\n" +
+      "🚫 HARD RULES: never invent a name/email/phone - pass only what the customer actually gave you. If you " +
+      "don't yet have a name and a way to reach them, ASK first (one question) and do NOT call this tool this turn. " +
+      "If the customer already exists in CRM this tool is removed from your toolbox - use the update/note tools instead.",
+    parameters: { type: "object", properties: { ..._CRM_CREATE_PROPS }, required: [] },
+  },
+};
+
+export const INTEGRATION_CREATE_CONTACT_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "integration_create_contact",
+    description:
+      "Create a NEW contact in the business's CRM (whichever CRM is connected as the source of truth). Same " +
+      "behavior and HARD RULES as integration_create_lead, but for businesses that capture people as contacts " +
+      "rather than leads. The system routes to the correct CRM and maps fields automatically - never tell the " +
+      "customer about CRM/contacts/records, and never invent values you weren't given.",
+    parameters: { type: "object", properties: { ..._CRM_CREATE_PROPS }, required: [] },
+  },
+};
+
 export const SCHEDULE_MEETING_TOOL = {
   type: "function" as const,
   function: {
@@ -573,6 +632,16 @@ export async function buildAgentToolsForAIAgent(
         tenantTool: {
           isEnabled: true,
           tenantIntegration: { status: "CONNECTED" },
+          // Calendar tools are surfaced through the PROVIDER-ADAPTER path
+          // instead of this HTTP-catalog path, to avoid double-surfacing the
+          // same tool under two names. Reads (check_availability/list_events)
+          // come from the registered `google_calendar` ProviderAdapter
+          // (google-calendar.adapter.ts); writes go ONLY through the validated
+          // `schedule_meeting` tool (working hours / buffers / conflicts), so
+          // raw create_event is intentionally never surfaced. The connected-AND-
+          // allowed authority is identical on both paths — this exclusion is
+          // purely routing (which path), not a capability/authorization gate.
+          catalogTool: { integration: { category: { not: "CALENDAR" } } },
         },
       },
       include: {
@@ -1272,6 +1341,31 @@ export async function dispatchToolCall(
       return {
         toolCallId: toolCall.id,
         content: JSON.stringify({ ok: false, reason: err?.message || "adapter_failed" }),
+      };
+    }
+  }
+
+  // Unified semantic lead/contact creation. Routed through the per-tenant
+  // CRMAdapter (via ctx.runCreateLead) so Airtable/Fireberry/HubSpot/… all share
+  // ONE create path with correct field mapping. MUST precede the generic
+  // `integration_<slug>` branch below (which would otherwise try to resolve a
+  // catalog tool literally named "create_lead" and miss generic-record CRMs).
+  if ((name === "integration_create_lead" || name === "integration_create_contact") && ctx.runCreateLead) {
+    const kind = name === "integration_create_contact" ? "contact" : "lead";
+    try {
+      const result = await ctx.runCreateLead({
+        kind,
+        name: typeof args.name === "string" ? args.name : undefined,
+        email: typeof args.email === "string" ? args.email : undefined,
+        phone: typeof args.phone === "string" ? args.phone : undefined,
+        company: typeof args.company === "string" ? args.company : undefined,
+        notes: typeof args.notes === "string" ? args.notes : undefined,
+      });
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "create_lead_failed" }),
       };
     }
   }

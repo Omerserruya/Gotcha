@@ -21,6 +21,7 @@ import type {
   CalendarAdapter,
   BusyInterval,
 } from "../scheduling.service";
+import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const FREEBUSY_URL = "https://www.googleapis.com/calendar/v3/freeBusy";
@@ -129,6 +130,35 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     };
   }
 
+  /**
+   * Read-only: list upcoming events in the window. Backs the
+   * `google_calendar.list_events` tool surfaced via the adapter framework.
+   */
+  async listEvents(opts: { fromMs: number; toMs: number; max?: number }): Promise<
+    Array<{ id: string; summary: string | null; start: string | null; end: string | null; attendees: string[] }>
+  > {
+    const { account, creds } = await this.loadAccount();
+    const calendarId = account.defaultCalendarId || "primary";
+    const params = new URLSearchParams({
+      timeMin: new Date(opts.fromMs).toISOString(),
+      timeMax: new Date(opts.toMs).toISOString(),
+      singleEvents: "true",
+      orderBy: "startTime",
+      maxResults: String(Math.min(Math.max(1, Number(opts.max) || 10), 50)),
+    });
+    const url = `${EVENTS_URL(calendarId)}?${params.toString()}`;
+    const res = await this.fetchAuthed(url, { method: "GET" }, creds);
+    const json: any = await res.json();
+    const items: any[] = json?.items ?? [];
+    return items.map((e) => ({
+      id: String(e.id ?? ""),
+      summary: e.summary ?? null,
+      start: e.start?.dateTime ?? e.start?.date ?? null,
+      end: e.end?.dateTime ?? e.end?.date ?? null,
+      attendees: (e.attendees ?? []).map((a: any) => a.email).filter(Boolean),
+    }));
+  }
+
   // ─── Internals ─────────────────────────────────────────
 
   private async loadAccount(): Promise<{ account: any; creds: StoredCredentials }> {
@@ -210,3 +240,96 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
     return next;
   }
 }
+
+// ─── Provider-framework registration ─────────────────────────
+//
+// Makes Google Calendar a FIRST-CLASS adapter-framework provider (like Stripe,
+// Airtable, HubSpot) so its READ tools surface + execute through the SAME
+// connected-AND-allowed pipeline as every other integration — no calendar
+// special-casing in the surface/dispatch layers. WRITES are intentionally NOT
+// exposed here: booking goes through the validated `schedule_meeting` path
+// (working hours / buffers / conflicts), so `create_event` is never surfaced to
+// the model. The concrete per-agent calendar is resolved here (calendar
+// capability is per-agent), keeping the framework contract unchanged.
+
+const GCAL_READ_TOOLS: ToolDefinition[] = [
+  {
+    name: "google_calendar.check_availability",
+    description: "Check the assigned agent's calendar for busy/free time in a window.",
+    whenToUse: "You need to know when the agent is free before proposing or confirming times.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        from_iso: { type: "string", description: "Window start, ISO8601 with timezone offset." },
+        to_iso: { type: "string", description: "Window end, ISO8601 with timezone offset." },
+      },
+      required: ["from_iso", "to_iso"],
+    },
+  },
+  {
+    name: "google_calendar.list_events",
+    description: "List the assigned agent's upcoming calendar events in a window.",
+    whenToUse: "You need to see existing events (e.g. to reference or avoid a clash) — read only.",
+    category: "READ",
+    riskLevel: "LOW",
+    parameters: {
+      type: "object",
+      properties: {
+        from_iso: { type: "string", description: "Window start, ISO8601 with timezone offset." },
+        to_iso: { type: "string", description: "Window end, ISO8601 with timezone offset." },
+        max: { type: "number", description: "Max events to return (default 10, max 50)." },
+      },
+      required: ["from_iso", "to_iso"],
+    },
+  },
+];
+
+/**
+ * Resolve the per-agent CONNECTED Google calendar account for this conversation.
+ * Calendar capability is per-agent (an agent books into a SPECIFIC calendar), so
+ * the agent is taken from the conversation's assignment. Throws a clear error
+ * (never a crash) when the agent has no connected calendar — the dispatcher
+ * surfaces it as a structured failure.
+ */
+async function resolveAgentCalendarAccountId(tenantId: string, conversationId?: string): Promise<string> {
+  if (!conversationId) throw new Error("calendar tools require a conversation context");
+  const conv = await (prisma as any).conversation.findUnique({
+    where: { id: conversationId },
+    select: { assignedAiAgentId: true },
+  });
+  const aiAgentId = conv?.assignedAiAgentId;
+  if (!aiAgentId) throw new Error("no_agent_assigned_to_conversation");
+  const account = await (prisma as any).calendarAccount.findFirst({
+    where: { tenantId, aiAgentId, provider: "GOOGLE_CALENDAR", status: "CONNECTED" },
+    select: { id: true },
+  });
+  if (!account) throw new Error("no_connected_calendar_for_agent");
+  return account.id;
+}
+
+export const GoogleCalendarProviderAdapter: ProviderAdapter = {
+  slug: "google_calendar",
+  tools: () => GCAL_READ_TOOLS,
+  async execute({ ctx, toolName, args }) {
+    const accountId = await resolveAgentCalendarAccountId(ctx.tenantId, ctx.conversationId);
+    const cal = new GoogleCalendarAdapter({ calendarAccountId: accountId });
+    const fromMs = Date.parse(String(args.from_iso ?? ""));
+    const toMs = Date.parse(String(args.to_iso ?? ""));
+    if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
+      throw new Error("from_iso and to_iso must be valid ISO8601 timestamps");
+    }
+    const tool = toolName.includes(".") ? toolName.slice(toolName.indexOf(".") + 1) : toolName;
+    if (tool === "check_availability") {
+      const busy = await cal.findBusy({ agentId: "", fromMs, toMs });
+      return { busy: busy.map((b) => ({ start: new Date(b.startMs).toISOString(), end: new Date(b.endMs).toISOString() })) };
+    }
+    if (tool === "list_events") {
+      return { events: await cal.listEvents({ fromMs, toMs, max: Number(args.max) || 10 }) };
+    }
+    throw new Error(`unsupported google_calendar tool: ${tool}`);
+  },
+};
+
+registerAdapter(GoogleCalendarProviderAdapter);

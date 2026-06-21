@@ -439,6 +439,12 @@ model AIAgent {
   toneConfig Json? @map("tone_config") // { formalityLevel, empathyLevel, assertiveness }
   behavioral Json? // { escalationTriggers[], forbiddenActions[], safetyBoundaries[] }
 
+  // Product Qualification Context (sales-oriented skills). Static per agent so
+  // it is cache-safe in the prompt. Drives needs-vs-product qualification
+  // instead of generic discovery.
+  // { whatWeSell, idealCustomerProfile, problemsSolved[], expectedOutcomes[], qualificationSignals[], disqualifiers[] }
+  salesContext Json? @map("sales_context")
+
   // First-class goal + success criteria. Always rendered into the system
   // prompt by buildGoals() - so non-funnel agents (Support, Research)
   // have meaningful per-agent goal text. For Sales/SDR/Recruiting these

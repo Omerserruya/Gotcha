@@ -603,7 +603,7 @@ export async function executeAction(
         // it from the conversation's `assignedAiAgentId`. Required because
         // makeScheduleMeetingHandler looks up the agent's connected
         // calendar (Google / Calendly) to know which adapter to use.
-        const p = action.params as ScheduleMeetingArgs & { conversationId?: string };
+        const p = action.params as unknown as ScheduleMeetingArgs & { conversationId?: string };
         if (!p.conversationId) {
           throw new Error("schedule_meeting requires conversationId in params");
         }

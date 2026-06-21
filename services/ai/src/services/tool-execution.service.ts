@@ -116,9 +116,36 @@ export async function executeTool(params: {
     }
   }
 
-  // Fail loudly on missing endpoint - no silent fallback.
+  // Endpoint-less catalog tools are backed by a provider ADAPTER (HubSpot,
+  // Salesforce, Monday, …) rather than an HTTP template. Route them to the
+  // adapter framework instead of failing — otherwise the bot's CRM action tools
+  // (create_lead/create_contact/create_deal on HubSpot/Salesforce) are dead and
+  // every lead-creation attempt errors. Providers WITH an HTTP template (Zoho,
+  // …) keep the endpoint path below.
   if (!catalogTool.endpoint) {
-    return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
+    if (!integrationSlug) {
+      return { ok: false, error: `catalog tool "${catalogTool.slug}" has no endpoint configured` };
+    }
+    const { executeAdapterTool } = await import("./connectors/integration-framework");
+    const adapterRes = await executeAdapterTool({
+      tenantId,
+      conversationId,
+      toolFunctionName: `${integrationSlug}.${catalogTool.slug}`,
+      args: input,
+    });
+    // Mutating writes change the lead/contact rows the prefetch cache is keyed
+    // on — invalidate so the next bot turn rebuilds context against fresh data.
+    if (adapterRes.ok && CRM_MUTATING_SLUGS.has(catalogTool.slug || "")) {
+      try {
+        const { invalidateCrmPrefetch } = await import("./crm-prefetch.service");
+        invalidateCrmPrefetch(tenantId, conversationId);
+      } catch (err: any) {
+        console.warn("[ToolExec] crm-prefetch invalidate (adapter) failed:", err?.message);
+      }
+    }
+    return adapterRes.ok
+      ? { ok: true, output: (adapterRes as any).result ?? null, error: undefined }
+      : { ok: false, output: null, error: (adapterRes as any).reason || "adapter_failed" };
   }
 
   // Validate params against catalog schema before dispatching.

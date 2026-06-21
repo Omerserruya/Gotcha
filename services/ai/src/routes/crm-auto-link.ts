@@ -210,7 +210,7 @@ router.post("/auto-link-identifier", async (req: Request, res: Response) => {
     // Hint guard - if neither identifier NOR a strong channel external_id is
     // available, linkOrCreateCrmContact would refuse with "no_identifiers".
     // Bail early with a clear reason so the caller can see why we skipped.
-    if (!hints.email && !hints.phone && hints.channels.length === 0) {
+    if (!hints.email && !hints.phone && !hints.channels?.length) {
       res.json({ ok: false, outcome: "no_identifiers", reason: "nothing-to-search-by" });
       return;
     }

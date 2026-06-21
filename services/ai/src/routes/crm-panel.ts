@@ -801,7 +801,7 @@ export async function syncCloseToCrm(
     const hasStrongId =
       Boolean(hints.phone) ||
       Boolean(hints.email) ||
-      hints.channels.some(
+      (hints.channels ?? []).some(
         (c) =>
           (c.channel === "whatsapp" || c.channel === "sms" || c.channel === "voice" || c.channel === "email") &&
           Boolean(c.external_id),

@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.service";
+import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
@@ -20,6 +21,40 @@ function sanitizePersona<T>(persona: T): T {
     return rest as T;
   }
   return persona;
+}
+
+/**
+ * Normalize the Product Qualification Context (agent.salesContext). Trims the
+ * two string fields, cleans the four string-array fields, and collapses an
+ * all-empty object to NULL so the prompt block is skipped. Unknown keys are
+ * dropped. Returns null for non-object input.
+ */
+function normalizeSalesContext(raw: unknown): Record<string, unknown> | null {
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const r = raw as Record<string, unknown>;
+  const str = (v: unknown): string | undefined =>
+    typeof v === "string" && v.trim() ? v.trim() : undefined;
+  const list = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((s) => s.trim())
+      : [];
+
+  const out: Record<string, unknown> = {};
+  const whatWeSell = str(r.whatWeSell);
+  const idealCustomerProfile = str(r.idealCustomerProfile);
+  const problemsSolved = list(r.problemsSolved);
+  const expectedOutcomes = list(r.expectedOutcomes);
+  const qualificationSignals = list(r.qualificationSignals);
+  const disqualifiers = list(r.disqualifiers);
+
+  if (whatWeSell) out.whatWeSell = whatWeSell;
+  if (idealCustomerProfile) out.idealCustomerProfile = idealCustomerProfile;
+  if (problemsSolved.length) out.problemsSolved = problemsSolved;
+  if (expectedOutcomes.length) out.expectedOutcomes = expectedOutcomes;
+  if (qualificationSignals.length) out.qualificationSignals = qualificationSignals;
+  if (disqualifiers.length) out.disqualifiers = disqualifiers;
+
+  return Object.keys(out).length ? out : null;
 }
 
 // ─── List AI Agents ──────────────────────────────────────────
@@ -248,11 +283,16 @@ router.get("/:id", authenticate, resolveTenant, requireActiveTenant(), requireRo
         usageRule: (tp as any).usageRule ?? null,
       }));
 
+    // Single calendar-capability signal so the builder can warn accurately
+    // when calendar tools are enabled but the agent cannot actually book.
+    const calendarCapability = await computeCalendarCapability(req.tenantId! as string, agent.id);
+
     res.json({
       data: {
         ...agent,
         knowledgeSources: agent.knowledgeBases.map((ak: any) => ak.knowledgeBase),
         tools,
+        calendarCapability,
       },
     });
   } catch (err) {
@@ -284,7 +324,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
       behavioral, persona, maxAutonomousMessages, maxAutonomousMinutes,
       confidenceThreshold, escalationMessage, conversationFlow, customGuardrails,
       departmentId, funnelId,
-      goal, successCriteria,
+      goal, successCriteria, salesContext,
       knowledgeBaseIds, toolIds,
     } = req.body;
 
@@ -351,6 +391,9 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         funnelId: funnelId || null,
         goal: normalizedGoal,
         successCriteria: typeof successCriteria === "string" ? successCriteria.trim() || null : null,
+        // Cast matches the loosely-typed sibling Json fields (identity/behavioral
+        // are `any` from req.body); null → SQL NULL, same as those.
+        salesContext: normalizeSalesContext(salesContext) as any,
       },
     });
 
@@ -427,6 +470,12 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       updateData.successCriteria = typeof updateData.successCriteria === "string"
         ? updateData.successCriteria.trim() || null
         : null;
+    }
+
+    // Product Qualification Context (sales). Clean strings/arrays; an
+    // all-empty object collapses to NULL so the prompt block is skipped.
+    if (Object.prototype.hasOwnProperty.call(updateData, "salesContext")) {
+      updateData.salesContext = normalizeSalesContext(updateData.salesContext);
     }
 
     // Role-driven guardrails on update - funnel binding is still required

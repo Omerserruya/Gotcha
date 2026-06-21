@@ -69,6 +69,12 @@ export interface ValidationContext {
   conversationId: string;
   /** Successful tool calls in this turn, for fabricated-action detection. */
   toolCallLog?: Array<{ tool: string; decision?: string; sideEffect?: string }>;
+  /** Tools the Turn Outcome Ledger recorded as COMMITTED this turn (real
+   * external ref). The authoritative success set — unioned with the toolCallLog
+   * decisions so the final fabrication check shares the single source of truth
+   * (e.g. a booking deduped from a prior turn has no fresh "executed" log entry
+   * but IS a real commit, and must not be flagged as fabricated). */
+  ledgerCommittedTools?: string[];
 }
 
 export type ViolationCategory =
@@ -113,11 +119,12 @@ export function validateAssistantOutput(
   // Fabricated-action heuristic: assistant claims a write action happened
   // ("I've refunded", "scheduled the meeting", "sent the link", "created
   // the lead") but no corresponding successful tool call exists in the log.
-  const succeededTools = new Set(
-    (ctx.toolCallLog || [])
+  const succeededTools = new Set([
+    ...(ctx.toolCallLog || [])
       .filter((c) => c.decision === "executed" || c.decision === "executed_on_retry")
       .map((c) => c.tool.toLowerCase()),
-  );
+    ...(ctx.ledgerCommittedTools || []).map((t) => t.toLowerCase()),
+  ]);
   const FABRICATION_RULES: Array<{ pattern: RegExp; needsTool: RegExp }> = [
     { pattern: /\b(i(?:'ve|\s+have)|just)\s+refunded\b/i, needsTool: /refund/i },
     { pattern: /\b(i(?:'ve|\s+have))\s+scheduled\b/i, needsTool: /(schedule_meeting|schedule_followup|book_)/i },

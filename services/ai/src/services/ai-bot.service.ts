@@ -81,6 +81,13 @@ import {
   detectRedundantInfoRequest,
   buildRedundantInfoCorrective,
 } from "./booking-guard.service";
+import { TurnOutcomeLedger } from "./turn-outcome-ledger";
+import {
+  buildCommittedOutcomeBlock,
+  evaluateReplyConsistency,
+  buildUnconfirmedCommitCorrective,
+} from "./ledger-reply";
+import { actionCategoriesForTool } from "./side-effect-classifier";
 import { listCustomApiTools, executeCustomApiTool } from "./connectors/custom-api.service";
 import { executeAdapterTool, listAdapters } from "./connectors/integration-framework";
 import {
@@ -111,7 +118,14 @@ function unwrapToolExec(
 ): AgentToolDispatchResult {
   if (exec.status === "completed") {
     const inner = exec.result as AgentToolDispatchResult | undefined;
-    if (inner && typeof inner === "object" && "content" in inner) return inner;
+    // Always bind to the CURRENT toolCallId and clone. The ledger dedup path
+    // returns the FIRST call's stored result for a duplicate call; without
+    // rebinding, two tool messages would share one tool_call_id → OpenAI 400
+    // ("Duplicate value for 'tool_call_id'"). Cloning avoids mutating the
+    // ledger's stored result object.
+    if (inner && typeof inner === "object" && "content" in inner) {
+      return { ...inner, toolCallId };
+    }
     // Defensive default if executor returned a non-AgentToolDispatchResult.
     return { toolCallId, content: typeof inner === "string" ? inner : "" };
   }
@@ -302,27 +316,8 @@ async function evaluateEscalationGates(opts: {
  *
  * Always-keep: escalate_to_human, submit_*, integration_*_search/_get/_lookup/_read.
  */
-/**
- * Reverse-mapping: which ActionCategory does this tool function name implement?
- * Mirrors the runtime filter logic so the runtime enforcer can detect when a
- * required action had a matching tool but the LLM didn't call it.
- */
-function actionCategoriesForTool(toolName: string): ActionCategory[] {
-  if (!toolName) return [];
-  if (toolName === "escalate_to_human") return ["escalate_to_human"];
-  if (toolName === "link_customer_identifier") return ["identity_link"];
-  if (toolName.startsWith("submit_")) return [];
-  if (/(_search|_get|_lookup|_read)$/.test(toolName)) return ["crm_read", "kb_lookup"];
-  if (/^integration_create_lead/.test(toolName)) return ["create_lead"];
-  if (/^integration_create_contact/.test(toolName)) return ["create_contact"];
-  if (/(_note$|add_note)/.test(toolName)) return ["add_note"];
-  if (/(tag_|_tag$)/.test(toolName)) return ["tag"];
-  if (/(schedule_followup|set_followup)/.test(toolName)) return ["schedule_followup"];
-  if (/(book_|schedule_meeting|schedule_demo)/.test(toolName)) return ["schedule_booking"];
-  if (/(send_proposal|send_quote|create_proposal)/.test(toolName)) return ["send_proposal"];
-  if (/(update_|patch_)/.test(toolName)) return ["update_record"];
-  return [];
-}
+// `actionCategoriesForTool` now lives in side-effect-classifier.ts (single
+// source of truth, shared with the Turn Outcome Ledger). Imported at top.
 
 /**
  * Programmatic exit-criteria gate for `close_conversation`. The funnel
@@ -1513,6 +1508,24 @@ async function generateAIBotReplyInner(
   let replyText: string | null = null;
   let totalTokens = 0;
   const toolCallLog: AIBotReplyResult["toolCallLog"] = [];
+  // Turn Outcome Ledger — single source of truth for side effects this turn.
+  // Passed to every orchestrator.submit() so duplicate semantic actions dedup
+  // and a committed success can never be downgraded by a later failure.
+  const ledger = new TurnOutcomeLedger();
+  const ledgerCtx = { contactId: contactRow?.id };
+  // Inject the authoritative committed-outcome block into the model context at
+  // most once per turn (the first time a side effect commits) so the reply is
+  // DERIVED FROM ledger state. Shared across the main loop, the contract retry,
+  // and the consistency regen (all append to the same chatMessages array).
+  let committedSummaryInjected = false;
+  const injectCommittedSummaryIfNeeded = () => {
+    if (committedSummaryInjected) return;
+    const block = buildCommittedOutcomeBlock(ledger);
+    if (block) {
+      chatMessages.push({ role: "system", content: block });
+      committedSummaryInjected = true;
+    }
+  };
 
   for (let round = 0; round < 3; round++) {
     const response = await generateResponse({
@@ -1758,6 +1771,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
+          { ledger, ctx: ledgerCtx, idempotency: true },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
 
@@ -1836,6 +1850,11 @@ async function generateAIBotReplyInner(
           content: result.content,
         });
       }
+
+      // Ledger-driven: once a side effect has committed, inject the
+      // authoritative outcome block BEFORE the next round produces the
+      // customer-facing reply, so that reply is derived from ledger truth.
+      injectCommittedSummaryIfNeeded();
 
       if (pausedForApproval) {
         awaitingApproval = pausedForApproval;
@@ -1972,6 +1991,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
+          { ledger, ctx: ledgerCtx, idempotency: true },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({
@@ -2064,23 +2084,18 @@ async function generateAIBotReplyInner(
   const replyWasPassiveCloser = isNonAdvancingReply(replyText);
   let passiveCloseRegenerated = false;
 
-  // Committed-action guard. If a side-effecting action tool actually SUCCEEDED
-  // this turn (booking created, lead/contact/deal created, proposal sent), the
-  // correct reply is to CONFIRM that outcome per the Action Outcome Contract -
-  // NOT to pivot to an earlier objective. The passive-closer/objective regen
-  // otherwise classifies a post-booking reply as "non-advancing for
-  // GENERATE_LEAD" and rewrites it into a discovery question, so the meeting
-  // gets booked on the calendar but the customer is never told (observed live:
-  // schedule_meeting ok:true → regen produced "what type of business?"). Skip
-  // the objective regen when a real side effect landed.
-  const COMMITTED_ACTION_TOOLS =
-    /(schedule_meeting|create_lead|create_contact|create_deal|create_record|create_item|integration_create_|schedule_followup|send_proposal)/;
-  const committedActionThisTurn = toolCallLog.some((c) => {
-    if (c.decision !== "executed" && c.decision !== "executed_on_retry") return false;
-    if (!COMMITTED_ACTION_TOOLS.test(String(c.tool))) return false;
-    const r = typeof c.result === "string" ? c.result : "";
-    return /"ok"\s*:\s*true/.test(r);
-  });
+  // Committed-action guard (ledger-driven). If a side-effecting action tool
+  // actually committed this turn (booking created, lead/contact/deal created,
+  // proposal sent), the correct reply is to CONFIRM that outcome per the Action
+  // Outcome Contract - NOT to pivot to an earlier objective. The
+  // passive-closer/objective regen otherwise classifies a post-booking reply as
+  // "non-advancing for GENERATE_LEAD" and rewrites it into a discovery question,
+  // so the meeting gets booked on the calendar but the customer is never told
+  // (observed live: schedule_meeting ok:true → regen produced "what type of
+  // business?"). The Turn Outcome Ledger is the single source of truth for
+  // "did a real side effect land" — replacing the old regex scan over tool-result
+  // strings, which read whichever result text the model happened to surface.
+  const committedActionThisTurn = ledger.committed().length > 0;
 
   // NOTE: this gate is deliberately NOT subject to budget.exceededTurnCap().
   // The per-turn cap is runaway-protection for unbounded tool loops; these
@@ -2197,23 +2212,25 @@ async function generateAIBotReplyInner(
   // guard fires only on a false "it's booked" claim, never on a normal "what
   // time works?" reply.
   const bookingClaim = detectBookingClaim(replyText);
-  const bookedOkThisTurn = toolCallLog.some(
-    (c) =>
-      c.tool === "schedule_meeting" &&
-      (c.decision === "executed" || c.decision === "executed_on_retry") &&
-      /"ok"\s*:\s*true/.test(typeof c.result === "string" ? c.result : ""),
-  );
+  // Ledger-driven consistency verdict. The Turn Outcome Ledger is the single
+  // source of truth: `fabricated_claim` = the reply asserts a booking is done
+  // but NO customer-facing booking committed this turn; `unconfirmed_commit` = a
+  // customer-facing outcome DID commit but the draft doesn't confirm it. This
+  // replaces the old per-tool `bookedOkThisTurn` regex over result strings.
+  const replyConsistency = evaluateReplyConsistency(ledger, replyText, {
+    bookingClaimMatched: bookingClaim.matched,
+    replyNonAdvancing: isNonAdvancingReply(replyText),
+  });
   if (
     replyText &&
     !awaitingApproval &&
     !pendingEscalation &&
     calendarCapability.bookable &&
-    bookingClaim.matched &&
-    !bookedOkThisTurn
+    replyConsistency.status === "fabricated_claim"
   ) {
     console.warn(
       `[ai-bot] fabricated-booking blocked: reply claims booking ("${bookingClaim.phrase}") ` +
-        `but no schedule_meeting succeeded this turn. Regenerating with tools.`,
+        `but the ledger has no committed customer-facing booking this turn. Regenerating with tools.`,
     );
     chatMessages.push({ role: "assistant", content: replyText });
     chatMessages.push({ role: "user", content: buildFabricatedBookingCorrective() });
@@ -2254,6 +2271,7 @@ async function generateAIBotReplyInner(
               { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
               agentToolCtx,
             ),
+          { ledger, ctx: ledgerCtx, idempotency: true },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
         toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: undefined });
@@ -2284,6 +2302,52 @@ async function generateAIBotReplyInner(
       result: "regenerated_to_avoid_fabricated_booking",
       decision: "fabricated_booking",
       sideEffect: "fabricated_booking_regenerated",
+    });
+  }
+
+  // ── Ledger consistency gate: unconfirmed commit ─────────────────
+  // A customer-facing outcome (e.g. a booking) ACTUALLY committed this turn but
+  // the draft reply fails to confirm it (empty / passive closer) — the meeting
+  // is on the calendar yet the customer would be told nothing, or asked an
+  // unrelated discovery question. The committed-summary block is already in
+  // context (injected mid-loop); push the stronger corrective and regenerate
+  // ONCE WITHOUT tools so the reply is derived from the committed ledger state.
+  // Skipped when the fabricated-booking guard already regenerated this turn.
+  let unconfirmedCommitRegenerated = false;
+  if (
+    !fabricatedBookingRegenerated &&
+    !awaitingApproval &&
+    !pendingEscalation &&
+    replyConsistency.status === "unconfirmed_commit"
+  ) {
+    const kinds = replyConsistency.customerFacing.map((e) => e.kind);
+    console.warn(
+      `[ai-bot] unconfirmed-commit blocked: ledger committed customer-facing ${kinds.join(",")} ` +
+        `but the draft reply does not confirm it. Regenerating from ledger state.`,
+    );
+    injectCommittedSummaryIfNeeded();
+    if (replyText) chatMessages.push({ role: "assistant", content: replyText });
+    chatMessages.push({ role: "user", content: buildUnconfirmedCommitCorrective(kinds) });
+    const regen = await generateResponse({
+      tenantId: opts.tenantId,
+      sessionId: opts.conversationId,
+      model,
+      messages: chatMessages,
+      temperature: config.temperature ?? 0.7,
+      maxTokens: config.maxTokens ?? 1024,
+      metadata: { type: "ai_bot_unconfirmed_commit_regen", conversationId: opts.conversationId, aiAgentId: config.id },
+      signal,
+    });
+    totalTokens += regen.usage.total_tokens || 0;
+    budget.addUsage(regen.usage.total_tokens || 0);
+    if (regen.content?.trim()) replyText = regen.content.trim();
+    unconfirmedCommitRegenerated = true;
+    toolCallLog.push({
+      tool: "__ledger_consistency_gate__",
+      args: { committed: kinds },
+      result: "regenerated_to_confirm_committed_outcome",
+      decision: "unconfirmed_commit",
+      sideEffect: "unconfirmed_commit_regenerated",
     });
   }
 
@@ -2440,6 +2504,9 @@ async function generateAIBotReplyInner(
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         toolCallLog,
+        // Ledger is the single source of truth for committed actions — feed it
+        // to the fabrication check so a deduped/cross-turn commit isn't flagged.
+        ledgerCommittedTools: ledger.committed().map((e) => e.tool),
       });
 
   return {

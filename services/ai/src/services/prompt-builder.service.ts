@@ -48,8 +48,20 @@ import {
   type ActionCategory,
 } from "./behavior-strategies";
 import { renderBrandVoice } from "./brand-archetypes";
-import { buildSkillBlock, requiredKnowledgeFor } from "./skills";
+import { buildSkillBlock, requiredKnowledgeFor, roleToSkill } from "./skills";
 import { computeKnowledgeLedger, renderKnowledgeLedger } from "./knowledge-ledger";
+import {
+  computeProspectState,
+  renderProspectState,
+  type CrmStateFlags,
+} from "./prospect-state";
+import {
+  selectActiveObjective,
+  renderObjectiveLedger,
+  shouldRenderLeadIdentity,
+  renderLeadIdentityLedger,
+} from "./objectives";
+import { buildBookingCapabilityBlock } from "./booking-guard.service";
 import {
   CONVERSATION_PLAYBOOKS,
   type PlaybookId,
@@ -96,6 +108,11 @@ export interface AgentRecord {
   toneConfig?: unknown;
   behavioral?: unknown;
   persona?: unknown;
+  /** Product Qualification Context (sales-oriented skills). Static per agent:
+   *  { whatWeSell, idealCustomerProfile, problemsSolved[], expectedOutcomes[],
+   *    qualificationSignals[], disqualifiers[] }. Anchors QUALIFY_LEAD to the
+   *  real offer instead of generic discovery. */
+  salesContext?: unknown;
   conversationFlow?: unknown;
   customGuardrails?: unknown;
   escalationRules?: unknown;
@@ -126,6 +143,16 @@ export interface ContextSlot {
    * tenant hasn't registered any.
    */
   templatesBlock?: string;
+  /**
+   * Facts learned in the LIVE conversation this session — recent customer
+   * utterances plus any structured facts already extracted/persisted for this
+   * person. Fed into the Knowledge Ledger + Objective Engine alongside the
+   * CRM/memory snapshots so objective progression reflects what the customer
+   * ACTUALLY said this turn, not only what a prior CRM/memory write captured.
+   * Without this the ledger is blind to the session and objectives get stuck on
+   * already-satisfied requirements (the real WhatsApp regression).
+   */
+  sessionFactsBlock?: string;
   locale?: string;
 }
 
@@ -156,6 +183,26 @@ export interface BuildPromptOpts {
    * no funnel is configured or the resolver couldn't determine a stage.
    */
   stageContext?: import("./intelligence/prompts/blocks/copilot-config-block").StageContextForPrompt;
+  /**
+   * CRM presence flags for THIS customer, resolved from the CRM prefetch. Drives
+   * the per-turn Prospect State block (NEW_PROSPECT / KNOWN_CONTACT /
+   * OPEN_OPPORTUNITY / CUSTOMER) and the Objective Engine's chain selection.
+   * Absent → treated as NEW_PROSPECT (no CRM record).
+   */
+  crm?: CrmStateFlags;
+  /**
+   * Whether this agent can actually book a meeting THIS conversation
+   * (calendar capability === CALENDAR_CONNECTED_AND_BOOKABLE). When explicitly
+   * false, a Booking Capability block tells the model it cannot commit to a
+   * time. Undefined → no block rendered (caller didn't compute capability).
+   */
+  calendarBookable?: boolean;
+  /**
+   * The tenant's company identity (employer + what it does/sells), from the
+   * onboarding BusinessProfile. Rendered as a stable `# Company` block so every
+   * agent knows who it represents. Absent → no block (no profile configured).
+   */
+  company?: import("./company-context.service").CompanyContext;
 }
 
 // ─── ESCALATION TOOL ────────────────────────────────────────
@@ -333,6 +380,9 @@ export function buildAgentPrompt(opts: BuildPromptOpts): string {
 function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): string | null {
   const parts: string[] = [];
   push(parts, buildIdentity(opts, strategy));
+  // Company identity (employer + what we do/sell) - inherited from the tenant
+  // BusinessProfile so EVERY agent represents the company, not a generic helper.
+  push(parts, buildCompanyBlock(opts));
   // Personality skill - the platform-wide humanlike-behavior layer. Sits
   // directly under Identity so "who you are" is immediately followed by
   // "how you behave". Customer-facing modes only.
@@ -342,9 +392,88 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
     push(parts, renderBrandVoice(asRecord(opts.agent.persona)?.brand_archetype));
   }
   push(parts, buildAgentPlaybooksStatic(opts));
+  // Product Qualification Context (sales-oriented skills) - anchors discovery to
+  // the real offer instead of generic need/authority/timeline. Static per agent.
+  push(parts, buildProductQualificationBlock(opts));
+  // Booking capability boundary - when the agent cannot actually book, tell it
+  // so up front. The runtime booking fail-safe enforces it regardless of prompt.
+  if (opts.behaviorState.mode === "agent" && opts.calendarBookable === false) {
+    push(parts, buildBookingCapabilityBlock(false));
+  }
   push(parts, buildGuardrailsBase(opts));
   if (parts.length === 0) return null;
   return parts.join("\n\n");
+}
+
+/**
+ * Company identity block — who the agent works for and what that company does.
+ * Reads ONLY opts.company (tenant BusinessProfile) → stable across the tenant's
+ * conversations, cache-safe. This is the universal employer context every agent
+ * inherits; per-agent salesContext layers the sales detail on top.
+ */
+function buildCompanyBlock(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode === "generator") return null;
+  const c = opts.company;
+  if (!c || !c.organizationName) return null;
+  const org = c.organizationName.trim();
+  const lines: string[] = ["# Company"];
+  lines.push(c.industry ? `You work for **${org}** (${c.industry}).` : `You work for **${org}**.`);
+  if (c.businessDescription) lines.push(`What ${org} does: ${c.businessDescription}`);
+  if (c.websiteDomain) lines.push(`Website: ${c.websiteDomain}`);
+  lines.push(
+    "You are an EMPLOYEE of this company and speak on its behalf in the first person (\"we\", \"our\"). " +
+      "Never describe the company as an outsider, never ask the customer what your own company does, and never act like a neutral assistant — you represent this business.",
+  );
+  return lines.join("\n");
+}
+
+/** Sales-oriented skills that benefit from product/offer context. */
+const PRODUCT_CONTEXT_SKILLS = new Set(["SALES", "SDR", "CUSTOMER_SUCCESS"]);
+
+/**
+ * Product Qualification Context — what we sell, ICP, problems, outcomes, and
+ * qualification signals — rendered only for sales-oriented skills and only when
+ * the agent has authored `salesContext`. Reads ONLY opts.agent.* → cache-safe.
+ */
+function buildProductQualificationBlock(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode === "generator") return null;
+  if (!PRODUCT_CONTEXT_SKILLS.has(roleToSkill(opts.agent.role))) return null;
+  const sc = asRecord(opts.agent.salesContext);
+  if (!sc) return null;
+
+  const str = (v: unknown): string | null =>
+    typeof v === "string" && v.trim() ? v.trim() : null;
+  const list = (v: unknown): string[] =>
+    Array.isArray(v)
+      ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((s) => s.trim())
+      : [];
+
+  const whatWeSell = str(sc.whatWeSell);
+  const icp = str(sc.idealCustomerProfile);
+  const problems = list(sc.problemsSolved);
+  const outcomes = list(sc.expectedOutcomes);
+  const signals = list(sc.qualificationSignals);
+  const disq = list(sc.disqualifiers);
+
+  if (!whatWeSell && !icp && !problems.length && !outcomes.length && !signals.length && !disq.length) {
+    return null;
+  }
+
+  const lines: string[] = [
+    "# Product Qualification Context",
+    "Qualify the prospect against THIS offer - not generic discovery. Tie every discovery question and recommendation to the fit between their situation and what we actually sell.",
+  ];
+  if (whatWeSell) lines.push("", `**What we sell:** ${whatWeSell}`);
+  if (icp) lines.push("", `**Ideal customer:** ${icp}`);
+  if (problems.length) lines.push("", "**Problems we solve:**", ...problems.map((p) => `- ${p}`));
+  if (outcomes.length) lines.push("", "**Outcomes customers get:**", ...outcomes.map((o) => `- ${o}`));
+  if (signals.length) lines.push("", "**Good-fit signals to probe for:**", ...signals.map((s) => `- ${s}`));
+  if (disq.length) lines.push("", "**Poor-fit / disqualifiers:**", ...disq.map((d) => `- ${d}`));
+  lines.push(
+    "",
+    "Lead toward establishing this fit, then toward the next concrete step (demo/meeting). If they are clearly a poor fit, qualify out gracefully rather than forcing a meeting.",
+  );
+  return lines.join("\n");
 }
 
 // ─── Block 2: Per-CONVERSATION ─────────────────────────────
@@ -420,10 +549,13 @@ Before sending, silently review your draft against these. If it fails any, rewri
 
 1. **Strategy consistency** - match the Active Strategy. Never regress CONVERT → QUALIFY, and never restart discovery after real progress was made. Hold the current direction unless an exit condition actually fired.
 2. **CRM awareness** - don't ask for anything already in the Context/CRM block or said earlier in this chat; reference it naturally instead.
+2a. **Read THIS message (CRITICAL)** - if the customer's latest message contains an email, phone number, name, time, or availability, it is now CAPTURED. Acknowledge/confirm it ("מעולה, רשמתי omer@example.com ויום שלישי אחה\"צ") and NEVER ask for that same detail again. Re-asking for something the customer literally just gave you is a serious failure.
 3. **One move per turn** - exactly one conversational move. A reflection that ends in one question is ONE move. Don't stack objectives.
-4. **Human check** - acknowledge before exploring; react to what they actually said; if they gave real information, reflect it before asking anything new. No mechanical checklist-walking.
+4. **Human check** - acknowledge before exploring; react to what they actually said; if they gave real information, reflect it before asking anything new. No mechanical checklist-walking. When the customer DESCRIBES their business or situation (e.g. "I have a small online store, lots of WhatsApp/Instagram messages"), name those specifics back and qualify DEEPER on them ("high message volume across WhatsApp and Instagram is exactly what we solve - where does it hurt most: response time, or leads slipping through?"). NEVER repeat the same question they just answered, and NEVER re-send your previous message.
+4a. **Do not bail (FORBIDDEN in sales)** - a vague, short, or "just looking" answer is NOT a reason to escalate or hand off. Do NOT call escalate_to_human or say "I'll transfer you to the team" in a normal discovery conversation. Only involve a human if the customer EXPLICITLY asks for one, is clearly upset, or you've genuinely hit something you cannot handle. Otherwise keep leading the conversation yourself.
 5. **Repetition** - don't reuse a recent opener, transition, or closer. Avoid leaning on "הבנתי / מעולה / מצוין / נשמע הגיוני / understood / great / makes sense / perfect".
 6. **No passive closer (FORBIDDEN)** - "אני כאן בשבילך", "אני כאן לעזור", "אל תהססי לפנות", "אם יש שאלות נוספות אני כאן", "I'm here if you need anything", "feel free to reach out", "anything else I can help with". End by advancing, clarifying, acknowledging, summarizing, or stopping naturally - never with generic availability.
+6a. **No passive OPENER (FORBIDDEN)** - never open or reply with a generic "how can I help / what are you looking for / what brings you here", e.g. "איך אפשר לעזור", "איך אני יכול לעזור", "במה אוכל לעזור", "how can I help you today?". That hands the lead back to the customer. You are a proactive rep: open by leading. On a vague or low-intent message - greet briefly, then in ONE sentence say what your company does for businesses like theirs (use the Company + Product Qualification context), and ask ONE concrete discovery question about THEIR business/need. If they asked a question, answer it in one sentence first, then ask your discovery question.
 7. **Reality check** - never imply a meeting was booked, a message sent, a task completed, or a team notified unless a real tool returned success THIS turn. The customer proposing a time is NOT you booking it - acknowledge their proposal, don't claim you scheduled it.
 7a. **Knowledge gap (when a Knowledge Ledger is present)** - if any required field is still MISSING and the conversation is active, your reply MUST advance toward learning it: answer what they asked, then weave in ONE genuine question toward the ledger's next target. Do NOT answer-and-stop while required knowledge is missing. Skip only if the customer just asked something that must be fully resolved first, or the conversation is genuinely closing.
 8. **Relationship depth** - warmth matches the Relationship signal: new = polite, light warmth · familiar = more conversational · warm = natural familiarity · established = highest warmth. Never jump intimacy levels suddenly.
@@ -440,6 +572,7 @@ function buildTurnBlock(opts: BuildPromptOpts, strategy: StrategyContract): stri
   const parts: string[] = [];
   push(parts, buildTurnState(opts));
   push(parts, buildPipelineStage(opts));
+  push(parts, buildProspectAndObjective(opts));
   push(parts, buildKnowledgeLedger(opts));
   push(parts, buildGoals(opts, strategy));
   push(parts, buildDecisionLayer(opts, strategy));
@@ -523,13 +656,40 @@ function buildKnowledgeLedger(opts: BuildPromptOpts): string | null {
   const required = requiredKnowledgeFor(opts.agent.role);
   if (!required.length) return null;
 
+  const ledger = computeKnowledgeLedger(required, factTextOf(opts));
+  return renderKnowledgeLedger(ledger);
+}
+
+// Concatenated resolved-fact text (customer + CRM + memory) used by both the
+// Knowledge Ledger and the Objective Engine to detect what's already known.
+function factTextOf(opts: BuildPromptOpts): string {
   const ctx = opts.context;
-  const factText = [ctx?.customerBlock, ctx?.crmBlock, ctx?.memoryBlock]
+  // sessionFactsBlock LAST so live-conversation facts are part of the same
+  // resolved-fact text the ledger/objective engine match against — a value the
+  // customer stated this session counts immediately, exactly like a CRM value.
+  return [ctx?.customerBlock, ctx?.crmBlock, ctx?.memoryBlock, ctx?.sessionFactsBlock]
     .filter((s): s is string => !!s && !!s.trim())
     .join("\n");
+}
 
-  const ledger = computeKnowledgeLedger(required, factText);
-  return renderKnowledgeLedger(ledger);
+// Per-turn Prospect State + Objective Ledger (the OBJECTIVE ENGINE surface).
+// Prospect State frames WHO this is (NEW_PROSPECT when no CRM record); the
+// Objective Ledger frames WHAT to achieve and what's still missing to complete
+// it. Agent mode only (objectives are keyed to the role's skill).
+function buildProspectAndObjective(opts: BuildPromptOpts): string | null {
+  if (opts.behaviorState.mode !== "agent") return null;
+
+  const prospectState = computeProspectState(opts.crm ?? { hasLead: false, hasContact: false });
+  const factText = factTextOf(opts);
+  const status = selectActiveObjective(opts.agent.role, prospectState, factText);
+
+  const parts = [
+    renderProspectState(prospectState),
+    renderObjectiveLedger(status, factText),
+    // Explicit per-field lead checklist while the lead is still being captured.
+    shouldRenderLeadIdentity(status) ? renderLeadIdentityLedger(factText) : null,
+  ].filter((s): s is string => !!s);
+  return parts.length ? parts.join("\n\n") : null;
 }
 
 function push(sections: string[], part: string | null): void {

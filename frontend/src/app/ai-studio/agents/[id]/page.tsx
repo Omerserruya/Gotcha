@@ -8,6 +8,7 @@ import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
 import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
 import { listFunnelSummaries, type FunnelSummary } from "@/lib/api-funnel";
+import { getGoogleCalendarConnectUrl } from "@/lib/api-scheduler";
 import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
@@ -109,6 +110,14 @@ interface AgentFormData {
   // brand_archetype edit doesn't wipe gender/traits set elsewhere - the PATCH
   // route replaces the whole persona object.
   persona: Record<string, unknown>;
+  salesContext: {
+    whatWeSell: string;
+    idealCustomerProfile: string;
+    problemsSolved: string[];
+    expectedOutcomes: string[];
+    qualificationSignals: string[];
+    disqualifiers: string[];
+  };
 }
 
 // ─── Constants ─────────────────────────────────────────────────
@@ -204,6 +213,14 @@ function mapApiToForm(agent: any): AgentFormData {
     conversationFlow: Array.isArray(agent.conversationFlow) ? agent.conversationFlow : [],
     customGuardrails: Array.isArray(agent.customGuardrails) ? agent.customGuardrails : [],
     persona: parsePersona(agent.persona),
+    salesContext: {
+      whatWeSell: agent.salesContext?.whatWeSell || "",
+      idealCustomerProfile: agent.salesContext?.idealCustomerProfile || "",
+      problemsSolved: agent.salesContext?.problemsSolved || [],
+      expectedOutcomes: agent.salesContext?.expectedOutcomes || [],
+      qualificationSignals: agent.salesContext?.qualificationSignals || [],
+      disqualifiers: agent.salesContext?.disqualifiers || [],
+    },
   };
 }
 
@@ -249,6 +266,14 @@ const NEW_AGENT_DEFAULT: AgentFormData = {
   conversationFlow: [],
   customGuardrails: [],
   persona: {},
+  salesContext: {
+    whatWeSell: "",
+    idealCustomerProfile: "",
+    problemsSolved: [],
+    expectedOutcomes: [],
+    qualificationSignals: [],
+    disqualifiers: [],
+  },
 };
 
 // Brand Voice archetypes - keys MUST match services/ai/src/services/brand-archetypes.ts.
@@ -352,6 +377,13 @@ export default function AgentEditorPage() {
   const [marketplaceIntegrations, setMarketplaceIntegrations] = useState<any[]>([]);
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
+  const [calendarCapability, setCalendarCapability] = useState<{
+    capability: string;
+    bookable: boolean;
+    providers: string[];
+    activeMeetingTypes: number;
+    lastError: string | null;
+  } | null>(null);
 
   useEffect(() => {
     if (isNew || !token) return;
@@ -361,6 +393,7 @@ export default function AgentEditorPage() {
       .then((res) => {
         if (res.data) {
           setForm(mapApiToForm(res.data));
+          setCalendarCapability(res.data.calendarCapability ?? null);
           // Incomplete wizard draft → resume the builder at its saved step.
           const status = String(res.data.status || "").toUpperCase();
           if (status === "DRAFT" && res.data.builderStep) {
@@ -447,6 +480,19 @@ export default function AgentEditorPage() {
         toolIds,
         tools,
         knowledgeBaseIds,
+        salesContext: (() => {
+          const sc = form.salesContext;
+          return (sc.whatWeSell.trim() || sc.idealCustomerProfile.trim() || sc.problemsSolved.length || sc.expectedOutcomes.length || sc.qualificationSignals.length || sc.disqualifiers.length)
+            ? {
+                whatWeSell: sc.whatWeSell.trim(),
+                idealCustomerProfile: sc.idealCustomerProfile.trim(),
+                problemsSolved: sc.problemsSolved,
+                expectedOutcomes: sc.expectedOutcomes,
+                qualificationSignals: sc.qualificationSignals,
+                disqualifiers: sc.disqualifiers,
+              }
+            : null;
+        })(),
       };
 
       if (isNew) {
@@ -844,6 +890,50 @@ export default function AgentEditorPage() {
             title={t("aiStudio.agents.editor.skills.title")}
             subtitle={t("aiStudio.agents.editor.skills.subtitle")}
           >
+            {/* Calendar capability warning banner */}
+            {calendarCapability && !calendarCapability.bookable && form.tools.some(t => t.enabled && /calendar|calendly/i.test(t.integration)) && (
+              <div className={clsx(
+                "mb-4 rounded-xl border p-4",
+                calendarCapability.capability === "NO_CALENDAR"
+                  ? "border-red-200 bg-red-50"
+                  : "border-amber-200 bg-amber-50"
+              )}>
+                <p className={clsx(
+                  "text-sm font-semibold mb-1",
+                  calendarCapability.capability === "NO_CALENDAR" ? "text-red-800" : "text-amber-800"
+                )}>
+                  ⚠️{" "}
+                  {calendarCapability.capability === "NO_CALENDAR"
+                    ? "This AI Employee cannot book meetings"
+                    : "No bookable meeting types"}
+                </p>
+                <p className={clsx(
+                  "text-xs mb-3",
+                  calendarCapability.capability === "NO_CALENDAR" ? "text-red-700" : "text-amber-700"
+                )}>
+                  {calendarCapability.capability === "NO_CALENDAR"
+                    ? "Calendar tools are enabled but no calendar account is connected, so it cannot book meetings."
+                    : "A calendar is connected, but there are no active meeting types, so this AI Employee still can’t book. Add a meeting type in Scheduling settings."}
+                </p>
+                {calendarCapability.capability === "NO_CALENDAR" && (
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      try {
+                        const { url } = await getGoogleCalendarConnectUrl(token!, id);
+                        window.location.href = url;
+                      } catch (err) {
+                        console.error("Failed to get calendar connect URL:", err);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-red-600 hover:bg-red-700 text-white text-xs font-medium rounded-lg transition"
+                  >
+                    Connect Google Calendar
+                  </button>
+                )}
+              </div>
+            )}
+
             {Object.entries(toolsByIntegration).map(([integration, tools]) => (
               <div key={integration} className="mb-4 last:mb-0">
                 {/* Integration header */}
@@ -959,6 +1049,93 @@ export default function AgentEditorPage() {
               {t("aiStudio.agents.editor.skills.addMore")}
             </button>
           </SectionCard>
+
+          {/* ── Sales Context (sales-oriented roles only) ── */}
+          {(["sales", "sdr", "customer_success"] as string[]).includes(form.role) && (
+            <SectionCard
+              title="Sales Context"
+              subtitle="What you sell and who you sell to — used to qualify prospects against your actual offer."
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    What we sell
+                  </label>
+                  <textarea
+                    value={form.salesContext.whatWeSell}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, whatWeSell: e.target.value } })}
+                    placeholder="Describe your product or service in 1–2 sentences."
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Ideal customer profile
+                  </label>
+                  <textarea
+                    value={form.salesContext.idealCustomerProfile}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, idealCustomerProfile: e.target.value } })}
+                    placeholder="Who is the perfect customer? E.g. company size, industry, role, pain points."
+                    rows={2}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Problems solved
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.problemsSolved.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, problemsSolved: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"Manual process taking too long\nNo visibility into pipeline\nHigh churn from poor onboarding"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Expected outcomes
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.expectedOutcomes.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, expectedOutcomes: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"50% reduction in manual work\nFull pipeline visibility\n3x faster onboarding"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Qualification signals
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.qualificationSignals.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, qualificationSignals: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"Budget > $10k/yr confirmed\nDecision maker in the call\nActive evaluation underway"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Disqualifiers
+                    <span className="text-gray-400 font-normal ml-1 text-xs">(one per line)</span>
+                  </label>
+                  <textarea
+                    value={form.salesContext.disqualifiers.join("\n")}
+                    onChange={(e) => patch({ salesContext: { ...form.salesContext, disqualifiers: e.target.value.split("\n").map(s => s.trim()).filter(Boolean) } })}
+                    placeholder={"Fewer than 10 employees\nNo budget for current quarter\nAlready locked in a contract"}
+                    rows={3}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition resize-none"
+                  />
+                </div>
+              </div>
+            </SectionCard>
+          )}
 
           {/* ── Section 4: Knowledge ── */}
           <SectionCard

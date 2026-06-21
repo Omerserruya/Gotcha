@@ -3,6 +3,7 @@ import {
   publishEvent,
   evaluatePolicies,
   createApprovalRequest,
+  getRedis,
   type PolicyResult,
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
@@ -11,6 +12,38 @@ import type {
   ProposedAction,
   RuntimeMode,
 } from "./types";
+import {
+  classifySideEffect,
+  semanticKey,
+  extractExternalRef,
+  type SemanticKeyCtx,
+  type SideEffectInfo,
+} from "../side-effect-classifier";
+import type { OutcomeStatus, TurnOutcomeLedger } from "../turn-outcome-ledger";
+
+/**
+ * Per-call options for the Turn Outcome Ledger (within-turn dedup + the
+ * single source of truth for side effects). Optional → non-bot callers
+ * (voice, live-analysis) are unaffected when omitted.
+ */
+export interface SubmitLedgerOpts {
+  ledger?: TurnOutcomeLedger;
+  ctx?: SemanticKeyCtx;
+  /**
+   * Cross-turn (redelivery) idempotency. When true AND the action carries a
+   * conversationId, a committable side effect is keyed by its semantic key in
+   * Redis: a redelivered inbound message that re-runs the SAME semantic action
+   * reuses the prior committed result instead of creating a duplicate external
+   * object (a second calendar event / lead). Fail-soft: any Redis error degrades
+   * to a normal execution. Off by default → non-bot callers are unaffected.
+   */
+  idempotency?: boolean;
+}
+
+/** Redelivery window for cross-turn idempotency. WhatsApp/webhook retries land
+ * within seconds–minutes; 2h is a safe upper bound that still avoids blocking a
+ * genuinely repeated action far in the future. */
+const IDEMPOTENCY_TTL_SECONDS = 60 * 60 * 2;
 
 /**
  * The Action Orchestrator - Layer 3 of the architecture.
@@ -54,8 +87,60 @@ export class ActionOrchestrator {
   async submit(
     action: ProposedAction,
     executor: () => Promise<unknown>,
+    opts?: SubmitLedgerOpts,
   ): Promise<ExecutionResult> {
-    let gate;
+    // ── Turn Outcome Ledger: within-turn semantic dedup ──────────────
+    // If this exact semantic side effect already SUCCEEDED this turn (committed
+    // OR succeeded_unverified), short-circuit and return the stored result.
+    // Prevents duplicate external objects and self-collisions (e.g. a second
+    // schedule_meeting seeing the first booking as agent_busy). Generic: no
+    // per-tool logic — classification is derived from the existing taxonomy.
+    const ledger = opts?.ledger;
+    let info: SideEffectInfo | undefined;
+    let key: string | undefined;
+    // Classify whenever we have EITHER a ledger (within-turn dedup) or
+    // idempotency (cross-turn dedup) so a redelivery is caught even on a fresh
+    // turn whose in-memory ledger is empty.
+    if (ledger || opts?.idempotency) {
+      info = classifySideEffect(action.tool);
+      if (info.sideEffect) {
+        key = semanticKey(info, action.args as Record<string, any>, opts?.ctx);
+        // 1) Within-turn: this exact semantic action already succeeded this turn.
+        if (ledger?.hasSucceeded(key)) {
+          const prior = ledger.get(key)!;
+          console.log(
+            `[orchestrator] ledger dedup hit tool=${action.tool} key=${key} ` +
+              `→ reusing ${prior.status} result (no re-execute)`,
+          );
+          return prior.result as ExecutionResult;
+        }
+        // 2) Cross-turn (redelivery): a prior turn already committed this exact
+        // semantic action. Seed the in-memory ledger so within-turn consistency
+        // + the committed-summary injection treat it as committed, then return.
+        if (opts?.idempotency) {
+          const cached = await this.idempotencyLookup(action, key);
+          if (cached) {
+            console.log(
+              `[orchestrator] idempotency hit tool=${action.tool} key=${key} ` +
+                `→ reusing committed result from a prior turn (no re-execute)`,
+            );
+            if (ledger) this.recordToLedger(ledger, info, key, action.tool, cached);
+            return cached;
+          }
+        }
+      }
+    }
+
+    const recordIfLedger = (r: ExecutionResult): ExecutionResult => {
+      if (info?.sideEffect && key) {
+        if (ledger) this.recordToLedger(ledger, info, key, action.tool, r);
+        // Persist for cross-turn redelivery defense (only commits are stored).
+        if (opts?.idempotency) void this.persistIdempotency(action, info, key, r);
+      }
+      return r;
+    };
+
+    let gate: PolicyResult;
     try {
       gate = await evaluatePolicies({
         tenantId: action.tenantId,
@@ -67,17 +152,127 @@ export class ActionOrchestrator {
       // human approval path remains the safe fallback.
       const reason = `policy-gate-error: ${err?.message ?? String(err)}`;
       console.warn("[orchestrator] gate evaluation failed:", reason);
-      return this.recordDeny(action, reason, "policy");
+      return recordIfLedger(await this.recordDeny(action, reason, "policy"));
     }
 
     if (gate.decision === "DENY") {
-      return this.recordDeny(action, gate.reason, "policy");
+      return recordIfLedger(await this.recordDeny(action, gate.reason, "policy"));
     }
     if (gate.decision === "REQUIRE_APPROVAL") {
-      return this.recordPropose(action, gate);
+      return recordIfLedger(await this.recordPropose(action, gate));
     }
     // ALLOW → auto-execute
-    return this.runAutoExecute(action, executor);
+    return recordIfLedger(await this.runAutoExecute(action, executor));
+  }
+
+  /**
+   * Derive the ledger status + external ref from a completed submit() result.
+   * Shared by the in-memory ledger record AND the cross-turn idempotency store
+   * so both classify a result identically (single derivation path).
+   */
+  private deriveOutcome(
+    info: SideEffectInfo,
+    exec: ExecutionResult,
+  ): { status: OutcomeStatus; ref: ReturnType<typeof extractExternalRef> } {
+    let parsed: any = {};
+    const inner: any = exec.result;
+    if (exec.status === "completed" && inner && typeof inner === "object") {
+      if (typeof inner.content === "string") {
+        try { parsed = JSON.parse(inner.content); } catch { parsed = {}; }
+      } else {
+        parsed = inner;
+      }
+    }
+    const ref = extractExternalRef(info.kind, parsed);
+    let status: OutcomeStatus;
+    if (exec.status === "proposed") status = "pending_approval";
+    else if (exec.status === "denied") status = "denied";
+    else if (exec.status === "failed") status = "failed";
+    else status = parsed?.ok === true ? (ref ? "committed" : "succeeded_unverified") : "failed";
+    return { status, ref };
+  }
+
+  /**
+   * Record a completed submit() into the ledger. A success with NO real external
+   * id is recorded as `succeeded_unverified` and logged as a LEDGER_GAP (the
+   * handler should return an id).
+   */
+  private recordToLedger(
+    ledger: TurnOutcomeLedger,
+    info: SideEffectInfo,
+    key: string,
+    tool: string,
+    exec: ExecutionResult,
+  ): void {
+    const { status, ref } = this.deriveOutcome(info, exec);
+
+    if (status === "succeeded_unverified") {
+      console.warn(
+        `[orchestrator] LEDGER_GAP: ${tool} (kind=${info.kind}) returned ok:true with no ` +
+          `externalRef — recorded as succeeded_unverified (deduped, but not confidently ` +
+          `claimable). Add a real id (eventId/leadId/messageId/…) to the handler result.`,
+      );
+    }
+    ledger.record({
+      semanticKey: key,
+      tool,
+      kind: info.kind,
+      visibility: info.visibility,
+      status,
+      externalRef: ref,
+      result: exec,
+    });
+  }
+
+  // ── Cross-turn idempotency (redelivery defense) ────────────────────
+  // Keyed by tenant + conversation + semantic key so a redelivered inbound
+  // message that re-runs the SAME semantic action reuses the prior committed
+  // result. ALL Redis access is fail-soft: an error degrades to normal
+  // execution (the within-turn ledger still prevents same-turn duplicates).
+
+  private idemKey(action: ProposedAction, semanticKeyStr: string): string | null {
+    if (!action.conversationId) return null;
+    return `idem:tool:${action.tenantId}:${action.conversationId}:${semanticKeyStr}`;
+  }
+
+  private async idempotencyLookup(
+    action: ProposedAction,
+    semanticKeyStr: string,
+  ): Promise<ExecutionResult | null> {
+    const k = this.idemKey(action, semanticKeyStr);
+    if (!k) return null;
+    try {
+      const raw = await getRedis().get(k);
+      if (!raw) return null;
+      return JSON.parse(raw) as ExecutionResult;
+    } catch (err: any) {
+      console.warn("[orchestrator] idempotency lookup failed (degrading to execute):", err?.message);
+      return null;
+    }
+  }
+
+  /**
+   * Persist a COMMITTED result for cross-turn dedup. Only real commits (ok:true
+   * WITH an external ref) are stored — never failures, denials, or unverified
+   * successes — so a redelivery can never reuse a non-result and a failed first
+   * attempt does not block a later genuine retry. SET NX → the first committer
+   * wins; concurrent redeliveries can't clobber each other.
+   */
+  private async persistIdempotency(
+    action: ProposedAction,
+    info: SideEffectInfo,
+    semanticKeyStr: string,
+    exec: ExecutionResult,
+  ): Promise<void> {
+    const k = this.idemKey(action, semanticKeyStr);
+    if (!k) return;
+    const { status } = this.deriveOutcome(info, exec);
+    if (status !== "committed") return;
+    try {
+      await getRedis().set(k, JSON.stringify(exec), "EX", IDEMPOTENCY_TTL_SECONDS, "NX");
+    } catch (err: any) {
+      console.warn("[orchestrator] idempotency persist failed (non-fatal):", err?.message);
+    }
   }
 
   /**

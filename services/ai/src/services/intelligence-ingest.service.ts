@@ -73,6 +73,33 @@ const GLOBAL_CONFIDENCE_FLOOR = 0.6;
 // overwrite automatically; otherwise the conflict goes to human review.
 const CONFLICT_MARGIN = 0.15;
 
+// Built-in scope map for canonical Skill / Objective-Engine knowledge keys.
+// Without this, a tenant that never registered these as FieldDefinitions would
+// have every extracted conversation fact SKIPPED (the real `written=0` bug),
+// leaving the Objective Engine permanently blind to what the customer said.
+// These keys are the contract between skills.ts/objectives.ts and the ingest
+// layer, so they persist regardless of tenant field-registry configuration. A
+// tenant FieldDefinition for the same key still wins (checked first).
+const CANONICAL_FIELD_SCOPES: Record<string, FieldScope> = {
+  // Stable per-person facts → customer
+  business_type: "customer",
+  company_size: "customer",
+  communication_channels: "customer",
+  current_tools: "customer",
+  contact_name: "customer",
+  contact_method: "customer",
+  email: "customer",
+  phone: "customer",
+  authority: "customer",
+  // Deal/opportunity-specific facts → opportunity
+  pain_points: "opportunity",
+  need: "opportunity",
+  interest: "opportunity",
+  timeline: "opportunity",
+  budget: "opportunity",
+  product_interest: "opportunity",
+};
+
 type MergeDecision =
   | { action: "apply"; entry: FactSnapshotEntry }
   | { action: "review"; reason: "low_confidence" | "conflict" }
@@ -297,8 +324,15 @@ export async function ingestConversationFacts(params: {
   const byScope: Record<FieldScope, ScopedItem[]> = { customer: [], opportunity: [], conversation: [] };
   let skipped = 0;
   for (const f of fields) {
-    const def = defByKey.get(f.key);
-    if (!def) { skipped++; continue; }                 // unknown key → Discovery's job (P6)
+    // Tenant FieldDefinition wins; otherwise fall back to the built-in scope for
+    // canonical Skill/Objective keys so core facts persist even when the tenant
+    // never configured a field registry (fixes the `written=0` regression).
+    let def = defByKey.get(f.key);
+    if (!def) {
+      const canonical = CANONICAL_FIELD_SCOPES[f.key];
+      if (canonical) def = { scope: canonical, type: "TEXT", threshold: GLOBAL_CONFIDENCE_FLOOR };
+    }
+    if (!def) { skipped++; continue; }                 // truly unknown key → Discovery's job (P6)
     if (def.scope !== "customer" && def.scope !== "opportunity" && def.scope !== "conversation") {
       skipped++; continue;                              // REVIEW_REQUIRED / unroutable → park
     }

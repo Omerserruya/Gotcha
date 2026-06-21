@@ -33,5 +33,8 @@ import "./paypal.adapter";
 import "./salesforce.adapter";
 import "./monday.adapter";
 import "./aws-rds.adapter";
+// Google Calendar exposes READ tools (check_availability/list_events) through
+// the framework like any other provider; writes go through schedule_meeting.
+import "./google-calendar.adapter";
 
 export { listAdapters, getAdapter, executeAdapterTool, type ProviderAdapter, type ToolDefinition } from "./integration-framework";

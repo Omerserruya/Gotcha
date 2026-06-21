@@ -94,6 +94,18 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   create_ticket:               { mode: "always" },
   create_task:                 { mode: "always" },
   create_workflow:             { mode: "always" },
+
+  // Vendor-neutral semantic CRM create wrappers. These dispatch through the
+  // resolved per-tenant CRMAdapter and intentionally have NO CatalogTool row,
+  // so they MUST be treated as static tools here - otherwise the dynamic
+  // catalog branch denies them for every generic-CRM tenant (Airtable,
+  // Fireberry, Monday, Shopify-as-CRM, …). Creating a lead/contact is a
+  // low-risk, additive WRITE and a core autonomous action, so it auto-runs by
+  // default - matching the HubSpot/Zoho `create_lead` catalog tool, which
+  // carries no hitlPolicy (→ "never"). Tenants can still tighten via a
+  // TenantToolPermission row keyed by this exact tool name.
+  integration_create_lead:     { mode: "never" },
+  integration_create_contact:  { mode: "never" },
 };
 
 // ─── Core evaluator ─────────────────────────────────────────
@@ -117,7 +129,35 @@ export async function evaluatePolicies(opts: {
   let tenantToolId: string | null = null;
   let tenantToolEnabled = true;
 
-  if (opts.toolName.startsWith("integration_") || opts.toolName.includes(".")) {
+  if (opts.toolName === "integration_create_lead" || opts.toolName === "integration_create_contact") {
+    // Vendor-neutral semantic create. No CatalogTool row by design - resolve
+    // its floor from SYSTEM_TOOL_POLICIES (→ "never") so it is NOT routed into
+    // the catalog-required branch below (which would deny it for generic-CRM
+    // tenants). Tenant overrides flow through the static TenantToolPermission
+    // path (tenantToolId stays null).
+    catalog = SYSTEM_TOOL_POLICIES[opts.toolName] ?? { mode: "never" };
+  } else if (opts.toolName.startsWith("custom.") || opts.toolName.startsWith("custom_db.")) {
+    // Tenant-defined custom HTTP / DB-query tools. Their definition lives in
+    // CustomApiTool / CustomDbQueryTool, NOT CatalogTool, so the dynamic branch
+    // would deny every call. Resolve a risk-based floor from the tool's own
+    // category/riskLevel instead: read-only + non-HIGH auto-runs; any
+    // write/delete/action or HIGH-risk tool requires approval (safe-by-default,
+    // matches the documented schema intent). Tenant overrides flow through the
+    // static TenantToolPermission path (tenantToolId stays null).
+    const isDb = opts.toolName.startsWith("custom_db.");
+    const slug = opts.toolName.slice((isDb ? "custom_db." : "custom.").length);
+    const model = isDb ? (prisma as any).customDbQueryTool : (prisma as any).customApiTool;
+    const row = await model?.findUnique?.({
+      where: { tenantId_slug: { tenantId: opts.tenantId, slug } },
+    }).catch(() => null);
+    if (!row || !row.isActive) {
+      return denyResult(`unknown or inactive custom tool "${opts.toolName}"`, {});
+    }
+    const cat = String(row.category || "").toUpperCase();
+    const risk = String(row.riskLevel || "").toUpperCase();
+    const autoRun = cat === "READ" && risk !== "HIGH";
+    catalog = autoRun ? { mode: "never" } : { mode: "always" };
+  } else if (opts.toolName.startsWith("integration_") || opts.toolName.includes(".")) {
     // Dynamic integration tool. Resolve via CatalogTool.
     //
     // Two name shapes flow through here:

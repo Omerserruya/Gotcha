@@ -125,6 +125,8 @@ export { createServiceApp, startService } from "./lib/service-app";
 export {
   LINK_IDENTIFIER_TOOL,
   ESCALATE_TOOL,
+  INTEGRATION_CREATE_LEAD_TOOL,
+  INTEGRATION_CREATE_CONTACT_TOOL,
   buildAgentTools,
   buildAgentToolsForAIAgent,
   dispatchToolCall,
