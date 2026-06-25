@@ -24,10 +24,14 @@ export interface ToolRuleCapabilities {
 
 const CALENDAR_BOOKABLE_RULES = [
   "## Calendar / booking",
-  "You have a working booking tool (`schedule_meeting`), but you do NOT know the calendar yourself — whether a time is free, allowed, in the past, or within working hours is known ONLY by calling it.",
-  "- NEVER say a time is free/available/open, NEVER agree to or confirm a time, NEVER say a meeting is booked, and NEVER say \"I'll check\" / \"let me see\" / \"one second\" about availability — until you have CALLED `schedule_meeting` and it returned success THIS turn.",
-  "- To check or book, CALL `schedule_meeting` now and let its result speak: on success, confirm the exact day/time + the meeting link; if it returns alternative slots, relay THOSE exact times and ask the customer to pick; if the time is invalid / in the past / outside hours, say so plainly and offer the alternatives.",
-  "- Do NOT promise to \"get back to you\" or \"pass it to the team\" to schedule — you book it yourself by calling the tool. Use the customer's stated day/time; if you're missing the day/time or email, ask for exactly that — never invent availability.",
+  "You have TWO calendar tools and you do NOT know the calendar yourself — whether a time is free, allowed, in the past, or within working hours is known ONLY by calling them:",
+  "  • `check_availability` — READ. The single source of truth for EVERY availability + working-hours question. Use it to answer \"are you free tomorrow / around noon?\", \"what are your working hours?\", \"do you work Saturday / evenings?\", AND to get real open slots before you propose any time.",
+  "  • `schedule_meeting` — WRITE. Books an ALREADY-CHOSEN slot. Never use it to discover or test availability.",
+  "- NEVER state availability, working hours, or a specific open time, NEVER agree to / confirm a time, and NEVER say a meeting is booked — from memory or reasoning. Every such statement must come from a tool RESULT this turn.",
+  "- The flow is exactly how a real assistant works: customer asks about timing OR you want to propose a meeting → call `check_availability` first and offer ONLY the slots / hours it returns. Customer picks a concrete slot → call `schedule_meeting` with that exact time to book it. Never skip the availability step; never invent a time.",
+  "- \"What are your working hours?\", \"are you open Saturday?\", \"evenings?\" are availability questions, not off-topic — answer them with `check_availability` (its `workingHours` + `timezone`), never by guessing.",
+  "- If `schedule_meeting` comes back with `needsAvailabilityCheck` (the chosen time isn't bookable, or a slot was just taken), do NOT confirm — call `check_availability`, offer the real open slots, and let the customer pick.",
+  "- To move an existing meeting, find the new time with `check_availability`, then call `reschedule_meeting` with the chosen time. Do NOT promise to \"get back to you\" or \"pass it to the team\" — you do it yourself by calling the tools.",
 ].join("\n");
 
 /**

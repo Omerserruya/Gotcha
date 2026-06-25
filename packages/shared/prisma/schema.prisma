@@ -425,7 +425,7 @@ model AIAgent {
   systemPrompt     String  @default("") @map("system_prompt")
   sharedPrompt     String? @map("shared_prompt")
   autonomousPrompt String? @map("autonomous_prompt")
-  model            String  @default("gpt-4o-mini")
+  model            String  @default("gpt-5-mini")
   provider         String  @default("openai")
   temperature      Float   @default(0.7)
   maxTokens        Int     @default(1024) @map("max_tokens")
@@ -1905,6 +1905,58 @@ model MeetingType {
   @@unique([tenantId, slug])
   @@index([tenantId, isActive])
   @@map("meeting_types")
+}
+
+// ─── Meeting Bookings (source of truth for booked calendar events) ─
+//
+// One row per calendar event the bot books, keyed by the customer (not the
+// conversation), so reschedule/cancel resolve the EXACT event to act on even
+// across separate conversations - and so the bot never invents a duplicate by
+// calling schedule_meeting again on a "move it" intent.
+//
+// Invariant the handlers enforce: at most ONE ACTIVE booking per customer per
+// agent. schedule_meeting reschedules the existing ACTIVE booking instead of
+// creating a second event; cancel/reschedule look up `eventId` from here.
+//
+// Replaces the fragile audit-log + email-attendee scan that locked onto the
+// wrong duplicate once any existed (the audit scan remains a read-only fallback
+// to backfill bookings made before this table existed).
+model MeetingBooking {
+  id                 String           @id @default(cuid())
+  tenantId           String           @map("tenant_id")
+  /// The AIAgent that owns the calendar this event lives on.
+  aiAgentId          String           @map("ai_agent_id")
+  /// Conversation the booking was made in (context only; lookup is by customer).
+  conversationId     String           @map("conversation_id")
+  /// Stable customer key (WhatsApp phone / channel external id). Same value
+  /// across the customer's conversations → reschedule/cancel work cross-thread.
+  customerExternalId String?          @map("customer_external_id")
+  /// Calendar attendee email (Google invite target), when known.
+  customerEmail      String?          @map("customer_email")
+  provider           CalendarProvider
+  calendarAccountId  String           @map("calendar_account_id")
+  /// Source-of-truth calendar event id - what reschedule/cancel PATCH/DELETE.
+  eventId            String           @map("event_id")
+  meetingTypeSlug    String?          @map("meeting_type_slug")
+  startAt            DateTime         @map("start_at")
+  endAt              DateTime         @map("end_at")
+  customerTimezone   String?          @map("customer_timezone")
+  joinUrl            String?          @map("join_url")
+  status             BookingStatus    @default(ACTIVE)
+  createdAt          DateTime         @default(now()) @map("created_at")
+  updatedAt          DateTime         @updatedAt @map("updated_at")
+
+  @@unique([provider, eventId])
+  @@index([tenantId, customerExternalId, status])
+  @@index([tenantId, conversationId, status])
+  @@index([tenantId, aiAgentId, status])
+  @@map("meeting_bookings")
+}
+
+enum BookingStatus {
+  ACTIVE
+  CANCELLED
+  COMPLETED
 }
 
 // ─── Tenant Funnel (Task 2 - configurable funnel + playbooks) ─

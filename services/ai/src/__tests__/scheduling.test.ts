@@ -128,6 +128,37 @@ describe("Scheduling - INVALID paths", () => {
     if (r.verdict === "INVALID") expect(r.reason).toBe("agent_busy");
   });
 
+  it("14:30 taken → proposes the NEAREST free slots around it, not the morning", () => {
+    const requested = idtIso("2026-05-05", "14:30"); // Tue
+    const now = Date.parse("2026-05-05T05:00:00+03:00");
+    const busy: BusyInterval[] = [
+      {
+        startMs: Date.parse(idtIso("2026-05-05", "14:30")),
+        endMs: Date.parse(idtIso("2026-05-05", "15:00")),
+      },
+    ];
+    const r = resolveAvailability({
+      policy: ISRAEL_POLICY,
+      meetingType: DISCOVERY,
+      busy,
+      nowMs: now,
+      requestedAtIso: requested,
+    });
+    expect(r.verdict).toBe("INVALID");
+    if (r.verdict === "INVALID") {
+      expect(r.reason).toBe("agent_busy");
+      expect(r.proposed.length).toBeGreaterThan(0);
+      const reqMs = Date.parse(requested);
+      // Old behavior returned the day's first free slots (09:00/10:00/11:00).
+      // New behavior anchors to the request: every proposal sits near 14:30.
+      for (const s of r.proposed) {
+        expect(Math.abs(s.startMs - reqMs)).toBeLessThanOrEqual(2 * 3600_000);
+      }
+      const nearest = Math.min(...r.proposed.map((s) => Math.abs(s.startMs - reqMs)));
+      expect(nearest).toBeLessThanOrEqual(90 * 60_000);
+    }
+  });
+
   it("Slot inside the buffer zone → buffer_violated", () => {
     // Busy 09:30–10:00 + 15 min after-buffer means 10:00–10:15 is blocked.
     // Request 10:00 → 30-min meeting starts inside the buffer.
@@ -213,6 +244,60 @@ describe("Scheduling - PROPOSE path", () => {
         if (sameDay) expect(slot.startMs).toBeGreaterThanOrEqual(earliestAllowedMs);
       }
     }
+  });
+});
+
+describe("Scheduling - windowed enumeration (check_availability)", () => {
+  it("window before the first open slot → no proposals", () => {
+    // Tue 05:00, window only 05:00–08:00 (before 09:00 open) → empty.
+    const now = Date.parse("2026-05-05T05:00:00+03:00");
+    const r = resolveAvailability({
+      policy: ISRAEL_POLICY,
+      meetingType: DISCOVERY,
+      busy: [],
+      nowMs: now,
+      windowStartMs: now,
+      windowEndMs: Date.parse(idtIso("2026-05-05", "08:00")),
+    });
+    expect(r.verdict).toBe("PROPOSE");
+    if (r.verdict === "PROPOSE") expect(r.proposed).toHaveLength(0);
+  });
+
+  it("window confined to one afternoon → every proposal falls inside it", () => {
+    const now = Date.parse("2026-05-05T05:00:00+03:00");
+    const winStart = Date.parse(idtIso("2026-05-05", "14:00"));
+    const winEnd = Date.parse(idtIso("2026-05-05", "17:00"));
+    const r = resolveAvailability({
+      policy: ISRAEL_POLICY,
+      meetingType: DISCOVERY,
+      busy: [],
+      nowMs: now,
+      windowStartMs: winStart,
+      windowEndMs: winEnd,
+    });
+    expect(r.verdict).toBe("PROPOSE");
+    if (r.verdict === "PROPOSE") {
+      expect(r.proposed.length).toBeGreaterThan(0);
+      for (const s of r.proposed) {
+        expect(s.startMs).toBeGreaterThanOrEqual(winStart);
+        expect(s.endMs).toBeLessThanOrEqual(winEnd);
+      }
+    }
+  });
+
+  it("window cannot widen past the policy horizon", () => {
+    const now = Date.parse("2026-05-05T05:00:00+03:00");
+    // Ask 60 days out, but maxHorizon is 30d → clamps to nothing.
+    const r = resolveAvailability({
+      policy: ISRAEL_POLICY,
+      meetingType: DISCOVERY,
+      busy: [],
+      nowMs: now,
+      windowStartMs: now + 60 * 24 * 3600_000,
+      windowEndMs: now + 61 * 24 * 3600_000,
+    });
+    expect(r.verdict).toBe("PROPOSE");
+    if (r.verdict === "PROPOSE") expect(r.proposed).toHaveLength(0);
   });
 });
 

@@ -98,7 +98,11 @@ export interface EmbeddingResponse {
 // ─── Singleton Client ───────────────────────────────────────
 
 let openaiClient: OpenAI | null = null;
-let defaultModel = "gpt-4o-mini";
+// Single source of truth for the default chat model. Overridden at init() from
+// OPENAI_DEFAULT_MODEL (see index.ts). All call sites resolve the model via
+// getDefaultModel() rather than hardcoding a literal, so swapping models is a
+// one-env-var change.
+let defaultModel = "gpt-5-mini";
 let defaultEmbeddingModel = "text-embedding-3-small";
 
 export function initAIService(config: {
@@ -247,6 +251,47 @@ function sanitizeMessagesForOpenAI(messages: any[]): any[] {
   return changed ? out : messages;
 }
 
+// gpt-5 family + o-series reasoning models changed the chat-completions
+// contract: `max_tokens` is rejected (use `max_completion_tokens`), and only the
+// default temperature (1) is accepted. Detect by model id so a single
+// OPENAI_DEFAULT_MODEL swap doesn't 400 every call.
+function modelRequiresCompletionTokens(model: string): boolean {
+  return /^(gpt-5|o[1-9])/i.test(model);
+}
+
+// Set the token cap + temperature on a chat-completions request in the shape the
+// target model accepts. Mutates `req`.
+function applyTokenAndTemperatureParams(
+  req: Record<string, any>,
+  model: string,
+  temperature: number | undefined,
+  maxTokens: number | undefined,
+): void {
+  const tokens = maxTokens ?? 1024;
+  if (modelRequiresCompletionTokens(model)) {
+    // Reasoning models (gpt-5 / o-series) spend HIDDEN reasoning tokens BEFORE
+    // any visible output, and `max_completion_tokens` caps the COMBINED total.
+    // Capping at just the intended output size starves the reply: the whole
+    // budget goes to reasoning and content comes back '' with
+    // finish_reason='length' (the bot then "doesn't respond"). So add reasoning
+    // headroom ON TOP of the requested output budget. This is only a ceiling -
+    // you pay for tokens actually generated, so a generous cap is safe.
+    const headroom = Number(process.env.OPENAI_REASONING_HEADROOM_TOKENS) || 2048;
+    req.max_completion_tokens = tokens + headroom;
+    // Keep reasoning light so the bot stays responsive (default 'medium' on
+    // gpt-5 makes chat turns slow and reasoning-token heavy). Override via env;
+    // "none" omits the param entirely.
+    const effort = process.env.OPENAI_REASONING_EFFORT || "low";
+    if (effort && effort !== "none") req.reasoning_effort = effort;
+    // Only the default temperature (1) is supported - send it only when it is
+    // exactly the default, otherwise omit so the model uses its required value.
+    if (temperature === 1) req.temperature = temperature;
+  } else {
+    req.max_tokens = tokens;
+    req.temperature = temperature ?? 0.7;
+  }
+}
+
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
   const model = params.model || defaultModel;
@@ -255,9 +300,8 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
   const requestParams: OpenAI.ChatCompletionCreateParamsNonStreaming = {
     model,
     messages: sanitizeMessagesForOpenAI(params.messages),
-    temperature: params.temperature ?? 0.7,
-    max_tokens: params.maxTokens ?? 1024,
   };
+  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens);
 
   // Pin to a stable backend route so OpenAI's automatic prefix cache can
   // hit consistently across turns in the same conversation/call.
@@ -441,11 +485,10 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   const requestParams: OpenAI.ChatCompletionCreateParamsStreaming = {
     model,
     messages: sanitizeMessagesForOpenAI(params.messages),
-    temperature: params.temperature ?? 0.7,
-    max_tokens: params.maxTokens ?? 1024,
     stream: true,
     stream_options: { include_usage: true },
   };
+  applyTokenAndTemperatureParams(requestParams as any, model, params.temperature, params.maxTokens);
   if (params.sessionId) {
     (requestParams as any).user = params.sessionId;
   }

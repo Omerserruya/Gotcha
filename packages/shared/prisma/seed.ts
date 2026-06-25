@@ -727,8 +727,13 @@ async function main() {
   // bot enforces them out of the box.
   const ACTION_CONTRACTS = [
     {
+      // Booking a meeting requires ONLY the booking tool. A CRM sync must never
+      // be a BLOCKING prerequisite of booking - if the CRM write fails (e.g.
+      // missing OAuth scopes), the bot would otherwise be unable to "complete"
+      // the booking and would escalate to a human instead of just scheduling
+      // the demo. CRM updates happen via the normal lead create/update flow.
       trigger: "booking",
-      requiredTools: [{ name: "schedule_meeting" }, { name: "integration_update_lead" }],
+      requiredTools: [{ name: "schedule_meeting" }],
       executionMode: "ALL_REQUIRED",
       order: null as string[] | null,
       blocking: true,

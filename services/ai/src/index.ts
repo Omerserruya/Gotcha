@@ -38,7 +38,7 @@ import customerSummaryRoutes from "./routes/customer-summary";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
-import { initAIService } from "./services/ai.service";
+import { initAIService, getDefaultModel } from "./services/ai.service";
 import { startLiveRunnerSupervisor } from "./services/intelligence";
 import {
   startPostCallQAWorker,
@@ -64,7 +64,7 @@ if (process.env.OPENAI_API_KEY) {
     process.env.OPENAI_BASE_URL || undefined,
     process.env.OPENAI_DEFAULT_MODEL || undefined,
   ));
-  console.log("AI provider: OpenAI initialized (model: %s)", process.env.OPENAI_DEFAULT_MODEL || "gpt-4o-mini");
+  console.log("AI provider: OpenAI initialized (model: %s)", process.env.OPENAI_DEFAULT_MODEL || getDefaultModel());
 } else {
   console.warn("AI provider: No OPENAI_API_KEY set - using stub provider");
 }

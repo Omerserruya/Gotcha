@@ -28,7 +28,7 @@ import { generateResponse, getDefaultModel } from "../services/ai.service";
 import multer from "multer";
 
 const router = Router();
-const CHAT_MODEL = process.env.OPENAI_DEFAULT_MODEL || "gpt-4o-mini";
+const CHAT_MODEL = process.env.OPENAI_DEFAULT_MODEL || getDefaultModel();
 
 const upload = multer({
   storage: multer.memoryStorage(),

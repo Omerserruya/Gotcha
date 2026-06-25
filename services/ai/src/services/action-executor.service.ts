@@ -609,7 +609,7 @@ export async function executeAction(
         }
         const conv = await prisma.conversation.findFirst({
           where: { id: p.conversationId, tenantId },
-          select: { assignedAiAgentId: true },
+          select: { assignedAiAgentId: true, customerExternalId: true },
         });
         const aiAgentId = (conv as any)?.assignedAiAgentId as string | null | undefined;
         if (!aiAgentId) {
@@ -617,7 +617,13 @@ export async function executeAction(
             `schedule_meeting: conversation ${p.conversationId} has no assignedAiAgentId - cannot resolve calendar adapter`,
           );
         }
-        const handler = makeScheduleMeetingHandler({ tenantId, aiAgentId });
+        const handler = makeScheduleMeetingHandler({
+          tenantId,
+          aiAgentId,
+          conversationId: p.conversationId,
+          customerExternalId: (conv as any)?.customerExternalId ?? undefined,
+          customerEmail: p.customer_email,
+        });
         const result = await handler({
           duration_minutes: p.duration_minutes,
           meeting_type: p.meeting_type,

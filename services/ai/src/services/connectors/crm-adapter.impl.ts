@@ -281,14 +281,24 @@ export class HubSpotCRMAdapter implements CRMAdapter {
     if (!email && !phone) {
       return { ok: false, kind: "contact", reason: "email_or_phone_required" };
     }
+    // Name may arrive split (first_name/last_name) or as a single display_name
+    // (the AI bot passes display_name). Derive first/last so the name is never
+    // dropped on create - same split used by enrichContact below.
+    let firstname = payload.first_name;
+    let lastname = payload.last_name;
+    if (!firstname && !lastname && payload.display_name) {
+      const [first, ...rest] = payload.display_name.trim().split(/\s+/);
+      if (first) firstname = first;
+      if (rest.length) lastname = rest.join(" ");
+    }
     if (email) {
       const r = await executeAdapterTool({
         tenantId: this.tenantId,
         toolFunctionName: "hubspot.create_contact",
         args: {
           email,
-          firstname: payload.first_name,
-          lastname: payload.last_name,
+          firstname,
+          lastname,
           phone: phone ?? undefined,
           company: payload.company,
           source: payload.source ?? "GOTCHA",
@@ -352,18 +362,29 @@ export class HubSpotCRMAdapter implements CRMAdapter {
     due_at?: string;
     source_interaction_id?: string;
   }): Promise<CrmAdapterWriteResult> {
-    // HubSpot's adapter tool surface today is `hubspot.log_activity` with
-    // kinds NOTE/EMAIL/CALL - no first-class TASK. Degrade by writing a NOTE
-    // prefixed with "TODO:" so the action is at least visible on the
-    // record's timeline (and search-discoverable in HubSpot).
-    const head = `TODO: ${args.subject}` + (args.priority ? ` [priority=${args.priority}]` : "")
-      + (args.due_at ? ` (due ${args.due_at})` : "");
-    const body = args.body ? `${head}\n\n${args.body}` : head;
-    const finalBody = augmentBodyWithMarker(body, args.source_interaction_id, undefined, undefined);
+    // Create a FIRST-CLASS HubSpot task (hubspot.create_task → /objects/tasks),
+    // so it lands in the rep's task queue with a real status/priority/due date -
+    // not a "TODO:" note buried in the timeline. The body keeps the
+    // source-interaction marker for idempotency/traceability.
+    const PRIORITY_MAP: Record<string, string> = {
+      low: "LOW",
+      normal: "MEDIUM",
+      high: "HIGH",
+      urgent: "HIGH",
+    };
+    const hsPriority = args.priority ? PRIORITY_MAP[args.priority] ?? "NONE" : "NONE";
+    const body = augmentBodyWithMarker(args.body ?? "", args.source_interaction_id, undefined, undefined);
+    const due_ts = args.due_at ? Date.parse(args.due_at) : undefined;
     const r = await executeAdapterTool({
       tenantId: this.tenantId,
-      toolFunctionName: "hubspot.log_activity",
-      args: { contact_id: args.contact_id, kind: "NOTE", body: finalBody },
+      toolFunctionName: "hubspot.create_task",
+      args: {
+        contact_id: args.contact_id,
+        subject: args.subject,
+        body: body || undefined,
+        priority: hsPriority,
+        due_ts: Number.isFinite(due_ts) ? due_ts : undefined,
+      },
     });
     if (!r.ok) return { ok: false, reason: r.reason };
     return { ok: true, id: (r.result as any)?.id, was_update: false };

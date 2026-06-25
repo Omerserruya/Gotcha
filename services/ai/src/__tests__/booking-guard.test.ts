@@ -24,6 +24,11 @@ describe("detectBookingClaim — Hebrew completion claims (must MATCH)", () => {
     "הכל סגור",                        // "all set"
     "הפגישה מחר ב-16:00 סגורה!",       // the real live fabrication that slipped past every gate
     "הכל סגור! קבענו שיחת הכרות מחר בשעה 15:00", // real-booking phrasing (Roni)
+    // E2E amorphous run: model fabricated a booking while BOOK_MEETING was still
+    // locked — these phrasings matched NO claim pattern and slipped to the customer.
+    "הצלחתי לקבוע, הקישור לפגישה: https://gotcha.demo/meet/abc123",
+    "שלחתי הזמנה ל‑20 דקות למחר ב‑16:30",
+    "קבעתי לנו את הדמו למחר ב-16:30",
   ];
   for (const phrase of positives) {
     it(`matches: "${phrase}"`, () => {

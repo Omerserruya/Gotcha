@@ -68,6 +68,8 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   close_conversation:          { mode: "never" },
   tag_contact:                 { mode: "never" },
   generate_followup:           { mode: "never" },
+  // Read-only availability lookup — never books, never needs approval.
+  check_availability:          { mode: "never" },
 
   // Write-side / external-facing - require approval by default.
   send_message:                { mode: "always" },
@@ -80,6 +82,11 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   // need a human nod. Tune per tenant via TenantToolPermission, or widen the
   // condition (e.g. contains(args.meeting_type, 'enterprise')).
   schedule_meeting:            { mode: "on_condition", condition: "args.duration_minutes > 60" },
+  // Moving an existing booking is reversible and low-risk (it only shifts a
+  // meeting the customer already agreed to); cancelling is likewise reversible
+  // (re-book). Both auto-run; tighten per tenant via TenantToolPermission.
+  reschedule_meeting:          { mode: "never" },
+  cancel_meeting:              { mode: "never" },
   // Financial actions - approval is MANDATORY per CLAUDE.md §9 (refunds,
   // discounts). Floored to `always`; do NOT relax to a threshold that would
   // auto-execute small amounts. Tenants may only tighten, never loosen, via

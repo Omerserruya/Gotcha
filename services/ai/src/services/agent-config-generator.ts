@@ -10,6 +10,7 @@
  */
 
 import { prisma } from "@chatcenter/shared";
+import { getDefaultModel } from "./ai.service";
 
 interface PersonaTraits {
   warmth?: string;
@@ -237,7 +238,7 @@ export async function generateAgentConfig(
     behavioral: JSON.parse(JSON.stringify(config.behavioral)),
     persona: personaOverride ? JSON.parse(JSON.stringify(personaOverride)) : undefined,
     status: "ACTIVE" as const,
-    model: "gpt-4o-mini",
+    model: getDefaultModel(),
     provider: "openai",
     temperature: 0.7,
     maxTokens: 1024,

@@ -139,6 +139,12 @@ export type {
   ToolCallLike,
   ScheduleMeetingArgs,
   ScheduleMeetingResult,
+  RescheduleMeetingArgs,
+  RescheduleMeetingResult,
+  CancelMeetingResult,
+  CheckAvailabilityArgs,
+  CheckAvailabilityResult,
+  WorkingHoursWindow,
 } from "./lib/agent-tools";
 
 // Secrets

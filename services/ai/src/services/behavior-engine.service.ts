@@ -686,6 +686,21 @@ function classifyIntentAndUrgency(
     intentSource = `accumulated ${topIntent} over ${n} msg (score=${topScore.toFixed(1)}, margin=${margin.toFixed(1)})`;
   }
 
+  // Scheduling-change override: managing an EXISTING booking (move / reschedule /
+  // push / cancel a meeting or demo) is a scheduling action the AI can fulfil
+  // itself, NOT a support problem - even though "cancel" is a support marker.
+  // Without this, "cancel my meeting" / "let's move the demo" scored as support →
+  // strategy RESOLVE → the AI steered to resolve/escalate instead of calling
+  // reschedule_meeting / cancel_meeting. Force transactional so the matrix routes
+  // to CONVERT (which allows scheduling actions).
+  const latest = (req.lastMessage || "").toLowerCase();
+  const MEETING_REF = /(meeting|demo|appointment|\bcall\b|booking|פגיש|דמו|תור|שיחה)/i;
+  const CHANGE_VERB = /(reschedul|postpone|push|\bmove\b|change|cancel|earlier|later|different time|another time|להזיז|לדחות|לשנות|לבטל|להקדים|מועד אחר|שעה אחרת|זמן אחר)/i;
+  if (MEETING_REF.test(latest) && CHANGE_VERB.test(latest)) {
+    intent = "transactional";
+    intentSource = "scheduling change (manage existing booking) → transactional";
+  }
+
   // Urgency stays anchored to the CURRENT message (+ flags): a fresh problem or
   // a "now!" should spike urgency this turn even mid-discovery.
   const text = (req.lastMessage || "").toLowerCase();

@@ -24,6 +24,7 @@ import {
   type BuilderEvent,
 } from "../services/agent-builder.service";
 import { generateReadinessReport } from "../services/agent-readiness.service";
+import { generateSalesContext } from "../services/sales-context-generator.service";
 
 const router = Router();
 
@@ -340,13 +341,31 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
     const agentId = req.params.id as string;
-    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true } });
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true, salesContext: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
+
+    // Auto-fill the Sales Context (Product Qualification Context) the first time
+    // an employee finishes the wizard, so the admin lands in the editor with the
+    // six fields pre-proposed (still fully editable) instead of blank. Only when
+    // the admin hasn't authored one already. Best-effort — never blocks the
+    // promotion. See sales-context-generator.service.ts.
+    let salesContext: unknown = undefined;
+    const hasSalesContext =
+      agent.salesContext && typeof agent.salesContext === "object" && Object.keys(agent.salesContext as object).length > 0;
+    if (!hasSalesContext) {
+      const generated = await generateSalesContext(tenantId, agentId);
+      if (generated) salesContext = generated;
+    }
+
     await prisma.aIAgent.update({
       where: { id: agentId },
-      data: { builderStep: null, ...(agent.status === "DRAFT" ? { status: "ACTIVE" as const } : {}) },
+      data: {
+        builderStep: null,
+        ...(agent.status === "DRAFT" ? { status: "ACTIVE" as const } : {}),
+        ...(salesContext !== undefined ? { salesContext: salesContext as any } : {}),
+      },
     });
-    res.json({ data: { ok: true } });
+    res.json({ data: { ok: true, salesContextAutofilled: salesContext !== undefined } });
   } catch (err: any) {
     console.error("Builder complete error:", err);
     res.status(500).json({ error: "Failed to complete builder" });

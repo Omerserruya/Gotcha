@@ -223,7 +223,7 @@ services:
       JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
-      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-4o-mini}
+      OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
       # Set OPENAI_LOG=debug to log the FULL outbound OpenAI request (system
       # prompt + messages + tool schemas) and response to stdout. Off by default.
       OPENAI_LOG: ${OPENAI_LOG:-}

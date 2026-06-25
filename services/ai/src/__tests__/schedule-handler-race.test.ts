@@ -115,7 +115,7 @@ const REQUESTED = "2026-05-05T11:00:00+03:00";
 describe("schedule_meeting - race-condition retry", () => {
   it("VALID on first try → returns success without retrying", async () => {
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",
@@ -134,7 +134,7 @@ describe("schedule_meeting - race-condition retry", () => {
       return { eventId: "evt_retry", joinUrl: "https://meet.example/retry" };
     };
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",
@@ -161,7 +161,7 @@ describe("schedule_meeting - race-condition retry", () => {
       return [{ startMs: requestedMs, endMs: requestedMs + 30 * 60_000, source: "google" as const }];
     };
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",
@@ -187,7 +187,7 @@ describe("schedule_meeting - race-condition retry", () => {
     };
     adapterFindBusyImpl = async () => []; // recheck stays VALID
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");
-    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT });
+    const handler = makeScheduleMeetingHandler({ tenantId: TENANT, aiAgentId: AGENT, conversationId: "conv_test" });
     const r = await handler({
       duration_minutes: 30,
       meeting_type: "discovery_call",

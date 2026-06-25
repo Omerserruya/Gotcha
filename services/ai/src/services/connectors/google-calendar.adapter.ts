@@ -131,6 +131,58 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
   }
 
   /**
+   * Move an existing event to a new time. PATCH only the start/end so attendees,
+   * the Meet link, and the title are preserved. `sendUpdates=all` notifies guests.
+   */
+  async updateEvent(opts: {
+    agentId: string;
+    eventId: string;
+    startMs: number;
+    endMs: number;
+    customerTimezone?: string;
+  }): Promise<{ eventId: string; joinUrl?: string }> {
+    const { account, creds } = await this.loadAccount();
+    const calendarId = account.defaultCalendarId || "primary";
+    const tz = opts.customerTimezone || "UTC";
+    const body = {
+      start: { dateTime: new Date(opts.startMs).toISOString(), timeZone: tz },
+      end: { dateTime: new Date(opts.endMs).toISOString(), timeZone: tz },
+    };
+    const url = `${EVENTS_URL(calendarId)}/${encodeURIComponent(opts.eventId)}?conferenceDataVersion=1&sendUpdates=all`;
+    console.log(
+      `[gcal-adapter] events.patch.PATCH calendar=${calendarId} eventId=${opts.eventId} ` +
+        `start=${body.start.dateTime}`,
+    );
+    const t = Date.now();
+    const res = await this.fetchAuthed(url, { method: "PATCH", body: JSON.stringify(body) }, creds);
+    const json: any = await res.json();
+    const joinUrl = json?.hangoutLink ?? json?.conferenceData?.entryPoints?.[0]?.uri;
+    console.log(`[gcal-adapter] events.patch.OK eventId=${json?.id} dt_ms=${Date.now() - t}`);
+    return { eventId: String(json?.id ?? opts.eventId), joinUrl };
+  }
+
+  /** Cancel an existing event. `sendUpdates=all` notifies guests of the cancellation. */
+  async cancelEvent(opts: { agentId: string; eventId: string }): Promise<void> {
+    const { account, creds } = await this.loadAccount();
+    const calendarId = account.defaultCalendarId || "primary";
+    const url = `${EVENTS_URL(calendarId)}/${encodeURIComponent(opts.eventId)}?sendUpdates=all`;
+    console.log(`[gcal-adapter] events.delete.DELETE calendar=${calendarId} eventId=${opts.eventId}`);
+    const t = Date.now();
+    // 404/410 = already gone → treat as success (idempotent cancel).
+    try {
+      await this.fetchAuthed(url, { method: "DELETE" }, creds);
+    } catch (err: any) {
+      const msg = String(err?.message || "");
+      if (/ 4(04|10):/.test(msg)) {
+        console.log(`[gcal-adapter] events.delete already-gone eventId=${opts.eventId} (ok)`);
+        return;
+      }
+      throw err;
+    }
+    console.log(`[gcal-adapter] events.delete.OK eventId=${opts.eventId} dt_ms=${Date.now() - t}`);
+  }
+
+  /**
    * Read-only: list upcoming events in the window. Backs the
    * `google_calendar.list_events` tool surfaced via the adapter framework.
    */
@@ -252,22 +304,13 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
 // the model. The concrete per-agent calendar is resolved here (calendar
 // capability is per-agent), keeping the framework contract unchanged.
 
+// NOTE: availability is NOT exposed here. A raw free/busy passthrough bypasses
+// the scheduling policy (working hours, buffers, min-notice, meeting-type
+// windows). The model gets availability through the first-class
+// `check_availability` built-in tool instead, which runs the SAME
+// `resolveAvailability` resolver as `schedule_meeting` — one source of truth.
+// Only neutral reads (list_events) live on this adapter path.
 const GCAL_READ_TOOLS: ToolDefinition[] = [
-  {
-    name: "google_calendar.check_availability",
-    description: "Check the assigned agent's calendar for busy/free time in a window.",
-    whenToUse: "You need to know when the agent is free before proposing or confirming times.",
-    category: "READ",
-    riskLevel: "LOW",
-    parameters: {
-      type: "object",
-      properties: {
-        from_iso: { type: "string", description: "Window start, ISO8601 with timezone offset." },
-        to_iso: { type: "string", description: "Window end, ISO8601 with timezone offset." },
-      },
-      required: ["from_iso", "to_iso"],
-    },
-  },
   {
     name: "google_calendar.list_events",
     description: "List the assigned agent's upcoming calendar events in a window.",
@@ -321,10 +364,6 @@ export const GoogleCalendarProviderAdapter: ProviderAdapter = {
       throw new Error("from_iso and to_iso must be valid ISO8601 timestamps");
     }
     const tool = toolName.includes(".") ? toolName.slice(toolName.indexOf(".") + 1) : toolName;
-    if (tool === "check_availability") {
-      const busy = await cal.findBusy({ agentId: "", fromMs, toMs });
-      return { busy: busy.map((b) => ({ start: new Date(b.startMs).toISOString(), end: new Date(b.endMs).toISOString() })) };
-    }
     if (tool === "list_events") {
       return { events: await cal.listEvents({ fromMs, toMs, max: Number(args.max) || 10 }) };
     }

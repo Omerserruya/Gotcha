@@ -67,6 +67,17 @@ const BOOKING_CLAIM_PATTERNS: RegExp[] = [
   /קבעתי[^.!?\n]*(פגישה|שיחה|מחר|בשעה|יום|הכרות|לך)/, // "יום" also covers ליום/ביום
   /קבענו[^.!?\n]*(פגישה|שיחה|מחר|בשעה|יום|הכרות)/, // "יום" also covers ליום/ביום
   /הכל\s+סגור/,
+  // Hebrew — "I managed to schedule", "I scheduled the demo/meeting for ..."
+  /הצלחתי\s+לקבוע/, // "I managed to schedule" (the live fabrication that slipped past)
+  /קבעתי\s+(לנו\s+)?(את\s+)?(הדמו|הפגישה|הפגישה|השיחה|המפגש)/, // "I scheduled the demo/meeting"
+  // Hebrew — "I sent (you) an invite / invitation"
+  /(שלחתי|נשלח[ה]?|שולח[ת]?)\s+(לך\s+)?(הזמנה|זימון|הזמנת\s+יומן)/,
+  // Hebrew — handing over a meeting/join link ("the link to the meeting is ...")
+  /(הקישור|הלינק|קישור|לינק)\s+(ל?פגישה|ל?שיחה|ל?מפגש|להצטרפות|לזום|לדמו)/,
+  // English — "I('ve) sent the invite", "here's the meeting link", "join link/url"
+  /\b(i'?ve|i\s+have|we'?ve|we\s+have)\s+sent\b[^.!?\n]*\b(invite|invitation|calendar\s+invite)\b/i,
+  /\b(here'?s|here\s+is)\b[^.!?\n]*\b(meeting\s+|join\s+|calendar\s+)?link\b/i,
+  /\bjoin\s+(url|link)\b/i,
 ];
 
 /** True when the reply CLAIMS a booking is already done (completed), not merely
@@ -288,9 +299,10 @@ export function buildFabricatedBookingCorrective(): string {
 export function buildBookingGroundingCorrective(): string {
   return (
     `**STOP — you stated a time, availability, or booking that no tool verified this turn.** ` +
-    `You do NOT know the calendar yourself: whether a day/time is free, allowed, in the past, or on a non-working day is known ONLY by calling \`schedule_meeting\`. ` +
+    `You do NOT know the calendar yourself: whether a day/time is free, allowed, in the past, or on a non-working day is known ONLY through your calendar tools. ` +
     `Never say a slot is available/booked, agree to a time, or say a day "doesn't work" from your own guessing. ` +
-    `Do this now: if you have the meeting type + an explicit future day/time + the customer's email, CALL \`schedule_meeting\` and let its result speak — on success confirm it; if it returns proposed alternatives, relay THOSE exact times and ask the customer to pick; if the time is invalid/in the past, tell them honestly and offer the proposed times. ` +
+    `Do this now: to state ANY availability, open time, or working hours — or to propose times — CALL \`check_availability\` and answer ONLY from its result (offer the exact slots it returns, or answer hours from its \`workingHours\`). ` +
+    `Only once the customer has CHOSEN a concrete slot, CALL \`schedule_meeting\` with that exact time to book it, then confirm the real outcome; if it returns \`needsAvailabilityCheck\`, call \`check_availability\` and offer real slots instead. ` +
     `If you are missing the day/time or email, do NOT invent availability — ask for what's missing. ` +
     `Reply in the customer's language. One move only.`
   );

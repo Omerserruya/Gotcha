@@ -29,6 +29,20 @@ export type ObjectiveName =
   | "RESOLVE_ISSUE"
   | "COLLECT_CONTACT";
 
+/**
+ * A measurable BUSINESS OUTCOME — the thing the Goal Evaluator checks for. This
+ * is deliberately decoupled from tools and from the ledger's low-level
+ * action-kinds: a `booking` is a booking whether it happened via schedule_meeting,
+ * a workflow engine, an MCP server, or another AI employee. Extend as new
+ * employee types ship real outcomes (e.g. "quote" | "ticket" | "order").
+ *
+ * Only objectives that PRODUCE a real-world record carry one. Navigation
+ * objectives (QUALIFY_LEAD, RESOLVE_ISSUE) intentionally have NONE — they are
+ * steps, not outcomes, and never report goal achievement (BEL owns "done" when
+ * there is no business outcome to measure).
+ */
+export type BusinessOutcome = "booking" | "crm_lead" | "crm_contact" | "crm_deal";
+
 export interface ObjectiveModule {
   id: ObjectiveName;
   mission: string;
@@ -46,6 +60,26 @@ export interface ObjectiveModule {
   blockPassiveClose: boolean;
   /** The tool whose success truly completes this objective, if any. */
   completionTool?: string;
+  /**
+   * When true, this objective is NOT complete until its `completionTool` has
+   * actually SUCCEEDED this conversation - having the required INFO is not
+   * enough. This is what makes the engine action-complete instead of info-
+   * complete: e.g. BOOK_MEETING stays the active objective (so the resolver
+   * keeps surfacing "call schedule_meeting NOW") even after the customer agreed
+   * and gave an email, until a booking actually lands. Reserved for objectives
+   * whose ACTION is the outcome. CRM-write objectives stay info-complete +
+   * best-effort (the post-conversation pipeline is their backstop), so they do
+   * NOT set this - a failed CRM write must never stall the chain.
+   */
+  requiresActionSuccess?: boolean;
+  /**
+   * The measurable business outcome this objective produces, if any. Set ONLY on
+   * outcome-producing objectives — the Goal Evaluator reads it to decide whether
+   * the configured goal was ACHIEVED, by checking whether the outcome exists in
+   * its runtime home (CRM state / booking store / live ledger). Absent → this is
+   * a navigation step, never a goal-achievement criterion.
+   */
+  outcome?: BusinessOutcome;
 }
 
 const GENERATE_LEAD: ObjectiveModule = {
@@ -54,17 +88,17 @@ const GENERATE_LEAD: ObjectiveModule = {
     "Turn an unknown prospect into a lead: learn who they are, how to reach them, and what they need - enough to create a CRM lead.",
   requiredInformation: [
     { key: "contact_name", label: "the person's name", importance: "required", priority: 1, sourceHints: ["name", "contactName", "fullName", "firstName"] },
-    { key: "contact_method", label: "a way to reach them (email or phone)", importance: "required", priority: 2, sourceHints: ["email", "phone", "mobile", "contactMethod"] },
+    { key: "interest", label: "what they're interested in / why they reached out", importance: "preferred", priority: 2, sourceHints: ["interest", "need", "painPoints"] },
     { key: "business_type", label: "what their business does", importance: "required", priority: 3, sourceHints: ["industry", "company", "businessType"] },
-    { key: "interest", label: "what they're interested in / why they reached out", importance: "preferred", priority: 4, sourceHints: ["interest", "need", "painPoints"] },
+    { key: "contact_method", label: "a way to reach them (email or phone)", importance: "required", priority: 4, sourceHints: ["email", "phone", "mobile", "contactMethod"] },
   ],
   completionCriteria: [
+    "You understand their business and what they're interested in",
     "You know who they are (a name) and how to reach them (email or phone)",
-    "You have a rough sense of their business and what they want",
     "Enough is known to create or enrich a CRM lead in the background",
   ],
   nextStepLogic:
-    "Weave in ONE natural question for the most valuable missing piece (name → contact → business → interest). Once you have a name + a way to reach them + their interest, the lead can be created silently and you advance to QUALIFY_LEAD.",
+    "Lead with DISCOVERY, not data capture. As a sales rep you FIRST understand their business and what they need (name → their business/need), and only once there is genuine interest do you naturally ask for a way to reach them. NEVER ask for an email or phone, and never create the lead, before you understand what their business does and why they reached out — that feels like a form, not a conversation. Once you have a name + their interest + a contact method, create the lead silently and advance to QUALIFY_LEAD.",
   failureCriteria: [
     "Let a NEW prospect leave without learning their name or any way to reach them",
     "Gave a passive close to an unidentified prospect",
@@ -72,26 +106,27 @@ const GENERATE_LEAD: ObjectiveModule = {
   ],
   blockPassiveClose: true,
   completionTool: "integration_create_lead",
+  outcome: "crm_lead",
 };
 
 const QUALIFY_LEAD: ObjectiveModule = {
   id: "QUALIFY_LEAD",
-  mission: "Qualify the opportunity: understand need, authority, timeline, and budget.",
+  mission: "Establish enough fit to earn the demo: understand their need; the demo itself does the deeper qualification.",
   requiredInformation: [
     { key: "need", label: "the problem they're solving", importance: "required", priority: 1, sourceHints: ["need", "painPoints"] },
-    { key: "authority", label: "who owns the decision", importance: "required", priority: 2, sourceHints: ["authority", "title", "role"] },
-    { key: "timeline", label: "when they want to act", importance: "required", priority: 3, sourceHints: ["timeline", "timeframe"] },
+    { key: "authority", label: "who owns the decision", importance: "preferred", priority: 2, sourceHints: ["authority", "title", "role"] },
+    { key: "timeline", label: "when they want to act", importance: "preferred", priority: 3, sourceHints: ["timeline", "timeframe"] },
     { key: "budget", label: "whether budget exists / range", importance: "preferred", priority: 4, sourceHints: ["budget"] },
   ],
   completionCriteria: [
-    "You understand their real need",
-    "You know who decides and roughly when they'd act",
+    "You understand their real need / what hurts",
   ],
   nextStepLogic:
-    "Probe one dimension at a time, anchored to what they said. When need + authority + timeline are credible, propose a meeting/demo (BOOK_MEETING).",
+    "As soon as you understand their need and they're a plausible fit, PROACTIVELY propose the demo (BOOK_MEETING) as the next step - don't wait for them to ask, and don't keep interrogating budget/authority/timeline ('when do you want to start?') before the demo. The demo IS where the deeper qualification happens. Authority/timeline/budget are nice to weave in lightly, never blockers to offering the demo.",
   failureCriteria: [
-    "Pitched a solution before qualifying",
-    "Ended a qualifiable conversation without learning need or decision process",
+    "Pitched a solution before understanding the need",
+    "Kept qualifying (authority/timeline/budget) instead of offering the demo once the need was clear",
+    "Asked 'when do you want to start' before the prospect has even seen a demo",
   ],
   blockPassiveClose: true,
 };
@@ -109,13 +144,21 @@ const BOOK_MEETING: ObjectiveModule = {
     "The booking tool returned success this turn",
   ],
   nextStepLogic:
-    "Propose concrete times; once they agree and you have an email, book it. Never end without at least proposing the meeting as the next step.",
+    "Booking is a conversation, not a slot-dump, and you NEVER invent times — availability comes ONLY from `check_availability` (READ), booking ONLY from `schedule_meeting` (WRITE). FLOW: (1) Once they agree to meet, find a real time: either ask their preference first ('morning or afternoon?' / 'when's good for you?'), OR — when they already hinted a time, or you're ready to propose — write a SHORT ack ('רגע אחד, בודק 🙏') AS you call `check_availability` (the ack goes out as its own message while the calendar is read). (2) After `check_availability` returns, your NEXT message gives the REAL result: if they named a time and it's open, confirm it and ask to lock it in ('מצוין, מחר ב-10:00 פנוי. לקבוע?' / 'great, 10:00 tomorrow is open - shall I book it?'); otherwise offer ONLY the real open slots it returned and ask them to pick. Never blast slots `check_availability` didn't return. Don't cram the ack and the result into one message. (3) Once they pick a concrete time AND you have an email, BOOK it by calling `schedule_meeting` with that exact time, then confirm the REAL outcome (day/time + link). If `schedule_meeting` returns `needsAvailabilityCheck`, the slot isn't bookable — call `check_availability` again, offer real slots, and do NOT confirm. Never end a qualified conversation without moving the meeting forward.",
   failureCriteria: [
+    "Proposed or confirmed a time that no check_availability result returned (invented availability)",
+    "Used schedule_meeting to discover availability instead of check_availability",
+    "Crammed the 'checking' ack and the availability result into a single message instead of ack-first then result",
     "Ended a qualified conversation without proposing a meeting",
-    "Claimed a meeting was booked without a tool success",
+    "Claimed a meeting was booked without a schedule_meeting success",
   ],
   blockPassiveClose: true,
   completionTool: "schedule_meeting",
+  // The booking IS the outcome. Stay active until schedule_meeting succeeds, so
+  // the resolver keeps driving the actual booking instead of declaring victory
+  // the moment the customer says "yes" and hands over an email.
+  requiresActionSuccess: true,
+  outcome: "booking",
 };
 
 const CREATE_DEAL: ObjectiveModule = {
@@ -135,6 +178,7 @@ const CREATE_DEAL: ObjectiveModule = {
   ],
   blockPassiveClose: true,
   completionTool: "integration_create_deal",
+  outcome: "crm_deal",
 };
 
 const RESOLVE_ISSUE: ObjectiveModule = {
@@ -167,6 +211,7 @@ const COLLECT_CONTACT: ObjectiveModule = {
   failureCriteria: ["Let an interested person leave with no way to reach them"],
   blockPassiveClose: true,
   completionTool: "integration_create_contact",
+  outcome: "crm_contact",
 };
 
 export const OBJECTIVES: Record<ObjectiveName, ObjectiveModule> = {
@@ -197,13 +242,172 @@ export interface ObjectiveStatus {
   missingRequired: string[];
 }
 
+/**
+ * GOAL COMMITMENT (Unit A — Persistent Goal Ownership).
+ *
+ * `selectActiveObjective` is stateless: it re-derives "first incomplete step"
+ * from the facts visible THIS turn. That makes the active goal regress whenever
+ * a fact transiently drops out of the resolved-fact text (a Hebrew turn that
+ * doesn't repeat "demo", a CRM block that didn't hydrate, etc.) — the agent
+ * "forgets" it was booking and restarts qualification.
+ *
+ * The ActiveGoalSnapshot is the durable, cross-turn memory of the goal the agent
+ * OWNS. It is persisted in the `ai.bot_turn` audit metadata and reloaded next
+ * turn. `commitObjective` reconciles the freshly-derived objective against this
+ * committed snapshot with three rules:
+ *
+ *   1. ADVANCE   — fresh is at/after the committed step (the committed objective
+ *                  completed, or an eager forward jump like the BOOK_MEETING
+ *                  promotion) → adopt fresh.
+ *   2. HOLD      — fresh regressed to an EARLIER step while the committed
+ *                  objective is NOT complete → keep the committed objective
+ *                  (this is the "never regress on temporary context loss" rule).
+ *   3. RELEASE   — if the agent has been stalled on the held objective with no
+ *                  gap progress for `stallReleaseAfter` turns, stop forcing it
+ *                  and let natural selection take over (escape valve, so a dead
+ *                  goal can never trap the conversation forever).
+ *
+ * `achieved` is sticky: a required field, once satisfied, stays satisfied across
+ * turns even if it later drops out of the fact text — so the agent never re-asks
+ * for something it already has.
+ */
+export interface ActiveGoalSnapshot {
+  objectiveId: ObjectiveName;
+  /** 0-based chain position of the committed objective. */
+  stepIndex: number;
+  /** Required-info keys ever satisfied for this objective (sticky union). */
+  achieved: string[];
+  /** Required-info keys still missing (gap), after applying sticky `achieved`. */
+  missingRequired: string[];
+  /** Consecutive turns held with no reduction in the gap. Drives RELEASE. */
+  stalledTurns: number;
+}
+
+function requiredKeysOf(obj: ObjectiveModule): string[] {
+  return obj.requiredInformation.filter((f) => f.importance === "required").map((f) => f.key);
+}
+
+/** Recompute an objective's currently-missing required keys from fact text. */
+function missingRequiredFor(obj: ObjectiveModule, factText: string): string[] {
+  const ledger = computeKnowledgeLedger(obj.requiredInformation, factText);
+  return ledger.entries
+    .filter((e) => !e.known && e.importance === "required")
+    .map((e) => e.key);
+}
+
+/** Build a committed snapshot for `objectiveId`, folding in sticky `achieved`. */
+function buildSnapshot(
+  objectiveId: ObjectiveName,
+  stepIndex: number,
+  freshMissing: string[],
+  stickyAchieved: string[],
+  priorStalled: number,
+  priorMissingCount: number | null,
+): { snapshot: ActiveGoalSnapshot; missingRequired: string[] } {
+  const req = requiredKeysOf(OBJECTIVES[objectiveId]);
+  const achieved = [
+    ...new Set([
+      ...stickyAchieved.filter((k) => req.includes(k)),
+      ...req.filter((k) => !freshMissing.includes(k)),
+    ]),
+  ];
+  const missingRequired = req.filter((k) => !achieved.includes(k));
+  const progressed = priorMissingCount === null ? true : missingRequired.length < priorMissingCount;
+  const stalledTurns = priorMissingCount === null ? 0 : progressed ? 0 : priorStalled + 1;
+  return {
+    snapshot: { objectiveId, stepIndex, achieved, missingRequired, stalledTurns },
+    missingRequired,
+  };
+}
+
+/**
+ * Reconcile the freshly-derived objective (`fresh`) against the committed goal
+ * (`prior`) and return BOTH the objective to act on this turn AND the snapshot
+ * to persist for next turn. Pure: no I/O. When `prior` is null this is a no-op
+ * (returns `fresh` as a fresh commitment) — fully back-compatible.
+ */
+export function commitObjective(
+  prior: ActiveGoalSnapshot | null,
+  fresh: ObjectiveStatus | null,
+  factText: string,
+  opts: { stallReleaseAfter?: number } = {},
+): { status: ObjectiveStatus | null; snapshot: ActiveGoalSnapshot | null } {
+  const stallReleaseAfter = opts.stallReleaseAfter ?? 3;
+
+  // Chain fully complete this turn → no active goal to own.
+  if (!fresh) return { status: null, snapshot: null };
+
+  const adopt = (priorStalled = 0, priorMissingCount: number | null = null, sticky: string[] = []) => {
+    const { snapshot, missingRequired } = buildSnapshot(
+      fresh.objective.id,
+      fresh.stepIndex,
+      fresh.missingRequired,
+      sticky,
+      priorStalled,
+      priorMissingCount,
+    );
+    return { status: { ...fresh, missingRequired }, snapshot };
+  };
+
+  // No prior commitment → commit the fresh selection as-is.
+  if (!prior) return adopt();
+
+  // Same objective continuing → carry sticky `achieved`, track stall.
+  if (prior.objectiveId === fresh.objective.id) {
+    return adopt(prior.stalledTurns, prior.missingRequired.length, prior.achieved);
+  }
+
+  // ADVANCE: fresh is at/after the committed step (committed objective completed,
+  // or an eager forward jump such as the BOOK_MEETING promotion) → adopt fresh.
+  if (fresh.stepIndex >= prior.stepIndex) return adopt();
+
+  // RELEASE: stalled on the committed objective too long → stop forcing it.
+  if (prior.stalledTurns >= stallReleaseAfter) return adopt();
+
+  // HOLD: fresh regressed to an earlier objective while the committed one is not
+  // complete → keep the committed objective (anti-regression). Recompute its gap
+  // from current facts and keep `achieved` sticky.
+  const heldObj = OBJECTIVES[prior.objectiveId];
+  const heldFreshMissing = missingRequiredFor(heldObj, factText);
+  const { snapshot, missingRequired } = buildSnapshot(
+    prior.objectiveId,
+    prior.stepIndex,
+    heldFreshMissing,
+    prior.achieved,
+    prior.stalledTurns,
+    prior.missingRequired.length,
+  );
+  return {
+    status: { objective: heldObj, stepIndex: prior.stepIndex, chain: fresh.chain, missingRequired },
+    snapshot,
+  };
+}
+
 function objectiveComplete(
   obj: ObjectiveModule,
   prospectState: ProspectState,
   factText: string,
+  completedActionTools: string[] = [],
+  // Whether the agent can actually PERFORM action-mandatory completion tools
+  // this conversation (e.g. a bookable calendar for BOOK_MEETING). When false,
+  // the action-success requirement is waived so a non-bookable agent isn't stuck
+  // on an objective it can never complete - it falls back to info-complete.
+  canCompleteActions: boolean = true,
 ): boolean {
   // A lead already exists → GENERATE_LEAD is satisfied by definition.
   if (obj.id === "GENERATE_LEAD" && prospectState !== "NEW_PROSPECT") return true;
+  // Action-mandatory objectives (e.g. BOOK_MEETING): the completion TOOL having
+  // SUCCEEDED this conversation IS completion - independent of whether the info-
+  // field ledger detected the agreement. Info detection is fragile across
+  // languages (Hebrew "פגישה"/"דמו" never matches the English "meeting"/"demo"
+  // sourceHints), so gating on info would loop the bot into re-booking every
+  // turn. Booked → done; not booked → stay active to DRIVE the booking. Skipped
+  // when the agent can't perform the action (falls through to info-complete so a
+  // non-bookable agent never stalls).
+  if (obj.requiresActionSuccess && canCompleteActions && obj.completionTool) {
+    return completedActionTools.includes(obj.completionTool);
+  }
+  // Info-mandatory objectives: complete when every required field is present.
   const ledger = computeKnowledgeLedger(obj.requiredInformation, factText);
   return !ledger.hasMissingRequired;
 }
@@ -243,6 +447,16 @@ function leadIdentityReady(factText: string): boolean {
   return known("name") && hasContact;
 }
 
+// The REQUIRED booking inputs are present (BOOK_MEETING.requiredInformation:
+// meeting_interest + attendee_email). When a customer is concretely scheduling
+// AND an email is on hand, the booking objective is reachable RIGHT NOW — we must
+// not block it on delayed qualification extraction or a missing name (the
+// trust-eroding window where the model "books" while BOOK_MEETING is still
+// locked). A real email value is the gate (no false-positives from hint words).
+function bookingInputsReady(factText: string): boolean {
+  return CONTACT_EMAIL_RE.test(factText);
+}
+
 /**
  * The active objective for this turn = first incomplete objective in the role's
  * chain. Returns null when every objective in the chain is complete.
@@ -251,9 +465,24 @@ export function selectActiveObjective(
   role: string | null | undefined,
   prospectState: ProspectState,
   factText: string,
+  // Action tools that have already SUCCEEDED this conversation (cross-turn).
+  // Lets action-mandatory objectives (BOOK_MEETING) stay active until their
+  // tool actually landed. Empty/omitted → info-complete semantics (back-compat).
+  completedActionTools: string[] = [],
+  // Whether the agent can perform action-mandatory completion tools (e.g. a
+  // bookable calendar). False → don't stall on an action the agent can't do.
+  canCompleteActions: boolean = true,
+  // WIZARD→RUNTIME (structured fact): the configured goal maps to this objective,
+  // which becomes the chain's ENDPOINT — objectives beyond it are not pursued
+  // (e.g. an SDR configured to "book demos" stops at BOOK_MEETING, never chases
+  // CREATE_DEAL). null/absent → role-derived chain unchanged. Never SKIPS earlier
+  // capture/qualify steps, so it can't bypass lead capture.
+  goalObjective: ObjectiveName | null = null,
 ): ObjectiveStatus | null {
   const skill: SkillName = roleToSkill(role);
-  const chain = OBJECTIVE_CHAINS[skill];
+  const fullChain = OBJECTIVE_CHAINS[skill];
+  const endIdx = goalObjective ? fullChain.indexOf(goalObjective) : -1;
+  const chain = endIdx >= 0 ? fullChain.slice(0, endIdx + 1) : fullChain;
 
   // ── Natural-progression override (do not block a ready buyer) ──
   // When the customer has EXPLICITLY asked to meet AND lead identity (name +
@@ -263,9 +492,13 @@ export function selectActiveObjective(
   // `authority`/`timeline`/`business_type` is the regression we're fixing. Only
   // applies when BOOK_MEETING is in this skill's chain and isn't already done.
   const bookIdx = chain.indexOf("BOOK_MEETING");
-  if (bookIdx >= 0 && customerRequestedMeeting(factText) && leadIdentityReady(factText)) {
+  if (
+    bookIdx >= 0 &&
+    customerRequestedMeeting(factText) &&
+    (leadIdentityReady(factText) || bookingInputsReady(factText))
+  ) {
     const book = OBJECTIVES.BOOK_MEETING;
-    if (!objectiveComplete(book, prospectState, factText)) {
+    if (!objectiveComplete(book, prospectState, factText, completedActionTools, canCompleteActions)) {
       const ledger = computeKnowledgeLedger(book.requiredInformation, factText);
       const missingRequired = ledger.entries
         .filter((e) => !e.known && e.importance === "required")
@@ -276,7 +509,7 @@ export function selectActiveObjective(
 
   for (let i = 0; i < chain.length; i++) {
     const obj = OBJECTIVES[chain[i]];
-    if (objectiveComplete(obj, prospectState, factText)) continue;
+    if (objectiveComplete(obj, prospectState, factText, completedActionTools, canCompleteActions)) continue;
     const ledger = computeKnowledgeLedger(obj.requiredInformation, factText);
     const missingRequired = ledger.entries
       .filter((e) => !e.known && e.importance === "required")
@@ -284,6 +517,354 @@ export function selectActiveObjective(
     return { objective: obj, stepIndex: i, chain, missingRequired };
   }
   return null;
+}
+
+/**
+ * Resolve the configured GOAL = the endpoint of the (wizard-truncated) chain.
+ * This is the objective whose business outcome (if any) the Goal Evaluator
+ * measures. Independent of navigation progress — it's the chain's destination,
+ * not its cursor. Returns null when the role has no chain.
+ */
+export function resolveGoalObjective(
+  role: string | null | undefined,
+  goalObjective: ObjectiveName | null = null,
+): ObjectiveName | null {
+  const skill: SkillName = roleToSkill(role);
+  const fullChain = OBJECTIVE_CHAINS[skill];
+  if (!fullChain?.length) return null;
+  const endIdx = goalObjective ? fullChain.indexOf(goalObjective) : -1;
+  const chain = endIdx >= 0 ? fullChain.slice(0, endIdx + 1) : fullChain;
+  return chain[chain.length - 1] ?? null;
+}
+
+// ─── Next-Best-Action resolver (the DECISION layer) ─────────────────
+// The objective engine knows WHAT to achieve and WHAT'S MISSING; this turns
+// that state into a small, ranked shortlist of concrete next actions. It does
+// NOT decide for the model - it NOMINATES 2-4 goal-derived candidates and the
+// model picks one (and executes it). That keeps the system an AI employee
+// choosing among meaningful options, not a deterministic workflow engine.
+//
+// Inputs are pure state the turn already computed: the active objective status,
+// the dispatchable tool surface (capability), and whether a calendar can book.
+
+export type NextActionKind = "act" | "ask" | "propose" | "escalate";
+
+export interface NextActionCandidate {
+  kind: NextActionKind;
+  /** Tool to call (kind "act"/"escalate"). */
+  tool?: string;
+  /** Required-info field to ask for (kind "ask"). */
+  field?: string;
+  /** Imperative the model reads. */
+  label: string;
+  /** 0..1 priority; the shortlist is sorted by this. */
+  score: number;
+  /** Why this advances the active objective. */
+  rationale: string;
+}
+
+function isCalendarTool(tool: string | undefined): boolean {
+  return !!tool && /(schedule_meeting|schedule_demo|book_)/.test(tool);
+}
+
+/**
+ * Resolve the ranked shortlist of next-best actions for THIS turn. Returns []
+ * when every objective is complete (the caller may close). Never throws.
+ *
+ * Generic by construction: it reads each objective's `requiredInformation`
+ * priorities + `completionTool`, so new objectives are supported with no change
+ * here. A couple of objective-aware touches (propose-the-demo) ride on top.
+ */
+export function resolveNextActions(input: {
+  status: ObjectiveStatus | null;
+  capability: string[]; // tool function names dispatchable this turn
+  calendarBookable?: boolean;
+  // WIZARD→RUNTIME (structured fact): are the configured qualification signals
+  // sufficiently evidenced? `false` suppresses PROACTIVELY proposing the demo
+  // (qualify against the configured criteria first). undefined/true → no gating.
+  qualificationMet?: boolean;
+  // GOAL PROGRESS > INFO COLLECTION: the active objective has STALLED — its
+  // missing info has been requested across turns without being supplied. When
+  // true, we stop nominating the same ASK (a strong employee doesn't ask the
+  // same unanswered question repeatedly) and surface a forward move instead;
+  // the missing detail is collected opportunistically later. Role-agnostic.
+  stalled?: boolean;
+}): NextActionCandidate[] {
+  const { status, capability, calendarBookable, qualificationMet, stalled } = input;
+  if (!status) return [];
+
+  const obj = status.objective;
+  const missing = status.missingRequired;
+  const has = (t: string) => capability.includes(t);
+
+  const candidates: NextActionCandidate[] = [];
+
+  // 1) ACT - all required info captured and the completion tool is callable.
+  const tool = obj.completionTool;
+  const toolCallable =
+    !!tool && has(tool) && (!isCalendarTool(tool) || !!calendarBookable);
+  if (toolCallable && missing.length === 0) {
+    candidates.push({
+      kind: "act",
+      tool,
+      score: 0.95,
+      label: `Call \`${tool}\` NOW - every required detail for ${obj.id} is already captured. Act, don't re-ask.`,
+      rationale: `${obj.id} completes when ${tool} returns success this turn.`,
+    });
+  }
+
+  // 2) PROPOSE the demo - the highest-value forward move for a qualified
+  //    prospect when booking is possible (objective-aware).
+  // WIZARD→RUNTIME: while still QUALIFYING, only PROACTIVELY propose the demo once
+  // the configured qualification signals are met. If the judgment fact says they
+  // are NOT met, qualify against the configured criteria first (do not pre-empt
+  // it). BOOK_MEETING (the customer already wants to book) is never gated here.
+  const proposeQualified = !(obj.id === "QUALIFY_LEAD" && qualificationMet === false);
+  if (calendarBookable && proposeQualified && (obj.id === "QUALIFY_LEAD" || obj.id === "BOOK_MEETING")) {
+    const score = obj.id === "BOOK_MEETING" ? 0.88 : 0.8;
+    candidates.push({
+      kind: "propose",
+      tool: has("schedule_meeting") ? "schedule_meeting" : undefined,
+      score,
+      label:
+        "Proactively propose the demo/meeting and offer 2 concrete times. Don't wait to be asked; the demo is the next step once they're a fit.",
+      rationale: "Advancing a qualified prospect toward a booked meeting is the highest-value move.",
+    });
+  }
+
+  // 3) ASK - the single highest-priority missing required field. Suppressed when
+  //    the objective has STALLED (the info was already requested and not given) -
+  //    a competent employee stops re-asking and advances instead (see 3b).
+  const nextField = [...obj.requiredInformation]
+    .sort((a, b) => a.priority - b.priority)
+    .find((f) => missing.includes(f.key));
+  if (nextField && !stalled) {
+    candidates.push({
+      kind: "ask",
+      field: nextField.key,
+      score: 0.7,
+      label: `Ask the customer for: ${nextField.label}. This is the next thing ${obj.id} needs - ask it naturally, one thing at a time.`,
+      rationale: `Missing required field "${nextField.key}" is blocking ${obj.id}.`,
+    });
+  }
+
+  // 3b) ADVANCE (goal progress > info collection). When the objective has stalled
+  //     on missing info, STOP re-asking and make the best forward move instead.
+  //     Generic: the missing detail becomes opportunistic, not a hard blocker.
+  if (stalled && nextField) {
+    candidates.push({
+      kind: "propose",
+      score: 0.75, // outranks the (suppressed) ASK so the forward move wins
+      label:
+        `You've already asked for "${nextField.label}" and it hasn't been provided. Do NOT ask for it again. ` +
+        `Make a concrete forward move toward the goal instead — give a relevant, specific piece of value, ` +
+        `answer what they care about, or propose the next step — and let that detail come naturally later.`,
+      rationale: `${obj.id} stalled on "${nextField.key}"; advancing beats re-asking an unanswered question.`,
+    });
+  }
+
+  // 4) ESCALATE - always available, deliberately deprioritized (last resort).
+  candidates.push({
+    kind: "escalate",
+    tool: "escalate_to_human",
+    score: 0.1,
+    label:
+      "Escalate to a human ONLY if the customer explicitly asked for one, is clearly upset, or no action above can advance the goal. A failed background tool (e.g. a CRM sync) is NOT a reason to escalate.",
+    rationale: "Last resort - prefer advancing the objective yourself.",
+  });
+
+  // Sort by score desc, dedupe by (kind+tool+field), cap at 4.
+  const seen = new Set<string>();
+  return candidates
+    .sort((a, b) => b.score - a.score)
+    .filter((c) => {
+      const key = `${c.kind}:${c.tool ?? ""}:${c.field ?? ""}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 4);
+}
+
+/** True when the active objective is still reachable AND there is at least one
+ *  advancing (non-escalate) action available. Used by Goal Preservation to
+ *  decide whether escalation is premature. */
+export function hasViableAdvancingAction(candidates: NextActionCandidate[]): boolean {
+  return candidates.some((c) => c.kind !== "escalate");
+}
+
+// ─── Guaranteed background actions (CRM integrity) ──────────────────────────
+// Objective completion tools that are SILENT background CRM writes. These must
+// fire DETERMINISTICALLY the moment their required info exists — never left to
+// whether the model "remembered" to call them (the 65 missed create_lead in the
+// audit). Generic: keyed off objective.completionTool, never a hardcoded site.
+const BACKGROUND_COMPLETION_TOOLS = new Set<string>([
+  "integration_create_lead",
+  "integration_create_contact",
+  "integration_create_deal",
+]);
+
+/**
+ * Background actions that are RIPE (their objective's required info is present)
+ * but have NOT yet committed this conversation — they should be executed
+ * silently this turn. Walks the WHOLE chain (a lead must exist even once we've
+ * advanced to booking), not just the active objective. Pure.
+ */
+export function guaranteedBackgroundActions(input: {
+  role: string | null | undefined;
+  prospectState: ProspectState;
+  factText: string;
+  committedTools: string[];
+}): Array<{ objectiveId: ObjectiveName; tool: string }> {
+  const chain = OBJECTIVE_CHAINS[roleToSkill(input.role)] ?? [];
+  const committed = new Set(input.committedTools);
+  const out: Array<{ objectiveId: ObjectiveName; tool: string }> = [];
+  for (const id of chain) {
+    const obj = OBJECTIVES[id];
+    const tool = obj.completionTool;
+    if (!tool || !BACKGROUND_COMPLETION_TOOLS.has(tool)) continue;
+    if (committed.has(tool)) continue; // already done this conversation
+    // A lead / contact already exists when the prospect is no longer NEW → the
+    // record is there, don't re-create it (the create's only job is to make it
+    // exist). Deal creation has no such proxy; dedup handles repeats.
+    if ((id === "GENERATE_LEAD" || id === "COLLECT_CONTACT") && input.prospectState !== "NEW_PROSPECT") continue;
+    const ledger = computeKnowledgeLedger(obj.requiredInformation, input.factText);
+    if (!ledger.hasMissingRequired) out.push({ objectiveId: id, tool });
+  }
+  return out;
+}
+
+// ─── Goal prioritization (business-outcome layer above objectives) ──────────
+// When more than one move is viable, a strong employee advances the highest-
+// value business OUTCOME, not whichever the customer's last message gestured at.
+// Higher = pursue first. Generic ordering over objective ids; new objectives
+// inherit a default. Booking/conversion/retention/completion all outrank pure
+// informational conversation (which has no objective and therefore no weight).
+export const OBJECTIVE_PRIORITY: Record<ObjectiveName, number> = {
+  BOOK_MEETING: 100,   // booking — highest-value forward motion
+  CREATE_DEAL: 95,     // conversion
+  RESOLVE_ISSUE: 80,   // retention / resolution
+  QUALIFY_LEAD: 60,    // progression toward conversion
+  GENERATE_LEAD: 50,   // completion (capture)
+  COLLECT_CONTACT: 50, // completion (capture)
+};
+
+export function objectivePriority(id: ObjectiveName | undefined): number {
+  return id ? (OBJECTIVE_PRIORITY[id] ?? 40) : 0;
+}
+
+// ─── Outcome quality > data collection (generic creation gate) ──────────────
+// A record (lead/contact/deal/opportunity/ticket/case/quote/…) should be created
+// only when creation is MEANINGFUL business progress — never just because enough
+// fields exist. Role-agnostic rules, no per-role logic:
+//   (1) a poor-fit prospect (judgment fit="disqualified") → create NOTHING;
+//   (2) a high-commitment object (deal/opportunity/quote/order/contract/invoice)
+//       requires a real, known contact to attach to (prospectState ≠ NEW_PROSPECT).
+// Non-creation tools are always allowed; capture objects (lead/contact/ticket)
+// stay available for engaged prospects. Matches any creation tool by name shape.
+const CREATION_TOOL_RE = /create/i;
+const COMMITMENT_OBJECT_RE = /(deal|opportunit|quote|order|contract|invoice)/i;
+
+export function isCreationToolAllowed(
+  toolName: string,
+  ctx: { fit: "qualified" | "disqualified" | "neutral"; prospectState: ProspectState },
+): boolean {
+  if (!CREATION_TOOL_RE.test(toolName)) return true; // not a creation tool
+  if (ctx.fit === "disqualified") return false; // no records for a poor-fit prospect
+  if (COMMITMENT_OBJECT_RE.test(toolName) && ctx.prospectState === "NEW_PROSPECT") return false;
+  return true;
+}
+
+// ─── Wizard → Runtime binding: structured facts (judgment layer) ────────────
+// Free-text Wizard config (goal, ICP, qualificationSignals[], disqualifiers[],
+// successCriteria) is converted into these DETERMINISTIC facts by a single
+// structured evaluation step (wizard-binding.service.ts) — NO regex / keyword /
+// fuzzy matching anywhere. The objective engine, readiness logic, recovery, and
+// prioritization consume ONLY this typed object, never the raw config text.
+//
+// `evaluated:false` means the step did not run (no config) or failed → every
+// consumer treats the facts as absent and behaves exactly as before (back-compat).
+export interface WizardRuntimeFacts {
+  evaluated: boolean;
+  /** Fit against configured ICP + disqualifiers. */
+  fit: "qualified" | "disqualified" | "neutral";
+  /** The configured disqualifier (verbatim) the customer matched, if disqualified. */
+  disqualifierMatched: string | null;
+  /** Whether the configured qualification signals are sufficiently evidenced. */
+  qualificationMet: boolean;
+  /** Subset of the configured qualificationSignals evidenced so far. */
+  signalsMet: string[];
+  /** The objective the configured goal maps to — the chain's ENDPOINT (objectives
+   *  beyond it are not pursued). null → use the role-derived chain unchanged. */
+  goalObjective: ObjectiveName | null;
+}
+
+export const EMPTY_WIZARD_FACTS: WizardRuntimeFacts = {
+  evaluated: false,
+  fit: "neutral",
+  disqualifierMatched: null,
+  qualificationMet: true, // absent config never gates readiness
+  signalsMet: [],
+  goalObjective: null,
+};
+
+/** Directive injected when the judgment step flags a configured disqualifier:
+ *  steer the model to qualify out gracefully instead of forcing a meeting. */
+export function renderQualifyOutDirective(matched: string): string {
+  return [
+    "# Fit check — qualify out gracefully (configured disqualifier matched)",
+    `What the customer described matches a configured poor-fit signal: "${matched}".`,
+    "Do NOT push a demo or hard-sell this turn. Acknowledge honestly and, if it's truly a mismatch, " +
+      "disengage politely — point them to a better-fit resource or leave the door open — rather than " +
+      "forcing a meeting. If they clarify they ARE a fit, continue pursuing the goal normally.",
+  ].join("\n");
+}
+
+/**
+ * Render the business-outcome priority directive for BLOCK 5. Makes the model's
+ * decision ordering explicit: advancing the committed outcome outranks open-
+ * ended discussion; answer + advance when possible, advance when forced to pick.
+ */
+export function renderOutcomePriority(status: ObjectiveStatus | null): string | null {
+  if (!status) return null;
+  const tier =
+    objectivePriority(status.objective.id) >= 95
+      ? "the highest-value outcome available right now"
+      : objectivePriority(status.objective.id) >= 80
+        ? "a high-value outcome"
+        : "the active outcome";
+  return [
+    "# Business-outcome priority",
+    `Advancing **${status.objective.id}** is ${tier}. Business outcomes — booking, conversion, ` +
+      `retention/resolution, then capture — ALWAYS outrank open-ended informational chat.`,
+    "When the customer asks something, answer it AND make the outcome-advancing move in the same turn. " +
+      "If you must choose, advance the outcome — never let the conversation drift into pure Q&A while a " +
+      "concrete next step toward the goal is available.",
+  ].join("\n");
+}
+
+/**
+ * Render the shortlist into the prompt. The model PICKS one and executes it.
+ * Action-first framing: prefer calling the tool over talking when an ACT is
+ * listed. Returns null when there are no candidates (all objectives complete).
+ */
+export function renderNextActions(candidates: NextActionCandidate[]): string | null {
+  if (!candidates.length) return null;
+  const lines: string[] = [
+    "# Next best actions (decide and ACT this turn)",
+    "These are the goal-derived moves that advance the active objective, best first. Pick the ONE that best fits what the customer just said, then DO it this turn - call the tool or ask the one question. Prefer an [ACT] over talking when it's listed: you already have what you need, so act instead of describing.",
+    "",
+  ];
+  const tag: Record<NextActionKind, string> = {
+    act: "ACT",
+    propose: "PROPOSE",
+    ask: "ASK",
+    escalate: "ESCALATE",
+  };
+  candidates.forEach((c, i) => {
+    lines.push(`${i + 1}. [${tag[c.kind]}] ${c.label}`);
+  });
+  return lines.join("\n");
 }
 
 /**

@@ -2,7 +2,7 @@ import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
 import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
-import { generateResponse } from "../services/ai.service";
+import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
 import { isBrandArchetype } from "../services/brand-archetypes";
@@ -372,7 +372,7 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         escalationRules: escalationRules || [],
         interactiveMessages: interactiveMessages || {},
         systemPrompt: systemPrompt || "",
-        model: model || "gpt-4o-mini",
+        model: model || getDefaultModel(),
         provider: provider || "openai",
         temperature: temperature ?? 0.7,
         maxTokens: maxTokens ?? 1024,

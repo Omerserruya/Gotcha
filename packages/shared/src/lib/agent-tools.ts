@@ -38,6 +38,26 @@ export interface AgentToolContext {
    */
   scheduleMeeting?: (args: ScheduleMeetingArgs) => Promise<ScheduleMeetingResult>;
   /**
+   * Optional handler for `check_availability` (read-only). Answers "what times
+   * are free?", "are you open Saturday?", "what are your working hours?" by
+   * inspecting the configured calendar + scheduling policy. NEVER creates an
+   * event. Wired alongside scheduleMeeting whenever a calendar is bookable.
+   */
+  checkAvailability?: (args: CheckAvailabilityArgs) => Promise<CheckAvailabilityResult>;
+  /**
+   * Optional handler for `reschedule_meeting`. Moves the meeting already booked
+   * in THIS conversation to a new time (the existing eventId is resolved
+   * server-side from the audit trail, NOT supplied by the model). Wired by the
+   * ai service only when a connected calendar AND a prior booking exist.
+   */
+  rescheduleMeeting?: (args: RescheduleMeetingArgs) => Promise<RescheduleMeetingResult>;
+  /**
+   * Optional handler for `cancel_meeting`. Cancels the meeting already booked in
+   * THIS conversation (eventId resolved server-side). Wired alongside
+   * rescheduleMeeting.
+   */
+  cancelMeeting?: () => Promise<CancelMeetingResult>;
+  /**
    * Custom API tool runner. Set by ai-bot.service from
    * connectors/custom-api.service. The dispatcher routes any tool whose
    * name matches `custom.<slug>` here. Returns a JSON-stringifiable result.
@@ -111,7 +131,14 @@ export type ScheduleMeetingResult =
       ok: false;
       verdict: "INVALID";
       reason: string;
-      proposedSlotsIso: string[];
+      /**
+       * schedule_meeting is a pure WRITE tool: it never searches for slots. When
+       * the chosen time isn't bookable (out of hours, busy, min-notice, or a
+       * `slot_taken` race after validation) it sets this flag so the model knows
+       * to call `check_availability` for real open slots instead of expecting
+       * alternatives in this result.
+       */
+      needsAvailabilityCheck: true;
       /**
        * Pre-localized customer-facing copy. Set when the failure mode warrants
        * a specific user-visible message (e.g. `slot_taken` race after the
@@ -122,7 +149,90 @@ export type ScheduleMeetingResult =
       /** The slot the model originally tried to book - for audit. */
       requestedSlotIso?: string;
     }
-  | { ok: false; verdict: "PROPOSE"; proposedSlotsIso: string[] }
+  | { ok: false; reason: string; needsAvailabilityCheck?: boolean };
+
+export interface RescheduleMeetingArgs {
+  /** The NEW time the customer wants, ISO8601 with timezone offset. */
+  requested_at_iso: string;
+  customer_timezone?: string;
+}
+
+/**
+ * Reschedule shares schedule_meeting's result shape: VALID on a successful move
+ * (new eventId/joinUrl/start/end), INVALID with `needsAvailabilityCheck` when
+ * the new time isn't bookable (defer to check_availability), or a bare
+ * {ok:false,reason} (e.g. `no_existing_meeting` when there's nothing to move).
+ */
+export type RescheduleMeetingResult = ScheduleMeetingResult;
+
+export type CancelMeetingResult =
+  | { ok: true; cancelled: true; startMs?: number; endMs?: number }
+  | { ok: false; reason: string };
+
+export interface CheckAvailabilityArgs {
+  /**
+   * Which meeting type to check against (its duration + working-hours policy).
+   * Optional: the server snaps to the closest configured type, or uses the only
+   * one when a single type exists.
+   */
+  meeting_type?: string;
+  /**
+   * A SPECIFIC time the customer asked about ("are you free tomorrow at noon?"),
+   * ISO8601 with offset. Returns `requestedAvailable` + a `requestedReason` when
+   * not free. Mutually exclusive with from_iso/to_iso (point check vs window).
+   */
+  requested_at_iso?: string;
+  /** Window start for "what's free tomorrow / Saturday / next week", ISO8601. */
+  from_iso?: string;
+  /** Window end for the same windowed question, ISO8601. */
+  to_iso?: string;
+  customer_timezone?: string;
+}
+
+/** A weekly working-hours window in the agent's timezone (empty weekday = closed). */
+export interface WorkingHoursWindow {
+  /** 0=Sun … 6=Sat (JS Date.getDay()). */
+  weekday: number;
+  /** "HH:MM" 24h, agent timezone. */
+  start: string;
+  /** "HH:MM" 24h, agent timezone (exclusive). */
+  end: string;
+}
+
+/**
+ * Read-only availability answer. The single source of truth the model uses for
+ * EVERY availability / working-hours question. Never books anything.
+ */
+export type CheckAvailabilityResult =
+  | {
+      ok: true;
+      /** IANA timezone the working hours + slots are expressed in. */
+      timezone: string;
+      /** Structured weekly working hours; absence of a weekday = closed that day. */
+      workingHours: WorkingHoursWindow[];
+      minNoticeHours: number;
+      maxHorizonDays: number;
+      /** Duration (minutes) of the meeting type these slots were computed for. */
+      durationMinutes: number;
+      meetingTypeSlug: string;
+      /** Set when `requested_at_iso` was given — the point-check verdict. */
+      requestedIso?: string;
+      requestedAvailable?: boolean;
+      /** InvalidReason (e.g. outside_working_hours, agent_busy) when not available. */
+      requestedReason?: string;
+      /**
+       * Valid, bookable open slots (ISO8601). Within [from_iso,to_iso] when a
+       * window was given, else soonest-first. The customer picks one of these and
+       * THEN the model calls schedule_meeting with it.
+       */
+      proposedSlotsIso: string[];
+      /**
+       * Soonest valid slot ignoring the window — populated when the windowed
+       * answer is empty (e.g. asked about a closed Saturday) so the model can say
+       * "we're closed then; the nearest is …".
+       */
+      nextAvailableIso?: string;
+    }
   | { ok: false; reason: string };
 
 export interface AgentToolSideEffect {
@@ -438,15 +548,77 @@ export const INTEGRATION_CREATE_CONTACT_TOOL = {
   },
 };
 
+export const CHECK_AVAILABILITY_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "check_availability",
+    description:
+      "READ-ONLY. Inspect the assigned agent's REAL calendar + scheduling rules to answer ANY availability " +
+      "or working-hours question. This is the ONLY source of truth for when the agent can meet — you do NOT " +
+      "know the calendar yourself, so never state availability, working hours, or specific open times from " +
+      "memory or reasoning. This tool NEVER books anything.\n\n" +
+      "Call it whenever the customer asks about timing, OR right before you propose any time yourself:\n" +
+      "  • \"are you free tomorrow / around noon / next week?\" → pass from_iso/to_iso for that window (or " +
+      "requested_at_iso for one exact time).\n" +
+      "  • \"what are your working hours?\", \"do you work Saturdays?\", \"are evenings possible?\" → call with " +
+      "no time and answer from the returned `workingHours` (structured weekly hours) + `timezone`.\n" +
+      "  • YOU want to propose meeting times → call first (with the window you have in mind, or none for " +
+      "'soonest') and offer ONLY the returned `proposedSlotsIso`. Never volunteer a clock time this tool " +
+      "did not return.\n\n" +
+      "Result:\n" +
+      "  - `workingHours` + `timezone` + `minNoticeHours` → answer hours / Saturday / evening questions directly.\n" +
+      "  - `proposedSlotsIso` → real bookable slots to offer; the customer picks one, THEN you call " +
+      "schedule_meeting with that exact slot.\n" +
+      "  - `requestedAvailable` + `requestedReason` (only when you passed `requested_at_iso`) → whether that one " +
+      "exact time is open, and if not, why.\n" +
+      "  - `nextAvailableIso` → the soonest open slot when the window you asked about has none (e.g. a closed " +
+      "Saturday): say you're closed then and offer it.",
+    parameters: {
+      type: "object",
+      properties: {
+        meeting_type: {
+          type: "string",
+          description:
+            "Configured meeting-type slug to check against (drives duration + working-hours policy). " +
+            "Optional — the server snaps to the closest configured type, or uses the only one configured.",
+        },
+        requested_at_iso: {
+          type: "string",
+          description:
+            "A SINGLE exact time to check ('are you free tomorrow at 12:00?'), ISO8601 with timezone offset. " +
+            "Use this OR from_iso/to_iso — not both.",
+        },
+        from_iso: {
+          type: "string",
+          description: "Window start for 'what's free tomorrow / Saturday / next week', ISO8601 with offset.",
+        },
+        to_iso: {
+          type: "string",
+          description: "Window end for that windowed question, ISO8601 with offset.",
+        },
+        customer_timezone: {
+          type: "string",
+          description: "IANA timezone (e.g. 'Asia/Jerusalem'). Provide if known.",
+        },
+      },
+      required: [],
+    },
+  },
+};
+
 export const SCHEDULE_MEETING_TOOL = {
   type: "function" as const,
   function: {
     name: "schedule_meeting",
     description:
-      "Book a meeting on the assigned agent's calendar. The system enforces working hours, " +
-      "buffers, minimum-notice, max-horizon, and existing busy slots - DO NOT assume the time " +
-      "you propose is free, the server validates and may reject.\n" +
-      "BEFORE calling this tool you MUST do TWO things in order:\n\n" +
+      "BOOK a meeting at a SPECIFIC time the customer has ALREADY chosen. This is a pure WRITE action: it " +
+      "creates the calendar event, the Meet link, and the invites. It does NOT search for times and does NOT " +
+      "decide availability — that is `check_availability`'s job. Never call this to 'see if a time works', and " +
+      "never invent a time.\n\n" +
+      "PRECONDITION — you only reach this tool once a concrete slot is agreed, obtained one of two ways:\n" +
+      "  • the customer named an explicit time AND you confirmed it is open via `check_availability`, or\n" +
+      "  • the customer picked one of the slots `check_availability` returned.\n\n" +
+      "BEFORE booking, complete these (ask ONE question per turn if anything is missing):\n" +
       "STEP A - CRM identity reconciliation (silent, no narration):\n" +
       "  • Look up the customer in CRM by their phone first (the conversation's `senderId` / phone is the " +
       "primary channel identifier). Use whatever CRM lookup tool is available (e.g. `integration.zoho_crm.search_lead`, " +
@@ -458,30 +630,22 @@ export const SCHEDULE_MEETING_TOOL = {
       "they stated (high confidence), then `update_record` to keep the lead fresh.\n" +
       "  • If the customer is NOT FOUND → after gathering essentials below, call `create_lead` (silent) " +
       "with their phone + email + name. The booking happens RIGHT AFTER the lead exists.\n\n" +
-      "STEP B - gather meeting essentials in conversation (unless the customer already volunteered them):\n" +
-      "  1. Time the customer prefers (date + hour + their timezone if non-obvious).\n" +
-      "  2. Whether anyone else should be invited (additional guest emails) - explicitly ask if not stated.\n" +
-      "  3. Topic / agenda - one short line, so the calendar event title + notes are useful.\n" +
-      "  4. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n" +
-      "Ask one question per turn until you have these.\n\n" +
-      "🚫 HARD RULES - break these and the booking will be wrong:\n" +
-      "  • If the customer's last inbound did NOT include an explicit time (e.g. \"Tuesday at 11\"), " +
-      "you MUST reply with a question (e.g. \"Sure - what day/time works for you?\") and NOT call " +
-      "schedule_meeting this turn.\n" +
-      "  • If the customer has not been asked about additional guests in THIS conversation, you MUST " +
-      "ask before calling schedule_meeting.\n" +
-      "  • Even if you can guess from CRM history, never assume guests = none. Confirm with the customer.\n" +
+      "STEP B - essentials (unless already volunteered):\n" +
+      "  1. Whether anyone else should be invited (additional guest emails) - explicitly ask if not stated.\n" +
+      "  2. Topic / agenda - one short line, so the calendar event title + notes are useful.\n" +
+      "  3. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n\n" +
+      "🚫 HARD RULES:\n" +
+      "  • `requested_at_iso` is REQUIRED — it is the exact agreed slot. If you do NOT have a concrete agreed " +
+      "time, call `check_availability` instead; do not call this tool.\n" +
+      "  • If the customer has not been asked about additional guests in THIS conversation, ask first; never " +
+      "assume guests = none, even from CRM history.\n" +
       "  • Never call schedule_meeting on the customer's first booking-intent message. Reconcile + qualify first.\n\n" +
-      "Behavior of the tool itself:\n" +
-      "  - If the customer suggested a time → pass it via `requested_at_iso` and the server validates.\n" +
-      "  - If the customer did NOT suggest a time → omit `requested_at_iso` and the server " +
-      "returns 2–3 valid slots in `proposed_slots`; relay them and ask the customer to pick one.\n" +
-      "Never invent times. Never claim a slot is available without a successful tool result.\n" +
-      "Failure modes:\n" +
-      "  - verdict='INVALID' with reason='slot_taken' means another booking landed in the same " +
-      "window between validation and creation. DO NOT confirm the meeting. The result includes " +
-      "`userMessage.he` / `userMessage.en` - relay that line verbatim in the customer's language, " +
-      "then offer the slots in `proposedSlotsIso`.",
+      "Result handling:\n" +
+      "  - verdict='VALID' → booked; confirm the exact day/time + the meeting link.\n" +
+      "  - ok:false with `needsAvailabilityCheck:true` (reasons include no_time_selected, outside_working_hours, " +
+      "agent_busy, min_notice_violated, slot_taken) → the chosen slot is NOT bookable. Do NOT confirm. Call " +
+      "`check_availability` to get real open slots, offer them, and let the customer pick. When a " +
+      "`userMessage.he`/`userMessage.en` is present, relay it verbatim in the customer's language first.",
     parameters: {
       type: "object",
       properties: {
@@ -502,8 +666,9 @@ export const SCHEDULE_MEETING_TOOL = {
         requested_at_iso: {
           type: "string",
           description:
-            "Optional ISO8601 timestamp the customer explicitly asked for. Must include timezone offset. " +
-            "Omit when proposing slots.",
+            "REQUIRED. The exact ISO8601 slot (with timezone offset) the customer has CHOSEN — either a time " +
+            "they named that you confirmed open via check_availability, or one of check_availability's returned " +
+            "slots. This tool books THIS time; it never searches for one.",
         },
         customer_timezone: {
           type: "string",
@@ -527,8 +692,57 @@ export const SCHEDULE_MEETING_TOOL = {
           description: "Short note to attach to the calendar event (one sentence) - typically the topic / agenda the customer stated.",
         },
       },
-      required: ["duration_minutes", "meeting_type"],
+      required: ["duration_minutes", "meeting_type", "requested_at_iso"],
     },
+  },
+};
+
+export const RESCHEDULE_MEETING_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "reschedule_meeting",
+    description:
+      "MOVE the meeting already booked in THIS conversation to a new, ALREADY-CHOSEN time. Use this - never " +
+      "schedule_meeting - when the customer wants to change/move/postpone an existing meeting. Calling " +
+      "schedule_meeting again would create a DUPLICATE event and leave the old one on the calendar.\n" +
+      "The system already knows which event to move (resolved server-side) - you only provide the NEW time. " +
+      "Like schedule_meeting, this is a WRITE action: it does NOT search for replacement times.\n" +
+      "HARD RULES:\n" +
+      "  • Only call this if a meeting was actually booked earlier in this conversation. If unsure, you don't have one.\n" +
+      "  • To find a replacement time, use `check_availability` first (it gives real open slots / working hours); " +
+      "call reschedule_meeting only once the customer has CHOSEN the new time. Never invent the new time.\n" +
+      "  • If the new time turns out to be unbookable you'll get ok:false with `needsAvailabilityCheck:true` — " +
+      "do NOT confirm the move; call check_availability, offer real slots, and let the customer pick.\n" +
+      "  • On success the meeting keeps its original meeting link; confirm the new day/time to the customer.",
+    parameters: {
+      type: "object",
+      properties: {
+        requested_at_iso: {
+          type: "string",
+          description: "The NEW ISO8601 time the customer asked for. Must include timezone offset.",
+        },
+        customer_timezone: {
+          type: "string",
+          description: "IANA timezone (e.g. 'Asia/Jerusalem'). Provide if known.",
+        },
+      },
+      required: ["requested_at_iso"],
+    },
+  },
+};
+
+export const CANCEL_MEETING_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "cancel_meeting",
+    description:
+      "CANCEL the meeting already booked in THIS conversation. Use when the customer wants to cancel/call off an " +
+      "existing meeting (and is NOT asking to move it - to move it, use reschedule_meeting). The system knows which " +
+      "event to cancel (resolved server-side); the guests are notified automatically.\n" +
+      "HARD RULES:\n" +
+      "  • Only call this if a meeting was actually booked earlier in this conversation.\n" +
+      "  • Confirm the cancellation to the customer once it succeeds. Do NOT then offer to rebook unless they ask.",
+    parameters: { type: "object", properties: {} },
   },
 };
 
@@ -574,6 +788,20 @@ export interface BuildAgentToolsOptions {
    * causes the model to confidently propose times it can't actually book.
    */
   scheduleMeeting?: boolean;
+  /**
+   * check_availability tool (read-only). Surfaced together with scheduleMeeting
+   * whenever the agent has a bookable calendar — it's the source of truth for
+   * availability + working-hours questions, so the model never invents times.
+   */
+  checkAvailability?: boolean;
+  /**
+   * reschedule_meeting / cancel_meeting tools. Default OFF - the ai service
+   * enables them ONLY when the agent has a bookable calendar AND a meeting was
+   * already booked in this conversation (so the model can't move/cancel a
+   * meeting that doesn't exist).
+   */
+  rescheduleMeeting?: boolean;
+  cancelMeeting?: boolean;
   /** Extra tenant-defined function schemas to append. */
   extra?: Array<Record<string, unknown>>;
   /**
@@ -597,7 +825,10 @@ export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record
   // create_task is NOT a built-in: it's a CRM action and should be surfaced
   // as an integration tool (AgentToolPermission), not auto-included here.
   // The schema + dispatcher are kept so a connected CRM can expose it.
+  if (opts.checkAvailability === true) tools.push(CHECK_AVAILABILITY_TOOL as any);
   if (opts.scheduleMeeting === true) tools.push(SCHEDULE_MEETING_TOOL as any);
+  if (opts.rescheduleMeeting === true) tools.push(RESCHEDULE_MEETING_TOOL as any);
+  if (opts.cancelMeeting === true) tools.push(CANCEL_MEETING_TOOL as any);
   if (opts.extra?.length) tools.push(...opts.extra);
   return tools;
 }
@@ -635,15 +866,15 @@ export async function buildAgentToolsForAIAgent(
         tenantTool: {
           isEnabled: true,
           tenantIntegration: { status: "CONNECTED" },
-          // Calendar tools are surfaced through the PROVIDER-ADAPTER path
-          // instead of this HTTP-catalog path, to avoid double-surfacing the
-          // same tool under two names. Reads (check_availability/list_events)
-          // come from the registered `google_calendar` ProviderAdapter
-          // (google-calendar.adapter.ts); writes go ONLY through the validated
-          // `schedule_meeting` tool (working hours / buffers / conflicts), so
-          // raw create_event is intentionally never surfaced. The connected-AND-
-          // allowed authority is identical on both paths — this exclusion is
-          // purely routing (which path), not a capability/authorization gate.
+          // Calendar tools are NOT surfaced through this HTTP-catalog path, to
+          // avoid double-surfacing the same tool under two names. Availability is
+          // the first-class `check_availability` built-in (validated against the
+          // scheduling policy — working hours / buffers / conflicts), booking is
+          // the `schedule_meeting` built-in, and neutral reads (list_events) come
+          // from the registered `google_calendar` ProviderAdapter. Raw
+          // create_event / free-busy passthroughs are intentionally never
+          // surfaced. This exclusion is purely routing (which path), not a
+          // capability/authorization gate.
           catalogTool: { integration: { category: { not: "CALENDAR" } } },
         },
       },
@@ -1010,6 +1241,28 @@ export async function dispatchToolCall(
     };
   }
 
+  if (name === "check_availability") {
+    console.log(`[ai-bot] tool_call check_availability args=${JSON.stringify(args)}`);
+    if (!ctx.checkAvailability) {
+      console.warn(`[ai-bot] check_availability called but ctx.checkAvailability handler is not wired`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: "scheduling_not_configured" }),
+      };
+    }
+    try {
+      const result = await ctx.checkAvailability(args as unknown as CheckAvailabilityArgs);
+      console.log(`[ai-bot] check_availability → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] check_availability threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "check_availability failed" }),
+      };
+    }
+  }
+
   if (name === "schedule_meeting") {
     console.log(`[ai-bot] tool_call schedule_meeting args=${JSON.stringify(args)}`);
     if (!ctx.scheduleMeeting) {
@@ -1031,6 +1284,48 @@ export async function dispatchToolCall(
       return {
         toolCallId: toolCall.id,
         content: JSON.stringify({ ok: false, reason: err?.message || "schedule_meeting failed" }),
+      };
+    }
+  }
+
+  if (name === "reschedule_meeting") {
+    console.log(`[ai-bot] tool_call reschedule_meeting args=${JSON.stringify(args)}`);
+    if (!ctx.rescheduleMeeting) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: "reschedule_not_configured" }),
+      };
+    }
+    try {
+      const result = await ctx.rescheduleMeeting(args as unknown as RescheduleMeetingArgs);
+      console.log(`[ai-bot] reschedule_meeting → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] reschedule_meeting threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "reschedule_meeting failed" }),
+      };
+    }
+  }
+
+  if (name === "cancel_meeting") {
+    console.log(`[ai-bot] tool_call cancel_meeting`);
+    if (!ctx.cancelMeeting) {
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: "cancel_not_configured" }),
+      };
+    }
+    try {
+      const result = await ctx.cancelMeeting();
+      console.log(`[ai-bot] cancel_meeting → ${JSON.stringify(result).slice(0, 240)}`);
+      return { toolCallId: toolCall.id, content: JSON.stringify(result) };
+    } catch (err: any) {
+      console.error(`[ai-bot] cancel_meeting threw: ${err?.message}`);
+      return {
+        toolCallId: toolCall.id,
+        content: JSON.stringify({ ok: false, reason: err?.message || "cancel_meeting failed" }),
       };
     }
   }

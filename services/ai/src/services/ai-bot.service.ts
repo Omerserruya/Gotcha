@@ -17,6 +17,7 @@ import {
   prisma,
   buildAgentToolsForAIAgent,
   dispatchToolCall,
+  evaluatePolicies,
   INTEGRATION_CREATE_LEAD_TOOL,
   INTEGRATION_CREATE_CONTACT_TOOL,
 } from "@chatcenter/shared";
@@ -25,7 +26,7 @@ import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js"
 import { randomUUID } from "crypto";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
-import { generateResponse } from "./ai.service";
+import { generateResponse, getDefaultModel } from "./ai.service";
 import { executeAction, type PlannedAction } from "./action-executor.service";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
 import { validateAndPersist } from "./output-validator.service";
@@ -60,17 +61,41 @@ import {
 } from "./conversation-memory.service";
 import { loadFunnelForTenant } from "./funnel-config.repo";
 import { missingContractInputs } from "./tool-contracts";
-import { computeProspectState } from "./prospect-state";
+import { computeProspectState, type ProspectState } from "./prospect-state";
 import {
   selectActiveObjective,
+  commitObjective,
+  resolveGoalObjective,
+  type ActiveGoalSnapshot,
+  resolveNextActions,
+  hasViableAdvancingAction,
+  guaranteedBackgroundActions,
+  isCreationToolAllowed,
+  type WizardRuntimeFacts,
+  EMPTY_WIZARD_FACTS,
   isPassiveCloser,
   isNonAdvancingReply,
   customerIsClosing,
   buildCloserCorrective,
 } from "./objectives";
+import {
+  evaluateGoalStatus,
+  presentBusinessOutcomes,
+  businessOutcomesFromLedger,
+  buildGoalPendingCorrective,
+} from "./goal-evaluator";
+import { groupToolsIntoCapabilities } from "./capabilities";
+import { evaluateWizardBinding } from "./wizard-binding.service";
 import { roleToSkill, requiredKnowledgeFor } from "./skills";
 import { computeKnowledgeLedger } from "./knowledge-ledger";
-import { makeScheduleMeetingHandler } from "./schedule-handler.service";
+import {
+  makeScheduleMeetingHandler,
+  makeCheckAvailabilityHandler,
+  makeRescheduleMeetingHandler,
+  makeCancelMeetingHandler,
+  resolveActiveBooking,
+  type ActiveBooking,
+} from "./schedule-handler.service";
 import { computeCalendarCapability, type CalendarCapabilityDetail } from "./calendar-capability.service";
 import { getCompanyContext, type CompanyContext } from "./company-context.service";
 import {
@@ -145,10 +170,28 @@ function unwrapToolExec(
     };
   }
   if (exec.status === "denied") {
+    const reason = exec.error ?? "policy";
+    // Return a STRUCTURED, actionable result (parity with the other gate
+    // results) instead of free-text. Free-text "denied: policy" gave the model
+    // no recovery path, so it would re-attempt the same/near-identical call on
+    // the next round - burning a full prompt+tools round-trip each time. The
+    // explicit instruction tells it to STOP retrying and hand off, which ends
+    // the loop early.
     return {
       toolCallId,
-      content: `Action "${toolName}" denied: ${exec.error ?? "policy"}`,
-      sideEffect: { denied: { reason: exec.error ?? "policy" } as any },
+      content: JSON.stringify({
+        ok: false,
+        error: "tool_denied_by_policy",
+        tool: toolName,
+        reason,
+        instruction:
+          `You are NOT permitted to use "${toolName}" in this conversation. ` +
+          `Do NOT call it again or call a near-identical variant. ` +
+          `Continue using the tools you DO have; if the customer genuinely needs this action, ` +
+          `use escalate_to_human and tell them a teammate will follow up. ` +
+          `Never tell the customer the action succeeded.`,
+      }),
+      sideEffect: { denied: { reason } as any },
     };
   }
   if (exec.status === "failed") {
@@ -173,6 +216,12 @@ function classifyToolForNotification(toolFunctionName: string): SystemEventType 
 
 export interface AIBotReplyResult {
   reply: string | null;
+  /**
+   * Short ack messages to send as their OWN bubble(s) BEFORE `reply` (e.g.
+   * "רגע אחד, בודק 🙏" while a calendar tool runs). The worker sends each of
+   * these first, then `reply`. Empty/absent for the normal single-message case.
+   */
+  interimMessages?: string[];
   escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string } | null;
   awaitingApproval: { approvalRequestId: string; tool: string; reason: string } | null;
   toolCallLog: Array<{
@@ -262,21 +311,45 @@ function detectHumanHandoff(text: string): boolean {
  * forces strategy=RESOLVE + escalationPressure=escalate_now + required
  * action `escalate_to_human` - the same path a worker-side trip takes.
  *
- * Three gates:
- *   1. max_messages - total OUTBOUND ai_bot messages on this conversation
- *      hits the per-agent cap (default 10).
- *   2. max_minutes  - wall-clock minutes since conversation.createdAt
- *      exceeds the per-agent cap (default 15).
- *   3. Returns `false` for keyword-match - that's already handled by
- *      `detectHumanHandoff` and flows through `humanHandoffRequested`.
+ * ── Map of what actually escalates to a human (and what must NOT) ──
+ *   ESCALATE when:
+ *     1. The customer EXPLICITLY asks for a human - handled separately by
+ *        `detectHumanHandoff` → `humanHandoffRequested` (always escalates).
+ *     2. RUNAWAY loop: OUTBOUND ai_bot messages reach the HARD ceiling
+ *        (2× the per-agent message cap) - unconditional safety backstop.
+ *     3. STALLED: the AI has gone past the soft message cap OR past
+ *        `maxAutonomousMinutes` WITHIN THE CURRENT ACTIVE BURST, AND the goal
+ *        is not viable (no advancing action left).
+ *   NEVER escalate just because:
+ *     - the TOTAL conversation is old. The timer measures the CURRENT burst
+ *       (`autonomousSinceAt` = first message after the last long gap), so a
+ *       customer returning hours/days later to reschedule starts fresh and is
+ *       NOT handed to a human for crossing a counter.
+ *     - the goal is still viable (engaged + reachable, or an actionable
+ *       scheduling request the AI can fulfil) - see `goalViable`.
+ *     - a vague/short answer, a normal discovery turn, or a background tool
+ *       failure (handled by Quality Contract rule 4a, not here).
  */
 async function evaluateEscalationGates(opts: {
   tenantId: string;
   conversationId: string;
   config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null };
-  conversationCreatedAt: Date;
+  /**
+   * Start of the CURRENT autonomous burst (not conversation.createdAt). A burst
+   * resets after a long quiet gap, so the minutes cap reflects "how long has the
+   * AI been going in THIS exchange", not the conversation's lifetime age.
+   */
+  autonomousSinceAt: Date;
+  // GOAL PRESERVATION: when the business objective is still viable (we can reach
+  // the customer AND they're actively engaged, OR the customer is asking for an
+  // action the AI can complete such as book/reschedule/cancel), the soft
+  // message/time caps are SUPPRESSED - a hot lead one message from booking must
+  // not be handed to a human just for crossing a counter. A hard ceiling (2x the
+  // message cap) is still enforced as the safety backstop against runaway loops.
+  goalViable: boolean;
 }): Promise<boolean> {
   const maxMsgs = opts.config.maxAutonomousMessages || 10;
+  const hardCeiling = maxMsgs * 2;
   try {
     const aiMessageCount = await prisma.message.count({
       where: {
@@ -286,11 +359,23 @@ async function evaluateEscalationGates(opts: {
         metadata: { path: ["source"], equals: "ai_bot" },
       },
     });
-    if (aiMessageCount >= maxMsgs) {
+    if (aiMessageCount >= hardCeiling) {
       console.log(
-        `[ai-bot] escalation gate tripped: ai_messages=${aiMessageCount} cap=${maxMsgs} convo=${opts.conversationId}`,
+        `[ai-bot] escalation gate tripped (HARD ceiling): ai_messages=${aiMessageCount} ceiling=${hardCeiling} convo=${opts.conversationId}`,
       );
       return true;
+    }
+    if (aiMessageCount >= maxMsgs) {
+      if (opts.goalViable) {
+        console.log(
+          `[ai-bot] soft msg cap reached (${aiMessageCount}/${maxMsgs}) but objective is viable + customer engaged - NOT escalating (goal preservation). convo=${opts.conversationId}`,
+        );
+      } else {
+        console.log(
+          `[ai-bot] escalation gate tripped: ai_messages=${aiMessageCount} cap=${maxMsgs} (no viable advancing action) convo=${opts.conversationId}`,
+        );
+        return true;
+      }
     }
   } catch (err: any) {
     // Fail-open on transient DB error - the worker still has its own
@@ -300,15 +385,155 @@ async function evaluateEscalationGates(opts: {
   }
 
   const maxMins = opts.config.maxAutonomousMinutes || 15;
-  const minutesElapsed = (Date.now() - opts.conversationCreatedAt.getTime()) / 60000;
-  if (minutesElapsed >= maxMins) {
+  const minutesElapsed = (Date.now() - opts.autonomousSinceAt.getTime()) / 60000;
+  if (minutesElapsed >= maxMins && !opts.goalViable) {
     console.log(
-      `[ai-bot] escalation gate tripped: elapsed=${Math.round(minutesElapsed)}m cap=${maxMins}m convo=${opts.conversationId}`,
+      `[ai-bot] escalation gate tripped: burst_elapsed=${Math.round(minutesElapsed)}m cap=${maxMins}m (no viable advancing action) convo=${opts.conversationId}`,
     );
     return true;
   }
 
   return false;
+}
+
+// Regex marking a successful tool result (`{"ok":true,...}`). Used to tell a
+// tool that merely DISPATCHED from one that actually SUCCEEDED.
+const TOOL_OK_RE = /"ok"\s*:\s*true/;
+
+/**
+ * Action tools that have actually SUCCEEDED earlier in this conversation
+ * (cross-turn). Reads the audit trail the bot already writes per tool call
+ * (`ai.tool_call.<tool>` with decision="executed" AND an ok:true result). Drives
+ * the Objective Engine's action-complete check so e.g. BOOK_MEETING stays the
+ * active objective until schedule_meeting truly landed. Fail-soft → [].
+ */
+async function loadCommittedActionTools(tenantId: string, conversationId: string): Promise<string[]> {
+  try {
+    // Read the per-turn `ai.bot_turn` audits' toolCalls[] (NOT the per-tool
+    // `ai.tool_call.X` rows): the bot_turn log captures EVERY execution including
+    // tools that ran on a retry/regen path (decision="executed_on_retry"), which
+    // the per-tool audit misses. A booking that landed on retry must still count
+    // as committed, or BOOK_MEETING would re-activate next turn and double-book.
+    const rows = await prisma.auditLog.findMany({
+      where: { tenantId, targetId: conversationId, action: "ai.bot_turn" },
+      select: { metadata: true },
+      orderBy: { createdAt: "desc" },
+      take: 50,
+    });
+    const out = new Set<string>();
+    for (const r of rows) {
+      const calls = (r.metadata as any)?.toolCalls;
+      if (!Array.isArray(calls)) continue;
+      for (const c of calls) {
+        const decision = String(c?.decision ?? "");
+        if ((decision === "executed" || decision === "executed_on_retry") && TOOL_OK_RE.test(String(c?.result ?? ""))) {
+          const tool = String(c?.tool ?? "");
+          if (tool) out.add(tool);
+        }
+      }
+    }
+    return [...out];
+  } catch (err: any) {
+    console.warn("[ai-bot] committed-action-tools load failed (non-fatal):", err?.message);
+    return [];
+  }
+}
+
+/**
+ * GOAL OWNERSHIP (Unit A). Reload the goal the agent committed to on the most
+ * recent turn from the `ai.bot_turn` audit metadata (`activeGoal`). Lets
+ * `commitObjective` carry the objective across turns so a transient fact loss
+ * can't regress it. Fail-soft → null (stateless first-incomplete selection).
+ */
+/**
+ * Build the toolName → Integration.category map for the Capability Layer, so
+ * integration tools group under their real domain (CRM, HELPDESK, …) instead of
+ * the CUSTOM fallback. Generic + data-driven: read straight from
+ * AgentToolPermission → CatalogTool → Integration.category. Built-ins don't need
+ * a hint (they carry their own capability). Fail-soft → {} (built-in grouping
+ * still works). Integration tools are surfaced as `integration_<slug>`.
+ */
+async function loadToolCapabilityHints(
+  tenantId: string,
+  aiAgentId: string | null | undefined,
+): Promise<Record<string, string>> {
+  if (!aiAgentId) return {};
+  try {
+    const rows: any[] = await (prisma as any).agentToolPermission.findMany({
+      where: { tenantId, aiAgentId, isAllowed: true },
+      select: {
+        tenantTool: {
+          select: { catalogTool: { select: { slug: true, integration: { select: { category: true } } } } },
+        },
+      },
+    });
+    const hints: Record<string, string> = {};
+    for (const r of rows) {
+      const ct = r?.tenantTool?.catalogTool;
+      const cat = ct?.integration?.category;
+      if (ct?.slug && cat) hints[`integration_${ct.slug}`] = String(cat);
+    }
+    return hints;
+  } catch (err: any) {
+    console.warn("[ai-bot] loadToolCapabilityHints failed (non-fatal):", err?.message);
+    return {};
+  }
+}
+
+async function loadCommittedGoal(
+  tenantId: string,
+  conversationId: string,
+  // PER-CUSTOMER GOAL CONTINUITY: a goal belongs to the relationship, not the
+  // thread. When the customer's identity is known, resume the most recent
+  // meaningful goal across ALL their conversations so a returning customer in a
+  // NEW conversation picks up where they left off instead of restarting. Falls
+  // back to the current conversation when identity is absent. Bounded by a
+  // recency window so a months-old goal doesn't haunt a fresh intent.
+  customer?: { channel: string; externalId: string | null | undefined },
+): Promise<ActiveGoalSnapshot | null> {
+  try {
+    let conversationIds: string[] = [conversationId];
+    if (customer?.externalId) {
+      const RESUME_WINDOW_DAYS = 14;
+      const since = new Date(Date.now() - RESUME_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+      const convs = await prisma.conversation.findMany({
+        where: {
+          tenantId,
+          channel: customer.channel as any,
+          customerExternalId: customer.externalId,
+          updatedAt: { gte: since },
+        },
+        select: { id: true },
+        orderBy: { lastMessageAt: "desc" },
+        take: 20,
+      });
+      conversationIds = [...new Set([conversationId, ...convs.map((c) => c.id)])];
+    }
+    // Latest turns across the customer's conversations; pick the most recent one
+    // that actually carries a committed goal (a completed-then-empty turn has
+    // none — keep looking back so we resume the last MEANINGFUL goal).
+    const rows = await prisma.auditLog.findMany({
+      where: { tenantId, targetId: { in: conversationIds }, action: "ai.bot_turn" },
+      select: { metadata: true },
+      orderBy: { createdAt: "desc" },
+      take: 10,
+    });
+    for (const row of rows) {
+      const g = (row?.metadata as any)?.activeGoal;
+      if (!g || typeof g !== "object" || typeof g.objectiveId !== "string") continue;
+      return {
+        objectiveId: g.objectiveId,
+        stepIndex: Number.isFinite(g.stepIndex) ? g.stepIndex : 0,
+        achieved: Array.isArray(g.achieved) ? g.achieved.map(String) : [],
+        missingRequired: Array.isArray(g.missingRequired) ? g.missingRequired.map(String) : [],
+        stalledTurns: Number.isFinite(g.stalledTurns) ? g.stalledTurns : 0,
+      };
+    }
+    return null;
+  } catch (err: any) {
+    console.warn("[ai-bot] committed-goal load failed (non-fatal):", err?.message);
+    return null;
+  }
 }
 
 /**
@@ -488,30 +713,18 @@ function checkContractGate(
   toolName: string,
   state: BehaviorState,
 ): { blocked: boolean; reason?: string; mustCallFirst?: string[]; contractTrigger?: string } {
-  if (!toolName) return { blocked: false };
-  if (toolName === "escalate_to_human") return { blocked: false };
-  if (toolName === "link_customer_identifier") return { blocked: false };
-  if (toolName.startsWith("submit_")) return { blocked: false };
-  if (/(_search|_get|_lookup|_read)$/.test(toolName)) return { blocked: false };
-
-  const cs = state.actionContractState;
-  if (!cs?.active) return { blocked: false };
-
-  for (const c of cs.contracts) {
-    if (!c.blocking) continue;
-    if (!c.requiredTools.includes(toolName)) continue;
-    if (c.pending.includes(toolName)) continue; // currently allowed
-    if (c.completed.includes(toolName)) continue; // already done - idempotent
-    // Tool is part of the contract but the LLM is jumping the sequence.
-    return {
-      blocked: true,
-      reason:
-        `Action Contract \`${c.trigger}\` (${c.executionMode}) requires you to complete: ` +
-        `${c.pending.map((p) => `\`${p}\``).join(", ")} before calling \`${toolName}\`.`,
-      mustCallFirst: c.pending,
-      contractTrigger: c.trigger,
-    };
-  }
+  // Action-Contract dispatch gating is ADVISORY, not blocking (user mandate:
+  // "if the AI decides to call a tool, it must be able to"). A blocking contract
+  // used to veto a tool that jumped sequence, AND it could drag in a co-required
+  // sibling tool (e.g. booking required integration_update_lead); when that
+  // sibling failed (CRM 403), the model couldn't "complete the contract" and
+  // escalated to a human instead of just running the primary tool. The contract
+  // is still TRACKED for progress/observability and still STEERS the model via
+  // the prompt (now best-effort, see buildTurnBlock), but it never vetoes a
+  // dispatch. Sequencing that truly must be atomic belongs in a single
+  // service-side endpoint, not a model-facing gate.
+  void state;
+  void toolName;
   return { blocked: false };
 }
 
@@ -536,6 +749,22 @@ function computeUnmetRequiredActions(
     if (!wasCalled) unmet.push({ action, toolName: matchingTool });
   }
   return unmet;
+}
+
+// OUTCOME QUALITY > DATA COLLECTION. Generic, role-agnostic surface filter: a
+// record should be created only when creation is meaningful business progress,
+// never just because enough fields exist. Two universal rules:
+//   (1) a poor-fit prospect (judgment fit="disqualified") → create NOTHING;
+//   (2) a high-commitment object (deal/opportunity/quote/order/contract/invoice)
+//       requires a real, known contact to attach to (prospectState ≠ NEW_PROSPECT)
+//       — you don't open a deal/opportunity for an anonymous or unqualified party.
+// Capture objects (lead/contact/ticket/case) remain available for engaged
+// prospects. Works for any role and any future creation tool by name shape.
+function filterCreationToolsByEngagement(
+  tools: any[],
+  ctx: { fit: "qualified" | "disqualified" | "neutral"; prospectState: ProspectState },
+): any[] {
+  return (tools as any[]).filter((t) => isCreationToolAllowed(t?.function?.name || "", ctx));
 }
 
 function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] {
@@ -570,6 +799,19 @@ function filterToolsByAllowedActions(tools: any[], state: BehaviorState): any[] 
     if (name === "link_customer_identifier") return true;
     if (name.startsWith("submit_")) return true;
     if (/(_search|_get|_lookup|_read)$/.test(name)) return true;
+    // Scheduling tools are ALWAYS available when surfaced - they're already
+    // gated upstream (check_availability + schedule_meeting by calendar
+    // capability; reschedule/cancel by an existing booking). A blocking contract
+    // mid-booking must NOT strip them, or a customer who returns to check times /
+    // move / cancel the meeting can't be served and the bot escalates instead of
+    // acting. check_availability is read-only, so it's always safe to keep.
+    if (
+      name === "check_availability" ||
+      name === "schedule_meeting" ||
+      name === "reschedule_meeting" ||
+      name === "cancel_meeting"
+    )
+      return true;
     return pendingSet.has(name);
   });
 }
@@ -674,9 +916,13 @@ function pickKnownIdentifier(conv: any, kind: "email" | "phone"): string | undef
   return undefined; // email lives in messages, not on the conversation row
 }
 
-function renderCustomerInfoBlock(conv: any): string | undefined {
+function renderCustomerInfoBlock(
+  conv: any,
+  known?: { email?: string; name?: string },
+): string | undefined {
   const lines: string[] = ["## Customer & Conversation Info"];
-  if (conv.customerName) lines.push(`- Customer Name: ${conv.customerName}`);
+  const name = conv.customerName || known?.name;
+  if (name) lines.push(`- Customer Name: ${name}`);
   if (conv.customerExternalId) {
     const isPhone = /^\+?\d{6,}$/.test(String(conv.customerExternalId).replace(/[\s-]/g, ""));
     const label = conv.channel === "WHATSAPP" || isPhone ? "Phone (WhatsApp)" : "External ID";
@@ -685,6 +931,11 @@ function renderCustomerInfoBlock(conv: any): string | undefined {
       : conv.customerExternalId;
     lines.push(`- ${label}: ${value}`);
   }
+  // Email is the #1 thing the bot wrongly re-asks for ("do you have my email?"
+  // → "no, what is it?"). We DO know it (from the transcript / CRM / linked
+  // contact, resolved into `resolvedCustomerEmail`); surface it so the bot
+  // confirms it instead of denying it. Stable per conversation → cache-safe.
+  if (known?.email) lines.push(`- Email: ${known.email}`);
   if (conv.channel) lines.push(`- Channel: ${conv.channel}`);
   if (conv.status) lines.push(`- Conversation Status: ${conv.status}`);
   if (conv.createdAt) lines.push(`- Conversation Started: ${conv.createdAt.toISOString()}`);
@@ -694,8 +945,10 @@ function renderCustomerInfoBlock(conv: any): string | undefined {
   if (lines.length <= 1) return undefined;
   lines.push("");
   lines.push(
-    "Use these values when running background actions (CRM lookup, lead create/update, tagging). " +
-      "Do NOT ask the customer for information that is already listed here.",
+    "These are facts you ALREADY have about the customer. Use them when running background " +
+      "actions (CRM lookup, lead create/update, tagging), and when the customer asks whether you " +
+      "have their details (e.g. their email), CONFIRM the value above - never claim you don't have " +
+      "it and never re-ask for information already listed here.",
   );
   return lines.join("\n");
 }
@@ -718,7 +971,10 @@ function renderPendingApprovalsBlock(pending: Array<{ tool: string }>): string |
       "back the moment it's approved, not that it vanished into a queue. Treat this as a FIRST-CLASS " +
       "state held across turns: do not auto-retry, do not re-collect info, do not restart the flow " +
       "from the beginning; if the customer returns later, pick up from exactly where it stands. " +
-      "Otherwise, keep the conversation moving naturally - answer their question, clarify, or qualify.",
+      "CRUCIAL: do NOT let the pending item freeze everything else - keep ADVANCING THE GOAL in " +
+      "parallel. Collect the next detail you still need, take the next forward step that does not " +
+      "depend on the pending action, and answer their questions. The pending approval blocks ONLY " +
+      "that one action, not the whole conversation.",
   ].join("\n");
 }
 
@@ -747,6 +1003,25 @@ async function lookupLastAssistantMove(
     if (typeof strat === "string") return STRATEGY_TO_LAST_MOVE[strat];
   } catch { /* best-effort */ }
   return undefined;
+}
+
+// Final humanizing pass on the customer-facing reply. Models love joining
+// clauses with an em/en dash or a spaced hyphen ("…אשמח לעזור - מתי…"), which
+// reads as machine-written. Prompt rules reduce it but don't eliminate it, so we
+// also strip it deterministically here. Token-internal hyphens (phone numbers,
+// "Wi-Fi", date ranges like 10-15) have NO surrounding spaces and are preserved.
+function humanizeReply(text: string | null): string | null {
+  if (!text) return text;
+  let out = text;
+  // Em/en dash used as a clause connector (with or without surrounding spaces).
+  out = out.replace(/\s*[—–]\s*/g, ", ");
+  // ASCII hyphen used as a dash: space(s) on BOTH sides → comma. " word - word"
+  out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
+  // Don't leave a stray ", " right before sentence punctuation or newline.
+  out = out.replace(/,\s*([.!?,\n])/g, "$1");
+  // Collapse the accidental ", ," and trailing/leading artifacts.
+  out = out.replace(/,\s*,/g, ",").replace(/[ \t]{2,}/g, " ");
+  return out.trim();
 }
 
 export async function generateAIBotReply(opts: {
@@ -820,7 +1095,7 @@ async function resolveSessionKnowledge(opts: {
     const resp = await generateResponse({
       tenantId: opts.tenantId,
       sessionId: `${opts.conversationId}:knowledge-resolve`,
-      model: "gpt-4o-mini",
+      model: getDefaultModel(),
       temperature: 0,
       maxTokens: 400,
       responseFormat: { type: "json_object" },
@@ -983,7 +1258,7 @@ async function generateAIBotReplyInner(
         },
         awaitingApproval: null,
         toolCallLog: [],
-        modelUsed: config.model || "gpt-4o-mini",
+        modelUsed: config.model || getDefaultModel(),
         totalTokens: 0,
       };
     }
@@ -1013,8 +1288,12 @@ async function generateAIBotReplyInner(
   let crmBlock: string | undefined;
   let crmHasLead = false;
   let crmHasCustomer = false;
+  // Customer email resolved from CRM (or transcript) - feeds the calendar lookup
+  // that lets reschedule/cancel find a meeting booked in an earlier conversation.
+  let resolvedCustomerEmail: string | undefined;
   try {
     const recentEmail = extractRecentEmail(messages);
+    resolvedCustomerEmail = recentEmail || undefined;
     const prefetch = await prefetchCrmContext(opts.tenantId, opts.conversationId, {
       externalId: conversation.customerExternalId,
       email: recentEmail,
@@ -1022,6 +1301,10 @@ async function generateAIBotReplyInner(
     if (prefetch) {
       crmBlock = renderCrmContextBlock(prefetch) || undefined;
       crmHasLead = prefetch.leadMatches.length > 0;
+      resolvedCustomerEmail =
+        prefetch.contactMatches.find((c) => c.email)?.email ||
+        prefetch.leadMatches.find((c) => c.email)?.email ||
+        resolvedCustomerEmail;
       crmHasCustomer = prefetch.contactMatches.some((c: any) => {
         const tags: string[] = (c?.tags || c?.lifecycle_stage_tags || []) as string[];
         return Array.isArray(tags) && tags.some((t) => /customer|active|paying/i.test(String(t)));
@@ -1038,6 +1321,7 @@ async function generateAIBotReplyInner(
     where: { tenantId: opts.tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
     select: { id: true, email: true, phone: true },
   });
+  if (!resolvedCustomerEmail && contactRow?.email) resolvedCustomerEmail = contactRow.email;
   const priorConversationCount = await prisma.conversation.count({
     where: {
       tenantId: opts.tenantId,
@@ -1070,6 +1354,46 @@ async function generateAIBotReplyInner(
     conversationId: opts.conversationId,
     contractIds: actionContracts.map((c) => c.id),
   });
+
+  // GOAL PRESERVATION signal for the escalation gate: is the business objective
+  // still viable this turn? We can reach the customer (contact captured or a CRM
+  // record) AND they're actively engaged (their message triggered this turn).
+  // When true, the soft autonomous-budget caps are suppressed so a hot, engaged
+  // lead isn't handed to a human just for crossing a message/time counter. An
+  // explicit human-handoff request is a SEPARATE flag and still escalates.
+  const hasReachPath = !!(contactRow?.email || contactRow?.phone) || crmHasLead || crmHasCustomer;
+  const customerEngaged =
+    !!opts.incomingMessage?.trim() ||
+    (messages.length > 0 && messages[messages.length - 1]?.direction === "INBOUND");
+  // A scheduling request (book / move / cancel a meeting or demo) is an action
+  // the AI can complete itself - it must NOT be handed to a human just for
+  // crossing a counter. This is the #1 reason a RETURNING customer ("can we move
+  // the demo?") used to escalate: their conversation is old, so the time cap
+  // tripped. Treat such a turn as goal-viable.
+  const schedulingIntentForGate =
+    /(reschedul|postpone|\bmove\b|cancel|book|schedule|לקבוע|לתאם|להזיז|לדחות|לבטל|לשנות|פגיש|דמו|demo|meeting)/i.test(
+      opts.incomingMessage || "",
+    );
+  const escalationGoalViable = (hasReachPath && customerEngaged) || schedulingIntentForGate;
+
+  // Start of the CURRENT autonomous burst for the time-based escalation cap.
+  // A burst is broken by a quiet gap (≥ BURST_RESET): a customer returning after
+  // hours/days starts a fresh timer, so the "AI ran too long" cap measures the
+  // active exchange, not the conversation's lifetime age (conversation.createdAt
+  // would make every returning customer trip the cap instantly).
+  const BURST_RESET_MS = 30 * 60_000;
+  let autonomousSinceAt: Date = conversation.createdAt;
+  for (let i = 1; i < messages.length; i++) {
+    const prev = new Date(messages[i - 1].createdAt).getTime();
+    const cur = new Date(messages[i].createdAt).getTime();
+    if (cur - prev >= BURST_RESET_MS) autonomousSinceAt = new Date(messages[i].createdAt);
+  }
+  // If the newest stored message is itself stale (the current inbound arrives
+  // after a long gap), the burst starts now.
+  if (messages.length > 0) {
+    const lastMs = new Date(messages[messages.length - 1].createdAt).getTime();
+    if (Date.now() - lastMs >= BURST_RESET_MS) autonomousSinceAt = new Date();
+  }
 
   // ── Behavior Engine - single decision point ─────────────
   const behaviorState = computeBehaviorState({
@@ -1106,7 +1430,8 @@ async function generateAIBotReplyInner(
           maxAutonomousMessages: config.maxAutonomousMessages,
           maxAutonomousMinutes: config.maxAutonomousMinutes,
         },
-        conversationCreatedAt: conversation.createdAt,
+        autonomousSinceAt,
+        goalViable: escalationGoalViable,
       }),
     },
     funnel,
@@ -1163,7 +1488,9 @@ async function generateAIBotReplyInner(
 
   // ── Build system prompt ────────────────────────────────
   const ctxSlot: ContextSlot = {
-    customerBlock: renderCustomerInfoBlock(conversation),
+    customerBlock: renderCustomerInfoBlock(conversation, {
+      email: resolvedCustomerEmail,
+    }),
     crmBlock,
     memoryBlock,
     pendingApprovalsBlock: renderPendingApprovalsBlock(pendingApprovals),
@@ -1184,6 +1511,32 @@ async function generateAIBotReplyInner(
     config.id,
   );
   const hasConnectedCalendar = calendarCapability.bookable;
+  // A meeting already booked in THIS conversation (from the audit trail). Drives
+  // BOTH whether reschedule/cancel are surfaced AND a prompt fact so the model
+  // moves/cancels the real event instead of calling schedule_meeting again
+  // (which would create a duplicate). Only meaningful when bookable.
+  // Cheap intent check on the latest inbound: only pay for the cross-conversation
+  // calendar lookup (a Google API call) when the customer actually mentions
+  // moving/cancelling an existing meeting. Normal turns use only the cheap
+  // in-conversation audit path. The handlers themselves always do the full
+  // resolve (by then the model has already chosen to reschedule/cancel).
+  const latestInbound =
+    (opts.incomingMessage?.trim() ||
+      (messages.length > 0 && messages[messages.length - 1]?.direction === "INBOUND"
+        ? messages[messages.length - 1]?.body
+        : "")) ?? "";
+  const wantsMeetingChange =
+    /(reschedul|postpone|move\b|cancel|לבטל|להזיז|לדחות|לשנות|כבר קבעתי|כבר יש לי פגיש)/i.test(latestInbound);
+  const existingBooking: ActiveBooking | null = hasConnectedCalendar
+    ? await resolveActiveBooking({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        aiAgentId: config.id,
+        customerExternalId: conversation.customerExternalId ?? undefined,
+        customerEmail: wantsMeetingChange ? resolvedCustomerEmail : undefined,
+      })
+    : null;
+  const hasExistingBooking = !!existingBooking;
   // Company identity inherited from the tenant BusinessProfile - so the agent
   // always knows who it works for and what the company does/sells.
   const companyContext: CompanyContext | null = await getCompanyContext(opts.tenantId);
@@ -1193,7 +1546,43 @@ async function generateAIBotReplyInner(
     contactId: contactRow?.id,
     authToken: process.env.INTERNAL_SERVICE_TOKEN,
     scheduleMeeting: hasConnectedCalendar
-      ? makeScheduleMeetingHandler({ tenantId: opts.tenantId, aiAgentId: config.id })
+      ? makeScheduleMeetingHandler({
+          tenantId: opts.tenantId,
+          aiAgentId: config.id,
+          conversationId: opts.conversationId,
+          customerExternalId: conversation.customerExternalId ?? undefined,
+          customerEmail: resolvedCustomerEmail,
+        })
+      : undefined,
+    // Read-only availability lookup — surfaced together with schedule_meeting so
+    // the bot answers "what's free / what are your hours?" from the calendar and
+    // never invents times.
+    checkAvailability: hasConnectedCalendar
+      ? makeCheckAvailabilityHandler({
+          tenantId: opts.tenantId,
+          aiAgentId: config.id,
+          conversationId: opts.conversationId,
+          customerExternalId: conversation.customerExternalId ?? undefined,
+          customerEmail: resolvedCustomerEmail,
+        })
+      : undefined,
+    rescheduleMeeting: hasExistingBooking
+      ? makeRescheduleMeetingHandler({
+          tenantId: opts.tenantId,
+          aiAgentId: config.id,
+          conversationId: opts.conversationId,
+          customerExternalId: conversation.customerExternalId ?? undefined,
+          customerEmail: resolvedCustomerEmail,
+        })
+      : undefined,
+    cancelMeeting: hasExistingBooking
+      ? makeCancelMeetingHandler({
+          tenantId: opts.tenantId,
+          aiAgentId: config.id,
+          conversationId: opts.conversationId,
+          customerExternalId: conversation.customerExternalId ?? undefined,
+          customerEmail: resolvedCustomerEmail,
+        })
       : undefined,
     runCustomApiTool: ({ slug, args }) =>
       executeCustomApiTool({
@@ -1301,6 +1690,12 @@ async function generateAIBotReplyInner(
     identityLinking: !!contactRow?.id,
     escalation: true,
     scheduleMeeting: hasConnectedCalendar,
+    // Read-only availability lookup rides on the same bookable-calendar signal.
+    checkAvailability: hasConnectedCalendar,
+    // Surface move/cancel ONLY when an actual booking exists in this conversation,
+    // so the model can't try to move/cancel a meeting that was never made.
+    rescheduleMeeting: hasExistingBooking,
+    cancelMeeting: hasExistingBooking,
     // Honor CatalogTool.allowedModes - tools tagged ASSIST-only are dropped
     // from the autonomous surface. The copilot path uses {closure,followup}
     // flags; the autonomous path uses this mode filter.
@@ -1512,6 +1907,20 @@ async function generateAIBotReplyInner(
   // SINGLE filter - replaces the legacy stripCreateLead/Contact + pendingApprovals filters.
   tools = filterToolsByAllowedActions(tools, behaviorState);
 
+  // Diagnostic: surfaced scheduling tools + contract-gate state, so a missing
+  // reschedule/cancel is observable instead of inferred.
+  console.log(
+    `[ai-bot][tool-surface] convo=${opts.conversationId} strategy=${behaviorState.strategy} ` +
+      `hasExistingBooking=${hasExistingBooking} ` +
+      `checkavail=${tools.some((t: any) => t?.function?.name === "check_availability")} ` +
+      `sched=${tools.some((t: any) => t?.function?.name === "schedule_meeting")} ` +
+      `resched=${tools.some((t: any) => t?.function?.name === "reschedule_meeting")} ` +
+      `cancel=${tools.some((t: any) => t?.function?.name === "cancel_meeting")} ` +
+      `contractActive=${behaviorState.actionContractState?.active ?? false} ` +
+      `contractBlocking=${behaviorState.actionContractState?.blocking ?? false} ` +
+      `pending=[${(behaviorState.actionContractState?.pendingTools ?? []).join(",")}]`,
+  );
+
   // Sort tools alphabetically by function name BEFORE the OpenAI call so the
   // `tools` array is byte-stable across turns of the same conversation.
   // The model picks tools by name; array order doesn't influence its choice,
@@ -1525,7 +1934,43 @@ async function generateAIBotReplyInner(
     return an < bn ? -1 : an > bn ? 1 : 0;
   });
 
-  const toolFunctionNames: string[] = (tools as any[])
+  // Policy pre-filter - make the SURFACE agree with the DISPATCH gate.
+  // Dispatch runs every tool call through evaluatePolicies() (via the
+  // orchestrator). If a tool is surfaced but evaluatePolicies would hard-DENY
+  // it (no tenant tool / not granted to this agent / disabled / unknown custom
+  // tool), then offering it only wastes a full prompt+tools LLM round: the model
+  // picks it, the gate rejects it, and we loop. Dropping such tools up front
+  // costs nothing in capability (a DENY tool was never dispatchable) and removes
+  // the wasted round. REQUIRE_APPROVAL tools are KEPT - they are valid and route
+  // through HITL. Args aren't known yet, but DENY decisions are args-independent.
+  // Runs once per turn, in parallel; fail-soft (a check error keeps the tool).
+  try {
+    const decisions = await Promise.all(
+      (tools as any[]).map(async (t) => {
+        const name = t?.function?.name;
+        if (typeof name !== "string" || !name) return { keep: true, name };
+        try {
+          const r = await evaluatePolicies({ tenantId: opts.tenantId, toolName: name, aiAgentId: config.id });
+          return { keep: r.decision !== "DENY", name, reason: r.reason };
+        } catch {
+          return { keep: true, name };
+        }
+      }),
+    );
+    const dropped = decisions.filter((d) => !d.keep);
+    if (dropped.length) {
+      console.warn(
+        `[ai-bot] surface/policy disagreement - dropped ${dropped.length} tool(s) the dispatch gate would deny: ` +
+          dropped.map((d) => `${d.name} (${d.reason})`).join("; "),
+      );
+      const keepNames = new Set(decisions.filter((d) => d.keep).map((d) => d.name));
+      tools = (tools as any[]).filter((t) => keepNames.has(t?.function?.name));
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] policy pre-filter failed (keeping full surface):", err?.message);
+  }
+
+  let toolFunctionNames: string[] = (tools as any[])
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
 
@@ -1565,15 +2010,81 @@ async function generateAIBotReplyInner(
     isCustomer: crmHasCustomer,
   };
 
+  // Cross-turn action completion - which action tools already SUCCEEDED in this
+  // conversation. Drives the Objective Engine's action-complete check so an
+  // action-mandatory objective (BOOK_MEETING) stays active (and the resolver
+  // keeps surfacing "call the tool now") until the action actually landed.
+  const committedActionTools = await loadCommittedActionTools(opts.tenantId, opts.conversationId);
+  // GOAL OWNERSHIP (Unit A): the goal committed last turn, carried into both the
+  // prompt-side objective view and the post-turn decision/persist below.
+  const priorGoal = await loadCommittedGoal(opts.tenantId, opts.conversationId, {
+    channel: conversation.channel,
+    externalId: conversation.customerExternalId,
+  });
+
+  // WIZARD → RUNTIME BINDING: the single structured evaluation step. Converts the
+  // agent's free-text config (goal, ICP, qualification signals, disqualifiers)
+  // + this conversation into typed facts the objective engine / readiness /
+  // recovery / prioritization consume. One judgment call per turn; skipped (no
+  // cost) when the agent has no bindable config; fail-safe to EMPTY facts.
+  const wizardTranscript = [
+    ctxSlot.customerBlock,
+    ctxSlot.crmBlock,
+    ctxSlot.memoryBlock,
+    ctxSlot.sessionFactsBlock,
+    ...messages
+      .filter((m) => m.body?.trim())
+      .slice(-12)
+      .map((m) => `${m.direction === "INBOUND" ? "Customer" : "Agent"}: ${m.body}`),
+  ]
+    .filter((s): s is string => !!s && !!s.trim())
+    .join("\n");
+  const wizardFacts: WizardRuntimeFacts = await evaluateWizardBinding({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+    role: config.role,
+    goal: (config as any).goal ?? null,
+    salesContext: config.salesContext,
+    transcript: wizardTranscript,
+    signal,
+  });
+
+  // OUTCOME QUALITY > DATA COLLECTION (role-agnostic): don't let the model create
+  // records (lead/contact/deal/opportunity/ticket/case/…) unless creation is
+  // meaningful progress. Generic rules, no per-role logic: (a) a poor-fit prospect
+  // gets NO records created; (b) a high-commitment object (deal/opportunity/quote/
+  // order) requires a real, known contact to attach to (prospectState ≠ NEW) —
+  // you don't open a deal for an anonymous/hostile/unqualified contact. Capture
+  // objects (lead/contact/ticket) stay available for genuinely engaged prospects.
+  // Filtering the SURFACE is the single choke point: the model cannot call an
+  // un-surfaced tool in ANY loop (main / preference / recovery / regen).
+  const prospectStateForGate = computeProspectState(crmFlags);
+  tools = filterCreationToolsByEngagement(tools as any[], {
+    fit: wizardFacts.fit,
+    prospectState: prospectStateForGate,
+  });
+  toolFunctionNames = (tools as any[])
+    .map((t) => t?.function?.name)
+    .filter((n): n is string => typeof n === "string");
+
+  // Capability Layer hints: integration tool → Integration.category, so the
+  // Current Plan groups them by their real domain (not the CUSTOM fallback).
+  const toolCapabilityHints = await loadToolCapabilityHints(opts.tenantId, config.id);
+
   const systemPrompt = buildAgentPrompt({
     behaviorState,
     agent: toAgentRecord(config),
     context: ctxSlot,
     knowledge: { block: kbBlock },
     toolFunctionNames,
+    toolCapabilityHints,
+    hasActiveBooking: hasExistingBooking,
     stageContext,
     crm: crmFlags,
     calendarBookable: calendarCapability.bookable,
+    completedActionTools: committedActionTools,
+    priorGoal,
+    wizardFacts,
     company: companyContext ?? undefined,
   });
 
@@ -1595,11 +2106,31 @@ async function generateAIBotReplyInner(
     });
   }
 
-  const model = config.model || "gpt-4o-mini";
+  // When a meeting is already on the calendar for this conversation, tell the
+  // model so a "move it" / "cancel it" request routes to reschedule_meeting /
+  // cancel_meeting instead of schedule_meeting (which would duplicate the event).
+  if (existingBooking) {
+    const whenIso = new Date(existingBooking.startMs).toISOString();
+    const durMin = Math.max(15, Math.round((existingBooking.endMs - existingBooking.startMs) / 60_000));
+    chatMessages.push({
+      role: "system",
+      content:
+        `📅 ACTIVE MEETING: a meeting is already booked in this conversation for ${whenIso} (${durMin} min). ` +
+        `If the customer wants to MOVE/change the time, call reschedule_meeting with the new time. ` +
+        `If they want to CANCEL it, call cancel_meeting. ` +
+        `NEVER call schedule_meeting again for this customer — that creates a DUPLICATE event.`,
+    });
+  }
+
+  const model = config.model || getDefaultModel();
   let pendingEscalation: AIBotReplyResult["escalation"] = null;
   let awaitingApproval: AIBotReplyResult["awaitingApproval"] = null;
   let replyText: string | null = null;
   let totalTokens = 0;
+  // Pre-tool acks ("one moment, checking") to send as their OWN bubble(s)
+  // BEFORE the final reply. Populated when the model acks alongside a calendar
+  // tool call. The worker sends these first, then the reply (two-bubble flow).
+  const interimMessages: string[] = [];
   const toolCallLog: AIBotReplyResult["toolCallLog"] = [];
   // Turn Outcome Ledger — single source of truth for side effects this turn.
   // Passed to every orchestrator.submit() so duplicate semantic actions dedup
@@ -1660,6 +2191,18 @@ async function generateAIBotReplyInner(
         content: response.content || "",
         tool_calls: toolCalls,
       });
+
+      // Two-bubble flow: when the model emits a short ack ALONGSIDE a calendar
+      // tool call (schedule/reschedule/cancel — these have real check latency),
+      // send that ack as its OWN message now; the post-tool reply becomes the
+      // second bubble ("רגע אחד, בודק 🙏" → "הפגישה ב-17:00, להעביר ל-11:00?").
+      const callsCalendarTool = toolCalls.some((t) =>
+        /^(check_availability|schedule_meeting|reschedule_meeting|cancel_meeting)$/.test(t.function?.name || ""),
+      );
+      const ackText = response.content?.trim();
+      if (callsCalendarTool && ackText && !interimMessages.includes(ackText)) {
+        interimMessages.push(ackText);
+      }
 
       let pausedForApproval: AIBotReplyResult["awaitingApproval"] = null;
       for (const tc of toolCalls) {
@@ -1872,6 +2415,21 @@ async function generateAIBotReplyInner(
           : result.sideEffect?.denied ? "denied"
           : result.sideEffect?.escalate ? "escalate"
           : undefined;
+
+        // INVARIANT: a tool we OFFERED to the model must be dispatchable. If a
+        // surfaced tool is policy-DENIED at dispatch, the surface pre-filter and
+        // the policy gate disagree - the model wasted a round on a tool it could
+        // never run. This should be impossible (the pre-filter drops DENY tools
+        // before they're offered); log loudly so a config/lookup gap surfaces
+        // instead of silently degrading into a dead-end or escalation.
+        if (sideEffectType === "denied" && toolFunctionNames.includes(toolName)) {
+          console.error(
+            `[ai-bot] INVARIANT VIOLATION: surfaced tool "${toolName}" was DENIED at dispatch ` +
+              `(reason: ${result.sideEffect?.denied?.reason ?? "unknown"}). The model was offered a tool ` +
+              `it cannot execute. Check evaluatePolicies vs the surface filter for conv=${opts.conversationId}.`,
+          );
+        }
+
         toolCallLog.push({
           tool: toolName,
           args: toolArgs,
@@ -2014,30 +2572,33 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // Action-Contract co-steps are BEST-EFFORT (user mandate: the primary tool
+  // always runs; a co-required sibling must never block or escalate). A still-
+  // pending contract tool is logged for observability but NEVER force-injected -
+  // force-injecting it is exactly what made the model fire a failing CRM sibling
+  // (e.g. integration_update_lead 403) and then escalate. Only genuine BEL
+  // required actions (e.g. identity_link) still force a retry below.
+  if (contractViolations.length > 0) {
+    console.warn(
+      `[ai-bot] Action-contract co-steps still pending (best-effort, NOT forced): ` +
+        contractViolations.map((v) => `${v.trigger}→[${v.missing.join(",")}]`).join(" | "),
+    );
+  }
+
   if (
-    (unmetToForce.length > 0 || contractViolations.length > 0) &&
+    unmetToForce.length > 0 &&
     !awaitingApproval &&
     !pendingEscalation &&
     !budget.exceededTurnCap()
   ) {
-    const reasonParts: string[] = [];
-    if (unmetToForce.length) {
-      reasonParts.push(
-        `Missing required tools: ${unmetToForce.map((u) => `\`${u.toolName}\` (for \`${u.action}\`)`).join(", ")}.`,
-      );
-    }
-    if (contractViolations.length) {
-      reasonParts.push(
-        contractViolations
-          .map((v) => `Action Contract \`${v.trigger}\` (${v.mode}) requires: ${v.missing.map((m) => `\`${m}\``).join(", ")}.`)
-          .join(" "),
-      );
-    }
-    console.warn(`[ai-bot] Contract violation - ${reasonParts.join(" | ")}. Forcing retry.`);
+    const reasonParts: string[] = [
+      `Missing required tools: ${unmetToForce.map((u) => `\`${u.toolName}\` (for \`${u.action}\`)`).join(", ")}.`,
+    ];
+    console.warn(`[ai-bot] Required-action gap - ${reasonParts.join(" | ")}. Forcing retry.`);
     chatMessages.push({
       role: "user",
       content:
-        `**CONTRACT VIOLATION DETECTED.** ${reasonParts.join(" ")} ` +
+        `**MISSING REQUIRED ACTION.** ${reasonParts.join(" ")} ` +
         `You MUST call the missing tool(s) NOW before producing any reply text. ` +
         `This is the regeneration the original prompt warned about. Do not skip again.`,
     });
@@ -2153,6 +2714,434 @@ async function generateAIBotReplyInner(
     }
   }
 
+  // ── Action Preference (Unit B) ──────────────────────────────────
+  // Goal ownership creates pressure to ACT, not narrate. If the committed goal
+  // has a RIPE action — its completion tool is dispatchable this turn AND every
+  // REQUIRED input is already captured AND policy allows it (exactly the
+  // condition under which resolveNextActions emits an `act` candidate) — but the
+  // model produced a NON-ADVANCING reply (passive closer / generic opener) and
+  // executed nothing, re-roll ONCE with tool_choice:"required" so the model must
+  // commit to a tool instead of talking. This is intelligent PREFERENCE, not
+  // blind forcing: it fires only when an action is genuinely ready and the turn
+  // would otherwise be pure talk, and the model still picks WHICH tool. The
+  // dispatch input/policy/approval gates run on the forced call exactly as in the
+  // main loop, so an under-specified or disallowed write can never slip through —
+  // worst case the model is steered back to asking for the one missing value.
+  // Generic + metadata-driven: the trigger is the goal's readiness, never a
+  // specific tool name, so it covers background AND customer-facing actions alike.
+  {
+    const actionAlreadyTaken = toolCallLog.some(
+      (t) =>
+        (t.decision === "executed" || t.decision === "executed_on_retry") &&
+        TOOL_OK_RE.test(String(t.result ?? "")),
+    );
+    const apFactText = [ctxSlot.customerBlock, ctxSlot.crmBlock, ctxSlot.memoryBlock, ctxSlot.sessionFactsBlock]
+      .filter((s): s is string => !!s && !!s.trim())
+      .join("\n");
+    const apProspectState = computeProspectState({
+      hasLead: crmHasLead,
+      hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
+      isCustomer: crmHasCustomer,
+    });
+    const apCommitted = toolCallLog
+      .filter(
+        (t) =>
+          (t.decision === "executed" || t.decision === "executed_on_retry") &&
+          TOOL_OK_RE.test(String(t.result ?? "")),
+      )
+      .map((t) => t.tool);
+    // Respect goal ownership (Unit A): reconcile against the committed goal so a
+    // HELD objective's ready action is the one we prefer.
+    const { status: apStatus } = commitObjective(
+      priorGoal,
+      selectActiveObjective(
+        config.role,
+        apProspectState,
+        apFactText,
+        [...new Set([...committedActionTools, ...apCommitted])],
+        calendarCapability.bookable,
+        wizardFacts.goalObjective,
+      ),
+      apFactText,
+    );
+    const ripeAct = resolveNextActions({
+      status: apStatus,
+      capability: toolFunctionNames,
+      calendarBookable: calendarCapability.bookable,
+      qualificationMet: wizardFacts.qualificationMet,
+    }).find((c) => c.kind === "act" && !!c.tool);
+
+    // Wizard→Runtime: never FORCE a conversion action (booking/deal) on a prospect
+    // who matches a configured disqualifier - the configured poor-fit signal must
+    // override the action-preference push. Soft + per-turn: the model may still
+    // offer it, we just don't compel it. Background actions remain guaranteed.
+    const apDisqualified = wizardFacts.fit === "disqualified";
+    if (apDisqualified && ripeAct?.tool) {
+      console.log(`[ai-bot][qualify-out] configured disqualifier matched - NOT forcing ${ripeAct.tool}. convo=${opts.conversationId}`);
+    }
+
+    if (
+      ripeAct?.tool &&
+      !apDisqualified &&
+      !actionAlreadyTaken &&
+      isNonAdvancingReply(replyText) &&
+      !awaitingApproval &&
+      !pendingEscalation &&
+      !budget.exceededTurnCap()
+    ) {
+      console.log(
+        `[ai-bot][action-preference] committed goal has a RIPE act (${ripeAct.tool}) but the reply was ` +
+          `non-advancing and nothing executed - forcing tool_choice=required. convo=${opts.conversationId}`,
+      );
+      chatMessages.push({
+        role: "user",
+        content:
+          `A concrete action is ready that advances the current goal, and every input it needs is already known. ` +
+          `Do NOT keep discussing or close the conversation - call the tool that advances the goal NOW, ` +
+          `then write your reply based on its real result.`,
+      });
+      const apResponse = await generateResponse({
+        tenantId: opts.tenantId,
+        sessionId: opts.conversationId,
+        model,
+        messages: chatMessages,
+        temperature: config.temperature ?? 0.7,
+        maxTokens: config.maxTokens ?? 1024,
+        tools: tools as any[],
+        // Force the SPECIFIC ripe tool, not a bare "required". With "required"
+        // the model can satisfy the constraint by grabbing the always-present
+        // escalate_to_human (observed: a stray escalate fired under forcing).
+        // Naming the goal's ready tool keeps this preference, not a handoff — and
+        // it stays generic (the tool comes from the NBA, never hardcoded).
+        toolChoice: { type: "function", function: { name: ripeAct.tool } },
+        metadata: { type: "ai_bot_action_preference", conversationId: opts.conversationId, aiAgentId: config.id },
+        signal,
+      });
+      totalTokens += apResponse.usage.total_tokens || 0;
+      budget.addUsage(apResponse.usage.total_tokens || 0);
+
+      const apToolCalls = apResponse.toolCalls;
+      if (apToolCalls && apToolCalls.length > 0) {
+        chatMessages.push({ role: "assistant", content: apResponse.content || "", tool_calls: apToolCalls });
+        for (const tc of apToolCalls) {
+          const toolName = tc.function?.name || "unknown";
+          let toolArgs: Record<string, unknown> = {};
+          try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+
+          // Same required-input backstop as the main loop: a forced call must
+          // never fire an under-specified write. If inputs are missing, return
+          // the gate result and let the model ask for them instead.
+          const apMissing = Array.from(
+            new Set([
+              ...missingRequiredArgs(toolName, toolArgs, tools as any[]),
+              ...missingContractInputs(toolName, toolArgs).missing,
+            ]),
+          );
+          if (apMissing.length > 0) {
+            const gateContent = JSON.stringify({
+              ok: false,
+              error: "missing_required_inputs",
+              missing_inputs: apMissing,
+              instruction: `Do NOT call ${toolName} yet. Ask the customer for the missing values (${apMissing.join(", ")}) first, then call it.`,
+            });
+            toolCallLog.push({
+              tool: toolName,
+              args: toolArgs,
+              result: gateContent,
+              decision: "missing_required_inputs",
+              sideEffect: "missing_required_inputs",
+            });
+            chatMessages.push({ role: "tool", tool_call_id: tc.id, content: gateContent });
+            continue;
+          }
+
+          const exec = await getActionOrchestrator().submit(
+            {
+              id: randomUUID(),
+              conversationId: agentToolCtx.conversationId ?? "",
+              tenantId: agentToolCtx.tenantId,
+              proposedBy: { mode: "chat", system: "ai-bot:action-preference" },
+              actor: { agentId: "" },
+              tool: toolName,
+              args: toolArgs,
+              rationale: "ai-bot action-preference (RIPE goal action)",
+              urgency: "low",
+            },
+            () =>
+              dispatchToolCall(
+                { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+                agentToolCtx,
+              ),
+            { ledger, ctx: ledgerCtx, idempotency: true },
+          );
+          const result = unwrapToolExec(tc.id, toolName, exec);
+          toolCallLog.push({
+            tool: toolName,
+            args: toolArgs,
+            result: result.content,
+            decision: "executed_on_retry",
+            sideEffect: undefined,
+          });
+
+          // Same contract-progress tracking as the main loop / required retry.
+          try {
+            const matchingContracts = behaviorState.actionContractState.contracts
+              .map((c) => actionContracts.find((x) => x.id === c.id))
+              .filter((c): c is ActionContract => !!c)
+              .filter((c) => c.requiredTools.some((t) => t.name === toolName));
+            for (const contract of matchingContracts) {
+              await markContractToolCompleted({
+                tenantId: opts.tenantId,
+                conversationId: opts.conversationId,
+                contract,
+                toolName,
+              });
+            }
+          } catch {/* non-fatal */}
+
+          chatMessages.push({ role: "tool", tool_call_id: result.toolCallId, content: result.content });
+        }
+        // Final pass: derive the customer-facing reply from the action's real
+        // result (unless the turn budget tripped, in which case ship what we have).
+        if (!budget.exceededTurnCap()) {
+          const apFinal = await generateResponse({
+            tenantId: opts.tenantId,
+            sessionId: opts.conversationId,
+            model,
+            messages: chatMessages,
+            temperature: config.temperature ?? 0.7,
+            maxTokens: config.maxTokens ?? 1024,
+            tools: tools as any[],
+            metadata: { type: "ai_bot_action_preference_final", conversationId: opts.conversationId, aiAgentId: config.id },
+            signal,
+          });
+          totalTokens += apFinal.usage.total_tokens || 0;
+          budget.addUsage(apFinal.usage.total_tokens || 0);
+          if (apFinal.content?.trim()) replyText = apFinal.content.trim();
+        } else if (apResponse.content?.trim()) {
+          replyText = apResponse.content.trim();
+        }
+      }
+    }
+  }
+
+  // ── Failure Recovery (Unit C) ────────────────────────────────────
+  // A committed goal creates pressure toward RECOVERY, not handoff. If a
+  // goal-advancing action was ATTEMPTED this turn but FAILED (ok:false), a strong
+  // owner does not give up or escalate on the first hiccup — they retry with
+  // corrected inputs, use a different tool that reaches the same outcome, ask the
+  // customer for the one detail that was missing/rejected, or offer a workaround;
+  // escalation is the LAST resort. This runs ONE bounded recovery re-roll and,
+  // when the failure-driven escalation is avoidable (the customer didn't ask for a
+  // human AND a non-escalate advancing move still exists), HOLDS that escalation
+  // so recovery is tried first. Fully generic: a "failed action" is any non-read
+  // tool that returned ok:false; recovery is driven by the committed goal's
+  // readiness, never by the tool's identity (no booking/CRM/integration logic).
+  {
+    const isReadTool = (t: string) => /(_search|_get|_lookup|_read)$/.test(t);
+    const isOk = (r: unknown) => TOOL_OK_RE.test(String(r ?? ""));
+    const ranThisTurn = (t: { decision?: string }) =>
+      t.decision === "executed" || t.decision === "executed_on_retry";
+    const failedActions = toolCallLog.filter(
+      (t) => ranThisTurn(t) && !isReadTool(t.tool) && !isOk(t.result),
+    );
+    const succeededAction = toolCallLog.some(
+      (t) => ranThisTurn(t) && !isReadTool(t.tool) && isOk(t.result),
+    );
+
+    if (
+      failedActions.length > 0 &&
+      !succeededAction &&
+      !detectHumanHandoff(opts.incomingMessage) &&
+      !awaitingApproval &&
+      !budget.exceededTurnCap()
+    ) {
+      // Is there still a non-escalate move toward the committed goal? Only then
+      // do we treat a handoff as avoidable and attempt recovery.
+      const recFactText = [ctxSlot.customerBlock, ctxSlot.crmBlock, ctxSlot.memoryBlock, ctxSlot.sessionFactsBlock]
+        .filter((s): s is string => !!s && !!s.trim())
+        .join("\n");
+      const recProspect = computeProspectState({
+        hasLead: crmHasLead,
+        hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
+        isCustomer: crmHasCustomer,
+      });
+      const recCommitted = toolCallLog
+        .filter((t) => ranThisTurn(t) && isOk(t.result))
+        .map((t) => t.tool);
+      const { status: recStatus } = commitObjective(
+        priorGoal,
+        selectActiveObjective(
+          config.role,
+          recProspect,
+          recFactText,
+          [...new Set([...committedActionTools, ...recCommitted])],
+          calendarCapability.bookable,
+          wizardFacts.goalObjective,
+        ),
+        recFactText,
+      );
+      const canStillAdvance = hasViableAdvancingAction(
+        resolveNextActions({
+          status: recStatus,
+          capability: toolFunctionNames,
+          calendarBookable: calendarCapability.bookable,
+          qualificationMet: wizardFacts.qualificationMet,
+        }),
+      );
+
+      if (canStillAdvance) {
+        // The escalation set this turn was a reflex to the failure, not an
+        // explicit customer request → HOLD it; recovery may re-set it only if the
+        // recovery round itself decides to escalate (see below).
+        if (pendingEscalation) {
+          console.log(
+            `[ai-bot][recovery] holding failure-driven escalation to attempt recovery first. convo=${opts.conversationId}`,
+          );
+          pendingEscalation = null;
+        }
+        const failedNames = [...new Set(failedActions.map((f) => f.tool))];
+        let failReason = "";
+        try {
+          const parsed = JSON.parse(String(failedActions[0].result ?? "{}"));
+          failReason = String(parsed?.reason ?? parsed?.error ?? "");
+        } catch {/* result not JSON → no reason text */}
+        console.log(
+          `[ai-bot][recovery] action(s) failed (${failedNames.join(",")}${failReason ? `: ${failReason}` : ""}) - ` +
+            `driving recovery before any handoff. convo=${opts.conversationId}`,
+        );
+        chatMessages.push({
+          role: "user",
+          content:
+            `The action you attempted did not succeed${failReason ? ` (reason: ${failReason})` : ""}, but the goal is still ` +
+            `open and you OWN it. Do NOT hand off to a human or give up over one failed attempt. Before escalation is even ` +
+            `an option, do the next thing a capable owner would, in order: (1) retry the action with corrected inputs if ` +
+            `something was wrong or missing; (2) use a different available tool that reaches the same outcome; (3) ask the ` +
+            `customer for the ONE specific detail that was missing or rejected, then proceed; (4) offer a concrete workaround ` +
+            `that still advances the goal. Escalate ONLY if none of these is possible. Never expose internal or technical ` +
+            `failure details to the customer - keep the reply natural.`,
+        });
+        const recResponse = await generateResponse({
+          tenantId: opts.tenantId,
+          sessionId: opts.conversationId,
+          model,
+          messages: chatMessages,
+          temperature: config.temperature ?? 0.7,
+          maxTokens: config.maxTokens ?? 1024,
+          tools: tools as any[],
+          metadata: { type: "ai_bot_recovery", conversationId: opts.conversationId, aiAgentId: config.id },
+          signal,
+        });
+        totalTokens += recResponse.usage.total_tokens || 0;
+        budget.addUsage(recResponse.usage.total_tokens || 0);
+
+        const recToolCalls = recResponse.toolCalls;
+        if (recToolCalls && recToolCalls.length > 0) {
+          chatMessages.push({ role: "assistant", content: recResponse.content || "", tool_calls: recToolCalls });
+          for (const tc of recToolCalls) {
+            const toolName = tc.function?.name || "unknown";
+            let toolArgs: Record<string, unknown> = {};
+            try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+
+            const recMissing = Array.from(
+              new Set([
+                ...missingRequiredArgs(toolName, toolArgs, tools as any[]),
+                ...missingContractInputs(toolName, toolArgs).missing,
+              ]),
+            );
+            if (recMissing.length > 0) {
+              const gateContent = JSON.stringify({
+                ok: false,
+                error: "missing_required_inputs",
+                missing_inputs: recMissing,
+                instruction: `Do NOT call ${toolName} yet. Ask the customer for the missing values (${recMissing.join(", ")}) first, then call it.`,
+              });
+              toolCallLog.push({
+                tool: toolName,
+                args: toolArgs,
+                result: gateContent,
+                decision: "missing_required_inputs",
+                sideEffect: "missing_required_inputs",
+              });
+              chatMessages.push({ role: "tool", tool_call_id: tc.id, content: gateContent });
+              continue;
+            }
+
+            const exec = await getActionOrchestrator().submit(
+              {
+                id: randomUUID(),
+                conversationId: agentToolCtx.conversationId ?? "",
+                tenantId: agentToolCtx.tenantId,
+                proposedBy: { mode: "chat", system: "ai-bot:recovery" },
+                actor: { agentId: "" },
+                tool: toolName,
+                args: toolArgs,
+                rationale: "ai-bot failure recovery",
+                urgency: "low",
+              },
+              () =>
+                dispatchToolCall(
+                  { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+                  agentToolCtx,
+                ),
+              { ledger, ctx: ledgerCtx, idempotency: true },
+            );
+            const result = unwrapToolExec(tc.id, toolName, exec);
+            toolCallLog.push({
+              tool: toolName,
+              args: toolArgs,
+              result: result.content,
+              decision: "executed_on_retry",
+              sideEffect: undefined,
+            });
+            // Recovery itself decided to escalate (genuine last resort) → honor it.
+            if (result.sideEffect?.escalate) pendingEscalation = result.sideEffect.escalate;
+
+            try {
+              const matchingContracts = behaviorState.actionContractState.contracts
+                .map((c) => actionContracts.find((x) => x.id === c.id))
+                .filter((c): c is ActionContract => !!c)
+                .filter((c) => c.requiredTools.some((t) => t.name === toolName));
+              for (const contract of matchingContracts) {
+                await markContractToolCompleted({
+                  tenantId: opts.tenantId,
+                  conversationId: opts.conversationId,
+                  contract,
+                  toolName,
+                });
+              }
+            } catch {/* non-fatal */}
+
+            chatMessages.push({ role: "tool", tool_call_id: result.toolCallId, content: result.content });
+          }
+          // Final pass: reply derived from the recovery action's real result.
+          if (!budget.exceededTurnCap()) {
+            const recFinal = await generateResponse({
+              tenantId: opts.tenantId,
+              sessionId: opts.conversationId,
+              model,
+              messages: chatMessages,
+              temperature: config.temperature ?? 0.7,
+              maxTokens: config.maxTokens ?? 1024,
+              tools: tools as any[],
+              metadata: { type: "ai_bot_recovery_final", conversationId: opts.conversationId, aiAgentId: config.id },
+              signal,
+            });
+            totalTokens += recFinal.usage.total_tokens || 0;
+            budget.addUsage(recFinal.usage.total_tokens || 0);
+            if (recFinal.content?.trim()) replyText = recFinal.content.trim();
+          } else if (recResponse.content?.trim()) {
+            replyText = recResponse.content.trim();
+          }
+        } else if (recResponse.content?.trim()) {
+          // No tool this round → recovery via missing-info collection / workaround.
+          // The ask/workaround reply IS the recovery; accept it (escalation stays held).
+          replyText = recResponse.content.trim();
+        }
+      }
+    }
+  }
+
   // ── Objective-completeness gate (block passive closers) ─────────
   // Programmatic enforcement of "never end a live conversation while a
   // revenue objective is incomplete". Prompt instructions alone don't stop
@@ -2171,11 +3160,146 @@ async function generateAIBotReplyInner(
     hasContact: !!crmBlock || crmHasLead || crmHasCustomer,
     isCustomer: crmHasCustomer,
   });
-  const decisionObjStatus = selectActiveObjective(config.role, decisionProspectState, decisionFactText);
+  // Include THIS turn's successful action tools so the post-reply objective view
+  // reflects a booking that just landed (consistent with the prompt-time view).
+  const thisTurnCommitted = toolCallLog
+    .filter(
+      (t) =>
+        (t.decision === "executed" || t.decision === "executed_on_retry") &&
+        TOOL_OK_RE.test(String(t.result ?? "")),
+    )
+    .map((t) => t.tool);
+  const freshDecisionObjStatus = selectActiveObjective(
+    config.role,
+    decisionProspectState,
+    decisionFactText,
+    [...new Set([...committedActionTools, ...thisTurnCommitted])],
+    calendarCapability.bookable,
+    wizardFacts.goalObjective,
+  );
+  // GOAL OWNERSHIP (Unit A): reconcile against the committed goal (incl. this
+  // turn's landed actions) → the objective to act on AND the snapshot to persist
+  // for next turn. This is what stops the agent regressing/restarting.
+  const { status: decisionObjStatus, snapshot: nextGoalSnapshot } = commitObjective(
+    priorGoal,
+    freshDecisionObjStatus,
+    decisionFactText,
+  );
+
+  // GOAL EVALUATOR (separate from navigation): did the configured business
+  // OUTCOME happen? Pure projection over runtime homes (CRM flags + active
+  // booking + this-turn ledger) + capability + fit + approval. Drives the
+  // passive-close backstop so "no next objective" never means "you may close"
+  // while a business outcome is still pending. Null → no business goal → BEL owns it.
+  const decisionGoalStatus = evaluateGoalStatus({
+    goalObjective: resolveGoalObjective(config.role, wizardFacts.goalObjective),
+    presentOutcomes: presentBusinessOutcomes({
+      crmFlags,
+      hasActiveBooking: hasExistingBooking,
+      liveOutcomes: businessOutcomesFromLedger(ledger.customerFacingCommitted()),
+    }),
+    capabilities: groupToolsIntoCapabilities(toolFunctionNames, toolCapabilityHints).map((g) => g.capability),
+    fit: wizardFacts.fit,
+    approvalPending: !!awaitingApproval,
+  });
+  const goalOutcomePending =
+    !!decisionGoalStatus && (decisionGoalStatus.kind === "ACTIVE" || decisionGoalStatus.kind === "BLOCKED");
+
+  // ── Guaranteed Background Actions (deterministic CRM integrity) ──────────
+  // A background CRM write (create lead/contact/deal) whose objective's required
+  // info is already present MUST happen this turn — never left to whether the
+  // model remembered to call it (the audit's 65 missed create_lead). Runs a
+  // SILENT, tool-only round per ripe background action against a COPY of the
+  // message thread, so it NEVER changes the customer reply. Deliberately NOT
+  // gated on awaitingApproval: an approval pending on one action must not freeze
+  // CRM integrity on others (capability "continue progress during approval").
+  {
+    const committedSoFar = [...new Set([...committedActionTools, ...thisTurnCommitted])];
+    const ripeBackground = guaranteedBackgroundActions({
+      role: config.role,
+      prospectState: decisionProspectState,
+      factText: decisionFactText,
+      committedTools: committedSoFar,
+    });
+    for (const { tool: bgTool } of ripeBackground) {
+      if (budget.exceededTurnCap()) break;
+      if (thisTurnCommitted.includes(bgTool)) continue;
+      if (!toolFunctionNames.includes(bgTool)) continue; // only force a tool the agent actually has
+      console.log(`[ai-bot][guaranteed-bg] ripe background action ${bgTool} not yet run - forcing silently. convo=${opts.conversationId}`);
+      const bgMessages = [
+        ...chatMessages,
+        {
+          role: "user",
+          content:
+            `SYSTEM: A background CRM record is ready and must be created now. Call \`${bgTool}\` ` +
+            `using the customer details already in context. This is a SILENT background action - it ` +
+            `does NOT change your reply to the customer; produce only the tool call.`,
+        },
+      ];
+      const bgResp = await generateResponse({
+        tenantId: opts.tenantId,
+        sessionId: opts.conversationId,
+        model,
+        messages: bgMessages,
+        temperature: config.temperature ?? 0.7,
+        maxTokens: config.maxTokens ?? 1024,
+        tools: tools as any[],
+        toolChoice: { type: "function", function: { name: bgTool } },
+        metadata: { type: "ai_bot_guaranteed_bg", conversationId: opts.conversationId, aiAgentId: config.id },
+        signal,
+      });
+      totalTokens += bgResp.usage.total_tokens || 0;
+      budget.addUsage(bgResp.usage.total_tokens || 0);
+      for (const tc of bgResp.toolCalls || []) {
+        const toolName = tc.function?.name || "unknown";
+        if (toolName !== bgTool) continue; // forced single tool; ignore anything else
+        let toolArgs: Record<string, unknown> = {};
+        try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        // Structural backstop: never fire an under-specified write. If the args
+        // aren't actually derivable, skip SILENTLY - do not pester the customer.
+        const missingInputs = Array.from(
+          new Set([
+            ...missingRequiredArgs(toolName, toolArgs, tools as any[]),
+            ...missingContractInputs(toolName, toolArgs).missing,
+          ]),
+        );
+        if (missingInputs.length > 0) {
+          console.warn(`[ai-bot][guaranteed-bg] ${bgTool} missing inputs (${missingInputs.join(",")}) - skipping silent create.`);
+          continue;
+        }
+        const exec = await getActionOrchestrator().submit(
+          {
+            id: randomUUID(),
+            conversationId: agentToolCtx.conversationId ?? "",
+            tenantId: agentToolCtx.tenantId,
+            proposedBy: { mode: "chat", system: "ai-bot:guaranteed-bg" },
+            actor: { agentId: "" },
+            tool: toolName,
+            args: toolArgs,
+            rationale: "ai-bot guaranteed background action (RIPE objective completion tool)",
+            urgency: "low",
+          },
+          () =>
+            dispatchToolCall(
+              { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+              agentToolCtx,
+            ),
+          { ledger, ctx: ledgerCtx, idempotency: true },
+        );
+        const result = unwrapToolExec(tc.id, toolName, exec);
+        toolCallLog.push({ tool: toolName, args: toolArgs, result: result.content, decision: "executed_on_retry", sideEffect: "background" });
+        if (TOOL_OK_RE.test(result.content)) thisTurnCommitted.push(toolName);
+      }
+    }
+  }
+
   // Non-advancing = passive closer ("anything else?") OR generic opener ("how
   // can I help?"). Both stall a revenue objective; both trigger the regen gate.
   const replyWasPassiveCloser = isNonAdvancingReply(replyText);
   let passiveCloseRegenerated = false;
+  // Wizard→Runtime: a disqualified (poor-fit) prospect may close GRACEFULLY -
+  // don't force a forward move on a lead we've configured ourselves to drop.
+  const decisionDisqualified = wizardFacts.fit === "disqualified";
 
   // Committed-action guard (ledger-driven). If a side-effecting action tool
   // actually committed this turn (booking created, lead/contact/deal created,
@@ -2204,14 +3328,26 @@ async function generateAIBotReplyInner(
     replyWasPassiveCloser &&
     !committedActionThisTurn &&
     !customerIsClosing(opts.incomingMessage) &&
-    decisionObjStatus &&
-    decisionObjStatus.objective.blockPassiveClose
+    !decisionDisqualified &&
+    // Block a passive close when EITHER an active objective forbids it OR the
+    // business OUTCOME is still pending/blocked (the case the bare null cursor
+    // used to mask: "no next objective" ≠ "the goal happened").
+    ((decisionObjStatus && decisionObjStatus.objective.blockPassiveClose) || goalOutcomePending)
   ) {
     console.warn(
-      `[ai-bot] passive-closer blocked: objective=${decisionObjStatus.objective.id} incomplete (missing=${decisionObjStatus.missingRequired.join(",") || "criteria"}). Regenerating.`,
+      `[ai-bot] passive-closer blocked: ${
+        decisionObjStatus
+          ? `objective=${decisionObjStatus.objective.id} incomplete (missing=${decisionObjStatus.missingRequired.join(",") || "criteria"})`
+          : `goal ${decisionGoalStatus?.outcome}=${decisionGoalStatus?.kind}`
+      }. Regenerating.`,
     );
     chatMessages.push({ role: "assistant", content: replyText });
-    chatMessages.push({ role: "user", content: buildCloserCorrective(decisionObjStatus) });
+    chatMessages.push({
+      role: "user",
+      content: decisionObjStatus
+        ? buildCloserCorrective(decisionObjStatus)
+        : buildGoalPendingCorrective(decisionGoalStatus!),
+    });
     // Regenerate WITHOUT tools so the model must return forward-moving text
     // (a discovery question / next-step proposal), not a half-handled call.
     const regen = await generateResponse({
@@ -2230,7 +3366,9 @@ async function generateAIBotReplyInner(
     passiveCloseRegenerated = true;
     toolCallLog.push({
       tool: "__objective_gate__",
-      args: { objective: decisionObjStatus.objective.id, missing: decisionObjStatus.missingRequired },
+      args: decisionObjStatus
+        ? { objective: decisionObjStatus.objective.id, missing: decisionObjStatus.missingRequired }
+        : { goal: decisionGoalStatus?.outcome, status: decisionGoalStatus?.kind },
       result: "regenerated_to_avoid_passive_close",
       decision: "objective_incomplete",
       sideEffect: "objective_gate_regenerated",
@@ -2317,9 +3455,16 @@ async function generateAIBotReplyInner(
   // schedule_meeting result this turn that returned real proposed alternatives.
   const hasCommittedBooking = () =>
     ledger.customerFacingCommitted().some((e) => e.kind === "booking");
+  // Stating availability / proposing a time is GROUNDED by a check_availability
+  // result this turn (the read tool is now the source of truth for open slots +
+  // working hours), or by a schedule/reschedule result that carried slots.
   const hasProposedSlots = () =>
     toolCallLog.some(
-      (c) => c.tool === "schedule_meeting" && /proposedSlotsIso/.test(typeof c.result === "string" ? c.result : ""),
+      (c) =>
+        (c.tool === "check_availability" || c.tool === "schedule_meeting" || c.tool === "reschedule_meeting") &&
+        /proposedSlotsIso|workingHours|requestedAvailable|nextAvailableIso/.test(
+          typeof c.result === "string" ? c.result : "",
+        ),
     );
   const ungroundedAssertion = (reply: string | null) =>
     isBookingAssertionUngrounded(detectBookingAssertion(reply), {
@@ -2327,12 +3472,20 @@ async function generateAIBotReplyInner(
       proposedSlots: hasProposedSlots(),
     });
 
+  // A successful cancel this turn GROUNDS any meeting mention in the reply (it's
+  // a cancellation confirmation, not a booking claim). Without this the grounding
+  // gate flagged "ביטלתי את הפגישה" as an ungrounded booking assertion and
+  // regenerated it into a bogus "let's schedule a meeting, when's good?" reply.
+  const cancelledThisTurn = toolCallLog.some(
+    (c) => c.tool === "cancel_meeting" && TOOL_OK_RE.test(typeof c.result === "string" ? c.result : ""),
+  );
   let bookingGroundingRegenerated = false;
   const assertion = detectBookingAssertion(replyText);
   if (
     replyText &&
     !awaitingApproval &&
     !pendingEscalation &&
+    !cancelledThisTurn &&
     calendarCapability.bookable &&
     ungroundedAssertion(replyText)
   ) {
@@ -2362,6 +3515,20 @@ async function generateAIBotReplyInner(
         const toolName = tc.function?.name || "unknown";
         let toolArgs: Record<string, unknown> = {};
         try { toolArgs = JSON.parse(tc.function?.arguments || "{}"); } catch {}
+        // This regen exists to GROUND a booking claim, not to hand off. If the
+        // model grabs the always-present escalate_to_human here it's an
+        // off-purpose artifact (observed live: a stray escalation executed during
+        // grounding). Acknowledge the tool_call so the message sequence stays
+        // valid, but do NOT dispatch the escalation side effect.
+        if (toolName === "escalate_to_human") {
+          console.warn(`[ai-bot] booking-grounding: ignoring off-purpose escalate_to_human. convo=${opts.conversationId}`);
+          chatMessages.push({
+            role: "tool",
+            tool_call_id: tc.id,
+            content: JSON.stringify({ ok: false, error: "escalation_not_applicable_during_booking_grounding" }),
+          });
+          continue;
+        }
         const exec = await getActionOrchestrator().submit(
           {
             id: randomUUID(),
@@ -2571,6 +3738,10 @@ async function generateAIBotReplyInner(
         source: "ai_bot",
         escalated: !!pendingEscalation,
         awaitingApproval: !!awaitingApproval,
+        // GOAL OWNERSHIP (Unit A): the committed goal carried to the next turn.
+        activeGoal: nextGoalSnapshot ?? undefined,
+        // WIZARD→RUNTIME: the structured judgment facts that drove this turn.
+        wizardFacts: wizardFacts.evaluated ? wizardFacts : undefined,
         toolCalls: toolCallLog.length > 0 ? toolCallLog : undefined,
         behaviorState: {
           strategy: behaviorState.strategy,
@@ -2616,6 +3787,19 @@ async function generateAIBotReplyInner(
     console.warn("[ai-bot] escalation emit failed:", err?.message);
   }
 
+  // Escalation must not leave the customer in silence. If we handed off to a
+  // human (escalate_to_human) but the model produced no customer-facing text,
+  // send a short warm transition line so they know a person is taking over.
+  if (pendingEscalation && !replyText?.trim()) {
+    const he = /[֐-׿]/.test(opts.incomingMessage || "");
+    replyText = he
+      ? "העברתי את זה לצוות שלנו, מישהו מאיתנו יחזור אליך בהקדם 🙏"
+      : "I've passed this on to our team, someone will get back to you shortly 🙏";
+  }
+
+  // Final humanizing pass on the outgoing reply (strip machine-style dashes).
+  replyText = humanizeReply(replyText);
+
   // Output validator - last defence against prompt-leakage and fabricated
   // execution claims ("I refunded your card" with no refund tool call).
   // Fire-and-forget audit on any violation; returns a safe deflection in
@@ -2631,8 +3815,13 @@ async function generateAIBotReplyInner(
         ledgerCommittedTools: ledger.committed().map((e) => e.tool),
       });
 
+  // Don't emit an interim ack that is identical to the final reply (avoids a
+  // duplicate bubble if the model didn't actually produce a distinct result).
+  const finalInterim = interimMessages.filter((m) => m && m !== safeReply);
+
   return {
     reply: safeReply,
+    interimMessages: finalInterim.length > 0 ? finalInterim : undefined,
     escalation: pendingEscalation,
     awaitingApproval,
     toolCallLog,
@@ -2655,7 +3844,7 @@ export async function generateAIBotOneshot(opts: {
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
   }
   if (config.status === "PAUSED") {
-    return { reply: null, modelUsed: config.model || "gpt-4o-mini", totalTokens: 0 };
+    return { reply: null, modelUsed: config.model || getDefaultModel(), totalTokens: 0 };
   }
 
   const oneshotState = computeBehaviorState({
@@ -2673,7 +3862,7 @@ export async function generateAIBotOneshot(opts: {
     company: oneshotCompany ?? undefined,
   });
 
-  const model = config.model || "gpt-4o-mini";
+  const model = config.model || getDefaultModel();
   const maxTokens = opts.maxTokens ?? Math.min(config.maxTokens ?? 1024, 400);
 
   const result = await generateResponse({

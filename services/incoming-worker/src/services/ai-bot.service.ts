@@ -40,6 +40,8 @@ interface SendContext {
 
 interface AIBotReplyResult {
   reply: string | null;
+  /** Short acks (e.g. "one moment, checking") to send as their own bubble(s) before `reply`. */
+  interimMessages?: string[];
   escalation: { reason: string; priority?: "low" | "medium" | "high"; summary?: string } | null;
   awaitingApproval: { approvalRequestId: string; tool: string; reason: string } | null;
   toolCallLog: Array<{
@@ -92,7 +94,7 @@ export async function processAIBot(
   // Pre-check: hard limits set on the agent row. These are enforced by the
   // worker, not the AI service, because they're side-effect decisions
   // (escalate vs. continue) tied to the conversation's channel pipeline.
-  const shouldEscalate = await checkEscalationThresholds(conversationId, tenantId, agentLite);
+  const shouldEscalate = await checkEscalationThresholds(conversationId, tenantId, agentLite, incomingMessage);
   if (shouldEscalate) {
     await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
     return true;
@@ -265,6 +267,50 @@ export async function processAIBot(
     return false;
   }
 
+  // Two-bubble flow: send any pre-tool acks ("one moment, checking") as their
+  // own message(s) first, then a brief pause so the result reads like the bot
+  // actually went and checked, then the real reply. Best-effort: a failed
+  // interim send never blocks the real reply.
+  if (result.interimMessages?.length) {
+    for (const interim of result.interimMessages) {
+      if (!interim?.trim()) continue;
+      try {
+        const interimExtId = await adapter.sendTextMessage(
+          sendContext.credentials,
+          sendContext.channelAccountExternalId,
+          sendContext.recipientId,
+          interim,
+        );
+        const interimMsg = await prisma.message.create({
+          data: {
+            tenantId,
+            conversationId,
+            channel: sendContext.channel,
+            direction: "OUTBOUND",
+            body: interim,
+            senderName: "AI Bot",
+            externalMessageId: interimExtId,
+            status: interimExtId ? "SENT" : "FAILED",
+            metadata: { source: "ai_bot", kind: "interim_ack" },
+          },
+        });
+        await prisma.conversation.update({
+          where: { id: conversationId },
+          data: { lastMessageAt: new Date() },
+        });
+        await publishEvent({
+          event: "message:new",
+          tenantId,
+          data: { message: interimMsg, conversationId, channel: sendContext.channel },
+        });
+      } catch (err: any) {
+        console.warn("[AI-Bot] interim ack send failed (continuing to reply):", err?.message);
+      }
+    }
+    // Small human-feeling gap between "checking…" and the result.
+    await new Promise((resolve) => setTimeout(resolve, 900));
+  }
+
   const extId = await adapter.sendTextMessage(
     sendContext.credentials,
     sendContext.channelAccountExternalId,
@@ -371,6 +417,7 @@ async function checkEscalationThresholds(
   conversationId: string,
   tenantId: string,
   config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null },
+  incomingText?: string,
 ): Promise<boolean> {
   const aiMessageCount = await prisma.message.count({
     where: {
@@ -382,21 +429,83 @@ async function checkEscalationThresholds(
   });
 
   const maxMsgs = config.maxAutonomousMessages || 10;
-  if (aiMessageCount >= maxMsgs) {
-    console.log(`[AI-Bot] Max messages reached (${aiMessageCount}/${maxMsgs}) for conversation ${conversationId}`);
+  const hardCeiling = maxMsgs * 2;
+
+  // Hard ceiling - true runaway-loop backstop, always escalates.
+  if (aiMessageCount >= hardCeiling) {
+    console.log(`[AI-Bot] HARD ceiling reached (${aiMessageCount}/${hardCeiling}) for conversation ${conversationId} - escalating`);
     return true;
   }
 
+  // GOAL PRESERVATION: the soft message/time caps are autonomous-budget limits,
+  // not a reason to abandon a live deal. When the objective is still viable - we
+  // have a way to reach the customer (a contact email/phone) and they're engaged
+  // (this runs on a fresh inbound) - suppress the soft caps so a hot lead one
+  // message from booking isn't handed to a human just for crossing a counter.
   const conversation = await prisma.conversation.findUnique({
     where: { id: conversationId },
-    select: { createdAt: true },
+    select: { createdAt: true, channel: true, customerExternalId: true },
   });
+  let hasReachPath = false;
+  try {
+    if (conversation) {
+      const contact = await prisma.contact.findFirst({
+        where: { tenantId, channel: conversation.channel, externalId: conversation.customerExternalId },
+        select: { email: true, phone: true },
+      });
+      hasReachPath = !!(contact?.email || contact?.phone);
+    }
+  } catch (err: any) {
+    console.warn("[AI-Bot] reach-path lookup failed (non-fatal):", err?.message);
+  }
+  // A scheduling request (book / move / cancel a meeting or demo) is an action
+  // the AI can complete - never hand it to a human for crossing a counter. This
+  // is the main reason a returning customer ("can we move the demo?") used to
+  // auto-escalate. Treat such a turn as goal-viable.
+  const schedulingIntent =
+    /(reschedul|postpone|\bmove\b|cancel|book|schedule|לקבוע|לתאם|להזיז|לדחות|לבטל|לשנות|פגיש|דמו|demo|meeting)/i.test(
+      incomingText || "",
+    );
+  const goalViable = hasReachPath || schedulingIntent; // engagement implied: runs on an inbound
+
+  if (aiMessageCount >= maxMsgs) {
+    if (goalViable) {
+      console.log(`[AI-Bot] soft msg cap (${aiMessageCount}/${maxMsgs}) reached but objective viable - NOT escalating (goal preservation) conv=${conversationId}`);
+    } else {
+      console.log(`[AI-Bot] Max messages reached (${aiMessageCount}/${maxMsgs}) for conversation ${conversationId}`);
+      return true;
+    }
+  }
 
   if (conversation) {
-    const minutesElapsed = (Date.now() - conversation.createdAt.getTime()) / 60000;
+    // Measure the CURRENT autonomous burst, not the conversation's lifetime age.
+    // A burst resets after a quiet gap (≥30m), so a customer returning hours/days
+    // later doesn't trip the "AI ran too long" cap the instant they message.
+    const BURST_RESET_MS = 30 * 60_000;
+    let autonomousSinceMs = conversation.createdAt.getTime();
+    try {
+      const recent = await prisma.message.findMany({
+        where: { conversationId, tenantId },
+        orderBy: { createdAt: "asc" },
+        take: 50,
+        select: { createdAt: true },
+      });
+      for (let i = 1; i < recent.length; i++) {
+        const prev = new Date(recent[i - 1].createdAt).getTime();
+        const cur = new Date(recent[i].createdAt).getTime();
+        if (cur - prev >= BURST_RESET_MS) autonomousSinceMs = cur;
+      }
+      if (recent.length > 0) {
+        const lastMs = new Date(recent[recent.length - 1].createdAt).getTime();
+        if (Date.now() - lastMs >= BURST_RESET_MS) autonomousSinceMs = Date.now();
+      }
+    } catch (err: any) {
+      console.warn("[AI-Bot] burst-start lookup failed (non-fatal):", err?.message);
+    }
+    const minutesElapsed = (Date.now() - autonomousSinceMs) / 60000;
     const maxMins = config.maxAutonomousMinutes || 15;
-    if (minutesElapsed >= maxMins) {
-      console.log(`[AI-Bot] Max time reached (${Math.round(minutesElapsed)}m/${maxMins}m) for conversation ${conversationId}`);
+    if (minutesElapsed >= maxMins && !goalViable) {
+      console.log(`[AI-Bot] Max burst time reached (${Math.round(minutesElapsed)}m/${maxMins}m) for conversation ${conversationId}`);
       return true;
     }
   }

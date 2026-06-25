@@ -93,6 +93,21 @@ export interface ResolveAvailabilityOpts {
   customerTimezone?: string;
   /** How many alternatives to propose when requested is invalid OR omitted. */
   proposeCount?: number;
+  /**
+   * Optional lower bound (Unix ms) for slot enumeration. Used by
+   * check_availability to answer windowed questions ("what's free TOMORROW",
+   * "anything SATURDAY", "next WEEK"). Clamped against now+minNotice — never
+   * proposes a slot earlier than the policy allows. Ignored for a requested-time
+   * point check. Omit for "soonest available".
+   */
+  windowStartMs?: number;
+  /**
+   * Optional upper bound (Unix ms) for slot enumeration. Clamped against
+   * now+maxHorizon. When the window yields no valid slot (e.g. the customer
+   * asked about a closed Saturday) the resolver returns an empty `proposed`;
+   * check_availability layers a `nextAvailableIso` fallback on top.
+   */
+  windowEndMs?: number;
 }
 
 export type ResolveAvailabilityResult =
@@ -138,11 +153,43 @@ export interface CalendarAdapter {
     /** Extra attendee emails (the customer's teammates/manager). */
     additionalGuests?: string[];
   }): Promise<{ eventId: string; joinUrl?: string }>;
+  /**
+   * Move an existing event to a new time (keeps the same attendees + meet link).
+   * Optional: providers that don't support direct edits (e.g. Calendly, whose
+   * reschedule is the customer's own link flow) simply omit it.
+   */
+  updateEvent?(opts: {
+    agentId: string;
+    eventId: string;
+    startMs: number;
+    endMs: number;
+    customerTimezone?: string;
+  }): Promise<{ eventId: string; joinUrl?: string }>;
+  /** Cancel an existing event. Optional for the same reason as updateEvent. */
+  cancelEvent?(opts: { agentId: string; eventId: string }): Promise<void>;
+  /**
+   * List upcoming events in a window. Optional - used to find a customer's
+   * existing meeting (by attendee email) when it was booked outside the current
+   * conversation. Providers without it simply can't do cross-conversation lookup.
+   */
+  listEvents?(opts: { fromMs: number; toMs: number; max?: number }): Promise<
+    Array<{ id: string; summary: string | null; start: string | null; end: string | null; attendees: string[] }>
+  >;
 }
 
 // ─── Resolver (pure, deterministic) ─────────────────────────
 
 const DEFAULT_PROPOSE_COUNT = 3;
+
+// Failures where the requested time is a meaningful anchor (right ballpark, wrong
+// exact slot) → propose the nearest free slots around it. The rest (past time,
+// beyond horizon, unparseable) carry no usable anchor → earliest-first instead.
+const NEAREST_ANCHOR_REASONS: Set<InvalidReason> = new Set([
+  "outside_working_hours",
+  "outside_meeting_type_window",
+  "agent_busy",
+  "buffer_violated",
+]);
 
 export function resolveAvailability(opts: ResolveAvailabilityOpts): ResolveAvailabilityResult {
   const proposeCount = opts.proposeCount ?? DEFAULT_PROPOSE_COUNT;
@@ -164,11 +211,15 @@ export function resolveAvailability(opts: ResolveAvailabilityOpts): ResolveAvail
         slot: { startMs: t, endMs: t + opts.meetingType.durationMinutes * 60_000 },
       };
     }
-    return {
-      verdict: "INVALID",
-      reason,
-      proposed: enumerateValidSlots(opts, proposeCount),
-    };
+    // For "ballpark" failures (the requested time is well-formed and in range but
+    // just unavailable), propose the slots CLOSEST to what they asked for - e.g.
+    // 14:00 / 15:00 around a taken 14:30 - not the day's first free slots. For
+    // out-of-range failures (past, beyond horizon, unparseable) the requested
+    // time is no anchor at all, so fall back to earliest-first.
+    const proposed = NEAREST_ANCHOR_REASONS.has(reason)
+      ? enumerateNearestSlots(opts, proposeCount, t)
+      : enumerateValidSlots(opts, proposeCount);
+    return { verdict: "INVALID", reason, proposed };
   }
 
   // 2) No request → propose slots.
@@ -224,8 +275,13 @@ function enumerateValidSlots(opts: ResolveAvailabilityOpts, count: number): Arra
   const { policy, meetingType, nowMs } = opts;
   const stepMs = policy.slotResolutionMinutes * 60_000;
   const dur = meetingType.durationMinutes * 60_000;
-  const startFromMs = nowMs + policy.minNoticeHours * 3600_000;
-  const endByMs = nowMs + policy.maxHorizonDays * 24 * 3600_000;
+  // Optional caller window ("tomorrow", "Saturday", "next week") clamps the
+  // enumeration range but can NEVER widen it past the policy: the earliest is
+  // always >= now+minNotice and the latest <= now+maxHorizon.
+  const policyStartMs = nowMs + policy.minNoticeHours * 3600_000;
+  const policyEndMs = nowMs + policy.maxHorizonDays * 24 * 3600_000;
+  const startFromMs = Math.max(policyStartMs, opts.windowStartMs ?? policyStartMs);
+  const endByMs = Math.min(policyEndMs, opts.windowEndMs ?? policyEndMs);
 
   // Round up to next grid step to keep slots tidy (e.g. :00, :15).
   let cursor = ceilToStep(startFromMs, stepMs);
@@ -247,6 +303,48 @@ function enumerateValidSlots(opts: ResolveAvailabilityOpts, count: number): Arra
     cursor += stepMs;
   }
   return out;
+}
+
+/**
+ * Return up to `count` valid slots CLOSEST to `anchorMs` (the time the customer
+ * actually asked for), searching both later and earlier and ordered for a tidy
+ * read-out. Used when a requested time is well-formed but unavailable, so we
+ * offer "14:00 or 15:00" around a taken 14:30 instead of the day's first slots.
+ * Every returned slot passes the same `validateSlot` gate as a direct booking.
+ */
+function enumerateNearestSlots(
+  opts: ResolveAvailabilityOpts,
+  count: number,
+  anchorMs: number,
+): Array<{ startMs: number; endMs: number }> {
+  const { policy, meetingType, nowMs } = opts;
+  const stepMs = policy.slotResolutionMinutes * 60_000;
+  const dur = meetingType.durationMinutes * 60_000;
+  const startFromMs = nowMs + policy.minNoticeHours * 3600_000;
+  const endByMs = nowMs + policy.maxHorizonDays * 24 * 3600_000;
+
+  const anchor = ceilToStep(anchorMs, stepMs);
+  const found: Array<{ startMs: number; endMs: number }> = [];
+  const seen = new Set<number>();
+
+  const HARD_CAP = 5000;
+  for (let k = 0; k <= HARD_CAP && found.length < count; k++) {
+    // Probe later before earlier at the same distance: a customer who asked for
+    // 14:30 usually means "around then or a bit after", so ties prefer the later slot.
+    const candidates = k === 0 ? [anchor] : [anchor + k * stepMs, anchor - k * stepMs];
+    for (const c of candidates) {
+      if (found.length >= count) break;
+      if (c < startFromMs || c >= endByMs || seen.has(c)) continue;
+      seen.add(c);
+      if (!validateSlot(c, opts)) found.push({ startMs: c, endMs: c + dur });
+    }
+    // Both directions have left the bookable window → nothing more to find.
+    if (anchor + k * stepMs >= endByMs && anchor - k * stepMs < startFromMs) break;
+  }
+
+  // Present chronologically so the customer reads "14:00, 15:00", not "15:00, 14:00".
+  found.sort((a, b) => a.startMs - b.startMs);
+  return found;
 }
 
 function ceilToStep(t: number, stepMs: number): number {

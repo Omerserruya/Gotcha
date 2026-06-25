@@ -857,12 +857,16 @@ export async function syncCloseToCrm(
   const endedAt = loaded.conv.closedAt ? new Date(loaded.conv.closedAt) : new Date();
   const durationSeconds = startedAt && endedAt ? Math.max(0, Math.round((endedAt.getTime() - startedAt.getTime()) / 1000)) : undefined;
 
-  const firstMessage = await (prisma as any).message.findFirst({
-    where: { tenantId, conversationId },
-    orderBy: { createdAt: "asc" },
-    select: { direction: true },
+  // A conversation summary is an INBOUND engagement whenever the customer
+  // actually participated (sent at least one message) - which is the normal
+  // case. The previous "first message direction" heuristic mislabeled the whole
+  // chat as OUTBOUND just because a flow/agent sent the opening greeting first.
+  // Only a conversation with NO inbound message at all (pure outbound blast)
+  // stays outbound.
+  const inboundCount = await (prisma as any).message.count({
+    where: { tenantId, conversationId, direction: "INBOUND" },
   });
-  const direction: "inbound" | "outbound" = firstMessage?.direction === "OUTBOUND" ? "outbound" : "inbound";
+  const direction: "inbound" | "outbound" = inboundCount > 0 ? "inbound" : "outbound";
 
   const summary = (intel as any)?.summary ?? loaded.conv.aiSummary ?? null;
   const crmContactId = loaded.resolved.crmContactId!;
