@@ -1,0 +1,81 @@
+[log_87c831] sending request {
+  method: 'post',
+  url: 'https://api.openai.com/v1/chat/completions',
+  options: {
+    method: 'post',
+    path: '/chat/completions',
+    body: {
+      model: 'gpt-5-mini',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are a CRM analyst summarizing a customer conversation for the sales/support team.\n' +
+            `Read the WHOLE conversation and infer the customer's REAL intent - do NOT take the opening word literally. Someone who opens with "support"/"תמיכה" but then asks what the product does, what it can do, and how it works is doing PRODUCT DISCOVERY / PRE-SALES, not support. Classify by what they actually explored, not the first word.\n` +
+            '\n' +
+            'Write concise bullet points with this structure:\n' +
+            "• **Why they reached out**: the customer's true underlying intent across the whole conversation (e.g. exploring the product, evaluating a specific capability, a real support issue, pricing). Be specific about the topic.\n" +
+            '• **What they asked**: the concrete questions or topics they explored, as a short sub-list when there were several.\n' +
+            `• **Status**: where things stand from the CUSTOMER's side (e.g. exploring, asked X and awaiting an answer, ready to buy, issue resolved). A human agent reads this AFTER claiming the conversation - they ARE the human now handling it - so never phrase status as "waiting to be connected to a human agent" or "needs to be handed off"; describe what the customer actually needs next.\n` +
+            '• **Opportunity**: any sales/expansion signal - interest in a capability, evaluation intent, buying signal. Write "none clear" if genuinely absent. Do NOT invent one.\n' +
+            '\n' +
+            `Rules: ground every point in what was actually said - never fabricate. Don't mislabel a discovery/evaluation chat as "support". Keep it brief.\n` +
+            '\n' +
+            'Respond in Hebrew.'
+        },
+        {
+          role: 'user',
+          content: 'Customer: היי\n' +
+            'Flow: היי! איזה כיף שפנית אלינו, איך נוכל לעזור לך?\n' +
+            'Customer: מכירה\n' +
+            'AI Bot: מעולה! אנחנו ב-GOTCHA מציעים פתרונות לניהול תקשורת עם לקוחות, כולל שיחות ווצאפ, טלפון, אימייל ועוד, הכל במקום אחד. \n' +
+            '\n' +
+            'מה סוג העסק שלך?\n' +
+            'Customer: פלטפורמה לניהול מלאי\n' +
+            'AI Bot: נשמע מעניין! פלטפורמת ניהול מלאי יכולה להפיק הרבה ערך מהתקשורת היעילה עם הלקוחות. \n' +
+            '\n' +
+            'שאלתי קודם על סוג העסק, עכשיו אני סקרן לדעת: האם אתם מתמודדים עם אתגרים בתקשורת עם הלקוחות שלכם?\n' +
+            'Customer: האמת שכן \n' +
+            'אבל עזוב אין לי זמן עכשיו\n' +
+            'AI Bot: אני מבין שאתה עסוק. אם תרצה, אני יכול לקבוע שיחה קצרה בשעה שנוחה לך, כדי שנוכל להמשיך את השיחה כשיהיה לך יותר זמן. מתי נוח לך לדבר?\n' +
+            'Customer: אפשר\n' +
+            'Customer: מחר\n' +
+            'AI Bot: רשמתי שתרצה לקבוע שיחה מחר. אני אעביר את הפרטים לצוות ואחזור אליך עם השעה המדויקת.\n' +
+            'Customer: אה?\n' +
+            'AI Bot: סליחה על הבלבול! אני צריך לדעת איזו שעה מחר תהיה נוחה לך לקבוע את השיחה. יש לך העדפה לשעה מסוימת?\n' +
+            'Customer: 3 בלילה פנוי?\n' +
+            'AI Bot: אני אבדוק את זמינות השעות. שנייה אחת.\n' +
+            'Customer: פנוי?\n' +
+            'AI Bot: אני צריך לדעת מה האימייל שלך כדי לקבוע את השיחה. תוכל לספק לי את הפרטים?\n' +
+            'Customer: למתי אתה קובע?\n' +
+            'AI Bot: אני רוצה לקבוע את השיחה למחר ב-3 בלילה, אך אני צריך את האימייל שלך כדי לשלוח את ההזמנה. מה האימייל שלך?\n' +
+            'Customer: 3 בלילה פנוי?\n' +
+            'AI Bot: לצערי, שעות הלילה לא מתאימות לקביעת פגישות. יש לך זמן אחר מחר במהלך היום?\n' +
+            'Customer: אז למה אתה מאפשר מלכתחילה?\n' +
+            'AI Bot: אני מבין את המצב. אנחנו כאן כדי להקל על התקשורת עם הלקוחות, ובשיחה נוכל להבין איך GOTCHA יכול לעזור לך בניהול מלאי.\n' +
+            '\n' +
+            'שאלתי קודם על האתגרים שאתם מתמודדים איתם - מה הכאב הכי גדול שלכם בתחום התקשורת עם הלקוחות?\n' +
+            'Customer: מה זה קשור ?\n' +
+            'AI Bot: אני מחבר אותך עם חבר צוות אנושי שימשיך מכאן.'
+        }
+      ],
+      max_completion_tokens: 2304,
+      reasoning_effort: 'low',
+      user: 'cmqo2120d000jd010lad1q0ax'
+    },
+    stream: false,
+    __security: { bearerAuth: true }
+  },
+  headers: {
+    accept: 'application/json',
+    authorization: '***',
+    'content-type': 'application/json',
+    'user-agent': 'OpenAI/JS 6.44.0',
+    'x-stainless-arch': 'x64',
+    'x-stainless-lang': 'js',
+    'x-stainless-os': 'Linux',
+    'x-stainless-package-version': '6.44.0',
+    'x-stainless-retry-count': '0',
+    'x-stainless-runtime': 'node',
+    'x-stainless-runtime-version': 'v20.20.2'
+  }
+}
