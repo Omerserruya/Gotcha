@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
 import {
@@ -26,6 +27,7 @@ const STATUS_CLASS: Record<VoiceChannelStatus, string> = {
 
 export default function VoiceChannelsListPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -102,7 +104,7 @@ export default function VoiceChannelsListPage() {
     [channels],
   );
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     return (
       <div className="flex items-center justify-center h-full">
         <p className="text-gray-400 text-sm">{t("settings.voiceChannels.adminRequired")}</p>

@@ -83,6 +83,15 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
+        location /api/permissions {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
         location /api/departments {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
@@ -707,6 +716,14 @@ http {
 
         location ~ ^/t/([^/]+)/api/agents(.*)$ {
             proxy_pass http://auth_service/api/agents$2$is_args$args;
+            proxy_set_header X-Tenant-ID $1;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        location ~ ^/t/([^/]+)/api/permissions(.*)$ {
+            proxy_pass http://auth_service/api/permissions$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;

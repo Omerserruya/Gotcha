@@ -19,6 +19,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import {
   getFunnel,
@@ -60,6 +61,7 @@ function humanize(s: string): string {
 
 export default function FunnelEditorPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const router = useRouter();
   const funnelDbId = useDynamicParam();
@@ -157,7 +159,7 @@ export default function FunnelEditorPage() {
     [stages],
   );
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     return <div className="max-w-3xl mx-auto p-6 text-sm text-gray-500">{t("funnels.editor.adminOnly")}</div>;
   }
 

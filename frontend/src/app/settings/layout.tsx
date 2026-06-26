@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useI18n } from "@/context/I18nContext";
 import { AppLayout } from "@/components/AppLayout";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
+import { usePermissions } from "@/context/PermissionsContext";
 import clsx from "clsx";
 
 interface SettingsNavItem {
@@ -14,11 +15,14 @@ interface SettingsNavItem {
   icon: (props: { className?: string }) => React.ReactElement;
   exact?: boolean;
   voiceOnly?: boolean;
+  /** Permission-gated nav item — hidden unless the user holds this permission. */
+  perm?: string;
 }
 
 const settingsNav: SettingsNavItem[] = [
   { href: "/settings", labelKey: "settings.nav.general", icon: GeneralIcon, exact: true },
-  { href: "/settings/agents", labelKey: "nav.agents", icon: AgentsIcon },
+  // Unified Users page: replaces the old Agents + Roles & Permissions pages.
+  { href: "/settings/users", label: "Users", icon: AgentsIcon, perm: "settings:members:manage" },
   { href: "/settings/departments", labelKey: "nav.departments", icon: DepartmentsIcon },
   { href: "/settings/channels", labelKey: "nav.channels", icon: ChannelsIcon },
   { href: "/settings/integrations", labelKey: "settings.nav.integrations", icon: IntegrationsIcon },
@@ -28,7 +32,6 @@ const settingsNav: SettingsNavItem[] = [
   { href: "/settings/tools", labelKey: "settings.nav.tools", icon: ToolsIcon },
   { href: "/settings/voice-channels", labelKey: "settings.nav.voiceChannels", icon: VoiceChannelsIcon, voiceOnly: true },
   { href: "/settings/funnels", labelKey: "settings.nav.funnels", icon: FunnelIcon },
-  { href: "/settings/permissions", labelKey: "settings.nav.permissions", icon: PermissionsIcon },
   { href: "/settings/notifications", labelKey: "notifications.title", icon: NotificationsIcon },
 ];
 
@@ -36,9 +39,13 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
   const { t } = useI18n();
   const pathname = usePathname();
   const flags = useVoiceFlags();
+  const { can } = usePermissions();
 
   const visibleNav = settingsNav.filter((item) => {
-    if (item.voiceOnly) return flags.voiceCopilotEnabled;
+    if (item.voiceOnly && !flags.voiceCopilotEnabled) return false;
+    // Permission-gated items are hidden unless held. Items without `perm`
+    // keep their current visibility (this whole area is already ADMIN-gated).
+    if (item.perm && !can(item.perm)) return false;
     return true;
   });
 

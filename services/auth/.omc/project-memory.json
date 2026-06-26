@@ -184,6 +184,12 @@
       "accessCount": 1,
       "lastAccessed": 1772395564899,
       "type": "directory"
+    },
+    {
+      "path": "src/routes/permissions.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782400207750,
+      "type": "file"
     }
   ],
   "userDirectives": []

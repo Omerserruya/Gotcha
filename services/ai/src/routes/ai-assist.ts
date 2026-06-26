@@ -16,6 +16,7 @@ import { generateAllAgentConfigs, generateAgentConfig } from "../services/agent-
 import { analyzeConversation, getConversationIntelligence, getConversationReplay } from "../services/conversation-intelligence.service";
 import { getToolsForTenant, executeTool, getToolExecutions } from "../services/tool-execution.service";
 import { executeAdapterTool } from "../services/connectors/integration-framework";
+import { getCrmAdapter } from "../services/connectors/crm-adapter-resolver";
 import { scoreAgent, getAgentScore } from "../services/agent-performance.service";
 import { generateFollowup } from "../services/followup-generator.service";
 import { buildCustomerState } from "../services/customer-state.service";
@@ -655,6 +656,36 @@ router.post("/:conversationId/adapter-tools/execute", async (req: Request, res: 
   } catch (err: any) {
     console.error("Adapter tool execute error:", err);
     res.status(500).json({ error: "Failed to execute adapter tool" });
+  }
+});
+
+// ─── Uniform CRM identity lookup ─────────────────────────────
+// Search the connected system-of-record by email/phone through the
+// CRMAdapter.findCustomer interface. Unlike the per-vendor catalog
+// `lead_search`/`contact_search` tools (which only Zoho-style providers
+// register), this covers EVERY source-of-truth integration connectable at
+// onboarding - HubSpot, Salesforce, Zoho, Shopify, Fireberry, Airtable -
+// through one code path. Shared's searchLeads/searchContacts fall back here
+// for providers that don't expose the catalog search tools.
+router.post("/:conversationId/crm/find", async (req: Request, res: Response) => {
+  try {
+    const { phone, email, external_id } = req.body || {};
+    if (!phone && !email && !external_id) {
+      res.json({ data: { ok: true, contacts: [] } });
+      return;
+    }
+    const adapter = await getCrmAdapter(req.tenantId!);
+    if (adapter.capabilities?.is_stub) {
+      res.json({ data: { ok: false, reason: "no_crm_configured", contacts: [] } });
+      return;
+    }
+    const result = await adapter.findCustomer({ phone, email, external_id });
+    res.json({
+      data: { ok: result.ok, contacts: result.contacts ?? [], reason: result.reason },
+    });
+  } catch (err: any) {
+    console.error("CRM find error:", err);
+    res.status(500).json({ error: "Failed to search CRM" });
   }
 });
 

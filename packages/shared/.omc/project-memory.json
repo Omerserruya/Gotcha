@@ -127,6 +127,18 @@
       "type": "file"
     },
     {
+      "path": "src/lib/permissions.ts",
+      "accessCount": 4,
+      "lastAccessed": 1782395552551,
+      "type": "file"
+    },
+    {
+      "path": "src/index.ts",
+      "accessCount": 3,
+      "lastAccessed": 1782395640227,
+      "type": "file"
+    },
+    {
       "path": "src/lib/agent-tools.ts",
       "accessCount": 2,
       "lastAccessed": 1777918626142,
@@ -142,6 +154,12 @@
       "path": "package.json",
       "accessCount": 2,
       "lastAccessed": 1781700826220,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/rbac-seed.ts",
+      "accessCount": 2,
+      "lastAccessed": 1782395617262,
       "type": "file"
     },
     {
@@ -175,12 +193,6 @@
       "type": "file"
     },
     {
-      "path": "src/index.ts",
-      "accessCount": 1,
-      "lastAccessed": 1779870069301,
-      "type": "file"
-    },
-    {
       "path": "src/middleware/tenant.ts",
       "accessCount": 1,
       "lastAccessed": 1779870213517,
@@ -208,6 +220,12 @@
       "path": "prisma/seed-packs.ts",
       "accessCount": 1,
       "lastAccessed": 1781700811508,
+      "type": "file"
+    },
+    {
+      "path": "src/middleware/permission-gate.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782395566690,
       "type": "file"
     }
   ],

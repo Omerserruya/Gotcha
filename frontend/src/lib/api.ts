@@ -2543,10 +2543,40 @@ export interface TenantRole {
   name: string;
   description: string | null;
   isSystem: boolean;
+  builtinKey: string | null;
+  defaultScope: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE";
   createdAt: string;
   updatedAt: string;
   features: { roleId: string; feature: string; createdAt: string }[];
   _count?: { assignments: number };
+}
+
+// Hierarchical permission catalog (single source of truth, served by backend).
+export interface PermissionDef {
+  key: string;
+  domain: string;
+  feature: string;
+  subFeature: string;
+  action: string;
+  kind: "runtime" | "configuration";
+  scoped: boolean;
+  displayName: string;
+  description: string;
+}
+
+export interface BuiltinRoleDef {
+  key: string;
+  name: string;
+  description: string;
+  defaultScope: "own" | "team" | "department" | "workspace";
+  permissions: string[];
+}
+
+export interface PermissionCatalog {
+  permissions: PermissionDef[];
+  byDomain: Record<string, PermissionDef[]>;
+  builtinRoles: BuiltinRoleDef[];
+  scopes: PermissionScope[];
 }
 
 export interface UserFeatureGrantRow {
@@ -2592,6 +2622,20 @@ export function getMyFeatures(token: string) {
     "/api/permissions/me",
     { token },
   );
+}
+
+/** Canonical RBAC surface: the caller's effective permission keys + scope. */
+export type PermissionScope = "own" | "team" | "department" | "workspace";
+export function getMyAccess(token: string) {
+  return apiFetch<{
+    data: {
+      role: string;
+      roleKey: string | null; // effective built-in role (owner|admin|department_manager|agent|system_admin)
+      permissions: string[];
+      scope: PermissionScope;
+      features: string[];
+    };
+  }>("/api/permissions/me", { token });
 }
 
 export function getPermissionsFeatureRegistry(token: string) {
@@ -2682,5 +2726,57 @@ export function unassignUserFromRole(token: string, userId: string, roleId: stri
   return apiFetch<void>(`/api/permissions/users/${userId}/roles/${roleId}`, {
     token,
     method: "DELETE",
+  });
+}
+
+/** Read the hierarchical permission catalog + built-in roles (for the UI). */
+export function getPermissionCatalog(token: string) {
+  return apiFetch<{ data: PermissionCatalog }>("/api/permissions/catalog", { token });
+}
+
+/** A tenant member row for the User Management list (ALL users + assigned role). */
+export interface TenantMember {
+  id: string;
+  name: string;
+  email: string;
+  isActive: boolean;
+  phoneNumber: string | null;
+  legacyRole: string;
+  departmentId: string | null;
+  departmentRole: string | null;
+  departmentName: string | null;
+  roleId: string | null;
+  roleName: string | null;
+  roleBuiltinKey: string | null;
+  scope: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE" | null;
+}
+export function getTenantMembers(token: string) {
+  return apiFetch<{ data: TenantMember[] }>("/api/permissions/users", { token });
+}
+
+/** Full per-user access view for the User Management side panel. */
+export interface UserAccessView {
+  user: { id: string; role: string; email: string; name: string };
+  // roles[].scope is the raw DB enum (uppercase) override, null = inherit role default.
+  roles: { roleId: string; scope: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE" | null }[];
+  grants: { feature: string; granted: boolean; reason: string | null }[];
+  permissions: string[];
+  scope: PermissionScope; // effective (lowercase)
+  features: string[];
+}
+export function getUserAccess(token: string, userId: string) {
+  return apiFetch<{ data: UserAccessView }>(`/api/permissions/users/${userId}`, { token });
+}
+
+/** Set a user's primary role (+ optional scope override). Replaces existing assignment. */
+export function setUserPrimaryRole(
+  token: string,
+  userId: string,
+  body: { roleId: string; scope?: "OWN" | "TEAM" | "DEPARTMENT" | "WORKSPACE" | null },
+) {
+  return apiFetch<{ data: unknown }>(`/api/permissions/users/${userId}/role`, {
+    token,
+    method: "PUT",
+    body: JSON.stringify(body),
   });
 }

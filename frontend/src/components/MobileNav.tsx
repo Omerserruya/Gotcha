@@ -5,6 +5,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { Locale, localeConfig } from "@/i18n";
 import clsx from "clsx";
@@ -110,12 +111,13 @@ const moreNavItems = [
 
 export function MobileBottomNav() {
   const { user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const pathname = usePathname();
   const [showMore, setShowMore] = useState(false);
 
-  // Only show for ADMIN
-  if (user?.role !== "ADMIN") return null;
+  // Only show the admin bottom-nav for tenant admins/owners (effective role).
+  if (!atLeastRole("admin")) return null;
 
   const isMoreActive = moreNavItems.some((item) => pathname.startsWith(item.href));
 

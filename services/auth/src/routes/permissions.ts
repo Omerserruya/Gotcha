@@ -9,11 +9,32 @@ import {
   assertTenantId,
   invalidatePermissionsCache,
   getUserFeatures,
+  getEffectiveAccess,
+  getEffectiveBuiltinRole,
   ALL_FEATURES,
   FEATURE_METADATA,
   isFeature,
   type Feature,
+  // Hierarchical permission catalog (single source of truth).
+  PERMISSIONS,
+  BUILTIN_ROLES,
+  BUILTIN_ROLE_ORDER,
+  SCOPE_ORDER,
+  isPermissionKey,
+  expandPermissionPattern,
+  listPermissionsByDomain,
 } from "@chatcenter/shared";
+
+/**
+ * A grantable key may be either a legacy feature key OR a hierarchical
+ * permission key / wildcard pattern. Both live in the same string columns;
+ * the resolver knows which namespace each belongs to.
+ */
+function isGrantableKey(key: string): boolean {
+  if (key === "*") return true;
+  if (key.endsWith(":*")) return expandPermissionPattern(key).length > 0;
+  return isFeature(key) || isPermissionKey(key);
+}
 
 /**
  * Tenant ADMIN - permission configuration within the tenant.
@@ -54,15 +75,76 @@ async function ensureRoleBelongsToTenant(roleId: string, tenantId: string) {
   return prisma.tenantRole.findFirst({ where: { id: roleId, tenantId } });
 }
 
-// ─── Self: what features can I access right now? ───────────────
+// ─── Self: what can I access right now? ────────────────────────
+// Returns the canonical hierarchical permission set + effective scope (the
+// new RBAC surface the frontend reacts to) AND the legacy feature list
+// (kept for back-compat with existing callers).
 router.get("/me", ...ANY_USER, async (req: Request, res: Response): Promise<void> => {
   const tenantId = assertTenantId(req);
-  const features = await getUserFeatures({
+  const principal = {
     userId: req.user!.userId,
     tenantId,
     role: req.user!.role,
+    departmentRole: req.user!.departmentRole,
+  };
+  const [features, access, roleKey] = await Promise.all([
+    getUserFeatures({ userId: principal.userId, tenantId, role: principal.role }),
+    getEffectiveAccess(principal),
+    getEffectiveBuiltinRole(principal),
+  ]);
+  res.json({
+    data: {
+      role: req.user!.role, // legacy enum
+      roleKey: req.user!.role === "SYSTEM_ADMIN" ? "system_admin" : roleKey, // effective built-in role
+      permissions: access.permissions,
+      scope: access.scope,
+      features, // legacy
+    },
   });
-  res.json({ data: { features, role: req.user!.role } });
+});
+
+// ─── Members: ALL tenant users + their assigned role + scope ────
+// The unified User Management list. Unlike /api/agents (agent-only), this
+// returns every member with the new built-in role assignment.
+router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise<void> => {
+  const tenantId = assertTenantId(req);
+  const users = await prisma.user.findMany({
+    where: { tenantId, role: { not: "SYSTEM_ADMIN" } },
+    orderBy: [{ createdAt: "asc" }],
+    select: {
+      id: true,
+      name: true,
+      email: true,
+      isActive: true,
+      phoneNumber: true,
+      role: true, // legacy enum (fallback)
+      departmentMember: {
+        select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
+      },
+      roleAssignments: {
+        select: { scope: true, role: { select: { id: true, name: true, builtinKey: true, defaultScope: true } } },
+      },
+    },
+  });
+  const data = users.map((u) => {
+    const assignment = u.roleAssignments[0] ?? null;
+    return {
+      id: u.id,
+      name: u.name,
+      email: u.email,
+      isActive: u.isActive,
+      phoneNumber: u.phoneNumber,
+      legacyRole: u.role,
+      departmentId: u.departmentMember?.departmentId ?? null,
+      departmentRole: u.departmentMember?.departmentRole ?? null,
+      departmentName: u.departmentMember?.department?.name ?? null,
+      roleId: assignment?.role.id ?? null,
+      roleName: assignment?.role.name ?? null,
+      roleBuiltinKey: assignment?.role.builtinKey ?? null,
+      scope: assignment?.scope ?? assignment?.role.defaultScope ?? null,
+    };
+  });
+  res.json({ data });
 });
 
 // ─── User: resolved feature set ────────────────────────────────
@@ -71,14 +153,38 @@ router.get("/users/:userId", ...ADMIN_ONLY, async (req: Request, res: Response):
   const userId = req.params.userId as string;
   const user = await prisma.user.findFirst({
     where: { id: userId, tenantId },
-    select: { id: true, role: true, email: true, name: true },
+    select: {
+      id: true,
+      role: true,
+      email: true,
+      name: true,
+      roleAssignments: { select: { roleId: true, scope: true } },
+      featureGrants: { select: { feature: true, granted: true, reason: true } },
+    },
   });
   if (!user) {
     res.status(404).json({ error: "User not found" });
     return;
   }
-  const features = await getUserFeatures({ userId: user.id, tenantId, role: user.role });
-  res.json({ data: { user, features } });
+  const [features, access] = await Promise.all([
+    getUserFeatures({ userId: user.id, tenantId, role: user.role }),
+    getEffectiveAccess({
+      userId: user.id,
+      tenantId,
+      role: user.role,
+      departmentRole: null,
+    }),
+  ]);
+  res.json({
+    data: {
+      user: { id: user.id, role: user.role, email: user.email, name: user.name },
+      roles: user.roleAssignments,
+      grants: user.featureGrants,
+      permissions: access.permissions,
+      scope: access.scope,
+      features, // legacy
+    },
+  });
 });
 
 // ─── User grants (raw overrides) ───────────────────────────────
@@ -106,8 +212,8 @@ router.put(
     const tenantId = assertTenantId(req);
     const userId = req.params.userId as string;
     const feature = req.params.feature as string;
-    if (!isFeature(feature)) {
-      res.status(400).json({ error: "Unknown feature", feature });
+    if (!isGrantableKey(feature)) {
+      res.status(400).json({ error: "Unknown feature or permission", feature });
       return;
     }
     if (!(await ensureUserBelongsToTenant(userId, tenantId))) {
@@ -167,7 +273,7 @@ router.post(
     const tenantId = assertTenantId(req);
     const { name, description, features } = req.body as z.infer<typeof createRoleSchema>;
 
-    const unknown = features.filter((f) => !isFeature(f));
+    const unknown = features.filter((f) => !isGrantableKey(f));
     if (unknown.length) {
       res.status(400).json({ error: "Unknown features", features: unknown });
       return;
@@ -262,7 +368,7 @@ router.put(
       return;
     }
     const { features } = req.body as { features: string[] };
-    const unknown = features.filter((f) => !isFeature(f));
+    const unknown = features.filter((f) => !isGrantableKey(f));
     if (unknown.length) {
       res.status(400).json({ error: "Unknown features", features: unknown });
       return;
@@ -328,11 +434,66 @@ router.delete(
   },
 );
 
-// ─── Feature registry (read-only) ──────────────────────────────
+// ─── Feature registry (read-only, legacy) ──────────────────────
 router.get("/features", ...ANY_USER, (_req: Request, res: Response): void => {
   res.json({
     data: ALL_FEATURES.map((key) => FEATURE_METADATA[key]),
   });
 });
+
+// ─── Permission catalog (read-only) — single source of truth ────
+// Drives the User Management UI: the permission picker + built-in roles +
+// scope options. Hierarchical (feature:sub-feature:action), grouped by domain.
+router.get("/catalog", ...ANY_USER, (_req: Request, res: Response): void => {
+  res.json({
+    data: {
+      permissions: PERMISSIONS,
+      byDomain: listPermissionsByDomain(),
+      builtinRoles: BUILTIN_ROLE_ORDER.map((k) => BUILTIN_ROLES[k]),
+      scopes: SCOPE_ORDER,
+    },
+  });
+});
+
+// ─── Set a user's primary role (+ optional scope) ───────────────
+// The User Management UX is "one role + additional permissions". This replaces
+// the user's role assignment with the single chosen role and applies the scope
+// override. Additional permissions remain managed via the grants endpoints.
+const setUserRoleSchema = z.object({
+  roleId: z.string().min(1),
+  scope: z.enum(["OWN", "TEAM", "DEPARTMENT", "WORKSPACE"]).nullable().optional(),
+});
+
+router.put(
+  "/users/:userId/role",
+  ...ADMIN_ONLY,
+  validate(setUserRoleSchema),
+  async (req: Request, res: Response): Promise<void> => {
+    const tenantId = assertTenantId(req);
+    const userId = req.params.userId as string;
+    const { roleId, scope } = req.body as z.infer<typeof setUserRoleSchema>;
+    if (!(await ensureUserBelongsToTenant(userId, tenantId))) {
+      res.status(404).json({ error: "User not found" });
+      return;
+    }
+    const role = await ensureRoleBelongsToTenant(roleId, tenantId);
+    if (!role) {
+      res.status(404).json({ error: "Role not found" });
+      return;
+    }
+    await prisma.$transaction([
+      prisma.userRoleAssignment.deleteMany({ where: { userId } }),
+      prisma.userRoleAssignment.create({
+        data: { userId, roleId, scope: scope ?? null, assignedBy: req.user?.userId },
+      }),
+    ]);
+    invalidatePermissionsCache({ userId });
+    const assignment = await prisma.userRoleAssignment.findFirst({
+      where: { userId, roleId },
+      include: { role: true },
+    });
+    res.json({ data: assignment });
+  },
+);
 
 export default router;

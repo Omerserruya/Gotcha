@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { Locale, localeConfig } from "@/i18n";
 import {
@@ -93,6 +94,7 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
 
 export default function SettingsPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t, locale, setLocale, tenantDefault, userOverride, setTenantDefault } = useI18n();
   const [localeSaving, setLocaleSaving] = useState(false);
   const [localeMessage, setLocaleMessage] = useState("");
@@ -317,7 +319,7 @@ export default function SettingsPage() {
         </div>
 
         {/* Tenant default (admin only) */}
-        {user?.role === "ADMIN" && (
+        {atLeastRole("admin") && (
           <div>
             <label className="text-xs font-medium text-gray-600 block mb-1">
               {t("settings.language.tenantDefault")}
@@ -343,7 +345,7 @@ export default function SettingsPage() {
     </div>
   );
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     // Non-admins see ONLY the language card. Other admin surfaces
     // (SLA, business hours, etc.) remain hidden behind this gate.
     return (

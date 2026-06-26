@@ -227,6 +227,17 @@ enum Role {
   AGENT
 }
 
+// Data-reach dimension, INDEPENDENT of which permissions a role holds.
+// Carried on the role (defaultScope) and optionally overridden per
+// assignment. Future "Team Leader" vs "Department Manager" differ only here.
+// See packages/shared/src/lib/permission-catalog.ts (SCOPE_ORDER).
+enum PermissionScope {
+  OWN
+  TEAM
+  DEPARTMENT
+  WORKSPACE
+}
+
 model User {
   id                       String   @id @default(cuid())
   tenantId                 String   @map("tenant_id")
@@ -2935,6 +2946,13 @@ model TenantRole {
   // System-managed roles (e.g. seeded "Default Agent") cannot be deleted
   // by tenant admins. Custom roles created by the tenant admin can.
   isSystem    Boolean  @default(false) @map("is_system")
+  // Stable key for built-in roles (owner|admin|department_manager|agent).
+  // NULL for tenant-created custom roles. Lets the resolver/seed identify
+  // built-ins without matching on the (localizable) display name.
+  builtinKey  String?  @map("builtin_key")
+  // Default data-reach for users assigned this role. Overridable per
+  // assignment (UserRoleAssignment.scope).
+  defaultScope PermissionScope @default(OWN) @map("default_scope")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -2962,6 +2980,8 @@ model TenantRoleFeature {
 model UserRoleAssignment {
   userId     String   @map("user_id")
   roleId     String   @map("role_id")
+  // Per-assignment scope override. NULL = inherit the role's defaultScope.
+  scope      PermissionScope? @map("scope")
   assignedAt DateTime @default(now()) @map("assigned_at")
   assignedBy String?  @map("assigned_by")
 

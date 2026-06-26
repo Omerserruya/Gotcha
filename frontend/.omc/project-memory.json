@@ -149,6 +149,12 @@
       "type": "file"
     },
     {
+      "path": "src/lib/api.ts",
+      "accessCount": 65,
+      "lastAccessed": 1782397433319,
+      "type": "directory"
+    },
+    {
       "path": "src/components/mainPlaybook/MainPlaybookEditor.tsx",
       "accessCount": 61,
       "lastAccessed": 1777281331044,
@@ -159,12 +165,6 @@
       "accessCount": 61,
       "lastAccessed": 1780251417688,
       "type": "file"
-    },
-    {
-      "path": "src/lib/api.ts",
-      "accessCount": 61,
-      "lastAccessed": 1781518438294,
-      "type": "directory"
     },
     {
       "path": "src/app/ai-studio/page.tsx",
@@ -185,15 +185,15 @@
       "type": "file"
     },
     {
-      "path": "public/widget/chatcenter-widget.js",
-      "accessCount": 39,
-      "lastAccessed": 1776004395158,
+      "path": "src/app/history/page.tsx",
+      "accessCount": 40,
+      "lastAccessed": 1782401164178,
       "type": "file"
     },
     {
-      "path": "src/app/history/page.tsx",
-      "accessCount": 35,
-      "lastAccessed": 1779777617609,
+      "path": "public/widget/chatcenter-widget.js",
+      "accessCount": 39,
+      "lastAccessed": 1776004395158,
       "type": "file"
     },
     {
@@ -269,6 +269,12 @@
       "type": "directory"
     },
     {
+      "path": "src/components/MobileNav.tsx",
+      "accessCount": 12,
+      "lastAccessed": 1782400928494,
+      "type": "file"
+    },
+    {
       "path": "src/app/agents/page.tsx",
       "accessCount": 11,
       "lastAccessed": 1776350530043,
@@ -290,12 +296,6 @@
       "path": "src/app/integrations/[slug]/page.tsx",
       "accessCount": 10,
       "lastAccessed": 1780658595089,
-      "type": "file"
-    },
-    {
-      "path": "src/components/MobileNav.tsx",
-      "accessCount": 9,
-      "lastAccessed": 1776348419215,
       "type": "file"
     },
     {

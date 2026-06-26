@@ -104,8 +104,65 @@ export {
   assertFeature,
   invalidatePermissionsCache,
   FeatureGateError,
+  // Hierarchical permission resolver (canonical RBAC path).
+  hasPermission,
+  assertPermission,
+  getUserPermissions,
+  getEffectiveAccess,
+  getEffectiveBuiltinRole,
+  resolveUserScope,
+  isPermissionLicensed,
+  scopeToDb,
+  PermissionDeniedError,
 } from "./lib/permissions";
-export type { PermissionUser } from "./lib/permissions";
+export type { PermissionUser, PermissionPrincipal } from "./lib/permissions";
+
+// Permission catalog — single source of truth for RBAC, licensing, packaging.
+export {
+  PERMISSIONS,
+  ALL_PERMISSION_KEYS,
+  ALL_LICENSE_KEYS,
+  SCOPE_ORDER,
+  BUILTIN_ROLES,
+  BUILTIN_ROLE_ORDER,
+  isPermissionKey,
+  getPermission,
+  listPermissionsByDomain,
+  expandPermissionPattern,
+  expandPermissionPatterns,
+  featureLicenseKey,
+  subFeatureLicenseKey,
+  licenseKeysFor,
+  builtinRoleForLegacy,
+  maxScope,
+} from "./lib/permission-catalog";
+export type {
+  PermissionDef,
+  PermissionScope,
+  PermissionKind,
+  PermissionDomain,
+  PermissionKey,
+  BuiltinRoleKey,
+  BuiltinRoleDef,
+} from "./lib/permission-catalog";
+
+// RBAC seed + backfill.
+export {
+  seedTenantRoles,
+  backfillTenantAssignments,
+  seedTenantRbac,
+  seedAllTenantsRbac,
+} from "./lib/rbac-seed";
+
+// Packaging / plans (License layer presets).
+export {
+  PLAN_PRESETS,
+  PLAN_ORDER,
+  PLAN_DOMAINS,
+  applyPlanToTenant,
+  planDomains,
+} from "./lib/plans";
+export type { PlanKey, PlanDef } from "./lib/plans";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
 export { redact, safeLogger } from "./lib/log-redact";
 export {
@@ -155,6 +212,7 @@ export type { SecretProvider } from "./secrets";
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
+export { requirePermission } from "./middleware/permission-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";

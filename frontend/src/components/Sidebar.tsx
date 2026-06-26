@@ -4,6 +4,7 @@ import Link from "next/link";
 import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import clsx from "clsx";
 import { NotificationBell } from "./NotificationBell";
@@ -37,6 +38,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, logout } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const pathname = usePathname();
 
@@ -88,8 +90,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
       <nav className="flex-1 py-3 space-y-1 px-2">
         {navItems
           .filter((item) => {
-            if (item.adminOnly) return user?.role === "ADMIN";
-            if ((item as any).managerOrAdmin) return user?.role === "ADMIN" || user?.departmentRole === "MANAGER";
+            // Gated by effective built-in role (consistent with the backend
+            // requireRole bridge — assigned roles drive nav, no dead links).
+            if (item.adminOnly) return atLeastRole("admin");
+            if ((item as any).managerOrAdmin) return atLeastRole("department_manager");
             return true;
           })
           .map((item) => {

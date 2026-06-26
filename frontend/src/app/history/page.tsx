@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import { getConversations, getConversation, getConversationScore, deleteConversation } from "@/lib/api";
 import ConfirmModal from "@/components/ConfirmModal";
@@ -77,6 +78,7 @@ function StarRating({ score, max = 100 }: { score: number; max?: number }) {
 
 export default function HistoryPage() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const [conversations, setConversations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -103,7 +105,7 @@ export default function HistoryPage() {
   const [deleteLoading, setDeleteLoading] = useState(false);
   const contextMenuRef = useRef<HTMLDivElement>(null);
 
-  const canAccess = user?.role === "ADMIN" || user?.departmentRole === "MANAGER";
+  const canAccess = atLeastRole("department_manager");
 
   const handleContextMenu = useCallback((e: React.MouseEvent, convId: string) => {
     e.preventDefault();

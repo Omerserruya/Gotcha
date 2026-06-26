@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import {
   getChannels,
@@ -89,6 +90,7 @@ export function ChannelsContent() {
 
 function ChannelsPageContent() {
   const { token, user } = useAuth();
+  const { atLeastRole } = usePermissions();
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -354,7 +356,7 @@ function ChannelsPageContent() {
     }
   }
 
-  if (user?.role !== "ADMIN") {
+  if (!atLeastRole("admin")) {
     return (
         <div className="flex items-center justify-center h-full">
           <p className="text-gray-400">{t("settings.adminRequired")}</p>
