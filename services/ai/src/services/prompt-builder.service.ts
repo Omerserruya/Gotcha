@@ -57,7 +57,7 @@ import {
   type ActiveGoalSnapshot,
   type WizardRuntimeFacts,
 } from "./objectives";
-import { computeCurrentPlan, renderCurrentPlan } from "./planner.service";
+import { computeCurrentPlan, renderCurrentPlan, type PlanInput, type CurrentPlan } from "./planner.service";
 import { buildBookingCapabilityBlock } from "./booking-guard.service";
 import { buildToolRulesBlock } from "./tool-rules";
 import {
@@ -727,8 +727,23 @@ function factTextOf(opts: BuildPromptOpts): string {
 // sub-sections + flat tool list. The model receives "goal → situation → best
 // action → capabilities" instead of reconstructing it. Agent mode only.
 function buildCurrentPlanBlock(opts: BuildPromptOpts): string | null {
-  if (opts.behaviorState.mode !== "agent") return null;
-  const plan = computeCurrentPlan({
+  // SHARED BRAIN: both the AI Employee (agent) and the AI Copilot (copilot) reason
+  // over the SAME Current Plan. Only `generator` (config authoring) has no plan.
+  // The difference is execution: the Copilot renders in advisory mode (recommend),
+  // the Employee in act mode — same computeCurrentPlan, same facts.
+  const plan = computeCurrentPlanForOpts(opts);
+  if (!plan) return null;
+  return renderCurrentPlan(plan, { advisory: opts.behaviorState.mode === "copilot" });
+}
+
+/**
+ * Map the prompt builder's opts → the Action Planner's narrow input. The SINGLE
+ * place the two are bridged, so the planner stays decoupled from the builder and
+ * every caller (the prompt block AND the Copilot diagnostics) derives the plan
+ * from byte-identical inputs.
+ */
+export function planInputFromOpts(opts: BuildPromptOpts): PlanInput {
+  return {
     role: opts.agent.role,
     prospectFlags: opts.crm ?? { hasLead: false, hasContact: false },
     factText: factTextOf(opts),
@@ -740,8 +755,20 @@ function buildCurrentPlanBlock(opts: BuildPromptOpts): string | null {
     toolCapabilityHints: opts.toolCapabilityHints,
     strategyName: opts.behaviorState.strategy,
     hasActiveBooking: opts.hasActiveBooking,
-  });
-  return renderCurrentPlan(plan);
+  };
+}
+
+/**
+ * Compute the EXACT `CurrentPlan` the prompt's `# Current Plan` block is rendered
+ * from, or null for modes that have no plan (`generator`). Exposed so the Copilot
+ * provider can log `[copilot][plan]` against the very plan the model received —
+ * guaranteeing the diagnostics never drift from what was actually in the prompt.
+ * Pure; never throws (delegates to `computeCurrentPlan`).
+ */
+export function computeCurrentPlanForOpts(opts: BuildPromptOpts): CurrentPlan | null {
+  const mode = opts.behaviorState.mode;
+  if (mode !== "agent" && mode !== "copilot") return null;
+  return computeCurrentPlan(planInputFromOpts(opts));
 }
 
 function push(sections: string[], part: string | null): void {

@@ -163,6 +163,12 @@
       "type": "file"
     },
     {
+      "path": "src/lib/capability-runtime/calendar.contracts.ts",
+      "accessCount": 2,
+      "lastAccessed": 1782570307765,
+      "type": "file"
+    },
+    {
       "path": "prisma/migrations/20260409120000_add_conversation_flow_and_custom_guardrails/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1775724158051,
@@ -226,6 +232,18 @@
       "path": "src/middleware/permission-gate.ts",
       "accessCount": 1,
       "lastAccessed": 1782395566690,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/capability-runtime/contract.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782570149937,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/capability-runtime/resolver.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782570184464,
       "type": "file"
     }
   ],

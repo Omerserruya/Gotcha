@@ -334,5 +334,9 @@ export {
   type ResolvedLocale,
 } from "./lib/locale";
 
+// Capability Runtime (operation contracts + pure resolver). Strategy/provider
+// impls live in services/ai and are injected via RuntimeBindings.
+export * from "./lib/capability-runtime";
+
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

@@ -3,7 +3,57 @@ import {
   capabilityOfTool,
   groupToolsIntoCapabilities,
   renderCapabilities,
+  classifyToolEffect,
+  routeCopilotTool,
 } from "../services/capabilities";
+
+describe("capabilities - classifyToolEffect (Copilot decision engine)", () => {
+  it("classifies safe read tools as 'read' (auto-runnable)", () => {
+    for (const t of [
+      "check_availability",
+      "get_contact",
+      "resolve_identity",
+      "hubspot.search_contacts",
+      "hubspot.get_contact",
+      "integration.zoho_crm.search_lead",
+      "list_recent_messages",
+      "salesforce.describe_fields",
+      "get_customer_orders",
+    ]) {
+      expect(classifyToolEffect(t)).toBe("read");
+    }
+  });
+
+  it("classifies customer-facing / mutating tools as 'action' (recommend-only)", () => {
+    for (const t of [
+      "schedule_meeting",
+      "reschedule_meeting",
+      "cancel_meeting",
+      "integration_create_lead",
+      "integration_create_deal",
+      "update_contact",
+      "hubspot.update_contact",
+      "issue_refund",
+      "send_message",
+      "create_task",
+      "close_conversation",
+      "escalate_to_human",
+      "wix.create_contact",
+    ]) {
+      expect(classifyToolEffect(t)).toBe("action");
+    }
+  });
+
+  it("is safe-biased: unknown / ambiguous names resolve to 'action'", () => {
+    expect(classifyToolEffect("frobnicate_widget")).toBe("action");
+    expect(classifyToolEffect("custom.do_the_thing")).toBe("action");
+    expect(classifyToolEffect("")).toBe("read"); // empty/terminator is inert
+  });
+
+  it("an action verb anywhere wins over a read verb (get_or_create → action)", () => {
+    expect(classifyToolEffect("get_or_create_contact")).toBe("action");
+  });
+});
 
 describe("capabilities - capabilityOfTool", () => {
   it("maps booking built-ins to CALENDAR", () => {
@@ -82,6 +132,51 @@ describe("capabilities - groupToolsIntoCapabilities", () => {
 
   it("empty surface → no groups", () => {
     expect(groupToolsIntoCapabilities([])).toEqual([]);
+  });
+});
+
+describe("capabilities - routeCopilotTool (execution eligibility, single source of truth)", () => {
+  it("submit_suggestions is a non-executing terminator", () => {
+    const r = routeCopilotTool("submit_suggestions");
+    expect(r).toEqual({ effect: "read", execute: false, executionMode: "none" });
+  });
+
+  it("READ tools auto-run in the background", () => {
+    for (const t of ["check_availability", "hubspot.search_contacts", "get_contact", "list_recent_messages"]) {
+      const r = routeCopilotTool(t);
+      expect(r.effect).toBe("read");
+      expect(r.execute).toBe(true);
+      expect(r.executionMode).toBe("background");
+    }
+  });
+
+  it("ACTION tools are recommend-only, never executed", () => {
+    for (const t of ["schedule_meeting", "integration_create_lead", "issue_refund", "update_contact", "send_message"]) {
+      const r = routeCopilotTool(t);
+      expect(r.effect).toBe("action");
+      expect(r.execute).toBe(false);
+      expect(r.executionMode).toBe("recommended");
+    }
+  });
+
+  it("is consistent with classifyToolEffect for every tool (no drift)", () => {
+    for (const t of [
+      "check_availability", "schedule_meeting", "reschedule_meeting", "cancel_meeting",
+      "integration_create_lead", "create_task", "create_ticket", "update_contact",
+      "hubspot.search_contacts", "integration_shopify.get_order", "unknown.mystery_tool",
+    ]) {
+      const r = routeCopilotTool(t);
+      expect(r.effect).toBe(classifyToolEffect(t));
+      // execute IFF read; reads run in background, actions are recommended.
+      expect(r.execute).toBe(r.effect === "read");
+      expect(r.executionMode).toBe(r.effect === "read" ? "background" : "recommended");
+    }
+  });
+
+  it("ambiguous/unknown tools are recommend-only (safe-biased)", () => {
+    const r = routeCopilotTool("frobnicate_widget");
+    expect(r.effect).toBe("action");
+    expect(r.executionMode).toBe("recommended");
   });
 });
 

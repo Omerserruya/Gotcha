@@ -7,12 +7,14 @@ import type { AIProvider, ConversationContext, AISuggestion, IntentClassificatio
 import { retrieveRelevantChunks, buildKnowledgeContext } from "./knowledge.service";
 import { generateResponse, getDefaultModel } from "./ai.service";
 import { isAbortError } from "./turn-cancellation.service";
-import { prisma, buildAgentTools, buildAgentToolsForAIAgent, dispatchToolCall, publishEvent } from "@chatcenter/shared";
+import { prisma, dispatchToolCall, publishEvent } from "@chatcenter/shared";
 import type { AgentToolContext } from "@chatcenter/shared";
 import {
   buildAgentPrompt,
+  computeCurrentPlanForOpts,
   renderOutputContractInstruction,
   type AgentRecord,
+  type BuildPromptOpts,
   type ContextSlot,
 } from "./prompt-builder.service";
 import {
@@ -20,6 +22,27 @@ import {
   shouldRetrieveKB,
   type BehaviorState,
 } from "./behavior-engine.service";
+import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.service";
+import { assemblePlanContext, type AssembledPlanContext } from "./plan-context.service";
+import { routeCopilotTool } from "./capabilities";
+import { assembleCopilotToolSurface } from "./copilot-tool-surface.service";
+// CALENDAR capability execution — the ONE runtime pipeline, advisory mode. The
+// Copilot no longer has its own calendar execution logic.
+import { executeCalendarToolAdvisory, isCalendarTool } from "./capability-runtime/calendar.execute";
+import { preResolveCalendarRead } from "./capability-runtime/calendar.preresolve";
+import { createProdCalendarPort } from "./capability-runtime/calendar.port.prod";
+import { isCalendarRuntimeEnabled } from "./capability-runtime/flags";
+
+const copilotCalPort = createProdCalendarPort();
+import {
+  logCopilotPlan,
+  logCopilotTool,
+  plannerReasonForTool,
+  noToolDecision,
+  summarizeToolResult,
+  type CopilotDiagContext,
+} from "./copilot-diagnostics.service";
+import type { CrmStateFlags } from "./prospect-state";
 
 // Terminator tool - copilot uses this to "finish" with structured output.
 //
@@ -46,6 +69,14 @@ const SUBMIT_SUGGESTIONS_TOOL = {
     description:
       "Call this to FINISH and return your final suggestions to the human agent. " +
       "Call it exactly once, after you've used any read-only tools you need. " +
+      "Your suggestions MUST come from the Current Plan: each is a different way to take the plan's " +
+      "best next action toward the current goal. Offer DISTINCT variants — typically (1) the best " +
+      "recommendation, (2) a softer approach, (3) a more direct approach — not three rephrasings of one line. " +
+      "If you auto-ran read-only tools, WEAVE the retrieved facts into the replies (e.g. 'the calendar is open " +
+      "tomorrow at 11:00 and 14:00', 'the last order was 8 days ago') so the human doesn't have to look them up. " +
+      "If the plan's best move is a customer-facing ACTION (book / create / refund / send), do NOT perform it — " +
+      "recommend it to the human (an `action`-type suggestion) describing the action and why it advances the goal. " +
+      "If no tool is needed, say so plainly in your reply suggestions. " +
       "OPTIONAL: include `signals` ONLY when the customer's latest message contains a clearly " +
       "quotable phrase proving the signal. Default is empty. Never invent signals from tone.",
     parameters: {
@@ -53,13 +84,22 @@ const SUBMIT_SUGGESTIONS_TOOL = {
       properties: {
         suggestions: {
           type: "array",
-          description: "2–3 suggestions",
+          description: "2–3 plan-aligned suggestions, each a distinct approach to the goal",
           items: {
             type: "object",
             properties: {
               text: { type: "string" },
               confidence: { type: "number" },
               type: { type: "string", enum: ["reply", "action", "info"] },
+              approach: {
+                type: "string",
+                enum: ["best", "softer", "direct"],
+                description: "Which variant this is — keep the three distinct.",
+              },
+              rationale: {
+                type: "string",
+                description: "One short clause: why this move advances the current goal.",
+              },
             },
             required: ["text", "confidence", "type"],
           },
@@ -322,48 +362,130 @@ export class OpenAIProvider implements AIProvider {
         contactId = contact?.id;
       } catch { /* best-effort */ }
     }
+    const aiAgentId = context.conversationMeta?.aiAgentId;
+    const extIdForCal = context.conversationMeta?.customerExternalId;
+
+    // SURFACE PARITY: ONE shared builder resolves calendar capability + active
+    // booking and assembles the calendar-gated advisory tool surface — the exact
+    // SAME surface the CHAT Copilot path now consumes (no mirrored implementation).
+    // Without it the model can't run check_availability (and invents times) nor
+    // recommend a real schedule_meeting. READ tools auto-run (handler wired below);
+    // the decision-gate keeps ACTIONs recommend-only.
+    const surface = await assembleCopilotToolSurface({
+      tenantId: context.tenantId || "",
+      conversationId: context.conversationId,
+      aiAgentId,
+      contactId,
+      customerExternalId: extIdForCal,
+    });
+    const calendarBookable = surface.calendarBookable;
+    const hasActiveBooking = surface.hasActiveBooking;
+
     const toolCtx: AgentToolContext = {
       tenantId: context.tenantId || "",
       conversationId: context.conversationId,
       contactId,
       authToken: process.env.INTERNAL_SERVICE_TOKEN,
       mode: "copilot",
+      // check_availability is READ → the decision-gate lets it auto-run, so its
+      // handler must be wired. schedule/reschedule/cancel are ACTIONs the gate
+      // intercepts (recommend-only), so they need surface presence, not a handler.
+      checkAvailability: surface.checkAvailabilityHandler,
     };
 
-    const aiAgentId = context.conversationMeta?.aiAgentId;
-    let tools: any[] = [SUBMIT_SUGGESTIONS_TOOL];
-    if (aiAgentId && context.tenantId) {
-      try {
-        const surface = await buildAgentToolsForAIAgent(context.tenantId, aiAgentId, {
-          identityLinking: !!contactId,
-          escalation: false,
-          // Copilot is advisory - it must NOT close the conversation or
-          // schedule a follow-up on its own. Those are human-agent decisions.
-          // Leaving these on caused the LLM to fire close_conversation on
-          // casual copilot questions and bounce the chat into history.
-          closure: false,
-          followup: false,
-          allowedMode: "ASSIST",
-        });
-        tools = [SUBMIT_SUGGESTIONS_TOOL, ...surface];
-      } catch (err: any) {
-        console.warn("[copilot] Integration tool load failed:", err?.message);
+    // The terminator (submit_suggestions) is the ONLY thing the primary path adds
+    // on top of the shared surface; the CHAT path omits it (free text). Everything
+    // dispatchable is identical across both Copilot entry points.
+    const tools: any[] = [SUBMIT_SUGGESTIONS_TOOL, ...surface.tools];
+    const toolFunctionNames: string[] = tools
+      .map((t: any) => t?.function?.name)
+      .filter((n: any): n is string => typeof n === "string");
+    // ── SHARED BRAIN ──────────────────────────────────────────────────────
+    // Build the SAME Current Plan the AI Employee reasons over, so the Copilot's
+    // recommendation is driven by the identical goal / objective / next-action /
+    // capability engine (assemblePlanContext → computeCurrentPlan, via
+    // buildAgentPrompt). There is NO copilot-specific reasoning here — only the
+    // downstream EXECUTION differs (the Copilot recommends customer-facing actions
+    // to the human and auto-runs only safe reads).
+    let planCtx: AssembledPlanContext | undefined;
+    try {
+      let crmFlags: CrmStateFlags = { hasLead: false, hasContact: false };
+      const extId = context.conversationMeta?.customerExternalId;
+      if (context.tenantId && extId) {
+        const prefetch = await prefetchCrmContext(context.tenantId, context.conversationId, { externalId: extId });
+        if (prefetch) {
+          ctxSlot.crmBlock = renderCrmContextBlock(prefetch) || ctxSlot.crmBlock;
+          const hasLead = prefetch.leadMatches.length > 0;
+          crmFlags = {
+            hasLead,
+            hasContact: hasLead || prefetch.contactMatches.length > 0,
+            isCustomer: prefetch.contactMatches.length > 0,
+          };
+        }
       }
+      const planAgent = pickAgent(config) as any;
+      planCtx = await assemblePlanContext({
+        tenantId: context.tenantId || "",
+        conversationId: context.conversationId,
+        role: planAgent?.role || "agent",
+        agentId: aiAgentId ?? planAgent?.id ?? null,
+        goal: planAgent?.goal ?? null,
+        salesContext: planAgent?.salesContext,
+        customer: { channel: context.conversationMeta?.channel || "", externalId: extId },
+        crmFlags,
+        contextBlocks: { customerBlock: ctxSlot.customerBlock, crmBlock: ctxSlot.crmBlock },
+        messages: context.messages,
+        signal: context.signal,
+      });
+    } catch (err: any) {
+      console.warn("[copilot] plan context assembly failed (non-fatal):", err?.message);
     }
 
-    // Now that the tool surface is built, render the system prompt with the
-    // capability whitelist baked into the Execution Contract.
-    const toolFunctionNames: string[] = tools.map((t: any) => t?.function?.name).filter(
-      (n: any): n is string => typeof n === "string",
-    );
-    const systemPrompt = buildAgentPrompt({
+    const promptOpts: BuildPromptOpts = {
       behaviorState: copilotBehavior,
       agent: pickAgent(config),
       context: ctxSlot,
       knowledge: { block: kbBlock },
       toolFunctionNames,
-    });
+      toolCapabilityHints: planCtx?.toolCapabilityHints,
+      crm: planCtx?.crmFlags,
+      completedActionTools: planCtx?.completedActionTools,
+      priorGoal: planCtx?.priorGoal,
+      wizardFacts: planCtx?.wizardFacts,
+      calendarBookable,
+      hasActiveBooking,
+    };
+    const systemPrompt = buildAgentPrompt(promptOpts);
     const chatMessages = this.buildChatMessages(context, systemPrompt, copilotBehavior);
+
+    // ── DIAGNOSTICS ───────────────────────────────────────────────────────
+    // The EXACT plan the prompt rendered (same opts → same CurrentPlan), logged
+    // before the model reasons. `tools[]` below route through routeCopilotTool so
+    // every READ/ACTION/MISSING_INFORMATION decision is observable from stdout.
+    const diag: CopilotDiagContext = {
+      tenantId: context.tenantId,
+      conversationId: context.conversationId,
+      entry: "suggest",
+    };
+    const plan = computeCurrentPlanForOpts(promptOpts);
+    logCopilotPlan(plan, diag);
+
+    // PLANNER-OWNED EXECUTION (Runtime before LLM, ADVISORY): run the calendar
+    // READ now and inject the REAL open times so the Copilot drafts real options,
+    // never "I'll check". Same runtime call as the Employee — only the mode differs.
+    if (isCalendarRuntimeEnabled(context.tenantId || "") && plan) {
+      const pre = await preResolveCalendarRead({
+        objective: plan.currentObjective,
+        calendarBookable,
+        hasActiveBooking,
+        mode: "advisory",
+        context: { tenantId: context.tenantId || "", conversationId: context.conversationId, customerExternalId: extIdForCal ?? undefined, aiAgentId: aiAgentId ?? undefined },
+        port: copilotCalPort,
+      });
+      if (pre.block) chatMessages.push({ role: "system", content: pre.block } as any);
+    }
+
+    let dispatchedToolCount = 0;
 
     const quickActions: AISuggestion[] = [];
     let finalSuggestions: AISuggestion[] = [];
@@ -432,6 +554,82 @@ export class OpenAIProvider implements AIProvider {
             continue;
           }
 
+          // ── DECISION ENGINE ────────────────────────────────────────────
+          // The Copilot is not a tool caller; it decides WHO executes via the
+          // shared routeCopilotTool (single source of truth, also used by CHAT).
+          // Safe READ tools run automatically to enrich the suggestion. Customer-
+          // facing ACTIONS are NEVER executed here — they are surfaced to the
+          // human agent as a recommendation with the tool + args attached, and
+          // the model is told it was surfaced so it keeps drafting the reply.
+          dispatchedToolCount++;
+
+          // CALENDAR → the ONE runtime pipeline (ADVISORY): READ auto-runs and
+          // returns real facts; WRITE is recommended (never executed). No
+          // copilot-specific calendar logic remains — same pipeline as the
+          // employee, differing only in ExecutionMode.
+          if (isCalendarTool(toolName)) {
+            let calArgs: Record<string, unknown> = {};
+            try { calArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* {} */ }
+            const adv = await executeCalendarToolAdvisory({
+              toolName,
+              toolArgs: calArgs,
+              context: { tenantId: context.tenantId || "", conversationId: context.conversationId, customerExternalId: extIdForCal ?? undefined, aiAgentId: aiAgentId ?? undefined },
+              port: copilotCalPort,
+              plannerGoal: plan?.goal ?? undefined,
+            });
+            chatMessages.push({ role: "tool", tool_call_id: tc.id, content: adv.content } as any);
+            if (adv.quickAction) {
+              quickActions.push({
+                id: `quick-${quickActions.length}`,
+                text: humanizeQuickAction(adv.quickAction.tool, adv.quickAction.args),
+                confidence: 0.9,
+                type: "quick_action",
+                quickAction: adv.quickAction,
+              });
+            }
+            logCopilotTool({
+              decision: adv.quickAction ? "ACTION" : "READ",
+              plannerReason: plannerReasonForTool(plan, toolName),
+              tool: toolName,
+              executed: !adv.quickAction,
+              executionMode: adv.quickAction ? "recommended" : "background",
+              result: summarizeToolResult(adv.content),
+            }, diag);
+            continue;
+          }
+
+          const routing = routeCopilotTool(toolName);
+          if (routing.executionMode === "recommended") {
+            let qaArgs: Record<string, unknown> = {};
+            try { qaArgs = JSON.parse(tc.function?.arguments || "{}"); } catch { /* keep {} */ }
+            quickActions.push({
+              id: `quick-${quickActions.length}`,
+              text: humanizeQuickAction(toolName, qaArgs),
+              confidence: 0.9,
+              type: "quick_action",
+              quickAction: { tool: toolName, args: qaArgs, reason: "Recommended by Co-Pilot" },
+            });
+            chatMessages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({
+                ok: true,
+                recommended: true,
+                executed: false,
+                note: "Surfaced to the human agent as a recommended action — NOT executed by the Co-Pilot. Continue and write the suggested reply for the human to send.",
+              }),
+            } as any);
+            logCopilotTool({
+              decision: "ACTION",
+              plannerReason: plannerReasonForTool(plan, toolName),
+              tool: toolName,
+              executed: false,
+              executionMode: "recommended",
+              result: `recommended to human: ${humanizeQuickAction(toolName, qaArgs)}`,
+            }, diag);
+            continue;
+          }
+
           const res = await dispatchToolCall(
             { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
             toolCtx,
@@ -451,9 +649,23 @@ export class OpenAIProvider implements AIProvider {
             tool_call_id: res.toolCallId,
             content: res.content,
           } as any);
+          logCopilotTool({
+            decision: "READ",
+            plannerReason: plannerReasonForTool(plan, toolName),
+            tool: toolName,
+            executed: true,
+            executionMode: "background",
+            result: summarizeToolResult(res.content),
+          }, diag);
         }
 
         if (terminated) break;
+      }
+
+      // Turn-level decision when no READ/ACTION tool ran: a pure reply (NO_TOOL)
+      // or blocked on a required input the planner named (MISSING_INFORMATION).
+      if (dispatchedToolCount === 0) {
+        logCopilotTool(noToolDecision(plan), diag);
       }
 
       const out = [...finalSuggestions, ...quickActions];
@@ -643,29 +855,91 @@ export class OpenAIProvider implements AIProvider {
       });
       chatContactId = contact?.id;
     }
-    // Copilot CHAT - advisory to the human agent. Same gating as
-    // suggestResponse: NEVER expose close_conversation / schedule_followup /
-    // escalate_to_human. The agent asking the copilot a question must never
-    // cause a real side-effect on the conversation they already own - closing
-    // it, scheduling a follow-up, or escalating it. The human IS the human
-    // agent; escalation is their manual decision, not the copilot's.
-    const chatTools = buildAgentTools({
-      identityLinking: !!chatContactId,
-      escalation: false,
-      closure: false,
-      followup: false,
+    // ── SURFACE PARITY ────────────────────────────────────────────────────
+    // Copilot CHAT now consumes the EXACT same tool surface as the primary
+    // Copilot path — and the same calendar gating the AI Employee uses — via the
+    // ONE shared builder, instead of the old generic built-in-only surface that
+    // silently dropped the calendar tools and the check_availability handler.
+    // Advisory gating (no close / follow-up / escalate) is baked into the builder:
+    // the agent asking the copilot a question must never cause a real side-effect
+    // on the conversation they already own. No mirrored implementation remains.
+    const planAgent = pickAgent(config) as any;
+    const chatAgentId: string | null = planAgent?.id ?? null;
+    const surface = await assembleCopilotToolSurface({
+      tenantId: params.tenantId || "",
+      conversationId: params.conversationId,
+      aiAgentId: chatAgentId,
+      contactId: chatContactId,
+      customerExternalId: params.customerData?.externalId,
     });
-    const chatToolFnNames: string[] = chatTools
-      .map((t: any) => t?.function?.name)
-      .filter((n: any): n is string => typeof n === "string");
+    const chatTools = surface.tools;
+    const chatToolFnNames = surface.toolFunctionNames;
+    const calendarBookable = surface.calendarBookable;
+    const hasActiveBooking = surface.hasActiveBooking;
 
-    const systemPrompt = buildAgentPrompt({
+    // ── SHARED BRAIN ──────────────────────────────────────────────────────
+    // Copilot CHAT reasons over the SAME Current Plan as the AI Employee.
+    let planCtx: AssembledPlanContext | undefined;
+    try {
+      let crmFlags: CrmStateFlags = { hasLead: false, hasContact: false };
+      let crmBlock: string | undefined;
+      const extId = params.customerData?.externalId;
+      if (params.tenantId && extId) {
+        const prefetch = await prefetchCrmContext(params.tenantId, params.conversationId, { externalId: extId });
+        if (prefetch) {
+          crmBlock = renderCrmContextBlock(prefetch) || undefined;
+          const hasLead = prefetch.leadMatches.length > 0;
+          crmFlags = {
+            hasLead,
+            hasContact: hasLead || prefetch.contactMatches.length > 0,
+            isCustomer: prefetch.contactMatches.length > 0,
+          };
+        }
+      }
+      planCtx = await assemblePlanContext({
+        tenantId: params.tenantId || "",
+        conversationId: params.conversationId,
+        role: planAgent?.role || "agent",
+        agentId: chatAgentId,
+        goal: planAgent?.goal ?? null,
+        salesContext: planAgent?.salesContext,
+        customer: { channel: params.customerData?.channel || "", externalId: extId },
+        crmFlags,
+        contextBlocks: { customerBlock, crmBlock },
+        messages: params.messages,
+      });
+      if (crmBlock) customerBlock = [customerBlock, crmBlock].filter(Boolean).join("\n\n");
+    } catch (err: any) {
+      console.warn("[copilot-chat] plan context assembly failed (non-fatal):", err?.message);
+    }
+
+    const promptOpts: BuildPromptOpts = {
       behaviorState: chatBehavior,
       agent: pickAgent(config),
       context: { customerBlock, locale: params.locale },
       knowledge: { block: kbBlock },
       toolFunctionNames: chatToolFnNames,
-    });
+      toolCapabilityHints: planCtx?.toolCapabilityHints,
+      crm: planCtx?.crmFlags,
+      completedActionTools: planCtx?.completedActionTools,
+      priorGoal: planCtx?.priorGoal,
+      wizardFacts: planCtx?.wizardFacts,
+      calendarBookable,
+      hasActiveBooking,
+    };
+    const systemPrompt = buildAgentPrompt(promptOpts);
+
+    // ── DIAGNOSTICS ───────────────────────────────────────────────────────
+    // Same observability as the primary path: log the EXACT plan the prompt
+    // rendered, then route every tool call through routeCopilotTool below.
+    const diag: CopilotDiagContext = {
+      tenantId: params.tenantId,
+      conversationId: params.conversationId,
+      entry: "chat",
+    };
+    const plan = computeCurrentPlanForOpts(promptOpts);
+    logCopilotPlan(plan, diag);
+    let dispatchedToolCount = 0;
 
     const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
       { role: "system", content: systemPrompt },
@@ -691,12 +965,30 @@ export class OpenAIProvider implements AIProvider {
 
     messages.push({ role: "user", content: params.agentMessage });
 
-    // contactId + tools were computed above for the capability whitelist.
+    // PLANNER-OWNED EXECUTION (Runtime before LLM, ADVISORY) — identical to suggest.
+    if (isCalendarRuntimeEnabled(params.tenantId || "") && plan) {
+      const pre = await preResolveCalendarRead({
+        objective: plan.currentObjective,
+        calendarBookable,
+        hasActiveBooking,
+        mode: "advisory",
+        context: { tenantId: params.tenantId || "", conversationId: params.conversationId, customerExternalId: params.customerData?.externalId ?? undefined, aiAgentId: chatAgentId ?? undefined },
+        port: copilotCalPort,
+      });
+      if (pre.block) messages.push({ role: "system", content: pre.block });
+    }
+
+    // contactId + tools were computed above for the capability whitelist. mode +
+    // the check_availability READ handler mirror the primary path exactly, so the
+    // CHAT Copilot auto-runs availability checks (never inventing times) and routes
+    // gate decisions through the same copilot side-effect path.
     const toolCtx: AgentToolContext = {
       tenantId: params.tenantId || "",
       conversationId: params.conversationId,
       contactId: chatContactId,
       authToken: process.env.INTERNAL_SERVICE_TOKEN,
+      mode: "copilot",
+      checkAvailability: surface.checkAvailabilityHandler,
     };
     const tools = chatTools;
 
@@ -715,6 +1007,9 @@ export class OpenAIProvider implements AIProvider {
 
         const toolCalls = result.toolCalls;
         if (!toolCalls || toolCalls.length === 0) {
+          // Turn-level decision when no READ/ACTION tool ran: pure reply (NO_TOOL)
+          // or blocked on a planner-named required input (MISSING_INFORMATION).
+          if (dispatchedToolCount === 0) logCopilotTool(noToolDecision(plan), diag);
           return result.content || "I couldn't generate a response. Please try again.";
         }
 
@@ -725,8 +1020,59 @@ export class OpenAIProvider implements AIProvider {
         } as any);
 
         for (const tc of toolCalls) {
+          // DECISION ENGINE: identical to the primary path — route through the
+          // shared routeCopilotTool. Safe READ tools auto-run; customer-facing
+          // ACTIONS are recommended to the human, never executed.
+          const toolName = tc.function?.name || "";
+          dispatchedToolCount++;
+
+          // CALENDAR → the ONE runtime pipeline (ADVISORY), identical to suggest.
+          if (isCalendarTool(toolName)) {
+            let calArgs: Record<string, unknown> = {};
+            try { calArgs = JSON.parse(tc.function.arguments || "{}"); } catch { /* {} */ }
+            const adv = await executeCalendarToolAdvisory({
+              toolName,
+              toolArgs: calArgs,
+              context: { tenantId: params.tenantId || "", conversationId: params.conversationId, customerExternalId: params.customerData?.externalId ?? undefined, aiAgentId: chatAgentId ?? undefined },
+              port: copilotCalPort,
+              plannerGoal: plan?.goal ?? undefined,
+            });
+            messages.push({ role: "tool", tool_call_id: tc.id, content: adv.content } as any);
+            logCopilotTool({
+              decision: adv.quickAction ? "ACTION" : "READ",
+              plannerReason: plannerReasonForTool(plan, toolName),
+              tool: toolName,
+              executed: !adv.quickAction,
+              executionMode: adv.quickAction ? "recommended" : "background",
+              result: summarizeToolResult(adv.content),
+            }, diag);
+            continue;
+          }
+
+          const routing = routeCopilotTool(toolName);
+          if (routing.executionMode === "recommended") {
+            messages.push({
+              role: "tool",
+              tool_call_id: tc.id,
+              content: JSON.stringify({
+                ok: true,
+                recommended: true,
+                executed: false,
+                note: "Surfaced to the human agent as a recommended action — NOT executed by the Co-Pilot. Tell the agent you recommend this action and why it advances the goal.",
+              }),
+            } as any);
+            logCopilotTool({
+              decision: "ACTION",
+              plannerReason: plannerReasonForTool(plan, toolName),
+              tool: toolName,
+              executed: false,
+              executionMode: "recommended",
+              result: "recommended to human (not executed)",
+            }, diag);
+            continue;
+          }
           const res = await dispatchToolCall(
-            { id: tc.id, function: { name: tc.function.name, arguments: tc.function.arguments } },
+            { id: tc.id, function: { name: toolName, arguments: tc.function.arguments } },
             toolCtx,
           );
           messages.push({
@@ -734,6 +1080,14 @@ export class OpenAIProvider implements AIProvider {
             tool_call_id: res.toolCallId,
             content: res.content,
           } as any);
+          logCopilotTool({
+            decision: "READ",
+            plannerReason: plannerReasonForTool(plan, toolName),
+            tool: toolName,
+            executed: true,
+            executionMode: "background",
+            result: summarizeToolResult(res.content),
+          }, diag);
         }
       }
       return "I couldn't finalize a response after using tools. Please try again.";

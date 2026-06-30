@@ -224,6 +224,11 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
+      # ── Capability Runtime (Calendar pilot): 3C cutover + 3B shadow. Off unless set. ──
+      CAPABILITY_RUNTIME_CALENDAR: ${CAPABILITY_RUNTIME_CALENDAR:-}
+      CAPABILITY_RUNTIME_CALENDAR_TENANTS: ${CAPABILITY_RUNTIME_CALENDAR_TENANTS:-}
+      CAPABILITY_RUNTIME_SHADOW: ${CAPABILITY_RUNTIME_SHADOW:-}
+      CAPABILITY_RUNTIME_SHADOW_TENANTS: ${CAPABILITY_RUNTIME_SHADOW_TENANTS:-}
       # Set OPENAI_LOG=debug to log the FULL outbound OpenAI request (system
       # prompt + messages + tool schemas) and response to stdout. Off by default.
       OPENAI_LOG: ${OPENAI_LOG:-}

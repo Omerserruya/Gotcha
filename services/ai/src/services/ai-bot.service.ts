@@ -44,10 +44,22 @@ import { resolveActiveStage } from "./intelligence/stage-resolver.service";
 import type { StageContextForPrompt } from "./intelligence/prompts/blocks/copilot-config-block";
 import {
   buildAgentPrompt,
+  computeCurrentPlanForOpts,
   renderOutputContractInstruction,
   type AgentRecord,
+  type BuildPromptOpts,
   type ContextSlot,
 } from "./prompt-builder.service";
+// ── Capability Runtime shadow (Slice 3B): env-gated, per-tenant, fire-and-forget,
+//    advisory-only, main-loop-only. Never affects the live turn. ──
+import { shadowCompareCalendar } from "./capability-runtime/calendar.shadow";
+import { executeCalendarToolViaRuntime } from "./capability-runtime/calendar.execute";
+import { preResolveCalendarRead } from "./capability-runtime/calendar.preresolve";
+import { createProdCalendarPort } from "./capability-runtime/calendar.port.prod";
+import { isCalendarRuntimeEnabled, isCalendarShadowEnabled } from "./capability-runtime/flags";
+
+const SHADOW_CALENDAR_TOOLS = /^(check_availability|schedule_meeting|reschedule_meeting|cancel_meeting)$/;
+const shadowProdPort = createProdCalendarPort();
 import {
   computeBehaviorState,
   shouldRetrieveKB,
@@ -71,7 +83,6 @@ import {
   hasViableAdvancingAction,
   guaranteedBackgroundActions,
   isCreationToolAllowed,
-  type WizardRuntimeFacts,
   EMPTY_WIZARD_FACTS,
   isPassiveCloser,
   isNonAdvancingReply,
@@ -85,7 +96,7 @@ import {
   buildGoalPendingCorrective,
 } from "./goal-evaluator";
 import { groupToolsIntoCapabilities } from "./capabilities";
-import { evaluateWizardBinding } from "./wizard-binding.service";
+import { assemblePlanContext } from "./plan-context.service";
 import { roleToSkill, requiredKnowledgeFor } from "./skills";
 import { computeKnowledgeLedger } from "./knowledge-ledger";
 import {
@@ -400,141 +411,9 @@ async function evaluateEscalationGates(opts: {
 // tool that merely DISPATCHED from one that actually SUCCEEDED.
 const TOOL_OK_RE = /"ok"\s*:\s*true/;
 
-/**
- * Action tools that have actually SUCCEEDED earlier in this conversation
- * (cross-turn). Reads the audit trail the bot already writes per tool call
- * (`ai.tool_call.<tool>` with decision="executed" AND an ok:true result). Drives
- * the Objective Engine's action-complete check so e.g. BOOK_MEETING stays the
- * active objective until schedule_meeting truly landed. Fail-soft → [].
- */
-async function loadCommittedActionTools(tenantId: string, conversationId: string): Promise<string[]> {
-  try {
-    // Read the per-turn `ai.bot_turn` audits' toolCalls[] (NOT the per-tool
-    // `ai.tool_call.X` rows): the bot_turn log captures EVERY execution including
-    // tools that ran on a retry/regen path (decision="executed_on_retry"), which
-    // the per-tool audit misses. A booking that landed on retry must still count
-    // as committed, or BOOK_MEETING would re-activate next turn and double-book.
-    const rows = await prisma.auditLog.findMany({
-      where: { tenantId, targetId: conversationId, action: "ai.bot_turn" },
-      select: { metadata: true },
-      orderBy: { createdAt: "desc" },
-      take: 50,
-    });
-    const out = new Set<string>();
-    for (const r of rows) {
-      const calls = (r.metadata as any)?.toolCalls;
-      if (!Array.isArray(calls)) continue;
-      for (const c of calls) {
-        const decision = String(c?.decision ?? "");
-        if ((decision === "executed" || decision === "executed_on_retry") && TOOL_OK_RE.test(String(c?.result ?? ""))) {
-          const tool = String(c?.tool ?? "");
-          if (tool) out.add(tool);
-        }
-      }
-    }
-    return [...out];
-  } catch (err: any) {
-    console.warn("[ai-bot] committed-action-tools load failed (non-fatal):", err?.message);
-    return [];
-  }
-}
-
-/**
- * GOAL OWNERSHIP (Unit A). Reload the goal the agent committed to on the most
- * recent turn from the `ai.bot_turn` audit metadata (`activeGoal`). Lets
- * `commitObjective` carry the objective across turns so a transient fact loss
- * can't regress it. Fail-soft → null (stateless first-incomplete selection).
- */
-/**
- * Build the toolName → Integration.category map for the Capability Layer, so
- * integration tools group under their real domain (CRM, HELPDESK, …) instead of
- * the CUSTOM fallback. Generic + data-driven: read straight from
- * AgentToolPermission → CatalogTool → Integration.category. Built-ins don't need
- * a hint (they carry their own capability). Fail-soft → {} (built-in grouping
- * still works). Integration tools are surfaced as `integration_<slug>`.
- */
-async function loadToolCapabilityHints(
-  tenantId: string,
-  aiAgentId: string | null | undefined,
-): Promise<Record<string, string>> {
-  if (!aiAgentId) return {};
-  try {
-    const rows: any[] = await (prisma as any).agentToolPermission.findMany({
-      where: { tenantId, aiAgentId, isAllowed: true },
-      select: {
-        tenantTool: {
-          select: { catalogTool: { select: { slug: true, integration: { select: { category: true } } } } },
-        },
-      },
-    });
-    const hints: Record<string, string> = {};
-    for (const r of rows) {
-      const ct = r?.tenantTool?.catalogTool;
-      const cat = ct?.integration?.category;
-      if (ct?.slug && cat) hints[`integration_${ct.slug}`] = String(cat);
-    }
-    return hints;
-  } catch (err: any) {
-    console.warn("[ai-bot] loadToolCapabilityHints failed (non-fatal):", err?.message);
-    return {};
-  }
-}
-
-async function loadCommittedGoal(
-  tenantId: string,
-  conversationId: string,
-  // PER-CUSTOMER GOAL CONTINUITY: a goal belongs to the relationship, not the
-  // thread. When the customer's identity is known, resume the most recent
-  // meaningful goal across ALL their conversations so a returning customer in a
-  // NEW conversation picks up where they left off instead of restarting. Falls
-  // back to the current conversation when identity is absent. Bounded by a
-  // recency window so a months-old goal doesn't haunt a fresh intent.
-  customer?: { channel: string; externalId: string | null | undefined },
-): Promise<ActiveGoalSnapshot | null> {
-  try {
-    let conversationIds: string[] = [conversationId];
-    if (customer?.externalId) {
-      const RESUME_WINDOW_DAYS = 14;
-      const since = new Date(Date.now() - RESUME_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-      const convs = await prisma.conversation.findMany({
-        where: {
-          tenantId,
-          channel: customer.channel as any,
-          customerExternalId: customer.externalId,
-          updatedAt: { gte: since },
-        },
-        select: { id: true },
-        orderBy: { lastMessageAt: "desc" },
-        take: 20,
-      });
-      conversationIds = [...new Set([conversationId, ...convs.map((c) => c.id)])];
-    }
-    // Latest turns across the customer's conversations; pick the most recent one
-    // that actually carries a committed goal (a completed-then-empty turn has
-    // none — keep looking back so we resume the last MEANINGFUL goal).
-    const rows = await prisma.auditLog.findMany({
-      where: { tenantId, targetId: { in: conversationIds }, action: "ai.bot_turn" },
-      select: { metadata: true },
-      orderBy: { createdAt: "desc" },
-      take: 10,
-    });
-    for (const row of rows) {
-      const g = (row?.metadata as any)?.activeGoal;
-      if (!g || typeof g !== "object" || typeof g.objectiveId !== "string") continue;
-      return {
-        objectiveId: g.objectiveId,
-        stepIndex: Number.isFinite(g.stepIndex) ? g.stepIndex : 0,
-        achieved: Array.isArray(g.achieved) ? g.achieved.map(String) : [],
-        missingRequired: Array.isArray(g.missingRequired) ? g.missingRequired.map(String) : [],
-        stalledTurns: Number.isFinite(g.stalledTurns) ? g.stalledTurns : 0,
-      };
-    }
-    return null;
-  } catch (err: any) {
-    console.warn("[ai-bot] committed-goal load failed (non-fatal):", err?.message);
-    return null;
-  }
-}
+// loadCommittedActionTools, loadCommittedGoal and loadToolCapabilityHints now
+// live in plan-context.service.ts (assemblePlanContext) — the single source of
+// truth shared by the AI Employee and the AI Copilot.
 
 /**
  * Filter the LLM tool surface using ONLY `state.allowedActions`. The BEL
@@ -2010,44 +1889,32 @@ async function generateAIBotReplyInner(
     isCustomer: crmHasCustomer,
   };
 
-  // Cross-turn action completion - which action tools already SUCCEEDED in this
-  // conversation. Drives the Objective Engine's action-complete check so an
-  // action-mandatory objective (BOOK_MEETING) stays active (and the resolver
-  // keeps surfacing "call the tool now") until the action actually landed.
-  const committedActionTools = await loadCommittedActionTools(opts.tenantId, opts.conversationId);
-  // GOAL OWNERSHIP (Unit A): the goal committed last turn, carried into both the
-  // prompt-side objective view and the post-turn decision/persist below.
-  const priorGoal = await loadCommittedGoal(opts.tenantId, opts.conversationId, {
-    channel: conversation.channel,
-    externalId: conversation.customerExternalId,
-  });
-
-  // WIZARD → RUNTIME BINDING: the single structured evaluation step. Converts the
-  // agent's free-text config (goal, ICP, qualification signals, disqualifiers)
-  // + this conversation into typed facts the objective engine / readiness /
-  // recovery / prioritization consume. One judgment call per turn; skipped (no
-  // cost) when the agent has no bindable config; fail-safe to EMPTY facts.
-  const wizardTranscript = [
-    ctxSlot.customerBlock,
-    ctxSlot.crmBlock,
-    ctxSlot.memoryBlock,
-    ctxSlot.sessionFactsBlock,
-    ...messages
-      .filter((m) => m.body?.trim())
-      .slice(-12)
-      .map((m) => `${m.direction === "INBOUND" ? "Customer" : "Agent"}: ${m.body}`),
-  ]
-    .filter((s): s is string => !!s && !!s.trim())
-    .join("\n");
-  const wizardFacts: WizardRuntimeFacts = await evaluateWizardBinding({
+  // SHARED BRAIN: assemble the per-turn plan context ONCE. The AI Employee (here)
+  // and the AI Copilot both call assemblePlanContext, so the objective engine sees
+  // identical inputs → an identical Current Plan. Execution mode is the only
+  // difference (the Employee acts; the Copilot recommends). See plan-context.service.
+  const planContext = await assemblePlanContext({
     tenantId: opts.tenantId,
     conversationId: opts.conversationId,
     role: config.role,
+    agentId: config.id,
     goal: (config as any).goal ?? null,
     salesContext: config.salesContext,
-    transcript: wizardTranscript,
+    customer: { channel: conversation.channel, externalId: conversation.customerExternalId },
+    crmFlags,
+    contextBlocks: {
+      customerBlock: ctxSlot.customerBlock,
+      crmBlock: ctxSlot.crmBlock,
+      memoryBlock: ctxSlot.memoryBlock,
+      sessionFactsBlock: ctxSlot.sessionFactsBlock,
+    },
+    messages,
     signal,
   });
+  const committedActionTools = planContext.completedActionTools;
+  const priorGoal = planContext.priorGoal;
+  const wizardFacts = planContext.wizardFacts;
+  const toolCapabilityHints = planContext.toolCapabilityHints;
 
   // OUTCOME QUALITY > DATA COLLECTION (role-agnostic): don't let the model create
   // records (lead/contact/deal/opportunity/ticket/case/…) unless creation is
@@ -2067,11 +1934,7 @@ async function generateAIBotReplyInner(
     .map((t) => t?.function?.name)
     .filter((n): n is string => typeof n === "string");
 
-  // Capability Layer hints: integration tool → Integration.category, so the
-  // Current Plan groups them by their real domain (not the CUSTOM fallback).
-  const toolCapabilityHints = await loadToolCapabilityHints(opts.tenantId, config.id);
-
-  const systemPrompt = buildAgentPrompt({
+  const promptOpts: BuildPromptOpts = {
     behaviorState,
     agent: toAgentRecord(config),
     context: ctxSlot,
@@ -2086,7 +1949,22 @@ async function generateAIBotReplyInner(
     priorGoal,
     wizardFacts,
     company: companyContext ?? undefined,
-  });
+  };
+  const systemPrompt = buildAgentPrompt(promptOpts);
+
+  // ── Shadow (3B) per-turn correlation + planner goal. shadowTurnId is minted
+  //    every turn (so the legacy audit carries a join key regardless); the planner
+  //    goal is computed ONCE and only when shadow is enabled (zero cost otherwise).
+  const shadowOn = isCalendarShadowEnabled(opts.tenantId);
+  const calRuntimeOn = isCalendarRuntimeEnabled(opts.tenantId);
+  const shadowTurnId = randomUUID();
+  // Compute the SAME CurrentPlan the prompt rendered, once, when the runtime is
+  // engaged — it drives both the shadow correlation and the planner-owned
+  // pre-LLM calendar execution below.
+  const runtimePlan = (calRuntimeOn || shadowOn)
+    ? (() => { try { return computeCurrentPlanForOpts(promptOpts); } catch { return null; } })()
+    : null;
+  const shadowPlannerGoal: string | undefined = runtimePlan?.goal ?? undefined;
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
   // The output-contract instruction is now rendered inside the per-turn
@@ -2120,6 +1998,29 @@ async function generateAIBotReplyInner(
         `If they want to CANCEL it, call cancel_meeting. ` +
         `NEVER call schedule_meeting again for this customer — that creates a DUPLICATE event.`,
     });
+  }
+
+  // ── PLANNER-OWNED EXECUTION (Runtime before LLM) ──────────────────────
+  // When the planner's goal is to book a meeting, the Capability Runtime runs the
+  // calendar READ now (AUTONOMOUS) and injects the REAL open times as authoritative
+  // facts. The model receives data, not a tool to invoke — so it can never narrate
+  // "I'll check availability". Fail-soft; only when the calendar capability is on.
+  if (calRuntimeOn && runtimePlan) {
+    const pre = await preResolveCalendarRead({
+      objective: runtimePlan.currentObjective,
+      calendarBookable: calendarCapability.bookable,
+      hasActiveBooking: hasExistingBooking,
+      mode: "autonomous",
+      context: {
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        customerExternalId: conversation.customerExternalId ?? undefined,
+        customerEmail: contactRow?.email ?? undefined,
+        aiAgentId: config.id,
+      },
+      port: shadowProdPort,
+    });
+    if (pre.block) chatMessages.push({ role: "system", content: pre.block });
   }
 
   const model = config.model || getDefaultModel();
@@ -2402,11 +2303,31 @@ async function generateAIBotReplyInner(
             rationale: "ai-bot inbox tool call",
             urgency: "low",
           },
+          // 3C CUTOVER: when the Calendar capability runtime is enabled for this
+          // tenant, calendar tools execute through the Capability Runtime; every
+          // other tool (and every tenant without the flag) takes the legacy path.
+          // Both branches return an AgentToolDispatchResult, so the orchestrator
+          // still owns idempotency / HITL approval / ledger / audit unchanged.
           () =>
-            dispatchToolCall(
-              { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
-              agentToolCtx,
-            ),
+            calRuntimeOn && SHADOW_CALENDAR_TOOLS.test(toolName)
+              ? executeCalendarToolViaRuntime({
+                  toolName,
+                  toolArgs,
+                  toolCallId: tc.id,
+                  context: {
+                    tenantId: opts.tenantId,
+                    conversationId: opts.conversationId,
+                    customerExternalId: conversation.customerExternalId ?? undefined,
+                    customerEmail: contactRow?.email ?? undefined,
+                    aiAgentId: config.id,
+                  },
+                  port: shadowProdPort,
+                  plannerGoal: shadowPlannerGoal,
+                })
+              : dispatchToolCall(
+                  { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+                  agentToolCtx,
+                ),
           { ledger, ctx: ledgerCtx, idempotency: true },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
@@ -2451,6 +2372,9 @@ async function generateAIBotReplyInner(
               decision: sideEffectType || "executed",
               result: result.content.slice(0, 500),
               source: "ai_bot",
+              // Capability Runtime shadow join keys (Conversation→Turn→ToolCall).
+              turnId: shadowTurnId,
+              toolCallId: tc.id,
             },
           },
         }).catch((err: any) => console.error(`[ai-bot] Tool call audit failed for ${toolName}:`, err.message));
@@ -2500,6 +2424,34 @@ async function generateAIBotReplyInner(
           tool_call_id: result.toolCallId,
           content: result.content,
         });
+
+        // ── 3B SHADOW: env-gated, per-tenant, fire-and-forget, advisory, MAIN LOOP ONLY.
+        //    Runs the Capability Runtime alongside the legacy result and logs a JSON
+        //    ShadowComparison joined by correlationId. Advisory → never executes a write;
+        //    never affects this turn (shadowCompareCalendar also never throws). ──
+        if (shadowOn && !calRuntimeOn && SHADOW_CALENDAR_TOOLS.test(toolName)) {
+          void shadowCompareCalendar({
+            legacyTool: toolName,
+            legacyArgs: toolArgs,
+            legacyResult: result.content,
+            context: {
+              tenantId: opts.tenantId,
+              conversationId: opts.conversationId,
+              customerExternalId: conversation.customerExternalId ?? undefined,
+              customerEmail: contactRow?.email ?? undefined,
+              aiAgentId: config.id,
+            },
+            correlation: {
+              tenantId: opts.tenantId,
+              conversationId: opts.conversationId,
+              turnId: shadowTurnId,
+              toolCallId: tc.id,
+              correlationId: `${opts.conversationId}:${shadowTurnId}:${tc.id}`,
+            },
+            plannerGoal: shadowPlannerGoal,
+            port: shadowProdPort,
+          }).catch(() => { /* shadow must never affect the live turn */ });
+        }
       }
 
       // Ledger-driven: once a side effect has committed, inject the

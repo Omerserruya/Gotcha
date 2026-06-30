@@ -185,6 +185,103 @@ export function capabilityOfTool(name: string, hints?: Record<string, string>): 
 }
 
 /**
+ * A tool's EXECUTION EFFECT, independent of role:
+ *   - "read"   : a safe, side-effect-free retrieval (search/get/list/check/…).
+ *   - "action" : a customer-facing or state-mutating operation (book/create/
+ *                refund/send/update/…).
+ *
+ * This is the primitive the AI Copilot uses to decide WHO executes: it may
+ * auto-run "read" tools in the background to enrich a recommendation, but it
+ * must only RECOMMEND "action" tools to the human (never fire them). The AI
+ * Employee ignores this split (it executes both) — same brain, different mode.
+ *
+ * Classification is by naming convention + a small known-tool table, biased to
+ * SAFETY: anything ambiguous or unrecognized is treated as "action" so the
+ * Copilot never auto-executes something customer-facing by mistake.
+ */
+export type ToolEffect = "read" | "action";
+
+const KNOWN_READ_TOOLS = new Set<string>([
+  "check_availability",
+  "get_contact",
+  "resolve_identity",
+  "list_recent_messages",
+  "get_conversation",
+  "list_workflows",
+  "preview_broadcast",
+]);
+
+const KNOWN_ACTION_TOOLS = new Set<string>([
+  "schedule_meeting", "reschedule_meeting", "cancel_meeting",
+  "integration_create_lead", "integration_create_contact", "integration_create_deal",
+  "create_task", "create_ticket", "update_contact", "update_crm", "tag_contact",
+  "merge_contacts", "link_customer_identifier", "send_message",
+  "schedule_followup", "schedule_followup_template", "generate_followup",
+  "create_broadcast", "schedule_broadcast", "create_workflow",
+  "issue_refund", "refund", "apply_discount", "close_conversation", "escalate_to_human",
+]);
+
+// Verb at a name boundary (`get_x`, `hubspot.search_y`, `x.list`). ACTION is
+// checked FIRST: a name that carries any mutating verb is an action even if it
+// also reads (e.g. `get_or_create`).
+const ACTION_VERB_RE =
+  /(^|[._])(create|update|delete|remove|send|schedule|book|reschedule|cancel|refund|issue|charge|pay|merge|close|escalate|tag|link|apply|assign|move|convert|generate|post|set|sync|upsert)([._]|$)/i;
+const READ_VERB_RE =
+  /(^|[._])(get|list|search|find|lookup|read|fetch|describe|retrieve|check|view|query|resolve|preview|count|history)([._]|$)/i;
+
+/**
+ * Classify a tool by execution effect. Pure; never throws. Safe-biased: unknown
+ * or ambiguous tools resolve to "action" (the Copilot will recommend, not run).
+ */
+export function classifyToolEffect(name: string): ToolEffect {
+  if (!name || name === "submit_suggestions") return "read";
+  if (KNOWN_ACTION_TOOLS.has(name)) return "action";
+  if (KNOWN_READ_TOOLS.has(name)) return "read";
+  if (ACTION_VERB_RE.test(name)) return "action";
+  if (READ_VERB_RE.test(name)) return "read";
+  return "action";
+}
+
+/** How the Copilot may run a tool this turn (the EXECUTION-ELIGIBILITY decision). */
+export type CopilotExecutionMode = "background" | "recommended" | "none";
+
+export interface CopilotToolRouting {
+  /** Effect classification (read = safe retrieval, action = state-mutating). */
+  effect: ToolEffect;
+  /** Does the Copilot auto-execute this tool itself? Only safe reads do. */
+  execute: boolean;
+  /**
+   * - `background`  : auto-run silently to enrich the recommendation (reads).
+   * - `recommended` : surfaced to the human as a recommended action, NOT run.
+   * - `none`        : terminator / non-executing (submit_suggestions).
+   */
+  executionMode: CopilotExecutionMode;
+}
+
+/**
+ * The SINGLE source of truth for Copilot execution eligibility, derived purely
+ * from `classifyToolEffect`. Both Copilot paths (suggestResponse + chatWithAgent)
+ * route EVERY model-invoked tool through this — so "who executes" can never drift
+ * between the two entry points. The AI Employee ignores this split (it executes
+ * everything); same brain, different mode.
+ *
+ *   - `submit_suggestions` → terminator, never executes (executionMode "none").
+ *   - a READ tool          → the Copilot auto-runs it in the background.
+ *   - an ACTION tool       → the Copilot recommends it to the human, never runs it.
+ *
+ * Pure; never throws.
+ */
+export function routeCopilotTool(name: string): CopilotToolRouting {
+  if (!name || name === "submit_suggestions") {
+    return { effect: "read", execute: false, executionMode: "none" };
+  }
+  const effect = classifyToolEffect(name);
+  return effect === "read"
+    ? { effect, execute: true, executionMode: "background" }
+    : { effect, execute: false, executionMode: "recommended" };
+}
+
+/**
  * Group a turn's tool surface into capabilities. Pure, deterministic, never throws.
  * `hints` maps an integration tool name → its Integration.category (CRM, CALENDAR…)
  * — the orchestrator already has this when it builds the surface.

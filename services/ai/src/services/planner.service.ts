@@ -233,8 +233,16 @@ const ACTION_TAG: Record<NextActionKind, string> = {
  * objective/NBA sub-sections and the flat tool list. Reuses the exact imperative
  * action labels the model is already tuned to (from resolveNextActions).
  */
-export function renderCurrentPlan(plan: CurrentPlan): string {
-  const lines: string[] = ["# Current Plan (decide and ACT this turn)"];
+export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean }): string {
+  // `advisory` = the Copilot execution mode: SAME plan, but it recommends to the
+  // human instead of acting. Only the call-to-action phrasing changes; every fact
+  // (goal, situation, best action, candidates, why, capabilities) is identical.
+  const advisory = opts?.advisory === true;
+  const lines: string[] = [
+    advisory
+      ? "# Current Plan (recommend the next move to the human agent — do NOT act yourself)"
+      : "# Current Plan (decide and ACT this turn)",
+  ];
 
   // ── No active objective to navigate → the GOAL STATUS (not the bare cursor)
   //    decides what to say. This is the decoupling: "no next step" no longer
@@ -341,7 +349,9 @@ export function renderCurrentPlan(plan: CurrentPlan): string {
     lines.push(`**Best next action → [${ACTION_TAG[b.kind]}]** ${b.label}`);
     lines.push(`_Why:_ ${b.rationale} _(confidence ${plan.confidence.toFixed(2)})_`);
     lines.push(
-      "Pick the ONE move that best fits what the customer just said and DO it this turn — call the tool or ask the one question. Prefer an [ACT]/[PROPOSE] over talking when you already have what you need.",
+      advisory
+        ? "This is the move to RECOMMEND. Draft reply options that take it — for an [ACT]/[PROPOSE] (book / create / refund / send), surface it as a recommended action with the details; for an [ASK], draft the one question. Never perform a customer-facing action yourself; the human sends it."
+        : "Pick the ONE move that best fits what the customer just said and DO it this turn — call the tool or ask the one question. Prefer an [ACT]/[PROPOSE] over talking when you already have what you need.",
     );
     const rest = plan.candidateActions.slice(1);
     if (rest.length > 0) {
