@@ -268,6 +268,18 @@ function ApprovalListCard({
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
           <RiskChip level={row.riskLevel} />
+          {Array.isArray(row.riskTags) && row.riskTags.length > 0 && (
+            <div className="flex flex-wrap justify-end gap-1 max-w-[160px]">
+              {row.riskTags.map((tag) => (
+                <span
+                  key={tag}
+                  className="text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded bg-red-50 text-red-500 ring-1 ring-red-100"
+                >
+                  {tag.replace(/_/g, " ").toLowerCase()}
+                </span>
+              ))}
+            </div>
+          )}
           {row.status !== "PENDING" && (
             <span
               className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 ${statusTone}`}

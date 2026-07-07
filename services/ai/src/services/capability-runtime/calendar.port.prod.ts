@@ -51,6 +51,16 @@ export function createProdCalendarPort(): CalendarPort {
       }));
     },
 
+    async agentTimezone(ctx) {
+      // The agent's timezone lives on its meeting types; take the first active one.
+      const mt = await (prisma as any).meetingType.findFirst({
+        where: { tenantId: ctx.tenantId, isActive: true },
+        select: { agentTimezone: true },
+        orderBy: { createdAt: "asc" },
+      });
+      return mt?.agentTimezone ?? null;
+    },
+
     async resolveMeetingKind(ctx, hint) {
       const rows: Array<{ slug: string; name: string; durationMinutes: number }> =
         await (prisma as any).meetingType.findMany({

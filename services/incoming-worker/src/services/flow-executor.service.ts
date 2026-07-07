@@ -25,7 +25,7 @@
  * RouterRule-list evaluator in routing.service.ts. That is the only escape hatch.
  */
 
-import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue } from "@chatcenter/shared";
+import { prisma, getOutboundAdapter, decryptCredentials, publishEvent, flowResumeQueue, describeSendError } from "@chatcenter/shared";
 import type { ChannelCredentials } from "@chatcenter/shared";
 import { processAIBot } from "./ai-bot.service";
 import { tryLinkIdentifierFromInbound } from "./identity-link.service";
@@ -599,13 +599,20 @@ async function walk(
         if (ctx.sendCtx && buttons.length > 0) {
           const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
           if (adapter) {
-            const extId = await adapter.sendInteractiveMessage(
-              ctx.sendCtx.credentials,
-              ctx.sendCtx.channelAccountExternalId,
-              ctx.sendCtx.recipientId,
-              body,
-              buttons,
-            );
+            let extId: string | null;
+            try {
+              extId = await adapter.sendInteractiveMessage(
+                ctx.sendCtx.credentials,
+                ctx.sendCtx.channelAccountExternalId,
+                ctx.sendCtx.recipientId,
+                body,
+                buttons,
+              );
+            } catch (err: any) {
+              const { sendError } = describeSendError(err, ctx.sendCtx.channel as any);
+              await persistOutbound(ctx, body, "interactive", null, { buttons, sendError });
+              throw err;
+            }
             await persistOutbound(ctx, body, "interactive", extId, { buttons });
           }
         }
@@ -1005,12 +1012,21 @@ async function sendText(
   if (!resolved || !resolved.trim() || !sendCtx) return;
   const adapter = getOutboundAdapter(sendCtx.channel as any);
   if (!adapter) return;
-  const extId = await adapter.sendTextMessage(
-    sendCtx.credentials,
-    sendCtx.channelAccountExternalId,
-    sendCtx.recipientId,
-    resolved,
-  );
+  let extId: string | null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendCtx.credentials,
+      sendCtx.channelAccountExternalId,
+      sendCtx.recipientId,
+      resolved,
+    );
+  } catch (err: any) {
+    // Persist a FAILED row with the full provider error before rethrowing, so
+    // the flow's history shows a diagnosable failure instead of a silent drop.
+    const { sendError } = describeSendError(err, sendCtx.channel as any);
+    await persistOutbound(ctx, resolved, "text", null, { sendError });
+    throw err;
+  }
   await persistOutbound(ctx, resolved, "text", extId);
 }
 
@@ -1028,15 +1044,22 @@ async function sendMedia(
   const adapter = getOutboundAdapter(ctx.sendCtx.channel as any);
   if (!adapter) return;
   if (adapter.sendMediaMessage) {
-    const extId = await adapter.sendMediaMessage(
-      ctx.sendCtx.credentials,
-      ctx.sendCtx.channelAccountExternalId,
-      ctx.sendCtx.recipientId,
-      resolvedUrl,
-      mediaType,
-      resolvedName,
-      resolvedCaption,
-    );
+    let extId: string | null;
+    try {
+      extId = await adapter.sendMediaMessage(
+        ctx.sendCtx.credentials,
+        ctx.sendCtx.channelAccountExternalId,
+        ctx.sendCtx.recipientId,
+        resolvedUrl,
+        mediaType,
+        resolvedName,
+        resolvedCaption,
+      );
+    } catch (err: any) {
+      const { sendError } = describeSendError(err, ctx.sendCtx.channel as any);
+      await persistOutbound(ctx, resolvedCaption || resolvedUrl, mediaType, null, { url: resolvedUrl, filename: resolvedName, sendError });
+      throw err;
+    }
     await persistOutbound(ctx, resolvedCaption || resolvedUrl, mediaType, extId, { url: resolvedUrl, filename: resolvedName });
     return;
   }
@@ -1255,15 +1278,16 @@ async function sendTemplate(data: Record<string, any>, ctx: FlowExecCtx): Promis
       components,
     );
   } catch (err: any) {
-    console.error(`${tag} fail name=${tmpl.name} err=${String(err?.message || err).slice(0, 200)}`);
+    const { sendError } = describeSendError(err, sendCtx.channel as any);
+    console.error(`${tag} fail name=${tmpl.name} err=${JSON.stringify(sendError)}`);
     // Persist a FAILED message row so the agent's history shows the attempt
-    // (and the failure reason) instead of silently dropping.
+    // (and the full provider error) instead of silently dropping.
     await persistOutbound(ctx, tmpl.body || tmpl.name, "template", null, {
       templateId: tmpl.id,
       templateName: tmpl.name,
       language: tmpl.language,
       components,
-      error: String(err?.message || err).slice(0, 500),
+      sendError,
     });
     return "failed";
   }
@@ -1288,6 +1312,11 @@ async function persistOutbound(
   // No sendCtx (or no conversation) → nothing to attach an outbound row to.
   // Context-free runs hit the first branch since they carry neither.
   if (!ctx.sendCtx || !ctx.conversationId) return;
+  // When a structured provider error rode in on metadata.sendError, lift its
+  // human summary into the errorMessage column so the failed row is diagnosable
+  // from the DB/UI (not just buried in the JSON blob).
+  const sendErrorMessage: string | undefined =
+    !extId && metadata?.sendError?.message ? String(metadata.sendError.message) : undefined;
   const m = await prisma.message.create({
     data: {
       tenantId: ctx.tenantId,
@@ -1299,6 +1328,7 @@ async function persistOutbound(
       senderName: "Flow",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
+      errorMessage: sendErrorMessage,
       metadata: metadata || {},
     } as any,
   });

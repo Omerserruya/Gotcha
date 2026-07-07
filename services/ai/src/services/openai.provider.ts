@@ -29,9 +29,7 @@ import { assembleCopilotToolSurface } from "./copilot-tool-surface.service";
 // CALENDAR capability execution — the ONE runtime pipeline, advisory mode. The
 // Copilot no longer has its own calendar execution logic.
 import { executeCalendarToolAdvisory, isCalendarTool } from "./capability-runtime/calendar.execute";
-import { preResolveCalendarRead } from "./capability-runtime/calendar.preresolve";
 import { createProdCalendarPort } from "./capability-runtime/calendar.port.prod";
-import { isCalendarRuntimeEnabled } from "./capability-runtime/flags";
 
 const copilotCalPort = createProdCalendarPort();
 import {
@@ -470,20 +468,6 @@ export class OpenAIProvider implements AIProvider {
     const plan = computeCurrentPlanForOpts(promptOpts);
     logCopilotPlan(plan, diag);
 
-    // PLANNER-OWNED EXECUTION (Runtime before LLM, ADVISORY): run the calendar
-    // READ now and inject the REAL open times so the Copilot drafts real options,
-    // never "I'll check". Same runtime call as the Employee — only the mode differs.
-    if (isCalendarRuntimeEnabled(context.tenantId || "") && plan) {
-      const pre = await preResolveCalendarRead({
-        objective: plan.currentObjective,
-        calendarBookable,
-        hasActiveBooking,
-        mode: "advisory",
-        context: { tenantId: context.tenantId || "", conversationId: context.conversationId, customerExternalId: extIdForCal ?? undefined, aiAgentId: aiAgentId ?? undefined },
-        port: copilotCalPort,
-      });
-      if (pre.block) chatMessages.push({ role: "system", content: pre.block } as any);
-    }
 
     let dispatchedToolCount = 0;
 
@@ -532,6 +516,10 @@ export class OpenAIProvider implements AIProvider {
                 text: typeof s === "string" ? s : (s.text || ""),
                 confidence: typeof s === "object" ? (s.confidence ?? 0.8) : 0.8,
                 type: (typeof s === "object" ? s.type : "reply") as AISuggestion["type"],
+                // The model already writes WHY each suggestion fits — carry it
+                // to the inbox instead of dropping it (owner-trust surface).
+                approach: typeof s === "object" && typeof s.approach === "string" ? s.approach : undefined,
+                rationale: typeof s === "object" && typeof s.rationale === "string" ? s.rationale : undefined,
               })).filter((s: AISuggestion) => s.text);
 
               // Persist intent-signal annotations on the latest inbound message
@@ -965,18 +953,6 @@ export class OpenAIProvider implements AIProvider {
 
     messages.push({ role: "user", content: params.agentMessage });
 
-    // PLANNER-OWNED EXECUTION (Runtime before LLM, ADVISORY) — identical to suggest.
-    if (isCalendarRuntimeEnabled(params.tenantId || "") && plan) {
-      const pre = await preResolveCalendarRead({
-        objective: plan.currentObjective,
-        calendarBookable,
-        hasActiveBooking,
-        mode: "advisory",
-        context: { tenantId: params.tenantId || "", conversationId: params.conversationId, customerExternalId: params.customerData?.externalId ?? undefined, aiAgentId: chatAgentId ?? undefined },
-        port: copilotCalPort,
-      });
-      if (pre.block) messages.push({ role: "system", content: pre.block });
-    }
 
     // contactId + tools were computed above for the capability whitelist. mode +
     // the check_availability READ handler mirror the primary path exactly, so the

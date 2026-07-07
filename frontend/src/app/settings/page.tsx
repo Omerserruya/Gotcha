@@ -369,6 +369,24 @@ export default function SettingsPage() {
 
       {languageCard}
 
+      {/* Billing & Subscription — plans, AI Units, payment method, invoices. */}
+      <a
+        href="/settings/billing"
+        className="group bg-white border border-gray-200 hover:border-emerald-300 hover:shadow-subtle rounded-2xl p-4 transition block"
+      >
+        <div className="flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
+            <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 6h16.5a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5v-9a1.5 1.5 0 011.5-1.5z" />
+            </svg>
+          </div>
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-semibold text-gray-900 group-hover:text-emerald-700">Billing &amp; Subscription</div>
+            <div className="text-xs text-gray-500">Plan, AI Units, payment method, auto-purchase, invoices.</div>
+          </div>
+        </div>
+      </a>
+
       {/* AI Guardrails - quick links to the F8 policy + F4 tool gate admin surfaces. */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <a

@@ -25,8 +25,9 @@ import {
   getOutboundAdapter,
   decryptCredentials,
   publishEvent,
+  describeSendError,
 } from "@chatcenter/shared";
-import type { ChannelCredentials } from "@chatcenter/shared";
+import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
@@ -91,18 +92,41 @@ export async function processAIBot(
   const sendContext = buildSendContext(conversation);
   if (!sendContext) return false;
 
+  // Enforce the agent's lifecycle status at dispatch. "Pause" must actually
+  // pause: a PAUSED employee hands the conversation to a human instead of
+  // silently continuing to answer; a DRAFT (or any non-ACTIVE) employee is
+  // never dispatched at all.
+  if (agentLite.status !== "ACTIVE") {
+    if (agentLite.status === "PAUSED") {
+      console.warn(`[AI-Bot] agent ${agentLite.id} is PAUSED - escalating conv=${conversationId} to human`);
+      await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+        case: "agent_paused",
+        summary: "The AI employee is paused, so the conversation was handed to a human.",
+      });
+      return true;
+    }
+    console.warn(`[AI-Bot] agent ${agentLite.id} status=${agentLite.status} - not dispatching conv=${conversationId}`);
+    return false;
+  }
+
   // Pre-check: hard limits set on the agent row. These are enforced by the
   // worker, not the AI service, because they're side-effect decisions
   // (escalate vs. continue) tied to the conversation's channel pipeline.
-  const shouldEscalate = await checkEscalationThresholds(conversationId, tenantId, agentLite, incomingMessage);
-  if (shouldEscalate) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
+  const escalationCase = await checkEscalationThresholds(conversationId, tenantId, agentLite, incomingMessage);
+  if (escalationCase) {
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+      case: escalationCase,
+      summary: "The AI reached its autonomy limit for this conversation.",
+    });
     return true;
   }
 
   // Pre-check: explicit human request - short-circuits the LLM call.
   if (isHumanRequest(incomingMessage)) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+      case: "customer_requested_human",
+      summary: "The customer explicitly asked for a person.",
+    });
     return true;
   }
 
@@ -141,7 +165,20 @@ export async function processAIBot(
       return false;
     }
     console.error("[AI-Bot] AI service /reply call failed:", err.response?.data || err.message);
-    return false;
+    // NEVER leave the customer in silence: an AI-service failure/timeout hands
+    // the conversation to a human with the warm handoff line. (The handoff
+    // copy generator also lives in the AI service - escalateToHuman already
+    // falls back to the agent's static escalationMessage when it's down.)
+    try {
+      await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+        case: "ai_service_failure",
+        summary: "The AI could not produce a reply (service error or timeout), so the conversation was handed to a human.",
+      });
+      return true;
+    } catch (escErr: any) {
+      console.error("[AI-Bot] failure-escalation also failed:", escErr?.message);
+      return false;
+    }
   }
 
   // Side-effect: pause for human approval. Don't reply - set state, audit,
@@ -254,7 +291,10 @@ export async function processAIBot(
 
   // Side-effect: model decided to escalate (via the escalate_to_human tool).
   if (result.escalation) {
-    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id);
+    await escalateToHuman(tenantId, conversationId, sendContext, agentLite.escalationMessage, agentLite.id, {
+      case: result.escalation.reason || "ai_decided",
+      summary: result.escalation.summary,
+    });
     return true;
   }
 
@@ -311,12 +351,27 @@ export async function processAIBot(
     await new Promise((resolve) => setTimeout(resolve, 900));
   }
 
-  const extId = await adapter.sendTextMessage(
-    sendContext.credentials,
-    sendContext.channelAccountExternalId,
-    sendContext.recipientId,
-    result.reply,
-  );
+  // Adapter throws on provider errors despite the `string | null` signature.
+  // A failed send must still persist the reply row as FAILED (visible in the
+  // inbox) instead of crashing the job into a retry loop with no record.
+  let extId: string | null = null;
+  let sendErrorDetail: ProviderSendError | null = null;
+  let sendErrorMessage: string | null = null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendContext.credentials,
+      sendContext.channelAccountExternalId,
+      sendContext.recipientId,
+      result.reply,
+    );
+  } catch (err: any) {
+    const described = describeSendError(err, sendContext.channel);
+    sendErrorDetail = described.sendError;
+    sendErrorMessage = described.errorMessage;
+    // Full provider breakdown is persisted below (errorMessage + metadata.sendError)
+    // so the failed send is diagnosable from the DB/UI without server logs.
+    console.error(`[AI-Bot] reply send failed (persisting FAILED message):`, JSON.stringify(sendErrorDetail));
+  }
 
   const aiMessage = await prisma.message.create({
     data: {
@@ -328,11 +383,13 @@ export async function processAIBot(
       senderName: "AI Bot",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
+      errorMessage: sendErrorMessage || undefined,
       metadata: {
         source: "ai_bot",
         ...(result.toolCallLog.length > 0 && {
           toolCalls: result.toolCallLog.map((tc) => ({ tool: tc.tool, decision: tc.decision })),
         }),
+        ...(sendErrorDetail ? { sendError: sendErrorDetail } : {}),
       },
     },
   });
@@ -413,12 +470,17 @@ function buildSendContext(conversation: any): SendContext | null {
   };
 }
 
+/**
+ * Deterministic escalation gates. Returns the machine-readable CASE that
+ * fired (persisted so owners can see WHY the bot handed off) or null when
+ * no gate tripped.
+ */
 async function checkEscalationThresholds(
   conversationId: string,
   tenantId: string,
   config: { maxAutonomousMessages: number | null; maxAutonomousMinutes: number | null },
   incomingText?: string,
-): Promise<boolean> {
+): Promise<string | null> {
   const aiMessageCount = await prisma.message.count({
     where: {
       conversationId,
@@ -434,7 +496,7 @@ async function checkEscalationThresholds(
   // Hard ceiling - true runaway-loop backstop, always escalates.
   if (aiMessageCount >= hardCeiling) {
     console.log(`[AI-Bot] HARD ceiling reached (${aiMessageCount}/${hardCeiling}) for conversation ${conversationId} - escalating`);
-    return true;
+    return "hard_message_ceiling";
   }
 
   // GOAL PRESERVATION: the soft message/time caps are autonomous-budget limits,
@@ -473,7 +535,7 @@ async function checkEscalationThresholds(
       console.log(`[AI-Bot] soft msg cap (${aiMessageCount}/${maxMsgs}) reached but objective viable - NOT escalating (goal preservation) conv=${conversationId}`);
     } else {
       console.log(`[AI-Bot] Max messages reached (${aiMessageCount}/${maxMsgs}) for conversation ${conversationId}`);
-      return true;
+      return "autonomous_message_cap";
     }
   }
 
@@ -506,11 +568,11 @@ async function checkEscalationThresholds(
     const maxMins = config.maxAutonomousMinutes || 15;
     if (minutesElapsed >= maxMins && !goalViable) {
       console.log(`[AI-Bot] Max burst time reached (${Math.round(minutesElapsed)}m/${maxMins}m) for conversation ${conversationId}`);
-      return true;
+      return "autonomous_time_cap";
     }
   }
 
-  return false;
+  return null;
 }
 
 // A bare keyword like "נציג"/"agent"/"representative" is NOT a handoff request:
@@ -548,6 +610,7 @@ async function escalateToHuman(
   sendContext: SendContext,
   fallbackMessage: string,
   aiAgentId?: string,
+  reason?: { case: string; summary?: string },
 ): Promise<void> {
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
@@ -564,12 +627,27 @@ async function escalateToHuman(
     fallbackMessage,
   );
 
-  const extId = await adapter.sendTextMessage(
-    sendContext.credentials,
-    sendContext.channelAccountExternalId,
-    sendContext.recipientId,
-    escalationMessage,
-  );
+  // The adapter THROWS on provider errors (bad number, closed 24h window,
+  // template required) despite the `string | null` signature. A failed SEND
+  // must never abort the ESCALATION itself — the human takeover and the
+  // audit trail matter more than the courtesy message. Degrade to a FAILED
+  // message row and continue.
+  let extId: string | null = null;
+  let escSendError: ProviderSendError | null = null;
+  let escSendErrorMessage: string | null = null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendContext.credentials,
+      sendContext.channelAccountExternalId,
+      sendContext.recipientId,
+      escalationMessage,
+    );
+  } catch (err: any) {
+    const described = describeSendError(err, sendContext.channel);
+    escSendError = described.sendError;
+    escSendErrorMessage = described.errorMessage;
+    console.warn(`[AI-Bot] escalation handoff send failed (continuing with handover):`, JSON.stringify(escSendError));
+  }
 
   await prisma.message.create({
     data: {
@@ -581,7 +659,14 @@ async function escalateToHuman(
       senderName: "AI Bot",
       externalMessageId: extId,
       status: extId ? "SENT" : "FAILED",
-      metadata: { source: "ai_bot", escalation: true, aiGenerated: escalationMessage !== fallbackMessage },
+      errorMessage: escSendErrorMessage || undefined,
+      metadata: {
+        source: "ai_bot",
+        escalation: true,
+        aiGenerated: escalationMessage !== fallbackMessage,
+        ...(reason ? { escalationCase: reason.case, ...(reason.summary ? { escalationSummary: reason.summary } : {}) } : {}),
+        ...(escSendError ? { sendError: escSendError } : {}),
+      },
     },
   });
 
@@ -603,14 +688,19 @@ async function escalateToHuman(
       messageType: "system",
       senderName: "System",
       status: "DELIVERED",
-      metadata: { systemEvent: "ai_bot_escalation" },
+      metadata: {
+        systemEvent: "ai_bot_escalation",
+        // Why the bot handed off - rendered on the inbox divider so the
+        // handover is explainable, not a bare label.
+        ...(reason ? { escalationCase: reason.case, ...(reason.summary ? { escalationSummary: reason.summary } : {}) } : {}),
+      },
     },
   });
 
   await publishEvent({
     event: "conversation:updated",
     tenantId,
-    data: { id: conversationId, isHandedOver: true, status: "WAITING" },
+    data: { id: conversationId, isHandedOver: true, status: "WAITING", ...(reason ? { escalationCase: reason.case } : {}) },
   });
 }
 

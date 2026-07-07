@@ -28,6 +28,85 @@ export interface NormalizedStatusUpdate {
   status: "sent" | "delivered" | "read" | "failed";
   timestamp?: Date;
   errorMessage?: string;
+  // Structured provider failure detail for FAILED deliveries. `errorMessage`
+  // stays for back-compat (human string); `error` carries the full breakdown
+  // so a failed send is diagnosable from the DB/UI without server logs.
+  error?: ProviderSendError;
+}
+
+/**
+ * Full, structured provider send/delivery failure. Every field a provider hands
+ * us is preserved so a failed message can be diagnosed end-to-end from the
+ * database and Inbox UI alone - no log-diving, no reproduction.
+ *
+ * Shape is provider-neutral; `channel` + `raw` let a specific channel's quirks
+ * survive. For WhatsApp/Meta these map to the Graph API error object
+ * (`error.code`, `error.error_subcode`, `error.type`, `error.error_data.details`,
+ * `error.fbtrace_id`) plus the HTTP status and `x-fb-request-id` header.
+ */
+export interface ProviderSendError {
+  channel: ChannelType;
+  phase: "send" | "delivery";   // synchronous send-time vs async delivery webhook
+  httpStatus?: number;          // HTTP status of the provider response
+  code?: number;                // provider error code (Meta error.code)
+  subcode?: number;             // provider error subcode (Meta error.error_subcode)
+  type?: string;                // provider error type (e.g. "OAuthException")
+  message: string;              // best human-readable summary
+  detail?: string;              // extra detail (error_data.details / error_user_msg)
+  fbtraceId?: string;           // Meta fbtrace_id - quote to Meta support
+  requestId?: string;           // provider request id (x-fb-request-id header)
+  retryable: boolean;           // whether a retry could plausibly succeed
+  at: string;                   // ISO timestamp the failure was captured
+  raw?: unknown;                // trimmed original error payload for deep debug
+}
+
+/**
+ * Error thrown by outbound adapters on a send failure. Carries the full
+ * `ProviderSendError` so callers persist structure (not just `.message`).
+ * `err.message` remains the human summary for back-compat with existing
+ * `err?.message` logging.
+ */
+export class ChannelSendError extends Error {
+  readonly provider: ProviderSendError;
+  constructor(provider: ProviderSendError) {
+    super(provider.message);
+    this.name = "ChannelSendError";
+    this.provider = provider;
+    // Restore prototype chain when compiled down to ES5.
+    Object.setPrototypeOf(this, ChannelSendError.prototype);
+  }
+}
+
+/**
+ * Normalize ANY thrown send error into a persistable shape. Callers use this in
+ * their catch blocks so every FAILED outbound row gets both a human
+ * `errorMessage` and structured `metadata.sendError`, regardless of whether the
+ * adapter threw a rich `ChannelSendError` or a bare `Error`.
+ */
+export function describeSendError(
+  err: unknown,
+  fallbackChannel?: ChannelType,
+): { errorMessage: string; sendError: ProviderSendError } {
+  if (err instanceof ChannelSendError) {
+    return { errorMessage: err.provider.message, sendError: err.provider };
+  }
+  const anyErr = err as any;
+  const message =
+    (typeof anyErr?.message === "string" && anyErr.message) ||
+    String(err ?? "Send failed");
+  return {
+    errorMessage: message,
+    sendError: {
+      channel: (fallbackChannel ?? "WHATSAPP") as ChannelType,
+      phase: "send",
+      code: typeof anyErr?.code === "number" ? anyErr.code : undefined,
+      httpStatus: typeof anyErr?.response?.status === "number" ? anyErr.response.status : undefined,
+      message,
+      retryable: false,
+      at: new Date().toISOString(),
+      raw: anyErr?.code && typeof anyErr.code === "string" ? { code: anyErr.code } : undefined,
+    },
+  };
 }
 
 // Public comment event normalized across IG (entry.changes[].field === "comments")

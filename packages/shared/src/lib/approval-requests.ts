@@ -27,6 +27,18 @@ export interface CreateApprovalRequestInput {
   riskTags?: string[];
   requestedBy: string;  // "bot" | "flow:<id>" | "ai-agent:<id>"
   gate?: ToolGateResult;
+  /**
+   * Kernel resume envelope (P1-3/B6). Set by the Capability Runtime's approval
+   * gate: the FULL ExecutionRequest so approval-resume re-enters the Runtime
+   * (invariants apply on HITL writes). Absent for legacy-brain requests.
+   */
+  resumeEnvelope?: {
+    kind: "kernel_operation";
+    operation: string;
+    params: Record<string, unknown>;
+    context: Record<string, unknown>;
+    mode: string;
+  };
 }
 
 export async function createApprovalRequest(
@@ -51,6 +63,7 @@ export async function createApprovalRequest(
       riskTags: (input.riskTags ?? []) as any,
       status: "PENDING",
       requestedBy: input.requestedBy,
+      resumeEnvelope: (input.resumeEnvelope as any) ?? null,
       expiresAt,
     },
     select: { id: true, expiresAt: true, conversationId: true, tool: true, summary: true, riskLevel: true, requestedBy: true, createdAt: true },

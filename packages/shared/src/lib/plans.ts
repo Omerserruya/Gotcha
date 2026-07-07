@@ -18,7 +18,10 @@ import { prisma } from "./prisma";
 import { invalidatePermissionsCache } from "./permissions";
 import type { PermissionDomain } from "./permission-catalog";
 
-export type PlanKey = "light" | "pro" | "enterprise";
+// Self-serve tiers (Light/Pro/Business) + sales-only Enterprise. `grandfathered`
+// is a temporary one-way compatibility state (full access, billing+enforcement
+// OFF) used only during rollout — see services/billing migration flow.
+export type PlanKey = "light" | "pro" | "business" | "enterprise" | "grandfathered";
 
 /** Every feature domain (top segment of a permission key) = a packaging unit. */
 export const PLAN_DOMAINS: readonly PermissionDomain[] = [
@@ -56,15 +59,30 @@ export const PLAN_PRESETS: Record<PlanKey, PlanDef> = {
     description: "Adds CRM, AI employees, approvals and analytics.",
     domains: ["conversation", "customer", "channels", "settings", "crm", "ai", "approvals", "analytics"],
   },
+  business: {
+    key: "business",
+    name: "Business",
+    description: "Everything in Pro plus third-party integrations and higher limits.",
+    domains: [...PLAN_DOMAINS],
+  },
   enterprise: {
     key: "enterprise",
     name: "Enterprise",
-    description: "Everything, including third-party integrations.",
+    description: "Custom limits and contract pricing (sales-only). All capabilities.",
+    domains: [...PLAN_DOMAINS],
+  },
+  // Temporary compatibility state for existing tenants during billing rollout.
+  // Full access; the AI runtime gate is skipped (enforcementEnabled=false on the
+  // subscription) and no billing runs. NOT a commercial product.
+  grandfathered: {
+    key: "grandfathered",
+    name: "Grandfathered",
+    description: "Legacy tenant — full access while billing rolls out. Not for sale.",
     domains: [...PLAN_DOMAINS],
   },
 };
 
-export const PLAN_ORDER: PlanKey[] = ["light", "pro", "enterprise"];
+export const PLAN_ORDER: PlanKey[] = ["light", "pro", "business", "enterprise"];
 
 /**
  * Apply a plan to a tenant by writing the feature-domain entitlement rows.

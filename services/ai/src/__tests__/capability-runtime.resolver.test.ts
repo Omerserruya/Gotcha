@@ -12,11 +12,11 @@
 import { describe, it, expect } from "vitest";
 import {
   resolveExecution,
-  CALENDAR_CONTRACTS,
   type ExecutionRequest,
   type RuntimeBindings,
   type StrategyResult,
 } from "@chatcenter/shared";
+import { CALENDAR_CONTRACTS } from "../services/capability-runtime/calendar.contracts";
 
 function req(operation: string, params: Record<string, unknown> = {}, mode: ExecutionRequest["mode"] = "autonomous"): ExecutionRequest {
   return { operation, params, mode, context: { tenantId: "t1", conversationId: "c1", customerExternalId: "cust1" } };

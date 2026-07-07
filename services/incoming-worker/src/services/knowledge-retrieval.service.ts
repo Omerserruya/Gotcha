@@ -1,5 +1,5 @@
 import OpenAI from "openai";
-import { prisma, trackAIUsage } from "@chatcenter/shared";
+import { prisma, trackAIUsage, meterAiUnits } from "@chatcenter/shared";
 import { QdrantClient } from "@qdrant/js-client-rest";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -40,6 +40,16 @@ async function generateEmbedding(text: string, tenantId?: string): Promise<numbe
       completionTokens: 0,
       totalTokens: response.usage.total_tokens,
     }).catch((err: any) => console.error("[Knowledge] Usage tracking failed:", err.message));
+
+    // Meter AI Units so embeddings are NOT an enforcement exception — every AI
+    // surface debits the wallet + writes the billing ledger. No-op when
+    // BILLING_ENFORCEMENT_MODE=off. Fire-and-forget; never block retrieval.
+    meterAiUnits({
+      tenantId,
+      model: EMBEDDING_MODEL,
+      inputTokens: response.usage.prompt_tokens ?? response.usage.total_tokens,
+      outputTokens: 0,
+    }).catch((err: any) => console.error("[Knowledge] Unit metering failed:", err.message));
   }
 
   return response.data[0].embedding;

@@ -37,6 +37,10 @@ http {
         server notifications:${NOTIFICATIONS_PORT};
     }
 
+    upstream billing_service {
+        server billing:${BILLING_PORT};
+    }
+
     upstream frontend {
         server frontend:${FRONTEND_PORT};
     }
@@ -61,6 +65,15 @@ http {
         location /api/auth {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/billing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
             proxy_set_header Host $host;
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
@@ -503,6 +516,16 @@ http {
         }
 
         location /api/ai-debug {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://ai_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Decision Timeline (P1-5): read-only kernel loop trace for the owner UI.
+        location /api/decision-timeline {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;

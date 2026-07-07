@@ -10,6 +10,7 @@ import {
   publishEvent,
   crossTenantMiddleware,
   AI_MODEL_PRICING,
+  resolveModelPricing,
   AI_FEATURE_CATEGORIES,
   AI_CATEGORY_ORDER,
   categorySqlCase,
@@ -1016,7 +1017,6 @@ router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req
       modelMixByCategory.set(k, arr);
     }
 
-    const defaultPricing = AI_MODEL_PRICING["gpt-4o-mini"]!;
     const categoryDefMap = new Map(AI_FEATURE_CATEGORIES.map((d) => [d.key, d] as const));
 
     const categories = byCategory.map((row) => {
@@ -1028,19 +1028,20 @@ router.get("/pricing/unit-costs", authenticate, requireSystemAdmin(), async (req
       const conversations = Number(row.conversations);
       const costUsd = Number(row.cost_usd ?? 0);
 
-      // Per-model split: bill uncached prompt at full rate, cached at 50%,
-      // completion at full rate. Mirrors trackAIUsage()'s accounting.
+      // Per-model split: bill uncached prompt at full rate, cached at the
+      // model's cached rate, completion at full rate. Mirrors trackAIUsage()'s
+      // accounting via the same shared resolver (prefix-aware, gpt-5-safe).
       let inputCostUsd = 0;
       let outputCostUsd = 0;
       const modelMix = (modelMixByCategory.get(row.category) ?? []).map((m) => {
-        const pricing = (m.model && AI_MODEL_PRICING[m.model]) || defaultPricing;
+        const pricing = resolveModelPricing(m.model);
         const mPrompt = Number(m.prompt_tokens);
         const mCompletion = Number(m.completion_tokens);
         const mCached = Math.min(Number(m.cached_prompt_tokens), mPrompt);
         const mUncached = Math.max(0, mPrompt - mCached);
         const mIn =
           (mUncached / 1_000_000) * pricing.prompt +
-          (mCached / 1_000_000) * pricing.prompt * 0.5;
+          (mCached / 1_000_000) * (pricing.cachedPrompt ?? pricing.prompt * 0.5);
         const mOut = (mCompletion / 1_000_000) * pricing.completion;
         inputCostUsd += mIn;
         outputCostUsd += mOut;

@@ -127,15 +127,33 @@
       "type": "file"
     },
     {
+      "path": "src/lib/billing/wallet.ts",
+      "accessCount": 9,
+      "lastAccessed": 1782814112992,
+      "type": "file"
+    },
+    {
+      "path": "src/index.ts",
+      "accessCount": 7,
+      "lastAccessed": 1783230782044,
+      "type": "file"
+    },
+    {
       "path": "src/lib/permissions.ts",
       "accessCount": 4,
       "lastAccessed": 1782395552551,
       "type": "file"
     },
     {
-      "path": "src/index.ts",
-      "accessCount": 3,
-      "lastAccessed": 1782395640227,
+      "path": "package.json",
+      "accessCount": 4,
+      "lastAccessed": 1782814203495,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/index.ts",
+      "accessCount": 4,
+      "lastAccessed": 1782883586702,
       "type": "file"
     },
     {
@@ -151,12 +169,6 @@
       "type": "file"
     },
     {
-      "path": "package.json",
-      "accessCount": 2,
-      "lastAccessed": 1781700826220,
-      "type": "file"
-    },
-    {
       "path": "src/lib/rbac-seed.ts",
       "accessCount": 2,
       "lastAccessed": 1782395617262,
@@ -166,6 +178,24 @@
       "path": "src/lib/capability-runtime/calendar.contracts.ts",
       "accessCount": 2,
       "lastAccessed": 1782570307765,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/plans.ts",
+      "accessCount": 2,
+      "lastAccessed": 1782813840464,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/capability-runtime/contract.ts",
+      "accessCount": 2,
+      "lastAccessed": 1782850516512,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/cognition.ts",
+      "accessCount": 2,
+      "lastAccessed": 1782850758174,
       "type": "file"
     },
     {
@@ -235,15 +265,99 @@
       "type": "file"
     },
     {
-      "path": "src/lib/capability-runtime/contract.ts",
-      "accessCount": 1,
-      "lastAccessed": 1782570149937,
-      "type": "file"
-    },
-    {
       "path": "src/lib/capability-runtime/resolver.ts",
       "accessCount": 1,
       "lastAccessed": 1782570184464,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/billing/pricing.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782813735201,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/billing/entitlements.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782813812550,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/billing/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782813851666,
+      "type": "file"
+    },
+    {
+      "path": "prisma/seed-billing.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782814183432,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/capability-runtime/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782850516632,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/identity.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782850600815,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/grants.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782850613392,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/memory.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782850626530,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/facts.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782850641707,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/agent.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782850673580,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/oracle.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782882793826,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/shadow-eval.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782883304143,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/agent/reasoner-provider.ts",
+      "accessCount": 1,
+      "lastAccessed": 1782883579940,
+      "type": "file"
+    },
+    {
+      "path": "src/channels/whatsapp.adapter.ts",
+      "accessCount": 1,
+      "lastAccessed": 1783235254229,
+      "type": "file"
+    },
+    {
+      "path": "src/channels/__tests__/whatsapp-send-error.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1783339870321,
       "type": "file"
     }
   ],

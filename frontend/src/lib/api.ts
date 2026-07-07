@@ -114,6 +114,13 @@ export function releaseConversation(token: string, id: string) {
   });
 }
 
+export function returnConversationToAi(token: string, id: string) {
+  return apiFetch<{ data: any }>(`/api/conversations/${id}/return-to-ai`, {
+    token,
+    method: "POST",
+  });
+}
+
 export function reassignConversation(token: string, id: string, agentId: string) {
   return apiFetch<{ data: any }>(`/api/conversations/${id}/reassign`, {
     token,
@@ -1492,6 +1499,26 @@ export function getAIAgent(token: string, id: string) {
 
 export function createAIAgent(token: string, data: Record<string, any>) {
   return apiFetch<{ data: any }>("/api/ai-agents", { token, method: "POST", body: JSON.stringify(data) });
+}
+
+export function getAIAgentReachability(token: string, id: string) {
+  return apiFetch<{ data: { hasCanvas: boolean; reachable: boolean } }>(`/api/ai-agents/${id}/reachability`, { token });
+}
+
+export interface EffectivePermissions {
+  governed: boolean;
+  allowedToolSlugs: string[];
+  effectiveOperations: string[];
+  capabilities: Array<{
+    capability: string;
+    summary: string;
+    live: boolean;
+    operations: Array<{ name: string; effective: boolean }>;
+  }>;
+}
+
+export function getAIAgentEffectivePermissions(token: string, id: string) {
+  return apiFetch<{ data: EffectivePermissions }>(`/api/ai-agents/${id}/effective-permissions`, { token });
 }
 
 export function updateAIAgent(token: string, id: string, data: Record<string, any>) {

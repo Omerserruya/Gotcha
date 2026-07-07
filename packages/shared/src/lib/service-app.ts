@@ -30,7 +30,11 @@ export function createServiceApp(config: ServiceConfig): express.Express {
   });
   app.use("/api/", limiter);
 
-  app.use(express.json());
+  // Capture the raw request body so provider webhooks (e.g. iCount) can verify
+  // HMAC signatures over the EXACT bytes received. JSON.stringify(req.body) is
+  // NOT byte-identical (key order / whitespace), so without this the signature
+  // check would always fail in production.
+  app.use(express.json({ verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
 
   // Health check
   app.get("/health", (_req, res) => {

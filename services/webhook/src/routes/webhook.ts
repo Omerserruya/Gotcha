@@ -327,14 +327,31 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
 
   if (message) {
     // Persist Meta's failure reason when present so the operator can see
-    // *why* - empty error_message after a FAILED webhook is unhelpful.
+    // *why* - empty error_message after a FAILED webhook is unhelpful. Store
+    // BOTH the human string (errorMessage column) and the full structured
+    // provider breakdown (metadata.sendError) so an async delivery failure is
+    // as diagnosable as a synchronous send failure.
+    const failureData =
+      mappedStatus === "FAILED" && (status.errorMessage || status.error)
+        ? {
+            ...(status.errorMessage ? { errorMessage: status.errorMessage } : {}),
+            ...(status.error
+              ? {
+                  metadata: {
+                    ...((message.metadata && typeof message.metadata === "object")
+                      ? (message.metadata as Record<string, any>)
+                      : {}),
+                    sendError: status.error,
+                  },
+                }
+              : {}),
+          }
+        : {};
     await prisma.message.update({
       where: { id: message.id },
       data: {
         status: mappedStatus as any,
-        ...(mappedStatus === "FAILED" && status.errorMessage
-          ? { errorMessage: status.errorMessage }
-          : {}),
+        ...failureData,
       },
     });
     // Mirror onto ScheduledMessage so its UI reflects the real outcome
@@ -360,6 +377,7 @@ async function handleStatusUpdate(tenantId: string, status: NormalizedStatusUpda
         conversationId: message.conversationId,
         status: mappedStatus,
         error: mappedStatus === "FAILED" ? status.errorMessage ?? null : null,
+        sendError: mappedStatus === "FAILED" ? status.error ?? null : null,
         scheduledMessageId: (message as any).scheduledMessageId ?? null,
       },
     });

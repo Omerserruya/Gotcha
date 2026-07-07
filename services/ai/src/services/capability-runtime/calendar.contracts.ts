@@ -8,7 +8,7 @@
  * (services/ai), bound by the invariant/success `id`s used here.
  */
 
-import type { OperationContract } from "./contract";
+import type { OperationContract } from "@chatcenter/shared";
 
 const CHECK_AVAILABILITY: OperationContract = {
   id: "CHECK_AVAILABILITY",

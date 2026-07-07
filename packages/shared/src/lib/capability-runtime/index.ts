@@ -8,4 +8,3 @@
 
 export * from "./contract";
 export * from "./resolver";
-export { CALENDAR_CONTRACTS } from "./calendar.contracts";

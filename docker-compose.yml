@@ -54,8 +54,9 @@ services:
       FRONTEND_PORT: ${FRONTEND_PORT:-3000}
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
       NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
+      BILLING_PORT: ${BILLING_PORT:-4009}
     command: >
-      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT'
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT'
       < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     depends_on:
@@ -141,6 +142,9 @@ services:
       # Public HTTPS base for outbound Twilio webhook URLs (used by /api/voice-channels)
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      # Billing provisioning on onboarding completion (entity + trial + Units).
+      BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
+      BILLING_DEFAULT_TRIAL_PLAN: ${BILLING_DEFAULT_TRIAL_PLAN:-pro}
       # Required for the Meta Resumable Upload API path that mints media
       # handles for IMAGE/VIDEO/DOCUMENT WhatsApp template examples.
       META_APP_ID: ${META_APP_ID:-}
@@ -224,11 +228,9 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
-      # ── Capability Runtime (Calendar pilot): 3C cutover + 3B shadow. Off unless set. ──
-      CAPABILITY_RUNTIME_CALENDAR: ${CAPABILITY_RUNTIME_CALENDAR:-}
-      CAPABILITY_RUNTIME_CALENDAR_TENANTS: ${CAPABILITY_RUNTIME_CALENDAR_TENANTS:-}
-      CAPABILITY_RUNTIME_SHADOW: ${CAPABILITY_RUNTIME_SHADOW:-}
-      CAPABILITY_RUNTIME_SHADOW_TENANTS: ${CAPABILITY_RUNTIME_SHADOW_TENANTS:-}
+      # ── AI-Unit billing gate: off|observe|soft|hard (default off = no behavior change). ──
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-off}
+      BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
       # Set OPENAI_LOG=debug to log the FULL outbound OpenAI request (system
       # prompt + messages + tool schemas) and response to stdout. Off by default.
       OPENAI_LOG: ${OPENAI_LOG:-}
@@ -318,6 +320,38 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  billing:
+    build:
+      context: .
+      dockerfile: services/billing/Dockerfile
+    environment:
+      DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${BILLING_PORT:-4009}
+      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
+      # Billing config
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-ICOUNT}
+      BILLING_TRIAL_DAYS: ${BILLING_TRIAL_DAYS:-14}
+      BILLING_DUNNING_DAYS: ${BILLING_DUNNING_DAYS:-0,3,7}
+      BILLING_SCHEDULER_ENABLED: ${BILLING_SCHEDULER_ENABLED:-true}
+      BILLING_CYCLE_INTERVAL_MS: ${BILLING_CYCLE_INTERVAL_MS:-3600000}
+      # iCount (mock by default; set ICOUNT_MODE=live + creds for production)
+      ICOUNT_MODE: ${ICOUNT_MODE:-mock}
+      ICOUNT_API_BASE: ${ICOUNT_API_BASE:-https://api.icount.co.il/api/v3.php}
+      ICOUNT_CID: ${ICOUNT_CID:-}
+      ICOUNT_USER: ${ICOUNT_USER:-}
+      ICOUNT_PASS: ${ICOUNT_PASS:-}
+      ICOUNT_WEBHOOK_SECRET: ${ICOUNT_WEBHOOK_SECRET:-}
     depends_on:
       db:
         condition: service_healthy
@@ -419,7 +453,7 @@ services:
       context: .
       dockerfile: services/auth/Dockerfile
     command: >
-      sh -c "cd /app/packages/shared && npx prisma migrate deploy && npx tsx prisma/seed.ts"
+      sh -c "cd /app/packages/shared && npx prisma migrate deploy && npx tsx prisma/seed.ts && npx tsx prisma/seed-billing.ts"
     environment:
       DATABASE_URL: ${DATABASE_URL:-postgresql://postgres:postgres@db:5432/whatsapp_cc}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
@@ -455,3 +489,13 @@ volumes:
   pgdata:
   qdrant_data:
   uploads:
+
+# Lower MTU to 1442 to match this host's path MTU (~1492, PPPoE-style link).
+# Without this, container bulk transfers (external HTTPS to OpenAI/CRMs) stall
+# because NATed connections never receive the ICMP "fragmentation needed"
+# feedback for PMTU discovery. See daemon.json mtu for the build-time fix.
+networks:
+  default:
+    driver: bridge
+    driver_opts:
+      com.docker.network.driver.mtu: "1442"

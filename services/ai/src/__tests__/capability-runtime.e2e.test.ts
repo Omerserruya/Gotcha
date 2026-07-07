@@ -13,11 +13,10 @@
  */
 
 import { describe, it, expect } from "vitest";
-import { resolveExecution, CALENDAR_CONTRACTS, type ExecutionRequest, type RuntimeBindings } from "@chatcenter/shared";
+import { resolveExecution, type ExecutionRequest, type RuntimeBindings } from "@chatcenter/shared";
+import { CALENDAR_CONTRACTS } from "../services/capability-runtime/calendar.contracts";
 import { executeCalendarOperation } from "../services/capability-runtime/calendar.runtime";
-import { executeCalendarToolViaRuntime, executeCalendarToolAdvisory, isCalendarTool } from "../services/capability-runtime/calendar.execute";
-import { shadowCompareCalendar } from "../services/capability-runtime/calendar.shadow";
-import { preResolveCalendarRead } from "../services/capability-runtime/calendar.preresolve";
+import { executeCalendarToolAdvisory, isCalendarTool } from "../services/capability-runtime/calendar.execute";
 import type { CalendarPort, CalendarBookingRef, ResolvedMeetingKind } from "../services/capability-runtime/calendar.port";
 
 const DEMO = { slug: "demo", durationMinutes: 30 };
@@ -168,26 +167,6 @@ describe("CALENDAR capability — E2E matrix", () => {
     expect(result).toMatchObject({ status: "AWAITING_APPROVAL", ref: "appr_1" });
   });
 
-  it("3C dispatch executor returns legacy-shaped content the loop understands", async () => {
-    const book = calendar({ open: [S1] });
-    const ok = await executeCalendarToolViaRuntime({
-      toolName: "schedule_meeting", toolArgs: { requested_at_iso: S1, meeting_type: "demo", customer_email: "o@x.com" },
-      toolCallId: "tc1", context: ctx(), port: book.port, logger: () => {},
-    });
-    const parsed = JSON.parse(ok.content);
-    expect(parsed.ok).toBe(true);
-    expect(parsed.verdict).toBe("VALID");
-    expect(ok.toolCallId).toBe("tc1");
-
-    const noEmail = await executeCalendarToolViaRuntime({
-      toolName: "schedule_meeting", toolArgs: { requested_at_iso: S1, meeting_type: "demo" },
-      toolCallId: "tc2", context: ctx({ customerEmail: undefined }), port: calendar({ open: [S1] }).port, logger: () => {},
-    });
-    const pe = JSON.parse(noEmail.content);
-    expect(pe.ok).toBe(false);
-    expect(pe.missing_inputs).toContain("email");
-  });
-
   it("copilot ADVISORY: same pipeline, reads run, writes recommend (never execute)", async () => {
     expect(isCalendarTool("schedule_meeting")).toBe(true);
     expect(isCalendarTool("escalate_to_human")).toBe(false);
@@ -220,46 +199,5 @@ describe("CALENDAR capability — E2E matrix", () => {
     expect(JSON.parse(noEmail.content).missing_inputs).toContain("email");
   });
 
-  it("planner-owned execution: runtime pre-resolves availability before the LLM", async () => {
-    // Scheduling is the goal → runtime fetches real slots, returns an authoritative block.
-    const pre = await preResolveCalendarRead({
-      objective: "BOOK_MEETING", calendarBookable: true, hasActiveBooking: false, mode: "advisory",
-      context: ctx(), port: calendar({ open: [S1, S2] }).port, logger: () => {},
-    });
-    expect(pre.block).toBeDefined();
-    expect(pre.block).toMatch(/AUTHORITATIVE/);
-    expect(pre.block).toMatch(/never say you will/i);
 
-    // Not a scheduling goal → no pre-resolution (runtime doesn't act).
-    const none = await preResolveCalendarRead({
-      objective: "QUALIFY_LEAD", calendarBookable: true, hasActiveBooking: false, mode: "advisory",
-      context: ctx(), port: calendar({ open: [S1] }).port, logger: () => {},
-    });
-    expect(none.block).toBeUndefined();
-
-    // Already booked → the move/cancel WRITE path owns the turn, not pre-resolution.
-    const booked = await preResolveCalendarRead({
-      objective: "BOOK_MEETING", calendarBookable: true, hasActiveBooking: true, mode: "autonomous",
-      context: ctx(), port: calendar({ open: [S1] }).port, logger: () => {},
-    });
-    expect(booked.block).toBeUndefined();
-  });
-
-  it("legacy parity: representative cases never REGRESS", async () => {
-    const corr = { tenantId: "t1", conversationId: "c1", turnId: "turn1", toolCallId: "tc", correlationId: "c1:turn1:tc" };
-    // new booking, legacy booked → IDENTICAL
-    const a = await shadowCompareCalendar({
-      legacyTool: "schedule_meeting", legacyArgs: { requested_at_iso: S1, meeting_type: "demo", customer_email: "o@x.com" },
-      legacyResult: { ok: true, verdict: "VALID" }, context: ctx(), correlation: corr, port: calendar({ open: [S1] }).port, logger: () => {},
-    });
-    // rebooking existing customer → EXPECTED_DIFFERENCE (book→move split), NOT regression
-    const b = await shadowCompareCalendar({
-      legacyTool: "schedule_meeting", legacyArgs: { requested_at_iso: S2, meeting_type: "demo", customer_email: "o@x.com" },
-      legacyResult: { ok: true, verdict: "VALID" }, context: ctx(), correlation: corr,
-      port: calendar({ open: [S2], bookings: [{ eventId: "e0", startMs: Date.parse(S1), endMs: Date.parse(S1) + 1 }] }).port, logger: () => {},
-    });
-    expect(a.verdict).toBe("IDENTICAL");
-    expect(b.verdict).toBe("EXPECTED_DIFFERENCE");
-    expect([a, b].some((r) => r.verdict === "REGRESSION")).toBe(false);
-  });
 });

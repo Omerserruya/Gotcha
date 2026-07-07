@@ -12,7 +12,7 @@ COPY services/outgoing-worker/tsconfig.json services/outgoing-worker/
 
 COPY package.json ./
 
-RUN npm install
+RUN npm install --maxsockets=3 --fetch-timeout=90000 --fetch-retries=12 --fetch-retry-mintimeout=3000 --fetch-retry-maxtimeout=30000
 RUN cd packages/shared && npx prisma generate
 
 COPY services/outgoing-worker/src services/outgoing-worker/src/

@@ -6,6 +6,8 @@ import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
 import { buildAgentPrompt, GENERATOR_BUILTIN_AGENT } from "../services/prompt-builder.service";
 import { isBrandArchetype } from "../services/brand-archetypes";
+import { loadToolGrants, deriveAllowedOperations } from "../services/agent-loop/permissions-bridge";
+import { ensureCapabilitiesRegistered, describeAllWorlds } from "../services/capability-plane";
 
 const router = Router();
 
@@ -348,6 +350,17 @@ router.post("/", authenticate, resolveTenant, requireActiveTenant(), requireRole
         return;
       }
     }
+    // An explicitly-ACTIVE create must satisfy the same readiness rule the
+    // wizard enforces: at least one knowledge base. Otherwise any API client
+    // can mint a live employee with nothing grounded to answer from.
+    if (String(status || "").toUpperCase() === "ACTIVE" && (!Array.isArray(knowledgeBaseIds) || knowledgeBaseIds.length === 0)) {
+      res.status(422).json({
+        error: "knowledge_required_for_active",
+        message: "An ACTIVE AI employee needs at least one knowledge base. Create as DRAFT or attach knowledgeBaseIds.",
+      });
+      return;
+    }
+
     const normalizedGoal: string | null = (() => {
       if (typeof goal === "string" && goal.trim()) return goal.trim();
       if (requiresFunnel(effectiveRole)) return null;
@@ -499,10 +512,37 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
 
     // Only mark the employee ACTIVE once the creation wizard actually
     // completes (was an incomplete DRAFT, now being saved). Guarded so a
-    // PAUSED agent edited later is never silently reactivated, and so an
-    // explicit status sent in the body still wins.
-    if (wasIncompleteWizard && !Object.prototype.hasOwnProperty.call(updateData, "status")) {
-      updateData.status = "ACTIVE";
+    // PAUSED agent edited later is never silently reactivated. Promotion
+    // (auto OR explicit `status:"ACTIVE"` in the body) additionally requires
+    // server-side readiness (real name + goal-or-funnel + >=1 knowledge
+    // base) — an unready draft SAVES fine but stays DRAFT.
+    const explicitStatus = Object.prototype.hasOwnProperty.call(updateData, "status");
+    if (existing.status === "DRAFT" && (wasIncompleteWizard || (explicitStatus && updateData.status === "ACTIVE"))) {
+      const promotedName = String(merged.name ?? "").trim();
+      const hasIdentity = !!promotedName && promotedName !== "Untitled AI Employee";
+      const hasGoalOrFunnel = requiresFunnel(merged.role)
+        ? !!merged.funnelId
+        : !!String(merged.goal ?? "").trim();
+      const kbCount = Array.isArray(knowledgeBaseIds)
+        ? knowledgeBaseIds.length
+        : await prisma.aIAgentKnowledge.count({ where: { aiAgentId: req.params.id as string } });
+      const ready = hasIdentity && hasGoalOrFunnel && kbCount > 0;
+      if (explicitStatus && updateData.status === "ACTIVE" && !ready) {
+        const missing = [
+          ...(hasIdentity ? [] : ["name"]),
+          ...(hasGoalOrFunnel ? [] : [requiresFunnel(merged.role) ? "funnel" : "goal"]),
+          ...(kbCount > 0 ? [] : ["knowledge"]),
+        ];
+        res.status(422).json({ error: "draft_not_ready", missing });
+        return;
+      }
+      if (!explicitStatus && wasIncompleteWizard) {
+        if (ready) {
+          updateData.status = "ACTIVE";
+        } else {
+          console.warn(`[ai-agents] draft ${req.params.id} saved but NOT promoted (readiness unmet: identity=${hasIdentity} goalOrFunnel=${hasGoalOrFunnel} kb=${kbCount})`);
+        }
+      }
     }
 
     const agent = await prisma.aIAgent.update({
@@ -651,6 +691,84 @@ router.put(
     }
   },
 );
+
+// ─── Reachability ────────────────────────────────────────────
+// Runtime routing is exclusively the FlowCanvas graph: an ACTIVE employee
+// with no agent-node targeting it NEVER receives a conversation. This
+// endpoint tells the UI the truth so "go live" can't be a broken promise.
+router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const agent = await prisma.aIAgent.findFirst({
+      where: { id: req.params.id as string, tenantId: req.tenantId! as string },
+      select: { id: true },
+    });
+    if (!agent) { res.status(404).json({ error: "AI agent not found" }); return; }
+
+    const canvas = await (prisma as any).flowCanvas.findUnique({
+      where: { tenantId: req.tenantId! as string },
+      select: { nodes: true },
+    });
+    const nodes: any[] = Array.isArray(canvas?.nodes) ? (canvas!.nodes as any[]) : [];
+    // A node routes to this employee when its routeType is (or defaults to)
+    // "agent" and targetId matches — mirrors flow-executor's dispatchRoute.
+    const reachable = nodes.some((n) => {
+      const routeType = n?.data?.routeType ?? "agent";
+      return routeType === "agent" && n?.data?.targetId === agent.id;
+    });
+    res.json({ data: { hasCanvas: !!canvas, reachable } });
+  } catch (err) {
+    console.error("Reachability check error:", err);
+    res.status(500).json({ error: "Failed to check reachability" });
+  }
+});
+
+// ─── Effective permissions (P1-8) ────────────────────────────
+// The SINGLE source of truth for "what can this employee actually do right
+// now": the runtime AND-rule — an operation is EFFECTIVE only when its
+// capability is live (CONNECTED / bookable / KB attached) AND (for tool-governed
+// domains) an AgentToolPermission grants it. Reuses the exact permissions bridge
+// + capability world the kernel uses, so the UI never disagrees with the runtime.
+router.get("/:id/effective-permissions", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId! as string;
+    const agentId = req.params.id as string;
+    const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true } });
+    if (!agent) { res.status(404).json({ error: "AI agent not found" }); return; }
+
+    ensureCapabilitiesRegistered();
+    const [grants, world] = await Promise.all([
+      loadToolGrants(tenantId, agentId),
+      describeAllWorlds({ tenantId, aiAgentId: agentId, conversationId: "effective-permissions-probe" }),
+    ]);
+    const exposedOps = world.flatMap((w) => w.operations.map((o) => o.name));
+    const allowed = deriveAllowedOperations(grants, exposedOps);
+    const unrestricted = allowed.length === 0; // kernel convention: [] = all exposed ops
+    const allowedSet = new Set(allowed);
+
+    // Per-capability breakdown so the UI shows WHY an op is on/off.
+    const capabilities = world.map((w) => ({
+      capability: w.capability,
+      summary: w.summary,
+      live: w.operations.length > 0,
+      operations: w.operations.map((o) => ({
+        name: o.name,
+        effective: unrestricted || allowedSet.has(o.name),
+      })),
+    }));
+
+    res.json({
+      data: {
+        governed: grants.governed,
+        allowedToolSlugs: [...grants.allowedToolSlugs],
+        effectiveOperations: unrestricted ? exposedOps : allowed.filter((op) => op !== "__no_operations_granted__"),
+        capabilities,
+      },
+    });
+  } catch (err: any) {
+    console.error("Effective-permissions error:", err?.message);
+    res.status(500).json({ error: "Failed to compute effective permissions" });
+  }
+});
 
 // ─── Test Chat ───────────────────────────────────────────────
 router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), async (req: Request, res: Response) => {

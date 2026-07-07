@@ -20,13 +20,19 @@ import {
   evaluatePolicies,
   INTEGRATION_CREATE_LEAD_TOOL,
   INTEGRATION_CREATE_CONTACT_TOOL,
+  checkAiAllowed,
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
-import { generateResponse, getDefaultModel } from "./ai.service";
+import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
+import { isAgentArchitectureEnabled } from "@chatcenter/shared";
+import { runShadowEvaluationInBackground, toShadowContext } from "./reasoner/shadow-runner";
+import { agentLoopMode } from "./agent-loop/flags";
+import { agentKernelEligible } from "./agent-loop/operation-status"; // TEMPORARY migration routing floor
+import { runAgentLoopForBotTurn } from "./agent-loop/bot-loop-adapter";
 import { executeAction, type PlannedAction } from "./action-executor.service";
 import { beginTurn, isAbortError } from "./turn-cancellation.service";
 import { validateAndPersist } from "./output-validator.service";
@@ -50,16 +56,6 @@ import {
   type BuildPromptOpts,
   type ContextSlot,
 } from "./prompt-builder.service";
-// ── Capability Runtime shadow (Slice 3B): env-gated, per-tenant, fire-and-forget,
-//    advisory-only, main-loop-only. Never affects the live turn. ──
-import { shadowCompareCalendar } from "./capability-runtime/calendar.shadow";
-import { executeCalendarToolViaRuntime } from "./capability-runtime/calendar.execute";
-import { preResolveCalendarRead } from "./capability-runtime/calendar.preresolve";
-import { createProdCalendarPort } from "./capability-runtime/calendar.port.prod";
-import { isCalendarRuntimeEnabled, isCalendarShadowEnabled } from "./capability-runtime/flags";
-
-const SHADOW_CALENDAR_TOOLS = /^(check_availability|schedule_meeting|reschedule_meeting|cancel_meeting)$/;
-const shadowProdPort = createProdCalendarPort();
 import {
   computeBehaviorState,
   shouldRetrieveKB,
@@ -530,82 +526,11 @@ function checkExitCriteriaGate(
   };
 }
 
-/**
- * Programmatic BEL allowedActions gate. Evaluated at dispatch time -
- * NOT at surface-build time (see filterToolsByAllowedActions comment
- * for why surface-level narrowing was disabled).
- *
- * Block iff: the tool maps to one-or-more known ActionCategories and
- * none of those categories are in BehaviorState.allowedActions. Tools
- * with empty categories (custom/adapter tools we haven't taxonomized)
- * are always allowed - default-permit for unmodeled tools.
- *
- * Always-allowed (safety + read): escalate_to_human, link_customer_identifier,
- * submit_*, *_search/*_get/*_lookup/*_read.
- *
- * When this fires often, the fix is BEL classification (e.g. BEL picked
- * QUALIFY when the customer was actually transactional+hot) - not
- * weakening the gate.
- */
-function checkAllowedActionsGate(
-  toolName: string,
-  state: BehaviorState,
-): { blocked: boolean; reason?: string; categories?: ActionCategory[]; allowed?: ActionCategory[] } {
-  // Strategy-based dispatch gating is DISABLED - parity with the disabled
-  // surface filter in `filterToolsByAllowedActions`. Keeping this gate active
-  // while the surface stays full was self-contradictory: the model SEES every
-  // tool, correctly calls a critical one (e.g. `schedule_meeting` after the
-  // customer confirms a slot), and the runtime then refuses it because the BEL
-  // happened to land on GUIDE/QUALIFY - categories like `schedule_booking`
-  // live only in CONVERT. The model then verbalizes "I can't book directly,
-  // I'll pass it to the team" - exactly the failure mode the surface filter
-  // was disabled to prevent, just relocated to dispatch time.
-  //
-  // The strategy still steers MOVE SELECTION via the behavior prompt
-  // (allowedActions / forbiddenBehaviors text the prompt builder renders), and
-  // sequencing is still hard-enforced by the Action Contract gate
-  // (`checkContractGate`) below. But a strategy misclassification must never
-  // again silently veto a tool the model was right to call.
-  //
-  // The taxonomy (`actionCategoriesForTool`) is retained - it still powers
-  // `computeUnmetRequiredActions` observability - but no longer blocks here.
-  void state;
-  void toolName;
-  return { blocked: false };
-}
-
-/**
- * Programmatic Action Contract gate. Evaluated at dispatch time (NOT
- * just at surface-build time) so a tool that survived surface narrowing
- * cannot still fire out-of-sequence.
- *
- * Block iff: the tool is a `requiredTool` of any blocking contract AND
- * it is not currently in that contract's `pending` set AND it has not
- * already been `completed`. Returns the tools the LLM must call first
- * so the synthesized tool-result message can name them verbatim.
- *
- * Always-allowed escape valves (escalate_to_human, link_customer_identifier,
- * submit_*, read-only *_search/*_get/*_lookup/*_read) are never blocked -
- * the safety latch must remain reachable.
- */
-function checkContractGate(
-  toolName: string,
-  state: BehaviorState,
-): { blocked: boolean; reason?: string; mustCallFirst?: string[]; contractTrigger?: string } {
-  // Action-Contract dispatch gating is ADVISORY, not blocking (user mandate:
-  // "if the AI decides to call a tool, it must be able to"). A blocking contract
-  // used to veto a tool that jumped sequence, AND it could drag in a co-required
-  // sibling tool (e.g. booking required integration_update_lead); when that
-  // sibling failed (CRM 403), the model couldn't "complete the contract" and
-  // escalated to a human instead of just running the primary tool. The contract
-  // is still TRACKED for progress/observability and still STEERS the model via
-  // the prompt (now best-effort, see buildTurnBlock), but it never vetoes a
-  // dispatch. Sequencing that truly must be atomic belongs in a single
-  // service-side endpoint, not a model-facing gate.
-  void state;
-  void toolName;
-  return { blocked: false };
-}
+// (Removed: `checkAllowedActionsGate` and `checkContractGate` — both were disabled
+// stubs that returned `{blocked:false}` by user mandate. Their only call sites (in the
+// tool-dispatch loop) were therefore unreachable and have been removed. Move-selection
+// is still steered by the behavior prompt; the action taxonomy still powers
+// `computeUnmetRequiredActions`; contract progress is still tracked in the loop.)
 
 /**
  * Compute unmet required actions: required ∧ (matching tool was in surface) ∧ (no such tool was called).
@@ -916,6 +841,42 @@ export async function generateAIBotReply(opts: {
   // emitted. The route layer converts the resulting AbortError into HTTP 499.
   const turn = beginTurn(opts.tenantId, opts.conversationId, "bot");
   try {
+    // ── Agent Loop (flag-gated, beside the Planner) ───────────────────────────
+    // Capability lifecycle: off → shadow → autonomous (see agent-loop/flags.ts).
+    const loopMode = agentLoopMode(opts.tenantId);
+    // TEMPORARY migration routing floor (see agent-loop/operation-status.ts): the Kernel
+    // may DRIVE a conversation only for an agent explicitly opted in via AGENT_LOOP_AGENTS
+    // — one the operator has verified needs nothing beyond autonomous operations. Empty ⇒
+    // no agent, so autonomous mode stays safe even before a fully-autonomous employee
+    // exists. Deleted together with the Legacy brain (one brain → no routing).
+    const kernelDrivesTurn = loopMode === "autonomous" && agentKernelEligible(opts.aiAgentId);
+
+    // AUTONOMOUS — the loop DRIVES the customer turn (real execution). Fail-soft:
+    // any loop error falls back to the Planner, so the flag can never break a turn.
+    if (kernelDrivesTurn) {
+      try {
+        const r = await runAgentLoopForBotTurn(opts, "autonomous", turn.signal);
+        return { ...r, interimMessages: r.interimMessages };
+      } catch (loopErr) {
+        if (isAbortError(loopErr)) throw loopErr;
+        console.warn("[agent-loop] fell back to planner:", (loopErr as any)?.message ?? loopErr);
+      }
+    }
+
+    // SHADOW — EVALUATION only. Run the complete loop + Runtime (writes dry-run to
+    // RECOMMENDED) to persist iterations/metrics/observations under real traffic, but
+    // NEVER surface its output: the legacy Planner remains the customer-facing brain.
+    // Fire-and-forget OFF the live turn's critical path (no `turn.signal` — the eval
+    // runs to completion independently), fail-soft, so it can neither slow nor break
+    // the turn. This is how a capability earns the evidence to graduate to autonomous.
+    // Also runs for an autonomous-mode agent NOT (yet) opted into the routing floor, so
+    // it keeps accruing evidence until it is eligible.
+    if (loopMode === "shadow" || (loopMode === "autonomous" && !kernelDrivesTurn)) {
+      void runAgentLoopForBotTurn(opts, "shadow").catch((e) => {
+        if (!isAbortError(e)) console.warn("[agent-loop][shadow] eval failed:", (e as any)?.message ?? e);
+      });
+    }
+
     return await generateAIBotReplyInner(opts, turn.signal);
   } catch (err) {
     if (isAbortError(err)) {
@@ -974,7 +935,7 @@ async function resolveSessionKnowledge(opts: {
     const resp = await generateResponse({
       tenantId: opts.tenantId,
       sessionId: `${opts.conversationId}:knowledge-resolve`,
-      model: getDefaultModel(),
+      model: getMicroModel(),
       temperature: 0,
       maxTokens: 400,
       responseFormat: { type: "json_object" },
@@ -1092,6 +1053,26 @@ async function generateAIBotReplyInner(
     throw Object.assign(new Error("AI Agent not found for tenant"), { status: 404 });
   }
 
+  // Lifecycle enforcement (defense in depth behind the worker's dispatch
+  // guard): a non-ACTIVE employee never answers customers. PAUSED/DRAFT
+  // callers get a clean escalation result instead of a silent AI turn.
+  // (The oneshot path is deliberately NOT guarded - escalation handoff /
+  // bridge-ack messages must still render while an agent is paused.)
+  if ((config as any).status !== "ACTIVE") {
+    return {
+      reply: null,
+      escalation: {
+        reason: `agent_inactive:${(config as any).status}`,
+        priority: "low",
+        summary: `AI employee is ${(config as any).status} - conversation needs a human.`,
+      },
+      awaitingApproval: null,
+      toolCallLog: [],
+      modelUsed: config.model || getDefaultModel(),
+      totalTokens: 0,
+    };
+  }
+
   // Tenant default country - passed to extractIdentifierFromMessage so phone
   // candidates without a `+` prefix (e.g. Israeli "054-1234567" sent over IG)
   // still parse to E.164 and trigger identity_link against the existing CRM.
@@ -1142,6 +1123,25 @@ async function generateAIBotReplyInner(
       };
     }
     throw err;
+  }
+
+  // Billing pre-flight: when AI Units are exhausted (or the subscription is
+  // suspended) and enforcement is in HARD mode, escalate to a human cleanly
+  // instead of attempting an AI turn. observe/soft/off never block here.
+  const aiAllowance = await checkAiAllowed(opts.tenantId);
+  if (!aiAllowance.allowed && aiAllowance.reason) {
+    return {
+      reply: null,
+      escalation: {
+        reason: `units_exhausted:${aiAllowance.reason}`,
+        priority: "medium",
+        summary: `AI paused — ${aiAllowance.reason}. Remaining AI Units: ${aiAllowance.balance}.`,
+      },
+      awaitingApproval: null,
+      toolCallLog: [],
+      modelUsed: config.model || getDefaultModel(),
+      totalTokens: 0,
+    };
   }
 
   const messages = await prisma.message.findMany({
@@ -1952,19 +1952,38 @@ async function generateAIBotReplyInner(
   };
   const systemPrompt = buildAgentPrompt(promptOpts);
 
-  // ── Shadow (3B) per-turn correlation + planner goal. shadowTurnId is minted
-  //    every turn (so the legacy audit carries a join key regardless); the planner
-  //    goal is computed ONCE and only when shadow is enabled (zero cost otherwise).
-  const shadowOn = isCalendarShadowEnabled(opts.tenantId);
-  const calRuntimeOn = isCalendarRuntimeEnabled(opts.tenantId);
+  // ── Per-turn correlation. shadowTurnId is minted every turn (so the legacy audit
+  //    carries a join key regardless).
   const shadowTurnId = randomUUID();
-  // Compute the SAME CurrentPlan the prompt rendered, once, when the runtime is
-  // engaged — it drives both the shadow correlation and the planner-owned
-  // pre-LLM calendar execution below.
-  const runtimePlan = (calRuntimeOn || shadowOn)
+  // Compute the SAME CurrentPlan the prompt rendered, once, when the reasoner-shadow
+  // is engaged — it feeds the Planner↔Reasoner decision comparison below.
+  const runtimePlan = isAgentArchitectureEnabled()
     ? (() => { try { return computeCurrentPlanForOpts(promptOpts); } catch { return null; } })()
     : null;
-  const shadowPlannerGoal: string | undefined = runtimePlan?.goal ?? undefined;
+
+  // Reasoner shadow (Agent architecture, Phase 3): compare the Planner's decision
+  // to the Reasoner's over the SAME Oracle Facts and persist an eval-corpus row.
+  // Dark + fire-and-forget: gated by AGENT_ARCHITECTURE_ENABLED, fully try/caught
+  // — it can NEVER affect this turn (the Planner drives; the Reasoner never acts).
+  try {
+    runShadowEvaluationInBackground(
+      toShadowContext({
+        tenantId: opts.tenantId,
+        conversationId: opts.conversationId,
+        turnId: shadowTurnId,
+        sessionId: opts.conversationId,
+        bestNextAction: (runtimePlan?.bestNextAction as any) ?? null,
+        prospectFlags: (promptOpts as any).prospectFlags,
+        toolFunctionNames: (promptOpts as any).toolFunctionNames,
+        calendarBookable: (promptOpts as any).calendarBookable,
+        hasActiveBooking: !!(promptOpts as any).hasActiveBooking,
+        transcript: messages
+          .filter((m: any) => m.body?.trim())
+          .map((m: any) => ({ role: m.direction === "INBOUND" ? ("customer" as const) : ("agent" as const), text: m.body as string })),
+        goalOutcome: runtimePlan?.goal ?? undefined,
+      }),
+    );
+  } catch { /* shadow must never break the turn */ }
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
   // The output-contract instruction is now rendered inside the per-turn
@@ -1998,29 +2017,6 @@ async function generateAIBotReplyInner(
         `If they want to CANCEL it, call cancel_meeting. ` +
         `NEVER call schedule_meeting again for this customer — that creates a DUPLICATE event.`,
     });
-  }
-
-  // ── PLANNER-OWNED EXECUTION (Runtime before LLM) ──────────────────────
-  // When the planner's goal is to book a meeting, the Capability Runtime runs the
-  // calendar READ now (AUTONOMOUS) and injects the REAL open times as authoritative
-  // facts. The model receives data, not a tool to invoke — so it can never narrate
-  // "I'll check availability". Fail-soft; only when the calendar capability is on.
-  if (calRuntimeOn && runtimePlan) {
-    const pre = await preResolveCalendarRead({
-      objective: runtimePlan.currentObjective,
-      calendarBookable: calendarCapability.bookable,
-      hasActiveBooking: hasExistingBooking,
-      mode: "autonomous",
-      context: {
-        tenantId: opts.tenantId,
-        conversationId: opts.conversationId,
-        customerExternalId: conversation.customerExternalId ?? undefined,
-        customerEmail: contactRow?.email ?? undefined,
-        aiAgentId: config.id,
-      },
-      port: shadowProdPort,
-    });
-    if (pre.block) chatMessages.push({ role: "system", content: pre.block });
   }
 
   const model = config.model || getDefaultModel();
@@ -2065,7 +2061,7 @@ async function generateAIBotReplyInner(
       temperature: config.temperature ?? 0.7,
       maxTokens: config.maxTokens ?? 1024,
       tools: tools as any[],
-      metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id },
+      metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
       signal,
     });
 
@@ -2195,101 +2191,11 @@ async function generateAIBotReplyInner(
           continue;
         }
 
-        // BEL allowedActions gate - dispatch-time enforcement of the
-        // strategy's permitted action categories. Surface stays full
-        // (the model can SEE every tool to avoid the "talks-about-tool-
-        // it-doesn't-have" failure mode the author hit earlier) but
-        // the RUNTIME refuses to execute tools whose category isn't
-        // in BehaviorState.allowedActions. The LLM sees a tool result
-        // explaining the strategy mismatch and can pivot.
-        const actionsGate = checkAllowedActionsGate(toolName, behaviorState);
-        if (actionsGate.blocked) {
-          const gateContent = JSON.stringify({
-            ok: false,
-            error: actionsGate.reason,
-            allowed_actions_gate: true,
-            tool_categories: actionsGate.categories,
-            allowed_actions: actionsGate.allowed,
-          });
-          toolCallLog.push({
-            tool: toolName,
-            args: toolArgs,
-            result: gateContent,
-            decision: "actions_blocked",
-            sideEffect: "actions_blocked",
-          });
-          prisma.auditLog
-            .create({
-              data: {
-                tenantId: opts.tenantId,
-                actorType: "system",
-                action: "ai.actions_blocked",
-                targetType: "conversation",
-                targetId: opts.conversationId,
-                metadata: {
-                  tool: toolName,
-                  reason: actionsGate.reason,
-                  categories: actionsGate.categories,
-                  allowedActions: actionsGate.allowed,
-                  strategy: behaviorState.strategy,
-                  source: "ai_bot",
-                } as any,
-              },
-            })
-            .catch((err: any) => console.error(`[ai-bot] actions_blocked audit failed:`, err?.message));
-          chatMessages.push({
-            role: "tool",
-            tool_call_id: tc.id,
-            content: gateContent,
-          });
-          continue;
-        }
-
-        // Programmatic Action Contract gate - refuse to dispatch tools
-        // that jump a SEQUENCE contract's order. The surface filter
-        // also narrows blocking contracts, but this is a defense-in-depth
-        // check that catches custom/adapter tool names that may slip
-        // past the surface filter's regex.
-        const contractGate = checkContractGate(toolName, behaviorState);
-        if (contractGate.blocked) {
-          const gateContent = JSON.stringify({
-            ok: false,
-            error: contractGate.reason,
-            contract_gate: true,
-            must_call_first: contractGate.mustCallFirst,
-          });
-          toolCallLog.push({
-            tool: toolName,
-            args: toolArgs,
-            result: gateContent,
-            decision: "contract_blocked",
-            sideEffect: "contract_blocked",
-          });
-          prisma.auditLog
-            .create({
-              data: {
-                tenantId: opts.tenantId,
-                actorType: "system",
-                action: "ai.contract_blocked",
-                targetType: "conversation",
-                targetId: opts.conversationId,
-                metadata: {
-                  tool: toolName,
-                  reason: contractGate.reason,
-                  mustCallFirst: contractGate.mustCallFirst,
-                  contractTrigger: contractGate.contractTrigger,
-                  source: "ai_bot",
-                } as any,
-              },
-            })
-            .catch((err: any) => console.error(`[ai-bot] contract_blocked audit failed:`, err?.message));
-          chatMessages.push({
-            role: "tool",
-            tool_call_id: tc.id,
-            content: gateContent,
-          });
-          continue;
-        }
+        // (Removed: the BEL allowedActions gate and the Action-Contract dispatch
+        // gate. Both were disabled stubs — `checkAllowedActionsGate` /
+        // `checkContractGate` returned `{blocked:false}` by user mandate — so these
+        // call sites were unreachable dead code. Move-selection is still steered by
+        // the behavior prompt; contract progress is still tracked below.)
 
         const exec = await getActionOrchestrator().submit(
           {
@@ -2303,31 +2209,11 @@ async function generateAIBotReplyInner(
             rationale: "ai-bot inbox tool call",
             urgency: "low",
           },
-          // 3C CUTOVER: when the Calendar capability runtime is enabled for this
-          // tenant, calendar tools execute through the Capability Runtime; every
-          // other tool (and every tenant without the flag) takes the legacy path.
-          // Both branches return an AgentToolDispatchResult, so the orchestrator
-          // still owns idempotency / HITL approval / ledger / audit unchanged.
           () =>
-            calRuntimeOn && SHADOW_CALENDAR_TOOLS.test(toolName)
-              ? executeCalendarToolViaRuntime({
-                  toolName,
-                  toolArgs,
-                  toolCallId: tc.id,
-                  context: {
-                    tenantId: opts.tenantId,
-                    conversationId: opts.conversationId,
-                    customerExternalId: conversation.customerExternalId ?? undefined,
-                    customerEmail: contactRow?.email ?? undefined,
-                    aiAgentId: config.id,
-                  },
-                  port: shadowProdPort,
-                  plannerGoal: shadowPlannerGoal,
-                })
-              : dispatchToolCall(
-                  { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
-                  agentToolCtx,
-                ),
+            dispatchToolCall(
+              { id: tc.id, function: { name: toolName, arguments: tc.function?.arguments || "{}" } },
+              agentToolCtx,
+            ),
           { ledger, ctx: ledgerCtx, idempotency: true },
         );
         const result = unwrapToolExec(tc.id, toolName, exec);
@@ -2424,34 +2310,6 @@ async function generateAIBotReplyInner(
           tool_call_id: result.toolCallId,
           content: result.content,
         });
-
-        // ── 3B SHADOW: env-gated, per-tenant, fire-and-forget, advisory, MAIN LOOP ONLY.
-        //    Runs the Capability Runtime alongside the legacy result and logs a JSON
-        //    ShadowComparison joined by correlationId. Advisory → never executes a write;
-        //    never affects this turn (shadowCompareCalendar also never throws). ──
-        if (shadowOn && !calRuntimeOn && SHADOW_CALENDAR_TOOLS.test(toolName)) {
-          void shadowCompareCalendar({
-            legacyTool: toolName,
-            legacyArgs: toolArgs,
-            legacyResult: result.content,
-            context: {
-              tenantId: opts.tenantId,
-              conversationId: opts.conversationId,
-              customerExternalId: conversation.customerExternalId ?? undefined,
-              customerEmail: contactRow?.email ?? undefined,
-              aiAgentId: config.id,
-            },
-            correlation: {
-              tenantId: opts.tenantId,
-              conversationId: opts.conversationId,
-              turnId: shadowTurnId,
-              toolCallId: tc.id,
-              correlationId: `${opts.conversationId}:${shadowTurnId}:${tc.id}`,
-            },
-            plannerGoal: shadowPlannerGoal,
-            port: shadowProdPort,
-          }).catch(() => { /* shadow must never affect the live turn */ });
-        }
       }
 
       // Ledger-driven: once a side effect has committed, inject the
@@ -2497,45 +2355,10 @@ async function generateAIBotReplyInner(
   const unmetToForce = unmetRequired.filter((u) => !SILENT_BACKGROUND_ACTIONS.has(String(u.action)));
 
   // ── Action Contract violations (tool-name level) ──────────────
-  // After the dispatch loop, recompute pending tools per contract using
-  // the actual completed list. Any blocking, non-paused contract with
-  // pending tools → force a retry that names the missing tools verbatim.
-  const completedToolNamesThisTurn = new Set<string>(
-    toolCallLog.filter((c) => c.decision === "executed").map((c) => c.tool),
-  );
-  const contractViolations: Array<{ trigger: string; missing: string[]; mode: string }> = [];
-  for (const summary of behaviorState.actionContractState.contracts) {
-    if (!summary.blocking) continue;
-    if (summary.completed.length + completedToolNamesThisTurn.size === 0) continue;
-    // Derive what's still pending after this turn's executions.
-    const stillPending = summary.requiredTools.filter((name) => {
-      if (summary.completed.includes(name)) return false;
-      if (completedToolNamesThisTurn.has(name)) return false;
-      return true;
-    });
-    if (summary.executionMode === "AT_LEAST_ONE") {
-      const anyDone = summary.requiredTools.some(
-        (n) => summary.completed.includes(n) || completedToolNamesThisTurn.has(n),
-      );
-      if (anyDone) continue;
-    }
-    if (stillPending.length > 0) {
-      contractViolations.push({ trigger: summary.trigger, missing: stillPending, mode: summary.executionMode });
-    }
-  }
-
-  // Action-Contract co-steps are BEST-EFFORT (user mandate: the primary tool
-  // always runs; a co-required sibling must never block or escalate). A still-
-  // pending contract tool is logged for observability but NEVER force-injected -
-  // force-injecting it is exactly what made the model fire a failing CRM sibling
-  // (e.g. integration_update_lead 403) and then escalate. Only genuine BEL
-  // required actions (e.g. identity_link) still force a retry below.
-  if (contractViolations.length > 0) {
-    console.warn(
-      `[ai-bot] Action-contract co-steps still pending (best-effort, NOT forced): ` +
-        contractViolations.map((v) => `${v.trigger}→[${v.missing.join(",")}]`).join(" | "),
-    );
-  }
+  // (Removed: post-loop recomputation of still-pending blocking-contract tools.
+  // Action-Contract co-steps are best-effort — that block only `console.warn`ed the
+  // pending tools; the force-retry it once fed was already removed. Genuine BEL
+  // required actions still force a retry via `unmetToForce` below.)
 
   if (
     unmetToForce.length > 0 &&
@@ -2563,7 +2386,7 @@ async function generateAIBotReplyInner(
       temperature: config.temperature ?? 0.7,
       maxTokens: config.maxTokens ?? 1024,
       tools: tools as any[],
-      metadata: { type: "ai_bot_retry", conversationId: opts.conversationId, aiAgentId: config.id },
+      metadata: { type: "ai_bot_retry", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
       signal,
     });
     totalTokens += retryResponse.usage.total_tokens || 0;
@@ -2652,7 +2475,7 @@ async function generateAIBotReplyInner(
           temperature: config.temperature ?? 0.7,
           maxTokens: config.maxTokens ?? 1024,
           tools: tools as any[],
-          metadata: { type: "ai_bot_retry_final", conversationId: opts.conversationId, aiAgentId: config.id },
+          metadata: { type: "ai_bot_retry_final", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
           signal,
         });
         totalTokens += finalResp.usage.total_tokens || 0;
@@ -3689,6 +3512,10 @@ async function generateAIBotReplyInner(
         tokens: totalTokens,
         source: "ai_bot",
         escalated: !!pendingEscalation,
+        // WHY the turn escalated - machine case + human summary, so the owner
+        // UI can explain the handover instead of showing a bare flag.
+        escalationReason: pendingEscalation?.reason ?? undefined,
+        escalationSummary: pendingEscalation?.summary ?? undefined,
         awaitingApproval: !!awaitingApproval,
         // GOAL OWNERSHIP (Unit A): the committed goal carried to the next turn.
         activeGoal: nextGoalSnapshot ?? undefined,

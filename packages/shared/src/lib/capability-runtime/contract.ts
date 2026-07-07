@@ -33,7 +33,14 @@ export type InvariantCheckpoint = "PRE" | "POST";
 export type InvariantEnforcement = "RUNTIME_VERIFIED" | "PROVIDER_ATTESTED";
 
 /** The four execution modes that parameterize the SAME runtime. */
-export type ExecutionMode = "autonomous" | "advisory" | "workflow" | "external";
+/**
+ * `advisory` — copilot posture: writes become RECOMMENDED before the approval
+ * gate (a human is already in the loop; simulating HITL is noise).
+ * `dry_run` — evaluation/shadow posture: writes still never execute, but the
+ * approval gate IS probed (no request created) so shadow evidence proves the
+ * HITL policy surface, not just the write path.
+ */
+export type ExecutionMode = "autonomous" | "advisory" | "dry_run" | "workflow" | "external";
 
 /** A meaning-level input the LLM may supply (resolved to concrete by the strategy). */
 export interface ParamSpec {
@@ -119,6 +126,13 @@ export interface ExecutionRequest {
   params: Record<string, unknown>;
   context: ExecutionContext;
   mode: ExecutionMode;
+  /**
+   * Approval-resume (P1-3/B6): set ONLY by the approved-action dispatcher.
+   * The gate treats a matching APPROVED request as already satisfied, so the
+   * resumed execution re-runs the FULL Runtime (invariants included) without
+   * re-asking the human.
+   */
+  approval?: { approvedRef: string };
 }
 
 export type ExecutionResult =
@@ -169,4 +183,10 @@ export interface ExecutionTrace {
   outcome?: string;
   /** Failure / blocked / needs-input reason, when applicable. */
   reason?: string;
+  /**
+   * dry_run only: whether the write WOULD have required human approval had it
+   * run autonomously (gate probed, no request created). Shadow-eval evidence
+   * for the HITL surface.
+   */
+  approvalProbe?: { wouldRequire: boolean; reason?: string };
 }

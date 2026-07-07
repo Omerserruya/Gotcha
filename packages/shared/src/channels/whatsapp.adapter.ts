@@ -6,7 +6,9 @@ import type {
   NormalizedInboundMessage,
   NormalizedStatusUpdate,
   ChannelCredentials,
+  ProviderSendError,
 } from "./types";
+import { ChannelSendError } from "./types";
 
 const WA_API_URL = process.env.WHATSAPP_API_URL || "https://graph.facebook.com/v19.0";
 
@@ -37,17 +39,104 @@ export function formatWhatsAppText(text: string): string {
     .replace(/\n{3,}/g, "\n\n");
 }
 
-// Pulls the most useful human-readable error out of a WhatsApp/Graph API axios failure.
-function extractWaError(err: any): string {
-  const data = err?.response?.data;
-  const waErr = data?.error;
+// Meta/WhatsApp error codes that a plain retry could plausibly clear: rate
+// limits and transient server-side hiccups. Auth (190/10/2xx), 24h-window
+// re-engagement (131047), invalid params (100/131xx business errors) are NOT
+// here - retrying those just burns quota. See
+// developers.facebook.com/docs/whatsapp/cloud-api/support/error-codes.
+const WA_RETRYABLE_CODES = new Set<number>([
+  1,      // Unknown/transient API error
+  2,      // Temporary service outage
+  4,      // App-level rate limit
+  613,    // Rate limit hit
+  80007,  // Business-use-case rate limit
+  130429, // Cloud API message throughput rate limit
+  131000, // Something went wrong (Meta-side, generic transient)
+  131016, // Service temporarily unavailable
+  131056, // Pair rate limit (too many messages to the same number)
+]);
+
+function isWaRetryable(httpStatus: number | undefined, code: number | undefined): boolean {
+  if (httpStatus != null && (httpStatus === 429 || httpStatus >= 500)) return true;
+  if (code != null && WA_RETRYABLE_CODES.has(code)) return true;
+  return false;
+}
+
+// Build a fully-structured provider error from a WhatsApp/Graph API axios
+// failure so NOTHING is lost: HTTP status, Meta code/subcode/type, human
+// message + detail, fbtrace_id, request id (x-fb-request-id header) and a
+// derived retryability flag. Falls back gracefully for non-HTTP failures
+// (network resets, timeouts) which have no Graph error body.
+function buildWaSendError(err: any, phase: "send" | "delivery" = "send"): ProviderSendError {
+  const response = err?.response;
+  const waErr = response?.data?.error;
+  const httpStatus: number | undefined =
+    typeof response?.status === "number" ? response.status : undefined;
+  const requestId: string | undefined =
+    response?.headers?.["x-fb-request-id"] || response?.headers?.["x-fb-trace-id"] || undefined;
+
   if (waErr) {
-    const code = waErr.code ? `[${waErr.code}] ` : "";
+    const code = typeof waErr.code === "number" ? waErr.code : undefined;
+    const subcode = typeof waErr.error_subcode === "number" ? waErr.error_subcode : undefined;
     const title = waErr.error_user_title || waErr.message || waErr.type || "WhatsApp API error";
-    const detail = waErr.error_user_msg || waErr.error_data?.details;
-    return `${code}${title}${detail ? ": " + detail : ""}`;
+    const detail = waErr.error_user_msg || waErr.error_data?.details || undefined;
+    const codeTag = code != null ? `[${code}${subcode ? "/" + subcode : ""}] ` : "";
+    return {
+      channel: "WHATSAPP",
+      phase,
+      httpStatus,
+      code,
+      subcode,
+      type: waErr.type || undefined,
+      message: `${codeTag}${title}${detail ? ": " + detail : ""}`,
+      detail,
+      fbtraceId: waErr.fbtrace_id || undefined,
+      requestId,
+      retryable: isWaRetryable(httpStatus, code),
+      at: new Date().toISOString(),
+      raw: waErr,
+    };
   }
-  return err?.message || "WhatsApp send failed";
+
+  // No Graph error body: network-level failure (ECONNRESET/ETIMEDOUT/DNS) or a
+  // non-axios throw. Preserve whatever the runtime gave us (err.code is the
+  // Node syscall error like "ETIMEDOUT") and treat transport errors as
+  // retryable.
+  const nodeCode: string | undefined = typeof err?.code === "string" ? err.code : undefined;
+  const transport = !!nodeCode && nodeCode !== "ERR_BAD_REQUEST";
+  return {
+    channel: "WHATSAPP",
+    phase,
+    httpStatus,
+    message: err?.message || (nodeCode ? `WhatsApp transport error (${nodeCode})` : "WhatsApp send failed"),
+    detail: nodeCode,
+    requestId,
+    retryable: transport || (httpStatus != null && httpStatus >= 500),
+    at: new Date().toISOString(),
+    raw: nodeCode ? { code: nodeCode, message: err?.message } : undefined,
+  };
+}
+
+// Convert a WhatsApp/Graph delivery-status `errors[]` entry (async webhook)
+// into the same structured shape used for synchronous send failures.
+function buildWaStatusError(e: any): ProviderSendError {
+  const code = typeof e?.code === "number" ? e.code : undefined;
+  const subcode = typeof e?.error_subcode === "number" ? e.error_subcode : undefined;
+  const title = e?.title || e?.message || e?.error_data?.details || "Delivery failed";
+  const detail = e?.error_data?.details || e?.href || undefined;
+  const codeTag = code != null ? `[${code}${subcode ? "/" + subcode : ""}] ` : "";
+  return {
+    channel: "WHATSAPP",
+    phase: "delivery",
+    code,
+    subcode,
+    message: `${codeTag}${title}`.trim(),
+    detail,
+    fbtraceId: e?.fbtrace_id || undefined,
+    retryable: isWaRetryable(undefined, code),
+    at: new Date().toISOString(),
+    raw: e,
+  };
 }
 
 // ─── Inbound Adapter ─────────────────────────────────────────
@@ -98,18 +187,18 @@ export const whatsAppInboundAdapter: InboundAdapter = {
             // the rest of the pipeline can persist it on Message.errorMessage
             // (otherwise the operator sees "FAILED" with no reason).
             let errorMessage: string | undefined;
+            let error: ProviderSendError | undefined;
             const errs = Array.isArray(status.errors) ? status.errors : [];
             if (errs.length > 0) {
-              const e = errs[0] as any;
-              const code = e?.code != null ? `[${e.code}] ` : "";
-              const msg = e?.title || e?.message || e?.error_data?.details || "Delivery failed";
-              errorMessage = `${code}${msg}`.trim();
+              error = buildWaStatusError(errs[0]);
+              errorMessage = error.message;
             }
             updates.push({
               externalMessageId: status.id,
               status: mapped,
               timestamp: status.timestamp ? new Date(parseInt(status.timestamp) * 1000) : undefined,
               errorMessage,
+              error,
             });
           }
         }
@@ -190,7 +279,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      throw new Error(extractWaError(err));
+      throw new ChannelSendError(buildWaSendError(err));
     }
   },
 
@@ -215,7 +304,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      throw new Error(extractWaError(err));
+      throw new ChannelSendError(buildWaSendError(err));
     }
   },
 
@@ -245,7 +334,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      throw new Error(extractWaError(err));
+      throw new ChannelSendError(buildWaSendError(err));
     }
   },
 
@@ -277,7 +366,7 @@ export const whatsAppOutboundAdapter: OutboundAdapter = {
       );
       return response.data?.messages?.[0]?.id || null;
     } catch (err: any) {
-      throw new Error(extractWaError(err));
+      throw new ChannelSendError(buildWaSendError(err));
     }
   },
 };

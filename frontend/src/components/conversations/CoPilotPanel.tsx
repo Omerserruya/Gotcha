@@ -121,7 +121,7 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
   }, [prefillQuote?.version]);
 
   // AI-powered state
-  const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number; type: "reply" | "action" | "info" }[] | null>(null);
+  const [aiSuggestions, setAiSuggestions] = useState<{ text: string; label: string; confidence: number; type: "reply" | "action" | "info"; approach?: string; rationale?: string }[] | null>(null);
   const [aiSummary, setAiSummary] = useState<string | null>(null);
   const [aiLoading, setAiLoading] = useState(false);
   const [copilotMode, setCopilotMode] = useState<string>("READY_MESSAGE");
@@ -258,6 +258,8 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
           type: (s.type as "reply" | "action" | "info") || "reply",
           label: s.type === "reply" ? `${t("copilot.panel.aiReplyLabel")} ${i + 1}` : s.type === "action" ? t("copilot.panel.actionLabel") : t("copilot.panel.infoLabel"),
           confidence: Math.round(s.confidence * 100),
+          approach: typeof s.approach === "string" ? s.approach : undefined,
+          rationale: typeof s.rationale === "string" ? s.rationale : undefined,
         })));
       } else {
         setAiConfigured(false);
@@ -819,6 +821,13 @@ export function CoPilotPanel({ isOpen = true, conversation, messages, crmContext
                           </div>
                         </div>
                         <p className="text-xs text-gray-600 leading-relaxed">{s.text}</p>
+                        {(s.rationale || s.approach) && (
+                          <p className="mt-1.5 text-[11px] text-gray-400 leading-snug">
+                            {s.approach && <span className="font-medium text-gray-500">{s.approach}</span>}
+                            {s.approach && s.rationale && <span> · </span>}
+                            {s.rationale}
+                          </p>
+                        )}
                       </div>
                     </Wrapper>
                   );

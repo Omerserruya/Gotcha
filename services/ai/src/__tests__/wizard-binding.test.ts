@@ -7,6 +7,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 
 vi.mock("../services/ai.service", () => ({
   getDefaultModel: () => "gpt-5-mini",
+  getMicroModel: () => "gpt-5-nano",
   generateResponse: vi.fn(),
 }));
 

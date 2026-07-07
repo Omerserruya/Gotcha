@@ -64,10 +64,11 @@ export interface RuntimeBindings {
     req: ExecutionRequest,
     state: WorldState,
   ) => Promise<StrategyResult>;
-  /** Optional HITL gate. */
+  /** Optional HITL gate. `opts.probe` = evaluate policy only, create nothing. */
   approvalGate?: (
     contract: OperationContract,
     req: ExecutionRequest,
+    opts?: { probe?: boolean },
   ) => Promise<{ required: true; ref: string } | { required: false }>;
   /** Optional world-state loader (the business-state oracle entrypoint). */
   loadState?: (req: ExecutionRequest) => Promise<WorldState>;
@@ -175,8 +176,23 @@ export async function resolveExecution(
     record(inv, "skipped_should");
   }
 
-  // ── 2. Mode eligibility — advisory recommends WRITES, never executes them ──
+  // ── 2. Mode eligibility — advisory/dry_run recommend WRITES, never execute.
+  // advisory (copilot): short-circuit before the gate — a human is already in
+  // the loop. dry_run (shadow/evaluation): PROBE the gate first (no request
+  // created) so the trace proves whether the write WOULD have required
+  // approval — shadow evidence must cover the HITL surface, not just writes.
   if (contract.effect === "write" && req.mode === "advisory") {
+    return done({ status: "RECOMMENDED", proposal: { operation: contract.id, params: req.params } });
+  }
+  if (contract.effect === "write" && req.mode === "dry_run") {
+    if (contract.approval !== "none" && bind.approvalGate) {
+      try {
+        const probe = await bind.approvalGate(contract, req, { probe: true });
+        trace.approvalProbe = { wouldRequire: probe.required };
+      } catch (err: any) {
+        trace.approvalProbe = { wouldRequire: true, reason: String(err?.message || err) };
+      }
+    }
     return done({ status: "RECOMMENDED", proposal: { operation: contract.id, params: req.params } });
   }
 

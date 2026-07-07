@@ -1,6 +1,6 @@
 import { Job } from "bullmq";
-import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials } from "@chatcenter/shared";
-import type { ChannelCredentials } from "@chatcenter/shared";
+import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError } from "@chatcenter/shared";
+import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 import { recordBroadcastResult } from "./broadcast.worker";
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
@@ -30,6 +30,7 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
 
   let externalMessageId: string | null = null;
   let sendError: string | null = null;
+  let sendErrorDetail: ProviderSendError | null = null;
 
   try {
     if (messageType === "template" && adapter.sendTemplateMessage) {
@@ -61,15 +62,39 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
       );
     }
   } catch (err: any) {
-    sendError = err?.message || `${channel} send failed`;
-    console.error(`[outgoing] ${channel} adapter error:`, sendError);
+    const described = describeSendError(err, channel);
+    sendError = described.errorMessage;
+    sendErrorDetail = described.sendError;
+    // Structured so it's diagnosable from the DB/UI without server logs.
+    console.error(`[outgoing] ${channel} adapter error:`, JSON.stringify(sendErrorDetail));
   }
 
   const status = externalMessageId ? "SENT" : "FAILED";
 
+  // Merge the structured provider error into the row's existing metadata JSON
+  // (Prisma replaces the whole column, so read-then-merge to avoid clobbering
+  // whatever the enqueuer stored). Persisted at `metadata.sendError` so the
+  // failed send is fully diagnosable from the DB/UI without server logs.
+  let metadataUpdate: Record<string, any> | undefined;
+  if (sendErrorDetail) {
+    const existing = await prisma.message.findUnique({
+      where: { id: messageId },
+      select: { metadata: true },
+    });
+    const base = (existing?.metadata && typeof existing.metadata === "object")
+      ? (existing.metadata as Record<string, any>)
+      : {};
+    metadataUpdate = { ...base, sendError: sendErrorDetail };
+  }
+
   const updatedMessage = await prisma.message.update({
     where: { id: messageId },
-    data: { status, externalMessageId, errorMessage: sendError || undefined },
+    data: {
+      status,
+      externalMessageId,
+      errorMessage: sendError || undefined,
+      ...(metadataUpdate ? { metadata: metadataUpdate } : {}),
+    },
   });
 
   // If this Message was produced by a scheduled-message job, mirror the
@@ -95,7 +120,7 @@ async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<voi
     await publishEvent({
       event: "message:status",
       tenantId,
-      data: { messageId, conversationId: job.data.conversationId, status, externalMessageId, error: sendError },
+      data: { messageId, conversationId: job.data.conversationId, status, externalMessageId, error: sendError, sendError: sendErrorDetail || undefined },
     });
   }
 

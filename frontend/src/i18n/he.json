@@ -90,6 +90,16 @@
     "newConversation": "שיחה חדשה",
     "historyButton": "הקשר",
     "copilotButton": "עוזר AI",
+    "decisionTimeline": {
+      "button": "למה",
+      "title": "ציר החלטות",
+      "subtitle": "איך ה‑AI חשב בשיחה הזו",
+      "empty": "אין עדיין תיעוד החלטות AI לשיחה זו.",
+      "noGoal": "אין יעד מחויב",
+      "billing": "חיוב",
+      "allowed": "פעולות מותרות",
+      "termination": "הסתיים"
+    },
     "dropFilesHere": "שחרר קבצים כאן",
     "addCaption": "הוסף כיתוב...",
     "downloadFile": "הורד קובץ",
@@ -106,6 +116,16 @@
       "delivered": "נמסר",
       "read": "נקרא",
       "failed": "שליחה נכשלה"
+    },
+    "sendError": {
+      "prefix": "שליחה נכשלה",
+      "toggle": "הצג פרטי שגיאה",
+      "code": "קוד",
+      "type": "סוג",
+      "detail": "פירוט",
+      "requestId": "מזהה בקשה",
+      "retryable": "ניתן לנסות שוב",
+      "at": "זמן"
     },
     "historyPanel": {
       "title": "היסטוריה והערות",
@@ -155,7 +175,23 @@
       "success": "השיחה נפתחה",
       "error": "שגיאה בפתיחת שיחה"
     },
-    "attach": "צרף"
+    "attach": "צרף",
+    "systemAiEscalation": "ה-AI העביר לנציג אנושי",
+    "escalationReason": {
+      "agent_paused": "העובד הדיגיטלי מושהה",
+      "customer_requested_human": "הלקוח ביקש נציג אנושי",
+      "hard_message_ceiling": "הגיע למגבלת ההודעות",
+      "autonomous_message_cap": "הגיע למגבלת האוטונומיה",
+      "autonomous_time_cap": "חרג ממגבלת הזמן",
+      "agent_inactive": "העובד הדיגיטלי אינו פעיל",
+      "budget_exceeded": "נוצלה מכסת השימוש ב-AI",
+      "units_exhausted": "נגמרו יחידות ה-AI",
+      "ai_service_failure": "ה-AI לא הצליח להשיב בזמן"
+    },
+    "aiBadgeTitle": "נשלח אוטומטית על ידי העובד הדיגיטלי",
+    "systemReturnedToAi": "השיחה הוחזרה לעובד הדיגיטלי",
+    "returnToAi": "החזרה ל-AI",
+    "returnToAiTitle": "החזירו את השיחה לטיפול העובד הדיגיטלי"
   },
   "dashboard": {
     "title": "לוח בקרה",
@@ -2122,35 +2158,52 @@
       "avgResponseTime": "זמן תגובה ממוצע",
       "avgResolutionTime": "זמן פתרון ממוצע",
       "customerSatisfaction": "שביעות רצון לקוחות",
-      "aiResolutionRate": "שיעור פתרון AI"
+      "aiResolutionRate": "שיעור פתרון AI",
+      "aiHandledShare": "נתח טיפול AI",
+      "approvalRate": "שיעור אישורים"
     },
     "aiPerformance": {
       "title": "ביצועי סוכן AI",
       "conversationsHandled": "שיחות שטופלו",
       "avgResolutionTime": "זמן פתרון ממוצע",
       "escalationRate": "שיעור הסלמה",
-      "topCategories": "קטגוריות מובילות"
+      "topCategories": "קטגוריות מובילות",
+      "aiMessages": "הודעות AI",
+      "resolved": "נפתרו",
+      "escalated": "הוסלמו",
+      "governance": "בקרת אישורים",
+      "approvalRate": "שיעור אישור",
+      "overrideRate": "שיעור שינוי",
+      "pendingApprovals": "ממתינים",
+      "avgDecision": "זמן החלטה ממוצע לאישור: {minutes} דק'"
     },
     "humanPerformance": {
       "title": "ביצועי נציגים",
       "conversationsHandled": "שיחות שטופלו",
       "avgResolutionTime": "זמן פתרון ממוצע",
       "satisfactionScore": "ציון שביעות רצון",
-      "topAgents": "נציגים מובילים"
+      "topAgents": "נציגים מובילים",
+      "agent": "נציג",
+      "active": "פעילות",
+      "claimedToday": "נתפסו היום",
+      "avgResponse": "מענה ממוצע"
     },
     "topQuestions": {
       "title": "שאלות נפוצות",
       "subtitle": "שאלות הנשאלות לעתים קרובות והזדמנויות אוטומציה",
       "count": "כמות",
       "category": "קטגוריה",
-      "canAutomate": "הזדמנות אוטומציה"
+      "canAutomate": "הזדמנות אוטומציה",
+      "times": "{count} פעמים",
+      "automate": "אוטומציה"
     },
     "toolUsage": {
       "title": "שימוש בכלים",
       "subtitle": "כיצד כלי ה-AI מנוצלים",
       "tool": "כלי",
       "usage": "שימוש",
-      "successRate": "שיעור הצלחה"
+      "successRate": "שיעור הצלחה",
+      "uses": "{count} שימושים"
     },
     "channelPerformance": {
       "title": "ביצועי ערוצים",
@@ -2162,16 +2215,30 @@
       "conversations": "שיחות",
       "responseTime": "זמן תגובה",
       "resolutionRate": "שיעור פתרון",
-      "slaCompliance": "עמידה ב-SLA"
+      "slaCompliance": "עמידה ב-SLA",
+      "agents": "נציגים",
+      "resolution": "פתרון"
     },
     "insights": {
       "title": "תובנות AI",
       "subtitle": "הצעות אוטומציה ושיפורים",
       "automationOpportunity": "הזדמנות אוטומציה",
       "createFlow": "צור תהליך",
-      "setupIntegration": "הגדר אינטגרציה"
+      "setupIntegration": "הגדר אינטגרציה",
+      "highImpact": "השפעה גבוהה"
     },
-    "noData": "אין נתוני אנליטיקס זמינים לתקופה זו"
+    "noData": "אין נתוני אנליטיקס זמינים לתקופה זו",
+    "partialData": "חלק מהנתונים אינו זמין כרגע — מציגים את מה שיש.",
+    "noDataYet": "אין עדיין נתונים לתקופה זו.",
+    "noAgentsYet": "אין עדיין נציגים אנושיים.",
+    "noToolUsageYet": "ה-AI לא השתמש בכלים בתקופה זו.",
+    "noInsightsYet": "אין עדיין מספיק פעילות להפקת תובנות.",
+    "trend": {
+      "title": "נפח הודעות",
+      "subtitle": "הודעות נכנסות מול יוצאות ביום",
+      "inbound": "נכנסות",
+      "outbound": "יוצאות"
+    }
   },
   "replay": {
     "title": "הפעלה חוזרת של שיחה",
@@ -2524,6 +2591,18 @@
           "previewBtn1": "מעקב הזמנה",
           "previewBtn2": "החזרת פריט",
           "previewBtn3": "דבר עם נציג"
+        },
+        "reachability": {
+          "title": "העובד הזה עדיין לא מקבל שיחות",
+          "noNode": "הוא פעיל, אבל אף פלייבוק לא מנתב אליו שיחות. הוסיפו אותו לפלייבוק הראשי כדי שלקוחות באמת יגיעו אליו.",
+          "noCanvas": "הוא פעיל, אבל עדיין אין לכם פלייבוק — בלעדיו אף שיחה לא מנותבת לעובד דיגיטלי.",
+          "cta": "פתחו את הפלייבוקים"
+        },
+        "effectivePerms": {
+          "title": "מה העובד הזה יכול לעשות",
+          "subtitle": "הפעולות שהוא באמת יכול לבצע כרגע — היכולת צריכה להיות מחוברת וגם הפעולה מותרת לעובד הזה.",
+          "allowed": "מותר",
+          "blocked": "לא זמין (היכולת כבויה או לא הוענקה)"
         }
       }
     },

@@ -9,7 +9,7 @@
  */
 
 import OpenAI from "openai";
-import { trackAIUsage } from "@chatcenter/shared";
+import { trackAIUsage, assertAiAllowed, meterAiUnits } from "@chatcenter/shared";
 import { logAudit } from "./audit.service";
 import { stablePrefixOf } from "./prompt-builder.service";
 
@@ -24,6 +24,8 @@ export interface AIRequestParams {
   metadata?: {
     conversationId?: string;
     aiAgentId?: string;
+    /** Per-turn attribution (P1-6): groups every micro-call of one customer turn. */
+    turnId?: string;
     type?: string; // "suggestion" | "chat" | "summary" | "classification" | "onboarding"
     /**
      * Hash of the cached system prefix (SYSTEM_CORE + SESSION_PROFILE).
@@ -292,10 +294,52 @@ function applyTokenAndTemperatureParams(
   }
 }
 
+const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/**
+ * Debit AI Units for a completed model call and, when balance crosses an alert
+ * threshold (80/90/95/100%), notify billing so it can fan out owner alerts and
+ * trigger auto-purchase. Fully best-effort: any failure is logged, never thrown.
+ */
+async function meterAndReact(
+  tenantId: string,
+  model: string,
+  usage: { input_tokens: number; output_tokens: number; cached_tokens: number },
+  conversationId?: string,
+): Promise<void> {
+  try {
+    const m = await meterAiUnits({
+      tenantId,
+      model,
+      inputTokens: usage.input_tokens,
+      outputTokens: usage.output_tokens,
+      cachedInputTokens: usage.cached_tokens,
+      referenceId: conversationId,
+    });
+    if (!m || m.thresholds.length === 0) return;
+    await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/usage-threshold`, {
+      method: "POST",
+      headers: {
+        "content-type": "application/json",
+        "x-internal-key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+      },
+      body: JSON.stringify({ tenantId, thresholds: m.thresholds }),
+    }).catch(() => {});
+  } catch (err: any) {
+    console.error("[aiService] meterAndReact failed:", err?.message ?? err);
+  }
+}
+
 export async function generateResponse(params: AIRequestParams): Promise<AIResponse> {
   const client = getClient();
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
+
+  // Billing pre-flight: refuse AI when the tenant is out of AI Units or the
+  // subscription isn't serviceable. Throws AiUnitsExhaustedError ONLY in
+  // BILLING_ENFORCEMENT_MODE=hard; off/observe/soft never block. Callers map
+  // the error to graceful degradation (bot escalates, copilot disables).
+  await assertAiAllowed(params.tenantId);
 
   const requestParams: OpenAI.ChatCompletionCreateParamsNonStreaming = {
     model,
@@ -336,10 +380,15 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     }
   }
 
-  const response = await client.chat.completions.create(
-    requestParams,
-    params.signal ? { signal: params.signal } : undefined,
+  const llmStartedAt = Date.now();
+  const response = await callWithRetry(
+    () => client.chat.completions.create(
+      requestParams,
+      params.signal ? { signal: params.signal } : undefined,
+    ),
+    params.signal,
   );
+  const llmDurationMs = Date.now() - llmStartedAt;
 
   const cachedTokens =
     (response.usage as any)?.prompt_tokens_details?.cached_tokens ?? 0;
@@ -368,6 +417,12 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       `Likely cause: prompt prefix < 1024 tokens, or >5min since last call (cache TTL).`,
     );
   }
+  // Positive telemetry too — operators need cache HEALTH visible in both directions.
+  if (params.sessionId && cachedTokens > 0) {
+    console.log(
+      `[aiService] cache HIT sessionId=${params.sessionId} cached=${cachedTokens}/${usage.input_tokens} promptTokens`,
+    );
+  }
 
   const content = response.choices[0]?.message?.content || "";
   const rawToolCalls = restoreToolCallNames(
@@ -384,9 +439,15 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     completionTokens: usage.output_tokens,
     totalTokens: usage.total_tokens,
     cachedPromptTokens: cachedTokens,
+    // Per-turn attribution (P1-6): wall time of THIS call; turnId + aiAgentId
+    // from the caller's metadata so every micro-call of one turn shares a key.
+    durationMs: llmDurationMs,
+    turnId: params.metadata?.turnId,
+    aiAgentId: params.metadata?.aiAgentId,
     metadata: {
       conversationId: params.metadata?.conversationId,
       aiAgentId: params.metadata?.aiAgentId,
+      turnId: params.metadata?.turnId,
       sessionId: params.sessionId,
       // Spec assertion fields surfaced on every usage row so the platform
       // dashboard can detect violations: hash drift = prompt instability;
@@ -396,6 +457,10 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       cachedPrefixUsed: cachedTokens > 0,
     },
   }).catch((err) => console.error("[aiService] Usage tracking failed:", err.message));
+
+  // Meter AI Units (cost-driven debit) + react to crossed thresholds. No-op
+  // when BILLING_ENFORCEMENT_MODE=off. Fire-and-forget: never delays the reply.
+  void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
 
   // Audit log (fire-and-forget)
   logAudit({
@@ -482,6 +547,13 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
 
+  // Billing pre-flight — identical gate to the non-streaming generateResponse().
+  // Without this, every streamed AI path (autonomous worker, agent-runtime,
+  // agent-builder) would bypass the AI-Unit gate entirely. Throws
+  // AiUnitsExhaustedError ONLY in BILLING_ENFORCEMENT_MODE=hard; off/observe/soft
+  // never block. Callers map the error to graceful degradation.
+  await assertAiAllowed(params.tenantId);
+
   const requestParams: OpenAI.ChatCompletionCreateParamsStreaming = {
     model,
     messages: sanitizeMessagesForOpenAI(params.messages),
@@ -547,7 +619,12 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     toolNameMap,
   )!;
 
-  // Same fire-and-forget tracking + audit as the non-streaming path.
+  // Same fire-and-forget tracking + audit + AI-Unit metering as the
+  // non-streaming path. meterAndReact debits the wallet, writes the billing
+  // ledger, and fires threshold notifications — without it the streaming path
+  // would consume model capacity without ever billing it.
+  void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
+
   trackAIUsage({
     tenantId: params.tenantId,
     feature: type,
@@ -589,6 +666,65 @@ export function getDefaultModel(): string {
   return defaultModel;
 }
 
+/**
+ * Micro-call tier (P1-7). The cheap, high-frequency helper calls that block
+ * EVERY turn (knowledge_resolve, wizard_binding) don't need the flagship
+ * reasoning model — they extract/classify from a bounded prompt. Route them to
+ * a smaller/faster model (default gpt-5-nano) to cut per-turn latency and cost.
+ * Override with OPENAI_MICRO_MODEL; falls back to the default model if unset so
+ * the tier can be disabled by pointing it at the same model.
+ */
+export function getMicroModel(): string {
+  return process.env.OPENAI_MICRO_MODEL || "gpt-5-nano";
+}
+
 export function getDefaultEmbeddingModel(): string {
   return defaultEmbeddingModel;
+}
+
+// ─── Provider retry/backoff (P1-7) ──────────────────────────
+// The OpenAI SDK retries some errors itself, but not uniformly and not with a
+// jittered backoff we control. Wrap terminal LLM calls so a transient 429/5xx
+// or network blip doesn't fail a whole customer turn. NEVER retries a user
+// abort (turn cancellation) or a non-retryable 4xx (bad request / auth).
+const RETRYABLE_STATUS = new Set([408, 409, 429, 500, 502, 503, 504]);
+
+function isAbort(err: any): boolean {
+  return err?.name === "APIUserAbortError" || err?.name === "AbortError" || err?.code === "ABORT_ERR";
+}
+function isRetryable(err: any): boolean {
+  if (isAbort(err)) return false;
+  const status = err?.status ?? err?.response?.status;
+  if (typeof status === "number") return RETRYABLE_STATUS.has(status);
+  // No HTTP status → network/timeout class (ECONNRESET, ETIMEDOUT, fetch failed).
+  return true;
+}
+
+export async function callWithRetry<T>(
+  fn: () => Promise<T>,
+  signal?: AbortSignal,
+  opts: { maxRetries?: number; baseDelayMs?: number } = {},
+): Promise<T> {
+  const maxRetries = opts.maxRetries ?? 2;
+  const baseDelayMs = opts.baseDelayMs ?? 400;
+  let lastErr: any;
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err: any) {
+      lastErr = err;
+      if (attempt === maxRetries || !isRetryable(err) || signal?.aborted) throw err;
+      // Exponential backoff with jitter; honour a Retry-After header when present.
+      const retryAfterSec = Number(err?.headers?.["retry-after"] ?? err?.response?.headers?.get?.("retry-after"));
+      const backoff = Number.isFinite(retryAfterSec) && retryAfterSec > 0
+        ? retryAfterSec * 1000
+        : baseDelayMs * 2 ** attempt + Math.floor(Math.random() * baseDelayMs);
+      console.warn(`[aiService] LLM call failed (attempt ${attempt + 1}/${maxRetries + 1}, status=${err?.status ?? "net"}); retrying in ${backoff}ms`);
+      await new Promise<void>((resolve, reject) => {
+        const t = setTimeout(resolve, backoff);
+        signal?.addEventListener("abort", () => { clearTimeout(t); reject(err); }, { once: true });
+      });
+    }
+  }
+  throw lastErr;
 }

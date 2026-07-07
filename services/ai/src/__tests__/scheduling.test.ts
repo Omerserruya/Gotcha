@@ -196,6 +196,22 @@ describe("Scheduling - INVALID paths", () => {
       expect(r.proposed.length).toBeGreaterThan(0);
     }
   });
+
+  it("RFC-9557 IANA zone-suffixed ISO is parsed (not bad_iso_input), same instant", () => {
+    // LLM reasoners emit e.g. 2026-05-05T10:00:00+03:00[Asia/Jerusalem]; Date.parse
+    // chokes on the bracket. The numeric offset must still resolve to the same instant.
+    const now = Date.parse("2026-05-05T05:00:00+03:00"); // Tue 05:00 IDT
+    const base = idtIso("2026-05-05", "10:00"); // 2026-05-05T10:00:00+03:00
+    const r = resolveAvailability({
+      policy: ISRAEL_POLICY,
+      meetingType: DISCOVERY,
+      busy: [],
+      nowMs: now,
+      requestedAtIso: `${base}[Asia/Jerusalem]`,
+    });
+    expect(r.verdict).toBe("VALID");
+    if (r.verdict === "VALID") expect(r.slot.startMs).toBe(Date.parse(base));
+  });
 });
 
 describe("Scheduling - PROPOSE path", () => {

@@ -73,14 +73,26 @@ export async function getCrmAdapter(tenantId: string, vendor?: CrmVendor): Promi
 
   if (vendor) return instantiate(vendor, tenantId);
 
-  const cached = RESOLUTION_CACHE.get(tenantId);
-  if (cached && cached.expiresAt > Date.now()) {
-    return instantiate(cached.vendor, tenantId);
-  }
+  return instantiate(await resolveVendorCached(tenantId), tenantId);
+}
 
+/** Resolve (and cache) which CRM vendor backs a tenant, or null if none. */
+async function resolveVendorCached(tenantId: string): Promise<CrmVendor | null> {
+  const cached = RESOLUTION_CACHE.get(tenantId);
+  if (cached && cached.expiresAt > Date.now()) return cached.vendor;
   const resolved = await resolveFromDb(tenantId);
   RESOLUTION_CACHE.set(tenantId, { vendor: resolved, expiresAt: Date.now() + RESOLUTION_TTL_MS });
-  return instantiate(resolved, tenantId);
+  return resolved;
+}
+
+/**
+ * The tenant's resolved CRM vendor, or null if no CRM is connected. Read-only
+ * accessor over the SAME resolution `getCrmAdapter` uses (the NoOp adapter reports a
+ * placeholder vendor, so `getCrmAdapter().vendor` cannot answer "is a CRM connected?").
+ */
+export async function resolveCrmVendor(tenantId: string): Promise<CrmVendor | null> {
+  if (!tenantId) return null;
+  return resolveVendorCached(tenantId);
 }
 
 /**

@@ -2,11 +2,35 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
 import * as bcrypt from "bcryptjs";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits } from "@chatcenter/shared";
 import { sendActivationConfirmation, createMagicLink, sendOnboardingInvite, sendTeammateInvite } from "../services/notification.service";
 import OpenAI from "openai";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
+const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/**
+ * Provision the billing BillableEntity for a freshly-activated tenant. The
+ * trial itself starts later, when the admin adds a card on file (card-before-
+ * trial: billing's payment-methods route auto-starts the trial on first card).
+ * Best-effort — billing is a soft dependency, so a failure here is logged but
+ * never blocks tenant activation. Idempotent (ensure-entity is a no-op if the
+ * entity already exists).
+ */
+async function provisionBilling(tenantId: string): Promise<void> {
+  const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/ensure-entity`, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-internal-key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+    },
+    body: JSON.stringify({ tenantId }),
+  });
+  if (!res.ok) {
+    const body = await res.text();
+    throw new Error(`billing ensure-entity failed (${res.status}): ${body}`);
+  }
+}
 
 async function callAIGenerateConfigs(tenantId: string, authHeader: string): Promise<void> {
   const res = await fetch(`${AI_SERVICE_URL}/api/ai-assist/generate-configs`, {
@@ -154,6 +178,14 @@ ${deptDetails}`;
         completionTokens: response.usage.completion_tokens,
         totalTokens: response.usage.total_tokens,
       }).catch((err: any) => console.error("[Onboarding] Usage tracking failed:", err.message));
+
+      // Meter AI Units — onboarding chat is no longer an enforcement exception.
+      meterAiUnits({
+        tenantId,
+        model,
+        inputTokens: response.usage.prompt_tokens,
+        outputTokens: response.usage.completion_tokens,
+      }).catch((err: any) => console.error("[Onboarding] Unit metering failed:", err.message));
     }
 
     const content = response.choices[0]?.message?.content;
@@ -749,6 +781,12 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       console.error("Failed to send activation confirmation:", err);
     });
 
+    // Provision billing (entity + trial + included AI Units) for the new tenant.
+    // Best-effort: never block activation on billing availability.
+    provisionBilling(req.tenantId!).catch((err) => {
+      console.error(`[Onboarding] Billing provisioning failed for tenant ${req.tenantId}:`, err.message);
+    });
+
     res.json({
       data: {
         status: "ACTIVE",
@@ -1174,6 +1212,14 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
           promptTokens: response.usage.prompt_tokens,
           completionTokens: response.usage.completion_tokens,
           totalTokens: response.usage.total_tokens,
+        }).catch(() => { /* fire-and-forget */ });
+
+        // Meter AI Units — no enforcement exceptions for any AI surface.
+        meterAiUnits({
+          tenantId: req.tenantId!,
+          model,
+          inputTokens: response.usage.prompt_tokens,
+          outputTokens: response.usage.completion_tokens,
         }).catch(() => { /* fire-and-forget */ });
       }
 

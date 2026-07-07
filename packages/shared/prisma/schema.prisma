@@ -146,6 +146,15 @@ model Tenant {
   tenantRoles             TenantRole[]
   invites                 TenantInvite[]
   webhookTriggers         WebhookTrigger[]
+  // Billing & AI Units. The MONEY side (subscription/profile/invoices) binds to
+  // a BillableEntity, NOT directly to a tenant — see BillableEntityTenant. The
+  // WALLET + ENTITLEMENT side stays tenant-scoped (a tenant consumes capability
+  // and AI Units). In V1 these are 1:1; the abstraction lets them diverge later.
+  billableEntityLink      BillableEntityTenant?
+  aiUnitLots              AiUnitLot[]
+  aiUnitLedger            AiUnitLedgerEntry[]
+  aiBalance               TenantAiBalance?
+  tenantEntitlements      TenantEntitlement[]
 
   @@index([status])
   @@map("tenants")
@@ -455,6 +464,11 @@ model AIAgent {
   // instead of generic discovery.
   // { whatWeSell, idealCustomerProfile, problemsSolved[], expectedOutcomes[], qualificationSignals[], disqualifiers[] }
   salesContext Json? @map("sales_context")
+
+  // Last readiness-test report (P1-5): persisted so the owner can re-view the
+  // coverage result without re-running the LLM-costly generator each time.
+  // { score, coverage[], gaps[], generatedAt }
+  readinessReport Json? @map("readiness_report")
 
   // First-class goal + success criteria. Always rendered into the system
   // prompt by buildGoals() - so non-funnel agents (Support, Research)
@@ -1188,6 +1202,11 @@ model ApprovalRequest {
   decidedAt      DateTime?      @map("decided_at")
   decisionReason String?        @map("decision_reason")
   modifiedParams Json?          @map("modified_params") // if approver edited before running
+  // Kernel resume envelope (P1-3/B6): when the request originated from the
+  // Capability Runtime's approval gate, the FULL ExecutionRequest is stored so
+  // approval-resume re-enters the Runtime (invariants apply on HITL writes)
+  // instead of the legacy tool executor. Null for legacy-brain requests.
+  resumeEnvelope Json?          @map("resume_envelope")
   expiresAt      DateTime       @map("expires_at")
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
@@ -1692,6 +1711,20 @@ model UsageLog {
   promptTokens     Int?     @map("prompt_tokens")
   completionTokens Int?     @map("completion_tokens")
   costUsd          Decimal? @map("cost_usd") @db.Decimal(12, 6)
+  // Billing / AI-Units (populated when type="ai_tokens" once metering is live).
+  // unitsConsumed = (providerCost x categoryMultiplier x marginFactor) / unitCostBasis.
+  // This is the profitability ledger row; the coarse wallet movement lives in
+  // AiUnitLedgerEntry (linked via ledgerEntryId). billedPeriodKey ties the spend
+  // to a subscription billing period for reset/aggregation.
+  unitsConsumed    Decimal? @map("units_consumed") @db.Decimal(16, 6)
+  billedPeriodKey  String?  @map("billed_period_key")
+  ledgerEntryId    String?  @map("ledger_entry_id")
+  // Per-turn attribution (P1-6): turnId groups every micro-call of ONE customer
+  // turn; durationMs is that call's wall time; aiAgentId denormalizes the
+  // employee so per-employee cost/latency rollups don't join through metadata.
+  turnId           String?  @map("turn_id")
+  durationMs       Int?     @map("duration_ms")
+  aiAgentId        String?  @map("ai_agent_id")
   metadata         Json? // { channel, tool, conversationId, messageId, ... }
   createdAt        DateTime @default(now()) @map("created_at")
 
@@ -1700,10 +1733,15 @@ model UsageLog {
   @@index([tenantId, createdAt])
   @@index([tenantId, feature])
   @@index([tenantId, model])
+  @@index([tenantId, billedPeriodKey])
+  @@index([tenantId, aiAgentId])
+  @@index([tenantId, turnId])
   @@map("usage_logs")
 }
 
-// ─── Credit Transactions (Usage → Credits) ─────────────────
+// ─── Credit Transactions (DEPRECATED) ──────────────────────
+// Superseded by AiUnitLedgerEntry + AiUnitLot. Never written in production;
+// kept only to avoid a destructive migration. Do not use in new code.
 
 model CreditTransaction {
   id          String   @id @default(cuid())
@@ -1717,6 +1755,691 @@ model CreditTransaction {
   @@index([tenantId, source])
   @@index([tenantId, createdAt])
   @@map("credit_transactions")
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// BILLING · SUBSCRIPTION · LICENSING · AI UNITS
+// Design dossier: docs / plan i-want-to-design-async-muffin.md
+// Separation of concerns:
+//   • MONEY      (BillableEntity → BillingProfile/Subscription/Invoice/Charge)
+//   • WALLET     (tenant-scoped AiUnitLot/AiUnitLedgerEntry/TenantAiBalance)
+//   • ENTITLEMENT(tenant-scoped TenantEntitlement → materialized TenantFeature)
+//   • CATALOG    (Plan/PlanEntitlement/CreditPackage/BillableModel/UnitPricingConfig)
+// ════════════════════════════════════════════════════════════════════════
+
+enum BillableEntityKind {
+  TENANT // V1: one BillableEntity per tenant. Future: ACCOUNT (one payer, N tenants).
+  ACCOUNT
+}
+
+enum SubscriptionStatus {
+  PENDING // created, card not yet on file
+  TRIALING
+  ACTIVE
+  PAST_DUE // renewal charge failed; in dunning
+  SUSPENDED // dunning exhausted; AI gated, platform read-only
+  CANCELED
+  PAUSED
+  GRANDFATHERED // temporary one-way compatibility state (enforcement + billing OFF)
+}
+
+enum BillingProfileStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PaymentMethodStatus {
+  ACTIVE
+  EXPIRED
+  REMOVED
+}
+
+enum BillingProvider {
+  ICOUNT
+  STRIPE
+  MANUAL // grandfathered / admin-managed; no real provider
+}
+
+enum InvoiceType {
+  SUBSCRIPTION
+  CREDIT_PURCHASE
+  AUTO_PURCHASE
+}
+
+enum InvoiceStatus {
+  DRAFT
+  ISSUED
+  PAID
+  FAILED
+  VOID
+}
+
+enum ChargeStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum BillingInterval {
+  MONTHLY
+  ANNUAL
+}
+
+enum PendingChangeType {
+  DOWNGRADE
+  CANCEL
+}
+
+enum AiUnitBucket {
+  INCLUDED // monthly plan allotment; expires at renewal (use-it-or-lose-it)
+  PURCHASED // bought or auto-purchased; never expires; consumed FIFO after INCLUDED
+}
+
+enum AiUnitGrantType {
+  PLAN
+  PURCHASE
+  AUTO
+  PROMO
+  TRIAL
+}
+
+enum AiUnitEntryType {
+  GRANT
+  CONSUME
+  EXPIRE
+  ADJUST
+  REFUND
+}
+
+enum EntitlementValueType {
+  BOOLEAN
+  COUNTER // numeric limit (max users, AI employees, channels, storage…)
+  CONFIG // arbitrary JSON config
+}
+
+enum EntitlementSource {
+  PLAN_DEFAULT
+  OVERRIDE
+  PROMO
+  TRIAL
+  ADDON
+  BETA
+}
+
+// ─── Billable Entity (the payer abstraction) ───────────────
+// Money/subscription models reference billableEntityId, NEVER tenantId, so a
+// future BillingAccount → many tenants needs no redesign. V1 seeds one
+// TENANT-kind entity per tenant via the BillableEntityTenant link.
+
+model BillableEntity {
+  id          String             @id @default(cuid())
+  kind        BillableEntityKind @default(TENANT)
+  displayName String?            @map("display_name")
+  createdAt   DateTime           @default(now()) @map("created_at")
+  updatedAt   DateTime           @updatedAt @map("updated_at")
+
+  tenants            BillableEntityTenant[]
+  billingProfile     BillingProfile?
+  subscription       Subscription?
+  invoices           Invoice[]
+  autoPurchasePolicy AutoPurchasePolicy?
+
+  @@map("billable_entities")
+}
+
+model BillableEntityTenant {
+  id               String   @id @default(cuid())
+  billableEntityId String   @map("billable_entity_id")
+  // @unique enforces V1's one-entity-per-tenant. Dropping this unique later
+  // (without touching downstream models) is what enables multi-tenant accounts.
+  tenantId         String   @unique @map("tenant_id")
+  createdAt        DateTime @default(now()) @map("created_at")
+
+  entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  tenant Tenant         @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([billableEntityId])
+  @@map("billable_entity_tenants")
+}
+
+// ─── Plan & Pricing Catalog ────────────────────────────────
+
+model Plan {
+  id             String          @id @default(cuid())
+  key            String // light | pro | business | enterprise | grandfathered
+  name           String
+  version        Int             @default(1)
+  billingInterval BillingInterval @default(MONTHLY) @map("billing_interval")
+  basePrice      Decimal?        @map("base_price") @db.Decimal(12, 2) // null for sales-only / grandfathered
+  currency       String          @default("ILS")
+  includedAiUnits Int            @default(0) @map("included_ai_units")
+  salesOnly      Boolean         @default(false) @map("sales_only") // Enterprise = true (no public price)
+  active         Boolean         @default(true)
+  createdAt      DateTime        @default(now()) @map("created_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+
+  entitlements PlanEntitlement[]
+
+  @@unique([key, version])
+  @@index([key])
+  @@map("plans")
+}
+
+model PlanEntitlement {
+  id            String               @id @default(cuid())
+  planId        String               @map("plan_id")
+  entitlementKey String              @map("entitlement_key") // license key OR limit key
+  valueType     EntitlementValueType @map("value_type")
+  value         Json // { bool } | { count } | arbitrary config
+  createdAt     DateTime             @default(now()) @map("created_at")
+
+  plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  @@unique([planId, entitlementKey])
+  @@index([planId])
+  @@map("plan_entitlements")
+}
+
+model CreditPackage {
+  id              String   @id @default(cuid())
+  key             String   @unique
+  name            String
+  units           Int
+  price           Decimal  @db.Decimal(12, 2)
+  currency        String   @default("ILS")
+  providerPriceRef String? @map("provider_price_ref")
+  active          Boolean  @default(true)
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@map("credit_packages")
+}
+
+// Cost-driven pricing engine. AI Units are an abstraction over real provider
+// COST, not raw tokens. Adding a model / changing prices / adjusting margin =
+// data change only (no code). Versioned by effectiveFrom (newest active wins).
+
+model BillableModel {
+  id                  String    @id @default(cuid())
+  model               String // e.g. "gpt-5-mini"
+  provider            String    @default("openai")
+  kind                String    @default("CHAT") // CHAT | EMBEDDING | VOICE | DEEP_RESEARCH
+  inputCostPer1M      Decimal   @map("input_cost_per_1m") @db.Decimal(12, 6)
+  outputCostPer1M     Decimal   @map("output_cost_per_1m") @db.Decimal(12, 6)
+  cachedInputCostPer1M Decimal? @map("cached_input_cost_per_1m") @db.Decimal(12, 6)
+  categoryMultiplier  Decimal   @default(1) @map("category_multiplier") @db.Decimal(8, 4) // voice 2x, deep-research 10x
+  active              Boolean   @default(true)
+  effectiveFrom       DateTime  @default(now()) @map("effective_from")
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@index([model, active, effectiveFrom])
+  @@map("billable_models")
+}
+
+model UnitPricingConfig {
+  id              String   @id @default(cuid())
+  // The real provider cost (USD) that equals exactly 1 AI Unit (e.g. the cost
+  // of 10k gpt-5-mini tokens @ 80/20). marginFactor scales cost→Units to set
+  // commercial margin. Both are data so margin/cost changes never touch code.
+  unitCostBasisUsd Decimal  @map("unit_cost_basis_usd") @db.Decimal(12, 8)
+  marginFactor    Decimal  @default(1) @map("margin_factor") @db.Decimal(8, 4)
+  currency        String   @default("USD")
+  active          Boolean  @default(true)
+  effectiveFrom   DateTime @default(now()) @map("effective_from")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([active, effectiveFrom])
+  @@map("unit_pricing_configs")
+}
+
+// ─── Entitlement layering (feeds the existing permission resolver) ──
+// Override layer behind the materialized TenantFeature read cache. Carries
+// source + expiry so plan defaults, promos, trials, beta and manual overrides
+// coexist without destroying each other.
+
+model TenantEntitlement {
+  id            String               @id @default(cuid())
+  tenantId      String               @map("tenant_id")
+  entitlementKey String              @map("entitlement_key")
+  valueType     EntitlementValueType @map("value_type")
+  value         Json
+  source        EntitlementSource
+  expiresAt     DateTime?            @map("expires_at") // temporary features (beta/promo/trial)
+  reason        String?
+  createdBy     String?              @map("created_by")
+  createdAt     DateTime             @default(now()) @map("created_at")
+  updatedAt     DateTime             @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, entitlementKey, source])
+  @@index([tenantId])
+  @@index([tenantId, entitlementKey])
+  @@map("tenant_entitlements")
+}
+
+// ─── Wallet (tenant-scoped AI Units) ───────────────────────
+// Two buckets: INCLUDED (monthly, expires at renewal) and PURCHASED (never
+// expires, FIFO). Balance = Σ ledger, reconcilable against lot.unitsRemaining.
+
+model AiUnitLot {
+  id            String          @id @default(cuid())
+  tenantId      String          @map("tenant_id")
+  bucket        AiUnitBucket
+  grantType     AiUnitGrantType @map("grant_type")
+  unitsGranted  Decimal         @map("units_granted") @db.Decimal(16, 6)
+  unitsRemaining Decimal        @map("units_remaining") @db.Decimal(16, 6)
+  periodKey     String?         @map("period_key") // INCLUDED only — the billing period this allotment belongs to
+  expiresAt     DateTime?       @map("expires_at") // INCLUDED → period end; PURCHASED → null
+  source        String? // "plan:pro" | "package:5000" | "promo:launch" | "auto"
+  referenceId   String?         @map("reference_id") // invoice / order / subscription id
+  createdAt     DateTime        @default(now()) @map("created_at")
+
+  tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  entries AiUnitLedgerEntry[]
+
+  // FIFO consumption order: INCLUDED current period first, then PURCHASED oldest-first.
+  @@index([tenantId, bucket, createdAt])
+  @@index([tenantId, periodKey])
+  @@map("ai_unit_lots")
+}
+
+model AiUnitLedgerEntry {
+  id          String          @id @default(cuid())
+  tenantId    String          @map("tenant_id")
+  lotId       String?         @map("lot_id")
+  entryType   AiUnitEntryType @map("entry_type")
+  bucket      AiUnitBucket
+  units       Decimal         @db.Decimal(16, 6) // signed: GRANT/REFUND +, CONSUME/EXPIRE -
+  periodKey   String?         @map("period_key")
+  source      String?
+  referenceId String?         @map("reference_id") // usage turn / invoice / order
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  tenant Tenant     @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  lot    AiUnitLot? @relation(fields: [lotId], references: [id], onDelete: SetNull)
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, entryType])
+  @@index([tenantId, periodKey])
+  @@map("ai_unit_ledger_entries")
+}
+
+// Materialized snapshot for the hot-path pre-flight gate + UI. Derived from the
+// ledger/lots; kept in sync transactionally. Shows INCLUDED vs PURCHASED apart.
+model TenantAiBalance {
+  tenantId          String   @id @map("tenant_id")
+  includedRemaining Decimal  @default(0) @map("included_remaining") @db.Decimal(16, 6)
+  purchasedRemaining Decimal @default(0) @map("purchased_remaining") @db.Decimal(16, 6)
+  includedAllowance Decimal  @default(0) @map("included_allowance") @db.Decimal(16, 6) // current plan's monthly grant (for % calc)
+  periodKey         String?  @map("period_key")
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("tenant_ai_balances")
+}
+
+// ─── Money primitives (keyed by billableEntityId) ──────────
+
+model BillingProfile {
+  id                String               @id @default(cuid())
+  billableEntityId  String               @unique @map("billable_entity_id")
+  provider          BillingProvider      @default(ICOUNT)
+  providerCustomerId String?             @map("provider_customer_id")
+  currency          String               @default("ILS")
+  billingEmail      String?              @map("billing_email")
+  vatId             String?              @map("vat_id")
+  status            BillingProfileStatus @default(ACTIVE)
+  createdAt         DateTime             @default(now()) @map("created_at")
+  updatedAt         DateTime             @updatedAt @map("updated_at")
+
+  entity         BillableEntity  @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  paymentMethods PaymentMethod[]
+
+  @@map("billing_profiles")
+}
+
+model PaymentMethod {
+  id              String              @id @default(cuid())
+  billingProfileId String             @map("billing_profile_id")
+  provider        BillingProvider     @default(ICOUNT)
+  // Tokenized reference only — raw PAN is NEVER stored (iCount is the PCI vault).
+  token           String
+  brand           String?
+  last4           String?
+  expMonth        Int?                @map("exp_month")
+  expYear         Int?                @map("exp_year")
+  isDefault       Boolean             @default(false) @map("is_default")
+  status          PaymentMethodStatus @default(ACTIVE)
+  createdAt       DateTime            @default(now()) @map("created_at")
+  updatedAt       DateTime            @updatedAt @map("updated_at")
+
+  profile BillingProfile @relation(fields: [billingProfileId], references: [id], onDelete: Cascade)
+
+  @@index([billingProfileId])
+  @@map("payment_methods")
+}
+
+model Subscription {
+  id                 String             @id @default(cuid())
+  billableEntityId   String             @unique @map("billable_entity_id") // V1: one active subscription per entity
+  billingProfileId   String?            @map("billing_profile_id")
+  planKey            String             @map("plan_key")
+  planVersion        Int                @default(1) @map("plan_version")
+  status             SubscriptionStatus @default(PENDING)
+  // When false (GRANDFATHERED), the AI runtime gate is skipped and no billing
+  // runs. NOT an infinite-units balance — financial state stays deterministic.
+  enforcementEnabled Boolean            @default(true) @map("enforcement_enabled")
+  trialEndsAt        DateTime?          @map("trial_ends_at")
+  currentPeriodStart DateTime?          @map("current_period_start")
+  currentPeriodEnd   DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
+  providerSubscriptionRef String?       @map("provider_subscription_ref")
+  createdAt          DateTime           @default(now()) @map("created_at")
+  updatedAt          DateTime           @updatedAt @map("updated_at")
+
+  entity        BillableEntity             @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  pendingChange PendingSubscriptionChange?
+  events        SubscriptionEvent[]
+  dunning       DunningState?
+
+  @@index([status])
+  @@index([currentPeriodEnd])
+  @@index([trialEndsAt])
+  @@map("subscriptions")
+}
+
+model PendingSubscriptionChange {
+  id              String            @id @default(cuid())
+  subscriptionId  String            @unique @map("subscription_id")
+  changeType      PendingChangeType @map("change_type")
+  targetPlanKey   String?           @map("target_plan_key")
+  targetPlanVersion Int?            @map("target_plan_version")
+  effectiveAt     DateTime          @map("effective_at") // = currentPeriodEnd
+  createdBy       String?           @map("created_by")
+  createdAt       DateTime          @default(now()) @map("created_at")
+  appliedAt       DateTime?         @map("applied_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([effectiveAt, appliedAt])
+  @@map("pending_subscription_changes")
+}
+
+model SubscriptionEvent {
+  id             String              @id @default(cuid())
+  subscriptionId String              @map("subscription_id")
+  type           String // "trial_started" | "activated" | "plan_changed" | "suspended" | ...
+  fromStatus     SubscriptionStatus? @map("from_status")
+  toStatus       SubscriptionStatus? @map("to_status")
+  actor          String? // user id | "system" | "scheduler"
+  metadata       Json?
+  at             DateTime            @default(now())
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([subscriptionId, at])
+  @@map("subscription_events")
+}
+
+model Invoice {
+  id               String        @id @default(cuid())
+  billableEntityId String        @map("billable_entity_id")
+  provider         BillingProvider @default(ICOUNT)
+  // Reference to the iCount-issued legal tax document (חשבונית מס) — the
+  // authoritative record. This row is a thin mirror for in-app display.
+  providerInvoiceRef String?     @map("provider_invoice_ref")
+  providerPdfUrl   String?       @map("provider_pdf_url")
+  type             InvoiceType
+  amount           Decimal       @db.Decimal(12, 2)
+  currency         String        @default("ILS")
+  vat              Decimal?      @db.Decimal(12, 2)
+  status           InvoiceStatus @default(DRAFT)
+  lineItems        Json?         @map("line_items")
+  issuedAt         DateTime?     @map("issued_at")
+  paidAt           DateTime?     @map("paid_at")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime      @updatedAt @map("updated_at")
+
+  entity  BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+  charges Charge[]
+
+  @@index([billableEntityId, createdAt])
+  @@index([status])
+  @@map("invoices")
+}
+
+model Charge {
+  id              String       @id @default(cuid())
+  invoiceId       String       @map("invoice_id")
+  provider        BillingProvider @default(ICOUNT)
+  providerChargeRef String?    @map("provider_charge_ref")
+  amount          Decimal      @db.Decimal(12, 2)
+  currency        String       @default("ILS")
+  status          ChargeStatus @default(PENDING)
+  attemptNumber   Int          @default(1) @map("attempt_number")
+  failureCode     String?      @map("failure_code")
+  idempotencyKey  String       @unique @map("idempotency_key")
+  createdAt       DateTime     @default(now()) @map("created_at")
+
+  invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@index([invoiceId])
+  @@map("charges")
+}
+
+model AutoPurchasePolicy {
+  id               String   @id @default(cuid())
+  billableEntityId String   @unique @map("billable_entity_id")
+  enabled          Boolean  @default(false)
+  thresholdPct     Int      @default(10) @map("threshold_pct") // trigger when remaining <= this % of allowance
+  packageKey       String?  @map("package_key")
+  maxMonthlySpend  Decimal? @map("max_monthly_spend") @db.Decimal(12, 2)
+  currency         String   @default("ILS")
+  monthSpendKey    String?  @map("month_spend_key") // current spend window (billing-cycle anchored)
+  monthSpentAmount Decimal  @default(0) @map("month_spent_amount") @db.Decimal(12, 2)
+  lastTriggeredAt  DateTime? @map("last_triggered_at")
+  updatedBy        String?  @map("updated_by")
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
+
+  @@map("auto_purchase_policies")
+}
+
+model DunningState {
+  id             String    @id @default(cuid())
+  subscriptionId String    @unique @map("subscription_id")
+  stage          Int       @default(0)
+  nextRetryAt    DateTime? @map("next_retry_at")
+  attempts       Int       @default(0)
+  lastFailureCode String?  @map("last_failure_code")
+  createdAt      DateTime  @default(now()) @map("created_at")
+  updatedAt      DateTime  @updatedAt @map("updated_at")
+
+  subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
+
+  @@index([nextRetryAt])
+  @@map("dunning_states")
+}
+
+// Immutable log of every provider webhook received — the audit + idempotency
+// spine for refunds/chargebacks/payment confirmations. `providerEventId` is
+// unique so a redelivered webhook is processed at most once; the raw payload is
+// retained so any money event can be reconstructed months later.
+model BillingWebhookEvent {
+  id              String          @id @default(cuid())
+  provider        BillingProvider @default(ICOUNT)
+  providerEventId String          @unique @map("provider_event_id")
+  eventType       String          @map("event_type")
+  tenantId        String?         @map("tenant_id")
+  payload         Json
+  status          String          @default("RECEIVED") // RECEIVED | PROCESSED | IGNORED | FAILED
+  error           String?
+  receivedAt      DateTime        @default(now()) @map("received_at")
+  processedAt     DateTime?       @map("processed_at")
+
+  @@index([provider, eventType])
+  @@index([tenantId])
+  @@index([receivedAt])
+  @@map("billing_webhook_events")
+}
+
+// PERMANENT, provider-neutral evaluation corpus: one row per turn comparing the
+// (temporary) Planner's decision to the (shadow) Reasoner's decision over the
+// SAME Oracle Facts. Foundation for prompt eval, regression detection, model
+// comparison, fine-tuning, Planner-retirement decisions, and future automated
+// evals. `reasonerInput` stores the full neutral input so any FUTURE model can
+// be replayed against the exact same inputs. NEVER stores provider-specific
+// request/response — that stays behind the ReasonerProvider boundary.
+model ReasonerShadowEval {
+  id             String   @id @default(cuid())
+  schemaVersion  Int      @default(1) @map("schema_version")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  tenantId       String   @map("tenant_id")
+  conversationId String   @map("conversation_id")
+  turnId         String   @map("turn_id")
+  agentId        String?  @map("agent_id")
+
+  /// Replayable, provider-neutral input (Facts + Context + Memory).
+  reasonerInput  Json     @map("reasoner_input")
+
+  /// Both decisions in the ONE canonical vocabulary.
+  plannerDecision  Json   @map("planner_decision")
+  reasonerDecision Json   @map("reasoner_decision")
+
+  /// Agreement classification.
+  agree          Boolean
+  moveTypeMatch  Boolean  @map("move_type_match")
+  detailMatch    Boolean  @map("detail_match")
+  divergenceAxis String   @map("divergence_axis") // none | move_type | operation | field
+
+  /// Live-turn correlation (the Planner drove production; nullable/backfilled).
+  executedOperation    String? @map("executed_operation")
+  runtimeResult        String? @map("runtime_result")
+  finalBusinessOutcome String? @map("final_business_outcome")
+
+  /// Provenance / eval axes (provider-neutral).
+  provider      String
+  model         String
+  promptVersion String  @map("prompt_version")
+  latencyMs     Int?    @map("latency_ms")
+  inputTokens   Int?    @map("input_tokens")
+  outputTokens  Int?    @map("output_tokens")
+
+  /// Untrusted reasoning rationale (audit/eval only).
+  reasoningTrace String? @map("reasoning_trace")
+  metadata       Json?
+
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@index([divergenceAxis])
+  @@index([agree])
+  @@index([provider, model, promptVersion])
+  @@map("reasoner_shadow_evals")
+}
+
+// ─── Agent Loop (autonomous reasoning loop — observability corpus) ─────────
+// One run per loop; one iteration row per reason→execute cycle. Fully replayable
+// (each iteration stores the provider-neutral Oracle Facts snapshot the Reasoner
+// saw). Additive + flag-gated; the legacy Planner remains production.
+
+model AgentLoopRun {
+  id                String   @id @default(cuid())
+  loopId            String   @unique @map("loop_id")
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  tenantId          String   @map("tenant_id")
+  conversationId    String   @map("conversation_id")
+  turnId            String   @map("turn_id")
+  agentId           String?  @map("agent_id")
+
+  /// The business outcome the loop drove toward.
+  goal              String?
+  /// Exactly one TerminationReason (finish/need_input/escalate/max_iterations/…).
+  terminationReason String   @map("termination_reason")
+  iterationCount    Int      @map("iteration_count")
+  spentUnits        Int      @map("spent_units")
+  wallMs            Int      @map("wall_ms")
+  /// advisory | autonomous
+  mode              String
+
+  finalDecision     Json     @map("final_decision")
+  finalReplyIntent  Json     @map("final_reply_intent")
+  /// The single customer-facing message the Writer produced.
+  reply             String?
+
+  provider          String
+  model             String
+  promptVersion     String   @map("prompt_version")
+
+  iterations        AgentLoopIteration[]
+
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@index([terminationReason])
+  @@index([goal])
+  @@map("agent_loop_runs")
+}
+
+model AgentLoopIteration {
+  id                  String   @id @default(cuid())
+  createdAt           DateTime @default(now()) @map("created_at")
+
+  loopId              String   @map("loop_id")
+  run                 AgentLoopRun @relation(fields: [loopId], references: [loopId], onDelete: Cascade)
+
+  tenantId            String   @map("tenant_id")
+  conversationId      String   @map("conversation_id")
+  iteration           Int
+
+  goal                String?
+  /// Provider-neutral Facts snapshot the Reasoner saw this iteration (replayable).
+  oracleFactsSnapshot Json     @map("oracle_facts_snapshot")
+  /// Short WHY from the Reasoner read (situation/rationale) — audit only.
+  reasoningSummary    String   @map("reasoning_summary")
+
+  decisionType        String   @map("decision_type")
+  proposedOperation   String?  @map("proposed_operation")
+  proposedParams      Json?    @map("proposed_params")
+  /// ExecutionResult status if an operation ran (EXECUTED/NEEDS_INPUT/FAILED/…).
+  runtimeResult       String?  @map("runtime_result")
+  /// Neutral Observation projection (status/outcome/reason/invariants).
+  observation         Json?
+  /// Goal-relevant Facts signature — powers goal-based progress detection.
+  factsSignature      String?  @map("facts_signature")
+  progressed          Boolean?
+
+  inputTokens         Int?     @map("input_tokens")
+  outputTokens        Int?     @map("output_tokens")
+  latencyMs           Int?     @map("latency_ms")
+
+  @@unique([loopId, iteration])
+  @@index([tenantId, createdAt])
+  @@index([conversationId])
+  @@map("agent_loop_iterations")
+}
+
+/// Agent Loop cross-turn memory — the Reasoner's carried-forward conclusions
+/// (AgentMemory: committedGoal, workingHypotheses, alreadyAsked, priorReads,
+/// openCommitments), scoped per agent × customer so memory follows the customer
+/// across conversations. ADVISORY continuity only — Facts always override it.
+model AgentCustomerMemory {
+  id                 String   @id @default(cuid())
+  tenantId           String   @map("tenant_id")
+  agentId            String   @map("agent_id")
+  customerExternalId String   @map("customer_external_id")
+  /// The bounded AgentMemory JSON (last turn's Reasoner memoryUpdate).
+  memory             Json
+  updatedAt          DateTime @updatedAt @map("updated_at")
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@unique([tenantId, agentId, customerExternalId])
+  @@index([tenantId, updatedAt])
+  @@map("agent_customer_memory")
 }
 
 // ─── Audit Logs (Full System Audit Trail) ──────────────────

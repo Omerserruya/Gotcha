@@ -69,6 +69,35 @@ async function dispatchApprovedAction(args: {
   if (token) headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   headers["x-tenant-id"] = args.tenantId;
 
+  // ── Kernel-originated approvals (P1-3/B6) — resume through the Capability
+  // Runtime, NOT the legacy executor: the stored ExecutionRequest re-enters
+  // the Runtime so invariants/verification apply to the HITL write.
+  try {
+    const row = await (prisma as any).approvalRequest.findFirst({
+      where: { id: args.approvalId, tenantId: args.tenantId },
+      select: { resumeEnvelope: true },
+    });
+    if ((row?.resumeEnvelope as any)?.kind === "kernel_operation") {
+      const res = await fetch(`${base}/api/agent-loop/execute-approved`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+        },
+        body: JSON.stringify({ tenantId: args.tenantId, approvalId: args.approvalId }),
+      });
+      const data: any = await res.json().catch(() => ({}));
+      if (!res.ok) return { ok: false, error: data?.error || `kernel resume returned ${res.status}` };
+      const status = data?.data?.status;
+      if (status !== "EXECUTED") {
+        return { ok: false, error: `kernel resume ended ${status ?? "unknown"}`, result: data?.data };
+      }
+      return { ok: true, result: data?.data };
+    }
+  } catch (err: any) {
+    return { ok: false, error: `kernel resume dispatch failed: ${err?.message}` };
+  }
+
   // ── Integration tools - same path the bot uses ─────────────
   if (args.tool.startsWith("integration_")) {
     const slug = args.tool.slice("integration_".length);
@@ -322,11 +351,23 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
 
     // Un-pause the conversation so the bot resumes on the next inbound.
     // incoming-worker continues the bot loop only on "ai_agent".
+    // OWNERSHIP GUARD: if a human took the conversation over while this
+    // approval sat pending (isHandedOver / assigned agent), approving the
+    // action must NOT silently re-activate the bot on a human-owned
+    // conversation - execute the action, keep the human in charge.
     try {
-      await prisma.conversation.update({
-        where: { id: row.conversationId },
-        data: { handledBy: "ai_agent" },
+      const conv = await prisma.conversation.findFirst({
+        where: { id: row.conversationId, tenantId },
+        select: { isHandedOver: true, assignedAgentId: true },
       });
+      if (conv && !conv.isHandedOver && !conv.assignedAgentId) {
+        await prisma.conversation.update({
+          where: { id: row.conversationId },
+          data: { handledBy: "ai_agent" },
+        });
+      } else if (conv) {
+        console.log(`[approvals] conversation ${row.conversationId} is human-owned - approved action runs, bot stays paused`);
+      }
     } catch (err: any) {
       console.error("approvals.approve: failed to un-pause conversation:", err.message);
     }

@@ -6,7 +6,7 @@ import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
-import { getAIAgent, createAIAgent, updateAIAgent, deleteAIAgent, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases } from "@/lib/api";
+import { getAIAgent, getAIAgentReachability, getAIAgentEffectivePermissions, createAIAgent, updateAIAgent, deleteAIAgent, getDepartments, getMarketplaceIntegrations, getSystemKnowledgeBases, type EffectivePermissions } from "@/lib/api";
 import { listFunnelSummaries, type FunnelSummary } from "@/lib/api-funnel";
 import { getGoogleCalendarConnectUrl } from "@/lib/api-scheduler";
 import clsx from "clsx";
@@ -385,6 +385,19 @@ export default function AgentEditorPage() {
     lastError: string | null;
   } | null>(null);
 
+  const [reachability, setReachability] = useState<{ hasCanvas: boolean; reachable: boolean } | null>(null);
+  const [effectivePerms, setEffectivePerms] = useState<EffectivePermissions | null>(null);
+
+  useEffect(() => {
+    if (isNew || !token) return;
+    getAIAgentReachability(token, id)
+      .then((res) => setReachability(res.data))
+      .catch(() => setReachability(null));
+    getAIAgentEffectivePermissions(token, id)
+      .then((res) => setEffectivePerms(res.data))
+      .catch(() => setEffectivePerms(null));
+  }, [isNew, token, id]);
+
   useEffect(() => {
     if (isNew || !token) return;
     setLoading(true);
@@ -711,6 +724,69 @@ export default function AgentEditorPage() {
               )}
             </div>
           </div>
+
+          {/* Go-live honesty: an ACTIVE employee no playbook node routes to
+              never receives a conversation. Say so instead of letting "live"
+              be a broken promise. */}
+          {reachability && !reachability.reachable && String(form.status).toUpperCase() === "ACTIVE" && (
+            <div className="rounded-xl border border-amber-200 bg-amber-50 p-4">
+              <p className="text-sm font-semibold text-amber-800 mb-1">
+                ⚠️ {t("aiStudio.agents.editor.reachability.title")}
+              </p>
+              <p className="text-xs text-amber-700 mb-3">
+                {reachability.hasCanvas
+                  ? t("aiStudio.agents.editor.reachability.noNode")
+                  : t("aiStudio.agents.editor.reachability.noCanvas")}
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push("/ai-studio?tab=playbooks")}
+                className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition"
+              >
+                {t("aiStudio.agents.editor.reachability.cta")}
+              </button>
+            </div>
+          )}
+
+          {/* Effective permissions (P1-8): the runtime AND-rule made visible —
+              what this employee can ACTUALLY do right now (capability live AND
+              granted). Only shown for saved employees with at least one live
+              capability. */}
+          {effectivePerms && effectivePerms.capabilities.some((c) => c.live) && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4">
+              <p className="text-sm font-semibold text-gray-800 mb-1">
+                {t("aiStudio.agents.editor.effectivePerms.title")}
+              </p>
+              <p className="text-xs text-gray-400 mb-3">
+                {t("aiStudio.agents.editor.effectivePerms.subtitle")}
+              </p>
+              <div className="space-y-2.5">
+                {effectivePerms.capabilities.filter((c) => c.live).map((cap) => (
+                  <div key={cap.capability}>
+                    <div className="text-[11px] font-semibold text-gray-500 uppercase tracking-wide mb-1">{cap.capability}</div>
+                    <div className="flex flex-wrap gap-1.5">
+                      {cap.operations.map((op) => (
+                        <span
+                          key={op.name}
+                          className={clsx(
+                            "text-[11px] font-mono px-2 py-0.5 rounded border",
+                            op.effective
+                              ? "bg-green-50 text-green-700 border-green-200"
+                              : "bg-gray-50 text-gray-400 border-gray-200 line-through"
+                          )}
+                          title={op.effective
+                            ? t("aiStudio.agents.editor.effectivePerms.allowed")
+                            : t("aiStudio.agents.editor.effectivePerms.blocked")}
+                        >
+                          {op.name}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* ── Section 1: Agent Setup ── */}
           <SectionCard

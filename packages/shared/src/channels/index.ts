@@ -8,7 +8,10 @@ export type {
   ChannelCredentials,
   InboundAdapter,
   OutboundAdapter,
+  ProviderSendError,
 } from "./types";
+
+export { ChannelSendError, describeSendError } from "./types";
 
 export {
   detectInboundAdapter,

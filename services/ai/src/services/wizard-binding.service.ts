@@ -18,7 +18,7 @@
  * configured/allowed values) — it never interprets the conversation itself.
  */
 
-import { generateResponse, getDefaultModel } from "./ai.service";
+import { generateResponse, getMicroModel } from "./ai.service";
 import { roleToSkill } from "./skills";
 import {
   OBJECTIVE_CHAINS,
@@ -77,7 +77,7 @@ export async function evaluateWizardBinding(opts: {
   try {
     const resp = await generateResponse({
       tenantId: opts.tenantId,
-      model: getDefaultModel(),
+      model: getMicroModel(),
       messages: [
         { role: "system", content: system },
         { role: "user", content: user },

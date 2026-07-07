@@ -181,6 +181,16 @@ export interface CalendarAdapter {
 
 const DEFAULT_PROPOSE_COUNT = 3;
 
+/**
+ * Strip an RFC-9557 IANA zone-name suffix (e.g. `2026-07-02T09:00:00+03:00[Asia/Jerusalem]`)
+ * that `Date.parse` cannot handle. The numeric offset (`+03:00`) is preserved, so the
+ * instant is unchanged — only the trailing `[…]` bracket is removed. LLM reasoners emit
+ * this format; without normalization it was rejected as `bad_iso_input`.
+ */
+function normalizeRequestedIso(iso: string): string {
+  return iso.replace(/\[[^\]]+\]\s*$/, "").trim();
+}
+
 // Failures where the requested time is a meaningful anchor (right ballpark, wrong
 // exact slot) → propose the nearest free slots around it. The rest (past time,
 // beyond horizon, unparseable) carry no usable anchor → earliest-first instead.
@@ -196,7 +206,7 @@ export function resolveAvailability(opts: ResolveAvailabilityOpts): ResolveAvail
 
   // 1) If a specific time was requested, validate it.
   if (opts.requestedAtIso) {
-    const t = Date.parse(opts.requestedAtIso);
+    const t = Date.parse(normalizeRequestedIso(opts.requestedAtIso));
     if (Number.isNaN(t)) {
       return {
         verdict: "INVALID",

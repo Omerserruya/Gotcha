@@ -127,6 +127,17 @@ router.post("/:id/release", async (req: Request, res: Response) => {
   }
 });
 
+// Hand a conversation back to the AI employee (clears the one-way
+// isHandedOver latch). 409 when no AI employee is bound.
+router.post("/:id/return-to-ai", async (req: Request, res: Response) => {
+  try {
+    const conversation = await conversationService.returnToAi(req.tenantId!, req.params.id as string);
+    res.json({ data: conversation });
+  } catch (err: any) {
+    res.status(err.status || 500).json({ error: err.message || "Failed to return conversation to AI" });
+  }
+});
+
 // Allow both ADMIN and the assigned agent to transfer/reassign
 router.post("/:id/reassign", async (req: Request, res: Response) => {
   try {

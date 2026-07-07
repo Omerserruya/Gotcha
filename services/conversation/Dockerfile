@@ -12,7 +12,7 @@ COPY services/conversation/tsconfig.json services/conversation/
 
 COPY package.json ./
 
-RUN npm install
+RUN npm install --maxsockets=3 --fetch-timeout=90000 --fetch-retries=12 --fetch-retry-mintimeout=3000 --fetch-retry-maxtimeout=30000
 RUN cd packages/shared && npx prisma generate
 
 COPY services/conversation/src services/conversation/src/

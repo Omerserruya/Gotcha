@@ -344,6 +344,19 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
     const agent = await prisma.aIAgent.findFirst({ where: { id: agentId, tenantId }, select: { id: true, status: true, salesContext: true } });
     if (!agent) { res.status(404).json({ error: "draft not found" }); return; }
 
+    // Server-side readiness gate: promotion to ACTIVE is only legal when the
+    // draft actually satisfies the same rules the wizard shows (name, role,
+    // goal-or-funnel, >=1 knowledge base). The frontend gates this too, but
+    // any API client could otherwise activate an empty employee.
+    if (agent.status === "DRAFT") {
+      const snapshot = await loadDraftSnapshot(tenantId, agentId);
+      const readiness = snapshot ? draftReadiness(snapshot) : { ready: false, missing: ["draft"] };
+      if (!readiness.ready) {
+        res.status(422).json({ error: "draft_not_ready", missing: readiness.missing });
+        return;
+      }
+    }
+
     // Auto-fill the Sales Context (Product Qualification Context) the first time
     // an employee finishes the wizard, so the admin lands in the editor with the
     // six fields pre-proposed (still fully editable) instead of blank. Only when
@@ -419,6 +432,16 @@ router.post("/:id/readiness-test", async (req: Request, res: Response) => {
     if ("error" in report) {
       res.status(report.error === "agent_not_found" ? 404 : 502).json({ error: report.error });
       return;
+    }
+    // Persist so the owner can re-view without re-running the generator (P1-5).
+    // Best-effort: a persistence failure never blocks returning the report.
+    try {
+      await prisma.aIAgent.update({
+        where: { id: agentId },
+        data: { readinessReport: report as any },
+      });
+    } catch (persistErr: any) {
+      console.warn("[readiness-test] persist failed (non-fatal):", persistErr?.message);
     }
     res.json({ data: report });
   } catch (err: any) {

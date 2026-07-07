@@ -86,6 +86,10 @@ export interface AISuggestion {
   text: string;
   confidence: number;
   type: "reply" | "action" | "info" | "quick_action";
+  /** One-line label of the tactic this suggestion takes (model-authored). */
+  approach?: string;
+  /** WHY this suggestion fits the plan/customer right now (model-authored). */
+  rationale?: string;
   /**
    * Populated when type === "quick_action". Carries the tool name + args
    * the model proposed; the human agent in the inbox decides whether to

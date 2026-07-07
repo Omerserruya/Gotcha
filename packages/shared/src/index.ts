@@ -24,8 +24,11 @@ export type {
   ChannelCredentials,
   InboundAdapter,
   OutboundAdapter,
+  ProviderSendError,
 } from "./channels";
 export {
+  ChannelSendError,
+  describeSendError,
   detectInboundAdapter,
   getOutboundAdapter,
   getInboundAdapters,
@@ -75,8 +78,8 @@ export {
   rejectRequest,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
-export { trackAIUsage, estimateAICost, AI_MODEL_PRICING } from "./lib/ai-usage";
-export type { AIUsageEvent } from "./lib/ai-usage";
+export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup } from "./lib/ai-usage";
+export type { AIUsageEvent, EmployeeUsageRollup } from "./lib/ai-usage";
 export {
   AI_FEATURE_CATEGORIES,
   AI_CATEGORY_ORDER,
@@ -163,6 +166,9 @@ export {
   planDomains,
 } from "./lib/plans";
 export type { PlanKey, PlanDef } from "./lib/plans";
+
+// Billing · Subscription · AI Units (pricing engine, wallet, entitlement layering).
+export * from "./lib/billing";
 export { encryptCredentials, decryptCredentials, isEncrypted } from "./lib/encryption";
 export { redact, safeLogger } from "./lib/log-redact";
 export {
@@ -337,6 +343,11 @@ export {
 // Capability Runtime (operation contracts + pure resolver). Strategy/provider
 // impls live in services/ai and are injected via RuntimeBindings.
 export * from "./lib/capability-runtime";
+
+// Agent Contract (FROZEN architecture, Phase 1: envelope only — pure types +
+// pure binder + master flag, not wired into the live path). The kernel above
+// stays the single execution authority; an Agent only proposes through it.
+export * from "./lib/agent";
 
 // Types import (side-effect for Express augmentation)
 import "./types/express.d";

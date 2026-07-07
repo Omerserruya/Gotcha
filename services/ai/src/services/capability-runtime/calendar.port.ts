@@ -48,6 +48,14 @@ export interface CalendarPort {
   /** Concrete: snap the configured meeting types against an optional hint. */
   resolveMeetingKind(ctx: CalendarOpContext, hint?: string): Promise<ResolvedMeetingKind>;
 
+  /**
+   * Concrete: the agent's IANA timezone (e.g. "Asia/Jerusalem") from the configured
+   * meeting types, or null if unknown. Optional so in-memory fakes need not implement
+   * it. Surfaced into the Oracle so the Reasoner can present slots in local time and
+   * map a customer's local request to an instant — instead of asking for a timezone.
+   */
+  agentTimezone?(ctx: CalendarOpContext): Promise<string | null>;
+
   /** Concrete: is this exact time genuinely open for the kind? (point check) */
   isTimeOpen(ctx: CalendarOpContext, iso: string, kind: MeetingKind): Promise<boolean>;
 

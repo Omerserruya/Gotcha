@@ -15,7 +15,6 @@
 
 import {
   resolveExecution,
-  CALENDAR_CONTRACTS,
   type ExecutionRequest,
   type ExecutionResult,
   type ExecutionTrace,
@@ -23,6 +22,7 @@ import {
   type RuntimeBindings,
   type StrategyResult,
 } from "@chatcenter/shared";
+import { CALENDAR_CONTRACTS } from "./calendar.contracts";
 import type {
   CalendarPort,
   CalendarOpContext,
@@ -30,6 +30,7 @@ import type {
   MeetingKind,
   ResolvedMeetingKind,
 } from "./calendar.port";
+import { kernelApprovalGate } from "./approval-gate";
 
 /** Lazy, resettable memo so a verifier doesn't re-hit the port within one turn. */
 function memo<T>(fn: () => Promise<T>): (() => Promise<T>) & { reset: () => void } {
@@ -230,11 +231,34 @@ function buildCalendarBindings(
     }
   };
 
+  // HITL: which legacy tool's policy governs each calendar WRITE (the operation→
+  // concrete mapping lives here, in the runtime layer, never above it).
+  const OP_POLICY_TOOL: Record<string, string> = {
+    BOOK_MEETING: "schedule_meeting",
+    MOVE_MEETING: "reschedule_meeting",
+    CANCEL_MEETING: "cancel_meeting",
+  };
+
   return {
     verifiers,
     runSatisfier,
     executeStrategy: (contract) => executeStrategy(contract),
-    approvalGate: async () => ({ required: false as const }), // Slice 3: wire real HITL policy
+    // Real HITL: production `evaluatePolicies` + Approvals inbox via the shared gate.
+    // Thread duration/type so `on_condition` policies (e.g. duration > 60min)
+    // evaluate with the same args the legacy dispatch would have carried.
+    approvalGate: async (contract, _req, gateOpts) => {
+      const policyTool = OP_POLICY_TOOL[contract.id];
+      if (!policyTool) return { required: false as const };
+      const args: Record<string, unknown> = { ...req.params };
+      const k = await kind();
+      if (isKind(k)) {
+        args.duration_minutes = k.durationMinutes;
+        args.meeting_type = k.slug;
+      }
+      const iso = chosenIso();
+      if (iso) args.requested_at_iso = iso;
+      return kernelApprovalGate(contract, req, { policyTool, args }, gateOpts);
+    },
     strategyId: opts.strategyId ?? "calendar",
     emitTrace,
   };

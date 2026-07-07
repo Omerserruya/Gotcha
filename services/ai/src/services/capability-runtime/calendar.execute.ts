@@ -1,19 +1,19 @@
 /**
- * Slice 3C — calendar execution through the Capability Runtime.
+ * Copilot (ADVISORY) calendar execution through the Capability Runtime.
  *
- * Returns an AgentToolDispatchResult (the SAME shape `dispatchToolCall` returns),
- * so it drops straight into the existing orchestrator.submit(...) wrapper at the
- * dispatch site. That means idempotency, HITL approval, the Turn Outcome Ledger,
- * and auditing are all still owned by the orchestrator — the cutover swaps ONLY
- * who computes the tool result (new runtime vs legacy handler).
+ * The Copilot has NO calendar execution logic of its own: whenever its model emits
+ * a calendar tool (check_availability / schedule_meeting / …) we map tool→operation
+ * +params and run the SAME `executeCalendarOperation` pipeline in ADVISORY mode —
+ * READs auto-run and return real facts; WRITEs short-circuit to a RECOMMENDATION
+ * (never executed). Dependency resolution, invariants, approval, recovery, and
+ * tracing are all owned by the runtime, parameterized only by execution mode.
  *
- * The model still emits tool calls (check_availability / schedule_meeting / …);
- * here we map tool→operation+params, run the runtime in AUTONOMOUS mode (writes
- * execute), then map the semantic ExecutionResult back to the legacy result JSON
- * the reply/ledger logic already understands.
+ * (The employee-side AUTONOMOUS variant `executeCalendarToolViaRuntime` was the
+ * dead Slice-3C cutover path and has been removed; the employee books through the
+ * Agent Loop's CalendarCapability.)
  */
 
-import type { AgentToolDispatchResult, ExecutionRequest, ExecutionResult, ExecutionTrace } from "@chatcenter/shared";
+import type { ExecutionRequest, ExecutionResult, ExecutionTrace } from "@chatcenter/shared";
 import { executeCalendarOperation } from "./calendar.runtime";
 import type { CalendarPort } from "./calendar.port";
 
@@ -34,38 +34,6 @@ function paramsForTool(tool: string, a: Record<string, unknown>): Record<string,
       return { desired_time: a.requested_at_iso };
     default:
       return {};
-  }
-}
-
-/** Map the semantic result to the legacy tool-result JSON the loop already parses. */
-function toLegacyContent(op: string, result: ExecutionResult): string {
-  switch (result.status) {
-    case "EXECUTED": {
-      const data = (result.data ?? {}) as Record<string, unknown>;
-      if (op === "CHECK_AVAILABILITY") {
-        return JSON.stringify({ ok: true, proposedSlotsIso: data.proposedSlotsIso ?? [], outcome: result.outcome });
-      }
-      return JSON.stringify({ ok: true, verdict: "VALID", ...data, outcome: result.outcome });
-    }
-    case "NEEDS_INPUT":
-      return JSON.stringify({
-        ok: false,
-        error: "missing_required_inputs",
-        missing_inputs: [result.field],
-        instruction: `Do not proceed yet. Ask the customer for: ${result.field}, then call the tool again.`,
-      });
-    case "FAILED": {
-      const needsAvail = /no_slot|needs_availability|slot_taken|time_taken|none_open|conflict/i.test(result.reason);
-      return JSON.stringify({ ok: false, reason: result.reason, ...(needsAvail ? { needsAvailabilityCheck: true } : {}) });
-    }
-    case "BLOCKED":
-      return JSON.stringify({ ok: false, reason: result.reason });
-    case "AWAITING_APPROVAL":
-      return JSON.stringify({ ok: false, reason: "awaiting_approval", ref: result.ref });
-    case "RECOMMENDED":
-      return JSON.stringify({ ok: false, reason: "recommend_only_mode" });
-    default:
-      return JSON.stringify({ ok: false, reason: "unknown" });
   }
 }
 
@@ -131,37 +99,3 @@ export async function executeCalendarToolAdvisory(input: {
   }
 }
 
-export interface RuntimeExecInput {
-  toolName: string;
-  toolArgs: Record<string, unknown>;
-  toolCallId: string;
-  context: ExecutionRequest["context"];
-  port: CalendarPort;
-  plannerGoal?: string;
-  /** Trace sink (defaults to the runtime's JSON logger). */
-  logger?: (t: ExecutionTrace) => void;
-}
-
-/**
- * Execute one calendar tool via the Capability Runtime. Returns a dispatch-shaped
- * result; never throws (a runtime error becomes a structured ok:false result so
- * the loop continues exactly as a legacy handler error would).
- */
-export async function executeCalendarToolViaRuntime(input: RuntimeExecInput): Promise<AgentToolDispatchResult> {
-  const op = OP_FOR_TOOL[input.toolName];
-  if (!op) {
-    return { toolCallId: input.toolCallId, content: JSON.stringify({ ok: false, reason: `no_operation_for_tool:${input.toolName}` }) };
-  }
-  try {
-    const req: ExecutionRequest = {
-      operation: op,
-      params: paramsForTool(input.toolName, input.toolArgs ?? {}),
-      context: input.context,
-      mode: "autonomous",
-    };
-    const { result } = await executeCalendarOperation(req, { port: input.port, logger: input.logger, strategyId: "calendar.runtime" });
-    return { toolCallId: input.toolCallId, content: toLegacyContent(op, result) };
-  } catch (err: any) {
-    return { toolCallId: input.toolCallId, content: JSON.stringify({ ok: false, reason: `capability_runtime_error:${String(err?.message || err)}` }) };
-  }
-}

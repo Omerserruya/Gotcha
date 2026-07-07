@@ -90,6 +90,16 @@
     "newConversation": "New Conversation",
     "historyButton": "Context",
     "copilotButton": "Co-Pilot",
+    "decisionTimeline": {
+      "button": "Why",
+      "title": "Decision Timeline",
+      "subtitle": "How the AI reasoned this conversation",
+      "empty": "No AI decision trace for this conversation yet.",
+      "noGoal": "No committed goal",
+      "billing": "billing",
+      "allowed": "allowed ops",
+      "termination": "ended"
+    },
     "dropFilesHere": "Drop files here",
     "addCaption": "Add a caption...",
     "downloadFile": "Download file",
@@ -106,6 +116,16 @@
       "delivered": "Delivered",
       "read": "Read",
       "failed": "Failed to send"
+    },
+    "sendError": {
+      "prefix": "Failed to send",
+      "toggle": "Show error details",
+      "code": "Code",
+      "type": "Type",
+      "detail": "Detail",
+      "requestId": "Request ID",
+      "retryable": "Retryable",
+      "at": "Time"
     },
     "historyPanel": {
       "title": "History & Notes",
@@ -155,7 +175,23 @@
       "success": "Conversation started",
       "error": "Failed to start conversation"
     },
-    "attach": "Attach"
+    "attach": "Attach",
+    "systemAiEscalation": "AI handed off to a human",
+    "escalationReason": {
+      "agent_paused": "the AI employee is paused",
+      "customer_requested_human": "customer asked for a person",
+      "hard_message_ceiling": "reached its message limit",
+      "autonomous_message_cap": "reached its autonomy limit",
+      "autonomous_time_cap": "ran past its time limit",
+      "agent_inactive": "the AI employee is inactive",
+      "budget_exceeded": "AI usage limit reached",
+      "units_exhausted": "AI credits exhausted",
+      "ai_service_failure": "the AI could not reply in time"
+    },
+    "aiBadgeTitle": "Sent automatically by your AI employee",
+    "systemReturnedToAi": "Conversation returned to the AI employee",
+    "returnToAi": "Return to AI",
+    "returnToAiTitle": "Hand this conversation back to the AI employee"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -2121,35 +2157,52 @@
       "avgResponseTime": "Avg Response Time",
       "avgResolutionTime": "Avg Resolution Time",
       "customerSatisfaction": "Customer Satisfaction",
-      "aiResolutionRate": "AI Resolution Rate"
+      "aiResolutionRate": "AI Resolution Rate",
+      "aiHandledShare": "AI-handled share",
+      "approvalRate": "Approval rate"
     },
     "aiPerformance": {
       "title": "AI Agent Performance",
       "conversationsHandled": "Conversations Handled",
       "avgResolutionTime": "Avg Resolution Time",
       "escalationRate": "Escalation Rate",
-      "topCategories": "Top Resolved Categories"
+      "topCategories": "Top Resolved Categories",
+      "aiMessages": "AI messages",
+      "resolved": "Resolved",
+      "escalated": "Escalated",
+      "governance": "Approval governance",
+      "approvalRate": "Approval rate",
+      "overrideRate": "Override rate",
+      "pendingApprovals": "Pending",
+      "avgDecision": "Avg approval decision time: {minutes}m"
     },
     "humanPerformance": {
       "title": "Human Agent Performance",
       "conversationsHandled": "Conversations Handled",
       "avgResolutionTime": "Avg Resolution Time",
       "satisfactionScore": "Satisfaction Score",
-      "topAgents": "Top Agents"
+      "topAgents": "Top Agents",
+      "agent": "Agent",
+      "active": "Active",
+      "claimedToday": "Claimed today",
+      "avgResponse": "Avg response"
     },
     "topQuestions": {
       "title": "Top Customer Questions",
       "subtitle": "Most frequently asked questions and automation opportunities",
       "count": "Count",
       "category": "Category",
-      "canAutomate": "Automation Opportunity"
+      "canAutomate": "Automation Opportunity",
+      "times": "{count} times",
+      "automate": "Automate"
     },
     "toolUsage": {
       "title": "Tool Usage",
       "subtitle": "How AI tools are being utilized",
       "tool": "Tool",
       "usage": "Usage",
-      "successRate": "Success Rate"
+      "successRate": "Success Rate",
+      "uses": "{count} uses"
     },
     "channelPerformance": {
       "title": "Channel Performance",
@@ -2161,16 +2214,30 @@
       "conversations": "Conversations",
       "responseTime": "Response Time",
       "resolutionRate": "Resolution Rate",
-      "slaCompliance": "SLA Compliance"
+      "slaCompliance": "SLA Compliance",
+      "agents": "Agents",
+      "resolution": "Resolution"
     },
     "insights": {
       "title": "AI Insights",
       "subtitle": "Suggested automations and improvements",
       "automationOpportunity": "Automation Opportunity",
       "createFlow": "Create Flow",
-      "setupIntegration": "Setup Integration"
+      "setupIntegration": "Setup Integration",
+      "highImpact": "High impact"
     },
-    "noData": "No analytics data available for this period"
+    "noData": "No analytics data available for this period",
+    "partialData": "Some analytics are temporarily unavailable — showing what we have.",
+    "noDataYet": "No data for this period yet.",
+    "noAgentsYet": "No human agents yet.",
+    "noToolUsageYet": "The AI hasn't used any tools in this period.",
+    "noInsightsYet": "Not enough activity yet to generate insights.",
+    "trend": {
+      "title": "Message volume",
+      "subtitle": "Daily inbound vs outbound messages",
+      "inbound": "Inbound",
+      "outbound": "Outbound"
+    }
   },
   "replay": {
     "title": "Conversation Replay",
@@ -2523,6 +2590,18 @@
           "previewBtn1": "Track Order",
           "previewBtn2": "Return Item",
           "previewBtn3": "Talk to Agent"
+        },
+        "reachability": {
+          "title": "This employee isn't receiving conversations yet",
+          "noNode": "It's live, but no playbook routes conversations to it. Add it to your Main Playbook so customers actually reach it.",
+          "noCanvas": "It's live, but you don't have a playbook yet — without one, no conversations are routed to any AI employee.",
+          "cta": "Open Playbooks"
+        },
+        "effectivePerms": {
+          "title": "What this employee can do",
+          "subtitle": "Actions it can actually take right now — a capability must be connected AND the action allowed for this employee.",
+          "allowed": "Allowed",
+          "blocked": "Not available (capability off or not granted)"
         }
       }
     },
