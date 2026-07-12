@@ -202,12 +202,26 @@ export function MissionPanel({ collapsed }: Props) {
                   {isActive && description && (
                     <span className="block text-[11px] text-gray-500 leading-snug mt-0.5">{description}</span>
                   )}
+                  {/* Live detail from the server (detected identifiers / open-gap count). */}
+                  {isActive && m.hint && (
+                    <span className="block text-[10px] text-gray-400 leading-snug mt-0.5 truncate" dir="ltr">{m.hint}</span>
+                  )}
                 </span>
               </button>
             </li>
           );
         })}
       </ul>
+
+      {/* Bridge to the ledger's permanent home — one "what's next" surface, not
+          two. The full living recommendation backlog + twin live on /business. */}
+      <button
+        type="button"
+        onClick={() => router.push("/business")}
+        className="mt-2.5 w-full text-[11px] font-medium text-primary-600 hover:text-primary-700 text-center py-1"
+      >
+        {t("onboarding.missions.viewBusiness")}
+      </button>
     </div>
   );
 }

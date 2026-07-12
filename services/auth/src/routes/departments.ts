@@ -372,7 +372,7 @@ router.get("/:id/ai-employee", requireDepartmentRole("MANAGER"), async (req: Req
     if (rule?.aiAgentId) {
       const agent = await prisma.aIAgent.findUnique({
         where: { id: rule.aiAgentId },
-        select: { id: true, name: true, role: true, status: true, avatarColor: true, description: true },
+        select: { id: true, name: true, role: true, status: true, avatarColor: true },
       });
       res.json({ data: agent, ruleId: rule.id });
       return;

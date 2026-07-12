@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
@@ -105,7 +105,10 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
 
 // ─── Google Drive OAuth ─────────────────────────────────────
 
-router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
+// PENDING_ONBOARDING allowed: onboarding Movement 6 connects Drive before the
+// tenant flips ACTIVE. `flow=onboarding` rides the state so the callback can
+// land back on /setup instead of the app's knowledge page.
+router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"), (req: Request, res: Response) => {
   const clientId = process.env.GOOGLE_CLIENT_ID;
   const redirectUri = process.env.GOOGLE_REDIRECT_URI;
   if (!clientId || !redirectUri) {
@@ -117,7 +120,7 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireActiv
   if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
 
   const state = jwt.sign(
-    { tenantId: req.tenantId, kbId, userId: (req as any).userId },
+    { tenantId: req.tenantId, kbId, userId: (req as any).userId, flow: req.query.flow === "onboarding" ? "onboarding" : undefined },
     JWT_SECRET,
     { expiresIn: "10m" }
   );
@@ -183,7 +186,9 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     });
 
     const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-    res.redirect(`${frontendUrl}/knowledge?connected=google_drive`);
+    // Onboarding-initiated connects return to the wizard (Movement 6 resumes
+    // via the persisted progress checkpoint); everything else to the app.
+    res.redirect(payload.flow === "onboarding" ? `${frontendUrl}/setup?connected=google_drive` : `${frontendUrl}/knowledge?connected=google_drive`);
   } catch (err: any) {
     console.error("[Google Drive OAuth] Callback error:", err.message);
     res.status(500).json({ error: "OAuth callback failed" });
@@ -192,7 +197,9 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
 
 // ─── Integration API Routes (authenticated) ──────────────────
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// PENDING_ONBOARDING allowed so the onboarding wizard can list the Drive
+// integration, browse files, and trigger the first sync (admin-only, tenant-scoped).
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
 
 // List integrations for a knowledge base
 router.get("/kb/:kbId/integrations", async (req: Request, res: Response) => {

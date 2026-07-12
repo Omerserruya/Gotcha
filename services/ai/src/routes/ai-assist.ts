@@ -24,8 +24,76 @@ import { getPolicy, setPolicy } from "../services/policy.service";
 import voiceRouter from "./ai-assist-voice";
 import { buildAgentPrompt } from "../services/prompt-builder.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
+import { discoverBusiness } from "../services/business-discovery.service";
+import { tuneEmployeeChat } from "../services/employee-tuning.service";
 
 const router = Router();
+
+// ─── Business Discovery (Onboarding Intelligence Engine) ───
+// The deep 5-domain website scan that produces the Business Intelligence
+// Report + first recommendation (Bible Part II). The auth onboarding route
+// fetches the pages + detects signals (no LLM) and calls this with the admin
+// JWT forwarded — this is the one place onboarding is allowed to make an LLM
+// call. Best-effort: returns { ok:false } on a scan miss so the caller can
+// fall back to the shallow understanding and never block onboarding.
+router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { domain, locale, pages, signals } = req.body as {
+      domain?: string;
+      locale?: string;
+      pages?: Array<{ url: string; text: string }>;
+      signals?: import("../services/business-discovery.service").DiscoverySignals;
+    };
+    if (!domain || !Array.isArray(pages) || pages.length === 0) {
+      res.status(400).json({ error: "domain and pages are required" });
+      return;
+    }
+    const report = await discoverBusiness({
+      tenantId: req.tenantId!,
+      domain,
+      locale,
+      pages: pages.filter((p) => p && typeof p.text === "string").slice(0, 8),
+      signals: signals || {},
+    });
+    if (!report) {
+      res.json({ data: { ok: false } });
+      return;
+    }
+    res.json({ data: { ok: true, report } });
+  } catch (err) {
+    console.error("Discover business error:", err);
+    res.status(500).json({ error: "Failed to run business discovery" });
+  }
+});
+
+// Onboarding Movement 8 — chat with the recommended employee before deploy.
+router.post("/onboarding-employee-chat", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const { name, role, locale, context, persona, messages } = req.body as {
+      name?: string; role?: string; locale?: string;
+      context?: { business?: string; industry?: string; summary?: string; brandVoice?: string };
+      persona?: import("../services/employee-tuning.service").EmployeePersona;
+      messages?: Array<{ role: "user" | "assistant"; content: string }>;
+    };
+    if (!Array.isArray(messages) || messages.length === 0) {
+      res.status(400).json({ error: "messages are required" });
+      return;
+    }
+    const result = await tuneEmployeeChat({
+      tenantId: req.tenantId!,
+      name: (name || "").slice(0, 120) || "Your AI Employee",
+      role: role || "customer_support",
+      locale,
+      context,
+      persona: persona || {},
+      messages: messages.filter((m) => m && typeof m.content === "string").slice(-10),
+    });
+    res.json({ data: { ok: true, ...result } });
+  } catch (err) {
+    console.error("Employee tuning chat error:", err);
+    res.status(500).json({ error: "Failed to chat with the employee" });
+  }
+});
 
 // ─── Config Generation Endpoints (called during onboarding - tenant may not be active yet) ───
 

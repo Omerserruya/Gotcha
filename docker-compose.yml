@@ -228,8 +228,11 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
-      # ── AI-Unit billing gate: off|observe|soft|hard (default off = no behavior change). ──
-      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-off}
+      # ── AI-Unit billing gate: off|observe|soft|hard. Default HARD: credits are
+      # enforced for every subscription with enforcementEnabled (POCs, trials,
+      # paid). Tenants with NO subscription still fail open (dev tenants keep
+      # working); grandfathered subs skip the gate by design. ──
+      BILLING_ENFORCEMENT_MODE: ${BILLING_ENFORCEMENT_MODE:-hard}
       BILLING_SERVICE_URL: ${BILLING_SERVICE_URL:-http://billing:4009}
       # Set OPENAI_LOG=debug to log the FULL outbound OpenAI request (system
       # prompt + messages + tool schemas) and response to stdout. Off by default.

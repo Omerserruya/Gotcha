@@ -18,7 +18,9 @@ router.get("/billing/credits/balance", authenticate, resolveTenant, async (req, 
     purchasedRemaining: b.purchasedRemaining,
     total: b.total,
     includedAllowance: b.includedAllowance,
-    consumedPct: b.includedAllowance > 0 ? Math.min(100, Math.round((1 - b.total / b.includedAllowance) * 100)) : 0,
+    // Clamped to 0..100: purchased units can push total ABOVE the allowance
+    // (which is legitimately "0% consumed"), never below zero percent.
+    consumedPct: b.includedAllowance > 0 ? Math.min(100, Math.max(0, Math.round((1 - b.total / b.includedAllowance) * 100))) : 0,
     periodKey: b.periodKey,
   });
 });

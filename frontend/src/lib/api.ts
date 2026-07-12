@@ -691,6 +691,50 @@ export function deleteTenantUser(token: string, tenantId: string, userId: string
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "DELETE" });
 }
 
+// ─── System Admin: Onboarding Console + Reset + Nudge ───────
+export interface OnboardingConsoleRow {
+  tenantId: string;
+  company: string;
+  slug: string;
+  status: string;
+  createdAt: string;
+  discoveryComplete: boolean;
+  reviewComplete: boolean;
+  goalSelected: boolean;
+  crmConnected: boolean;
+  crmSlug: string | null;
+  channelsConnected: number;
+  integrationsConnected: number;
+  knowledgeCount: number;
+  knowledgeStatus: "none" | "detected" | "imported";
+  aiEmployeeCreated: boolean;
+  aiEmployeeName: string | null;
+  currentStage: string;
+  progressPct: number;
+  health: "activated" | "on_track" | "at_risk" | "stuck";
+  nextRecommendedAction: string;
+  lastActivity: string;
+  lastNudgeSentAt: string | null;
+  gaps: string[];
+  primaryGoal: string | null;
+  assignedCsm: string | null;
+}
+export function getOnboardingConsole(token: string) {
+  return apiFetch<{ data: { rows: OnboardingConsoleRow[]; generatedAt: string } }>("/api/system/onboarding-console", { token });
+}
+export function resetTenantOnboarding(token: string, tenantId: string) {
+  return apiFetch<{ data: { reset: boolean; removed: Record<string, number>; status: string } }>(
+    `/api/system/tenants/${tenantId}/reset-onboarding`,
+    { token, method: "POST" },
+  );
+}
+export function sendTenantNudge(token: string, tenantId: string) {
+  return apiFetch<{ data: { outcome: "sent" | "skipped" | "failed" | "no_admin"; reason?: string } }>(
+    `/api/system/tenants/${tenantId}/nudge`,
+    { token, method: "POST" },
+  );
+}
+
 export function resendOnboardingLink(token: string, tenantId: string) {
   return apiFetch<{ data: { message: string; sentTo: string } }>(`/api/system/tenants/${tenantId}/resend-onboarding`, {
     token, method: "POST",
@@ -820,9 +864,135 @@ export interface AnalyzeDomainResult {
   understanding?: BusinessUnderstanding;
   reason?: "invalid_domain" | "fetch_failed" | "ai_unavailable" | "no_summary";
 }
-export function analyzeBusinessDomain(token: string, domain: string, locale?: string) {
-  return apiFetch<{ data: AnalyzeDomainResult }>("/api/onboarding/analyze-domain", {
-    token, method: "POST", body: JSON.stringify({ domain, locale }),
+// ─── Onboarding Intelligence Engine (Business Discovery) ─────
+// The deep 5-domain scan + report + health + first recommendation. Powers
+// Movements 1-5 of the onboarding experience.
+export type FindingConfidence = "confirmed" | "likely" | "low" | "needs_verification" | "unknown";
+export interface DiscoveryChannel { type: string; identifier?: string; purpose?: string; confidence: FindingConfidence; provider?: string }
+export interface DiscoveryTechItem { slug: string; name: string; category?: string; confidence?: FindingConfidence }
+export interface DiscoveryTech {
+  platform: { slug: string; name: string; confidence: FindingConfidence } | null;
+  legacy: Array<{ slug: string; name: string }>;
+  tracking: Array<{ slug: string; name: string }>;
+  tools: DiscoveryTechItem[];
+}
+export interface PolicyFinding { found: boolean | null; confidence: FindingConfidence; url?: string }
+export interface DiscoveryBrand {
+  personality?: string; voice?: string; tone?: string; style?: string; audience?: string; positioning?: string;
+  vocabulary?: string[]; preferredTerminology?: string[]; forbiddenWords?: string[]; ctaStyle?: string;
+  greetingExample?: string; languages?: string[]; confidence?: FindingConfidence;
+}
+export interface DiscoveryGap {
+  id: string;
+  domain: "brand" | "business" | "knowledge" | "communication" | "technology" | "customers";
+  label: string;
+  severity: "high" | "medium" | "low";
+  ask: string;
+  confidence?: FindingConfidence;
+}
+export interface DiscoveryRecommendation {
+  employeeRole: "customer_support" | "sales" | "reception" | "conversation_intelligence";
+  employeeName: string;
+  reason: string;
+  systems: Array<{ slug: string; reason: string; alreadyDetected?: boolean }>;
+  knowledge: Array<{ label: string; reason: string }>;
+  channel?: string;
+}
+export interface BusinessDiscoveryRecord {
+  status: "PENDING" | "SCANNING" | "COMPLETE" | "FAILED";
+  websiteDomain?: string | null;
+  brand?: DiscoveryBrand | null;
+  business?: {
+    name?: string; country?: string; industry?: string; icp?: string; personas?: string[];
+    products?: string[]; services?: string[]; pricingModel?: string; valueProp?: string;
+    businessModel?: string; summary?: string; confidence?: FindingConfidence;
+  } | null;
+  knowledge?: {
+    hasFaq?: boolean; hasHelpCenter?: boolean; hasDocs?: boolean;
+    policies?: Record<string, PolicyFinding>; articleCountEstimate?: number | null; topics?: string[];
+  } | null;
+  communication?: { channels: DiscoveryChannel[] } | null;
+  technology?: DiscoveryTech | null;
+  gaps?: DiscoveryGap[] | null;
+  recommendation?: DiscoveryRecommendation | null;
+  health?: HealthReport | null;
+  confidence?: Record<string, number> | null;
+  report?: string | null;
+  primaryGoal?: string | null;
+  scannedAt?: string | null;
+  // Live scan phase written at REAL boundaries by /discover
+  // (homepage → pages → synthesis → done|failed). Polled by the ceremony.
+  scanPhase?: string | null;
+  // Resume checkpoint (P0): last movement reached (review..ready).
+  progress?: string | null;
+  // Movement 8 tune-chat transcript (bounded), so a reload resumes the chat.
+  tuneTranscript?: Array<{ role: "user" | "assistant"; content: string }> | null;
+}
+export interface HealthItem { label: string; ok: boolean }
+export interface HealthReport { knowledge: HealthItem[]; communication: HealthItem[]; tools: HealthItem[] }
+
+// Persistent recommendation backlog (living AI backlog).
+export interface RecommendationRow {
+  id: string; kind: string; title: string; reason?: string | null; action?: string | null;
+  targetSlug?: string | null; confidence: string; priority: number; status: string;
+  payload?: Record<string, any> | null;
+}
+export function getRecommendations(token: string, status = "OPEN") {
+  return apiFetch<{ data: { recommendations: RecommendationRow[] } }>(`/api/onboarding/recommendations?status=${encodeURIComponent(status)}`, { token });
+}
+export function resolveRecommendation(token: string, id: string, decision: "complete" | "dismiss") {
+  return apiFetch<{ data: { id: string; status: string } }>(`/api/onboarding/recommendations/${id}/${decision}`, { token, method: "POST" });
+}
+export function teachGap(token: string, label: string, method: "text" | "url", value: string) {
+  return apiFetch<{ data: { ok: boolean; reason?: string; knowledgeDocumentId?: string } }>("/api/onboarding/teach", {
+    token, method: "POST", body: JSON.stringify({ label, method, value }),
+  });
+}
+
+export function discoverBusiness(token: string, domain: string, locale?: string) {
+  return apiFetch<{ data: { ok: boolean; domain?: string; reason?: string; discovery?: BusinessDiscoveryRecord; signals?: { channels: string[]; technology: string[] } } }>(
+    "/api/onboarding/discover",
+    { token, method: "POST", body: JSON.stringify({ domain, locale }) },
+  );
+}
+// Fast, LLM-free plan for the discovery ceremony: business-typed steps that
+// reflect the real work the scan will do (Movement 1 — dynamic loader).
+export function discoverPlan(token: string, domain: string, locale?: string) {
+  return apiFetch<{ data: { ok: boolean; businessType: string; steps: Array<{ key: string; label: string }> } }>(
+    "/api/onboarding/discover/plan",
+    { token, method: "POST", body: JSON.stringify({ domain, locale }) },
+  );
+}
+export function getBusinessDiscovery(token: string) {
+  return apiFetch<{ data: { discovery: BusinessDiscoveryRecord | null } }>("/api/onboarding/discovery", { token });
+}
+export function patchBusinessDiscovery(token: string, patch: { business?: Record<string, unknown>; brand?: Record<string, unknown>; progress?: string; employeeName?: string }) {
+  return apiFetch<{ data: { discovery: BusinessDiscoveryRecord } }>("/api/onboarding/discovery", {
+    token, method: "PATCH", body: JSON.stringify(patch),
+  });
+}
+export function getBusinessHealth(token: string) {
+  return apiFetch<{ data: { health: HealthReport | null; gaps?: DiscoveryGap[] } }>("/api/onboarding/health", { token });
+}
+// Per-item correction on the reflected-back portrait (Movement 2): remove /
+// mark-incorrect / ignore a detected channel, tool, platform, or gap. Persists
+// immediately so the AI never re-surfaces it.
+export function correctDiscovery(token: string, target: "channel" | "tool" | "platform" | "gap", action: "remove" | "incorrect" | "ignore", key: string) {
+  return apiFetch<{ data: { ok: boolean; discovery: BusinessDiscoveryRecord } }>("/api/onboarding/discovery/correct", {
+    token, method: "POST", body: JSON.stringify({ target, action, key }),
+  });
+}
+// Movement 8 — chat with the recommended employee before deploy; the returned
+// persona reflects any tuning the owner asked for ("be friendlier", …).
+export interface EmployeePersona { tone?: string; personality?: string; focus?: string; instructions?: string[] }
+export function employeeChat(token: string, messages: Array<{ role: "user" | "assistant"; content: string }>, persona?: EmployeePersona, locale?: string) {
+  return apiFetch<{ data: { ok: boolean; reply?: string; persona?: EmployeePersona } }>("/api/onboarding/employee-chat", {
+    token, method: "POST", body: JSON.stringify({ messages, persona, locale }),
+  });
+}
+export function saveOnboardingGoal(token: string, goal: string, detail?: string) {
+  return apiFetch<{ data: { primaryGoal: string } }>("/api/onboarding/goal", {
+    token, method: "POST", body: JSON.stringify(detail?.trim() ? { goal, detail: detail.trim() } : { goal }),
   });
 }
 
@@ -878,13 +1048,6 @@ export interface SetupTile {
   stage: "core" | "later";
   meta?: { slug?: string | null };
 }
-export function getSetupMap(token: string) {
-  return apiFetch<{ data: { tiles: SetupTile[]; sourceSystem: string | null; sourceConnected: boolean; completedCount: number; totalCount: number } }>(
-    "/api/onboarding/setup-map",
-    { token },
-  );
-}
-
 // Persistent guidance layer - per-feature first-time state.
 export type GuideState = "unseen" | "snoozed" | "done";
 export function getOnboardingGuides(token: string) {
@@ -928,23 +1091,21 @@ export function acceptPublicInvite(payload: { token: string; name: string; email
 }
 
 export type OnboardingMissionId =
-  | "knowledge_base"
-  | "ai_employees"
+  | "connect_source_of_truth"
   | "connect_channel"
-  | "workflows";
+  | "add_webchat"
+  | "teach_knowledge";
 
 export interface OnboardingMission {
   id: OnboardingMissionId;
   status: "done" | "active" | "pending";
   deepLink: string;
+  /** Live detail — e.g. detected channel identifiers or an open-gaps count. */
+  hint?: string;
 }
 
 export function getOnboardingMissions(token: string) {
   return apiFetch<{ data: { missions: OnboardingMission[] } }>("/api/onboarding/missions", { token });
-}
-
-export function getBusinessProfile(token: string) {
-  return apiFetch<{ data: any }>("/api/onboarding/business-profile", { token });
 }
 
 export function saveOnboardingDepartments(token: string, data: { departments: any[] }) {
@@ -1071,8 +1232,8 @@ export function initConfluenceOAuth(token: string, kbId: string) {
   return apiFetch<{ url: string }>(`/api/knowledge/oauth/confluence/init?kbId=${kbId}`, { token });
 }
 
-export function initGoogleDriveOAuth(token: string, kbId: string) {
-  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?kbId=${kbId}`, { token });
+export function initGoogleDriveOAuth(token: string, kbId: string, flow?: "onboarding") {
+  return apiFetch<{ url: string }>(`/api/knowledge/oauth/google-drive/init?kbId=${kbId}${flow ? `&flow=${flow}` : ""}`, { token });
 }
 
 export function getConfluenceSpaces(token: string, intId: string) {
@@ -2639,6 +2800,38 @@ export function updateSystemTenantFeature(
   return apiFetch<{ data: TenantFeatureView }>(
     `/api/system/tenants/${tenantId}/features/${feature}`,
     { token, method: "PUT", body: JSON.stringify(body) },
+  );
+}
+
+// SYSTEM_ADMIN — entitlements (feature licensing), credits & POC provisioning.
+export interface LicenseDomainRow { key: string; enabled: boolean; source?: string | null; expiresAt?: string | null }
+export interface TenantBillingSummary {
+  error?: string;
+  subscription?: { planKey: string; status: string; enforcementEnabled: boolean; currentPeriodEnd?: string | null; trialEndsAt?: string | null } | null;
+  balance?: { includedRemaining: number; purchasedRemaining: number; includedAllowance: number; total: number; periodKey: string | null } | null;
+}
+export function getSystemTenantEntitlements(token: string, tenantId: string) {
+  return apiFetch<{ data: { domains: LicenseDomainRow[]; billing: TenantBillingSummary } }>(
+    `/api/system/tenants/${tenantId}/entitlements`,
+    { token },
+  );
+}
+export function updateSystemTenantEntitlement(token: string, tenantId: string, key: string, enabled: boolean) {
+  return apiFetch<{ data: { key: string; enabled: boolean } }>(
+    `/api/system/tenants/${tenantId}/entitlements/${encodeURIComponent(key)}`,
+    { token, method: "PUT", body: JSON.stringify({ enabled }) },
+  );
+}
+export function setupSystemTenantPoc(token: string, tenantId: string, body: { credits: number; expiresAt?: string; features?: string[] }) {
+  return apiFetch<{ data: { ok: boolean; credits: number; expiresAt: string | null; features: string[]; balance: TenantBillingSummary["balance"] } }>(
+    `/api/system/tenants/${tenantId}/poc`,
+    { token, method: "POST", body: JSON.stringify(body) },
+  );
+}
+export function grantSystemTenantCredits(token: string, tenantId: string, units: number) {
+  return apiFetch<{ data: { ok: boolean; balance: TenantBillingSummary["balance"] } }>(
+    `/api/system/tenants/${tenantId}/credits`,
+    { token, method: "POST", body: JSON.stringify({ units }) },
   );
 }
 

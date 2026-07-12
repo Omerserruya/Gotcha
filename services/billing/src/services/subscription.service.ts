@@ -20,6 +20,7 @@ import { currentPeriod, nextPeriod, periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 import { chargeFor } from "./invoice.service";
 import { unsuspendTenants } from "./tenant-status.service";
+import { expireDuePocs } from "./poc.service";
 
 const TRIAL_DAYS = parseInt(process.env.BILLING_TRIAL_DAYS || "14", 10);
 
@@ -276,7 +277,7 @@ export async function applyDuePendingChanges(now = new Date()): Promise<number> 
 }
 
 /** Charge trials whose window ended; renew active subs whose period ended. */
-export async function runBillingCycle(now = new Date()): Promise<{ trials: number; renewals: number; pending: number }> {
+export async function runBillingCycle(now = new Date()): Promise<{ trials: number; renewals: number; pending: number; pocsExpired: number }> {
   const pending = await applyDuePendingChanges(now);
 
   const trials = await prisma.subscription.findMany({ where: { status: "TRIALING", trialEndsAt: { lte: now } } });
@@ -285,5 +286,9 @@ export async function runBillingCycle(now = new Date()): Promise<{ trials: numbe
   const renewals = await prisma.subscription.findMany({ where: { status: "ACTIVE", cancelAtPeriodEnd: false, currentPeriodEnd: { lte: now } } });
   for (const s of renewals) await activateOrRenew(s.id, { reason: "renewal" });
 
-  return { trials: trials.length, renewals: renewals.length, pending };
+  // POCs never renew (cancelAtPeriodEnd=true keeps them out of the sweep
+  // above); expiring them is their entire lifecycle.
+  const pocsExpired = await expireDuePocs(now);
+
+  return { trials: trials.length, renewals: renewals.length, pending, pocsExpired };
 }

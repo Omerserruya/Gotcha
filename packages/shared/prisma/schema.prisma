@@ -124,6 +124,9 @@ model Tenant {
   departments             Department[]
   departmentMembers       DepartmentMember[]
   businessProfile         BusinessProfile?
+  businessDiscovery       BusinessDiscovery?
+  scheduledNudges         ScheduledNudge[]
+  recommendations         Recommendation[]
   onboarding              TenantOnboarding?
   knowledgeBases          KnowledgeBase[]
   aiAgents                AIAgent[]
@@ -758,6 +761,140 @@ model BusinessProfile {
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@map("business_profiles")
+}
+
+// ─── Business Discovery (Onboarding Intelligence Engine) ────
+// The "opening balance" of the AI Readiness spine. Produced by the deep
+// 5-domain website scan at the very start of onboarding (Movements 1-2 of
+// the Onboarding Bible). Persisted so the report survives a refresh / an
+// OAuth round-trip, and so Business Health (Movement 3) and the first
+// AI Recommendation (Movement 4) can be derived from it without re-running
+// the LLM-costly scan. One row per tenant.
+//
+// Every JSON blob is the *structured understanding* the AI reflected back -
+// never silently ingested. `report` is the first-person narrated briefing
+// the customer reads ("I analyzed your business. I found 126 products…").
+// `gaps` are first-class findings ("I couldn't find a refund policy").
+model BusinessDiscovery {
+  id            String   @id @default(cuid())
+  tenantId      String   @unique @map("tenant_id")
+  websiteDomain String?  @map("website_domain")
+  // Lifecycle: PENDING (scan queued) → SCANNING → COMPLETE → FAILED.
+  status        String   @default("PENDING")
+
+  // The five intelligence domains (Bible Part II). Each is the structured
+  // extraction the customer can see, confirm, and correct.
+  brand         Json?    // { voice, tone, style, vocabulary[], forbiddenWords[], ctaStyle, languages[], positioning }
+  business      Json?    // { industry, icp, personas[], products[], services[], pricingModel, valueProp, businessModel, summary }
+  knowledge     Json?    // { faq, helpCenter, docs, policies{shipping,returns,refunds,terms,privacy}, articleCount }
+  communication Json?    // { channels: [{ type, detail, confidence }] }
+  technology    Json?    // { storefront, cms, tools: [{ slug, name, category }] }
+
+  // Findings + honest gaps + the first recommendation + a calibrated
+  // confidence read per domain. All reflected back in the UI.
+  gaps           Json?   // [{ id, domain, label, severity, ask }]
+  recommendation Json?   // { employeeRole, employeeName, reason, systems: [{ slug, reason }], knowledge: [{ label, reason }], channel }
+  health         Json?   // { knowledge: [{ label, ok }], communication: [...], tools: [...] } snapshot at scan time
+  confidence     Json?   // { business, brand, knowledge, customers, communication, integrations }  (0-100)
+
+  // First-person narrated briefing (Movement 1 / Output 1).
+  report        String?  @db.Text
+
+  // The single earned question (Movement 5): primary business goal slug.
+  primaryGoal   String?  @map("primary_goal")
+
+  // Resume checkpoint (P0): the last movement key the owner reached
+  // (review|connect|goal|integrations|knowledge|recommendation|tune|ready).
+  // Derived state stays authoritative for stage; `progress` only refines the
+  // resume position WITHIN the review→ready band so a reload during movements
+  // 6-9 returns to that movement instead of falling back to integrations.
+  progress      String?
+
+  // Live ceremony phase (Movement 1) — updated between scan phases so the
+  // loader's checkmarks land on real events, not a timer:
+  // homepage|links|pages|signals|synthesis|normalizing|done.
+  scanPhase     String?  @map("scan_phase")
+
+  // Movement 8 tune-chat transcript, persisted (bounded to the last 20 turns)
+  // so a reload mid-tune resumes the conversation instead of losing it.
+  tuneTranscript Json?   @map("tune_transcript")
+
+  scannedAt DateTime? @map("scanned_at")
+  createdAt DateTime  @default(now()) @map("created_at")
+  updatedAt DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@map("business_discoveries")
+}
+
+// ─── Recommendations (living AI backlog) ────────────────────
+// A recommendation is NOT an onboarding step. It is a persistent, evolving
+// suggestion the AI produces as it learns the business ("connect Shopify",
+// "import your refund policy", "hire a Support employee"). Onboarding is merely
+// the FIRST surface that shows them; later they populate the Home dashboard.
+//
+// A recommendation lives until it is completed, dismissed, or REPLACED by a
+// better one. Idempotent via unique (tenantId, dedupeKey): a re-scan updates
+// the same logical rec instead of duplicating, and never resurrects one the
+// customer already completed or dismissed.
+model Recommendation {
+  id         String    @id @default(cuid())
+  tenantId   String    @map("tenant_id")
+  source     String    @default("discovery") // discovery | store_inspection | manual
+  kind       String // hire_employee | connect_system | connect_channel | import_knowledge | setup_workflow | tool_detected (detected on site, no connector — acknowledgment only)
+  title      String
+  reason     String?   @db.Text
+  action     String? // machine hint, e.g. "connect:shopify" | "hire:customer_support" | "teach:refund_policy"
+  targetSlug String?   @map("target_slug") // shopify | hubspot | whatsapp | ...
+  confidence String    @default("likely")
+  priority   Int       @default(0) // higher = surfaced first (already-detected systems rank up)
+  status     String    @default("OPEN") // OPEN | COMPLETED | DISMISSED | REPLACED
+  dedupeKey  String    @map("dedupe_key")
+  payload    Json?
+  completedAt DateTime? @map("completed_at")
+  dismissedAt DateTime? @map("dismissed_at")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([tenantId, status, priority])
+  @@map("recommendations")
+}
+
+// ─── Scheduled Nudges (Lifecycle Nudge Engine) ──────────────
+// A generic, restart-safe, idempotent scheduler for lifecycle nudges. The DB
+// row is the source of truth (survives a Redis flush); a repeatable BullMQ
+// sweep sends the due ones. Onboarding is the first consumer, but `kind` keeps
+// it generic for future lifecycle nudges (trial-ending, re-engagement, …).
+//
+// Idempotency: unique (tenantId, dedupeKey) — scheduling the same logical nudge
+// again UPDATES the existing PENDING row (reschedule) instead of duplicating.
+// Content is computed at SEND time from live state, so a nudge whose reason no
+// longer holds (the customer already did the thing) is marked SKIPPED, not sent.
+model ScheduledNudge {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  kind        String // "onboarding" | future lifecycle kinds
+  dedupeKey   String    @map("dedupe_key") // stable per logical nudge, e.g. "onboarding_next_step"
+  scheduledFor DateTime @map("scheduled_for")
+  status      String    @default("PENDING") // PENDING | SENT | CANCELLED | SKIPPED | FAILED
+  channel     String    @default("email") // email | in_app | both
+  attempts    Int       @default(0)
+  lastError   String?   @map("last_error")
+  sentAt      DateTime? @map("sent_at")
+  payload     Json? // optional context for content computation / templating
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, dedupeKey])
+  @@index([status, scheduledFor])
+  @@index([tenantId, status])
+  @@map("scheduled_nudges")
 }
 
 // ─── Tenant Invitations ─────────────────────────────────────

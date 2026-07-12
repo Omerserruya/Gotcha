@@ -18,6 +18,8 @@ import {
   type AiFeatureCategory,
 } from "@chatcenter/shared";
 import { sendOnboardingEmail } from "../services/notification.service";
+import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
+import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
 
 const router = Router();
 const SALT_ROUNDS = 10;
@@ -282,6 +284,9 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       console.error("Failed to send onboarding email:", err);
     });
 
+    // Arm the onboarding nudge so a tenant that never starts gets a follow-up.
+    scheduleOnboardingNudge(result.tenant.id, "1d").catch(() => {});
+
     res.status(201).json({
       data: {
         tenant: { id: result.tenant.id, name: result.tenant.name, slug: result.tenant.slug, status: result.tenant.status },
@@ -385,6 +390,103 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Re
   } catch (err: any) {
     console.error("Delete tenant error:", err);
     res.status(500).json({ error: "Failed to delete tenant" });
+  }
+});
+
+// ─── Reset Onboarding (non-destructive) ─────────────────────
+//
+// Returns a tenant to a brand-new onboarding state WITHOUT deleting the tenant
+// or its people. Deterministic + idempotent.
+//
+// DELETED (everything onboarding created / derived):
+//   BusinessDiscovery (discovery, health, readiness, goals, recommendations,
+//   the narrated report), BusinessProfile (the confirmed understanding),
+//   TenantOnboarding tracker, the generated AI employee(s) + their
+//   AIAgentKnowledge links + RouterRules, onboarding departments + members,
+//   and all ScheduledNudges. Tenant.status → PENDING_ONBOARDING.
+//
+// PRESERVED (deliberately — not onboarding artifacts, and unsafe to destroy):
+//   the tenant row, its users, connected OAuth integrations + channels
+//   (revoking live tokens is irreversible), and imported KnowledgeBases
+//   (real customer content). The next login runs onboarding from scratch;
+//   any already-connected system is simply detected as already-connected.
+router.post("/tenants/:id/reset-onboarding", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.params.id as string;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true, name: true } });
+    if (!tenant) {
+      res.status(404).json({ error: "Tenant not found" });
+      return;
+    }
+
+    const removed = await prisma.$transaction(async (tx) => {
+      const agents = await tx.aIAgent.findMany({ where: { tenantId }, select: { id: true } });
+      const agentIds = agents.map((a) => a.id);
+
+      const r = {
+        aiAgentKnowledge: (await tx.aIAgentKnowledge.deleteMany({ where: { aiAgentId: { in: agentIds } } })).count,
+        routerRules: (await tx.routerRule.deleteMany({ where: { tenantId } })).count,
+        aiAgents: (await tx.aIAgent.deleteMany({ where: { tenantId } })).count,
+        departmentMembers: (await tx.departmentMember.deleteMany({ where: { department: { tenantId } } })).count,
+        departments: (await tx.department.deleteMany({ where: { tenantId } })).count,
+        businessDiscovery: (await (tx as any).businessDiscovery.deleteMany({ where: { tenantId } })).count,
+        businessProfile: (await tx.businessProfile.deleteMany({ where: { tenantId } })).count,
+        onboarding: (await tx.tenantOnboarding.deleteMany({ where: { tenantId } })).count,
+        scheduledNudges: (await (tx as any).scheduledNudge.deleteMany({ where: { tenantId } })).count,
+      };
+
+      // Return to a fresh onboarding state (admin already exists → PENDING_ONBOARDING).
+      await tx.tenant.update({ where: { id: tenantId }, data: { status: "PENDING_ONBOARDING" } });
+      return r;
+    });
+
+    // Re-arm a fresh onboarding nudge so a reset tenant that never restarts is
+    // followed up like any brand-new tenant.
+    scheduleOnboardingNudge(tenantId, "1d").catch(() => {});
+
+    res.json({ data: { reset: true, tenantId, tenantName: tenant.name, removed, status: "PENDING_ONBOARDING" } });
+  } catch (err: any) {
+    console.error("Reset onboarding error:", err);
+    res.status(500).json({ error: "Failed to reset onboarding" });
+  }
+});
+
+// ─── System Admin: Onboarding Console ───────────────────────
+// One row per tenant with every onboarding milestone, derived progress,
+// health, and the Next Recommended Action. The operational board.
+router.get("/onboarding-console", authenticate, requireSystemAdmin(), async (_req: Request, res: Response): Promise<void> => {
+  try {
+    const rows = await listOnboardingSnapshots();
+    res.json({ data: { rows, generatedAt: new Date().toISOString() } });
+  } catch (err: any) {
+    console.error("Onboarding console error:", err);
+    res.status(500).json({ error: "Failed to load onboarding console" });
+  }
+});
+
+// Single-tenant snapshot (used by the tenant detail drawer).
+router.get("/tenants/:id/onboarding-snapshot", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const snapshot = await getOnboardingSnapshot(req.params.id as string);
+    if (!snapshot) { res.status(404).json({ error: "Tenant not found" }); return; }
+    res.json({ data: { snapshot } });
+  } catch (err: any) {
+    console.error("Onboarding snapshot error:", err);
+    res.status(500).json({ error: "Failed to load snapshot" });
+  }
+});
+
+// Admin-triggered manual nudge — arms + delivers immediately, returns outcome.
+router.post("/tenants/:id/nudge", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.params.id as string;
+    const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { id: true } });
+    if (!tenant) { res.status(404).json({ error: "Tenant not found" }); return; }
+    const result = await triggerNudgeNow(tenantId);
+    res.json({ data: result });
+  } catch (err: any) {
+    console.error("Manual nudge error:", err);
+    res.status(500).json({ error: "Failed to send nudge" });
   }
 });
 

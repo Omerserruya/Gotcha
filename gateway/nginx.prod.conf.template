@@ -1042,4 +1042,33 @@ http {
             try_files $uri $uri/index.html $uri.html /index.html;
         }
     }
+
+    # ── Help Center: help.gotcha.co.il → the exported /help pages ──
+    # The public knowledge base is part of the same static export; this vhost
+    # maps the subdomain root onto /help. TLS terminates upstream of this
+    # container exactly like the main host.
+    server {
+        listen 80;
+        server_name help.gotcha.co.il;
+
+        # Next.js assets + shared statics resolve as-is from the export.
+        location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
+            try_files $uri =404;
+        }
+
+        # In-page links already carry the /help prefix.
+        location /help {
+            try_files $uri $uri/index.html $uri.html /help/index.html;
+        }
+
+        # The bare root serves the help index directly.
+        location = / {
+            try_files /help/index.html =404;
+        }
+
+        # Unprefixed paths land on the help section.
+        location / {
+            try_files /help$uri /help$uri/index.html /help$uri.html /help/index.html;
+        }
+    }
 }

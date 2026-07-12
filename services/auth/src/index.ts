@@ -8,6 +8,7 @@ import systemFeatureRoutes from "./routes/system-features";
 import onboardingRoutes, { publicInviteRouter } from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
 import permissionsRoutes from "./routes/permissions";
+import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
 const config = { name: "auth-service", port: parseInt(process.env.PORT || "4001", 10) };
@@ -45,4 +46,9 @@ app.use("/api/public/onboarding", publicInviteRouter);
 app.use("/api/waitlist", waitlistRoutes);
 
 startService(app, config);
+
+// Lifecycle Nudge Engine — repeatable sweep that sends due onboarding nudges.
+// Best-effort: a failure here must never stop the auth service from serving.
+startNudgeWorker().catch((err) => console.error("[auth] nudge worker start failed:", err?.message));
+
 export { app };

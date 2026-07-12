@@ -1,9 +1,27 @@
 "use client";
 
+// Magic-link verification — the very first screen after the email click, so it
+// wears the same light identity as the setup flow it opens (wordmark, violet,
+// calm canvas), not a separate look.
+
 import { Suspense, useEffect, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { verifyMagicLink } from "@/lib/api";
+
+function Wordmark() {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src="/logo_icon.png" alt="GOTCHA" className="h-7 w-auto" />;
+}
+
+function Shell({ children }: { children: React.ReactNode }) {
+  return (
+    <div className="min-h-screen bg-[#fafafa] flex flex-col">
+      <header className="px-6 md:px-10 py-6"><Wordmark /></header>
+      <main className="flex-1 flex items-center justify-center px-6 pb-24">{children}</main>
+    </div>
+  );
+}
 
 function VerifyContent() {
   const router = useRouter();
@@ -33,47 +51,40 @@ function VerifyContent() {
 
   if (verifying) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-        <div className="text-center">
-          <div className="relative mx-auto mb-6 w-16 h-16">
-            <div className="absolute inset-0 rounded-full bg-indigo-100 animate-ping opacity-25" />
-            <div className="relative w-16 h-16 rounded-full bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center">
-              <svg className="w-8 h-8 text-white animate-spin" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-              </svg>
-            </div>
-          </div>
-          <h2 className="text-xl font-semibold text-gray-900 mb-2">Verifying your link...</h2>
-          <p className="text-gray-500">Please wait while we authenticate you</p>
+      <Shell>
+        <div className="text-center animate-riseIn">
+          <span className="relative inline-flex w-14 h-14 items-center justify-center mb-6">
+            <span className="absolute inset-0 rounded-2xl bg-gradient-to-br from-primary-400 to-primary-600 animate-pulseSoft" />
+            <span className="relative text-white text-xl">◎</span>
+          </span>
+          <h2 className="text-2xl font-bold text-gray-900 tracking-tight">Opening your workspace…</h2>
+          <p className="text-gray-500 mt-2">One moment while I verify your link.</p>
         </div>
-      </div>
+      </Shell>
     );
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50 px-4">
-      <div className="max-w-md w-full bg-white rounded-2xl shadow-lg border border-gray-100 p-8 text-center">
-        <div className="w-16 h-16 bg-red-50 rounded-full flex items-center justify-center mx-auto mb-5">
-          <svg className="w-8 h-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4.5c-.77-.833-2.694-.833-3.464 0L3.34 16.5c-.77.833.192 2.5 1.732 2.5z" />
+    <Shell>
+      <div className="max-w-md w-full text-center animate-riseIn">
+        <span className="inline-flex w-14 h-14 rounded-2xl bg-amber-50 border border-amber-100 items-center justify-center mb-6">
+          <svg className="w-7 h-7 text-amber-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8} strokeLinecap="round" strokeLinejoin="round" aria-hidden>
+            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
+            <line x1="12" y1="9" x2="12" y2="13" />
+            <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
-        </div>
-        <h2 className="text-xl font-bold text-gray-900 mb-2">Link Verification Failed</h2>
-        <p className="text-gray-500 mb-6">{error}</p>
-        <div className="space-y-3">
-          <button
-            onClick={() => router.push("/login")}
-            className="w-full py-3 bg-gradient-to-r from-indigo-500 to-purple-600 hover:from-indigo-600 hover:to-purple-700 text-white font-medium rounded-xl transition shadow-lg shadow-indigo-500/25"
-          >
-            Go to Login
-          </button>
-          <p className="text-xs text-gray-400">
-            Contact your system administrator if you need a new setup link.
-          </p>
-        </div>
+        </span>
+        <h2 className="text-2xl font-bold text-gray-900 tracking-tight">This link didn&apos;t work</h2>
+        <p className="text-gray-500 mt-2 leading-relaxed">{error}</p>
+        <button
+          onClick={() => router.push("/login")}
+          className="mt-8 inline-flex items-center justify-center px-8 py-3.5 bg-primary-500 hover:bg-primary-600 text-white text-base font-semibold rounded-2xl transition shadow-lg shadow-primary-500/25"
+        >
+          Go to login →
+        </button>
+        <p className="text-xs text-gray-400 mt-4">Contact your system administrator if you need a new setup link.</p>
       </div>
-    </div>
+    </Shell>
   );
 }
 
@@ -81,8 +92,8 @@ export default function VerifyMagicLinkPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-50 via-white to-purple-50">
-          <div className="animate-spin w-8 h-8 border-4 border-indigo-500 border-t-transparent rounded-full" />
+        <div className="min-h-screen flex items-center justify-center bg-[#fafafa]">
+          <div className="animate-spin w-8 h-8 border-4 border-primary-500 border-t-transparent rounded-full" />
         </div>
       }
     >

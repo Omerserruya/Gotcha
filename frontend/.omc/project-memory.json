@@ -143,16 +143,16 @@
       "type": "directory"
     },
     {
+      "path": "src/lib/api.ts",
+      "accessCount": 71,
+      "lastAccessed": 1783603964538,
+      "type": "directory"
+    },
+    {
       "path": "src/app/ai-studio/agents/[id]/page.tsx",
       "accessCount": 65,
       "lastAccessed": 1780645411514,
       "type": "file"
-    },
-    {
-      "path": "src/lib/api.ts",
-      "accessCount": 65,
-      "lastAccessed": 1782397433319,
-      "type": "directory"
     },
     {
       "path": "src/components/mainPlaybook/MainPlaybookEditor.tsx",
@@ -221,6 +221,12 @@
       "type": "file"
     },
     {
+      "path": "src/components/Sidebar.tsx",
+      "accessCount": 19,
+      "lastAccessed": 1783604052920,
+      "type": "file"
+    },
+    {
       "path": "src/app/bot/page.tsx",
       "accessCount": 17,
       "lastAccessed": 1778596631692,
@@ -236,12 +242,6 @@
       "path": "src/app/outbound/broadcasts/page.tsx",
       "accessCount": 16,
       "lastAccessed": 1776615651161,
-      "type": "file"
-    },
-    {
-      "path": "src/components/Sidebar.tsx",
-      "accessCount": 16,
-      "lastAccessed": 1780735946514,
       "type": "file"
     },
     {

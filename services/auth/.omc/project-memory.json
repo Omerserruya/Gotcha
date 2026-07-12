@@ -103,8 +103,14 @@
   "hotPaths": [
     {
       "path": "src/routes/onboarding.ts",
-      "accessCount": 16,
-      "lastAccessed": 1771950818988,
+      "accessCount": 45,
+      "lastAccessed": 1783603160294,
+      "type": "file"
+    },
+    {
+      "path": "src/services/notification.service.ts",
+      "accessCount": 13,
+      "lastAccessed": 1783603399199,
       "type": "file"
     },
     {
@@ -114,15 +120,15 @@
       "type": "file"
     },
     {
-      "path": "src/services/notification.service.ts",
-      "accessCount": 10,
-      "lastAccessed": 1772396291706,
-      "type": "file"
-    },
-    {
       "path": "src/routes/waitlist.ts",
       "accessCount": 8,
       "lastAccessed": 1772475906703,
+      "type": "file"
+    },
+    {
+      "path": "src/routes/departments.ts",
+      "accessCount": 6,
+      "lastAccessed": 1783434106891,
       "type": "file"
     },
     {
@@ -132,9 +138,9 @@
       "type": "file"
     },
     {
-      "path": "src/routes/departments.ts",
+      "path": "src/services/nudge-engine.service.ts",
       "accessCount": 4,
-      "lastAccessed": 1775565825385,
+      "lastAccessed": 1783603361709,
       "type": "file"
     },
     {
@@ -189,6 +195,12 @@
       "path": "src/routes/permissions.ts",
       "accessCount": 1,
       "lastAccessed": 1782400207750,
+      "type": "file"
+    },
+    {
+      "path": "src/__tests__/onboarding-logic.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1783604467943,
       "type": "file"
     }
   ],

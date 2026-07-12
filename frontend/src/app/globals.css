@@ -842,3 +842,16 @@ body {
   25% { transform: translateX(-2px); }
   75% { transform: translateX(2px); }
 }
+
+/* Onboarding motion respects the OS "reduce motion" preference: entrances and
+   exits become instant; the scan-stage pulse stays (it conveys state). */
+@media (prefers-reduced-motion: reduce) {
+  .animate-riseIn,
+  .animate-riseDown,
+  .animate-stageIn,
+  .animate-popIn,
+  .animate-leaveUp,
+  .animate-leaveDown {
+    animation: none !important;
+  }
+}

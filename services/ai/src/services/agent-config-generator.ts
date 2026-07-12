@@ -183,6 +183,81 @@ function generateBehavioralBlock(profile: BusinessProfileData, dept: DepartmentD
   };
 }
 
+// ─── Brain transplant: compile the employee from the Digital Twin ───────────
+//
+// The onboarding Business Discovery (the five-domain moat) is the employee's
+// genome. Without this the generator only ever saw the shallow BusinessProfile
+// (name/industry/description) and the twin was orphaned. Here we transplant the
+// discovered BRAND voice + BUSINESS identity into the exact structured fields
+// the runtime prompt-builder renders (identity.representationGuidelines,
+// persona.customAttributes, customGuardrails) so the employee sounds like the
+// brand from day one. Reading businessDiscovery here is services/ai's own
+// generation concern (same DB) — no cross-service API and no new LLM call.
+interface DiscoveryEnrichment {
+  representationGuidelines: string[];
+  personaAttributes: Record<string, string>;
+  guardrails: string[];
+  toneConfigPatch: Record<string, unknown>;
+}
+
+function strArr(v: unknown, cap: number): string[] {
+  return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && !!x.trim()).map((s) => s.trim()).slice(0, cap) : [];
+}
+
+async function buildDiscoveryEnrichment(tenantId: string): Promise<DiscoveryEnrichment | null> {
+  const disc = await prisma.businessDiscovery
+    .findUnique({ where: { tenantId }, select: { brand: true, business: true } })
+    .catch(() => null);
+  if (!disc) return null;
+  const brand = (disc.brand as any) || {};
+  const business = (disc.business as any) || {};
+
+  const guidelines: string[] = [];
+  const persona: Record<string, string> = {};
+  const guardrails: string[] = [];
+  const tone: Record<string, unknown> = {};
+
+  // Business identity → representation guidelines (who we serve, our promise).
+  const put = (arr: string[], label: string, v: unknown) => { if (typeof v === "string" && v.trim()) arr.push(`${label}: ${v.trim()}`); };
+  put(guidelines, "Our value proposition", business.valueProp);
+  put(guidelines, "Who we serve (ideal customer)", business.icp);
+  const personas = strArr(business.personas, 4);
+  if (personas.length) guidelines.push(`Typical customers: ${personas.join("; ")}`);
+  const products = strArr(business.products, 10);
+  if (products.length) guidelines.push(`What we offer: ${products.join(", ")}`);
+
+  // Brand voice → persona attributes (rendered as "Persona:" bullets in prompt).
+  const putP = (k: string, v: unknown) => { if (typeof v === "string" && v.trim()) persona[k] = v.trim(); };
+  putP("Brand voice", brand.voice);
+  putP("Tone of voice", brand.tone);
+  putP("Brand personality", brand.personality);
+  putP("Greeting style (open conversations like this)", brand.greetingExample);
+  putP("Positioning", brand.positioning);
+  putP("How we speak to our audience", brand.audience);
+  putP("Call-to-action style", brand.ctaStyle);
+  const preferred = [...strArr(brand.preferredTerminology, 10), ...strArr(brand.vocabulary, 10)];
+  if (preferred.length) persona["Preferred words & phrases"] = Array.from(new Set(preferred)).join(", ");
+  const langs = strArr(brand.languages, 4);
+  if (langs.length) persona["Languages we speak"] = langs.join(", ");
+
+  // Forbidden words → hard guardrails (the AI never says them).
+  for (const w of strArr(brand.forbiddenWords, 10)) guardrails.push(`Never use the word or phrase "${w}" — it is off-brand.`);
+
+  // toneConfig patch — the structured, settings-visible record of the brand
+  // (also what "≥4 discovered brand fields" is asserted against).
+  if (typeof brand.voice === "string" && brand.voice.trim()) tone.brandVoice = brand.voice.trim();
+  if (typeof brand.tone === "string" && brand.tone.trim()) tone.brandTone = brand.tone.trim();
+  if (typeof brand.personality === "string" && brand.personality.trim()) tone.brandPersonality = brand.personality.trim();
+  if (typeof brand.positioning === "string" && brand.positioning.trim()) tone.brandPositioning = brand.positioning.trim();
+  if (preferred.length) tone.preferredTerminology = Array.from(new Set(preferred));
+  const forbidden = strArr(brand.forbiddenWords, 10);
+  if (forbidden.length) tone.forbiddenWords = forbidden;
+  if (langs.length) tone.brandLanguages = langs;
+
+  if (!guidelines.length && !Object.keys(persona).length && !guardrails.length && !Object.keys(tone).length) return null;
+  return { representationGuidelines: guidelines, personaAttributes: persona, guardrails, toneConfigPatch: tone };
+}
+
 /**
  * Generates a structured AI Employee config for a department.
  * Creates or updates an AIAgent record and links it to the department via a RouterRule.
@@ -229,6 +304,24 @@ export async function generateAgentConfig(
     persona: personaOverride,
   };
 
+  // Brain transplant: fold the Digital Twin into the structured fields the
+  // prompt renders. Brand → persona attributes + guardrails; business identity →
+  // representation guidelines; brand → toneConfig (settings-visible). Graceful
+  // no-op for tenants that never ran discovery.
+  const enrichment = await buildDiscoveryEnrichment(tenantId);
+  if (enrichment?.representationGuidelines.length) {
+    config.identity.representationGuidelines = [
+      ...config.identity.representationGuidelines,
+      ...enrichment.representationGuidelines,
+    ];
+  }
+  if (enrichment && Object.keys(enrichment.toneConfigPatch).length) {
+    Object.assign(config.tone, enrichment.toneConfigPatch);
+  }
+  const mergedPersona: PersonaData | undefined = enrichment && Object.keys(enrichment.personaAttributes).length
+    ? { ...(personaOverride || {}), customAttributes: { ...(personaOverride?.customAttributes || {}), ...enrichment.personaAttributes } }
+    : personaOverride;
+
   // The runtime prompt is built from these structured fields by
   // `prompt-builder.service.ts` - no pre-baked systemPrompt is stored.
   const agentData = {
@@ -236,7 +329,8 @@ export async function generateAgentConfig(
     goals: JSON.parse(JSON.stringify(config.goals)),
     toneConfig: JSON.parse(JSON.stringify(config.tone)),
     behavioral: JSON.parse(JSON.stringify(config.behavioral)),
-    persona: personaOverride ? JSON.parse(JSON.stringify(personaOverride)) : undefined,
+    persona: mergedPersona ? JSON.parse(JSON.stringify(mergedPersona)) : undefined,
+    ...(enrichment?.guardrails.length ? { customGuardrails: enrichment.guardrails } : {}),
     status: "ACTIVE" as const,
     model: getDefaultModel(),
     provider: "openai",
@@ -281,6 +375,22 @@ export async function generateAgentConfig(
         enabled: true,
       } as any,
     });
+  }
+
+  // Attach the tenant's knowledge bases. An ACTIVE employee without knowledge
+  // is a contradiction — the agents API refuses it and retrieval finds
+  // nothing — yet generation used to leave the link empty, so the onboarding
+  // employee reported "not connected" to the knowledge it was taught.
+  const kbs = await prisma.knowledgeBase.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true },
+  });
+  for (const kb of kbs) {
+    await prisma.aIAgentKnowledge.upsert({
+      where: { aiAgentId_knowledgeBaseId: { aiAgentId: agent.id, knowledgeBaseId: kb.id } },
+      create: { aiAgentId: agent.id, knowledgeBaseId: kb.id },
+      update: {},
+    }).catch((err: any) => console.warn("[agent-config] KB link failed:", err?.message));
   }
 
   return agent.id;

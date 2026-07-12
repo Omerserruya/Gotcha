@@ -9,6 +9,7 @@ import { CommandCenterProvider } from "./CommandCenter/CommandCenterProvider";
 import { CommandCenterTrigger } from "./CommandCenter/CommandCenterTrigger";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
 import { FeatureGuides } from "./onboarding/FeatureGuides";
+import { CreditAlertBanner } from "./CreditAlertBanner";
 import { getOnboardingStatus } from "@/lib/api";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
@@ -121,6 +122,7 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
 
           {/* Main content - add bottom padding on mobile for admin bottom nav (not when chat is open) */}
           <main className={`flex-1 overflow-hidden w-full relative z-10 ${user?.role === "ADMIN" && !chatOpen ? "md:pb-0 pb-[68px]" : ""}`}>
+            <CreditAlertBanner />
             {children}
           </main>
 

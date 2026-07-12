@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
@@ -12,7 +12,9 @@ const upload = multer({
   limits: { fileSize: 10 * 1024 * 1024 }, // 10MB
 });
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// PENDING_ONBOARDING is allowed: Movement 6 of onboarding uploads files and
+// creates the first knowledge base BEFORE the tenant flips ACTIVE.
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
 
 // List knowledge bases
 router.get("/", async (req: Request, res: Response) => {

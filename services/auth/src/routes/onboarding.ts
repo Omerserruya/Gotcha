@@ -1,13 +1,31 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
+import { promises as dns } from "dns";
 import * as bcrypt from "bcryptjs";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits } from "@chatcenter/shared";
 import { sendActivationConfirmation, createMagicLink, sendOnboardingInvite, sendTeammateInvite } from "../services/notification.service";
+import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
+import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4009";
+
+/**
+ * fetch() with a hard timeout (T-3). A hung AI or billing hop must never hang
+ * an onboarding request — we abort after `ms` and surface it as an ordinary
+ * network failure the callers already handle (null / thrown Error).
+ */
+async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000): Promise<globalThis.Response> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), ms);
+  try {
+    return await fetch(url, { ...init, signal: ctl.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
 
 /**
  * Provision the billing BillableEntity for a freshly-activated tenant. The
@@ -18,14 +36,14 @@ const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4
  * entity already exists).
  */
 async function provisionBilling(tenantId: string): Promise<void> {
-  const res = await fetch(`${BILLING_SERVICE_URL}/api/internal/billing/ensure-entity`, {
+  const res = await fetchWithTimeout(`${BILLING_SERVICE_URL}/api/internal/billing/ensure-entity`, {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-internal-key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
     },
     body: JSON.stringify({ tenantId }),
-  });
+  }, 10000);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`billing ensure-entity failed (${res.status}): ${body}`);
@@ -33,13 +51,96 @@ async function provisionBilling(tenantId: string): Promise<void> {
 }
 
 async function callAIGenerateConfigs(tenantId: string, authHeader: string): Promise<void> {
-  const res = await fetch(`${AI_SERVICE_URL}/api/ai-assist/generate-configs`, {
+  const res = await fetchWithTimeout(`${AI_SERVICE_URL}/api/ai-assist/generate-configs`, {
     method: "POST",
     headers: { "Content-Type": "application/json", "Authorization": authHeader },
-  });
+  }, 30000);
   if (!res.ok) {
     const body = await res.text();
     throw new Error(`AI service generate-configs failed (${res.status}): ${body}`);
+  }
+}
+
+// The recommended employee (Movement 4 / Movement 7) → the department name that
+// makes the config generator produce a role-appropriate identity, and the
+// canonical AIAgent.role. Keeps the employee the owner "hired" consistent with
+// the one that actually gets created.
+const RECOMMENDATION_DEPT_NAME: Record<string, string> = {
+  customer_support: "Customer Support",
+  sales: "Sales",
+  reception: "Customer Support",
+  conversation_intelligence: "Customer Support",
+};
+const RECOMMENDATION_ROLE: Record<string, string> = {
+  customer_support: "customer_support",
+  sales: "sales",
+  reception: "customer_support",
+  conversation_intelligence: "customer_support",
+};
+
+/**
+ * "Bring them on board" — create the actual AIAgent for the recommended
+ * employee by REUSING the existing config generator, then rename it so the
+ * employee that joins is the exact one the owner just met in Movement 7.
+ *
+ * Generation is deterministic (no LLM — pure static mapping over the confirmed
+ * BusinessProfile), so this is cheap enough to run synchronously on activation:
+ * the employee genuinely EXISTS the moment the owner lands, which is the whole
+ * point ("it already joined the company", not "now configure one").
+ *
+ * Best-effort rename: only relabels when this is a fresh single-employee tenant
+ * (the onboarding case), so it never touches a tenant that already had agents.
+ */
+async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec: any): Promise<void> {
+  await callAIGenerateConfigs(tenantId, authHeader);
+
+  const agents = await prisma.aIAgent.findMany({ where: { tenantId }, select: { id: true, persona: true, customGuardrails: true }, orderBy: { createdAt: "desc" } });
+  if (agents.length !== 1) return; // only the clean onboarding case
+  const agentId = agents[0]!.id;
+
+  const displayName = typeof rec?.employeeName === "string" && rec.employeeName.trim()
+    ? rec.employeeName.trim().slice(0, 120)
+    : null;
+  const role = rec?.employeeRole && RECOMMENDATION_ROLE[rec.employeeRole] ? RECOMMENDATION_ROLE[rec.employeeRole] : null;
+
+  const data: Record<string, unknown> = {};
+  if (displayName) data.name = displayName;
+  if (role) data.role = role;
+
+  // Movement 8 — apply the persona the owner tuned by CHATTING with the employee
+  // before deploy as STRUCTURED fields (persona.customAttributes + guardrails),
+  // not a systemPrompt text append, so the prompt-builder renders it the same
+  // way it renders the transplanted brand — and the two compose cleanly.
+  const tuned = rec?.tunedPersona as { tone?: string; personality?: string; focus?: string; instructions?: string[] } | undefined;
+  if (tuned) {
+    const VALID_TONES = new Set(["professional", "friendly", "casual", "formal"]);
+    if (tuned.tone && VALID_TONES.has(tuned.tone)) data.tone = tuned.tone;
+
+    const currentPersona = (agents[0]!.persona as any) || {};
+    const attrs: Record<string, string> = { ...(currentPersona.customAttributes || {}) };
+    if (tuned.focus && tuned.focus.trim()) attrs["Primary focus"] = tuned.focus.trim();
+    if (tuned.personality && tuned.personality.trim()) attrs["Personality (owner-tuned)"] = tuned.personality.trim();
+    if (Object.keys(attrs).length) data.persona = { ...currentPersona, customAttributes: attrs };
+
+    const instr = Array.isArray(tuned.instructions)
+      ? tuned.instructions.filter((i): i is string => typeof i === "string" && !!i.trim()).map((s) => s.trim())
+      : [];
+    if (instr.length) {
+      const existingGuards = Array.isArray(agents[0]!.customGuardrails)
+        ? (agents[0]!.customGuardrails as unknown[]).filter((g): g is string => typeof g === "string")
+        : [];
+      data.customGuardrails = [...existingGuards, ...instr.map((i) => `Owner instruction: ${i}`)];
+    }
+  }
+
+  if (Object.keys(data).length) {
+    await prisma.aIAgent.update({ where: { id: agentId }, data });
+  }
+  if (displayName) {
+    await prisma.routerRule.updateMany({
+      where: { tenantId, aiAgentId: agentId },
+      data: { name: displayName },
+    }).catch(() => { /* label sync is cosmetic */ });
   }
 }
 
@@ -186,6 +287,24 @@ ${deptDetails}`;
         inputTokens: response.usage.prompt_tokens,
         outputTokens: response.usage.completion_tokens,
       }).catch((err: any) => console.error("[Onboarding] Unit metering failed:", err.message));
+
+      // Audit row (T-6, CLAUDE.md §5): the grandfathered auth-side LLM calls now
+      // leave an audit trail with the bounded prompt + context, not just usage.
+      prisma.auditLog.create({
+        data: {
+          tenantId,
+          actorType: "ai",
+          action: "ai.responded",
+          targetType: "onboarding",
+          metadata: {
+            feature: "onboarding_chat",
+            model,
+            tokens: { prompt: response.usage.prompt_tokens, completion: response.usage.completion_tokens, total: response.usage.total_tokens },
+            inputPreview: message.slice(0, 500),
+            context: { organization: businessContext.organizationName, industry: businessContext.industry, departments: businessContext.departments.map((d) => d.name) },
+          },
+        },
+      }).catch((err: any) => console.error("[Onboarding] Audit logging failed:", err.message));
     }
 
     const content = response.choices[0]?.message?.content;
@@ -735,9 +854,18 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       return;
     }
 
-    // Auto-create a single "General" department if the tenant has none.
-    // Keeps the AI generator happy without forcing the user through a
-    // wizard step they don't need on day one.
+    // The employee the owner just met in Movement 7 — drives the department
+    // name (so the generator produces a role-appropriate identity) and the
+    // final employee name/role.
+    const discovery = await prisma.businessDiscovery
+      .findUnique({ where: { tenantId: req.tenantId! }, select: { recommendation: true } })
+      .catch(() => null);
+    const recommendation = (discovery?.recommendation as any) || null;
+    const recDeptName =
+      (recommendation?.employeeRole && RECOMMENDATION_DEPT_NAME[recommendation.employeeRole]) || "General";
+
+    // Auto-create a single department if the tenant has none, named after the
+    // recommended employee so the generated identity fits the role.
     let departments = await prisma.department.findMany({
       where: { tenantId: req.tenantId!, isActive: true },
       select: { id: true, name: true },
@@ -746,7 +874,7 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       const dept = await prisma.department.create({
         data: {
           tenantId: req.tenantId!,
-          name: "General",
+          name: recDeptName,
           queueMode: "CLAIM",
           slaTarget: 30,
           aiSuggestionsEnabled: true,
@@ -770,16 +898,30 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       }),
     ]);
 
+    // Create the recommended employee NOW (awaited) — reusing the existing
+    // generator — so it genuinely exists the moment the owner lands. Generation
+    // is LLM-free and fast; the "Getting your employee ready…" screen covers it.
+    // Falls back to fire-and-forget so an agent still materializes on error.
     const authHeader = req.headers.authorization;
     if (authHeader) {
-      callAIGenerateConfigs(req.tenantId!, authHeader).catch((err) => {
-        console.error(`[Onboarding] Async generate-configs failed for tenant ${req.tenantId}:`, err.message);
-      });
+      try {
+        await hireRecommendedEmployee(req.tenantId!, authHeader, recommendation);
+      } catch (err: any) {
+        console.error(`[Onboarding] Synchronous hire failed for tenant ${req.tenantId}:`, err?.message);
+        callAIGenerateConfigs(req.tenantId!, authHeader).catch((e) => {
+          console.error(`[Onboarding] Async generate-configs fallback failed for tenant ${req.tenantId}:`, e.message);
+        });
+      }
     }
 
     sendActivationConfirmation(req.tenantId!).catch((err) => {
       console.error("Failed to send activation confirmation:", err);
     });
+
+    // Re-arm the nudge one last time: if they activated without a live channel,
+    // the sweep sends "your AI employee is waiting to start working"; if they're
+    // fully live it computes nothing and is SKIPPED. (No manual cancel needed.)
+    scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
 
     // Provision billing (entity + trial + included AI Units) for the new tenant.
     // Best-effort: never block activation on billing availability.
@@ -865,58 +1007,81 @@ router.get("/agent-config/:departmentId", requireRole("ADMIN"), async (req: Requ
 });
 
 // ─── Onboarding Missions ────────────────────────────────────
-// Five hardcoded missions, status derived from existing tables.
+// The post-onboarding journey missions — status derived from live state and
+// the Recommendation ledger, never a stored checkbox.
 // `done` if completed, `active` for the first incomplete one, `pending` for the rest.
 // `deepLink` is consumed by the sidebar MissionPanel so route changes stay server-side.
 
 type MissionId =
-  | "knowledge_base"
-  | "ai_employees"
+  | "connect_source_of_truth"
   | "connect_channel"
-  | "workflows";
+  | "add_webchat"
+  | "teach_knowledge";
 
 interface MissionResult {
   id: MissionId;
   done: boolean;
   deepLink: string;
+  /** Optional live detail, e.g. detected channel identifiers or an open-gaps count. */
+  hint?: string;
 }
 
 router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
 
-    const [kbCount, aiAgent, connectedChannel, flowCount] = await Promise.all([
-      prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
-      prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true } }).catch(() => null),
+    // The post-onboarding journey, derived from the SAME sources of truth the
+    // onboarding used: the connected-systems state, the discovery's detected
+    // channels (with real identifiers), and the living Recommendation ledger —
+    // never a stored checkbox. Order = highest-leverage first.
+    const [coreSlug, connectedChannel, discovery, openRecs] = await Promise.all([
+      connectedCoreSystem(tenantId).catch(() => null),
       prisma.channelAccount.findFirst({
         where: { tenantId, connectionStatus: "CONNECTED" },
         select: { id: true },
       }).catch(() => null),
-      (prisma as any).chatbotFlow?.count?.({ where: { tenantId } }).catch?.(() => 0) ?? Promise.resolve(0),
+      prisma.businessDiscovery.findUnique({
+        where: { tenantId },
+        select: { communication: true },
+      }).catch(() => null),
+      prisma.recommendation.findMany({
+        where: { tenantId, status: "OPEN" },
+        select: { kind: true, dedupeKey: true },
+      }).catch(() => [] as Array<{ kind: string; dedupeKey: string }>),
     ]);
 
-    // Order matches the onboarding journey: bring knowledge → hire the AI
-    // employee → connect a channel → wire the workflow.
+    const PRIMARY_CH = new Set(["whatsapp", "instagram", "facebook", "messenger", "telegram"]);
+    const detectedChannels = (((discovery?.communication as any)?.channels || []) as Array<{ type?: string; identifier?: string }>)
+      .filter((c) => c?.type && PRIMARY_CH.has(String(c.type).toLowerCase()));
+    const channelHint = detectedChannels.slice(0, 3)
+      .map((c) => `${String(c.type)}${c.identifier ? ` · ${c.identifier}` : ""}`)
+      .join("  ·  ");
+
+    const webchatOpen = openRecs.some((r) => r.dedupeKey === "channel:webchat");
+    const teachOpen = openRecs.filter((r) => r.kind === "import_knowledge").length;
+
     const missions: MissionResult[] = [
       {
-        id: "knowledge_base",
-        done: (kbCount || 0) > 0,
-        deepLink: "/ai-studio/knowledge",
-      },
-      {
-        id: "ai_employees",
-        done: !!aiAgent,
-        deepLink: "/ai-studio",
+        id: "connect_source_of_truth",
+        done: !!coreSlug,
+        deepLink: "/settings/integrations",
       },
       {
         id: "connect_channel",
         done: !!connectedChannel,
         deepLink: "/channels",
+        hint: channelHint || undefined,
       },
       {
-        id: "workflows",
-        done: (flowCount || 0) > 0,
-        deepLink: "/ai-studio/router",
+        id: "add_webchat",
+        done: !webchatOpen,
+        deepLink: "/channels",
+      },
+      {
+        id: "teach_knowledge",
+        done: teachOpen === 0,
+        deepLink: "/business",
+        hint: teachOpen > 0 ? String(teachOpen) : undefined,
       },
     ];
 
@@ -931,7 +1096,7 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
       } else {
         status = "pending";
       }
-      return { id: m.id, status, deepLink: m.deepLink };
+      return { id: m.id, status, deepLink: m.deepLink, hint: m.hint };
     });
 
     res.json({ data: { missions: out } });
@@ -953,7 +1118,7 @@ const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "fire
  *  Airtable is only "usable" once its column mapping is saved (a CONNECTED
  *  Airtable with no fieldMap is mid-setup, not a working source of truth). */
 async function connectedCoreSystem(tenantId: string): Promise<string | null> {
-  const rows = await (prisma as any).tenantIntegration.findMany({
+  const rows = await prisma.tenantIntegration.findMany({
     where: { tenantId, status: "CONNECTED", integration: { slug: { in: CORE_SYSTEM_SLUGS as unknown as string[] } } },
     include: { integration: true },
     orderBy: { createdAt: "asc" },
@@ -985,17 +1150,28 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
       data: { primarySystem: slug },
     });
     if (slug === "shopify") {
-      const ti = await (prisma as any).tenantIntegration.findFirst({
+      const ti = await prisma.tenantIntegration.findFirst({
         where: { tenantId: req.tenantId!, integration: { slug: "shopify" } },
         select: { id: true, config: true },
       });
       if (ti) {
         const cfg = (ti.config && typeof ti.config === "object" ? ti.config : {}) as Record<string, unknown>;
         cfg.useAsCrm = true;
-        await (prisma as any).tenantIntegration.update({ where: { id: ti.id }, data: { config: cfg } });
+        await prisma.tenantIntegration.update({ where: { id: ti.id }, data: { config: cfg } });
       }
     }
     const connected = await connectedCoreSystem(req.tenantId!);
+    // A connected system is no longer a recommendation — complete it so it never
+    // nags post-onboarding (the recommendation is fulfilled, not lost).
+    if (connected) {
+      await prisma.recommendation.updateMany({
+        where: { tenantId: req.tenantId!, dedupeKey: `connect:${connected}`, status: "OPEN" },
+        data: { status: "COMPLETED", completedAt: new Date() },
+      }).catch(() => {});
+      // Second-wave: connecting the source of truth unlocks a new class of
+      // concrete next steps — write them to the living backlog (surfaces on /business).
+      addStoreInspectionRecs(req.tenantId!, connected).catch(() => {});
+    }
     res.json({ data: { primarySystem: slug, connectedSlug: connected, connected: connected === slug } });
   } catch (err) {
     console.error("Set core system error:", err);
@@ -1014,10 +1190,10 @@ router.get("/setup-map", requireRole("ADMIN"), async (req: Request, res: Respons
       connectedCoreSystem(tenantId),
       prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
       prisma.aIAgent.findFirst({ where: { tenantId }, select: { id: true, status: true } }).catch(() => null),
-      (prisma as any).chatbotFlow?.count?.({ where: { tenantId } }).catch?.(() => 0) ?? Promise.resolve(0),
+      prisma.chatbotFlow.count({ where: { tenantId } }).catch(() => 0),
       prisma.user.count({ where: { tenantId, isActive: true } }),
       prisma.channelAccount.findFirst({ where: { tenantId, connectionStatus: "CONNECTED" }, select: { id: true } }).catch(() => null),
-      (prisma as any).tenantIntegration.count({ where: { tenantId, status: "CONNECTED" } }).catch(() => 0),
+      prisma.tenantIntegration.count({ where: { tenantId, status: "CONNECTED" } }).catch(() => 0),
       prisma.businessProfile.findUnique({ where: { tenantId }, select: { primarySystem: true } }).catch(() => null),
     ]);
 
@@ -1221,6 +1397,22 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
           inputTokens: response.usage.prompt_tokens,
           outputTokens: response.usage.completion_tokens,
         }).catch(() => { /* fire-and-forget */ });
+
+        // Audit row (T-6, CLAUDE.md §5): grandfathered domain-analysis LLM call.
+        prisma.auditLog.create({
+          data: {
+            tenantId: req.tenantId!,
+            actorType: "ai",
+            action: "ai.responded",
+            targetType: "onboarding",
+            metadata: {
+              feature: "onboarding_domain_analysis",
+              model,
+              tokens: { prompt: response.usage.prompt_tokens, completion: response.usage.completion_tokens, total: response.usage.total_tokens },
+              inputPreview: origin,
+            },
+          },
+        }).catch(() => { /* fire-and-forget */ });
       }
 
       const content = response.choices[0]?.message?.content;
@@ -1255,6 +1447,972 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
   } catch (err) {
     console.error("Analyze domain error:", err);
     res.status(500).json({ error: "Failed to analyze domain" });
+  }
+});
+
+// ─── Business Discovery (Onboarding Intelligence Engine) ─────
+//
+// Movements 1-4 of the Onboarding Bible. This route does the deterministic
+// half of the moat — a light same-origin crawl of the public pages and a
+// regex pass that detects the tech stack + communication channels — with NO
+// LLM. It then hands the raw text + signals to the AI service's
+// /discover-business endpoint (the one allowed new LLM call), persists the
+// resulting Business Intelligence Report to BusinessDiscovery, and returns it.
+//
+// The customer WATCHES this happen (Movement 1). Everything the engine learns
+// is reflected back (Movement 2), its self-assessed readiness is derived from
+// it (Business Health, Movement 3), and its first recommendation is read
+// straight off the report (Movement 4).
+
+/** Fetch a page returning BOTH raw HTML (for signal regexes) and stripped text
+ *  (for the LLM). Best-effort — returns null on any failure. */
+async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string } | null> {
+  const ctl = new AbortController();
+  const timer = setTimeout(() => ctl.abort(), timeoutMs);
+  try {
+    // Present as a real browser. Many stores sit behind bot filters that 403 a
+    // generic crawler UA — a partial/blocked fetch is a root cause of false
+    // negatives, so we look like Chrome and send the browser header set.
+    const r = await fetch(url, {
+      method: "GET",
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "he,en-US;q=0.9,en;q=0.8",
+        "Accept-Encoding": "gzip, deflate, br",
+        "Upgrade-Insecure-Requests": "1",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+      },
+      signal: ctl.signal,
+      redirect: "follow",
+    });
+    if (!r.ok) return null;
+    const ct = r.headers.get("content-type") || "";
+    if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
+    const html = await r.text();
+    const text = html
+      .replace(/<script[\s\S]*?<\/script>/gi, " ")
+      .replace(/<style[\s\S]*?<\/style>/gi, " ")
+      .replace(/<noscript[\s\S]*?<\/noscript>/gi, " ")
+      .replace(/<[^>]+>/g, " ")
+      .replace(/&nbsp;/gi, " ")
+      .replace(/&amp;/gi, "&")
+      .replace(/&lt;/gi, "<")
+      .replace(/&gt;/gi, ">")
+      .replace(/\s+/g, " ")
+      .trim();
+    return { html: html.slice(0, 400000), text };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+// Same-origin internal links worth reading — the pages that carry a business's
+// knowledge and policies. We only ever follow a handful.
+// Link text / path keywords worth following — the pages where policies, contact
+// details, and knowledge actually live. Bilingual (EN + HE) because Hebrew
+// stores label these in Hebrew even when the slug is English.
+const LINK_KEYWORDS =
+  /(about|faq|help|support|contact|shipping|deliver|return|refund|exchange|warranty|policy|policies|terms|privacy|legal|pricing|plans|q-?a|אודות|צור.?קשר|יצירת.?קשר|שאלות|עזרה|תמיכה|משלוח|החזר|החזרה|החזרות|ביטול|תקנון|מדיניות|פרטיות|אחריות|תנאי)/i;
+
+// Well-known convention paths we always TRY even if not linked from the home
+// page — most false negatives on Shopify/WordPress stores are policies that
+// exist at a predictable URL but aren't in the top nav. fetchPageRaw returns
+// null fast on a 404, so probing these is cheap.
+const CANDIDATE_PATHS = [
+  "/policies/refund-policy", "/policies/shipping-policy", "/policies/terms-of-service",
+  "/policies/privacy-policy", "/policies/legal-notice", "/policies/contact-information",
+  "/pages/contact", "/pages/contact-us", "/pages/faq", "/pages/about", "/pages/about-us",
+  "/pages/shipping", "/pages/returns", "/pages/warranty", "/pages/terms", "/pages/accessibility",
+  "/contact", "/contact-us", "/faq", "/about", "/terms", "/privacy",
+  "/shipping", "/returns", "/refund-policy", "/policies", "/help", "/support",
+];
+
+function extractInternalLinks(html: string, origin: string, cap = 10): string[] {
+  const originHost = (() => { try { return new URL(origin).hostname; } catch { return ""; } })();
+  const out = new Set<string>();
+  const re = /<a\b[^>]*href=["']([^"'#]+)["'][^>]*>([\s\S]*?)<\/a>/gi;
+  let m: RegExpExecArray | null;
+  while ((m = re.exec(html)) && out.size < cap * 4) {
+    const href = m[1];
+    const label = (m[2] || "").replace(/<[^>]+>/g, " ");
+    if (!href) continue;
+    let abs: URL;
+    try { abs = new URL(href, origin); } catch { continue; }
+    if (abs.hostname !== originHost) continue;
+    if (!/^https?:$/.test(abs.protocol)) continue;
+    if (LINK_KEYWORDS.test(decodeURIComponent(abs.pathname)) || LINK_KEYWORDS.test(label)) {
+      abs.hash = "";
+      out.add(abs.toString());
+    }
+  }
+  return Array.from(out).slice(0, cap);
+}
+
+// ─── Structured signal extraction (deterministic, LLM-free) ──
+//
+// Platform detection is STRENGTH-SCORED so we can tell an ACTIVE platform
+// (many strong signals — e.g. Shopify's CDN + theme + section markup) from a
+// LEGACY ARTIFACT (a single stray "magento" string). The AI is handed the
+// scores and told to trust the strongest, so an old tag never gets recommended
+// as an equal.
+
+interface PlatformDef { slug: string; name: string; patterns: RegExp[] }
+const PLATFORM_DEFS: PlatformDef[] = [
+  { slug: "shopify", name: "Shopify", patterns: [/cdn\.shopify\.com/i, /\/cdn\/shop\//i, /Shopify\.theme/i, /myshopify\.com/i, /x-shopify/i, /shopify-section/i, /window\.Shopify/i] },
+  { slug: "woocommerce", name: "WooCommerce", patterns: [/wp-content\/plugins\/woocommerce/i, /woocommerce/i, /wc-block/i, /wc_add_to_cart/i] },
+  { slug: "wix", name: "Wix", patterns: [/wixstatic\.com/i, /wix\.com/i, /X-Wix/i, /_wixCssStates/i, /wixapps/i] },
+  { slug: "magento", name: "Magento", patterns: [/mage\/cookies/i, /Magento_/i, /\/static\/version\d+\/frontend/i, /mage-cache/i, /magento/i] },
+  { slug: "bigcommerce", name: "BigCommerce", patterns: [/bigcommerce\.com/i, /stencil-utils/i] },
+  { slug: "squarespace", name: "Squarespace", patterns: [/squarespace\.com/i, /static1\.squarespace/i, /SQUARESPACE_CONTEXT/i] },
+  { slug: "webflow", name: "Webflow", patterns: [/webflow\.com/i, /w-webflow/i, /data-wf-/i] },
+];
+const TRACKING_DEFS: Array<{ slug: string; name: string; re: RegExp }> = [
+  { slug: "google_analytics", name: "Google Analytics", re: /google-analytics\.com|googletagmanager\.com|gtag\(|_gaq/i },
+  { slug: "meta_pixel", name: "Meta Pixel", re: /connect\.facebook\.net|fbq\(/i },
+  { slug: "tiktok_pixel", name: "TikTok Pixel", re: /analytics\.tiktok\.com|ttq\./i },
+  { slug: "hotjar", name: "Hotjar", re: /hotjar\.com|hjSiteSettings/i },
+];
+// Third-party tools / apps (incl. the Shopify ecosystem the recommender uses).
+const TOOL_DEFS: Array<{ slug: string; name: string; re: RegExp; chat?: boolean }> = [
+  { slug: "hubspot", name: "HubSpot", re: /hs-scripts\.com|js\.hs-|hubspot\.com|hsforms/i },
+  { slug: "salesforce", name: "Salesforce", re: /salesforce\.com|force\.com|pardot/i },
+  { slug: "zendesk", name: "Zendesk", re: /zendesk\.com|zdassets\.com/i, chat: true },
+  { slug: "intercom", name: "Intercom", re: /intercom\.io|widget\.intercom/i, chat: true },
+  { slug: "crisp", name: "Crisp", re: /crisp\.chat/i, chat: true },
+  { slug: "tawk", name: "Tawk.to", re: /tawk\.to/i, chat: true },
+  { slug: "gorgias", name: "Gorgias", re: /gorgias\.(com|chat)/i, chat: true },
+  { slug: "tidio", name: "Tidio", re: /tidio\.co/i, chat: true },
+  { slug: "drift", name: "Drift", re: /drift\.com/i, chat: true },
+  { slug: "zopim", name: "Zopim", re: /zopim/i, chat: true },
+  { slug: "stripe", name: "Stripe", re: /js\.stripe\.com|stripe\.com\/v3/i },
+  { slug: "paypal", name: "PayPal", re: /paypal\.com\/sdk|paypalobjects/i },
+  { slug: "calendly", name: "Calendly", re: /calendly\.com/i },
+  { slug: "klaviyo", name: "Klaviyo", re: /klaviyo\.com|static\.klaviyo/i },
+  { slug: "yotpo", name: "Yotpo", re: /yotpo\.com|staticw2\.yotpo/i },
+  { slug: "judgeme", name: "Judge.me", re: /judge\.me|judgeme/i },
+  { slug: "loox", name: "Loox", re: /loox\.io/i },
+  { slug: "returngo", name: "ReturnGO", re: /returngo\.ai|returngo/i },
+];
+
+function collectMatches(re: RegExp, hay: string, group = 1, cap = 12): string[] {
+  const out = new Set<string>();
+  const g = new RegExp(re.source, re.flags.includes("g") ? re.flags : re.flags + "g");
+  let m: RegExpExecArray | null;
+  while ((m = g.exec(hay)) && out.size < cap) { if (m[group]) out.add(m[group].trim()); }
+  return Array.from(out);
+}
+
+const EMAIL_JUNK = /(sentry|wix(press)?|example\.com|\.png|\.jpg|\.gif|@2x|@3x|godaddy|schema\.org|sentry\.io|w3\.org|core\.js)/i;
+
+export interface DiscoverySignals {
+  emails: string[];
+  phones: string[];
+  whatsapp: string[];
+  instagram: string[];
+  facebook: string[];
+  messenger: string[];
+  telegram: string[];
+  tiktok: string[];
+  contactForm: boolean;
+  liveChat: string | null;
+  platform: { slug: string; name: string; strength: number } | null;
+  otherPlatforms: Array<{ slug: string; name: string; strength: number }>;
+  tracking: string[];
+  tools: string[];
+  social: string[];
+  coverage: string[]; // URLs actually read
+  /** email → "gmail" | "outlook" from an MX lookup of the email's domain. */
+  emailProviders?: Record<string, string>;
+}
+
+/**
+ * Which mail platform serves the found addresses — a deterministic MX lookup
+ * per unique domain (google → Gmail/Workspace, outlook/microsoft → Microsoft
+ * 365). Lets the briefing show the real provider logo and offer the matching
+ * one-click connect. Best-effort: DNS failures simply yield no provider.
+ */
+async function detectEmailProviders(emails: string[]): Promise<Record<string, string>> {
+  const out: Record<string, string> = {};
+  const domains = Array.from(new Set(emails.map((e) => e.split("@")[1]).filter((d): d is string => !!d))).slice(0, 4);
+  await Promise.all(domains.map(async (domain) => {
+    try {
+      const mx = await dns.resolveMx(domain);
+      const hosts = mx.map((m) => m.exchange.toLowerCase()).join(" ");
+      const provider = /google|gmail/.test(hosts) ? "gmail" : /outlook|microsoft|office365/.test(hosts) ? "outlook" : null;
+      if (provider) for (const e of emails) if (e.toLowerCase().endsWith("@" + domain)) out[e] = provider;
+    } catch { /* unresolvable domain — no provider claim */ }
+  }));
+  return out;
+}
+
+/** Parse JSON-LD blocks for org contact info + social profiles (sameAs). */
+function parseJsonLd(html: string): { emails: string[]; phones: string[]; social: string[] } {
+  const emails = new Set<string>(), phones = new Set<string>(), social = new Set<string>();
+  for (const block of collectMatches(/<script[^>]+application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi, html, 1, 8)) {
+    let data: any;
+    try { data = JSON.parse(block); } catch { continue; }
+    const nodes: any[] = Array.isArray(data) ? data : data["@graph"] && Array.isArray(data["@graph"]) ? data["@graph"] : [data];
+    for (const n of nodes) {
+      if (!n || typeof n !== "object") continue;
+      if (typeof n.email === "string") emails.add(n.email.replace(/^mailto:/i, "").trim());
+      if (typeof n.telephone === "string") phones.add(n.telephone.trim());
+      const sa = n.sameAs;
+      if (Array.isArray(sa)) sa.forEach((u: any) => typeof u === "string" && social.add(u));
+      else if (typeof sa === "string") social.add(sa);
+      const cp = n.contactPoint;
+      const cps = Array.isArray(cp) ? cp : cp ? [cp] : [];
+      for (const c of cps) { if (c?.telephone) phones.add(String(c.telephone).trim()); if (c?.email) emails.add(String(c.email).replace(/^mailto:/i, "").trim()); }
+    }
+  }
+  return { emails: [...emails], phones: [...phones], social: [...social] };
+}
+
+function extractSignals(pages: Array<{ url: string; html: string }>): DiscoverySignals {
+  const html = pages.map((p) => p.html).join("\n");
+
+  const emails = new Set<string>();
+  collectMatches(/mailto:([^"'>?\s]+)/gi, html).forEach((e) => emails.add(decodeURIComponent(e).toLowerCase()));
+  collectMatches(/[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g, html, 0, 20).forEach((e) => emails.add(e.toLowerCase()));
+
+  const phones = new Set<string>();
+  collectMatches(/tel:(\+?[\d][\d\-\s().]{5,})/gi, html).forEach((p) => phones.add(p.replace(/[\s().]/g, "")));
+
+  const whatsapp = new Set<string>();
+  [/wa\.me\/(\+?\d{6,15})/gi, /api\.whatsapp\.com\/send\?phone=(\d{6,15})/gi, /whatsapp[^"']*?phone=(\d{6,15})/gi]
+    .forEach((re) => collectMatches(re, html).forEach((n) => whatsapp.add(n)));
+
+  const handle = (re: RegExp, exclude: RegExp) =>
+    collectMatches(re, html).filter((h) => !exclude.test(h));
+  const instagram = handle(/instagram\.com\/([A-Za-z0-9_.]{2,40})/gi, /^(p|reel|reels|explore|accounts|stories|tv|about)$/i);
+  const facebook = handle(/facebook\.com\/([A-Za-z0-9_.]{2,60})/gi, /^(sharer|tr|plugins|dialog|events|groups|profile\.php|permalink\.php|photo|login|help|policies|policy|terms|privacy|legal|about|business|ads|settings|watch|marketplace|gaming)$/i);
+  const messenger = collectMatches(/m\.me\/([A-Za-z0-9_.]+)/gi, html);
+  const telegram = handle(/t\.me\/([A-Za-z0-9_]{3,32})/gi, /^(share|joinchat)$/i);
+  const tiktok = handle(/tiktok\.com\/@([A-Za-z0-9_.]{2,30})/gi, /^$/);
+
+  const jsonld = parseJsonLd(html);
+  jsonld.emails.forEach((e) => e && emails.add(e.toLowerCase()));
+  jsonld.phones.forEach((p) => p && phones.add(p.replace(/[\s().]/g, "")));
+
+  // Platform strength scoring.
+  const scored = PLATFORM_DEFS
+    .map((d) => ({ slug: d.slug, name: d.name, strength: d.patterns.reduce((s, re) => s + (re.test(html) ? 1 : 0), 0) }))
+    .filter((p) => p.strength > 0)
+    .sort((a, b) => b.strength - a.strength);
+  const platform = scored[0] || null;
+  const otherPlatforms = scored.slice(1);
+
+  const tracking = TRACKING_DEFS.filter((t) => t.re.test(html)).map((t) => t.slug);
+  const matchedTools = TOOL_DEFS.filter((t) => t.re.test(html));
+  const tools = matchedTools.map((t) => t.slug);
+  const liveChat = matchedTools.find((t) => t.chat)?.name || null;
+
+  const contactForm = /<form[\s\S]{0,6000}(contact|message|inquir|נשמח|צור.?קשר|שליחה|get in touch)/i.test(html);
+
+  const social = new Set<string>(jsonld.social);
+  instagram.forEach((h) => social.add(`https://instagram.com/${h}`));
+  facebook.forEach((h) => social.add(`https://facebook.com/${h}`));
+
+  const clean = (arr: string[]) => arr.filter((e) => !EMAIL_JUNK.test(e));
+  return {
+    emails: clean([...emails]).slice(0, 8),
+    phones: [...phones].slice(0, 6),
+    whatsapp: [...whatsapp].slice(0, 4),
+    instagram: instagram.slice(0, 4),
+    facebook: facebook.slice(0, 4),
+    messenger: messenger.slice(0, 3),
+    telegram: telegram.slice(0, 3),
+    tiktok: tiktok.slice(0, 3),
+    contactForm,
+    liveChat,
+    platform,
+    otherPlatforms,
+    tracking,
+    tools,
+    social: [...social].slice(0, 10),
+    coverage: pages.map((p) => p.url),
+  };
+}
+
+/** Call the AI service to run the deep 5-domain LLM scan. Forwards the admin
+ *  JWT exactly like callAIGenerateConfigs. Returns the report or null. */
+async function callAIDiscoverBusiness(
+  authHeader: string,
+  body: { domain: string; locale: string; pages: Array<{ url: string; text: string }>; signals: DiscoverySignals },
+): Promise<any | null> {
+  try {
+    const res = await fetchWithTimeout(`${AI_SERVICE_URL}/api/ai-assist/discover-business`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authHeader },
+      body: JSON.stringify(body),
+    }, 60000);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: { ok?: boolean; report?: any } };
+    if (!json?.data?.ok || !json.data.report) return null;
+    return json.data.report;
+  } catch (err: any) {
+    console.warn("[Onboarding] AI discover-business failed:", err?.message);
+    return null;
+  }
+}
+
+// Derive the Business Health check (Movement 3) — a colleague's self-assessment
+// of "can I help you yet?", grouped Knowledge / Communication / Tools. ✓ for
+// what was found/detected, ⚠ for the genuine gaps. NOT a management score.
+function deriveHealth(report: any, live: { coreSystemSlug: string | null; connectedChannel: boolean }): any {
+  const kn = report?.knowledge || {};
+  const pol = kn.policies || {};
+  // A policy is a confidence-levelled finding {found, confidence}. Only a
+  // genuine `found === true` counts as ✓; found:false or null (unsure) is ⚠.
+  const has = (p: any): boolean => (p && typeof p === "object" ? p.found === true : !!p);
+  const knowledge: Array<{ label: string; ok: boolean }> = [
+    { label: "FAQ", ok: !!kn.hasFaq },
+    { label: "Help Center", ok: !!kn.hasHelpCenter },
+    { label: "Refund policy", ok: has(pol.refunds) },
+    { label: "Shipping policy", ok: has(pol.shipping) },
+    { label: "Returns policy", ok: has(pol.returns) },
+  ];
+  const channels: Array<{ type: string }> = Array.isArray(report?.communication?.channels) ? report.communication.channels : [];
+  const seen = new Set<string>();
+  const communication: Array<{ label: string; ok: boolean }> = [];
+  for (const c of channels) {
+    if (!c || typeof c.type !== "string" || seen.has(c.type)) continue;
+    seen.add(c.type);
+    communication.push({ label: `${c.type} detected`, ok: true });
+  }
+  if (communication.length === 0) communication.push({ label: "No channels detected yet", ok: false });
+
+  const tech = report?.technology || {};
+  const tools: Array<{ label: string; ok: boolean }> = [];
+  if (tech.platform?.name) tools.push({ label: `${tech.platform.name} detected`, ok: true });
+  (Array.isArray(tech.tools) ? tech.tools : []).slice(0, 4).forEach((t: any) => tools.push({ label: `${t.name || t.slug} detected`, ok: true }));
+  tools.push({ label: live.coreSystemSlug ? "Customer system connected" : "CRM not connected", ok: !!live.coreSystemSlug });
+
+  return { knowledge, communication, tools };
+}
+
+const discoverSchema = z.object({
+  domain: z.string().min(3).max(255),
+  locale: z.string().min(2).max(10).optional().default("en"),
+});
+
+router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { domain, locale } = req.body as { domain: string; locale: string };
+    const origin = normalizeDomain(domain);
+    if (!origin) {
+      res.json({ data: { ok: false, reason: "invalid_domain" } });
+      return;
+    }
+
+    // Re-scan concurrency guard (T-2): refuse a second scan while one is
+    // genuinely in flight. A SCANNING row untouched for >3 min is treated as a
+    // crashed request and allowed to restart, so a stale flag never traps a
+    // tenant. Prevents two racing scans last-writer-wins.
+    const prior = await prisma.businessDiscovery.findUnique({
+      where: { tenantId: req.tenantId! },
+      select: { status: true, updatedAt: true },
+    });
+    if (prior?.status === "SCANNING" && Date.now() - new Date(prior.updatedAt).getTime() < 3 * 60_000) {
+      res.status(409).json({ error: "scan_in_progress", data: { ok: false, reason: "scan_in_progress", domain: origin } });
+      return;
+    }
+
+    // Mark the scan as running WITHOUT clearing the prior report (T-2): a failed
+    // or slow re-scan leaves the last good report readable. The full-screen
+    // ceremony covers the scan, so stale data is never shown mid-scan; new
+    // results overwrite atomically on success below.
+    await prisma.businessDiscovery.upsert({
+      where: { tenantId: req.tenantId! },
+      update: { status: "SCANNING", websiteDomain: origin, scanPhase: "homepage" },
+      create: { tenantId: req.tenantId!, status: "SCANNING", websiteDomain: origin, scanPhase: "homepage" },
+    });
+
+    const home = await fetchPageRaw(origin);
+    if (!home) {
+      await prisma.businessDiscovery.update({
+        where: { tenantId: req.tenantId! },
+        data: { status: "FAILED" },
+      }).catch(() => {});
+      res.json({ data: { ok: false, reason: "fetch_failed", domain: origin } });
+      return;
+    }
+
+    // Ceremony phase: homepage read — now exploring the site's own pages. The
+    // frontend polls GET /discovery during the scan, so each write here lands a
+    // REAL checkmark (no timers).
+    await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data: { scanPhase: "pages" } }).catch(() => {});
+
+    // Deep same-origin crawl: discovered policy/contact links + well-known
+    // convention paths (deduped). This is the accuracy fix — most "missing"
+    // policies/contact details live in the footer or at a predictable URL, not
+    // on the home page. fetchPageRaw returns null fast on a 404, so probing is
+    // cheap; we cap total fetches to stay polite.
+    const discovered = extractInternalLinks(home.html, origin, 10);
+    const candidates = CANDIDATE_PATHS.map((p) => { try { return new URL(p, origin).toString(); } catch { return null; } }).filter((u): u is string => !!u);
+    const toFetch = Array.from(new Set([...discovered, ...candidates])).filter((u) => u !== origin && u !== origin + "/").slice(0, 16);
+    const fetched = (await Promise.all(toFetch.map((u) => fetchPageRaw(u, 6000)))).map((page, i) => ({ url: toFetch[i]!, page }));
+    const okPages = fetched.filter((e) => e.page).map((e) => ({ url: e.url, html: e.page!.html, text: e.page!.text }));
+
+    // Cap the text we ship to the AI so the JSON body stays under its
+    // body-parser limit. The AI trims further when building the LLM corpus.
+    const pages = [
+      { url: origin, text: home.text.slice(0, 9000) },
+      ...okPages.map((e) => ({ url: e.url, text: e.text.slice(0, 2800) })),
+    ];
+
+    const signals = extractSignals([{ url: origin, html: home.html }, ...okPages]);
+    signals.emailProviders = await detectEmailProviders(signals.emails);
+
+    // Deterministic findings, persisted at the synthesis boundary. This is what
+    // the ceremony renders as LIVE facts while the LLM thinks ("Found WhatsApp,
+    // Shopify…"), and it doubles as the honest fallback the review shows if the
+    // LLM step fails. Overwritten atomically by the normalized report on success.
+    const deterministicChannels = [
+      ...signals.whatsapp.map((id) => ({ type: "whatsapp", identifier: id, confidence: "confirmed" })),
+      ...signals.instagram.map((h) => ({ type: "instagram", identifier: `@${h}`, confidence: "confirmed" })),
+      ...signals.emails.map((e) => ({ type: "email", identifier: e, confidence: "confirmed", provider: signals.emailProviders?.[e] })),
+      ...signals.phones.map((p) => ({ type: "phone", identifier: p, confidence: "confirmed" })),
+    ];
+    // Ceremony phase: the deep 5-domain LLM synthesis (the longest beat).
+    await prisma.businessDiscovery.update({
+      where: { tenantId: req.tenantId! },
+      data: {
+        scanPhase: "synthesis",
+        communication: { channels: deterministicChannels },
+        technology: { platform: signals.platform, tools: signals.tools.map((s) => ({ slug: s, name: s })) },
+      },
+    }).catch(() => {});
+
+    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale, pages, signals });
+    if (!report) {
+      // The deterministic signals were already persisted at the synthesis
+      // boundary above — the review still shows the channels/tech we KNOW we
+      // detected; only the status settles here.
+      await prisma.businessDiscovery.update({
+        where: { tenantId: req.tenantId! },
+        data: { status: "FAILED", scanPhase: "failed" },
+      }).catch(() => {});
+      res.json({ data: { ok: false, reason: "scan_failed", domain: origin, signals } });
+      return;
+    }
+
+    const coreSystemSlug = await connectedCoreSystem(req.tenantId!);
+    const connectedChannel = !!(await prisma.channelAccount.findFirst({
+      where: { tenantId: req.tenantId!, connectionStatus: "CONNECTED" },
+      select: { id: true },
+    }).catch(() => null));
+    const health = deriveHealth(report, { coreSystemSlug, connectedChannel });
+
+    const saved = await prisma.businessDiscovery.upsert({
+      where: { tenantId: req.tenantId! },
+      update: {
+        status: "COMPLETE",
+        scanPhase: "done",
+        websiteDomain: origin,
+        brand: report.brand ?? undefined,
+        business: report.business ?? undefined,
+        knowledge: report.knowledge ?? undefined,
+        communication: report.communication ?? undefined,
+        technology: report.technology ?? undefined,
+        gaps: report.gaps ?? undefined,
+        recommendation: report.recommendation ?? undefined,
+        confidence: report.confidence ?? undefined,
+        health,
+        report: report.report ?? undefined,
+        scannedAt: new Date(),
+      },
+      create: {
+        tenantId: req.tenantId!,
+        status: "COMPLETE",
+        websiteDomain: origin,
+        brand: report.brand ?? undefined,
+        business: report.business ?? undefined,
+        knowledge: report.knowledge ?? undefined,
+        communication: report.communication ?? undefined,
+        technology: report.technology ?? undefined,
+        gaps: report.gaps ?? undefined,
+        recommendation: report.recommendation ?? undefined,
+        confidence: report.confidence ?? undefined,
+        health,
+        report: report.report ?? undefined,
+        scannedAt: new Date(),
+      },
+    });
+
+    // Persist the discovery's recommendations as a living backlog (nothing is
+    // ephemeral; "I'll do it later" loses nothing). Best-effort.
+    syncDiscoveryRecommendations(req.tenantId!, report).catch(() => {});
+
+    // Re-arm the onboarding nudge: if they go quiet after discovery, the sweep
+    // will send "I noticed you stopped after Business Discovery" ~a day later.
+    scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
+
+    res.json({ data: { ok: true, domain: origin, discovery: saved } });
+  } catch (err) {
+    console.error("Discover error:", err);
+    res.status(500).json({ error: "Failed to discover business" });
+  }
+});
+
+// POST /discover/plan - the dynamic, business-typed discovery ceremony (Movement 1).
+// Deterministic (NO LLM): a fast homepage-only fetch → classify the business →
+// emit the REAL steps the scan will perform for THIS kind of business, so the
+// loader reflects actual work (ecommerce ≠ law firm ≠ SaaS), never a fixed
+// animation. Falls back to a generic plan on any failure so the ceremony always
+// has steps to show. The heavy /discover call runs right after, and the final
+// step holds until it returns — so duration reflects the real work.
+const ECOM_PLATFORMS = new Set(["shopify", "woocommerce", "magento", "bigcommerce", "prestashop", "wix_stores", "squarespace_commerce", "ecwid", "shopware", "opencart"]);
+
+function classifyBusinessType(text: string, signals: DiscoverySignals): string {
+  const t = (text || "").toLowerCase();
+  const plat = (signals.platform?.slug || "").toLowerCase();
+  const has = (...ws: string[]) => ws.some((w) => t.includes(w));
+  if (ECOM_PLATFORMS.has(plat) || has("add to cart", "add to bag", "checkout", "free shipping", "in stock", "sold out", "my cart", "shopping cart", "עגלה", "הוסף לסל", "משלוח חינם", "לרכישה")) return "ecommerce";
+  if (has("law firm", "attorney", "lawyer", "litigation", "practice areas", "legal services", "counsel", "עורך דין", "עורכי דין", "ייעוץ משפטי", "משרד עורכי")) return "legal";
+  if (has("free trial", "start free", "start for free", "/pricing", "api documentation", "integrations", "sign up free", "our platform", "software platform", "for developers", "open source")) return "saas";
+  if (has("book now", "tours", "vacation", "itinerary", "destinations", "guided tour", "travel", "book your", "טיול", "חופשה", "יעדים", "הזמנת מקום")) return "tourism";
+  if (has("view menu", "our menu", "reservation", "reserve a table", "order online", "delivery & pickup", "restaurant", "תפריט", "הזמנת שולחן", "משלוחים", "מסעדה")) return "restaurant";
+  if (has("book an appointment", "clinic", "our patients", "treatment", "our doctors", "medical", "dental", "מרפאה", "לקביעת תור", "טיפול", "רופא")) return "health";
+  if (has("properties", "listings", "for sale", "for rent", "real estate", "square feet", 'נדל"ן', "דירות", "להשכרה", "למכירה")) return "realestate";
+  return "generic";
+}
+
+// [key, English, Hebrew] — each step is a genuine phase of the scan.
+const DISCOVERY_PLANS: Record<string, Array<[string, string, string]>> = {
+  ecommerce: [
+    ["platform", "Detecting your ecommerce platform", "מזהה את פלטפורמת המסחר שלכם"],
+    ["catalog", "Reading your product catalog", "קורא את קטלוג המוצרים"],
+    ["policies", "Finding your shipping & return policies", "מוצא את מדיניות המשלוח וההחזרות"],
+    ["channels", "Detecting your customer communication channels", "מזהה את ערוצי התקשורת עם הלקוחות"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  legal: [
+    ["services", "Understanding your legal services", "מבין את השירותים המשפטיים שלכם"],
+    ["areas", "Reading your practice areas", "קורא את תחומי ההתמחות"],
+    ["appointments", "Finding your appointment methods", "מוצא את דרכי קביעת הפגישות"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  saas: [
+    ["product", "Understanding your product", "מבין את המוצר שלכם"],
+    ["docs", "Reading your documentation", "קורא את התיעוד שלכם"],
+    ["helpcenter", "Detecting your Help Center", "מזהה את מרכז העזרה"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  tourism: [
+    ["offering", "Understanding your destinations & tours", "מבין את היעדים והטיולים שלכם"],
+    ["booking", "Reading your booking options", "קורא את אפשרויות ההזמנה"],
+    ["policies", "Finding your cancellation & travel policies", "מוצא את מדיניות הביטול והנסיעה"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  restaurant: [
+    ["menu", "Reading your menu", "קורא את התפריט שלכם"],
+    ["ordering", "Finding your reservation & ordering options", "מוצא את אפשרויות ההזמנה והשולחנות"],
+    ["hours", "Detecting your hours & locations", "מזהה את שעות הפעילות והסניפים"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  health: [
+    ["services", "Understanding your services", "מבין את השירותים שלכם"],
+    ["appointments", "Finding your appointment methods", "מוצא את דרכי קביעת התורים"],
+    ["policies", "Reading your patient information", "קורא את המידע למטופלים"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  realestate: [
+    ["listings", "Understanding your listings", "מבין את הנכסים שלכם"],
+    ["services", "Reading your services", "קורא את השירותים שלכם"],
+    ["contact", "Finding your contact & viewing methods", "מוצא את דרכי יצירת הקשר והצפייה"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+  generic: [
+    ["website", "Reading your website", "קורא את האתר שלכם"],
+    ["about", "Understanding what you do", "מבין מה אתם עושים"],
+    ["brand", "Learning your brand voice", "לומד את קול המותג שלכם"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
+};
+
+function planSteps(type: string, locale: string): Array<{ key: string; label: string }> {
+  const he = locale === "he";
+  return (DISCOVERY_PLANS[type] || DISCOVERY_PLANS.generic).map(([key, en, hb]) => ({ key, label: he ? hb : en }));
+}
+
+const planSchema = z.object({
+  domain: z.string().min(3).max(255),
+  locale: z.string().min(2).max(10).optional().default("en"),
+});
+
+router.post("/discover/plan", requireRole("ADMIN"), validate(planSchema), async (req: Request, res: Response): Promise<void> => {
+  const locale = (req.body?.locale as string) || "en";
+  try {
+    const origin = normalizeDomain((req.body as { domain: string }).domain);
+    if (!origin) { res.json({ data: { ok: false, businessType: "generic", steps: planSteps("generic", locale) } }); return; }
+    const home = await fetchPageRaw(origin, 6000);
+    let type = "generic";
+    if (home) {
+      const signals = extractSignals([{ url: origin, html: home.html }]);
+      type = classifyBusinessType(home.text, signals);
+    }
+    res.json({ data: { ok: true, businessType: type, steps: planSteps(type, locale) } });
+  } catch (err) {
+    // Never block the ceremony — always hand back a usable generic plan.
+    res.json({ data: { ok: false, businessType: "generic", steps: planSteps("generic", locale) } });
+  }
+});
+
+// GET /discovery - the persisted Business Intelligence Report (re-hydrates the
+// review, health, and recommendation surfaces on refresh / OAuth return).
+router.get("/discovery", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const discovery = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
+    res.json({ data: { discovery: discovery || null } });
+  } catch (err) {
+    console.error("Get discovery error:", err);
+    res.status(500).json({ error: "Failed to get discovery" });
+  }
+});
+
+// PATCH /discovery - the customer's one-tap corrections to the reflected-back
+// portrait (Movement 2). Only the fields the review surfaces are patchable;
+// each is merged so an unrelated correction never wipes another domain.
+// Movement keys the resume checkpoint may record (review→ready band). Derived
+// state stays authoritative for the coarse stage; `progress` only refines the
+// resume position so a reload during movements 6-9 returns to that movement.
+const MOVEMENT_KEYS = ["review", "connect", "goal", "integrations", "knowledge", "recommendation", "tune", "ready"] as const;
+
+const discoveryPatchSchema = z.object({
+  // Movement 7 — the owner names their employee on the Meet screen; merged
+  // into recommendation.employeeName so /complete hires under that name.
+  employeeName: z.string().min(1).max(120).optional(),
+  business: z.object({
+    name: z.string().max(200).optional(),
+    industry: z.string().max(120).optional(),
+    country: z.string().max(120).optional(),
+    summary: z.string().max(2000).optional(),
+    valueProp: z.string().max(2000).optional(),
+  }).optional(),
+  brand: z.object({
+    voice: z.string().max(200).optional(),
+    tone: z.string().max(200).optional(),
+    languages: z.array(z.string().max(20)).max(6).optional(),
+  }).optional(),
+  // Resume checkpoint (P0): written fire-and-forget on each movement transition.
+  progress: z.enum(MOVEMENT_KEYS).optional(),
+});
+
+router.patch("/discovery", requireRole("ADMIN"), validate(discoveryPatchSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const existing = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
+    if (!existing) {
+      res.status(404).json({ error: "No discovery to correct yet" });
+      return;
+    }
+    const patch = req.body as { business?: Record<string, unknown>; brand?: Record<string, unknown>; progress?: string; employeeName?: string };
+    const data: Record<string, unknown> = {};
+    // Only merge a domain when the caller actually sent it, so a bare
+    // progress-checkpoint write never re-writes business/brand.
+    if (patch.business) data.business = { ...((existing.business as Record<string, unknown>) || {}), ...patch.business };
+    if (patch.brand) data.brand = { ...((existing.brand as Record<string, unknown>) || {}), ...patch.brand };
+    if (patch.progress) data.progress = patch.progress;
+    if (patch.employeeName?.trim()) {
+      data.recommendation = { ...((existing.recommendation as Record<string, unknown>) || {}), employeeName: patch.employeeName.trim() };
+    }
+    const saved = await prisma.businessDiscovery.update({
+      where: { tenantId: req.tenantId! },
+      data,
+    });
+    res.json({ data: { discovery: saved } });
+  } catch (err) {
+    console.error("Patch discovery error:", err);
+    res.status(500).json({ error: "Failed to save corrections" });
+  }
+});
+
+// POST /discovery/correct - per-item corrections on the reflected-back portrait
+// (Movement 2): remove / mark-incorrect / ignore a detected channel, tool,
+// platform, or gap. The correction persists immediately (the AI "learns" it —
+// the item never reappears) and a matching recommendation is dismissed.
+const correctSchema = z.object({
+  target: z.enum(["channel", "tool", "platform", "gap"]),
+  action: z.enum(["remove", "incorrect", "ignore"]),
+  key: z.string().min(1).max(200), // channel: type · tool/platform: slug · gap: label
+});
+
+router.post("/discovery/correct", requireRole("ADMIN"), validate(correctSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { target, key } = req.body as { target: string; action: string; key: string };
+    const existing = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
+    if (!existing) { res.status(404).json({ error: "No discovery to correct yet" }); return; }
+
+    const data: Record<string, unknown> = {};
+    if (target === "channel") {
+      const comm = (existing.communication as any) || { channels: [] };
+      comm.channels = (Array.isArray(comm.channels) ? comm.channels : []).filter((c: any) => String(c?.type) !== key);
+      data.communication = comm;
+    } else if (target === "tool") {
+      const tech = (existing.technology as any) || {};
+      tech.tools = (Array.isArray(tech.tools) ? tech.tools : []).filter((t: any) => String(t?.slug) !== key);
+      tech.legacy = (Array.isArray(tech.legacy) ? tech.legacy : []).filter((t: any) => String(t?.slug) !== key);
+      tech.tracking = (Array.isArray(tech.tracking) ? tech.tracking : []).filter((t: any) => String(t?.slug) !== key);
+      data.technology = tech;
+    } else if (target === "platform") {
+      const tech = (existing.technology as any) || {};
+      tech.platform = null;
+      data.technology = tech;
+    } else if (target === "gap") {
+      const slug = slugifyGap(key);
+      data.gaps = (Array.isArray(existing.gaps) ? existing.gaps : []).filter((g: any) => slugifyGap(String(g?.label || "")) !== slug);
+      await prisma.recommendation.updateMany({
+        where: { tenantId: req.tenantId!, dedupeKey: { in: [`gap:${slug}`, `teach:${slug}`] }, status: "OPEN" },
+        data: { status: "DISMISSED", dismissedAt: new Date() },
+      }).catch(() => {});
+    }
+
+    const saved = await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data });
+    res.json({ data: { ok: true, discovery: saved } });
+  } catch (err) {
+    console.error("Correct discovery error:", err);
+    res.status(500).json({ error: "Failed to apply correction" });
+  }
+});
+
+// GET /health - Business Health (Movement 3), recomputed against LIVE connection
+// state so a channel/system connected after the scan flips its ⚠ to ✓.
+router.get("/health", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const discovery = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
+    if (!discovery) {
+      res.json({ data: { health: null } });
+      return;
+    }
+    const coreSystemSlug = await connectedCoreSystem(req.tenantId!);
+    const connectedChannel = !!(await prisma.channelAccount.findFirst({
+      where: { tenantId: req.tenantId!, connectionStatus: "CONNECTED" },
+      select: { id: true },
+    }).catch(() => null));
+    const health = deriveHealth(
+      { knowledge: discovery.knowledge, communication: discovery.communication, technology: discovery.technology },
+      { coreSystemSlug, connectedChannel },
+    );
+    res.json({ data: { health, gaps: discovery.gaps || [] } });
+  } catch (err) {
+    console.error("Get health error:", err);
+    res.status(500).json({ error: "Failed to get health" });
+  }
+});
+
+// GET /recommendation - the first AI Recommendation (Movement 4), read straight
+// off the persisted report.
+router.get("/recommendation", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const discovery = await prisma.businessDiscovery.findUnique({
+      where: { tenantId: req.tenantId! },
+      select: { recommendation: true },
+    });
+    res.json({ data: { recommendation: discovery?.recommendation || null } });
+  } catch (err) {
+    console.error("Get recommendation error:", err);
+    res.status(500).json({ error: "Failed to get recommendation" });
+  }
+});
+
+// POST /teach - the customer teaches the AI a gap inline (paste text / give a
+// URL). Persists it as real knowledge, resolves the gap on the discovery, and
+// completes the matching recommendation. "Teaching a colleague, not a form."
+const teachSchema = z.object({
+  label: z.string().min(1).max(200),
+  method: z.enum(["text", "url"]),
+  value: z.string().min(1).max(20000),
+});
+
+function slugifyGap(s: string): string {
+  return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "item";
+}
+
+router.post("/teach", requireRole("ADMIN"), validate(teachSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { label, method, value } = req.body as { label: string; method: "text" | "url"; value: string };
+
+    // Resolve the content to learn.
+    let content = value.trim();
+    let sourceUrl: string | undefined;
+    let sourceType = "text";
+    if (method === "url") {
+      const origin = normalizeDomain(value) || value.trim();
+      const page = await fetchPageRaw(origin, 8000);
+      if (!page || page.text.length < 20) {
+        res.json({ data: { ok: false, reason: "fetch_failed" } });
+        return;
+      }
+      content = page.text.slice(0, 20000);
+      sourceUrl = origin;
+      sourceType = "url";
+    }
+
+    // Store into the tenant's knowledge base (reuse the first, or create one).
+    let kb = await prisma.knowledgeBase.findFirst({ where: { tenantId: req.tenantId! }, select: { id: true } });
+    if (!kb) {
+      kb = await prisma.knowledgeBase.create({ data: { tenantId: req.tenantId!, name: "Company Knowledge", description: "Taught during onboarding" }, select: { id: true } });
+    }
+    const doc = await prisma.knowledgeDocument.create({
+      data: { knowledgeBaseId: kb.id, tenantId: req.tenantId!, title: label, content, sourceType, sourceUrl, metadata: { taughtDuringOnboarding: true } },
+      select: { id: true },
+    });
+
+    // Complete the matching recommendation(s) and clear the gap on the report.
+    const slug = slugifyGap(label);
+    await prisma.recommendation.updateMany({
+      where: { tenantId: req.tenantId!, dedupeKey: { in: [`gap:${slug}`, `teach:${slug}`] }, status: "OPEN" },
+      data: { status: "COMPLETED", completedAt: new Date() },
+    }).catch(() => {});
+    const disc = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! }, select: { gaps: true } }).catch(() => null);
+    if (disc && Array.isArray(disc.gaps)) {
+      const remaining = disc.gaps.filter((g: any) => slugifyGap(String(g?.label || "")) !== slug);
+      await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data: { gaps: remaining } }).catch(() => {});
+    }
+
+    scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
+    res.json({ data: { ok: true, knowledgeDocumentId: doc.id, label } });
+  } catch (err) {
+    console.error("Teach error:", err);
+    res.status(500).json({ error: "Failed to learn that" });
+  }
+});
+
+// GET /recommendations - the persistent living backlog (defaults to OPEN).
+router.get("/recommendations", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : "OPEN";
+    // A "Connect X" that's already connected is fulfilled — settle it before
+    // rendering so the list never asks for something the customer already did.
+    await reconcileConnectSystemRecs(req.tenantId!);
+    const recommendations = await listRecommendations(req.tenantId!, status);
+    res.json({ data: { recommendations } });
+  } catch (err) {
+    console.error("List recommendations error:", err);
+    res.status(500).json({ error: "Failed to list recommendations" });
+  }
+});
+
+// POST /recommendations/:id/complete | /dismiss - resolve a recommendation.
+// A resolved rec is never resurrected by a future re-scan.
+router.post("/recommendations/:id/:decision", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const decision = req.params.decision === "dismiss" ? "DISMISSED" : req.params.decision === "complete" ? "COMPLETED" : null;
+    if (!decision) { res.status(400).json({ error: "decision must be complete or dismiss" }); return; }
+    const ok = await setRecommendationStatus(req.tenantId!, req.params.id as string, decision);
+    if (!ok) { res.status(404).json({ error: "Recommendation not found" }); return; }
+    res.json({ data: { id: req.params.id, status: decision } });
+  } catch (err) {
+    console.error("Resolve recommendation error:", err);
+    res.status(500).json({ error: "Failed to update recommendation" });
+  }
+});
+
+// POST /goal - the single earned question (Movement 5). Persisted on the
+// discovery AND mirrored onto BusinessProfile.businessGoals so the post-
+// onboarding home + mission ordering read it.
+const goalSchema = z.object({
+  goal: z.string().min(1).max(64),
+  // Free-text elaboration — required UX for the "something else" goal, welcome
+  // on any goal. Mirrored into BusinessProfile.businessGoals for the generator.
+  detail: z.string().max(500).optional(),
+});
+
+router.post("/goal", requireRole("ADMIN"), validate(goalSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { goal, detail } = req.body as { goal: string; detail?: string };
+    await prisma.businessDiscovery.upsert({
+      where: { tenantId: req.tenantId! },
+      update: { primaryGoal: goal },
+      create: { tenantId: req.tenantId!, primaryGoal: goal, status: "PENDING" },
+    });
+    await prisma.businessProfile.updateMany({
+      where: { tenantId: req.tenantId! },
+      data: { businessGoals: detail?.trim() ? [goal, detail.trim()] : [goal] },
+    }).catch(() => { /* profile may not exist yet; non-blocking */ });
+    scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {}); // push the nudge forward
+    res.json({ data: { primaryGoal: goal } });
+  } catch (err) {
+    console.error("Set goal error:", err);
+    res.status(500).json({ error: "Failed to save goal" });
+  }
+});
+
+// POST /employee-chat - Movement 8: chat with the recommended employee BEFORE
+// it's deployed, and let the owner tune it in words. Proxies to services/ai (the
+// only place a new LLM call may live) and persists the tuned persona onto the
+// discovery, so /complete deploys the employee the owner actually shaped.
+async function callAIEmployeeChat(authHeader: string, body: unknown): Promise<any | null> {
+  try {
+    const res = await fetchWithTimeout(`${AI_SERVICE_URL}/api/ai-assist/onboarding-employee-chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: authHeader },
+      body: JSON.stringify(body),
+    }, 30000);
+    if (!res.ok) return null;
+    const json = (await res.json()) as { data?: { ok?: boolean; reply?: string; persona?: any } };
+    return json?.data?.ok ? json.data : null;
+  } catch (err: any) {
+    console.warn("[Onboarding] AI employee-chat failed:", err?.message);
+    return null;
+  }
+}
+
+const employeeChatSchema = z.object({
+  persona: z.object({
+    tone: z.string().max(40).optional(),
+    personality: z.string().max(400).optional(),
+    focus: z.string().max(200).optional(),
+    instructions: z.array(z.string().max(400)).max(20).optional(),
+  }).optional(),
+  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(20),
+  locale: z.string().min(2).max(10).optional(),
+});
+
+router.post("/employee-chat", requireRole("ADMIN"), validate(employeeChatSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { persona, messages, locale } = req.body as { persona?: any; messages: Array<{ role: string; content: string }>; locale?: string };
+    const disc = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
+    const rec = (disc?.recommendation || {}) as any;
+    const dbiz = (disc?.business as any) || {};
+    const dbrand = (disc?.brand as any) || {};
+    const startPersona = persona || rec.tunedPersona || {};
+    const result = await callAIEmployeeChat(req.headers.authorization!, {
+      name: rec.employeeName, role: rec.employeeRole || "customer_support", locale,
+      context: {
+        business: dbiz.name, industry: dbiz.industry,
+        summary: dbiz.summary, brandVoice: dbrand.voice || dbrand.personality,
+      },
+      persona: startPersona, messages,
+    });
+    if (!result) { res.json({ data: { ok: false } }); return; }
+
+    // Persist the tuned persona onto the recommendation (deploy uses it) AND the
+    // bounded transcript (last 20 turns) so a reload mid-tune resumes the chat.
+    if (disc) {
+      const transcript = [...messages, { role: "assistant", content: result.reply }]
+        .filter((m) => m && typeof m.content === "string")
+        .slice(-20);
+      await prisma.businessDiscovery.update({
+        where: { tenantId: req.tenantId! },
+        data: { recommendation: { ...rec, tunedPersona: result.persona }, tuneTranscript: transcript },
+      }).catch(() => {});
+    }
+    res.json({ data: { ok: true, reply: result.reply, persona: result.persona } });
+  } catch (err) {
+    console.error("Employee chat error:", err);
+    res.status(500).json({ error: "Failed to chat with the employee" });
   }
 });
 

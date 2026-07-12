@@ -199,6 +199,12 @@
       "type": "file"
     },
     {
+      "path": "prisma/migrations/20260707000000_business_discovery/migration.sql",
+      "accessCount": 2,
+      "lastAccessed": 1783433803265,
+      "type": "file"
+    },
+    {
       "path": "prisma/migrations/20260409120000_add_conversation_flow_and_custom_guardrails/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1775724158051,
@@ -358,6 +364,18 @@
       "path": "src/channels/__tests__/whatsapp-send-error.test.ts",
       "accessCount": 1,
       "lastAccessed": 1783339870321,
+      "type": "file"
+    },
+    {
+      "path": "prisma/migrations/20260707130000_scheduled_nudges/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1783437164179,
+      "type": "file"
+    },
+    {
+      "path": "prisma/migrations/20260707160000_recommendations/migration.sql",
+      "accessCount": 1,
+      "lastAccessed": 1783451822716,
       "type": "file"
     }
   ],

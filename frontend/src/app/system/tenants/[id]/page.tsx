@@ -8,6 +8,7 @@ import { getSystemTenant, updateTenant, createTenantUser, updateTenantUser, dele
 import { useRouter } from "next/navigation";
 import { SystemLayout } from "@/components/SystemLayout";
 import { FeaturesSection } from "./FeaturesSection";
+import { EntitlementsSection } from "./EntitlementsSection";
 import clsx from "clsx";
 
 export default function TenantDetailPage() {
@@ -529,6 +530,9 @@ export default function TenantDetailPage() {
             </div>
           ))}
         </div>
+
+        {/* Entitlements: licensed feature areas, AI credits & POC provisioning */}
+        <EntitlementsSection tenantId={tenantId} onMessage={showMsg} />
 
         {/* Features (two-layer permission system - tenant level) */}
         <FeaturesSection tenantId={tenantId} onMessage={showMsg} />

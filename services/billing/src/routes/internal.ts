@@ -4,14 +4,16 @@
  * Units run low), and by ops (grandfather backfill, run billing cycle).
  */
 import { Router } from "express";
+import { prisma, grantUnits, getBalance } from "@chatcenter/shared";
 import { requireInternalKey } from "../lib/internal-auth";
-import { ensureBillableEntity } from "../services/billable-entity.service";
+import { ensureBillableEntity, getEntityIdForTenant } from "../services/billable-entity.service";
 import { createTrialSubscription } from "../services/subscription.service";
 import { triggerAutoPurchase } from "../services/purchase.service";
 import { backfillAllTenants, grandfatherTenant } from "../services/grandfather.service";
 import { runBillingCycle } from "../services/subscription.service";
 import { runDunning } from "../services/dunning.service";
 import { refundCharge } from "../services/refund.service";
+import { setupPoc } from "../services/poc.service";
 import { emitBillingEvent } from "../lib/events";
 
 const router = Router();
@@ -83,6 +85,47 @@ router.post("/internal/billing/run-cycle", async (_req, res) => {
   const cycle = await runBillingCycle();
   const dunning = await runDunning();
   res.json({ ok: true, cycle, dunning });
+});
+
+/**
+ * SYSTEM_ADMIN console: provision a card-less POC — a real, ENFORCED
+ * subscription with an operator-set credit budget and optional expiry.
+ */
+router.post("/internal/billing/setup-poc", async (req, res) => {
+  const { tenantId, credits, expiresAt, actor } = req.body ?? {};
+  if (!tenantId || typeof credits !== "number" || credits <= 0) {
+    return res.status(400).json({ error: "tenantId and positive credits required" });
+  }
+  try {
+    const result = await setupPoc({ tenantId, credits, expiresAt: expiresAt ? new Date(expiresAt) : null, actor });
+    res.json({ ok: true, ...result });
+  } catch (err: any) {
+    res.status(400).json({ error: err?.message ?? "setup_poc_failed" });
+  }
+});
+
+/** SYSTEM_ADMIN console: top up credits (PURCHASED bucket — never expires). */
+router.post("/internal/billing/grant-credits", async (req, res) => {
+  const { tenantId, units, actor } = req.body ?? {};
+  if (!tenantId || typeof units !== "number" || units <= 0) {
+    return res.status(400).json({ error: "tenantId and positive units required" });
+  }
+  await grantUnits({ tenantId, bucket: "PURCHASED", grantType: "PROMO", units, source: `admin:${actor ?? "system"}` });
+  res.json({ ok: true, balance: await getBalance(tenantId) });
+});
+
+/** SYSTEM_ADMIN console: subscription + wallet snapshot for one tenant. */
+router.get("/internal/billing/summary", async (req, res) => {
+  const tenantId = String(req.query.tenantId || "");
+  if (!tenantId) return res.status(400).json({ error: "tenantId required" });
+  const entityId = await getEntityIdForTenant(tenantId);
+  const subscription = entityId
+    ? await prisma.subscription.findUnique({
+        where: { billableEntityId: entityId },
+        select: { planKey: true, status: true, enforcementEnabled: true, currentPeriodEnd: true, trialEndsAt: true },
+      })
+    : null;
+  res.json({ ok: true, subscription, balance: await getBalance(tenantId) });
 });
 
 export default router;

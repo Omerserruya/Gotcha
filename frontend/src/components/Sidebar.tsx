@@ -11,14 +11,18 @@ import { NotificationBell } from "./NotificationBell";
 import { IncomingCallBannerSidebar } from "./voice/IncomingCallBanner";
 import { MissionPanel } from "./onboarding/MissionPanel";
 
+// `domain` ties a nav item to its licensed feature domain: when the tenant's
+// license disables that domain (system console / plan / POC feature set), the
+// item disappears here — /api/permissions/me returns no keys under it.
 const navItems = [
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
+  { href: "/business", icon: BusinessIcon, labelKey: "nav.business", adminOnly: true },
   { href: "/history", icon: HistoryIcon, labelKey: "nav.history", managerOrAdmin: true },
-  { href: "/approvals", icon: ApprovalsIcon, labelKey: "nav.approvals", adminOnly: true },
-  { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true },
-  { href: "/analytics", icon: AnalyticsIcon, labelKey: "nav.analytics", adminOnly: true },
-  { href: "/outbound", icon: OutboundIcon, labelKey: "nav.outbound", adminOnly: true },
-  { href: "/ai-studio", icon: AIStudioIcon, labelKey: "nav.aiStudio", adminOnly: true },
+  { href: "/approvals", icon: ApprovalsIcon, labelKey: "nav.approvals", adminOnly: true, domain: "approvals" },
+  { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true, domain: "analytics" },
+  { href: "/analytics", icon: AnalyticsIcon, labelKey: "nav.analytics", adminOnly: true, domain: "analytics" },
+  { href: "/outbound", icon: OutboundIcon, labelKey: "nav.outbound", adminOnly: true, domain: "channels" },
+  { href: "/ai-studio", icon: AIStudioIcon, labelKey: "nav.aiStudio", adminOnly: true, domain: "ai" },
   { href: "/settings", icon: SettingsIcon, labelKey: "nav.settings", adminOnly: true },
 ];
 
@@ -26,6 +30,15 @@ function ApprovalsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+    </svg>
+  );
+}
+
+// "Your Business" — the permanent home of the Digital Twin.
+function BusinessIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4 21V7l8-4 8 4v14M9 21v-4a1 1 0 011-1h4a1 1 0 011 1v4M9 9h.01M15 9h.01M9 13h.01M15 13h.01" />
     </svg>
   );
 }
@@ -38,7 +51,7 @@ interface SidebarProps {
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   const { user, logout } = useAuth();
-  const { atLeastRole } = usePermissions();
+  const { atLeastRole, permissions, loaded, roleKey } = usePermissions();
   const { t } = useI18n();
   const pathname = usePathname();
 
@@ -92,8 +105,17 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
           .filter((item) => {
             // Gated by effective built-in role (consistent with the backend
             // requireRole bridge — assigned roles drive nav, no dead links).
-            if (item.adminOnly) return atLeastRole("admin");
-            if ((item as any).managerOrAdmin) return atLeastRole("department_manager");
+            if (item.adminOnly && !atLeastRole("admin")) return false;
+            if ((item as any).managerOrAdmin && !atLeastRole("department_manager")) return false;
+            // License gate: hide areas the tenant isn't entitled to. Only once
+            // /permissions/me has loaded (never flicker-hide during boot), and
+            // never for SYSTEM_ADMIN.
+            const domain = (item as any).domain as string | undefined;
+            if (domain && loaded && roleKey !== "system_admin") {
+              let licensed = false;
+              permissions.forEach((k) => { if (k.startsWith(domain + ":")) licensed = true; });
+              if (!licensed) return false;
+            }
             return true;
           })
           .map((item) => {
