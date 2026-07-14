@@ -1,5 +1,5 @@
 /**
- * Manual provider — used for GRANDFATHERED tenants and admin-managed accounts.
+ * Manual provider - used for GRANDFATHERED tenants and admin-managed accounts.
  * No real charging happens; it exists so grandfathered/manual flows share the
  * same PaymentProvider surface without special-casing call sites.
  */

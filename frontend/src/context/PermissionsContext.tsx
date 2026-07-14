@@ -5,7 +5,7 @@ import { useAuth } from "@/context/AuthContext";
 import { getMyAccess, type PermissionScope } from "@/lib/api";
 
 /**
- * Effective-permission context — the single place the UI asks "can the current
+ * Effective-permission context - the single place the UI asks "can the current
  * user do X?". Backed by GET /api/permissions/me (resolver-computed). The UI
  * reacts to permissions; it never hardcodes role checks.
  *
@@ -133,7 +133,7 @@ export function PermissionsProvider({ children }: { children: React.ReactNode })
       if (loaded) return matches(permissions, permission);
       return legacyCan(user?.role, permission);
     };
-    // Effective role tier — fall back to a legacy-enum approximation until /me loads.
+    // Effective role tier - fall back to a legacy-enum approximation until /me loads.
     const effectiveRoleKey: RoleKey = loaded
       ? roleKey
       : user?.role === "SYSTEM_ADMIN"

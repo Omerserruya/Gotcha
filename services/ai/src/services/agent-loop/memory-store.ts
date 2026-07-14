@@ -1,10 +1,10 @@
 /**
- * AgentMemory persistence — the DB-backed implementation of the kernel's
+ * AgentMemory persistence - the DB-backed implementation of the kernel's
  * cross-turn memory (per agent × customer, following the customer across
  * conversations). This closes the loop the contract always described: the
  * Reasoner's `memoryUpdate` becomes the NEXT turn's `memory` input.
  *
- * Trust model unchanged: memory is ADVISORY — Facts always override it.
+ * Trust model unchanged: memory is ADVISORY - Facts always override it.
  * Fail-soft both ways: a load failure yields empty memory; a save failure is
  * logged and never breaks a turn. Bounded before save so it can't grow
  * unbounded or poison context.
@@ -51,7 +51,7 @@ export async function loadAgentMemory(key: AgentMemoryKey): Promise<AgentMemory>
 }
 
 /**
- * The kernel contract's `MemoryStore`, DB-backed — the shared interface now has
+ * The kernel contract's `MemoryStore`, DB-backed - the shared interface now has
  * its production implementation (wire-or-delete: wired).
  */
 export const agentMemoryStore: MemoryStore = {

@@ -56,12 +56,8 @@ const FEATURES: Feature[] = [
           "לחצו כאן כדי ליצור עובד AI ראשון. הוא מנהל שיחות לפי העסק ומערכת הליבה שלכם.",
         ],
       },
-    ],
-  },
-  {
-    key: "workflows",
-    match: (p) => p.startsWith("/ai-studio/flows"),
-    steps: [
+      // The workflows list lives on the AI Studio home (there is no
+      // /ai-studio/flows index route), so its coachmark is step 2 here.
       {
         selector: '[data-tour="new-workflow"]',
         title: ["Workflows", "תהליכי עבודה"],
@@ -74,7 +70,9 @@ const FEATURES: Feature[] = [
   },
   {
     key: "settings",
-    match: (p) => p.startsWith("/settings"),
+    // The invite button lives on the Users page specifically - matching all
+    // of /settings meant firing where the anchor doesn't exist.
+    match: (p) => p.startsWith("/settings/users"),
     steps: [
       {
         selector: '[data-tour="invite-teammate"]',
@@ -112,9 +110,22 @@ export function FeatureGuides() {
       .catch(() => setGuides({}));
   }, [token]);
 
+  // Hide instantly when the GuidedTour starts mid-session.
+  useEffect(() => {
+    const hide = () => setActiveFeature(null);
+    window.addEventListener("gotcha:start-tour", hide);
+    return () => window.removeEventListener("gotcha:start-tour", hide);
+  }, []);
+
   // Decide whether to show a guide for the current route.
   useEffect(() => {
     if (!guides) return;
+    // Never compete with the GuidedTour - two spotlight layers at once
+    // double-dim the page and fight over the same anchors. The tour flag
+    // lives in localStorage; it re-checks here on every navigation.
+    try {
+      if (localStorage.getItem("onboarding.launchTour") === "1") { setActiveFeature(null); return; }
+    } catch { /* private mode */ }
     const feature = FEATURES.find((f) => f.match(pathname || ""));
     if (!feature) { setActiveFeature(null); return; }
     const state = guides[feature.key];
@@ -129,11 +140,23 @@ export function FeatureGuides() {
   const measure = useCallback(() => {
     if (!step) { setRect(null); setMissing(false); return; }
     const el = document.querySelector(step.selector) as HTMLElement | null;
-    if (!el) { setRect(null); setMissing(true); return; }
+    // Anchor not mounted yet is NOT "missing" - the retry loop below owns
+    // that verdict after its timeout. Flagging it here fired on the very
+    // first frame of a route transition.
+    if (!el) { setRect(null); return; }
     const r = el.getBoundingClientRect();
     setRect({ top: r.top, left: r.left, width: r.width, height: r.height });
     setMissing(false);
   }, [step]);
+
+  // If the anchor never shows up, the guide simply goes away for this
+  // session - it must never sit on top of (let alone dim) a working page.
+  useEffect(() => {
+    if (!missing || !activeFeature) return;
+    sessionHidden.current.add(activeFeature.key);
+    setActiveFeature(null);
+    setMissing(false);
+  }, [missing, activeFeature]);
 
   useEffect(() => {
     if (!activeFeature) return;
@@ -201,21 +224,19 @@ export function FeatureGuides() {
 
   if (!activeFeature || !step) return null;
   const showSpot = rect && !missing && holeStyle;
+  // Until the anchor is found there is nothing to point at - render nothing.
+  // (The old fallback dimmed + blurred the entire page, permanently when the
+  // anchor never existed.)
+  if (!showSpot) return null;
   const lastStep = stepIdx >= activeFeature.steps.length - 1;
 
   return (
     <div className="fixed inset-0 z-[9998] pointer-events-none">
-      {showSpot ? (
-        <>
-          <div className="absolute bg-black/50 backdrop-blur-[2px] pointer-events-auto" style={{ top: 0, left: 0, right: 0, height: holeStyle.top }} />
-          <div className="absolute bg-black/50 backdrop-blur-[2px] pointer-events-auto" style={{ top: holeStyle.top + holeStyle.height, left: 0, right: 0, bottom: 0 }} />
-          <div className="absolute bg-black/50 backdrop-blur-[2px] pointer-events-auto" style={{ top: holeStyle.top, left: 0, width: holeStyle.left, height: holeStyle.height }} />
-          <div className="absolute bg-black/50 backdrop-blur-[2px] pointer-events-auto" style={{ top: holeStyle.top, left: holeStyle.left + holeStyle.width, right: 0, height: holeStyle.height }} />
-          <div className="absolute rounded-2xl ring-4 ring-primary-400/60 animate-pulse pointer-events-none" style={{ ...holeStyle }} />
-        </>
-      ) : (
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px] pointer-events-auto" />
-      )}
+      <div className="absolute bg-black/50 pointer-events-auto" style={{ top: 0, left: 0, right: 0, height: holeStyle.top }} />
+      <div className="absolute bg-black/50 pointer-events-auto" style={{ top: holeStyle.top + holeStyle.height, left: 0, right: 0, bottom: 0 }} />
+      <div className="absolute bg-black/50 pointer-events-auto" style={{ top: holeStyle.top, left: 0, width: holeStyle.left, height: holeStyle.height }} />
+      <div className="absolute bg-black/50 pointer-events-auto" style={{ top: holeStyle.top, left: holeStyle.left + holeStyle.width, right: 0, height: holeStyle.height }} />
+      <div className="absolute rounded-2xl ring-4 ring-primary-400/60 animate-pulse pointer-events-none" style={{ ...holeStyle }} />
 
       <div className="absolute z-10 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 pointer-events-auto" style={popupStyle || { bottom: 20, right: 20, width: 300 }}>
         <div className="flex items-center justify-between mb-1.5">

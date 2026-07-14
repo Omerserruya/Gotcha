@@ -15,9 +15,9 @@ export const account: HelpCategory = {
       body: [
         `## Roles
 
-- **Admin** — full workspace control: settings, integrations, billing, AI configuration, all conversations.
-- **Agent** — works the inbox: sees and answers conversations, takes over from the AI.
-- **Department manager** — an agent with team-level views (like conversation history) for their department.
+- **Admin** - full workspace control: settings, integrations, billing, AI configuration, all conversations.
+- **Agent** - works the inbox: sees and answers conversations, takes over from the AI.
+- **Department manager** - an agent with team-level views (like conversation history) for their department.
 
 ## Inviting
 
@@ -25,14 +25,14 @@ export const account: HelpCategory = {
 
 ## Managing
 
-Deactivate a user any time — access ends immediately; their conversation history stays. Roles can be changed after joining.
+Deactivate a user any time - access ends immediately; their conversation history stays. Roles can be changed after joining.
 
 > Seats are part of your plan; if you're growing past it, upgrading takes effect immediately.`,
         `## תפקידים
 
-- **מנהל (Admin)** — שליטה מלאה: הגדרות, אינטגרציות, חיוב, תצורת AI, כל השיחות.
-- **נציג (Agent)** — עובד בתיבה: רואה ועונה לשיחות, משתלט מה-AI.
-- **מנהל מחלקה** — נציג עם תצוגות צוותיות (כמו היסטוריית שיחות) למחלקה שלו.
+- **מנהל (Admin)** - שליטה מלאה: הגדרות, אינטגרציות, חיוב, תצורת AI, כל השיחות.
+- **נציג (Agent)** - עובד בתיבה: רואה ועונה לשיחות, משתלט מה-AI.
+- **מנהל מחלקה** - נציג עם תצוגות צוותיות (כמו היסטוריית שיחות) למחלקה שלו.
 
 ## הזמנה
 
@@ -40,9 +40,9 @@ Deactivate a user any time — access ends immediately; their conversation histo
 
 ## ניהול
 
-אפשר להשבית משתמש בכל רגע — הגישה נחסמת מיד; היסטוריית השיחות נשארת. תפקידים ניתנים לשינוי אחרי ההצטרפות.
+אפשר להשבית משתמש בכל רגע - הגישה נחסמת מיד; היסטוריית השיחות נשארת. תפקידים ניתנים לשינוי אחרי ההצטרפות.
 
-> מקומות הצוות הם חלק מהתוכנית; אם גדלתם מעבר — שדרוג נכנס לתוקף מיד.`,
+> מקומות הצוות הם חלק מהתוכנית; אם גדלתם מעבר - שדרוג נכנס לתוקף מיד.`,
       ],
     },
     {
@@ -63,9 +63,9 @@ Every workspace (tenant) is fully isolated: your conversations, customers, knowl
 
 ## Your data and AI
 
-- Your knowledge and conversations are used to **answer your customers** — that's it.
+- Your knowledge and conversations are used to **answer your customers** - that's it.
 - Your data is **not used to train** foundation models.
-- Every AI action is logged — what it did, why, and with which data — for full auditability.
+- Every AI action is logged - what it did, why, and with which data - for full auditability.
 
 ## Channel credentials
 
@@ -84,9 +84,9 @@ Questions about a DPA or specific compliance needs? [Contact us](/help#contact).
 
 ## המידע שלכם וה-AI
 
-- הידע והשיחות משמשים **למענה ללקוחות שלכם** — וזהו.
+- הידע והשיחות משמשים **למענה ללקוחות שלכם** - וזהו.
 - המידע שלכם **לא משמש לאימון** מודלים.
-- כל פעולת AI מתועדת — מה נעשה, למה, ועם איזה מידע — לביקורת מלאה.
+- כל פעולת AI מתועדת - מה נעשה, למה, ועם איזה מידע - לביקורת מלאה.
 
 ## הרשאות ערוצים
 
@@ -102,22 +102,22 @@ export const faqs: HelpFaq[] = [
   {
     q: ["Can I keep using WhatsApp on my phone with the same number?", "אפשר להמשיך להשתמש בוואטסאפ בטלפון עם אותו מספר?"],
     a: [
-      "No — a number connected to the WhatsApp Business Platform (API) can't run in the WhatsApp app at the same time. Most businesses dedicate a number to GOTCHA. See the [WhatsApp guide](/help/channels/connect-whatsapp-waba).",
-      "לא — מספר שמחובר לפלטפורמת WhatsApp Business‏ (API) לא יכול לפעול במקביל באפליקציה. רוב העסקים מייעדים מספר ל-GOTCHA. ראו את [מדריך הוואטסאפ](/help/channels/connect-whatsapp-waba).",
+      "No - a number connected to the WhatsApp Business Platform (API) can't run in the WhatsApp app at the same time. Most businesses dedicate a number to GOTCHA. See the [WhatsApp guide](/help/channels/connect-whatsapp-waba).",
+      "לא - מספר שמחובר לפלטפורמת WhatsApp Business‏ (API) לא יכול לפעול במקביל באפליקציה. רוב העסקים מייעדים מספר ל-GOTCHA. ראו את [מדריך הוואטסאפ](/help/channels/connect-whatsapp-waba).",
     ],
   },
   {
     q: ["Does the AI speak Hebrew?", "ה-AI מדבר עברית?"],
     a: [
-      "Yes — fluently, including your brand voice. It mirrors the customer's language automatically, so Hebrew customers get Hebrew and English customers get English.",
-      "כן — באופן שוטף, כולל קול המותג שלכם. הוא משקף את שפת הלקוח אוטומטית: לקוח בעברית מקבל עברית, לקוח באנגלית מקבל אנגלית.",
+      "Yes - fluently, including your brand voice. It mirrors the customer's language automatically, so Hebrew customers get Hebrew and English customers get English.",
+      "כן - באופן שוטף, כולל קול המותג שלכם. הוא משקף את שפת הלקוח אוטומטית: לקוח בעברית מקבל עברית, לקוח באנגלית מקבל אנגלית.",
     ],
   },
   {
     q: ["What happens when the AI doesn't know an answer?", "מה קורה כשה-AI לא יודע תשובה?"],
     a: [
       "It says so honestly, and hands the conversation to your team with full context. It never invents facts. Teach it the answer once and it knows it forever.",
-      "הוא אומר זאת בכנות ומעביר את השיחה לצוות עם הקשר מלא. הוא לעולם לא ממציא עובדות. למדו אותו את התשובה פעם אחת — והוא יודע אותה לתמיד.",
+      "הוא אומר זאת בכנות ומעביר את השיחה לצוות עם הקשר מלא. הוא לעולם לא ממציא עובדות. למדו אותו את התשובה פעם אחת - והוא יודע אותה לתמיד.",
     ],
   },
   {
@@ -144,8 +144,8 @@ export const faqs: HelpFaq[] = [
   {
     q: ["Can I edit what the AI learned about my business?", "אפשר לערוך את מה שה-AI למד על העסק?"],
     a: [
-      "Yes — everything. During setup press \"Something off?\" on the review screen, and any time later on **Your Business** in the sidebar. Corrections stick: the AI never resurfaces something you removed.",
-      "כן — הכול. בהגדרה לחצו \"משהו לא מדויק?\" במסך הסקירה, ובכל שלב אחר תחת **העסק שלכם** בתפריט. תיקונים נשמרים: ה-AI לא מעלה שוב משהו שהסרתם.",
+      "Yes - everything. During setup press \"Something off?\" on the review screen, and any time later on **Your Business** in the sidebar. Corrections stick: the AI never resurfaces something you removed.",
+      "כן - הכול. בהגדרה לחצו \"משהו לא מדויק?\" במסך הסקירה, ובכל שלב אחר תחת **העסק שלכם** בתפריט. תיקונים נשמרים: ה-AI לא מעלה שוב משהו שהסרתם.",
     ],
   },
   {
@@ -158,22 +158,22 @@ export const faqs: HelpFaq[] = [
   {
     q: ["Can I try GOTCHA before paying?", "אפשר לנסות את GOTCHA לפני תשלום?"],
     a: [
-      "Yes — we set up free pilot workspaces (no credit card) with a real credit budget and the features you need. [Contact us](/help#contact) to arrange one.",
-      "כן — אנחנו מקימים סביבות פיילוט חינמיות (בלי כרטיס אשראי) עם תקציב קרדיטים אמיתי והפיצ'רים שצריך. [דברו איתנו](/help#contact) לתיאום.",
+      "Yes - we set up free pilot workspaces (no credit card) with a real credit budget and the features you need. [Contact us](/help#contact) to arrange one.",
+      "כן - אנחנו מקימים סביבות פיילוט חינמיות (בלי כרטיס אשראי) עם תקציב קרדיטים אמיתי והפיצ'רים שצריך. [דברו איתנו](/help#contact) לתיאום.",
     ],
   },
   {
     q: ["Which channels are supported?", "אילו ערוצים נתמכים?"],
     a: [
-      "WhatsApp Business (API), Instagram DM, Facebook Messenger and email (Gmail, Outlook, or any SMTP/IMAP mailbox) — all in one shared inbox.",
-      "וואטסאפ ביזנס (API), הודעות אינסטגרם, פייסבוק מסנג'ר ואימייל (Gmail, Outlook או כל תיבת SMTP/IMAP) — הכול בתיבה משותפת אחת.",
+      "WhatsApp Business (API), Instagram DM, Facebook Messenger and email (Gmail, Outlook, or any SMTP/IMAP mailbox) - all in one shared inbox.",
+      "וואטסאפ ביזנס (API), הודעות אינסטגרם, פייסבוק מסנג'ר ואימייל (Gmail, Outlook או כל תיבת SMTP/IMAP) - הכול בתיבה משותפת אחת.",
     ],
   },
   {
     q: ["How do I contact GOTCHA support?", "איך יוצרים קשר עם התמיכה של GOTCHA?"],
     a: [
-      "Email **support@gotcha.co.il** — a real human reads every message. Setup emails can also simply be replied to.",
-      "כתבו ל-**support@gotcha.co.il** — בן אדם אמיתי קורא כל הודעה. אפשר גם פשוט להשיב למיילים של ההגדרה.",
+      "Email **support@gotcha.co.il** - a real human reads every message. Setup emails can also simply be replied to.",
+      "כתבו ל-**support@gotcha.co.il** - בן אדם אמיתי קורא כל הודעה. אפשר גם פשוט להשיב למיילים של ההגדרה.",
     ],
   },
 ];

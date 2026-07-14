@@ -1,6 +1,6 @@
 "use client";
 
-// Magic-link verification — the very first screen after the email click, so it
+// Magic-link verification - the very first screen after the email click, so it
 // wears the same light identity as the setup flow it opens (wordmark, violet,
 // calm canvas), not a separate look.
 

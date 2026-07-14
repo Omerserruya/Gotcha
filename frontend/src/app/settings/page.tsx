@@ -362,14 +362,14 @@ export default function SettingsPage() {
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-full pb-20">
       {/* Header */}
-      <div>
+      <div data-tour="settings-home">
         <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
         <p className="text-sm text-gray-500 mt-1">{t("settings.subtitle")}</p>
       </div>
 
       {languageCard}
 
-      {/* Billing & Subscription — plans, AI Units, payment method, invoices. */}
+      {/* Billing & Subscription - plans, AI Units, payment method, invoices. */}
       <a
         href="/settings/billing"
         className="group bg-white border border-gray-200 hover:border-emerald-300 hover:shadow-subtle rounded-2xl p-4 transition block"

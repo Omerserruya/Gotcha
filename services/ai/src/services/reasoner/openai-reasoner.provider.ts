@@ -1,11 +1,11 @@
 /**
- * OpenAI ReasonerProvider — the FIRST implementation of the vendor-neutral
+ * OpenAI ReasonerProvider - the FIRST implementation of the vendor-neutral
  * `ReasonerProvider` contract. Everything OpenAI-shaped (prompt construction,
  * JSON coaxing, the SDK call) stays INSIDE this file; the boundary emits only a
  * validated `ReasonerOutput` + neutral telemetry.
  *
  * It reasons THROUGH the platform's metered choke point (`generateResponse`), so
- * billing/credits/enforcement apply automatically — a Reasoner call is an AI
+ * billing/credits/enforcement apply automatically - a Reasoner call is an AI
  * call and must never bypass the meter.
  *
  * NOTE: the prompt below is a first draft. The Reasoner runs in SHADOW first
@@ -31,7 +31,7 @@ export function renderInput(input: ReasonerInput): string {
       const pre = (o.businessPreconditions ?? []).length
         ? `\n  requires: ${o.businessPreconditions!.join("; ")}`
         : "";
-      return `- ${o.name} — ${o.meaning}${params ? ` [params: ${params}]` : ""}${pre}`;
+      return `- ${o.name} - ${o.meaning}${params ? ` [params: ${params}]` : ""}${pre}`;
     })
     .join("\n");
 
@@ -60,13 +60,13 @@ export function renderInput(input: ReasonerInput): string {
         .join("\n")
     : "";
 
-  // Domain world: rendered GENERICALLY — the Reasoner never learns domain names
+  // Domain world: rendered GENERICALLY - the Reasoner never learns domain names
   // from code. Each capability self-describes; adding one needs no change here.
   const worldBlock = f.world.length
     ? f.world
         .map((w) =>
           [
-            `### ${w.capability} — ${w.summary}`,
+            `### ${w.capability} - ${w.summary}`,
             "```json",
             JSON.stringify(w.facts, null, 2),
             "```",
@@ -79,7 +79,7 @@ export function renderInput(input: ReasonerInput): string {
     : "(no capability world-state this turn)";
 
   // ORDER MATTERS FOR COST, not meaning: OpenAI prompt caching reuses the longest
-  // identical PREFIX (≥1024 tokens). STABLE sections (mission/guidance/menu — fixed
+  // identical PREFIX (≥1024 tokens). STABLE sections (mission/guidance/menu - fixed
   // per agent, unchanged across iterations and turns) therefore come FIRST, and the
   // per-iteration volatile state (facts/world/loop/memory/transcript) LAST. Same
   // content, cheaper prefix. Do not interleave volatile content above the fold.
@@ -93,12 +93,12 @@ export function renderInput(input: ReasonerInput): string {
     "",
     // Identity + permissions are FIXED for the whole turn (stable head); only
     // money + world state below are per-iteration volatile.
-    "## CUSTOMER & PERMISSIONS (authoritative — never contradict these)",
+    "## CUSTOMER & PERMISSIONS (authoritative - never contradict these)",
     "```json",
     JSON.stringify({ customer: f.customer, permissions: f.permissions }, null, 2),
     "```",
     "",
-    "## MONEY (authoritative — never contradict these)",
+    "## MONEY (authoritative - never contradict these)",
     "```json",
     JSON.stringify({ entitlements: f.entitlements, billing: f.billing }, null, 2),
     "```",
@@ -107,7 +107,7 @@ export function renderInput(input: ReasonerInput): string {
     worldBlock,
     loopBlock,
     "",
-    "## MEMORY (your prior judgments — advisory; FACTS override MEMORY)",
+    "## MEMORY (your prior judgments - advisory; FACTS override MEMORY)",
     "```json",
     JSON.stringify(input.memory, null, 2),
     "```",
@@ -118,10 +118,10 @@ export function renderInput(input: ReasonerInput): string {
 }
 
 export const SYSTEM_PROMPT = [
-  "You are the REASONER — the business brain of an AI employee. You OWN judgment:",
+  "You are the REASONER - the business brain of an AI employee. You OWN judgment:",
   "customer intent, strategy, which business operation should happen, when none should,",
   "and what information is still missing. You do NOT execute anything and you do NOT",
-  "write the customer-facing reply — a runtime executes, and a writer phrases.",
+  "write the customer-facing reply - a runtime executes, and a writer phrases.",
   "",
   "RULES:",
   "1. FACTS are authoritative world-state. Never claim or assume anything they contradict.",

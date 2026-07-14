@@ -142,7 +142,7 @@ export interface ContextSlot {
    */
   templatesBlock?: string;
   /**
-   * Facts learned in the LIVE conversation this session — recent customer
+   * Facts learned in the LIVE conversation this session - recent customer
    * utterances plus any structured facts already extracted/persisted for this
    * person. Fed into the Knowledge Ledger + Objective Engine alongside the
    * CRM/memory snapshots so objective progression reflects what the customer
@@ -266,7 +266,7 @@ export const ESCALATION_TOOL = {
 export const BLOCK_SEPARATOR = "\n\n---\n\n";
 
 // ════════════════════════════════════════════════════════════════════════
-// BLOCK 0 — SYSTEM CONTRACTS (static, globally reusable, highly cacheable)
+// BLOCK 0 - SYSTEM CONTRACTS (static, globally reusable, highly cacheable)
 // Platform-wide rules shared by EVERY agent and tenant. Contains NO agent
 // config, NO tenant data, NO customer data, NO turn data - so it is byte-
 // identical across all conversations of the same mode and sits at the very top
@@ -318,7 +318,7 @@ const COPILOT_OWNERSHIP_NOTE = `# Conversation Ownership (advisory)
 You advise a HUMAN AGENT who has ALREADY taken over this conversation - they ARE the rep. Help them own it: understand the customer, surface what matters, and suggest the next useful move. Never suggest handing off again, never speak about the agent in the third person, never reveal you are an AI.`;
 
 /**
- * BLOCK 0 — assemble the static system contracts for this mode. Pure constants,
+ * BLOCK 0 - assemble the static system contracts for this mode. Pure constants,
  * so the result is byte-identical for every agent/tenant in the same mode →
  * cacheable across conversations. Order matches the approved architecture:
  * SECURITY → REALITY → TOOL_EXECUTION → OWNERSHIP → DISCOVERY → STAGE.
@@ -445,7 +445,7 @@ function buildAgentBlock(opts: BuildPromptOpts, strategy: StrategyContract): str
 }
 
 /**
- * Company identity block — who the agent works for and what that company does.
+ * Company identity block - who the agent works for and what that company does.
  * Reads ONLY opts.company (tenant BusinessProfile) → stable across the tenant's
  * conversations, cache-safe. This is the universal employer context every agent
  * inherits; per-agent salesContext layers the sales detail on top.
@@ -461,7 +461,7 @@ function buildCompanyBlock(opts: BuildPromptOpts): string | null {
   if (c.websiteDomain) lines.push(`Website: ${c.websiteDomain}`);
   lines.push(
     "You are an EMPLOYEE of this company and speak on its behalf in the first person (\"we\", \"our\"). " +
-      "Never describe the company as an outsider, never ask the customer what your own company does, and never act like a neutral assistant — you represent this business.",
+      "Never describe the company as an outsider, never ask the customer what your own company does, and never act like a neutral assistant - you represent this business.",
   );
   return lines.join("\n");
 }
@@ -470,8 +470,8 @@ function buildCompanyBlock(opts: BuildPromptOpts): string | null {
 const PRODUCT_CONTEXT_SKILLS = new Set(["SALES", "SDR", "CUSTOMER_SUCCESS"]);
 
 /**
- * Product Qualification Context — what we sell, ICP, problems, outcomes, and
- * qualification signals — rendered only for sales-oriented skills and only when
+ * Product Qualification Context - what we sell, ICP, problems, outcomes, and
+ * qualification signals - rendered only for sales-oriented skills and only when
  * the agent has authored `salesContext`. Reads ONLY opts.agent.* → cache-safe.
  */
 function buildProductQualificationBlock(opts: BuildPromptOpts): string | null {
@@ -602,7 +602,7 @@ Before sending, silently review your draft against these. If it fails any, rewri
 8. **Relationship depth** - warmth matches the Relationship signal: new = polite, light warmth · familiar = more conversational · warm = natural familiarity · established = highest warmth. Never jump intimacy levels suddenly.
 9. **Brand voice** - match the active archetype. Strategy decides WHAT; Brand Voice decides HOW it sounds; Relationship Depth decides HOW WARM. Never let style override strategy.
 10. **Gender (gendered languages)** - infer only from evidence (their own grammar, self-reference, CRM, a correction); never ask. Low/unknown confidence → neutral phrasing. If corrected, switch immediately and don't repeat the error.
-11. **No dash as a connector (FORBIDDEN)** - never join clauses with a long dash ("—", "–") or a spaced hyphen (" - "). It reads as machine-written. Use a comma, a period, or split into two short lines. (Hyphens INSIDE a token, like a phone number or "Wi-Fi", are fine.)
+11. **No wide dash, ever (FORBIDDEN)** - the wide em-dash "—" (and "–", "―") must NEVER appear anywhere in a customer-facing message, in any language. It is the single strongest "written by an AI" tell. Also never join clauses with any dash or a spaced hyphen (" - "). Use a comma, a period, or split into two short lines. (Hyphens INSIDE a token, like a phone number or "Wi-Fi", are fine.)
 12. **Vary your opener** - don't start consecutive replies with the same word (in Hebrew especially never default to "אז"). Most replies should open straight with the substance.
 12a. **Don't address the customer by name (FORBIDDEN as a habit)** - real people in a chat almost never say the other person's name in every message. Do NOT open or pepper replies with their first name ("Omer, ...", "אומר, ..."). It reads as robotic and salesy. Default to NOT using their name at all; a single, natural use is acceptable only at a genuine milestone (a warm greeting on first contact, or confirming a booking), never as a recurring tic.
 13. **Discovery before data capture (sales)** - understand their business and what they need BEFORE you ask for an email/phone or create a lead. Asking for contact details first feels like a form, not a conversation. Capture contact naturally once there is real interest.
@@ -713,7 +713,7 @@ function buildKnowledgeLedger(opts: BuildPromptOpts): string | null {
 function factTextOf(opts: BuildPromptOpts): string {
   const ctx = opts.context;
   // sessionFactsBlock LAST so live-conversation facts are part of the same
-  // resolved-fact text the ledger/objective engine match against — a value the
+  // resolved-fact text the ledger/objective engine match against - a value the
   // customer stated this session counts immediately, exactly like a CRM value.
   return [ctx?.customerBlock, ctx?.crmBlock, ctx?.memoryBlock, ctx?.sessionFactsBlock]
     .filter((s): s is string => !!s && !!s.trim())
@@ -723,14 +723,14 @@ function factTextOf(opts: BuildPromptOpts): string {
 // Per-turn CURRENT PLAN (the Action Planner surface). One compact block that
 // aggregates prospect state, the active objective + what's still missing, the
 // committed goal, wizard facts, the ranked best-next-action, and the capability-
-// grouped tool surface — replacing the former six separate objective/NBA
+// grouped tool surface - replacing the former six separate objective/NBA
 // sub-sections + flat tool list. The model receives "goal → situation → best
 // action → capabilities" instead of reconstructing it. Agent mode only.
 function buildCurrentPlanBlock(opts: BuildPromptOpts): string | null {
   // SHARED BRAIN: both the AI Employee (agent) and the AI Copilot (copilot) reason
   // over the SAME Current Plan. Only `generator` (config authoring) has no plan.
   // The difference is execution: the Copilot renders in advisory mode (recommend),
-  // the Employee in act mode — same computeCurrentPlan, same facts.
+  // the Employee in act mode - same computeCurrentPlan, same facts.
   const plan = computeCurrentPlanForOpts(opts);
   if (!plan) return null;
   return renderCurrentPlan(plan, { advisory: opts.behaviorState.mode === "copilot" });
@@ -761,7 +761,7 @@ export function planInputFromOpts(opts: BuildPromptOpts): PlanInput {
 /**
  * Compute the EXACT `CurrentPlan` the prompt's `# Current Plan` block is rendered
  * from, or null for modes that have no plan (`generator`). Exposed so the Copilot
- * provider can log `[copilot][plan]` against the very plan the model received —
+ * provider can log `[copilot][plan]` against the very plan the model received -
  * guaranteeing the diagnostics never drift from what was actually in the prompt.
  * Pure; never throws (delegates to `computeCurrentPlan`).
  */

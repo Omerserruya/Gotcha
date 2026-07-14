@@ -1,5 +1,5 @@
 /**
- * Recommendations — the living AI backlog.
+ * Recommendations - the living AI backlog.
  *
  * Discovery produces a set of suggestions; this service PERSISTS them as
  * Recommendation rows so nothing is ever ephemeral. "I'll do it later" loses
@@ -36,7 +36,7 @@ const ROLE_TITLE: Record<string, string> = {
 
 // Systems GOTCHA can actually connect (must match CORE_SYSTEM_SLUGS in
 // routes/onboarding.ts and the SYSTEMS catalog in the setup UI). A detected
-// tool OUTSIDE this set must never become a "Connect X" recommendation — a
+// tool OUTSIDE this set must never become a "Connect X" recommendation - a
 // connect CTA the product can't honor is a broken promise. Those become
 // `tool_detected` acknowledgments instead.
 const CONNECTABLE_SYSTEMS = new Set(["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"]);
@@ -50,7 +50,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
   const rec = report?.recommendation || {};
   const out: DesiredRec[] = [];
 
-  // 1. The first hire (highest priority — it's the whole point).
+  // 1. The first hire (highest priority - it's the whole point).
   const role = rec.employeeRole || "customer_support";
   out.push({
     dedupeKey: "hire",
@@ -63,10 +63,10 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
     priority: 100,
   });
 
-  // 2. Connect systems — ALREADY-DETECTED first (act on what we know: Shopify
+  // 2. Connect systems - ALREADY-DETECTED first (act on what we know: Shopify
   //    before proposing new tools). alreadyDetected bumps priority. Only slugs
   //    with a real connector become connect_system; detected-but-unsupported
-  //    tools (Yotpo, ReturnGO, …) are acknowledged honestly as tool_detected —
+  //    tools (Yotpo, ReturnGO, …) are acknowledged honestly as tool_detected -
   //    no connect verb, no dead CTA.
   for (const s of Array.isArray(rec.systems) ? rec.systems : []) {
     const slug = String(s?.slug || "").toLowerCase();
@@ -82,7 +82,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
         targetSlug: slug,
         confidence: detected ? "confirmed" : "likely",
         priority: detected ? 90 : 70,
-        // `evidence` powers the ⓘ "how do I know this" popover — the honest
+        // `evidence` powers the ⓘ "how do I know this" popover - the honest
         // provenance: a code fingerprint found during the scan vs an AI
         // suggestion grounded in the business profile.
         payload: {
@@ -95,7 +95,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
       out.push({
         dedupeKey: `tool:${slug}`,
         kind: "tool_detected",
-        title: `${titleCase(slug)} — noticed on your site`,
+        title: `${titleCase(slug)} - noticed on your site`,
         reason: s?.reason || undefined,
         targetSlug: slug,
         confidence: detected ? "confirmed" : "likely",
@@ -109,7 +109,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
     }
   }
 
-  // 3. Connect channels — EVERY detected channel GOTCHA can operate becomes a
+  // 3. Connect channels - EVERY detected channel GOTCHA can operate becomes a
   //    rec, so skipping any at the end (Movement 9) loses nothing; each persists
   //    as a living recommendation. The AI-recommended channel ranks highest.
   const PRIMARY_CH = new Set(["whatsapp", "instagram", "facebook", "messenger", "telegram", "email", "phone"]);
@@ -142,7 +142,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
   }
 
   // Live web chat: if the scan found no chat widget on the site, recommend
-  // GOTCHA's own embedded web chat — a real, connectable surface. This is the
+  // GOTCHA's own embedded web chat - a real, connectable surface. This is the
   // "add live chat" journey mission; skipping it during onboarding loses nothing.
   const hasSiteChat = detectedChannels.some((c: any) => String(c?.type || "").toLowerCase() === "website_chat");
   if (!hasSiteChat) {
@@ -150,7 +150,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
       dedupeKey: "channel:webchat",
       kind: "connect_channel",
       title: "Add live chat to your website",
-      reason: "No live-chat widget was found on your site — GOTCHA's web chat lets visitors talk to your AI employee right on the page.",
+      reason: "No live-chat widget was found on your site - GOTCHA's web chat lets visitors talk to your AI employee right on the page.",
       action: "connect_channel:webchat",
       targetSlug: "webchat",
       confidence: "likely",
@@ -189,7 +189,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
     });
   }
 
-  // 6. Workflows / automations — the fifth recommendation domain. Grounded in a
+  // 6. Workflows / automations - the fifth recommendation domain. Grounded in a
   //    real detected signal so it's a genuine suggestion, never generic filler.
   const platformSlug = String(report?.technology?.platform?.slug || "").toLowerCase();
   const STORE_PLATFORMS = new Set(["shopify", "woocommerce", "magento", "bigcommerce", "prestashop", "wix_stores", "ecwid"]);
@@ -198,7 +198,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
       dedupeKey: "workflow:order_status",
       kind: "setup_workflow",
       title: "Automate “where’s my order?” replies",
-      reason: "You’re on a store platform — order-status questions are your most common and most automatable.",
+      reason: "You’re on a store platform - order-status questions are your most common and most automatable.",
       action: "workflow:order_status",
       confidence: "likely",
       priority: 35,
@@ -209,7 +209,7 @@ export function buildDesiredRecommendations(report: any): DesiredRec[] {
       dedupeKey: "workflow:lead_followup",
       kind: "setup_workflow",
       title: "Auto follow-up with new leads",
-      reason: "A sales employee pays off fastest when no new lead goes cold — automate the first follow-up.",
+      reason: "A sales employee pays off fastest when no new lead goes cold - automate the first follow-up.",
       action: "workflow:lead_followup",
       confidence: "likely",
       priority: 33,
@@ -273,7 +273,7 @@ export async function syncDiscoveryRecommendations(tenantId: string, report: any
 
 /**
  * Reconcile connect_system recs against reality: any OPEN "Connect X" whose
- * integration is already CONNECTED is fulfilled — complete it so the list the
+ * integration is already CONNECTED is fulfilled - complete it so the list the
  * customer sees never asks for something they already did. Cheap (one query),
  * called on every recommendations read. Best-effort, never throws.
  */
@@ -322,7 +322,7 @@ export async function setRecommendationStatus(tenantId: string, id: string, stat
 // When the owner connects their source-of-truth system, a NEW class of concrete
 // next steps becomes possible (I can now look up orders, recognize customers,
 // import the catalog). We write these as `source:"store_inspection"` recs so
-// they surface post-onboarding on the /business hub — the twin keeps producing
+// they surface post-onboarding on the /business hub - the twin keeps producing
 // value as the account matures, not just once during setup. Idempotent and
 // never-resurrect, exactly like the discovery recs.
 const INSPECT_STORE_SLUGS = new Set(["shopify", "woocommerce", "magento", "bigcommerce", "prestashop", "wix_stores", "ecwid"]);
@@ -334,11 +334,11 @@ export async function addStoreInspectionRecs(tenantId: string, slug: string): Pr
     const name = titleCase(s);
     const desired: DesiredRec[] = INSPECT_STORE_SLUGS.has(s)
       ? [
-          { dedupeKey: `inspect:${s}:orders`, kind: "setup_workflow", title: "Automate “where’s my order?” replies", reason: `${name} is connected — I can look up orders and answer status questions myself.`, action: "workflow:order_status", confidence: "confirmed", priority: 88 },
+          { dedupeKey: `inspect:${s}:orders`, kind: "setup_workflow", title: "Automate “where’s my order?” replies", reason: `${name} is connected - I can look up orders and answer status questions myself.`, action: "workflow:order_status", confidence: "confirmed", priority: 88 },
           { dedupeKey: `inspect:${s}:catalog`, kind: "import_knowledge", title: `Import your ${name} product catalog`, reason: "Teach me your products so I answer questions about them accurately.", action: "import:catalog", confidence: "likely", priority: 60 },
         ]
       : [
-          { dedupeKey: `inspect:${s}:recognize`, kind: "setup_workflow", title: `Recognize every customer from ${name}`, reason: `${name} is connected — I can greet returning customers by name and pull their history.`, action: "workflow:recognize_customer", confidence: "confirmed", priority: 86 },
+          { dedupeKey: `inspect:${s}:recognize`, kind: "setup_workflow", title: `Recognize every customer from ${name}`, reason: `${name} is connected - I can greet returning customers by name and pull their history.`, action: "workflow:recognize_customer", confidence: "confirmed", priority: 86 },
           { dedupeKey: `inspect:${s}:followup`, kind: "setup_workflow", title: "Auto follow-up with new leads", reason: "A connected customer system pays off fastest when no new lead goes cold.", action: "workflow:lead_followup", confidence: "likely", priority: 58 },
         ];
 

@@ -1,9 +1,9 @@
 /**
- * CALENDAR runtime — binds the frozen CALENDAR contracts to a concrete
+ * CALENDAR runtime - binds the frozen CALENDAR contracts to a concrete
  * CalendarPort and runs them through the shared resolver.
  *
  * Constraint 1 (single source of truth): every calendar BUSINESS RULE lives here
- * as a verifier over the port's concrete reads — NOT in the port, NOT in the
+ * as a verifier over the port's concrete reads - NOT in the port, NOT in the
  * handlers. The port only does calendar I/O. The contracts declare the rules; the
  * verifiers evaluate them; the resolver enforces them. One rule, one place.
  *
@@ -90,7 +90,7 @@ export async function executeCalendarOperation(
     return { result, trace: captured! };
   } catch (err: any) {
     // A verifier/oracle/strategy READ that throws (e.g. the calendar API is down)
-    // must become an OBSERVABLE FAILED decision with a trace — never an unhandled
+    // must become an OBSERVABLE FAILED decision with a trace - never an unhandled
     // throw into the caller. resolveExecution only emits a trace on a terminal
     // return, so synthesize one here.
     const reason = `runtime_error:${String(err?.message || err)}`;

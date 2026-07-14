@@ -1,5 +1,5 @@
 /**
- * P1-7 — provider retry/backoff + micro-model tier.
+ * P1-7 - provider retry/backoff + micro-model tier.
  */
 
 import { describe, it, expect, vi } from "vitest";
@@ -26,13 +26,13 @@ describe("callWithRetry", () => {
     expect(fn).toHaveBeenCalledTimes(2);
   });
 
-  it("does NOT retry a 400 (non-retryable) — throws immediately", async () => {
+  it("does NOT retry a 400 (non-retryable) - throws immediately", async () => {
     const fn = vi.fn().mockRejectedValue(err(400));
     await expect(callWithRetry(fn, undefined, { baseDelayMs: 1 })).rejects.toThrow("boom");
     expect(fn).toHaveBeenCalledTimes(1);
   });
 
-  it("does NOT retry a user abort — throws immediately", async () => {
+  it("does NOT retry a user abort - throws immediately", async () => {
     const fn = vi.fn().mockRejectedValue(err(undefined, "APIUserAbortError"));
     await expect(callWithRetry(fn, undefined, { baseDelayMs: 1 })).rejects.toThrow();
     expect(fn).toHaveBeenCalledTimes(1);

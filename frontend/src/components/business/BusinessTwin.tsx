@@ -3,7 +3,7 @@
 // The Digital Twin, as a PERMANENT product object.
 //
 // Onboarding's Movement 2 (the executive briefing) was the twin's first render;
-// this component is the twin's permanent home — the same confidence-levelled,
+// this component is the twin's permanent home - the same confidence-levelled,
 // read-first portrait, rendered on the standalone /business page for the life of
 // the account. Discovery + Business Health flow in; corrections and gap-teaching
 // flow back out through the same endpoints onboarding uses, so the twin stays a
@@ -173,7 +173,7 @@ export function BusinessTwin({ he, disc, health, gaps, onCorrect, onTeach }: {
 
       {disc.report && <div className="mt-5 text-[15px] text-gray-700 leading-relaxed whitespace-pre-line">{disc.report}</div>}
 
-      {/* Readiness — the permanent "can I help you yet?" score (Law: living Health). */}
+      {/* Readiness - the permanent "can I help you yet?" score (Law: living Health). */}
       {health && allHealth.length > 0 && (
         <div className="mt-6 p-4 rounded-2xl bg-gray-50 border border-gray-100">
           <div className="flex items-center justify-between mb-2">
@@ -193,7 +193,7 @@ export function BusinessTwin({ he, disc, health, gaps, onCorrect, onTeach }: {
         {/* What you do */}
         <div className="py-3">
           <p className="text-xs font-semibold text-gray-400 uppercase tracking-wide flex items-center gap-2">{he ? "מה אתם עושים" : "What you do"}<ConfidenceChip he={he} c={b.confidence} /></p>
-          <p className="text-[15px] text-gray-700 leading-relaxed mt-1">{b.summary || b.valueProp || "—"}</p>
+          <p className="text-[15px] text-gray-700 leading-relaxed mt-1">{b.summary || b.valueProp || "-"}</p>
           {(b.products || []).length > 0 && (
             <div className="flex flex-wrap gap-1.5 mt-3">{(b.products || []).slice(0, 10).map((p, i) => <span key={i} className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 border border-gray-200 capitalize">{p}</span>)}</div>
           )}
@@ -295,7 +295,7 @@ export function BusinessTwin({ he, disc, health, gaps, onCorrect, onTeach }: {
   );
 }
 
-// ─── Recommendations hub — the living backlog, now with an in-app home ──────
+// ─── Recommendations hub - the living backlog, now with an in-app home ──────
 const KIND_LABEL: Record<string, [string, string]> = {
   hire_employee: ["Hire", "גיוס"],
   connect_system: ["Connect a system", "חיבור מערכת"],
@@ -314,7 +314,7 @@ export function RecommendationsHub({ he, recs, onResolve, onDismiss }: {
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 sm:px-8 py-8" dir={he ? "rtl" : "ltr"}>
       <h2 className="text-xl font-bold text-gray-900 tracking-tight">{he ? "מה שאני ממליץ" : "What I recommend"}</h2>
-      <p className="text-sm text-gray-500 mt-1">{he ? "רשימה חיה — מתעדכנת ככל שאני לומד. חצו כל דבר שכבר טיפלתם בו." : "A living list — it keeps working as I learn. Nothing here is ever lost."}</p>
+      <p className="text-sm text-gray-500 mt-1">{he ? "רשימה חיה - מתעדכנת ככל שאני לומד. חצו כל דבר שכבר טיפלתם בו." : "A living list - it keeps working as I learn. Nothing here is ever lost."}</p>
       {sorted.length === 0 ? (
         <div className="py-8 text-sm text-gray-500">{he ? "אין המלצות פתוחות כרגע. עבודה יפה 🎉" : "No open recommendations right now. Nice work 🎉"}</div>
       ) : (

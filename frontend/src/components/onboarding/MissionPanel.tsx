@@ -11,6 +11,13 @@ const HIDE_KEY = "onboarding.missions.hidden";
 const POLL_MS = 30_000;
 const TOTAL = 4;
 
+// Module-level cache: the Sidebar (and this panel) remount on EVERY page
+// navigation, and starting from null made the panel disappear and pop back
+// in on each click - the menu looked like it was "refreshing". The module
+// survives SPA navigations, so remounts paint the last known missions
+// instantly and the fetch below only updates them in the background.
+let cachedMissions: OnboardingMission[] | null = null;
+
 interface Props {
   collapsed: boolean;
 }
@@ -20,7 +27,7 @@ export function MissionPanel({ collapsed }: Props) {
   const { t } = useI18n();
   const router = useRouter();
 
-  const [missions, setMissions] = useState<OnboardingMission[] | null>(null);
+  const [missions, setMissions] = useState<OnboardingMission[] | null>(cachedMissions);
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
@@ -33,6 +40,7 @@ export function MissionPanel({ collapsed }: Props) {
     if (!token || user?.role !== "ADMIN") return;
     try {
       const res = await getOnboardingMissions(token);
+      cachedMissions = res.data.missions;
       setMissions(res.data.missions);
     } catch {
       /* silent - sidebar shouldn't break if endpoint is unavailable */
@@ -213,11 +221,11 @@ export function MissionPanel({ collapsed }: Props) {
         })}
       </ul>
 
-      {/* Bridge to the ledger's permanent home — one "what's next" surface, not
-          two. The full living recommendation backlog + twin live on /business. */}
+      {/* Bridge to the ledger's permanent home - one "what's next" surface, not
+          two. The full living backlog + twin live on /settings/business. */}
       <button
         type="button"
-        onClick={() => router.push("/business")}
+        onClick={() => router.push("/settings/business")}
         className="mt-2.5 w-full text-[11px] font-medium text-primary-600 hover:text-primary-700 text-center py-1"
       >
         {t("onboarding.missions.viewBusiness")}

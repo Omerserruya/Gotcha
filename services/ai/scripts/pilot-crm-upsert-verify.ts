@@ -1,5 +1,5 @@
 /**
- * LIVE SAFE EVIDENCE — UPSERT_CUSTOMER (CRM WRITE) through the CRM connector against the
+ * LIVE SAFE EVIDENCE - UPSERT_CUSTOMER (CRM WRITE) through the CRM connector against the
  * pilot's REAL HubSpot, WITHOUT mutating it. Proves the safe surface + shadow behavior:
  *   - describeWorld sees the real connection
  *   - advisory (shadow) mode → RECOMMENDED, the identity flow NEVER runs (no write)
@@ -28,7 +28,7 @@ async function run(params: Record<string, unknown>, mode: ExecutionMode) {
 }
 
 async function main() {
-  console.log(`\n=== LIVE SAFE EVIDENCE — UPSERT_CUSTOMER (no mutation) ===`);
+  console.log(`\n=== LIVE SAFE EVIDENCE - UPSERT_CUSTOMER (no mutation) ===`);
 
   const world = await CrmCapability.describeWorld({ tenantId: TENANT_ID, conversationId: CONV_ID });
   console.log(`1) describeWorld → "${world.summary}"  ops=[${world.operations.map((o) => o.name).join(",")}]`);

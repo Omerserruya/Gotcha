@@ -1,9 +1,9 @@
 /**
- * LIVE PILOT HARNESS — drives the production Calendar capability through the Agent
+ * LIVE PILOT HARNESS - drives the production Calendar capability through the Agent
  * Loop (the new cognitive kernel) on the real dev DB with the real OpenAI reasoner.
  *
  * This is NOT a test fixture: it exercises the exact production path a bot turn
- * takes when AGENT_LOOP_MODE is on — runAgentLoopForBotTurn → runAgentLoop →
+ * takes when AGENT_LOOP_MODE is on - runAgentLoopForBotTurn → runAgentLoop →
  * assembleOracleFacts (real calendar port) → OpenAI Reasoner → authorize → Capability
  * Runtime → observation → re-read → … → Writer. It then dumps the persisted
  * agent_loop_runs + agent_loop_iterations so we can inspect the emergent workflow.
@@ -24,7 +24,7 @@ import { initAIService } from "../src/services/ai.service";
 import { runAgentLoopForBotTurn } from "../src/services/agent-loop/bot-loop-adapter";
 
 const TENANT_ID = "cmmov5qh10000ltnqm7pmxqzc";
-const AGENT_ID = "cm5aabb73f8d574c5b909ca1e9fcd6a142"; // דניאל — CONNECTED Google Calendar
+const AGENT_ID = "cm5aabb73f8d574c5b909ca1e9fcd6a142"; // דניאל - CONNECTED Google Calendar
 
 async function seedConversation(conversationId: string, incoming: string) {
   // Idempotent + TenantGuard-compliant (every mutation `where` carries tenantId).
@@ -84,14 +84,14 @@ async function main() {
   console.log("toolCallLog:", JSON.stringify(result.toolCallLog, null, 2));
   console.log(`tokens=${result.totalTokens} wall=${wall}ms model=${result.modelUsed}`);
 
-  // Inspect what actually persisted — the observability contract.
+  // Inspect what actually persisted - the observability contract.
   const run = await (prisma as any).agentLoopRun.findFirst({
     where: { conversationId },
     orderBy: { createdAt: "desc" },
   });
   console.log("\n=== PERSISTED RUN (agent_loop_runs) ===");
   if (!run) {
-    console.log("  <none> — RUN DID NOT PERSIST");
+    console.log("  <none> - RUN DID NOT PERSIST");
   } else {
     console.log(`  loopId=${run.loopId} termination=${run.terminationReason} iterations=${run.iterationCount} mode=${run.mode}`);
     console.log(`  provider=${run.provider} model=${run.model} spentUnits=${run.spentUnits} wallMs=${run.wallMs}`);
@@ -108,7 +108,7 @@ async function main() {
       if (it.observation) console.log(`     obs: ${JSON.stringify(it.observation)}`);
     }
     if (iters.length === 0) {
-      console.log("  <none> — ITERATIONS DID NOT PERSIST (FK ordering?) — observability gap");
+      console.log("  <none> - ITERATIONS DID NOT PERSIST (FK ordering?) - observability gap");
     }
   }
 

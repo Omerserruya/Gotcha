@@ -1,17 +1,17 @@
 /**
- * Facts — the Oracle's output: deterministic, authoritative world-state.
+ * Facts - the Oracle's output: deterministic, authoritative world-state.
  *
  * TWO layers, by design (the kernel/domain split):
- *   1. KERNEL facts — universal to EVERY employee regardless of domain: customer
+ *   1. KERNEL facts - universal to EVERY employee regardless of domain: customer
  *      identity, entitlements, billing, permissions, the operation menu, freshness.
  *      The kernel understands these.
- *   2. DOMAIN world — a generic list of per-capability SELF-DESCRIPTIONS. The kernel
+ *   2. DOMAIN world - a generic list of per-capability SELF-DESCRIPTIONS. The kernel
  *      does NOT know what a "calendar" or a "cart" is; it only carries opaque
  *      `CapabilityWorldView`s and passes them to the Reasoner. Adding a capability
- *      (Calendar, CRM, Commerce, Voice, Knowledge…) adds one of these — NO kernel,
+ *      (Calendar, CRM, Commerce, Voice, Knowledge…) adds one of these - NO kernel,
  *      loop, or Reasoner change.
  *
- * The Reasoner may read Facts but may NEVER contradict them — entitlements,
+ * The Reasoner may read Facts but may NEVER contradict them - entitlements,
  * permissions and billing are Facts, never judgments. Money is never negotiable.
  */
 
@@ -23,7 +23,7 @@ export interface OperationParamHint {
   required: boolean;
 }
 
-/** An operation that is genuinely possible AND permitted this turn — the menu. */
+/** An operation that is genuinely possible AND permitted this turn - the menu. */
 export interface AvailableOperation {
   name: string;
   /** One-line business meaning, e.g. "book a confirmed meeting". */
@@ -36,7 +36,7 @@ export interface AvailableOperation {
 export type BillingStatus = "active" | "past_due" | "suspended";
 
 /**
- * A capability's SELF-DESCRIPTION of its current world-state — the only thing the
+ * A capability's SELF-DESCRIPTION of its current world-state - the only thing the
  * kernel knows about any domain. The kernel never interprets `facts`; it carries
  * the whole view and hands it to the Reasoner. Each registered capability produces
  * exactly one of these per tick.
@@ -46,7 +46,7 @@ export interface CapabilityWorldView {
   capability: string;
   /** One-line, LLM-readable statement of the current domain state. */
   summary: string;
-  /** Structured domain facts — opaque to the kernel, read by the Reasoner. */
+  /** Structured domain facts - opaque to the kernel, read by the Reasoner. */
   facts: Record<string, unknown>;
   /** Operations this capability offers RIGHT NOW (its contribution to the menu). */
   operations: AvailableOperation[];
@@ -72,7 +72,7 @@ export interface Facts {
     /** Operations RBAC permits for this principal (the Runtime re-checks). */
     allowedOperations: string[];
   };
-  /** The menu the Reasoner MUST pick from — union of world ops ∩ permitted. */
+  /** The menu the Reasoner MUST pick from - union of world ops ∩ permitted. */
   availableOperations: AvailableOperation[];
 
   // ── DOMAIN world (generic; the kernel does not know these domains) ──

@@ -1,5 +1,5 @@
 /**
- * Slice 3C — Calendar Capability END-TO-END MATRIX.
+ * Slice 3C - Calendar Capability END-TO-END MATRIX.
  *
  * Drives the REAL Capability Runtime (resolver + verifiers + calendar.runtime +
  * the 3C dispatch executor + the 3B shadow comparator) over a high-fidelity
@@ -80,7 +80,7 @@ async function run(scenario: string, expected: string, r: ReturnType<typeof cale
   return row;
 }
 
-describe("CALENDAR capability — E2E matrix", () => {
+describe("CALENDAR capability - E2E matrix", () => {
   it("runs the full matrix with correct decisions, no duplicates, no regressions", async () => {
     // 1. Availability lookup
     const avail = calendar({ open: [S1, S2] });

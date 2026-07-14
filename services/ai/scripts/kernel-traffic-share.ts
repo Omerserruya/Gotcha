@@ -1,5 +1,5 @@
 /**
- * MIGRATION METRIC — what share of production bot turns did the Kernel DRIVE (autonomous),
+ * MIGRATION METRIC - what share of production bot turns did the Kernel DRIVE (autonomous),
  * vs shadow (evidence-only, customer saw the legacy brain) vs legacy-only?
  *
  * The headline number for the migration: % of production traffic the Kernel handles.

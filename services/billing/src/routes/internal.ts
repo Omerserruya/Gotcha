@@ -80,7 +80,7 @@ router.post("/internal/billing/refund", async (req, res) => {
   res.status(result.ok ? 200 : 400).json(result);
 });
 
-/** Ops/scheduler hook — process trials, renewals, pending changes, dunning. */
+/** Ops/scheduler hook - process trials, renewals, pending changes, dunning. */
 router.post("/internal/billing/run-cycle", async (_req, res) => {
   const cycle = await runBillingCycle();
   const dunning = await runDunning();
@@ -88,7 +88,7 @@ router.post("/internal/billing/run-cycle", async (_req, res) => {
 });
 
 /**
- * SYSTEM_ADMIN console: provision a card-less POC — a real, ENFORCED
+ * SYSTEM_ADMIN console: provision a card-less POC - a real, ENFORCED
  * subscription with an operator-set credit budget and optional expiry.
  */
 router.post("/internal/billing/setup-poc", async (req, res) => {
@@ -104,7 +104,7 @@ router.post("/internal/billing/setup-poc", async (req, res) => {
   }
 });
 
-/** SYSTEM_ADMIN console: top up credits (PURCHASED bucket — never expires). */
+/** SYSTEM_ADMIN console: top up credits (PURCHASED bucket - never expires). */
 router.post("/internal/billing/grant-credits", async (req, res) => {
   const { tenantId, units, actor } = req.body ?? {};
   if (!tenantId || typeof units !== "number" || units <= 0) {

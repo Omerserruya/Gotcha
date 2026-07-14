@@ -1,16 +1,16 @@
-# Enterprise Readiness Audit — Security, ISO 27001, SOC 2 & GDPR
+# Enterprise Readiness Audit - Security, ISO 27001, SOC 2 & GDPR
 
 > **Type:** Founder-level enterprise-readiness due-diligence audit (Enterprise SaaS Architect + Security lens).
 > **Date:** 2026-07-08 · **Branch:** `feat/customer-intelligence-phase1` (working tree).
 > **Method:** Phase-separated (Audit → Vision → Roadmap → Playbook). Every current-state claim is `file:line`-cited from a direct 2026-07-08 code trace. This is a **defensive** audit of the owner's own codebase.
 > **Relationship to prior docs:** the `docs/security/` corpus (`SECURITY_ARCHITECTURE.md`, `THREAT_MODEL.md`, `SECURITY_FINDINGS.md` F-001…F-022, `SECURITY_SCORECARD.md`, all dated 2026-05-26) covered an **AI-hardening pass** and **predate the entire onboarding/discovery/billing feature set**. This audit re-verifies every major F-finding against the current tree and adds the new surface (N-findings). It supersedes the scorecard's "Conditional Ready 7.4/10" verdict, which reflected only the AI-hardening scope.
-> **Constraint honored:** audit only — no code modified.
+> **Constraint honored:** audit only - no code modified.
 
 ---
 
 ## Executive Summary
 
-The AI-security posture the 2026-05-26 docs described is **real and has held up** — prompt-injection sandboxing, output validation, tenant isolation, and cost budgets all survived subsequent feature work — and the scorecard's single blocking item (`.env` committed) is **resolved** (`.env` is gitignored and absent from history). That is genuine progress.
+The AI-security posture the 2026-05-26 docs described is **real and has held up** - prompt-injection sandboxing, output validation, tenant isolation, and cost budgets all survived subsequent feature work - and the scorecard's single blocking item (`.env` committed) is **resolved** (`.env` is gitignored and absent from history). That is genuine progress.
 
 But an enterprise-readiness lens is wider than the AI-hardening scope those docs measured, and on that wider lens the verdict is materially lower: the **new onboarding/discovery feature surface introduced fresh HIGH-severity AppSec holes that were never audited**, the **secrets posture regressed in a new way**, and the **GDPR/SOC2/ISO machinery required for an enterprise deal essentially does not exist.**
 
@@ -19,20 +19,20 @@ But an enterprise-readiness lens is wider than the AI-hardening scope those docs
 > **GOTCHA is a well-hardened AI application and a not-yet-compliant enterprise platform: its prompt/tenant/cost defenses are strong, but a committed service-mesh key, two fail-open trust boundaries (webhook signatures, auth-on-DB-error), an SSRF in the new website crawler, and the total absence of data-subject rights, retention, backups, monitoring, and CI security gates put it Far from GDPR/ISO 27001/SOC 2 Type II.**
 
 **The blocking enterprise-deal issues, ranked:**
-1. **Committed/weak service-mesh & signing secrets** — `"chatcenter-internal-2026"` hardcoded in 32 sites + compose (`internal-auth`/`ai.service.ts:324`/`onboarding.ts:27`; `docker-compose.yml:144,341`); the compose `JWT_SECRET` default is ≥16 chars so it **passes** the F-004 prod guard while being repo-known (`docker-compose.yml:83`). Internal key = ADMIN-on-any-tenant (`auth.ts:23-31`).
-2. **Public role escalation** — `/api/auth/register` accepts client `role` up to SYSTEM_ADMIN (`auth.ts:12`). *(Shared with the entitlements audit.)*
-3. **Webhook signature fail-open** — omitting `x-hub-signature-256` bypasses verification entirely (`webhook.ts:88-95`); forged inbound message injection.
-4. **SSRF in the onboarding crawler** — user-supplied domain fetched with `redirect:follow` and only a `^https?` check; no private-IP/metadata block (`onboarding.ts:1218,1383-1404`).
-5. **No GDPR data-lifecycle machinery** — no erasure, export, consent, or retention (Art. 15/17/20 unmet).
-6. **No CI/CD security gates** — no `.github/` at all: no dependency/secret scanning, no SAST, no change control.
+1. **Committed/weak service-mesh & signing secrets** - `"chatcenter-internal-2026"` hardcoded in 32 sites + compose (`internal-auth`/`ai.service.ts:324`/`onboarding.ts:27`; `docker-compose.yml:144,341`); the compose `JWT_SECRET` default is ≥16 chars so it **passes** the F-004 prod guard while being repo-known (`docker-compose.yml:83`). Internal key = ADMIN-on-any-tenant (`auth.ts:23-31`).
+2. **Public role escalation** - `/api/auth/register` accepts client `role` up to SYSTEM_ADMIN (`auth.ts:12`). *(Shared with the entitlements audit.)*
+3. **Webhook signature fail-open** - omitting `x-hub-signature-256` bypasses verification entirely (`webhook.ts:88-95`); forged inbound message injection.
+4. **SSRF in the onboarding crawler** - user-supplied domain fetched with `redirect:follow` and only a `^https?` check; no private-IP/metadata block (`onboarding.ts:1218,1383-1404`).
+5. **No GDPR data-lifecycle machinery** - no erasure, export, consent, or retention (Art. 15/17/20 unmet).
+6. **No CI/CD security gates** - no `.github/` at all: no dependency/secret scanning, no SAST, no change control.
 7. **No backups/DR, no monitoring/alerting/structured logs.**
 8. **Auth fail-open on DB error** (F-011, unchanged) and **audit log fire-and-forget & mutable** (F-019, unchanged).
 
-**Overall enterprise-readiness score: 4.5/10** — strong AI/app hardening (7.5/10) dragging against near-zero compliance infrastructure (2/10) and two new HIGH AppSec holes. **Not enterprise-ready; a focused P0/P1 closes the exploitable holes and a P2/P3 builds the compliance surface.**
+**Overall enterprise-readiness score: 4.5/10** - strong AI/app hardening (7.5/10) dragging against near-zero compliance infrastructure (2/10) and two new HIGH AppSec holes. **Not enterprise-ready; a focused P0/P1 closes the exploitable holes and a P2/P3 builds the compliance surface.**
 
 ---
 
-# PHASE 1 — CURRENT STATE AUDIT
+# PHASE 1 - CURRENT STATE AUDIT
 
 ## 1.1 Evidence base & method
 
@@ -40,65 +40,65 @@ Direct trace (2026-07-08): `packages/shared/src/{lib/jwt.ts,lib/encryption.ts,mi
 
 ## 1.2 Area-by-area posture
 
-### Tenant isolation — STRONG (improved since docs)
+### Tenant isolation - STRONG (improved since docs)
 
-- Pattern: every table carries `tenantId`; **no DB-level RLS** — correctness depends on each Prisma `where` including `tenantId`. `resolveTenant` makes JWT tenant authoritative for non-admins and rejects rather than silently resolving undefined (`tenant.ts:26-77`).
+- Pattern: every table carries `tenantId`; **no DB-level RLS** - correctness depends on each Prisma `where` including `tenantId`. `resolveTenant` makes JWT tenant authoritative for non-admins and rejects rather than silently resolving undefined (`tenant.ts:26-77`).
 - Sampled >10 routes across auth/conversation/ai/analytics/chatbot: all tenant-scoped. The new onboarding services (`onboarding-state`, `recommendations`, `nudge-engine`, `employee-tuning`) and AI endpoints (`ai-assist.ts:39,70,100`) are all properly scoped.
-- **CHANGED vs docs:** F-002 (cross-tenant `findUnique` long-tail) is **substantially remediated** — `voice-channels.ts` down to 2 id-only lookups, both guarded (`:518-521, 1286-1290`); 21 `tenantId !==` guards now present.
-- **Residual (LOW):** still convention-based — one missed `where` in future code silently leaks; `system.ts:29` deliberately opts the system router out of the tenant guard (by design for SYSTEM_ADMIN).
+- **CHANGED vs docs:** F-002 (cross-tenant `findUnique` long-tail) is **substantially remediated** - `voice-channels.ts` down to 2 id-only lookups, both guarded (`:518-521, 1286-1290`); 21 `tenantId !==` guards now present.
+- **Residual (LOW):** still convention-based - one missed `where` in future code silently leaks; `system.ts:29` deliberately opts the system router out of the tenant guard (by design for SYSTEM_ADMIN).
 
-### Secrets & encryption — MIXED (one fix, one regression)
+### Secrets & encryption - MIXED (one fix, one regression)
 
-- **App-level encryption at rest — GOOD:** AES-256-GCM (`encryption.ts`) for channel tokens (verified on the WhatsApp write path `channels.ts:404`), integrations, connectors, calendar OAuth, Twilio secrets. (Stale schema comment on `ChannelAccount.credentials` — the write path does encrypt.)
-- **JWT (F-004) — FIXED:** `resolveJwtSecret()` throws in prod on missing/<16-char secret (`jwt.ts:12-21`).
-- **F-010 (`.env` committed) — REMEDIATED:** not tracked, not in history, `.gitignore:5-7` excludes it. This was the scorecard's single gating item.
-- **NEW N-1 [CRITICAL] — committed internal-service key:** `"chatcenter-internal-2026"` hardcoded fallback in 32 sites + compose default; grants `role:ADMIN` on any tenant. If unset in prod, the mesh root credential is a public git string.
-- **NEW N-4 [MEDIUM] — weak compose defaults that defeat the F-004 guard:** `JWT_SECRET:-change-me-in-production-min-32-chars!!` is ≥16 chars so it **passes** the prod throw; `SYSTEM_ADMIN_SETUP_SECRET`/`POSTGRES_PASSWORD` similarly weak.
-- **No KMS/Vault** (all env-based). **TLS:** nginx templates have no `listen 443`/`ssl_certificate` — they proxy plain HTTP; the "nginx terminates TLS" claim is **not evidenced in-repo** (presumably an external LB — unverified).
+- **App-level encryption at rest - GOOD:** AES-256-GCM (`encryption.ts`) for channel tokens (verified on the WhatsApp write path `channels.ts:404`), integrations, connectors, calendar OAuth, Twilio secrets. (Stale schema comment on `ChannelAccount.credentials` - the write path does encrypt.)
+- **JWT (F-004) - FIXED:** `resolveJwtSecret()` throws in prod on missing/<16-char secret (`jwt.ts:12-21`).
+- **F-010 (`.env` committed) - REMEDIATED:** not tracked, not in history, `.gitignore:5-7` excludes it. This was the scorecard's single gating item.
+- **NEW N-1 [CRITICAL] - committed internal-service key:** `"chatcenter-internal-2026"` hardcoded fallback in 32 sites + compose default; grants `role:ADMIN` on any tenant. If unset in prod, the mesh root credential is a public git string.
+- **NEW N-4 [MEDIUM] - weak compose defaults that defeat the F-004 guard:** `JWT_SECRET:-change-me-in-production-min-32-chars!!` is ≥16 chars so it **passes** the prod throw; `SYSTEM_ADMIN_SETUP_SECRET`/`POSTGRES_PASSWORD` similarly weak.
+- **No KMS/Vault** (all env-based). **TLS:** nginx templates have no `listen 443`/`ssl_certificate` - they proxy plain HTTP; the "nginx terminates TLS" claim is **not evidenced in-repo** (presumably an external LB - unverified).
 
-### Audit logging — PARTIAL
+### Audit logging - PARTIAL
 
 - `AuditLog` model (`schema.prisma:2568-2586`); AI tool execution + every bot turn write rows (`action-executor.service.ts:688`, `ai-bot.service.ts:3503`); CLAUDE.md "log every AI interaction" is met for the autonomous-bot path.
 - **F-019 UNCHANGED [MEDIUM]:** fire-and-forget; a DB blip loses the evidence (`audit.service.ts:51-54`).
-- **No user-visible audit trail; no retention/immutability/WORM** — ordinary mutable rows (a SOC2/ISO gap).
+- **No user-visible audit trail; no retention/immutability/WORM** - ordinary mutable rows (a SOC2/ISO gap).
 - **Gap:** the two grandfathered auth-side LLM calls log usage but **no audit row** (cross-ref onboarding audit T-6).
 
-### Data lifecycle / GDPR — WEAKEST AREA (largely new territory)
+### Data lifecycle / GDPR - WEAKEST AREA (largely new territory)
 
-- **Retention/TTL cleanup: NONE** — all TTL hits are in-memory caches; no job purges Messages/Conversations/AuditLog/BusinessDiscovery/embeddings. Data retained indefinitely.
-- **Right-to-erasure: NONE** — per-object operational deletes exist (`conversations.ts:188`, tenant-level cascade delete `system.ts:352`), but no endpoint erases a single end-user (by phone/email) across a tenant; no self-service tenant deletion.
-- **Export/portability: NONE for customer data** — only a SYSTEM_ADMIN waitlist CSV (`waitlist.ts:179`).
-- **Consent capture: NONE** — all `consent` hits are OAuth `prompt=consent`; no cookie or message-processing consent anywhere.
-- **PII inventory:** `Message.body`, `Customer`, `Conversation.customerName`, CRM prefetch cache, KB→Qdrant embeddings, `SystemAgentMessage.content`, and **NEW** `BusinessDiscovery` (business emails/phones/WhatsApp/brand voice/free-text report — plaintext JSON, DB-only protection, `schema.prisma:778-813` — N-8).
+- **Retention/TTL cleanup: NONE** - all TTL hits are in-memory caches; no job purges Messages/Conversations/AuditLog/BusinessDiscovery/embeddings. Data retained indefinitely.
+- **Right-to-erasure: NONE** - per-object operational deletes exist (`conversations.ts:188`, tenant-level cascade delete `system.ts:352`), but no endpoint erases a single end-user (by phone/email) across a tenant; no self-service tenant deletion.
+- **Export/portability: NONE for customer data** - only a SYSTEM_ADMIN waitlist CSV (`waitlist.ts:179`).
+- **Consent capture: NONE** - all `consent` hits are OAuth `prompt=consent`; no cookie or message-processing consent anywhere.
+- **PII inventory:** `Message.body`, `Customer`, `Conversation.customerName`, CRM prefetch cache, KB→Qdrant embeddings, `SystemAgentMessage.content`, and **NEW** `BusinessDiscovery` (business emails/phones/WhatsApp/brand voice/free-text report - plaintext JSON, DB-only protection, `schema.prisma:778-813` - N-8).
 - **Subprocessors receiving PII:** OpenAI (every turn), Meta, Twilio, Zoho/HubSpot, Google, Calendly, Qdrant. **No DPA/subprocessor register in-repo.**
 - **Severity: HIGH enterprise/GDPR blocker.**
 
-### AI-specific — STRONG (held up)
+### AI-specific - STRONG (held up)
 
 - Prompt-injection defenses (F-003/F-005/F-007) intact: `sanitizeUntrusted` wired into customer/crm/memory/template/knowledge blocks (`prompt-builder.service.ts:535-544,1346`); output validator + cost budget present.
 - No PII in logs on the hot files; `log-redact.ts` exists.
 - Qdrant tenant filter enforced (`qdrant.service.ts:108`).
 - Residual footgun (unchanged): a tenant that sets all tools ALLOW lets the bot act on injected instructions.
-- **NEW low-risk surface:** the business-discovery LLM ingests attacker-controllable crawled text but only produces a tenant-facing report (not fed to the customer bot's tool loop) — low blast radius, unsanitized.
+- **NEW low-risk surface:** the business-discovery LLM ingests attacker-controllable crawled text but only produces a tenant-facing report (not fed to the customer bot's tool loop) - low blast radius, unsanitized.
 
-### AppSec basics — MIXED, two new HIGH
+### AppSec basics - MIXED, two new HIGH
 
 - **NEW N-3 [HIGH] SSRF:** onboarding `fetchHomepageText`/`fetchPageRaw` fetch a user-supplied domain with `redirect:follow`, only `^https?` validation, **no private-IP/metadata/localhost block** (`onboarding.ts:1218,1383-1404`). Content-type gate limits exfil; the request still fires at internal services / cloud metadata.
-- **NEW N-2 [HIGH] webhook fail-open:** verification runs only `if (signature)` and only `if (appSecret && rawBody)` (`webhook.ts:88-95`) — omit the header, bypass entirely; forged WhatsApp/Meta inbound injection. (Slack path correctly uses `timingSafeEqual`.)
-- Input validation: `zod` in 17 files — not universal; many routes hand-roll checks.
+- **NEW N-2 [HIGH] webhook fail-open:** verification runs only `if (signature)` and only `if (appSecret && rawBody)` (`webhook.ts:88-95`) - omit the header, bypass entirely; forged WhatsApp/Meta inbound injection. (Slack path correctly uses `timingSafeEqual`.)
+- Input validation: `zod` in 17 files - not universal; many routes hand-roll checks.
 - XSS: 3 `dangerouslySetInnerHTML`, all static/safe (no user-data injection).
 - CORS: wildcard scoped only to `/api/embedded-chat` (intentional widget); no broad misconfig.
 - Auth is Bearer-JWT (low CSRF surface); login rate-limited 30/15min but **no lockout/captcha/backoff**.
 - Dependency hygiene: single lockfile; **no `npm audit`/Snyk/Dependabot**.
 - **NEW N-5 [MEDIUM]:** nginx emits no HSTS/CSP/X-Frame-Options/X-Content-Type-Options.
 
-### Ops readiness — WEAK
+### Ops readiness - WEAK
 
 - Logging: `console.*` throughout; **no structured logging/aggregation** (no pino/winston/ELK/Datadog).
 - Health checks: present in `docker-compose.prod.yml`.
 - **NEW N-9: no postgres backup strategy** anywhere (no pg_dump/WAL/barman).
 - Incident response: none. Environment separation: dev/override/prod compose present.
-- **NEW N-7 [MEDIUM]: no `.github/` at all** — no CI, no automated audit, no secret scanning, no SAST.
+- **NEW N-7 [MEDIUM]: no `.github/` at all** - no CI, no automated audit, no secret scanning, no SAST.
 
 ## 1.3 F-finding reconciliation (2026-05-26 → 2026-07-08)
 
@@ -115,14 +115,14 @@ Direct trace (2026-07-08): `packages/shared/src/{lib/jwt.ts,lib/encryption.ts,mi
 | **F-010 `.env` committed** | OPEN (the gate) | **REMEDIATED** | gitignored, not in history |
 | F-011 auth fail-open on DB | Open | **Unchanged** | `auth.ts:47-50` |
 | F-019 audit fire-and-forget | Documented | **Unchanged** | `audit.service.ts:51-54` |
-| F-012/14/15/17 | Roadmap | Not re-verified this pass | — |
+| F-012/14/15/17 | Roadmap | Not re-verified this pass | - |
 
 **New since the docs (never audited):** N-1 committed internal key, N-2 webhook fail-open, N-3 SSRF, N-4 weak compose defaults, N-5 missing security headers, N-6 GDPR machinery absent, N-7 no CI gates, N-8 BusinessDiscovery plaintext PII, N-9 no backups; plus the entitlements audit's register-role escalation.
 
 ## 1.4 What works well (do not redesign)
 
-1. **AI prompt-security stack** — sanitizer + output validator + cost budget. Category-leading for a platform this age. Keep.
-2. **Tenant-isolation pattern + the F-002 cleanup** — JWT-authoritative resolveTenant, near-complete guard coverage. Keep; harden with a Prisma middleware backstop (see vision).
+1. **AI prompt-security stack** - sanitizer + output validator + cost budget. Category-leading for a platform this age. Keep.
+2. **Tenant-isolation pattern + the F-002 cleanup** - JWT-authoritative resolveTenant, near-complete guard coverage. Keep; harden with a Prisma middleware backstop (see vision).
 3. **App-level AES-256-GCM for credentials.** Correct. Keep; extend to BusinessDiscovery PII.
 4. **AI-action audit coverage** for the bot path. Keep; fix durability (F-019).
 5. **`.env` remediation.** The one gate closed. Keep it closed.
@@ -133,7 +133,7 @@ Direct trace (2026-07-08): `packages/shared/src/{lib/jwt.ts,lib/encryption.ts,mi
 |---|---|---|
 | **GDPR** | **Far** | No consent, no erasure/export, no retention, no DPA/subprocessor register; AES + isolation are the only present pillars |
 | **SOC 2 Type I** | **Moderate** | Audit log/RBAC/encryption exist; blockers: fire-and-forget mutable audit, no CI change-control, weak/committed secrets, no backup evidence, no monitoring |
-| **SOC 2 Type II** | **Far** | Needs operating-effectiveness over time: automated evidence, alerting, backup/restore tests, vuln mgmt, IR — essentially none |
+| **SOC 2 Type II** | **Far** | Needs operating-effectiveness over time: automated evidence, alerting, backup/restore tests, vuln mgmt, IR - essentially none |
 | **ISO 27001** | **Far** | No ISMS, no risk register beyond these docs, no supplier mgmt, no BCP/DR |
 
 ## 1.6 Scores (0–10)
@@ -154,13 +154,13 @@ Direct trace (2026-07-08): `packages/shared/src/{lib/jwt.ts,lib/encryption.ts,mi
 
 ---
 
-# PHASE 2 — VISION
+# PHASE 2 - VISION
 
-*First principles. The AI/app hardening is strong and stays; the vision is a compliance and trust-boundary surface an enterprise buyer's security team can pass — not a rewrite.*
+*First principles. The AI/app hardening is strong and stays; the vision is a compliance and trust-boundary surface an enterprise buyer's security team can pass - not a rewrite.*
 
 ## 2.1 Trust boundaries fail closed, not open
 
-Every boundary that currently fails open becomes fail-closed with an explicit, monitored exception: webhook signatures **required** (reject unsigned); auth-on-DB-error backed by a Redis liveness cache so a blip doesn't admit a revoked user; the internal service key **required at boot** (no default) and rotated; SSRF closed by an allowlist / private-range block / disabled redirects on every server-side fetch. **Why:** an enterprise security review fails the moment it finds one "if the check can't run, allow it" — and this codebase has four.
+Every boundary that currently fails open becomes fail-closed with an explicit, monitored exception: webhook signatures **required** (reject unsigned); auth-on-DB-error backed by a Redis liveness cache so a blip doesn't admit a revoked user; the internal service key **required at boot** (no default) and rotated; SSRF closed by an allowlist / private-range block / disabled redirects on every server-side fetch. **Why:** an enterprise security review fails the moment it finds one "if the check can't run, allow it" - and this codebase has four.
 
 ## 2.2 Secrets have one source and none are in git
 
@@ -172,7 +172,7 @@ A GDPR surface exists as first-class product capability: **erasure** (delete a c
 
 ## 2.4 The platform is observable and recoverable
 
-Structured logging with aggregation and alerting on the security signals the codebase already audits (output-validator blocks, budget aborts, rate-limit 429s, auth anomalies); postgres backups with tested restore; an incident-response runbook. **Why:** SOC 2 Type II is "operating effectiveness over time" — unmeasurable without these.
+Structured logging with aggregation and alerting on the security signals the codebase already audits (output-validator blocks, budget aborts, rate-limit 429s, auth anomalies); postgres backups with tested restore; an incident-response runbook. **Why:** SOC 2 Type II is "operating effectiveness over time" - unmeasurable without these.
 
 ## 2.5 CI is a security gate
 
@@ -180,7 +180,7 @@ Structured logging with aggregation and alerting on the security signals the cod
 
 ## 2.6 What should remain exactly as it is
 
-The prompt-sanitizer/output-validator/cost-budget stack; the JWT-authoritative resolveTenant pattern; AES-256-GCM credential encryption; the AI-action audit coverage; the embedded-chat rate limiters; the Slack `timingSafeEqual` verification (the correct pattern the Meta path should copy). Correct — do not touch for novelty.
+The prompt-sanitizer/output-validator/cost-budget stack; the JWT-authoritative resolveTenant pattern; AES-256-GCM credential encryption; the AI-action audit coverage; the embedded-chat rate limiters; the Slack `timingSafeEqual` verification (the correct pattern the Meta path should copy). Correct - do not touch for novelty.
 
 ## 2.7 What should disappear
 
@@ -188,38 +188,38 @@ The committed internal-key fallbacks; the weak compose defaults; the client-supp
 
 ---
 
-# PHASE 3 — ROADMAP
+# PHASE 3 - ROADMAP
 
 > Sequencing law: **exploitable holes first (P0), fail-closed boundaries + secrets discipline (P1), GDPR/compliance surface (P2), full SOC2/ISO evidence (P3).** No compliance work matters while an unauthenticated forged-message or SSRF path is open.
 
-## P0 — Close the exploitable holes (days)
+## P0 - Close the exploitable holes (days)
 
 **Objective:** nothing an external attacker can trivially exploit remains.
 **Scope:** rotate + require-at-boot the internal service key, delete the 32 fallbacks + weak compose defaults [N-1,N-4]; register server-assigns role [entitlements S-1]; enforce mandatory webhook HMAC, reject unsigned [N-2]; SSRF guard (allowlist + private-range/metadata block + no redirects) on onboarding fetches [N-3]; add security headers (HSTS/CSP/X-Frame-Options/X-Content-Type-Options) [N-5].
 **Business value:** removes the findings a buyer's pentest would flag on day one.
-**Risk:** low-medium — mandatory webhook verification could drop legitimate unsigned traffic (verify all live providers send signatures first); SSRF allowlist must permit legitimate customer domains (block private ranges, not public ones). **Complexity:** S-M. **Dependencies:** none; coordinate with entitlements P0.
+**Risk:** low-medium - mandatory webhook verification could drop legitimate unsigned traffic (verify all live providers send signatures first); SSRF allowlist must permit legitimate customer domains (block private ranges, not public ones). **Complexity:** S-M. **Dependencies:** none; coordinate with entitlements P0.
 **Success criteria:** boot refuses without an internal key; forged unsigned webhook rejected; discovery cannot reach `169.254.169.254`/localhost/private ranges; no client role accepted; headers present.
 **Verification:** unsigned webhook → 401; discovery against a metadata URL → blocked; register elevated role → AGENT; `curl -I` shows headers.
 
-## P1 — Fail-closed boundaries + secrets discipline (2–4 weeks)
+## P1 - Fail-closed boundaries + secrets discipline (2–4 weeks)
 
 **Objective:** no trust boundary fails open; no secret is in git.
 **Scope:** Redis-backed liveness cache to replace auth fail-open [F-011]; durable audit (Redis stream → idempotent Postgres writer) [F-019]; secrets manager (or required-at-boot everywhere) + gitleaks in CI; login lockout/backoff; encrypt BusinessDiscovery PII at rest [N-8]; Prisma tenant-scope middleware backstop.
 **Business value:** the boundaries a security questionnaire probes all pass.
-**Risk:** medium — the liveness cache and audit-stream are new infra; the Prisma backstop must not break intentional cross-tenant SYSTEM_ADMIN reads (exempt the system router). **Complexity:** M. **Dependencies:** P0.
+**Risk:** medium - the liveness cache and audit-stream are new infra; the Prisma backstop must not break intentional cross-tenant SYSTEM_ADMIN reads (exempt the system router). **Complexity:** M. **Dependencies:** P0.
 **Success criteria:** a DB blip no longer admits a revoked user; audit writes survive a DB blip; no committed secret can merge; discovery PII encrypted.
 **Verification:** simulate DB outage → revoked user rejected; kill DB during an audit write → row reconciled from the stream; gitleaks blocks a test secret.
 
-## P2 — The GDPR surface (4–8 weeks)
+## P2 - The GDPR surface (4–8 weeks)
 
 **Objective:** data-subject rights, retention, consent, subprocessor transparency.
 **Scope:** erasure endpoint (delete a customer by identifier across a tenant + embeddings) [N-6]; per-subject/per-tenant export; message-processing + cookie consent capture and enforcement; configurable retention TTL jobs (messages/conversations/discovery/embeddings/audit within legal minimums); subprocessor register + DPA surface; self-service tenant deletion.
 **Business value:** unblocks EU enterprise deals.
-**Risk:** medium-high — erasure must cascade correctly (messages, memory, embeddings, CRM mirror) without orphaning; retention must respect audit-log legal minimums. **Complexity:** L. **Dependencies:** P1 (durable audit, encryption).
+**Risk:** medium-high - erasure must cascade correctly (messages, memory, embeddings, CRM mirror) without orphaning; retention must respect audit-log legal minimums. **Complexity:** L. **Dependencies:** P1 (durable audit, encryption).
 **Success criteria:** a data-subject request is fulfillable end-to-end (erase + export); retention jobs run; consent is captured and honored.
 **Verification:** erase a test customer → gone from Message/Customer/memory/Qdrant; export returns a complete bundle; retention job purges past-TTL rows; consent withdrawal stops processing.
 
-## P3 — SOC 2 / ISO 27001 evidence machinery (quarter+)
+## P3 - SOC 2 / ISO 27001 evidence machinery (quarter+)
 
 **Objective:** operating-effectiveness evidence over time.
 **Scope:** structured logging + aggregation + alerting on the audited security signals; postgres backups with tested restore + DR runbook; incident-response plan; full CI security suite (Dependabot + gitleaks + CodeQL) as required gates; access reviews; the ISMS/risk-register artifacts; TLS termination made explicit and verifiable.
@@ -230,9 +230,9 @@ The committed internal-key fallbacks; the weak compose defaults; the client-supp
 
 ---
 
-# PHASE 4 — IMPLEMENTATION PLAYBOOK (for Claude Sonnet)
+# PHASE 4 - IMPLEMENTATION PLAYBOOK (for Claude Sonnet)
 
-> NO CODE. Backend/shared changes: rebuild images, `nginx -s reload`. **Treat P0 as blocking for the whole roadmap.** **Never** weaken a boundary to "unblock" a test — fix the caller.
+> NO CODE. Backend/shared changes: rebuild images, `nginx -s reload`. **Treat P0 as blocking for the whole roadmap.** **Never** weaken a boundary to "unblock" a test - fix the caller.
 
 ## 4.1 Implementation order
 
@@ -243,7 +243,7 @@ The committed internal-key fallbacks; the weak compose defaults; the client-supp
 
 ## 4.2 Key architecture decisions (made)
 
-- **SSRF guard:** a shared `safeFetch` util (resolve host → reject if private/loopback/link-local/metadata; disable redirects or re-validate each hop; keep the existing content-type + timeout caps) used by both onboarding fetch sites and any future server-side fetch. Do NOT allowlist by domain (customers have arbitrary domains) — **block private ranges, allow public.**
+- **SSRF guard:** a shared `safeFetch` util (resolve host → reject if private/loopback/link-local/metadata; disable redirects or re-validate each hop; keep the existing content-type + timeout caps) used by both onboarding fetch sites and any future server-side fetch. Do NOT allowlist by domain (customers have arbitrary domains) - **block private ranges, allow public.**
 - **Webhook verification:** make signature presence mandatory per provider; copy the Slack `timingSafeEqual` pattern to the Meta path; reject (401) unsigned. Add a per-provider "verification required" flag so a provider that genuinely can't sign is an explicit, logged exception, not a silent bypass.
 - **Auth fail-open replacement:** Redis-backed `isActive` cache (TTL ≈ JWT lifetime); on DB error, read the cache; only if the cache is also unavailable, fail **closed** for privileged roles.
 - **Durable audit:** `logAudit` writes to a Redis stream; a small consumer idempotently writes to Postgres; the row is immutable (append-only; no update path) and retention-tagged.
@@ -277,11 +277,11 @@ The committed internal-key fallbacks; the weak compose defaults; the client-supp
 
 ## 4.7 Regression risks
 
-- **Mandatory webhook verification** could drop live traffic — verify every production provider signs before flipping; ship the per-provider exception flag first.
-- **SSRF guard** could block legitimate customer sites behind CDNs resolving to shared IPs — block only RFC-1918/loopback/link-local/metadata, not public IPs; test against real customer domains.
-- **Auth fail-closed** could lock users out during a DB+Redis double outage — scope fail-closed to privileged roles; keep low-privilege read paths degrade-safe.
-- **Erasure cascade** could orphan or over-delete — dry-run mode + a scoped transaction; verify Qdrant + CRM mirror included.
-- **Retention jobs** could delete audit evidence needed for compliance — enforce a legal-minimum floor.
+- **Mandatory webhook verification** could drop live traffic - verify every production provider signs before flipping; ship the per-provider exception flag first.
+- **SSRF guard** could block legitimate customer sites behind CDNs resolving to shared IPs - block only RFC-1918/loopback/link-local/metadata, not public IPs; test against real customer domains.
+- **Auth fail-closed** could lock users out during a DB+Redis double outage - scope fail-closed to privileged roles; keep low-privilege read paths degrade-safe.
+- **Erasure cascade** could orphan or over-delete - dry-run mode + a scoped transaction; verify Qdrant + CRM mirror included.
+- **Retention jobs** could delete audit evidence needed for compliance - enforce a legal-minimum floor.
 
 ## 4.8 Manual QA checklist
 
@@ -308,7 +308,7 @@ The committed internal-key fallbacks; the weak compose defaults; the client-supp
 ## 4.10 Rollout / rollback
 
 - **Rollout:** P0 immediately, per-service. Webhook mandatory-verification behind a per-provider flag (exception → enforce). SSRF guard is behavior-preserving for public targets → ship directly. Auth fail-closed staged: cache first (observe), then fail-closed for privileged. GDPR/retention behind flags with dry-run first.
-- **Rollback:** security-forward changes (register, internal key, SSRF, webhook) are **fix-forward, not rollback** — a rollback re-opens the hole. Infra/CI additions are inert to revert. Erasure/retention gated by dry-run + flags so they can be disabled without data loss.
+- **Rollback:** security-forward changes (register, internal key, SSRF, webhook) are **fix-forward, not rollback** - a rollback re-opens the hole. Infra/CI additions are inert to revert. Erasure/retention gated by dry-run + flags so they can be disabled without data loss.
 
 ## 4.11 Definition of Done (per phase)
 
@@ -324,6 +324,6 @@ The committed internal-key fallbacks; the weak compose defaults; the client-supp
 - [x] Every current-state claim cited to working-tree `file:line` (2026-07-08).
 - [x] Every major 2026-05-26 F-finding re-verified against current code (§1.3), not assumed: F-010 remediated, F-002 largely remediated, F-011/F-019 unchanged, AI-hardening F-findings hold.
 - [x] New surface (onboarding/discovery/billing) audited fresh: N-1…N-9 with severities.
-- [x] Compliance distance stated honestly per framework (§1.5) — Far for GDPR/ISO/SOC2-II.
+- [x] Compliance distance stated honestly per framework (§1.5) - Far for GDPR/ISO/SOC2-II.
 - [x] Superseded the scorecard's "Conditional Ready 7.4/10" (AI-hardening scope) with a full enterprise-readiness verdict (4.5/10).
 - [x] No code, migrations, or tasks created. Cross-references: register-role escalation + internal key → shared with `docs/architecture/platform-entitlements-audit.md`; discovery SSRF/PII → `docs/product/onboarding-platform-audit.md`; AI-action audit coverage → `docs/product/ai-employee-platform-audit.md`.

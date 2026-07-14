@@ -1,5 +1,5 @@
 /**
- * RBAC seed + backfill — idempotent.
+ * RBAC seed + backfill - idempotent.
  *
  *   seedTenantRoles(tenantId)        seed the 4 built-in system roles + their
  *                                    permission rows from the catalog.
@@ -113,7 +113,7 @@ export async function backfillTenantAssignments(tenantId: string): Promise<numbe
   for (const u of users) {
     if (u.role === "SYSTEM_ADMIN") continue;
     if (u.roleAssignments.length > 0) {
-      // Already has an assignment — if it's an Owner, remember that.
+      // Already has an assignment - if it's an Owner, remember that.
       if (u.roleAssignments.some((a) => a.roleId === roleIds.owner)) ownerAssigned = true;
       continue;
     }

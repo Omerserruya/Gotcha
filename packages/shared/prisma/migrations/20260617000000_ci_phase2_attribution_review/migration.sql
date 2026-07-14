@@ -1,11 +1,11 @@
--- Customer Intelligence V2 — Phase 2: source attribution, examples-driven
+-- Customer Intelligence V2 - Phase 2: source attribution, examples-driven
 -- extraction, per-field confidence thresholds, a migration-safe REVIEW_REQUIRED
 -- scope, and a human-review queue for uncertain updates.
 --
 -- ADDITIVE, non-destructive, idempotent (IF NOT EXISTS / guarded enum ops) so it
 -- is safe over a dev DB that may have been hot-patched via `db push`.
 
--- 1) REVIEW_REQUIRED scope — a field whose true scope is unknown (e.g. backfilled
+-- 1) REVIEW_REQUIRED scope - a field whose true scope is unknown (e.g. backfilled
 --    from legacy summaryFields). The ingest layer NEVER routes it until a human
 --    assigns a real scope. (ADD VALUE IF NOT EXISTS is supported on PG 12+.)
 ALTER TYPE "IntelligenceScope" ADD VALUE IF NOT EXISTS 'REVIEW_REQUIRED';

@@ -7,7 +7,7 @@ const config: Config = {
   theme: {
     extend: {
       colors: {
-        // gray-150 — used throughout the onboarding/business surfaces for a
+        // gray-150 - used throughout the onboarding/business surfaces for a
         // border a hair softer than gray-200. Tailwind's default gray scale has
         // no 150, so without this the classes silently no-op (U-6). Merged into
         // the default gray palette (extend deep-merges), 50-900 preserved.
@@ -34,7 +34,7 @@ const config: Config = {
         panel: "0 1px 2px rgba(0, 0, 0, 0.03), 0 4px 16px rgba(0, 0, 0, 0.04)",
         "inner-glow": "inset 0 1px 0 rgba(255,255,255,0.8)",
       },
-      // Onboarding motion language — one easing family, three entrances.
+      // Onboarding motion language - one easing family, three entrances.
       keyframes: {
         riseIn: {
           "0%": { opacity: "0", transform: "translateY(16px)" },
@@ -53,7 +53,7 @@ const config: Config = {
           "50%": { opacity: "0.65", transform: "scale(0.94)" },
         },
         // Directional movement transitions: forward exits up / enters from
-        // below; back exits down / enters from above — the flow reads as one
+        // below; back exits down / enters from above - the flow reads as one
         // continuous document scrolled in the direction of travel.
         riseDown: {
           "0%": { opacity: "0", transform: "translateY(-16px)" },

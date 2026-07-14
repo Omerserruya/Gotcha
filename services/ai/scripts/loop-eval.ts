@@ -1,5 +1,5 @@
 /**
- * LOOP-EVAL — statistical evaluation of the Agent Loop's BEHAVIOR (not outcomes vs
+ * LOOP-EVAL - statistical evaluation of the Agent Loop's BEHAVIOR (not outcomes vs
  * legacy). Reads persisted agent_loop_runs + agent_loop_iterations and computes, per
  * run, the metrics that tell us whether the loop behaves like an excellent employee:
  *
@@ -10,7 +10,7 @@
  *   stuck loops · repeated operations · unnecessary operations · excessive reasoning ·
  *   early/incorrect termination · hallucinated operations · excessive cost
  *
- * Pure read + aggregate — cheap and re-runnable as the corpus grows. Populate the
+ * Pure read + aggregate - cheap and re-runnable as the corpus grows. Populate the
  * corpus with `loop-replay-batch.ts` (autonomous over simulated connectors).
  *
  *   ... npx tsx scripts/loop-eval.ts [days=90] [mode=all|autonomous|advisory]
@@ -72,7 +72,7 @@ async function main() {
   const where: any = { tenantId: TENANT_ID, createdAt: { gte: since } };
   if (modeFilter !== "all") where.mode = modeFilter;
   const allRuns: any[] = await (prisma as any).agentLoopRun.findMany({ where, orderBy: { createdAt: "desc" } });
-  // Exclude synthetic harness conversations — evaluate only REAL customer traffic.
+  // Exclude synthetic harness conversations - evaluate only REAL customer traffic.
   const SYNTHETIC = /^(pilot-loop|pilot-book|pilot-move|crm-)/;
   const runs = allRuns.filter((r) => !SYNTHETIC.test(String(r.conversationId)));
   const evals: RunEval[] = [];
@@ -83,7 +83,7 @@ async function main() {
 
   const n = evals.length;
   console.log(`\n=== LOOP-EVAL (n=${n} runs, last ${days}d, mode=${modeFilter}) ===`);
-  if (!n) { console.log("no runs — populate with loop-replay-batch.ts"); await prisma.$disconnect(); return; }
+  if (!n) { console.log("no runs - populate with loop-replay-batch.ts"); await prisma.$disconnect(); return; }
 
   // Distributions
   const iterArr = evals.map((e) => e.iterations), unitArr = evals.map((e) => e.units), wallArr = evals.map((e) => e.wallMs);

@@ -1,5 +1,5 @@
 /**
- * PROSPECT STATE — where this person stands relative to the CRM, made explicit
+ * PROSPECT STATE - where this person stands relative to the CRM, made explicit
  * in the prompt so the agent stops behaving the same way for a cold stranger
  * and a paying customer.
  *
@@ -39,13 +39,13 @@ export function computeProspectState(f: CrmStateFlags): ProspectState {
 
 const STATE_GUIDANCE: Record<ProspectState, string> = {
   NEW_PROSPECT:
-    "No CRM record exists for this person yet — you know almost nothing about them. Lead generation is a PRIMARY objective: naturally learn who they are, how to reach them, and what they need — enough to create a lead. Do not let them leave as an anonymous stranger.",
+    "No CRM record exists for this person yet - you know almost nothing about them. Lead generation is a PRIMARY objective: naturally learn who they are, how to reach them, and what they need - enough to create a lead. Do not let them leave as an anonymous stranger.",
   KNOWN_CONTACT:
-    "They're already a known contact/lead. Don't re-collect identity you already have — reference it naturally and move the relationship forward toward qualification or a meeting.",
+    "They're already a known contact/lead. Don't re-collect identity you already have - reference it naturally and move the relationship forward toward qualification or a meeting.",
   OPEN_OPPORTUNITY:
-    "There's an open opportunity. Drive it forward — advance the deal toward its next milestone (meeting, proposal, decision).",
+    "There's an open opportunity. Drive it forward - advance the deal toward its next milestone (meeting, proposal, decision).",
   CUSTOMER:
-    "This is an existing customer. Lead with their success; focus on retention, value, and relevant expansion — not basic lead capture.",
+    "This is an existing customer. Lead with their success; focus on retention, value, and relevant expansion - not basic lead capture.",
 };
 
 /** Render the # Prospect State block for BLOCK 5. */

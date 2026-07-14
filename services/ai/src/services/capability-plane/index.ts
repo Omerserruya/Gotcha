@@ -1,10 +1,10 @@
 /**
- * Capabilities — registration entry point. Registers the built-in DOMAIN
+ * Capabilities - registration entry point. Registers the built-in DOMAIN
  * capabilities once per process. The Agent Loop / Oracle assembler call
  * `ensureCapabilitiesRegistered()` before use; it is idempotent and cheap.
  *
  * Adding a domain capability = import it here and register it. Nothing else
- * changes. Kernel truth (identity, billing, permissions) is NOT a capability —
+ * changes. Kernel truth (identity, billing, permissions) is NOT a capability -
  * the Oracle assembler reads it directly.
  */
 
@@ -19,9 +19,9 @@ let registered = false;
 export function ensureCapabilitiesRegistered(): void {
   if (registered) return;
   registerCapability(CalendarCapability); // self-describing world + executor + policy
-  registerCapability(CrmCapability); // wraps getCrmAdapter() — kernel unchanged
-  registerCapability(KnowledgeCapability); // wraps the production RAG — kernel unchanged
-  registerCapability(CustomCapability); // tenant-defined API/DB tools — kernel unchanged
+  registerCapability(CrmCapability); // wraps getCrmAdapter() - kernel unchanged
+  registerCapability(KnowledgeCapability); // wraps the production RAG - kernel unchanged
+  registerCapability(CustomCapability); // tenant-defined API/DB tools - kernel unchanged
   // Future: registerCapability(CommerceCapability), …
   registered = true;
 }

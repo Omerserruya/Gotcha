@@ -1,12 +1,12 @@
 /**
- * Company Context — the employer identity every agent inherits from its tenant.
+ * Company Context - the employer identity every agent inherits from its tenant.
  *
  * An AI employee must know WHO it works for and WHAT that company does/sells,
  * in EVERY conversation, without per-agent authoring. Previously the prompt only
  * rendered the agent's own name + role ("You are דניאל, a sales representative"),
  * so the agent did generic discovery ("tell me about your business") instead of
  * representing the company. This reads the tenant's onboarding `BusinessProfile`
- * (organizationName, businessDescription, industry, website) — already captured —
+ * (organizationName, businessDescription, industry, website) - already captured -
  * and exposes it for a stable, cache-safe `# Company` prompt block.
  *
  * Per-agent `salesContext` (what we sell / ICP / qualification) layers ON TOP of
@@ -24,7 +24,7 @@ export interface CompanyContext {
 
 /**
  * Load the tenant's company context from its BusinessProfile. Returns null when
- * no profile exists or it has no organization name. Never throws — on error the
+ * no profile exists or it has no organization name. Never throws - on error the
  * agent simply runs without the company block (degrades, doesn't break).
  */
 export async function getCompanyContext(tenantId: string): Promise<CompanyContext | null> {

@@ -1,5 +1,5 @@
 /**
- * BOOK_MEETING write-path shadow evidence — isolates every persisted kernel iteration
+ * BOOK_MEETING write-path shadow evidence - isolates every persisted kernel iteration
  * whose proposedOperation is a calendar WRITE and scores it deterministically from the
  * Runtime trace. Also checks, per loop, whether a would-execute BOOK that SKIPPED the
  * `time_genuinely_open` SHOULD was preceded by a CHECK_AVAILABILITY in the same loop
@@ -56,7 +56,7 @@ async function main() {
   console.log(`\n=== AUTONOMOUS-READINESS GATE (BOOK_MEETING) ===`);
   console.log(`  open-check skipped WITHOUT a prior CHECK in-loop (real double-book risk): ${skipNoCheck}`);
   console.log(`  open-check skipped WITH a prior CHECK in-loop (redundant, safe):          ${skipAfterCheck}`);
-  console.log(`  VERDICT: ${skipNoCheck === 0 ? "no unguarded books — BOOK_MEETING write-path SAFE for autonomous" : "harden check-before-book before autonomous flip"}`);
+  console.log(`  VERDICT: ${skipNoCheck === 0 ? "no unguarded books - BOOK_MEETING write-path SAFE for autonomous" : "harden check-before-book before autonomous flip"}`);
   await prisma.$disconnect();
 }
 main().catch(async (e) => { console.error("BOOK-EVIDENCE FAILED:", e); await prisma.$disconnect(); process.exit(1); });

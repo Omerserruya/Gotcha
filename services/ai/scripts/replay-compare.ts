@@ -1,11 +1,11 @@
 /**
- * REPLAY-COMPARE — production-evidence harness for the legacy→kernel migration.
+ * REPLAY-COMPARE - production-evidence harness for the legacy→kernel migration.
  *
  * Runs the new brain (Agent Loop) in DRY-RUN SHADOW over REAL historical
  * conversations (real customer messages, real calendar/CRM state) and compares its
  * decision against the RECORDED historical ground truth (did legacy actually book?
  * what is the conversation's terminal state?). NO legacy re-execution, NO real
- * writes — advisory/dry-run means every write resolves to RECOMMENDED, so replaying
+ * writes - advisory/dry-run means every write resolves to RECOMMENDED, so replaying
  * real conversations is side-effect-free and safe.
  *
  * Purpose: accumulate confidence that the kernel behaves correctly under real
@@ -29,7 +29,7 @@ const AGENT_ID = "cm5aabb73f8d574c5b909ca1e9fcd6a142"; // דניאל
 
 // Real historical conversations for the pilot agent (sampled: booking/sales intent).
 const CONVERSATION_IDS = [
-  "cmqp707u0003vikr89imvy189", // ends "see you at the meeting" — HAS booking (ground truth +)
+  "cmqp707u0003vikr89imvy189", // ends "see you at the meeting" - HAS booking (ground truth +)
   "cmqnyj0el00imvyxmbqpk4xfk", // "email …, let's book Saturday 10:00"
   "cmqnya1o400hyvyxmpppvjy34", // "no need for the team, let's book today 10:00"
   "cmqo4v6r9002ld010f0hh9he8", // "tomorrow morning, my email test.heb@…"
@@ -73,14 +73,14 @@ function classify(loopOps: string[], loopTermination: string, hadBooking: boolea
 
   if (hadBooking) {
     // Legacy booked. The kernel should either recognize the booking (finish/converse)
-    // or still be driving toward it — but NOT escalate or stall confused.
+    // or still be driving toward it - but NOT escalate or stall confused.
     if (loopTermination === "escalate") return { agreement: "DIVERGE", flag: "legacy booked but kernel ESCALATED" };
     if (proposedBook) return { agreement: "ALIGN", flag: "kernel also books (idempotent store should dedupe)" };
     return { agreement: "ALIGN", flag: "kernel recognizes/continues around existing booking" };
   }
   // No booking historically.
   if (drivesToBooking) return { agreement: "ALIGN", flag: "kernel drives toward booking (no legacy booking to compare)" };
-  if (loopTermination === "escalate") return { agreement: "REVIEW", flag: "kernel escalated — verify appropriateness" };
+  if (loopTermination === "escalate") return { agreement: "REVIEW", flag: "kernel escalated - verify appropriateness" };
   return { agreement: "ALIGN", flag: `kernel ${loopTermination} (asked/converse)` };
 }
 

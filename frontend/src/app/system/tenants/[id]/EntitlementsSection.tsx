@@ -1,9 +1,9 @@
 "use client";
 
 /**
- * Entitlements, credits & POC — the special-tenant admin surface.
+ * Entitlements, credits & POC - the special-tenant admin surface.
  *
- * Feature LICENSING (what this tenant's contract allows) — distinct from the
+ * Feature LICENSING (what this tenant's contract allows) - distinct from the
  * raw feature flags: toggling a domain here writes a TenantEntitlement
  * OVERRIDE, which materializes into the permission resolver, so the tenant's
  * workspace UI hides/shows that area within ~30s (permission cache TTL).
@@ -42,7 +42,7 @@ const DOMAIN_LABEL: Record<string, string> = {
 };
 
 function fmtUnits(n: number | undefined | null): string {
-  if (n == null) return "—";
+  if (n == null) return "-";
   return Number(n).toLocaleString(undefined, { maximumFractionDigits: 1 });
 }
 
@@ -83,7 +83,7 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
     try {
       await updateSystemTenantEntitlement(token, tenantId, row.key, !row.enabled);
       setDomains((prev) => (prev || []).map((d) => (d.key === row.key ? { ...d, enabled: !row.enabled, source: "OVERRIDE" } : d)));
-      onMessage(`${DOMAIN_LABEL[row.key] || row.key} ${row.enabled ? "disabled" : "enabled"} — workspace UI updates within ~30s`);
+      onMessage(`${DOMAIN_LABEL[row.key] || row.key} ${row.enabled ? "disabled" : "enabled"} - workspace UI updates within ~30s`);
     } catch (e: any) {
       onMessage(e?.message || "Failed to update entitlement", "error");
     } finally {
@@ -163,7 +163,7 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
         <div className="rounded-lg bg-gray-50 border border-gray-100 p-3">
           <p className="text-[10px] uppercase tracking-wide text-gray-400 font-semibold">Budget used</p>
           <p className={clsx("text-sm font-semibold mt-1", consumedPct == null ? "text-gray-400" : consumedPct >= 100 ? "text-red-600" : consumedPct >= 80 ? "text-amber-600" : "text-gray-800")}>
-            {consumedPct == null ? "—" : `${consumedPct}%`}
+            {consumedPct == null ? "-" : `${consumedPct}%`}
           </p>
           <p className="text-[10px] text-gray-400 mt-0.5">of {fmtUnits(allowance)} allowance</p>
         </div>
@@ -183,7 +183,7 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
       {/* POC form */}
       {pocOpen && (
         <div className="rounded-xl border border-primary-200 bg-primary-50/40 p-4 space-y-3">
-          <p className="text-sm font-semibold text-gray-800">POC / pilot — free, no card, credits enforced</p>
+          <p className="text-sm font-semibold text-gray-800">POC / pilot - free, no card, credits enforced</p>
           <div className="grid md:grid-cols-2 gap-3">
             <label className="block text-xs text-gray-600">
               Credit budget (AI units)
@@ -191,7 +191,7 @@ export function EntitlementsSection({ tenantId, onMessage }: Props) {
                 className="mt-1 w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-primary-300" />
             </label>
             <label className="block text-xs text-gray-600">
-              Expires (optional — access revokes after)
+              Expires (optional - access revokes after)
               <input type="date" value={pocExpiry} onChange={(e) => setPocExpiry(e.target.value)}
                 className="mt-1 w-full px-3 py-2 text-sm bg-white border border-gray-200 rounded-lg outline-none focus:ring-1 focus:ring-primary-300" />
             </label>

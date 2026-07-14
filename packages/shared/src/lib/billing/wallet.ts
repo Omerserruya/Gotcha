@@ -1,5 +1,5 @@
 /**
- * AI-Unit wallet — append-only ledger + lot model.
+ * AI-Unit wallet - append-only ledger + lot model.
  *
  *   • INCLUDED  units: the monthly plan allotment. Expire at renewal
  *                      (use-it-or-lose-it). One lot per billing period.
@@ -122,7 +122,7 @@ async function refreshSnapshot(
   client: Tx,
 ): Promise<void> {
   // A PURCHASED grant carries no periodKey. Without this fallback we'd derive
-  // the INCLUDED balance against a null period — counting ZERO included lots and
+  // the INCLUDED balance against a null period - counting ZERO included lots and
   // wiping the tenant's remaining monthly allowance from the snapshot. Preserve
   // the current period (and allowance) from the existing snapshot when the
   // caller didn't supply one, so a purchase only ADDS purchased units.
@@ -300,7 +300,7 @@ export async function rolloverIncluded(
 /**
  * Claw back PURCHASED units from a refunded/charged-back purchase. Reduces the
  * lots granted under `referenceId` (the purchase invoice id) by whatever is
- * still REMAINING — already-consumed units cannot be un-spent, and balance never
+ * still REMAINING - already-consumed units cannot be un-spent, and balance never
  * goes negative. Writes a REFUND ledger entry per lot for auditability. Returns
  * the total units reclaimed.
  */

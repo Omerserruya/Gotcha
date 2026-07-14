@@ -1,10 +1,10 @@
 /**
- * Booking fail-safe — runtime enforcement that an agent which CANNOT book a
+ * Booking fail-safe - runtime enforcement that an agent which CANNOT book a
  * meeting never commits to a date/time (or implies a booking is possible/done).
  *
  * The validated booking path is `schedule_meeting`, surfaced only when calendar
  * capability is CALENDAR_CONNECTED_AND_BOOKABLE. When it is NOT, prompt text
- * alone is insufficient (the model still free-texts "Saturday works") — so the
+ * alone is insufficient (the model still free-texts "Saturday works") - so the
  * bot detects a booking commitment in the draft reply and regenerates ONCE with
  * a corrective, mirroring the passive-closer gate.
  *
@@ -14,22 +14,22 @@
  */
 
 /** Phrases where the assistant commits to / proposes a concrete meeting time or
- * day, or implies a booking happened. Heuristic but intentionally eager — it
+ * day, or implies a booking happened. Heuristic but intentionally eager - it
  * only gates the NOT-bookable state, where committing to a time is always wrong,
  * so a rewrite-to-follow-up is a safe outcome even on a loose match. */
 const BOOKING_COMMITMENT_PATTERNS: RegExp[] = [
-  // English — agreeing to / proposing a time or day
+  // English - agreeing to / proposing a time or day
   /\b(sounds good|great|perfect|works for me|that works|works for you)\b[^.!?\n]*\b(book|schedul|meet|call|slot|time|appointment)\b/i,
   /\b(i'?ll|i will|we'?ll|let'?s)\s+(book|schedule|set\s*up|arrange|lock\s*in|pencil\s+you\s+in|put\s+you\s+(down|in)|go\s+with|do)\b/i,
   /\b(see|meet|talk to)\s+you\s+(on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|next\s+week)\b/i,
   /\b(booked|scheduled|confirmed|locked\s+in|all\s+set)\b[^.!?\n]*\b(for|at|on)\b[^.!?\n]*(\d{1,2}(:\d{2})?\s*(am|pm)?|monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow)\b/i,
   /\b\d{1,2}(:\d{2})?\s*(am|pm)\b[^.!?\n]*\b(works|is\s+good|is\s+fine|confirmed|booked|see\s+you|let'?s)\b/i,
   /\b(monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b[^.!?\n]*\b(works|is\s+good|is\s+fine|perfect|confirmed|see\s+you|let'?s\s+(meet|do|book))\b/i,
-  // English — "all set" / "you're set" / "booked!" / "confirmed for"
+  // English - "all set" / "you're set" / "booked!" / "confirmed for"
   /\b(you'?re|you\s+are|we'?re|we\s+are)\s+all\s+set\b/i,
   /\b(booked|confirmed|locked\s+in|all\s+set)\s*!/i,
   /\b(confirmed|booked|scheduled)\s+(?:you\s+)?for\b/i,
-  // Hebrew — IMPORTANT: JS `\b` is ASCII-only and never matches at a
+  // Hebrew - IMPORTANT: JS `\b` is ASCII-only and never matches at a
   // Hebrew-letter boundary, so `\b`-wrapped Hebrew patterns silently NEVER
   // fire (verified: /\bקבעתי\b/.test("קבעתי לך") === false). All Hebrew
   // patterns here are therefore `\b`-free; they are specific multi-token
@@ -42,7 +42,7 @@ const BOOKING_COMMITMENT_PATTERNS: RegExp[] = [
   /ביום\s+(ראשון|שני|שלישי|רביעי|חמישי|שישי|שבת)[^.!?\n]*(מתאים|בסדר|מעולה|ניפגש|נקבע|נדבר)/,
   /(מצוין|מעולה|נהדר|סבבה|מתאים\s+לי)[^.!?\n]*(ניפגש|נקבע|בשעה\s+\d|נסגר|סגרנו)/,
   /בשעה\s+\d{1,2}[^.!?\n]*(ניפגש|נקבע|מתאים|בסדר|נתראה)/,
-  // "the meeting is locked/closed/set" — the fabricated-booking phrasing that
+  // "the meeting is locked/closed/set" - the fabricated-booking phrasing that
   // slipped past every gate live: "הפגישה מחר ב-16:00 סגורה"
   /(הפגישה|השיחה|המפגש)[^.!?\n]*(סגור[הת]?|נסגר[ה]?|סגרנו|קבוע[ה]?|נקבע[הת]?|מאושר[ת]?|נתאמ[הת]?)/,
   /(סגרנו|סגור[הת]|נסגר[ה])[^.!?\n]*(פגישה|שיחה|מחר|בשעה|ביום)/,
@@ -53,28 +53,28 @@ const BOOKING_COMMITMENT_PATTERNS: RegExp[] = [
 // CLAIM patterns: the assistant asserts a booking is DONE (past/completed),
 // as opposed to merely proposing a time. Used by the bookable-agent
 // fabricated-booking guard so it fires ONLY on a false "it's booked" claim,
-// never on a legitimate "let's schedule — what day?" proposal. `\b`-free for
+// never on a legitimate "let's schedule - what day?" proposal. `\b`-free for
 // Hebrew (see note above).
 const BOOKING_CLAIM_PATTERNS: RegExp[] = [
-  // English — claims a booking already happened
+  // English - claims a booking already happened
   /\b(i'?ve|i\s+have|we'?ve|we\s+have)\s+(booked|scheduled|confirmed|set\s+up)\b/i,
   /\b(you'?re|we'?re|you\s+are|we\s+are)\s+all\s+set\b/i,
   /\b(booked|confirmed|all\s+set|locked\s+in)\s*!/i,
   /\b(booked|confirmed|scheduled|locked\s+in)\b[^.!?\n]*\b(for|at|on|tomorrow)\b/i,
-  // Hebrew — claims DONE
+  // Hebrew - claims DONE
   /(הפגישה|השיחה|המפגש)[^.!?\n]*(סגור[הת]?|נסגר[ה]?|סגרנו|קבוע[ה]?|נקבע[הת]?|מאושר[ת]?|נתאמ[הת]?)/,
   /(סגרנו|נסגר[ה])[^.!?\n]*(פגישה|שיחה|מחר|בשעה|ביום)/,
   /קבעתי[^.!?\n]*(פגישה|שיחה|מחר|בשעה|יום|הכרות|לך)/, // "יום" also covers ליום/ביום
   /קבענו[^.!?\n]*(פגישה|שיחה|מחר|בשעה|יום|הכרות)/, // "יום" also covers ליום/ביום
   /הכל\s+סגור/,
-  // Hebrew — "I managed to schedule", "I scheduled the demo/meeting for ..."
+  // Hebrew - "I managed to schedule", "I scheduled the demo/meeting for ..."
   /הצלחתי\s+לקבוע/, // "I managed to schedule" (the live fabrication that slipped past)
   /קבעתי\s+(לנו\s+)?(את\s+)?(הדמו|הפגישה|הפגישה|השיחה|המפגש)/, // "I scheduled the demo/meeting"
-  // Hebrew — "I sent (you) an invite / invitation"
+  // Hebrew - "I sent (you) an invite / invitation"
   /(שלחתי|נשלח[ה]?|שולח[ת]?)\s+(לך\s+)?(הזמנה|זימון|הזמנת\s+יומן)/,
-  // Hebrew — handing over a meeting/join link ("the link to the meeting is ...")
+  // Hebrew - handing over a meeting/join link ("the link to the meeting is ...")
   /(הקישור|הלינק|קישור|לינק)\s+(ל?פגישה|ל?שיחה|ל?מפגש|להצטרפות|לזום|לדמו)/,
-  // English — "I('ve) sent the invite", "here's the meeting link", "join link/url"
+  // English - "I('ve) sent the invite", "here's the meeting link", "join link/url"
   /\b(i'?ve|i\s+have|we'?ve|we\s+have)\s+sent\b[^.!?\n]*\b(invite|invitation|calendar\s+invite)\b/i,
   /\b(here'?s|here\s+is)\b[^.!?\n]*\b(meeting\s+|join\s+|calendar\s+)?link\b/i,
   /\bjoin\s+(url|link)\b/i,
@@ -95,16 +95,16 @@ export function detectBookingClaim(
 
 // AVAILABILITY-assertion patterns: the assistant states (positively) that a
 // time/day is FREE/AVAILABLE, or offers a concrete slot. A bookable agent must
-// never invent this — availability is only known via a schedule_meeting call.
+// never invent this - availability is only known via a schedule_meeting call.
 // Observed live (omer): "יש לי זמן פנוי ביום שבת" with zero schedule_meeting
 // calls, then flip-flopping. `\b`-free for Hebrew (see note above).
 const AVAILABILITY_ASSERTION_PATTERNS: RegExp[] = [
-  // English — "I have free/available/a slot/an opening"
+  // English - "I have free/available/a slot/an opening"
   /\b(i|we)\s+(have|have\s+got|'?ve\s+got|got)\b[^.!?\n]*\b(free|available|availabilit\w*|open\b|a\s+slot|an?\s+opening|time\s+(slot|available))\b/i,
   /\b(i'?m|we'?re|i\s+am|we\s+are)\s+(free|available|open)\b/i,
   /\b(free|available|open)\b[^.!?\n]{0,30}\b(on\s+)?(monday|tuesday|wednesday|thursday|friday|saturday|sunday|tomorrow|today)\b/i,
   /\bi\s+(have|can\s+offer|can\s+do|could\s+do)\b[^.!?\n]{0,20}\b\d{1,2}(:\d{2})?\s*(am|pm)?\b/i,
-  // Hebrew — "I have free/available time", "I'm free on <day/time>"
+  // Hebrew - "I have free/available time", "I'm free on <day/time>"
   /יש\s+לי\s+(זמן\s+)?(פנוי|זמין)/,
   /אני\s+(פנוי|זמין)/,
   /(פנוי|זמין)\s+(ביום|בשעה|מחר|היום|ב-?\d)/,
@@ -114,7 +114,7 @@ const AVAILABILITY_ASSERTION_PATTERNS: RegExp[] = [
 
 /** True when the reply ASSERTS availability (states a free time/day or offers a
  * concrete slot). Combined with claim/commitment to drive the booking-grounding
- * gate — a bookable agent may only state availability that came from a
+ * gate - a bookable agent may only state availability that came from a
  * schedule_meeting result this turn. */
 export function detectAvailabilityAssertion(
   reply: string | null | undefined,
@@ -198,7 +198,7 @@ export interface RedundantInfoMatch {
 }
 
 /** True when the customer's latest message already supplied an email/phone/time
- * AND the draft reply asks for that same thing — re-asking for what was just
+ * AND the draft reply asks for that same thing - re-asking for what was just
  * given. Returns every redundantly re-asked item. */
 export function detectRedundantInfoRequest(
   incomingMessage: string | null | undefined,
@@ -229,10 +229,10 @@ export function buildRedundantInfoCorrective(items: RedundantInfoItem[]): string
   };
   const list = items.map((i) => label[i]).join(" and ");
   return (
-    `**STOP — you just asked for something the customer ALREADY gave you in their last message: their ${list}.** ` +
+    `**STOP - you just asked for something the customer ALREADY gave you in their last message: their ${list}.** ` +
     `Read their last message carefully. Do NOT ask for the ${list} again. ` +
-    `Rewrite your reply: confirm back exactly what they gave (use the right label — an address with "@" is an EMAIL, not a phone number), ` +
-    `then move forward — collect ONLY what is genuinely still missing, or state the concrete next step. ` +
+    `Rewrite your reply: confirm back exactly what they gave (use the right label - an address with "@" is an EMAIL, not a phone number), ` +
+    `then move forward - collect ONLY what is genuinely still missing, or state the concrete next step. ` +
     `Reply in the customer's language. One move only.`
   );
 }
@@ -261,10 +261,10 @@ export function buildBookingFailsafeCorrective(reason: "no_calendar" | "not_book
       ? "no calendar is connected to you"
       : "your calendar is connected but has no bookable meeting types configured";
   return (
-    `**YOU CANNOT BOOK MEETINGS — do not commit to a time.** ` +
+    `**YOU CANNOT BOOK MEETINGS - do not commit to a time.** ` +
     `Your draft reply agreed to or proposed a specific day/time (or implied a booking), but ${why}, ` +
     `so you have NO way to actually book it. Rewrite your reply: do NOT agree to any date or time and do NOT imply a meeting is or will be booked. ` +
-    `Instead make ONE genuine forward move that you CAN deliver — ask for the best email/phone and their general availability so a team member can follow up to confirm, offer to connect them with a person, or continue qualifying their need. ` +
+    `Instead make ONE genuine forward move that you CAN deliver - ask for the best email/phone and their general availability so a team member can follow up to confirm, offer to connect them with a person, or continue qualifying their need. ` +
     `Reply in the customer's language. One move only.`
   );
 }
@@ -280,11 +280,11 @@ export function buildBookingFailsafeCorrective(reason: "no_calendar" | "not_book
  */
 export function buildFabricatedBookingCorrective(): string {
   return (
-    `**YOU HAVE NOT BOOKED ANYTHING — your draft claims the meeting is booked/locked/confirmed, but no booking tool succeeded this turn.** ` +
+    `**YOU HAVE NOT BOOKED ANYTHING - your draft claims the meeting is booked/locked/confirmed, but no booking tool succeeded this turn.** ` +
     `Stating a meeting is set when it is not is a serious failure (no calendar event exists). ` +
     `If you have the meeting type + an explicit day/time + the customer's email, CALL \`schedule_meeting\` NOW and only confirm AFTER it returns success this turn. ` +
     `If the server proposes alternatives, relay them and ask the customer to pick. ` +
-    `If you are missing the day/time, do NOT claim it's booked — ask for the exact day/time to lock it. ` +
+    `If you are missing the day/time, do NOT claim it's booked - ask for the exact day/time to lock it. ` +
     `Reply in the customer's language. Never imply a booking that did not actually happen.`
   );
 }
@@ -293,17 +293,17 @@ export function buildFabricatedBookingCorrective(): string {
  * Corrective for the booking-grounding gate: the draft asserted a specific time,
  * stated availability, or claimed a booking, but NO `schedule_meeting` call this
  * turn justifies it. Availability and validity (working hours, minimum notice,
- * past times, busy slots) are known ONLY through `schedule_meeting` — the model
+ * past times, busy slots) are known ONLY through `schedule_meeting` - the model
  * must never invent them. Forces the tool so the REAL result drives the reply.
  */
 export function buildBookingGroundingCorrective(): string {
   return (
-    `**STOP — you stated a time, availability, or booking that no tool verified this turn.** ` +
+    `**STOP - you stated a time, availability, or booking that no tool verified this turn.** ` +
     `You do NOT know the calendar yourself: whether a day/time is free, allowed, in the past, or on a non-working day is known ONLY through your calendar tools. ` +
     `Never say a slot is available/booked, agree to a time, or say a day "doesn't work" from your own guessing. ` +
-    `Do this now: to state ANY availability, open time, or working hours — or to propose times — CALL \`check_availability\` and answer ONLY from its result (offer the exact slots it returns, or answer hours from its \`workingHours\`). ` +
+    `Do this now: to state ANY availability, open time, or working hours - or to propose times - CALL \`check_availability\` and answer ONLY from its result (offer the exact slots it returns, or answer hours from its \`workingHours\`). ` +
     `Only once the customer has CHOSEN a concrete slot, CALL \`schedule_meeting\` with that exact time to book it, then confirm the real outcome; if it returns \`needsAvailabilityCheck\`, call \`check_availability\` and offer real slots instead. ` +
-    `If you are missing the day/time or email, do NOT invent availability — ask for what's missing. ` +
+    `If you are missing the day/time or email, do NOT invent availability - ask for what's missing. ` +
     `Reply in the customer's language. One move only.`
   );
 }
@@ -329,7 +329,7 @@ export function buildBookingCapabilityBlock(bookable: boolean): string | null {
   if (bookable) return null;
   return [
     "# Booking Capability",
-    "You currently CANNOT book meetings — no working calendar/booking tool is available to you this conversation.",
+    "You currently CANNOT book meetings - no working calendar/booking tool is available to you this conversation.",
     "",
     "You MAY:",
     "- collect the customer's contact details (email / phone)",
@@ -343,6 +343,6 @@ export function buildBookingCapabilityBlock(bookable: boolean): string | null {
     "- say or imply that you scheduled, booked, or confirmed a meeting",
     "- imply booking is possible right now",
     "",
-    "**When the customer wants to meet / asks for a demo (REQUIRED handoff flow):** acknowledge enthusiastically, then before handing off make sure you have collected BOTH (1) a way to reach them (email or phone) AND (2) their preferred days/times or general availability — ask for whichever is still missing, one at a time. Only once you have contact + availability, tell them a team member will reach out to lock in a time that works. Never invent or confirm a slot, and never hand off having asked for contact but not their availability.",
+    "**When the customer wants to meet / asks for a demo (REQUIRED handoff flow):** acknowledge enthusiastically, then before handing off make sure you have collected BOTH (1) a way to reach them (email or phone) AND (2) their preferred days/times or general availability - ask for whichever is still missing, one at a time. Only once you have contact + availability, tell them a team member will reach out to lock in a time that works. Never invent or confirm a slot, and never hand off having asked for contact but not their availability.",
   ].join("\n");
 }

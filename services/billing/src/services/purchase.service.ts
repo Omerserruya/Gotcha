@@ -1,5 +1,5 @@
 /**
- * AI-Unit purchases — manual and automatic. Purchased Units are PURCHASED-bucket
+ * AI-Unit purchases - manual and automatic. Purchased Units are PURCHASED-bucket
  * lots (never expire, FIFO after included). Auto-purchase respects an enabled
  * flag + a monthly spend ceiling; hitting the ceiling notifies + offers a manual
  * purchase path rather than silently stopping.

@@ -130,7 +130,7 @@ async function resolveFromDb(tenantId: string): Promise<CrmVendor | null> {
 
     // 2. First CONNECTED (or recoverable ERROR) TenantIntegration with a CRM
     //    slug. ERROR is included so an OAuth CRM whose access token merely
-    //    expired still resolves to its real adapter — otherwise it returns the
+    //    expired still resolves to its real adapter - otherwise it returns the
     //    NoOp stub, `integration_create_lead` never surfaces, the adapter is
     //    never used, and the expired token is never refreshed (a deadlock). On
     //    first use the framework refreshes the token and recovers status to

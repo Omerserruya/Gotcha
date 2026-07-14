@@ -1,19 +1,19 @@
 /**
- * Onboarding State — the single source of truth for "where is this tenant in
+ * Onboarding State - the single source of truth for "where is this tenant in
  * onboarding?". One place computes the snapshot (milestones, progress, health,
  * current stage, next recommended action) so the System Admin console, the
  * Nudge Engine's personalization, and the reset flow all agree.
  *
  * Everything here is DERIVED from real product signals (BusinessDiscovery,
  * BusinessProfile, TenantOnboarding, TenantIntegration, ChannelAccount,
- * KnowledgeBase, AIAgent) — never a manual checkbox — so it can never drift
+ * KnowledgeBase, AIAgent) - never a manual checkbox - so it can never drift
  * from reality.
  */
 
 import { prisma } from "@chatcenter/shared";
 
 // Kept in sync with onboarding.ts CORE_SYSTEM_SLUGS (the systems that can be a
-// tenant's customer source-of-truth). Small, stable duplication — see note.
+// tenant's customer source-of-truth). Small, stable duplication - see note.
 export const CORE_SYSTEM_SLUGS = ["hubspot", "salesforce", "zoho_crm", "shopify", "fireberry", "airtable"] as const;
 
 /** Slug of the first CONNECTED + usable core system, or null. Airtable only
@@ -141,7 +141,7 @@ function deriveHealth(f: Facts): OnboardingHealth {
   return "on_track";
 }
 
-/** The "Next Recommended Action" column — a single operator-facing label. */
+/** The "Next Recommended Action" column - a single operator-facing label. */
 export function deriveNextAction(f: Facts): string {
   if (f.status === "ACTIVE") {
     if (!f.aiEmployeeName) return "Create First AI Employee";
@@ -194,7 +194,7 @@ function buildSnapshot(f: Facts): OnboardingSnapshot {
   };
 }
 
-/** Single-tenant snapshot — used by the nudge engine and reset flow. */
+/** Single-tenant snapshot - used by the nudge engine and reset flow. */
 export async function getOnboardingSnapshot(tenantId: string): Promise<OnboardingSnapshot | null> {
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },

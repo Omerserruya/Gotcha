@@ -3,7 +3,7 @@
  * reverses our state; a chargeback (bank-initiated, arrives via webhook) is
  * already final at the provider, so we only reverse our state + protect the
  * business (claw back purchased Units, suspend on dispute). Purchased-Unit
- * clawback reclaims whatever is still unspent — consumed Units can't be undone,
+ * clawback reclaims whatever is still unspent - consumed Units can't be undone,
  * balance never goes negative.
  */
 import { prisma, refundUnitsForReference } from "@chatcenter/shared";
@@ -36,7 +36,7 @@ async function reverse(opts: {
     ({ reclaimed } = await refundUnitsForReference(tenantId, invoice.id, `${opts.kind}:${opts.reason}`));
   }
 
-  // A chargeback is an adversarial signal — suspend the subscription so the AI
+  // A chargeback is an adversarial signal - suspend the subscription so the AI
   // gate refuses service until the dispute is resolved / a new card is added.
   if (opts.kind === "chargeback") {
     const sub = await prisma.subscription.findUnique({ where: { billableEntityId: invoice.billableEntityId } });

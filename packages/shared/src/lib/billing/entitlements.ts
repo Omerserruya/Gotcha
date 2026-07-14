@@ -1,5 +1,5 @@
 /**
- * Entitlement layering — the layer the dossier calls for:
+ * Entitlement layering - the layer the dossier calls for:
  *
  *   Plan defaults (PlanEntitlement)
  *        ⊕  Tenant overrides (TenantEntitlement: OVERRIDE/PROMO/TRIAL/ADDON/BETA)

@@ -1,7 +1,7 @@
 /**
  * Drive Tenant.status from subscription state (coupling-audit point 3): tenant
  * suspension is a CONSEQUENCE of a subscription on its BillableEntity, not of a
- * charge directly. Only toggles ACTIVE↔SUSPENDED — never touches PENDING_*
+ * charge directly. Only toggles ACTIVE↔SUSPENDED - never touches PENDING_*
  * onboarding states. A future multi-tenant account fans one subscription to all
  * its tenants here without any call-site change.
  */

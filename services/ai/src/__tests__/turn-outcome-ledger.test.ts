@@ -9,7 +9,7 @@ import {
   extractExternalRef,
 } from "../services/side-effect-classifier";
 
-describe("TurnOutcomeLedger — monotonic success", () => {
+describe("TurnOutcomeLedger - monotonic success", () => {
   it("a later failure does NOT downgrade a committed action", () => {
     const l = new TurnOutcomeLedger();
     l.record({ semanticKey: "booking|discovery_call|T|a@x.com", tool: "schedule_meeting", kind: "booking", visibility: "customer_facing", status: "committed", externalRef: { type: "gcal_event", id: "evt_abc" }, result: { ok: true } });
@@ -36,7 +36,7 @@ describe("TurnOutcomeLedger — monotonic success", () => {
   });
 });
 
-describe("TurnOutcomeLedger — dedup signal", () => {
+describe("TurnOutcomeLedger - dedup signal", () => {
   it("hasSucceeded() is true for committed AND succeeded_unverified", () => {
     const l = new TurnOutcomeLedger();
     l.record({ semanticKey: "c", tool: "t", kind: "create", visibility: "background", status: "committed", externalRef: { type: "x", id: "1" }, result: { ok: true } });
@@ -49,7 +49,7 @@ describe("TurnOutcomeLedger — dedup signal", () => {
   });
 });
 
-describe("TurnOutcomeLedger — deterministic ordering + visibility", () => {
+describe("TurnOutcomeLedger - deterministic ordering + visibility", () => {
   it("customer-facing committed set is ordered booking before send, excludes background", () => {
     const l = new TurnOutcomeLedger();
     l.record({ semanticKey: "create|lead|a", tool: "create_lead", kind: "create", visibility: "background", status: "committed", externalRef: { type: "crm_record", id: "ld_1" }, result: { ok: true } });
@@ -73,7 +73,7 @@ describe("statusFromResult", () => {
   });
 });
 
-describe("classifySideEffect — derived from existing taxonomy", () => {
+describe("classifySideEffect - derived from existing taxonomy", () => {
   it("classifies built-ins", () => {
     expect(classifySideEffect("schedule_meeting")).toMatchObject({ sideEffect: true, kind: "booking", visibility: "customer_facing" });
     expect(classifySideEffect("integration_create_lead")).toMatchObject({ kind: "create", noun: "lead", visibility: "background" });
@@ -92,7 +92,7 @@ describe("classifySideEffect — derived from existing taxonomy", () => {
   });
 });
 
-describe("semanticKey — stability (ordering / optional / format invariant)", () => {
+describe("semanticKey - stability (ordering / optional / format invariant)", () => {
   it("booking: reordered + format + casing variants collapse to one key", () => {
     const info = classifySideEffect("schedule_meeting");
     const k1 = semanticKey(info, { meeting_type: "discovery_call", requested_at_iso: "2026-06-22T16:30+02:00", customer_email: "noa@x.com", duration_minutes: 15, notes: "a" });
@@ -114,7 +114,7 @@ describe("semanticKey — stability (ordering / optional / format invariant)", (
   });
 });
 
-describe("extractExternalRef — mandatory id for committed", () => {
+describe("extractExternalRef - mandatory id for committed", () => {
   it("pulls eventId for booking, id for create, messageId for send", () => {
     expect(extractExternalRef("booking", { ok: true, eventId: "evt_1" })).toEqual({ type: "gcal_event", id: "evt_1" });
     expect(extractExternalRef("create", { ok: true, result: { id: "ld_1" } })).toEqual({ type: "crm_record", id: "ld_1" });

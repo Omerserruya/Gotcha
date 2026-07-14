@@ -1,5 +1,5 @@
 /**
- * LIVE HITL VERIFICATION — proves the kernel approval gate end-to-end against the
+ * LIVE HITL VERIFICATION - proves the kernel approval gate end-to-end against the
  * REAL policy stack + REAL DB (approval_requests), with a simulated calendar port so
  * no external write can occur. Three checks:
  *   1. 90-min meeting (schedule_meeting policy: on_condition duration>60) →
@@ -74,7 +74,7 @@ async function main() {
   console.log(`  approval required + real row + no event : ${ok1}`);
   console.log(`  idempotent across turns (no dup rows)   : ${ok2}`);
   console.log(`  under-threshold auto-runs (legacy parity): ${ok3}`);
-  console.log(`  → HITL wiring ${ok1 && ok2 && ok3 ? "VERIFIED LIVE ✓" : "NOT verified — inspect above"}`);
+  console.log(`  → HITL wiring ${ok1 && ok2 && ok3 ? "VERIFIED LIVE ✓" : "NOT verified - inspect above"}`);
 
   await cleanup();
   await prisma.$disconnect();

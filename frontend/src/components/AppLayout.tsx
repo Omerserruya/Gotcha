@@ -9,6 +9,7 @@ import { CommandCenterProvider } from "./CommandCenter/CommandCenterProvider";
 import { CommandCenterTrigger } from "./CommandCenter/CommandCenterTrigger";
 import { MobileHeader, MobileBottomNav } from "./MobileNav";
 import { FeatureGuides } from "./onboarding/FeatureGuides";
+import { GuidedTour } from "./onboarding/GuidedTour";
 import { CreditAlertBanner } from "./CreditAlertBanner";
 import { getOnboardingStatus } from "@/lib/api";
 
@@ -134,6 +135,10 @@ export function AppLayout({ children }: { children: React.ReactNode }) {
             Employees, Workflows, or Settings. Skippable + snoozable, state
             stored per-user in the DB. Renders nothing otherwise. */}
         <FeatureGuides />
+        {/* First-run journey - boots once, right after onboarding completes
+            (armed via localStorage "onboarding.launchTour"). Renders nothing
+            otherwise. Was never mounted before, so the tour never appeared. */}
+        <GuidedTour />
       </div>
     </CommandCenterProvider>
   );

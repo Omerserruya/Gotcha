@@ -1,11 +1,11 @@
 /**
- * Working Memory — the Agent Loop's evolving intra-loop scratchpad.
+ * Working Memory - the Agent Loop's evolving intra-loop scratchpad.
  *
  * Distinct from `AgentMemory` (cross-TURN continuity, advisory, fed back next
  * conversation turn). Working Memory is INTRA-LOOP: it is born when a loop starts
  * and dies when it terminates. It captures what the Agent has learned WHILE
- * reasoning toward a goal across iterations — established facts, operations it has
- * tried and ruled out, questions still open, and working hypotheses — so each
+ * reasoning toward a goal across iterations - established facts, operations it has
+ * tried and ruled out, questions still open, and working hypotheses - so each
  * iteration reasons from an accumulating understanding, not a flat replay of the
  * last observation.
  *
@@ -18,7 +18,7 @@
 import type { BusinessOutcome } from "./memory";
 import type { ReasonerDecision } from "./cognition";
 
-/** One completed loop iteration — the episodic trail (deterministic, from observations). */
+/** One completed loop iteration - the episodic trail (deterministic, from observations). */
 export interface IterationTrace {
   iteration: number;
   /** The decision the Reasoner committed this iteration. */
@@ -42,9 +42,9 @@ export interface WorkingMemory {
   goal: BusinessOutcome | null;
   /** World-state truths confirmed DURING the loop (deterministic, from Facts deltas). */
   establishedFacts: string[];
-  /** Operations tried and abandoned — the loop will not re-propose these blindly. */
+  /** Operations tried and abandoned - the loop will not re-propose these blindly. */
   ruledOut: RuledOutOperation[];
-  /** What is still unknown/blocking — sourced from the Reasoner's missingInformation. */
+  /** What is still unknown/blocking - sourced from the Reasoner's missingInformation. */
   openQuestions: string[];
   /** Working beliefs that are NOT Facts (advisory, Reasoner-authored). */
   hypotheses: string[];

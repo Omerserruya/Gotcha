@@ -4,7 +4,7 @@ import { getEffectiveBuiltinRole } from "../lib/permissions";
 /**
  * Map a requested legacy role name to the set of acceptable built-in role keys.
  * This bridges the coarse `Role` enum gates (used across all services) onto the
- * new assignment model, so a user's ASSIGNED role governs access everywhere —
+ * new assignment model, so a user's ASSIGNED role governs access everywhere -
  * e.g. a user with the "Admin" built-in role passes requireRole("ADMIN") even
  * if their legacy enum is still AGENT.
  *

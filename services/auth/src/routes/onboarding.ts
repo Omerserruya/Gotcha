@@ -4,7 +4,7 @@ import * as crypto from "crypto";
 import { promises as dns } from "dns";
 import * as bcrypt from "bcryptjs";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits } from "@chatcenter/shared";
-import { sendActivationConfirmation, createMagicLink, sendOnboardingInvite, sendTeammateInvite } from "../services/notification.service";
+import { sendActivationConfirmation, createMagicLink, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
@@ -14,7 +14,7 @@ const BILLING_SERVICE_URL = process.env.BILLING_SERVICE_URL || "http://billing:4
 
 /**
  * fetch() with a hard timeout (T-3). A hung AI or billing hop must never hang
- * an onboarding request — we abort after `ms` and surface it as an ordinary
+ * an onboarding request - we abort after `ms` and surface it as an ordinary
  * network failure the callers already handle (null / thrown Error).
  */
 async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000): Promise<globalThis.Response> {
@@ -31,7 +31,7 @@ async function fetchWithTimeout(url: string, init: RequestInit, ms = 20000): Pro
  * Provision the billing BillableEntity for a freshly-activated tenant. The
  * trial itself starts later, when the admin adds a card on file (card-before-
  * trial: billing's payment-methods route auto-starts the trial on first card).
- * Best-effort — billing is a soft dependency, so a failure here is logged but
+ * Best-effort - billing is a soft dependency, so a failure here is logged but
  * never blocks tenant activation. Idempotent (ensure-entity is a no-op if the
  * entity already exists).
  */
@@ -79,11 +79,11 @@ const RECOMMENDATION_ROLE: Record<string, string> = {
 };
 
 /**
- * "Bring them on board" — create the actual AIAgent for the recommended
+ * "Bring them on board" - create the actual AIAgent for the recommended
  * employee by REUSING the existing config generator, then rename it so the
  * employee that joins is the exact one the owner just met in Movement 7.
  *
- * Generation is deterministic (no LLM — pure static mapping over the confirmed
+ * Generation is deterministic (no LLM - pure static mapping over the confirmed
  * BusinessProfile), so this is cheap enough to run synchronously on activation:
  * the employee genuinely EXISTS the moment the owner lands, which is the whole
  * point ("it already joined the company", not "now configure one").
@@ -94,29 +94,46 @@ const RECOMMENDATION_ROLE: Record<string, string> = {
 async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec: any): Promise<void> {
   await callAIGenerateConfigs(tenantId, authHeader);
 
-  const agents = await prisma.aIAgent.findMany({ where: { tenantId }, select: { id: true, persona: true, customGuardrails: true }, orderBy: { createdAt: "desc" } });
-  if (agents.length !== 1) return; // only the clean onboarding case
-  const agentId = agents[0]!.id;
+  const agents = await prisma.aIAgent.findMany({ where: { tenantId }, select: { id: true, role: true, persona: true, customGuardrails: true }, orderBy: { createdAt: "desc" } });
+  if (agents.length === 0) return;
 
   const displayName = typeof rec?.employeeName === "string" && rec.employeeName.trim()
     ? rec.employeeName.trim().slice(0, 120)
     : null;
   const role = rec?.employeeRole && RECOMMENDATION_ROLE[rec.employeeRole] ? RECOMMENDATION_ROLE[rec.employeeRole] : null;
 
+  // Target the employee the owner just hired. With a single fresh employee that's
+  // it; on a multi-department generate we rename the one whose role matches the
+  // recommendation, else the most recently created - so the owner's chosen name
+  // is ALWAYS applied (the old `agents.length !== 1 → return` silently dropped it
+  // and left the generator's "<Dept> AI Employee" default - the name-bug).
+  const target = (role ? agents.find((a) => a.role === role) : null) || agents[0]!;
+  const agentId = target.id;
+
   const data: Record<string, unknown> = {};
   if (displayName) data.name = displayName;
   if (role) data.role = role;
 
-  // Movement 8 — apply the persona the owner tuned by CHATTING with the employee
+  // Movement 8 - apply the persona the owner tuned by CHATTING with the employee
   // before deploy as STRUCTURED fields (persona.customAttributes + guardrails),
   // not a systemPrompt text append, so the prompt-builder renders it the same
-  // way it renders the transplanted brand — and the two compose cleanly.
-  const tuned = rec?.tunedPersona as { tone?: string; personality?: string; focus?: string; instructions?: string[] } | undefined;
+  // way it renders the transplanted brand - and the two compose cleanly.
+  const tuned = rec?.tunedPersona as { tone?: string; personality?: string; focus?: string; goal?: string; successCriteria?: string[]; instructions?: string[] } | undefined;
   if (tuned) {
     const VALID_TONES = new Set(["professional", "friendly", "casual", "formal"]);
     if (tuned.tone && VALID_TONES.has(tuned.tone)) data.tone = tuned.tone;
 
-    const currentPersona = (agents[0]!.persona as any) || {};
+    // The owner CONFIRMED the goal + success criteria in the conversational build
+    // - these are first-class prompt fields, so they win over the generated ones.
+    if (typeof tuned.goal === "string" && tuned.goal.trim()) data.goal = tuned.goal.trim().slice(0, 2000);
+    if (Array.isArray(tuned.successCriteria) && tuned.successCriteria.length) {
+      data.successCriteria = tuned.successCriteria
+        .filter((s): s is string => typeof s === "string" && !!s.trim())
+        .map((s) => `• ${s.trim()}`)
+        .join("\n");
+    }
+
+    const currentPersona = (target.persona as any) || {};
     const attrs: Record<string, string> = { ...(currentPersona.customAttributes || {}) };
     if (tuned.focus && tuned.focus.trim()) attrs["Primary focus"] = tuned.focus.trim();
     if (tuned.personality && tuned.personality.trim()) attrs["Personality (owner-tuned)"] = tuned.personality.trim();
@@ -126,8 +143,8 @@ async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec
       ? tuned.instructions.filter((i): i is string => typeof i === "string" && !!i.trim()).map((s) => s.trim())
       : [];
     if (instr.length) {
-      const existingGuards = Array.isArray(agents[0]!.customGuardrails)
-        ? (agents[0]!.customGuardrails as unknown[]).filter((g): g is string => typeof g === "string")
+      const existingGuards = Array.isArray(target.customGuardrails)
+        ? (target.customGuardrails as unknown[]).filter((g): g is string => typeof g === "string")
         : [];
       data.customGuardrails = [...existingGuards, ...instr.map((i) => `Owner instruction: ${i}`)];
     }
@@ -280,7 +297,7 @@ ${deptDetails}`;
         totalTokens: response.usage.total_tokens,
       }).catch((err: any) => console.error("[Onboarding] Usage tracking failed:", err.message));
 
-      // Meter AI Units — onboarding chat is no longer an enforcement exception.
+      // Meter AI Units - onboarding chat is no longer an enforcement exception.
       meterAiUnits({
         tenantId,
         model,
@@ -854,7 +871,7 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       return;
     }
 
-    // The employee the owner just met in Movement 7 — drives the department
+    // The employee the owner just met in Movement 7 - drives the department
     // name (so the generator produces a role-appropriate identity) and the
     // final employee name/role.
     const discovery = await prisma.businessDiscovery
@@ -898,12 +915,16 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
       }),
     ]);
 
-    // Create the recommended employee NOW (awaited) — reusing the existing
-    // generator — so it genuinely exists the moment the owner lands. Generation
+    // Create the recommended employee NOW (awaited) - reusing the existing
+    // generator - so it genuinely exists the moment the owner lands. Generation
     // is LLM-free and fast; the "Getting your employee ready…" screen covers it.
     // Falls back to fire-and-forget so an agent still materializes on error.
+    // The owner can SKIP this from the "Meet your employee" screen ("I'll create
+    // one later") - then we activate the workspace with no employee and the
+    // journey checklist surfaces "create your AI employee" as the next step.
+    const skipEmployee = (req.body as { skipEmployee?: boolean } | undefined)?.skipEmployee === true;
     const authHeader = req.headers.authorization;
-    if (authHeader) {
+    if (authHeader && !skipEmployee) {
       try {
         await hireRecommendedEmployee(req.tenantId!, authHeader, recommendation);
       } catch (err: any) {
@@ -912,6 +933,8 @@ router.post("/complete", requireRole("ADMIN"), async (req: Request, res: Respons
           console.error(`[Onboarding] Async generate-configs fallback failed for tenant ${req.tenantId}:`, e.message);
         });
       }
+    } else if (skipEmployee) {
+      console.log(`[Onboarding] Tenant ${req.tenantId} skipped employee creation - activating without an AI employee.`);
     }
 
     sendActivationConfirmation(req.tenantId!).catch((err) => {
@@ -1007,7 +1030,7 @@ router.get("/agent-config/:departmentId", requireRole("ADMIN"), async (req: Requ
 });
 
 // ─── Onboarding Missions ────────────────────────────────────
-// The post-onboarding journey missions — status derived from live state and
+// The post-onboarding journey missions - status derived from live state and
 // the Recommendation ledger, never a stored checkbox.
 // `done` if completed, `active` for the first incomplete one, `pending` for the rest.
 // `deepLink` is consumed by the sidebar MissionPanel so route changes stay server-side.
@@ -1032,7 +1055,7 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
 
     // The post-onboarding journey, derived from the SAME sources of truth the
     // onboarding used: the connected-systems state, the discovery's detected
-    // channels (with real identifiers), and the living Recommendation ledger —
+    // channels (with real identifiers), and the living Recommendation ledger -
     // never a stored checkbox. Order = highest-leverage first.
     const [coreSlug, connectedChannel, discovery, openRecs] = await Promise.all([
       connectedCoreSystem(tenantId).catch(() => null),
@@ -1080,7 +1103,7 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
       {
         id: "teach_knowledge",
         done: teachOpen === 0,
-        deepLink: "/business",
+        deepLink: "/settings/business",
         hint: teachOpen > 0 ? String(teachOpen) : undefined,
       },
     ];
@@ -1103,6 +1126,94 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
   } catch (err) {
     console.error("Get missions error:", err);
     res.status(500).json({ error: "Failed to get missions" });
+  }
+});
+
+// GET /journey - the post-onboarding "first steps" arc for the Getting Started
+// page. Like /missions, every milestone is DERIVED from real product state -
+// the one exception is `first_chat` (the owner's first test conversation with
+// their employee), which is stateless by design (test-chat persists nothing),
+// so it's marked via the existing /guides mechanism (feature "first_chat").
+router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const tenantId = req.tenantId!;
+    const [agent, coreSlug, connectedChannel, discovery, openRecs, firstChatUsers, inboundCount, kbCount, profile] = await Promise.all([
+      prisma.aIAgent.findFirst({
+        where: { tenantId, status: { in: ["ACTIVE", "PAUSED"] } },
+        orderBy: { createdAt: "desc" },
+        select: { id: true, name: true, role: true, status: true },
+      }).catch(() => null),
+      connectedCoreSystem(tenantId).catch(() => null),
+      prisma.channelAccount.findFirst({
+        where: { tenantId, connectionStatus: "CONNECTED" },
+        select: { id: true, channel: true },
+      }).catch(() => null),
+      prisma.businessDiscovery.findUnique({
+        where: { tenantId },
+        select: { communication: true, business: true },
+      }).catch(() => null),
+      prisma.recommendation.findMany({
+        where: { tenantId, status: "OPEN" },
+        select: { kind: true, dedupeKey: true },
+      }).catch(() => [] as Array<{ kind: string; dedupeKey: string }>),
+      prisma.user.count({
+        where: { tenantId, onboardingGuides: { path: ["first_chat"], equals: "done" } },
+      }).catch(() => 0),
+      prisma.message.count({ where: { tenantId, direction: "INBOUND" } }).catch(() => 0),
+      prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
+      prisma.businessProfile.findUnique({
+        where: { tenantId },
+        select: { organizationName: true, industry: true },
+      }).catch(() => null),
+    ]);
+
+    const PRIMARY_CH = new Set(["whatsapp", "instagram", "facebook", "messenger", "telegram"]);
+    const detectedChannels = (((discovery?.communication as any)?.channels || []) as Array<{ type?: string; identifier?: string }>)
+      .filter((c) => c?.type && PRIMARY_CH.has(String(c.type).toLowerCase()));
+    const channelHint = detectedChannels.slice(0, 3)
+      .map((c) => `${String(c.type)}${c.identifier ? ` · ${c.identifier}` : ""}`)
+      .join("  ·  ");
+    const teachOpen = openRecs.filter((r) => r.kind === "import_knowledge").length;
+
+    type Milestone = { id: string; done: boolean; deepLink: string; hint?: string };
+    const milestones: Milestone[] = [
+      { id: "meet_employee", done: !!agent, deepLink: agent ? `/ai-studio/agents/${agent.id}` : "/ai-studio" },
+      { id: "first_chat", done: firstChatUsers > 0, deepLink: "/getting-started#chat" },
+      { id: "go_live_channel", done: !!connectedChannel, deepLink: "/channels", hint: channelHint || undefined },
+      { id: "first_customer", done: inboundCount > 0, deepLink: "/conversations" },
+      { id: "teach_knowledge", done: teachOpen === 0, deepLink: "/settings/business", hint: teachOpen > 0 ? String(teachOpen) : undefined },
+    ];
+
+    let activeAssigned = false;
+    const out = milestones.map((m) => {
+      let status: "done" | "active" | "pending";
+      if (m.done) { status = "done"; }
+      else if (!activeAssigned) { status = "active"; activeAssigned = true; }
+      else { status = "pending"; }
+      return { id: m.id, status, deepLink: m.deepLink, hint: m.hint };
+    });
+
+    const biz = (discovery?.business || {}) as any;
+    res.json({
+      data: {
+        complete: milestones.every((m) => m.done),
+        employee: agent,
+        business: {
+          name: profile?.organizationName || biz.name || null,
+          industry: profile?.industry || biz.industry || null,
+        },
+        context: {
+          coreSystem: coreSlug,
+          kbCount,
+          channelHint: channelHint || null,
+          detectedChannelCount: detectedChannels.length,
+        },
+        milestones: out,
+      },
+    });
+  } catch (err) {
+    console.error("Get journey error:", err);
+    res.status(500).json({ error: "Failed to get journey" });
   }
 });
 
@@ -1161,7 +1272,7 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
       }
     }
     const connected = await connectedCoreSystem(req.tenantId!);
-    // A connected system is no longer a recommendation — complete it so it never
+    // A connected system is no longer a recommendation - complete it so it never
     // nags post-onboarding (the recommendation is fulfilled, not lost).
     if (connected) {
       await prisma.recommendation.updateMany({
@@ -1169,7 +1280,7 @@ router.post("/core-system", requireRole("ADMIN"), validate(coreSystemSchema), as
         data: { status: "COMPLETED", completedAt: new Date() },
       }).catch(() => {});
       // Second-wave: connecting the source of truth unlocks a new class of
-      // concrete next steps — write them to the living backlog (surfaces on /business).
+      // concrete next steps - write them to the living backlog (surfaces on /business).
       addStoreInspectionRecs(req.tenantId!, connected).catch(() => {});
     }
     res.json({ data: { primarySystem: slug, connectedSlug: connected, connected: connected === slug } });
@@ -1390,7 +1501,7 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
           totalTokens: response.usage.total_tokens,
         }).catch(() => { /* fire-and-forget */ });
 
-        // Meter AI Units — no enforcement exceptions for any AI surface.
+        // Meter AI Units - no enforcement exceptions for any AI surface.
         meterAiUnits({
           tenantId: req.tenantId!,
           model,
@@ -1453,8 +1564,8 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 // ─── Business Discovery (Onboarding Intelligence Engine) ─────
 //
 // Movements 1-4 of the Onboarding Bible. This route does the deterministic
-// half of the moat — a light same-origin crawl of the public pages and a
-// regex pass that detects the tech stack + communication channels — with NO
+// half of the moat - a light same-origin crawl of the public pages and a
+// regex pass that detects the tech stack + communication channels - with NO
 // LLM. It then hands the raw text + signals to the AI service's
 // /discover-business endpoint (the one allowed new LLM call), persists the
 // resulting Business Intelligence Report to BusinessDiscovery, and returns it.
@@ -1465,13 +1576,13 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 // straight off the report (Movement 4).
 
 /** Fetch a page returning BOTH raw HTML (for signal regexes) and stripped text
- *  (for the LLM). Best-effort — returns null on any failure. */
+ *  (for the LLM). Best-effort - returns null on any failure. */
 async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string } | null> {
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     // Present as a real browser. Many stores sit behind bot filters that 403 a
-    // generic crawler UA — a partial/blocked fetch is a root cause of false
+    // generic crawler UA - a partial/blocked fetch is a root cause of false
     // negatives, so we look like Chrome and send the browser header set.
     const r = await fetch(url, {
       method: "GET",
@@ -1511,16 +1622,16 @@ async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: stri
   }
 }
 
-// Same-origin internal links worth reading — the pages that carry a business's
+// Same-origin internal links worth reading - the pages that carry a business's
 // knowledge and policies. We only ever follow a handful.
-// Link text / path keywords worth following — the pages where policies, contact
+// Link text / path keywords worth following - the pages where policies, contact
 // details, and knowledge actually live. Bilingual (EN + HE) because Hebrew
 // stores label these in Hebrew even when the slug is English.
 const LINK_KEYWORDS =
   /(about|faq|help|support|contact|shipping|deliver|return|refund|exchange|warranty|policy|policies|terms|privacy|legal|pricing|plans|q-?a|אודות|צור.?קשר|יצירת.?קשר|שאלות|עזרה|תמיכה|משלוח|החזר|החזרה|החזרות|ביטול|תקנון|מדיניות|פרטיות|אחריות|תנאי)/i;
 
 // Well-known convention paths we always TRY even if not linked from the home
-// page — most false negatives on Shopify/WordPress stores are policies that
+// page - most false negatives on Shopify/WordPress stores are policies that
 // exist at a predictable URL but aren't in the top nav. fetchPageRaw returns
 // null fast on a 404, so probing these is cheap.
 const CANDIDATE_PATHS = [
@@ -1556,7 +1667,7 @@ function extractInternalLinks(html: string, origin: string, cap = 10): string[] 
 // ─── Structured signal extraction (deterministic, LLM-free) ──
 //
 // Platform detection is STRENGTH-SCORED so we can tell an ACTIVE platform
-// (many strong signals — e.g. Shopify's CDN + theme + section markup) from a
+// (many strong signals - e.g. Shopify's CDN + theme + section markup) from a
 // LEGACY ARTIFACT (a single stray "magento" string). The AI is handed the
 // scores and told to trust the strongest, so an old tag never gets recommended
 // as an equal.
@@ -1631,7 +1742,7 @@ export interface DiscoverySignals {
 }
 
 /**
- * Which mail platform serves the found addresses — a deterministic MX lookup
+ * Which mail platform serves the found addresses - a deterministic MX lookup
  * per unique domain (google → Gmail/Workspace, outlook/microsoft → Microsoft
  * 365). Lets the briefing show the real provider logo and offer the matching
  * one-click connect. Best-effort: DNS failures simply yield no provider.
@@ -1645,7 +1756,7 @@ async function detectEmailProviders(emails: string[]): Promise<Record<string, st
       const hosts = mx.map((m) => m.exchange.toLowerCase()).join(" ");
       const provider = /google|gmail/.test(hosts) ? "gmail" : /outlook|microsoft|office365/.test(hosts) ? "outlook" : null;
       if (provider) for (const e of emails) if (e.toLowerCase().endsWith("@" + domain)) out[e] = provider;
-    } catch { /* unresolvable domain — no provider claim */ }
+    } catch { /* unresolvable domain - no provider claim */ }
   }));
   return out;
 }
@@ -1683,8 +1794,15 @@ function extractSignals(pages: Array<{ url: string; html: string }>): DiscoveryS
   collectMatches(/tel:(\+?[\d][\d\-\s().]{5,})/gi, html).forEach((p) => phones.add(p.replace(/[\s().]/g, "")));
 
   const whatsapp = new Set<string>();
-  [/wa\.me\/(\+?\d{6,15})/gi, /api\.whatsapp\.com\/send\?phone=(\d{6,15})/gi, /whatsapp[^"']*?phone=(\d{6,15})/gi]
-    .forEach((re) => collectMatches(re, html).forEach((n) => whatsapp.add(n)));
+  // Broadened so WhatsApp isn't silently dropped: classic wa.me / api links,
+  // the whatsapp:// app scheme, and wa.link short links all count.
+  [
+    /wa\.me\/(\+?\d{6,15})/gi,
+    /api\.whatsapp\.com\/send\?phone=(\d{6,15})/gi,
+    /whatsapp[^"']*?phone=(\d{6,15})/gi,
+    /whatsapp:\/\/send\?phone=(\+?\d{6,15})/gi,
+    /wa\.link\/(\+?\d{6,15})/gi,
+  ].forEach((re) => collectMatches(re, html).forEach((n) => whatsapp.add(n.replace(/^\+/, ""))));
 
   const handle = (re: RegExp, exclude: RegExp) =>
     collectMatches(re, html).filter((h) => !exclude.test(h));
@@ -1742,7 +1860,7 @@ function extractSignals(pages: Array<{ url: string; html: string }>): DiscoveryS
  *  JWT exactly like callAIGenerateConfigs. Returns the report or null. */
 async function callAIDiscoverBusiness(
   authHeader: string,
-  body: { domain: string; locale: string; pages: Array<{ url: string; text: string }>; signals: DiscoverySignals },
+  body: { domain: string; locale: string; pages: Array<{ url: string; text: string }>; signals: DiscoverySignals; businessType?: string },
 ): Promise<any | null> {
   try {
     const res = await fetchWithTimeout(`${AI_SERVICE_URL}/api/ai-assist/discover-business`, {
@@ -1760,22 +1878,48 @@ async function callAIDiscoverBusiness(
   }
 }
 
-// Derive the Business Health check (Movement 3) — a colleague's self-assessment
+// Business types for which shipping/returns/refund policies are a genuine,
+// expected gap. Everyone else (SaaS, legal, health, real-estate, generic B2B)
+// is never asked for a "shipping policy" - that was the invented-gap bug.
+const BUSINESS_TYPE_EXPECTS_FULFILMENT = new Set<string>(["ecommerce", "restaurant"]);
+
+// A gap that only makes sense for a business that ships physical goods. Matched
+// on the gap's label/id/key so it survives the LLM phrasing the gap freely.
+function isFulfilmentPolicyGap(gap: any): boolean {
+  const hay = `${gap?.id || ""} ${gap?.key || ""} ${gap?.label || ""} ${gap?.domain || ""}`.toLowerCase();
+  return /shipping|return|refund|delivery|משלוח|החזר|החזרים|ביטול עסקה/.test(hay);
+}
+
+// Derive the Business Health check (Movement 3) - a colleague's self-assessment
 // of "can I help you yet?", grouped Knowledge / Communication / Tools. ✓ for
 // what was found/detected, ⚠ for the genuine gaps. NOT a management score.
-function deriveHealth(report: any, live: { coreSystemSlug: string | null; connectedChannel: boolean }): any {
+function deriveHealth(report: any, live: { coreSystemSlug: string | null; connectedChannel: boolean }, businessType?: string): any {
   const kn = report?.knowledge || {};
   const pol = kn.policies || {};
   // A policy is a confidence-levelled finding {found, confidence}. Only a
   // genuine `found === true` counts as ✓; found:false or null (unsure) is ⚠.
   const has = (p: any): boolean => (p && typeof p === "object" ? p.found === true : !!p);
+  // Business-type–aware knowledge checklist. Shipping/Returns/Refunds are ONLY a
+  // meaningful gap for retail/ecommerce - asking a B2B SaaS or a law firm for a
+  // "shipping policy" is the invented-gap bug. Every business gets FAQ + Help
+  // Center; retail adds fulfilment policies, everyone else gets the universal
+  // legal pages (Privacy/Terms) instead.
   const knowledge: Array<{ label: string; ok: boolean }> = [
     { label: "FAQ", ok: !!kn.hasFaq },
     { label: "Help Center", ok: !!kn.hasHelpCenter },
-    { label: "Refund policy", ok: has(pol.refunds) },
-    { label: "Shipping policy", ok: has(pol.shipping) },
-    { label: "Returns policy", ok: has(pol.returns) },
   ];
+  if (BUSINESS_TYPE_EXPECTS_FULFILMENT.has(businessType || "")) {
+    knowledge.push(
+      { label: "Refund policy", ok: has(pol.refunds) },
+      { label: "Shipping policy", ok: has(pol.shipping) },
+      { label: "Returns policy", ok: has(pol.returns) },
+    );
+  } else {
+    // Universal pages that apply to any business - surfaced only when actually
+    // found, so they never read as an invented gap on a services/SaaS site.
+    if (has(pol.privacy)) knowledge.push({ label: "Privacy policy", ok: true });
+    if (has(pol.terms)) knowledge.push({ label: "Terms of service", ok: true });
+  }
   const channels: Array<{ type: string }> = Array.isArray(report?.communication?.channels) ? report.communication.channels : [];
   const seen = new Set<string>();
   const communication: Array<{ label: string; ok: boolean }> = [];
@@ -1842,13 +1986,13 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       return;
     }
 
-    // Ceremony phase: homepage read — now exploring the site's own pages. The
+    // Ceremony phase: homepage read - now exploring the site's own pages. The
     // frontend polls GET /discovery during the scan, so each write here lands a
     // REAL checkmark (no timers).
     await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data: { scanPhase: "pages" } }).catch(() => {});
 
     // Deep same-origin crawl: discovered policy/contact links + well-known
-    // convention paths (deduped). This is the accuracy fix — most "missing"
+    // convention paths (deduped). This is the accuracy fix - most "missing"
     // policies/contact details live in the footer or at a predictable URL, not
     // on the home page. fetchPageRaw returns null fast on a 404, so probing is
     // cheap; we cap total fetches to stay polite.
@@ -1867,6 +2011,12 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
 
     const signals = extractSignals([{ url: origin, html: home.html }, ...okPages]);
     signals.emailProviders = await detectEmailProviders(signals.emails);
+
+    // Usecase-aware analysis starts HERE: classify the business deterministically
+    // from its own pages (event venue ≠ Shopify store ≠ B2B SaaS) and thread it
+    // through the whole scan so the LLM, health, and gaps all reason about the
+    // RIGHT business - no more inventing a "return policy" for a SaaS.
+    const businessType = classifyBusinessType([home.text, ...okPages.map((p) => p.text)].join(" "), signals);
 
     // Deterministic findings, persisted at the synthesis boundary. This is what
     // the ceremony renders as LIVE facts while the LLM thinks ("Found WhatsApp,
@@ -1888,10 +2038,10 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       },
     }).catch(() => {});
 
-    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale, pages, signals });
+    const report = await callAIDiscoverBusiness(req.headers.authorization!, { domain: origin, locale, pages, signals, businessType });
     if (!report) {
       // The deterministic signals were already persisted at the synthesis
-      // boundary above — the review still shows the channels/tech we KNOW we
+      // boundary above - the review still shows the channels/tech we KNOW we
       // detected; only the status settles here.
       await prisma.businessDiscovery.update({
         where: { tenantId: req.tenantId! },
@@ -1906,7 +2056,21 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
       where: { tenantId: req.tenantId!, connectionStatus: "CONNECTED" },
       select: { id: true },
     }).catch(() => null));
-    const health = deriveHealth(report, { coreSystemSlug, connectedChannel });
+
+    // Persist the business type onto the report so the frontend + recommendations
+    // can read it too, then strip retail-fulfilment gaps for non-retail.
+    if (report.business && typeof report.business === "object") {
+      (report.business as any).businessType = businessType;
+    } else {
+      report.business = { businessType } as any;
+    }
+    // Drop retail-fulfilment gaps (shipping/returns/refunds) for any business
+    // that doesn't sell physical goods - they're invented gaps otherwise.
+    if (!BUSINESS_TYPE_EXPECTS_FULFILMENT.has(businessType) && Array.isArray(report.gaps)) {
+      report.gaps = report.gaps.filter((g: any) => !isFulfilmentPolicyGap(g));
+    }
+
+    const health = deriveHealth(report, { coreSystemSlug, connectedChannel }, businessType);
 
     const saved = await prisma.businessDiscovery.upsert({
       where: { tenantId: req.tenantId! },
@@ -1965,7 +2129,7 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
 // loader reflects actual work (ecommerce ≠ law firm ≠ SaaS), never a fixed
 // animation. Falls back to a generic plan on any failure so the ceremony always
 // has steps to show. The heavy /discover call runs right after, and the final
-// step holds until it returns — so duration reflects the real work.
+// step holds until it returns - so duration reflects the real work.
 const ECOM_PLATFORMS = new Set(["shopify", "woocommerce", "magento", "bigcommerce", "prestashop", "wix_stores", "squarespace_commerce", "ecwid", "shopware", "opencart"]);
 
 function classifyBusinessType(text: string, signals: DiscoverySignals): string {
@@ -1975,6 +2139,7 @@ function classifyBusinessType(text: string, signals: DiscoverySignals): string {
   if (ECOM_PLATFORMS.has(plat) || has("add to cart", "add to bag", "checkout", "free shipping", "in stock", "sold out", "my cart", "shopping cart", "עגלה", "הוסף לסל", "משלוח חינם", "לרכישה")) return "ecommerce";
   if (has("law firm", "attorney", "lawyer", "litigation", "practice areas", "legal services", "counsel", "עורך דין", "עורכי דין", "ייעוץ משפטי", "משרד עורכי")) return "legal";
   if (has("free trial", "start free", "start for free", "/pricing", "api documentation", "integrations", "sign up free", "our platform", "software platform", "for developers", "open source")) return "saas";
+  if (has("event venue", "event space", "wedding venue", "banquet", "event hall", "host your event", "weddings", "corporate events", "our venue", "book the venue", "אולם אירועים", "גן אירועים", "אולמי אירועים", "חתונות", "בר מצווה", "בת מצווה", "הפקת אירועים", "קייטרינג לאירועים")) return "events";
   if (has("book now", "tours", "vacation", "itinerary", "destinations", "guided tour", "travel", "book your", "טיול", "חופשה", "יעדים", "הזמנת מקום")) return "tourism";
   if (has("view menu", "our menu", "reservation", "reserve a table", "order online", "delivery & pickup", "restaurant", "תפריט", "הזמנת שולחן", "משלוחים", "מסעדה")) return "restaurant";
   if (has("book an appointment", "clinic", "our patients", "treatment", "our doctors", "medical", "dental", "מרפאה", "לקביעת תור", "טיפול", "רופא")) return "health";
@@ -1982,7 +2147,7 @@ function classifyBusinessType(text: string, signals: DiscoverySignals): string {
   return "generic";
 }
 
-// [key, English, Hebrew] — each step is a genuine phase of the scan.
+// [key, English, Hebrew] - each step is a genuine phase of the scan.
 const DISCOVERY_PLANS: Record<string, Array<[string, string, string]>> = {
   ecommerce: [
     ["platform", "Detecting your ecommerce platform", "מזהה את פלטפורמת המסחר שלכם"],
@@ -2033,6 +2198,13 @@ const DISCOVERY_PLANS: Record<string, Array<[string, string, string]>> = {
     ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
     ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
   ],
+  events: [
+    ["offering", "Understanding your venue & event types", "מבין את המקום וסוגי האירועים"],
+    ["availability", "Reading your booking & availability options", "קורא את אפשרויות ההזמנה והזמינות"],
+    ["packages", "Finding your packages & pricing", "מוצא את החבילות והמחירים"],
+    ["channels", "Detecting your communication channels", "מזהה את ערוצי התקשורת"],
+    ["employee", "Preparing your first AI Employee", "מכין את עובד ה-AI הראשון שלכם"],
+  ],
   generic: [
     ["website", "Reading your website", "קורא את האתר שלכם"],
     ["about", "Understanding what you do", "מבין מה אתם עושים"],
@@ -2065,7 +2237,7 @@ router.post("/discover/plan", requireRole("ADMIN"), validate(planSchema), async 
     }
     res.json({ data: { ok: true, businessType: type, steps: planSteps(type, locale) } });
   } catch (err) {
-    // Never block the ceremony — always hand back a usable generic plan.
+    // Never block the ceremony - always hand back a usable generic plan.
     res.json({ data: { ok: false, businessType: "generic", steps: planSteps("generic", locale) } });
   }
 });
@@ -2091,7 +2263,7 @@ router.get("/discovery", requireRole("ADMIN"), async (req: Request, res: Respons
 const MOVEMENT_KEYS = ["review", "connect", "goal", "integrations", "knowledge", "recommendation", "tune", "ready"] as const;
 
 const discoveryPatchSchema = z.object({
-  // Movement 7 — the owner names their employee on the Meet screen; merged
+  // Movement 7 - the owner names their employee on the Meet screen; merged
   // into recommendation.employeeName so /complete hires under that name.
   employeeName: z.string().min(1).max(120).optional(),
   business: z.object({
@@ -2100,11 +2272,25 @@ const discoveryPatchSchema = z.object({
     country: z.string().max(120).optional(),
     summary: z.string().max(2000).optional(),
     valueProp: z.string().max(2000).optional(),
+    // Owner-editable products/services list (the scan sometimes over-guesses
+    // these - the owner corrects them directly here, not via the flag menu).
+    products: z.array(z.string().max(120)).max(24).optional(),
   }).optional(),
   brand: z.object({
     voice: z.string().max(200).optional(),
     tone: z.string().max(200).optional(),
     languages: z.array(z.string().max(20)).max(6).optional(),
+  }).optional(),
+  // Owner-edited communication channels (identifier/purpose fixed by hand so we
+  // use the RIGHT number/address later for suggestions & connection).
+  communication: z.object({
+    channels: z.array(z.object({
+      type: z.string().min(1).max(40),
+      identifier: z.string().max(200).optional(),
+      purpose: z.string().max(200).optional(),
+      provider: z.string().max(40).optional(),
+      confidence: z.string().max(40).optional(),
+    })).max(24),
   }).optional(),
   // Resume checkpoint (P0): written fire-and-forget on each movement transition.
   progress: z.enum(MOVEMENT_KEYS).optional(),
@@ -2117,12 +2303,17 @@ router.patch("/discovery", requireRole("ADMIN"), validate(discoveryPatchSchema),
       res.status(404).json({ error: "No discovery to correct yet" });
       return;
     }
-    const patch = req.body as { business?: Record<string, unknown>; brand?: Record<string, unknown>; progress?: string; employeeName?: string };
+    const patch = req.body as { business?: Record<string, unknown>; brand?: Record<string, unknown>; communication?: { channels: unknown[] }; progress?: string; employeeName?: string };
     const data: Record<string, unknown> = {};
     // Only merge a domain when the caller actually sent it, so a bare
     // progress-checkpoint write never re-writes business/brand.
     if (patch.business) data.business = { ...((existing.business as Record<string, unknown>) || {}), ...patch.business };
     if (patch.brand) data.brand = { ...((existing.brand as Record<string, unknown>) || {}), ...patch.brand };
+    // Channels are REPLACED wholesale with the owner-edited list (the caller
+    // sends the full array), preserving any other communication sub-fields.
+    if (patch.communication?.channels) {
+      data.communication = { ...((existing.communication as Record<string, unknown>) || {}), channels: patch.communication.channels };
+    }
     if (patch.progress) data.progress = patch.progress;
     if (patch.employeeName?.trim()) {
       data.recommendation = { ...((existing.recommendation as Record<string, unknown>) || {}), employeeName: patch.employeeName.trim() };
@@ -2140,7 +2331,7 @@ router.patch("/discovery", requireRole("ADMIN"), validate(discoveryPatchSchema),
 
 // POST /discovery/correct - per-item corrections on the reflected-back portrait
 // (Movement 2): remove / mark-incorrect / ignore a detected channel, tool,
-// platform, or gap. The correction persists immediately (the AI "learns" it —
+// platform, or gap. The correction persists immediately (the AI "learns" it -
 // the item never reappears) and a matching recommendation is dismissed.
 const correctSchema = z.object({
   target: z.enum(["channel", "tool", "platform", "gap"]),
@@ -2293,7 +2484,7 @@ router.post("/teach", requireRole("ADMIN"), validate(teachSchema), async (req: R
 router.get("/recommendations", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const status = typeof req.query.status === "string" ? req.query.status : "OPEN";
-    // A "Connect X" that's already connected is fulfilled — settle it before
+    // A "Connect X" that's already connected is fulfilled - settle it before
     // rendering so the list never asks for something the customer already did.
     await reconcileConnectSystemRecs(req.tenantId!);
     const recommendations = await listRecommendations(req.tenantId!, status);
@@ -2323,29 +2514,79 @@ router.post("/recommendations/:id/:decision", requireRole("ADMIN"), async (req: 
 // discovery AND mirrored onto BusinessProfile.businessGoals so the post-
 // onboarding home + mission ordering read it.
 const goalSchema = z.object({
-  goal: z.string().min(1).max(64),
-  // Free-text elaboration — required UX for the "something else" goal, welcome
+  // Multi-select: the owner can pick more than one thing that matters
+  // (e.g. customer service + lead management) and the employee is built for all
+  // of them. `goal` (single) kept for backward compatibility.
+  goals: z.array(z.string().min(1).max(64)).min(1).max(4).optional(),
+  goal: z.string().min(1).max(64).optional(),
+  // Free-text elaboration - required UX for the "something else" goal, welcome
   // on any goal. Mirrored into BusinessProfile.businessGoals for the generator.
   detail: z.string().max(500).optional(),
+}).refine((d) => (Array.isArray(d.goals) && d.goals.length > 0) || !!d.goal, {
+  message: "At least one goal is required",
 });
 
 router.post("/goal", requireRole("ADMIN"), validate(goalSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { goal, detail } = req.body as { goal: string; detail?: string };
+    const body = req.body as { goals?: string[]; goal?: string; detail?: string };
+    // Normalize to a deduped list; the first is the PRIMARY (drives role/dept),
+    // the rest STACK into the combined objective in the config generator.
+    const goals = Array.from(new Set((body.goals?.length ? body.goals : (body.goal ? [body.goal] : [])).filter((g) => typeof g === "string" && g.trim()))).slice(0, 4);
+    const primary = goals[0]!;
+    const detail = body.detail;
     await prisma.businessDiscovery.upsert({
       where: { tenantId: req.tenantId! },
-      update: { primaryGoal: goal },
-      create: { tenantId: req.tenantId!, primaryGoal: goal, status: "PENDING" },
+      update: { primaryGoal: primary },
+      create: { tenantId: req.tenantId!, primaryGoal: primary, status: "PENDING" },
     });
     await prisma.businessProfile.updateMany({
       where: { tenantId: req.tenantId! },
-      data: { businessGoals: detail?.trim() ? [goal, detail.trim()] : [goal] },
+      // Store the full slug list (all selected use-cases) so the generator can
+      // combine them; append the free-text detail when present.
+      data: { businessGoals: detail?.trim() ? [...goals, detail.trim()] : goals },
     }).catch(() => { /* profile may not exist yet; non-blocking */ });
     scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {}); // push the nudge forward
-    res.json({ data: { primaryGoal: goal } });
+    res.json({ data: { primaryGoal: primary, goals } });
   } catch (err) {
     console.error("Set goal error:", err);
     res.status(500).json({ error: "Failed to save goal" });
+  }
+});
+
+// POST /notify-integration - the owner spotted a tool we don't support yet (a
+// ReturnGO-style app the scan flagged as important). One click tells the team so
+// we know what to build next. Best-effort email to an env-configured alias; the
+// request is always acknowledged to the UI even if mail isn't wired, so the owner
+// never sees a dead end.
+const notifyIntegrationSchema = z.object({
+  integration: z.string().min(1).max(120),
+  note: z.string().max(500).optional(),
+  source: z.string().max(60).optional(),
+});
+router.post("/notify-integration", requireRole("ADMIN"), validate(notifyIntegrationSchema), async (req: Request, res: Response): Promise<void> => {
+  try {
+    const { integration, note, source } = req.body as { integration: string; note?: string; source?: string };
+    const [tenant, user, discovery] = await Promise.all([
+      prisma.tenant.findUnique({ where: { id: req.tenantId! }, select: { name: true } }).catch(() => null),
+      prisma.user.findUnique({ where: { id: req.user!.userId }, select: { email: true, name: true } }).catch(() => null),
+      prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! }, select: { websiteDomain: true } }).catch(() => null),
+    ]);
+    const sent = await sendIntegrationRequestEmail({
+      integration: integration.trim(),
+      tenantId: req.tenantId!,
+      tenantName: tenant?.name || undefined,
+      requestedByEmail: user?.email || undefined,
+      requestedByName: user?.name || undefined,
+      websiteDomain: discovery?.websiteDomain || undefined,
+      note: note?.trim() || undefined,
+      source: source?.trim() || "onboarding",
+    });
+    // Acknowledge regardless of transport state - the owner's intent is captured
+    // and logged even if the email itself couldn't go out.
+    res.json({ data: { ok: true, notified: sent } });
+  } catch (err) {
+    console.error("Notify integration error:", err);
+    res.status(500).json({ error: "Failed to submit integration request" });
   }
 });
 
@@ -2374,6 +2615,10 @@ const employeeChatSchema = z.object({
     tone: z.string().max(40).optional(),
     personality: z.string().max(400).optional(),
     focus: z.string().max(200).optional(),
+    // Conversational build: the owner-confirmed mandate + what success looks like,
+    // captured live in the chat and applied to the employee at deploy.
+    goal: z.string().max(600).optional(),
+    successCriteria: z.array(z.string().max(300)).max(8).optional(),
     instructions: z.array(z.string().max(400)).max(20).optional(),
   }).optional(),
   messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(20),
@@ -2388,11 +2633,15 @@ router.post("/employee-chat", requireRole("ADMIN"), validate(employeeChatSchema)
     const dbiz = (disc?.business as any) || {};
     const dbrand = (disc?.brand as any) || {};
     const startPersona = persona || rec.tunedPersona || {};
+    // The goal the system defined (from Movement-5) - passed so the build opens by
+    // verifying it with the owner rather than inventing one.
+    const definedGoal = disc?.primaryGoal ? String(disc.primaryGoal).replace(/_/g, " ") : undefined;
     const result = await callAIEmployeeChat(req.headers.authorization!, {
       name: rec.employeeName, role: rec.employeeRole || "customer_support", locale,
       context: {
         business: dbiz.name, industry: dbiz.industry,
         summary: dbiz.summary, brandVoice: dbrand.voice || dbrand.personality,
+        goal: definedGoal,
       },
       persona: startPersona, messages,
     });

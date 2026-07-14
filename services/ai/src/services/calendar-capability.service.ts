@@ -1,5 +1,5 @@
 /**
- * Calendar Capability — the SINGLE source of truth for an agent's booking state.
+ * Calendar Capability - the SINGLE source of truth for an agent's booking state.
  *
  * Historically the runtime asked a boolean `hasConnectedCalendarFor()`, while
  * the UI exposed tenant-level calendar *tools* (create_event/check_availability)
@@ -49,7 +49,7 @@ const NONE: CalendarCapabilityDetail = {
 
 /**
  * Compute the calendar capability for one agent. Cheap (two indexed reads);
- * callers may still cache per turn. Never throws — on any DB error it degrades
+ * callers may still cache per turn. Never throws - on any DB error it degrades
  * to NO_CALENDAR so the bot fails safe (cannot book) rather than fabricating.
  */
 export async function computeCalendarCapability(
@@ -72,7 +72,7 @@ export async function computeCalendarCapability(
 
     const providers = connected.map((a) => a.provider);
 
-    // Bookable requires an active meeting type — schedule_meeting rejects a
+    // Bookable requires an active meeting type - schedule_meeting rejects a
     // booking when no active meeting type exists for the tenant.
     const activeMeetingTypes: number = await (prisma as any).meetingType.count({
       where: { tenantId, isActive: true },

@@ -1,5 +1,5 @@
 /**
- * Oracle — the deterministic composer of Facts (the pure heart).
+ * Oracle - the deterministic composer of Facts (the pure heart).
  *
  * The Oracle is the ONE source of truth for world-state. This file owns the
  * deterministic COMPOSITION: given the KERNEL signals (identity, money,
@@ -7,7 +7,7 @@
  * self-described `CapabilityWorldView`, it assembles the canonical `Facts` and
  * derives the operation menu GENERICALLY (union of every capability's current
  * operations, intersected with permissions). It is pure, never throws, has zero
- * execution deps, and knows NO domain — it never mentions calendar, crm, etc.
+ * execution deps, and knows NO domain - it never mentions calendar, crm, etc.
  *
  * Adding a capability changes NOTHING here: a new `CapabilityWorldView` flows
  * through untouched and its operations join the menu automatically.
@@ -15,7 +15,7 @@
 
 import type { Facts, AvailableOperation, BillingStatus, CapabilityWorldView } from "./facts";
 
-/** KERNEL signals — universal to every employee, read from their homes. */
+/** KERNEL signals - universal to every employee, read from their homes. */
 export interface KernelSignals {
   customer: {
     id?: string;
@@ -31,7 +31,7 @@ export interface KernelSignals {
   permissions: { allowedOperations: string[] };
   /** Each registered capability's self-description this tick. */
   world: CapabilityWorldView[];
-  /** ISO timestamp of the read — passed in (no ambient clock). */
+  /** ISO timestamp of the read - passed in (no ambient clock). */
   now: string;
 }
 

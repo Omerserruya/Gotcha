@@ -18,10 +18,10 @@ const opts = (tenantId: string) => ({
 
 beforeEach(() => {
   vi.mocked(getBalance).mockReset();
-  clearCapabilities(); // no domain reads — isolate the billing posture
+  clearCapabilities(); // no domain reads - isolate the billing posture
 });
 
-describe("oracle billing posture — never silently fail OPEN", () => {
+describe("oracle billing posture - never silently fail OPEN", () => {
   it("healthy read: real balance flows into entitlements", async () => {
     vi.mocked(getBalance).mockResolvedValue({ total: 0 } as any);
     const facts = await assembleOracleFacts(opts("t-exhausted"));
@@ -37,7 +37,7 @@ describe("oracle billing posture — never silently fail OPEN", () => {
     expect(facts.entitlements.withinLimits).toBe(false);
   });
 
-  it("read failure with NO known state: degrades permissive (metered AI backstop) — cold start only", async () => {
+  it("read failure with NO known state: degrades permissive (metered AI backstop) - cold start only", async () => {
     vi.mocked(getBalance).mockRejectedValue(new Error("billing down"));
     const facts = await assembleOracleFacts(opts("t-cold"));
     expect(facts.entitlements.withinLimits).toBe(true);

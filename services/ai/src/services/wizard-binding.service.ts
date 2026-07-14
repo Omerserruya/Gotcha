@@ -6,7 +6,7 @@
  * small, typed `WizardRuntimeFacts` verdict via ONE LLM judgment call.
  *
  * There is NO regex / keyword / fuzzy / heuristic matching of config against the
- * conversation anywhere — interpreting free text is exactly what the model does.
+ * conversation anywhere - interpreting free text is exactly what the model does.
  * The objective engine, readiness logic, recovery, and prioritization then
  * consume ONLY the structured facts this returns; they never see the raw config.
  *
@@ -15,7 +15,7 @@
  * so every consumer behaves exactly as it did before the binding existed.
  *
  * `normalize()` is structural VALIDATION only (whitelist the model's output to
- * configured/allowed values) — it never interprets the conversation itself.
+ * configured/allowed values) - it never interprets the conversation itself.
  */
 
 import { generateResponse, getMicroModel } from "./ai.service";
@@ -53,13 +53,13 @@ export async function evaluateWizardBinding(opts: {
 
   const system = [
     "You convert an AI sales/support employee's CONFIGURATION plus the live conversation into a small JSON verdict.",
-    "Judge ONLY from explicit evidence in the conversation. When uncertain, choose the neutral / false / null option — NEVER guess a disqualification or a fit you cannot see.",
+    "Judge ONLY from explicit evidence in the conversation. When uncertain, choose the neutral / false / null option - NEVER guess a disqualification or a fit you cannot see.",
     "Respond with ONLY a JSON object (no prose, no code fences) with EXACTLY these keys:",
     '- "fit": one of "qualified" | "disqualified" | "neutral". "disqualified" ONLY when the customer clearly matches a configured disqualifier; "qualified" when they clearly match the ideal customer or a qualification signal; otherwise "neutral".',
     '- "disqualifierMatched": the EXACT configured disqualifier string the customer matched, or null.',
-    '- "qualificationMet": boolean — true when enough configured qualification signals are evidenced to justify proposing a demo/meeting; false when not yet established.',
+    '- "qualificationMet": boolean - true when enough configured qualification signals are evidenced to justify proposing a demo/meeting; false when not yet established.',
     '- "signalsMet": array of the configured qualification-signal strings (verbatim) that are evidenced; [] if none.',
-    `- "goalObjective": which objective the CONFIGURED GOAL targets as its endpoint — one of [${chain.map((c) => `"${c}"`).join(", ")}] — or null if the goal does not clearly map to one.`,
+    `- "goalObjective": which objective the CONFIGURED GOAL targets as its endpoint - one of [${chain.map((c) => `"${c}"`).join(", ")}] - or null if the goal does not clearly map to one.`,
   ].join("\n");
 
   const user = [

@@ -515,7 +515,7 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     // PAUSED agent edited later is never silently reactivated. Promotion
     // (auto OR explicit `status:"ACTIVE"` in the body) additionally requires
     // server-side readiness (real name + goal-or-funnel + >=1 knowledge
-    // base) — an unready draft SAVES fine but stays DRAFT.
+    // base) - an unready draft SAVES fine but stays DRAFT.
     const explicitStatus = Object.prototype.hasOwnProperty.call(updateData, "status");
     if (existing.status === "DRAFT" && (wasIncompleteWizard || (explicitStatus && updateData.status === "ACTIVE"))) {
       const promotedName = String(merged.name ?? "").trim();
@@ -549,6 +549,17 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       where: { id: req.params.id as string },
       data: updateData,
     });
+
+    // Keep the linked RouterRule label in sync with the employee's name on a
+    // rename - onboarding already does this at hire time; the editor must too, or
+    // the routing/inbox label keeps showing the OLD name after a rename (part of
+    // "the name change doesn't take effect").
+    if (Object.prototype.hasOwnProperty.call(updateData, "name") && typeof agent.name === "string" && agent.name.trim() && agent.name !== existing.name) {
+      await prisma.routerRule.updateMany({
+        where: { tenantId: req.tenantId! as string, aiAgentId: agent.id },
+        data: { name: agent.name.trim() },
+      }).catch(() => { /* label sync is cosmetic - never fail the save on it */ });
+    }
 
     // Update knowledge base assignments if provided
     if (knowledgeBaseIds && Array.isArray(knowledgeBaseIds)) {
@@ -710,7 +721,7 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
     });
     const nodes: any[] = Array.isArray(canvas?.nodes) ? (canvas!.nodes as any[]) : [];
     // A node routes to this employee when its routeType is (or defaults to)
-    // "agent" and targetId matches — mirrors flow-executor's dispatchRoute.
+    // "agent" and targetId matches - mirrors flow-executor's dispatchRoute.
     const reachable = nodes.some((n) => {
       const routeType = n?.data?.routeType ?? "agent";
       return routeType === "agent" && n?.data?.targetId === agent.id;
@@ -724,7 +735,7 @@ router.get("/:id/reachability", authenticate, resolveTenant, requireActiveTenant
 
 // ─── Effective permissions (P1-8) ────────────────────────────
 // The SINGLE source of truth for "what can this employee actually do right
-// now": the runtime AND-rule — an operation is EFFECTIVE only when its
+// now": the runtime AND-rule - an operation is EFFECTIVE only when its
 // capability is live (CONNECTED / bookable / KB attached) AND (for tool-governed
 // domains) an AgentToolPermission grants it. Reuses the exact permissions bridge
 // + capability world the kernel uses, so the UI never disagrees with the runtime.

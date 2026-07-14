@@ -166,7 +166,7 @@ export default function OutboundCallPage() {
 
   return (
     <div className="max-w-xl mx-auto px-3 md:px-0">
-      <div className="bg-white border border-gray-200 rounded-xl p-4 md:p-6 shadow-subtle">
+      <div className="bg-white border border-gray-200 rounded-xl p-4 md:p-6 shadow-subtle" data-tour="outbound-dialer">
         <h2 className="text-lg font-semibold text-gray-900 mb-1">{t("outbound.call.title")}</h2>
         <p className="text-sm text-gray-500 mb-5">{t("outbound.call.subtitle")}</p>
 

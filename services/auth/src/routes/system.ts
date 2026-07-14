@@ -405,7 +405,7 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Re
 //   AIAgentKnowledge links + RouterRules, onboarding departments + members,
 //   and all ScheduledNudges. Tenant.status → PENDING_ONBOARDING.
 //
-// PRESERVED (deliberately — not onboarding artifacts, and unsafe to destroy):
+// PRESERVED (deliberately - not onboarding artifacts, and unsafe to destroy):
 //   the tenant row, its users, connected OAuth integrations + channels
 //   (revoking live tokens is irreversible), and imported KnowledgeBases
 //   (real customer content). The next login runs onboarding from scratch;
@@ -476,7 +476,7 @@ router.get("/tenants/:id/onboarding-snapshot", authenticate, requireSystemAdmin(
   }
 });
 
-// Admin-triggered manual nudge — arms + delivers immediately, returns outcome.
+// Admin-triggered manual nudge - arms + delivers immediately, returns outcome.
 router.post("/tenants/:id/nudge", authenticate, requireSystemAdmin(), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.params.id as string;

@@ -50,7 +50,7 @@ function getTransporter(): nodemailer.Transporter {
 
 /**
  * True only when real SMTP creds are configured. Without them, getTransporter
- * returns a STUB that only console.logs — so callers that must report HONEST
+ * returns a STUB that only console.logs - so callers that must report HONEST
  * delivery (the Nudge Engine / the AI's Voice) check this to avoid marking an
  * un-sent email as SENT (T-4: "the Voice is mute but the system reports speaking").
  */
@@ -101,7 +101,7 @@ export async function createMagicLink(tenantId: string, userId: string): Promise
 //
 // One visual system for every email the product sends: a soft light canvas, a
 // single white card with a brand-gradient hairline, generous whitespace, and
-// the brand palette used as accents — never as a wall of color. Every template
+// the brand palette used as accents - never as a wall of color. Every template
 // below composes this shell; the Nudge Engine imports it too, so the AI's
 // Voice and the product's transactional mail read as one product.
 
@@ -149,7 +149,7 @@ export function renderBrandEmail(a: BrandEmailArgs): string {
   const dir = he ? "rtl" : "ltr";
   const align = he ? "right" : "left";
   const closing = a.closingHtml ?? `
-      <p style="margin:0 0 14px;font-size:14px;color:${EC.muted};line-height:1.6;">${he ? "צריכים עזרה? פשוט השיבו למייל — בן אדם אמיתי קורא כל הודעה." : "Need help? Just hit reply &mdash; a real human reads every message."}</p>
+      <p style="margin:0 0 14px;font-size:14px;color:${EC.muted};line-height:1.6;">${he ? "צריכים עזרה? פשוט השיבו למייל - בן אדם אמיתי קורא כל הודעה." : "Need help? Just hit reply &mdash; a real human reads every message."}</p>
       <p style="margin:0;font-size:14px;color:${EC.muted};">${he ? "נתראה בקרוב," : "Talk soon,"}<br><strong style="color:${EC.ink};">${he ? "צוות GOTCHA." : "The GOTCHA. Team"}</strong></p>`;
   return `<!DOCTYPE html>
 <html lang="${he ? "he" : "en"}" dir="${dir}">
@@ -201,7 +201,7 @@ export function renderBrandEmail(a: BrandEmailArgs): string {
       <!-- footer -->
       <table role="presentation" cellpadding="0" cellspacing="0" border="0" style="width:100%;max-width:560px;">
         <tr><td align="center" style="padding:26px 16px 8px;">
-          <p style="margin:0;color:${EC.muted};font-size:11px;line-height:1.7;">${he ? "GOTCHA. — בונים את עתיד התקשורת עם הלקוחות." : "GOTCHA. &mdash; Building the future of customer communication."}</p>
+          <p style="margin:0;color:${EC.muted};font-size:11px;line-height:1.7;">${he ? "GOTCHA. - בונים את עתיד התקשורת עם הלקוחות." : "GOTCHA. &mdash; Building the future of customer communication."}</p>
           ${a.footerNote ? `<p style="margin:6px 0 0;color:${EC.faint};font-size:11px;line-height:1.7;">${a.footerNote}</p>` : ""}
         </td></tr>
       </table>
@@ -212,7 +212,7 @@ export function renderBrandEmail(a: BrandEmailArgs): string {
 </html>`;
 }
 
-// Section builders — each returns a full-width card row (<tr>…</tr>).
+// Section builders - each returns a full-width card row (<tr>…</tr>).
 
 export function emailParagraph(html: string, locale?: string): string {
   const align = locale === "he" ? "right" : "left";
@@ -297,8 +297,8 @@ function emailPills(caption: string, items: string[]): string {
 
 export function onboardingEmailHtml(adminName: string, tenantName: string, setupUrl: string): string {
   return renderBrandEmail({
-    title: `Set up ${escapeHtml(tenantName)} — GOTCHA.`,
-    preheader: "Your workspace is ready — your AI wants to meet your business.",
+    title: `Set up ${escapeHtml(tenantName)} - GOTCHA.`,
+    preheader: "Your workspace is ready - your AI wants to meet your business.",
     eyebrow: "Your workspace is ready",
     icon: "&#9889;",
     headline: `Let's set up ${escapeHtml(tenantName)}.`,
@@ -324,7 +324,7 @@ export function activationEmailHtml(
   dashboardUrl: string,
 ): string {
   return renderBrandEmail({
-    title: `${escapeHtml(tenantName)} is live — GOTCHA.`,
+    title: `${escapeHtml(tenantName)} is live - GOTCHA.`,
     preheader: "Everything's set up and ready to go.",
     eyebrow: "You're live",
     icon: "&#10003;",
@@ -365,8 +365,8 @@ export function waitlistWelcomeHtml(firstName: string, position: number): string
         </td></tr>
       </table>`;
   return renderBrandEmail({
-    title: "You're in — GOTCHA.",
-    preheader: "Welcome to early access — here's what happens next.",
+    title: "You're in - GOTCHA.",
+    preheader: "Welcome to early access - here's what happens next.",
     eyebrow: "Early access",
     icon: "&#10003;",
     headline: `You're in, ${escapeHtml(firstName)}.`,
@@ -438,7 +438,7 @@ export async function sendPasswordResetEmail(
 
   const subject = `Reset your password - ${tenantName}`;
   const html = renderBrandEmail({
-    title: "Reset password — GOTCHA.",
+    title: "Reset password - GOTCHA.",
     eyebrow: "Account security",
     icon: "&#128274;",
     headline: "Reset your password",
@@ -542,7 +542,7 @@ export async function sendOnboardingEmail(
 }
 
 /**
- * Send a lifecycle NUDGE email — generic subject/body computed by the Nudge
+ * Send a lifecycle NUDGE email - generic subject/body computed by the Nudge
  * Engine. Reuses the same transport + logging as every other email. Returns
  * true on success so the engine can mark the nudge SENT vs FAILED.
  */
@@ -563,11 +563,11 @@ export async function sendNudgeEmail(
     body: text,
     metadata: { dedupeKey },
   };
-  // Fail loud when the transport is a stub — a nudge that wasn't really sent must
+  // Fail loud when the transport is a stub - a nudge that wasn't really sent must
   // settle FAILED, never SENT. Otherwise the Voice reports it is speaking when
   // it is mute (T-4).
   if (!isEmailTransportConfigured()) {
-    console.error(`[EMAIL] Nudge NOT delivered to ${recipient} — SMTP unconfigured (stub transport). Marking FAILED, not SENT.`);
+    console.error(`[EMAIL] Nudge NOT delivered to ${recipient} - SMTP unconfigured (stub transport). Marking FAILED, not SENT.`);
     await logNotification(payload, "failed", "smtp_unconfigured").catch(() => {});
     return false;
   }
@@ -741,3 +741,66 @@ export async function sendTeammateInvite(args: TeammateInviteArgs): Promise<void
 // imports `sendOnboardingInvite` even though we only need
 // `sendTeammateInvite`). Re-export so the import line stays minimal.
 export const sendOnboardingInvite = sendTeammateInvite;
+
+// ── "Tell us about an integration we don't have yet" ────────────────────────
+// During onboarding the scan sometimes spots an important tool GOTCHA doesn't
+// support yet (a ReturnGO-style app). The owner can flag it with one click; we
+// email the team so we know what to build next. Destination is env-driven
+// (MAIL_TO / INTEGRATION_REQUEST_EMAIL) - a future group alias - and it degrades
+// gracefully (logs, never throws) when SMTP or the address isn't configured.
+export interface IntegrationRequestArgs {
+  integration: string;              // the tool/integration name the owner wants
+  tenantId?: string;
+  tenantName?: string;
+  requestedByEmail?: string;
+  requestedByName?: string;
+  websiteDomain?: string;
+  note?: string;                    // optional free-text context from the owner
+  source?: string;                  // where it was flagged (e.g. "onboarding_integrations")
+}
+
+export function integrationRequestRecipient(): string | null {
+  return (process.env.MAIL_TO || process.env.INTEGRATION_REQUEST_EMAIL || process.env.TEAM_ALERT_EMAIL || "").trim() || null;
+}
+
+export async function sendIntegrationRequestEmail(args: IntegrationRequestArgs): Promise<boolean> {
+  const to = integrationRequestRecipient();
+  if (!to) {
+    console.warn("[notify] integration request not sent - no MAIL_TO / INTEGRATION_REQUEST_EMAIL configured:", args.integration);
+    return false;
+  }
+  if (!isEmailTransportConfigured()) {
+    console.warn("[notify] integration request not sent - SMTP not configured:", args.integration);
+    return false;
+  }
+  const subject = `Integration request: ${args.integration}`;
+  const rows = [
+    ["Integration", args.integration],
+    ["Business", args.tenantName || "-"],
+    ["Website", args.websiteDomain || "-"],
+    ["Requested by", [args.requestedByName, args.requestedByEmail].filter(Boolean).join(" · ") || "-"],
+    ["Tenant ID", args.tenantId || "-"],
+    ["Source", args.source || "onboarding"],
+    ["Note", args.note || "-"],
+  ];
+  const bodyHtml = rows
+    .map(([k, v]) => `${emailParagraph(`<strong>${escapeHtml(String(k))}:</strong> ${escapeHtml(String(v))}`)}`)
+    .join("");
+  const html = renderBrandEmail({
+    title: subject,
+    eyebrow: "Integration request",
+    icon: "🔌",
+    headline: `A customer wants ${escapeHtml(args.integration)}`,
+    subhead: "Flagged during onboarding - a tool we don't support yet.",
+    bodyHtml,
+    footerNote: "You're receiving this because you're on the GOTCHA integrations alias.",
+  });
+  const text = rows.map(([k, v]) => `${k}: ${v}`).join("\n");
+  try {
+    await sendHtmlEmail(to, subject, html, text);
+    return true;
+  } catch (err: any) {
+    console.error("[notify] failed to send integration request email:", err?.message);
+    return false;
+  }
+}

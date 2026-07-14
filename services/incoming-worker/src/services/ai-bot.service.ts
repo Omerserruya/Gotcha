@@ -629,7 +629,7 @@ async function escalateToHuman(
 
   // The adapter THROWS on provider errors (bad number, closed 24h window,
   // template required) despite the `string | null` signature. A failed SEND
-  // must never abort the ESCALATION itself — the human takeover and the
+  // must never abort the ESCALATION itself - the human takeover and the
   // audit trail matter more than the courtesy message. Degrade to a FAILED
   // message row and continue.
   let extId: string | null = null;

@@ -1,5 +1,5 @@
 /**
- * AI-Unit pricing engine — COST-DRIVEN, not token-driven.
+ * AI-Unit pricing engine - COST-DRIVEN, not token-driven.
  *
  * AI Units are an abstraction over real provider COST. The runtime reports
  * `model + inputTokens + outputTokens`; we compute the real provider cost from
@@ -10,7 +10,7 @@
  *   unitsConsumed   = providerCostUsd · categoryMultiplier · marginFactor / unitCostBasisUsd
  *
  * Adding a model, changing provider prices, or adjusting commercial margin is a
- * DATA change (BillableModel / UnitPricingConfig rows) — never a code change.
+ * DATA change (BillableModel / UnitPricingConfig rows) - never a code change.
  *
  * The pure functions below are DB-free and unit-tested. `loadModelPricing` /
  * `loadUnitPricing` read the newest active config with a short in-process cache.

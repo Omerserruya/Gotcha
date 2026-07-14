@@ -1,5 +1,5 @@
 /**
- * Packaging / plans — built ENTIRELY on the existing License layer.
+ * Packaging / plans - built ENTIRELY on the existing License layer.
  *
  * A plan is just a set of tenant entitlements (TenantFeature rows keyed by
  * catalog license keys). The resolver's `isPermissionLicensed()` already does
@@ -20,7 +20,7 @@ import type { PermissionDomain } from "./permission-catalog";
 
 // Self-serve tiers (Light/Pro/Business) + sales-only Enterprise. `grandfathered`
 // is a temporary one-way compatibility state (full access, billing+enforcement
-// OFF) used only during rollout — see services/billing migration flow.
+// OFF) used only during rollout - see services/billing migration flow.
 export type PlanKey = "light" | "pro" | "business" | "enterprise" | "grandfathered";
 
 /** Every feature domain (top segment of a permission key) = a packaging unit. */
@@ -44,7 +44,7 @@ export interface PlanDef {
   domains: PermissionDomain[];
 }
 
-// Starting defaults — edit freely; this is the only place packaging is defined.
+// Starting defaults - edit freely; this is the only place packaging is defined.
 // `conversation`, `customer`, `channels` and `settings` are core (every plan).
 export const PLAN_PRESETS: Record<PlanKey, PlanDef> = {
   light: {
@@ -77,7 +77,7 @@ export const PLAN_PRESETS: Record<PlanKey, PlanDef> = {
   grandfathered: {
     key: "grandfathered",
     name: "Grandfathered",
-    description: "Legacy tenant — full access while billing rolls out. Not for sale.",
+    description: "Legacy tenant - full access while billing rolls out. Not for sale.",
     domains: [...PLAN_DOMAINS],
   },
 };

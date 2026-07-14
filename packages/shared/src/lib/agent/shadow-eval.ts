@@ -1,10 +1,10 @@
 /**
- * Shadow evaluation — Planner decision ↔ Reasoner decision, over the SAME Oracle
+ * Shadow evaluation - Planner decision ↔ Reasoner decision, over the SAME Oracle
  * Facts.
  *
  * The Planner is a MIGRATION ORACLE only: a temporary baseline we compare the
  * Reasoner against until parity is proven, then delete. Nothing here improves the
- * Planner — the adapter translates its output INTO the Reasoner's decision
+ * Planner - the adapter translates its output INTO the Reasoner's decision
  * vocabulary (the permanent target), which is a step toward retiring it.
  *
  * Pure, deterministic, zero deps, never throws. The live shadow runner (services/
@@ -21,7 +21,7 @@ import type { ReasonerDecision, ReasonerInput } from "./cognition";
 export const SHADOW_EVAL_SCHEMA_VERSION = 1;
 
 /**
- * The minimal shape of a Planner's chosen move — decoupled from services/ai's
+ * The minimal shape of a Planner's chosen move - decoupled from services/ai's
  * `NextActionCandidate` on purpose (shared imports nothing from the Planner it is
  * helping to delete). The shadow runner maps the real candidate into this.
  */
@@ -71,7 +71,7 @@ export interface DecisionDivergence {
 /**
  * Compare two decisions in the SAME vocabulary. Agreement = same move type AND
  * (for EXECUTE) same operation AND (for REQUEST_INPUT) same needed field. Reasons
- * (ESCALATE) and phrasing are intentionally NOT compared — only the decision.
+ * (ESCALATE) and phrasing are intentionally NOT compared - only the decision.
  */
 export function compareDecisions(
   planner: ReasonerDecision,
@@ -90,18 +90,18 @@ export function compareDecisions(
     const detailMatch = planner.needed === reasoner.needed;
     return { agree: detailMatch, moveTypeMatch: true, detailMatch, axis: detailMatch ? "none" : "field" };
   }
-  // CONVERSE / ESCALATE / WAIT — same move type is full agreement.
+  // CONVERSE / ESCALATE / WAIT - same move type is full agreement.
   return { agree: true, moveTypeMatch: true, detailMatch: true, axis: "none" };
 }
 
 /**
- * A single row of the PERMANENT evaluation corpus — provider-neutral and
+ * A single row of the PERMANENT evaluation corpus - provider-neutral and
  * replayable. This is not a shadow log; it is a dataset for prompt eval,
  * regression detection, model comparison, fine-tuning, Planner-retirement
  * decisions, and future automated evals.
  *
  * REPLAY: `reasonerInput` is the full, vendor-neutral input both decisions were
- * computed over — so a future model (GPT-6, Claude, …) can be re-run against the
+ * computed over - so a future model (GPT-6, Claude, …) can be re-run against the
  * exact same inputs and compared. NEVER store provider request/response; that
  * stays behind the ReasonerProvider boundary.
  */
@@ -137,7 +137,7 @@ export interface ShadowEvalRecord {
   // ── Provenance / eval axes (provider-neutral) ──
   provider: string;
   model: string;
-  /** Version of the reasoning prompt/strategy — the key regression axis. */
+  /** Version of the reasoning prompt/strategy - the key regression axis. */
   promptVersion: string;
   latencyMs?: number;
   inputTokens?: number;
@@ -149,7 +149,7 @@ export interface ShadowEvalRecord {
   metadata?: Record<string, unknown>;
 }
 
-/** Aggregate agreement stats over a batch — for the eval dashboard. Pure. */
+/** Aggregate agreement stats over a batch - for the eval dashboard. Pure. */
 export function summarizeShadowBatch(records: ShadowEvalRecord[]): {
   total: number;
   agreementRate: number;

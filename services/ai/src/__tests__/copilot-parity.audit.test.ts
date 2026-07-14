@@ -129,8 +129,8 @@ describe("Copilot ⇄ Employee CurrentPlan parity", () => {
 
       report.push(
         `\n### ${s.name}\n` +
-          `  goal=${cop.goal ?? "—"} | objective=${cop.currentObjective ?? "—"} | best=${cop.bestNextAction?.kind ?? "—"}:${cop.bestNextAction?.tool ?? "—"} (conf ${cop.confidence.toFixed(2)})\n` +
-          `  goalStatus=${cop.goalStatus?.kind ?? "—"} | missing=[${cop.currentState?.missingRequired.map((m) => m.key).join(",") ?? ""}]\n` +
+          `  goal=${cop.goal ?? "-"} | objective=${cop.currentObjective ?? "-"} | best=${cop.bestNextAction?.kind ?? "-"}:${cop.bestNextAction?.tool ?? "-"} (conf ${cop.confidence.toFixed(2)})\n` +
+          `  goalStatus=${cop.goalStatus?.kind ?? "-"} | missing=[${cop.currentState?.missingRequired.map((m) => m.key).join(",") ?? ""}]\n` +
           `  Copilot auto-run READ → [${reads.join(", ") || "none"}]\n` +
           `  Copilot RECOMMEND ACTION → [${actions.join(", ") || "none"}]\n` +
           `  parity(emp==cop): ${fingerprint(emp) === fingerprint(cop) ? "IDENTICAL ✅" : "DIVERGED ⚠️"}`,

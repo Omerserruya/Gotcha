@@ -215,7 +215,7 @@ export type CheckAvailabilityResult =
       /** Duration (minutes) of the meeting type these slots were computed for. */
       durationMinutes: number;
       meetingTypeSlug: string;
-      /** Set when `requested_at_iso` was given — the point-check verdict. */
+      /** Set when `requested_at_iso` was given - the point-check verdict. */
       requestedIso?: string;
       requestedAvailable?: boolean;
       /** InvalidReason (e.g. outside_working_hours, agent_busy) when not available. */
@@ -227,7 +227,7 @@ export type CheckAvailabilityResult =
        */
       proposedSlotsIso: string[];
       /**
-       * Soonest valid slot ignoring the window — populated when the windowed
+       * Soonest valid slot ignoring the window - populated when the windowed
        * answer is empty (e.g. asked about a closed Saturday) so the model can say
        * "we're closed then; the nearest is …".
        */
@@ -554,7 +554,7 @@ export const CHECK_AVAILABILITY_TOOL = {
     name: "check_availability",
     description:
       "READ-ONLY. Inspect the assigned agent's REAL calendar + scheduling rules to answer ANY availability " +
-      "or working-hours question. This is the ONLY source of truth for when the agent can meet — you do NOT " +
+      "or working-hours question. This is the ONLY source of truth for when the agent can meet - you do NOT " +
       "know the calendar yourself, so never state availability, working hours, or specific open times from " +
       "memory or reasoning. This tool NEVER books anything.\n\n" +
       "Call it whenever the customer asks about timing, OR right before you propose any time yourself:\n" +
@@ -580,13 +580,13 @@ export const CHECK_AVAILABILITY_TOOL = {
           type: "string",
           description:
             "Configured meeting-type slug to check against (drives duration + working-hours policy). " +
-            "Optional — the server snaps to the closest configured type, or uses the only one configured.",
+            "Optional - the server snaps to the closest configured type, or uses the only one configured.",
         },
         requested_at_iso: {
           type: "string",
           description:
             "A SINGLE exact time to check ('are you free tomorrow at 12:00?'), ISO8601 with timezone offset. " +
-            "Use this OR from_iso/to_iso — not both.",
+            "Use this OR from_iso/to_iso - not both.",
         },
         from_iso: {
           type: "string",
@@ -613,9 +613,9 @@ export const SCHEDULE_MEETING_TOOL = {
     description:
       "BOOK a meeting at a SPECIFIC time the customer has ALREADY chosen. This is a pure WRITE action: it " +
       "creates the calendar event, the Meet link, and the invites. It does NOT search for times and does NOT " +
-      "decide availability — that is `check_availability`'s job. Never call this to 'see if a time works', and " +
+      "decide availability - that is `check_availability`'s job. Never call this to 'see if a time works', and " +
       "never invent a time.\n\n" +
-      "PRECONDITION — you only reach this tool once a concrete slot is agreed, obtained one of two ways:\n" +
+      "PRECONDITION - you only reach this tool once a concrete slot is agreed, obtained one of two ways:\n" +
       "  • the customer named an explicit time AND you confirmed it is open via `check_availability`, or\n" +
       "  • the customer picked one of the slots `check_availability` returned.\n\n" +
       "BEFORE booking, complete these (ask ONE question per turn if anything is missing):\n" +
@@ -635,7 +635,7 @@ export const SCHEDULE_MEETING_TOOL = {
       "  2. Topic / agenda - one short line, so the calendar event title + notes are useful.\n" +
       "  3. The customer's email (only ask if STEP A didn't surface one and the customer hasn't given it).\n\n" +
       "🚫 HARD RULES:\n" +
-      "  • `requested_at_iso` is REQUIRED — it is the exact agreed slot. If you do NOT have a concrete agreed " +
+      "  • `requested_at_iso` is REQUIRED - it is the exact agreed slot. If you do NOT have a concrete agreed " +
       "time, call `check_availability` instead; do not call this tool.\n" +
       "  • If the customer has not been asked about additional guests in THIS conversation, ask first; never " +
       "assume guests = none, even from CRM history.\n" +
@@ -666,7 +666,7 @@ export const SCHEDULE_MEETING_TOOL = {
         requested_at_iso: {
           type: "string",
           description:
-            "REQUIRED. The exact ISO8601 slot (with timezone offset) the customer has CHOSEN — either a time " +
+            "REQUIRED. The exact ISO8601 slot (with timezone offset) the customer has CHOSEN - either a time " +
             "they named that you confirmed open via check_availability, or one of check_availability's returned " +
             "slots. This tool books THIS time; it never searches for one.",
         },
@@ -711,7 +711,7 @@ export const RESCHEDULE_MEETING_TOOL = {
       "  • Only call this if a meeting was actually booked earlier in this conversation. If unsure, you don't have one.\n" +
       "  • To find a replacement time, use `check_availability` first (it gives real open slots / working hours); " +
       "call reschedule_meeting only once the customer has CHOSEN the new time. Never invent the new time.\n" +
-      "  • If the new time turns out to be unbookable you'll get ok:false with `needsAvailabilityCheck:true` — " +
+      "  • If the new time turns out to be unbookable you'll get ok:false with `needsAvailabilityCheck:true` - " +
       "do NOT confirm the move; call check_availability, offer real slots, and let the customer pick.\n" +
       "  • On success the meeting keeps its original meeting link; confirm the new day/time to the customer.",
     parameters: {
@@ -790,7 +790,7 @@ export interface BuildAgentToolsOptions {
   scheduleMeeting?: boolean;
   /**
    * check_availability tool (read-only). Surfaced together with scheduleMeeting
-   * whenever the agent has a bookable calendar — it's the source of truth for
+   * whenever the agent has a bookable calendar - it's the source of truth for
    * availability + working-hours questions, so the model never invents times.
    */
   checkAvailability?: boolean;
@@ -869,7 +869,7 @@ export async function buildAgentToolsForAIAgent(
           // Calendar tools are NOT surfaced through this HTTP-catalog path, to
           // avoid double-surfacing the same tool under two names. Availability is
           // the first-class `check_availability` built-in (validated against the
-          // scheduling policy — working hours / buffers / conflicts), booking is
+          // scheduling policy - working hours / buffers / conflicts), booking is
           // the `schedule_meeting` built-in, and neutral reads (list_events) come
           // from the registered `google_calendar` ProviderAdapter. Raw
           // create_event / free-busy passthroughs are intentionally never

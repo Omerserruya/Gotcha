@@ -144,14 +144,14 @@
     },
     {
       "path": "src/lib/api.ts",
-      "accessCount": 71,
-      "lastAccessed": 1783603964538,
+      "accessCount": 74,
+      "lastAccessed": 1783945521642,
       "type": "directory"
     },
     {
       "path": "src/app/ai-studio/agents/[id]/page.tsx",
-      "accessCount": 65,
-      "lastAccessed": 1780645411514,
+      "accessCount": 68,
+      "lastAccessed": 1783884609750,
       "type": "file"
     },
     {
@@ -257,16 +257,16 @@
       "type": "file"
     },
     {
+      "path": "src/components/conversations/ConversationList.tsx",
+      "accessCount": 13,
+      "lastAccessed": 1784040726138,
+      "type": "directory"
+    },
+    {
       "path": "src/app/knowledge/page.tsx",
       "accessCount": 12,
       "lastAccessed": 1776002199581,
       "type": "file"
-    },
-    {
-      "path": "src/components/conversations/ConversationList.tsx",
-      "accessCount": 12,
-      "lastAccessed": 1779775820990,
-      "type": "directory"
     },
     {
       "path": "src/components/MobileNav.tsx",

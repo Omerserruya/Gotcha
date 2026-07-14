@@ -1,5 +1,5 @@
 /**
- * LIVE SHADOW EVIDENCE — SEARCH_CUSTOMER (CRM READ) through the new CRM driver against
+ * LIVE SHADOW EVIDENCE - SEARCH_CUSTOMER (CRM READ) through the new CRM driver against
  * the pilot's REAL CRM (HubSpot). READ-only: safe to run for real. Proves the driver is
  * a faithful wrapper: describeWorld sees the real connection, and SEARCH_CUSTOMER reaches
  * the real vendor via getCrmAdapter().findCustomer and returns a well-formed result +

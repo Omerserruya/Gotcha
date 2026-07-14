@@ -1,4 +1,4 @@
-// Server wrapper: static export (prod) requires generateStaticParams — every
+// Server wrapper: static export (prod) requires generateStaticParams - every
 // article page is pre-rendered from the finite content set.
 import { HELP_CATEGORIES } from "../../content";
 import { ArticleClient } from "./ArticleClient";

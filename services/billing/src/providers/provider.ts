@@ -1,5 +1,5 @@
 /**
- * Payment provider abstraction — iCount today, Stripe/Paddle tomorrow.
+ * Payment provider abstraction - iCount today, Stripe/Paddle tomorrow.
  *
  * The billing domain NEVER touches raw card data: the provider's hosted page
  * (iCount PayPage) tokenizes; we store only the token + card metadata. Every
@@ -26,7 +26,7 @@ export interface ChargeInput {
   amount: number;
   currency: string;
   description: string;
-  /** Required for safe retries — the provider must dedupe on this. */
+  /** Required for safe retries - the provider must dedupe on this. */
   idempotencyKey: string;
   /** When true, also issue a legal tax document (חשבונית מס) for the charge. */
   issueInvoice?: boolean;

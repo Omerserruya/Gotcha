@@ -1,6 +1,6 @@
 "use client";
 
-// System Admin — Onboarding Console. One row per tenant: every milestone,
+// System Admin - Onboarding Console. One row per tenant: every milestone,
 // derived progress, health, and the Next Recommended Action. Operational
 // visibility ("who is stuck, where, what's done, what's left") + per-row
 // Reset Onboarding and Send Nudge.
@@ -71,7 +71,7 @@ export default function OnboardingConsolePage() {
     try {
       const res = await sendTenantNudge(token, tenantId);
       const o = res.data;
-      flash(o.outcome === "sent" ? `Nudge sent (${o.reason})` : `Nudge ${o.outcome}${o.reason ? ` — ${o.reason}` : ""}`, o.outcome === "sent" ? "ok" : "err");
+      flash(o.outcome === "sent" ? `Nudge sent (${o.reason})` : `Nudge ${o.outcome}${o.reason ? ` - ${o.reason}` : ""}`, o.outcome === "sent" ? "ok" : "err");
       fetchRows();
     } catch (e: any) { flash(e?.message || "Nudge failed", "err"); }
     finally { setBusy(null); }
@@ -85,7 +85,7 @@ export default function OnboardingConsolePage() {
       const res = await resetTenantOnboarding(token, row.tenantId);
       const removed = res.data.removed || {};
       const n = Object.values(removed).reduce((a, b) => a + (b as number), 0);
-      flash(`Reset "${row.company}" — ${n} artifacts removed`, "ok");
+      flash(`Reset "${row.company}" - ${n} artifacts removed`, "ok");
       fetchRows();
     } catch (e: any) { flash(e?.message || "Reset failed", "err"); }
     finally { setBusy(null); }
@@ -104,7 +104,7 @@ export default function OnboardingConsolePage() {
         <div className="flex items-start justify-between flex-wrap gap-3">
           <div>
             <h1 className="text-2xl font-bold text-gray-900">Onboarding Console</h1>
-            <p className="text-sm text-gray-500 mt-1">Every tenant's onboarding progress — who's stuck, where, and what's next.</p>
+            <p className="text-sm text-gray-500 mt-1">Every tenant's onboarding progress - who's stuck, where, and what's next.</p>
           </div>
           <div className="flex gap-2 text-xs">
             <Stat label="Tenants" value={counts.total} />
@@ -176,11 +176,11 @@ export default function OnboardingConsolePage() {
                   <td className="px-2 py-2.5 text-center text-[11px] text-gray-500 capitalize">{r.knowledgeStatus}</td>
                   <td className="px-2 py-2.5 text-center">{r.aiEmployeeCreated ? <span className="text-[11px] text-emerald-600" title={r.aiEmployeeName || ""}>✓</span> : <Check ok={false} />}</td>
                   <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{rel(r.lastActivity)}</td>
-                  <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.lastNudgeSentAt ? rel(r.lastNudgeSentAt) : <span className="text-gray-300">—</span>}</td>
+                  <td className="px-3 py-2.5 text-gray-500 whitespace-nowrap">{r.lastNudgeSentAt ? rel(r.lastNudgeSentAt) : <span className="text-gray-300">-</span>}</td>
                   <td className="px-3 py-2.5"><Progress pct={r.progressPct} /></td>
                   <td className="px-3 py-2.5"><Health h={r.health} /></td>
                   <td className="px-3 py-2.5"><span className="text-xs font-medium text-gray-700">{r.nextRecommendedAction}</span></td>
-                  <td className="px-3 py-2.5 text-gray-400 text-xs">{r.assignedCsm || "—"}</td>
+                  <td className="px-3 py-2.5 text-gray-400 text-xs">{r.assignedCsm || "-"}</td>
                   <td className="px-3 py-2.5">
                     <div className="flex items-center justify-end gap-1.5">
                       <button disabled={busy === r.tenantId} onClick={() => doNudge(r.tenantId)}
@@ -238,7 +238,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone?: "ok
 
 function rel(iso: string): string {
   const t = new Date(iso).getTime();
-  if (Number.isNaN(t)) return "—";
+  if (Number.isNaN(t)) return "-";
   const s = Math.floor((Date.now() - t) / 1000);
   if (s < 60) return "just now";
   const m = Math.floor(s / 60); if (m < 60) return `${m}m ago`;

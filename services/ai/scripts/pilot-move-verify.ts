@@ -1,5 +1,5 @@
 /**
- * LIVE AUTONOMOUS MOVE_MEETING VERIFICATION — the remaining calendar WRITE evidence.
+ * LIVE AUTONOMOUS MOVE_MEETING VERIFICATION - the remaining calendar WRITE evidence.
  * Real Google Calendar: seed → BOOK slotA → MOVE to slotB → assert meeting_moved +
  * exactly one booking now at slotB → CANCEL cleanup → assert zero residual.
  */
@@ -69,7 +69,7 @@ async function main() {
     console.log(`  MOVE executed + invariants held      : ${moveOk}`);
     console.log(`  exactly one booking, now at slotB    : ${atB}`);
     console.log(`  cleanup left zero residual bookings  : ${residual.length === 0}`);
-    console.log(`  → MOVE_MEETING autonomous write-path ${moveOk && atB && residual.length === 0 ? "VERIFIED LIVE ✓ (safe to flip)" : "NOT verified — inspect above"}`);
+    console.log(`  → MOVE_MEETING autonomous write-path ${moveOk && atB && residual.length === 0 ? "VERIFIED LIVE ✓ (safe to flip)" : "NOT verified - inspect above"}`);
   } finally {
     await prisma.conversation.deleteMany({ where: { id: CONV_ID, tenantId: TENANT_ID } }).catch(() => {});
     await prisma.$disconnect();

@@ -26,7 +26,7 @@ import { prefetchCrmContext, renderCrmContextBlock } from "./crm-prefetch.servic
 import { assemblePlanContext, type AssembledPlanContext } from "./plan-context.service";
 import { routeCopilotTool } from "./capabilities";
 import { assembleCopilotToolSurface } from "./copilot-tool-surface.service";
-// CALENDAR capability execution — the ONE runtime pipeline, advisory mode. The
+// CALENDAR capability execution - the ONE runtime pipeline, advisory mode. The
 // Copilot no longer has its own calendar execution logic.
 import { executeCalendarToolAdvisory, isCalendarTool } from "./capability-runtime/calendar.execute";
 import { createProdCalendarPort } from "./capability-runtime/calendar.port.prod";
@@ -68,11 +68,11 @@ const SUBMIT_SUGGESTIONS_TOOL = {
       "Call this to FINISH and return your final suggestions to the human agent. " +
       "Call it exactly once, after you've used any read-only tools you need. " +
       "Your suggestions MUST come from the Current Plan: each is a different way to take the plan's " +
-      "best next action toward the current goal. Offer DISTINCT variants — typically (1) the best " +
-      "recommendation, (2) a softer approach, (3) a more direct approach — not three rephrasings of one line. " +
+      "best next action toward the current goal. Offer DISTINCT variants - typically (1) the best " +
+      "recommendation, (2) a softer approach, (3) a more direct approach - not three rephrasings of one line. " +
       "If you auto-ran read-only tools, WEAVE the retrieved facts into the replies (e.g. 'the calendar is open " +
       "tomorrow at 11:00 and 14:00', 'the last order was 8 days ago') so the human doesn't have to look them up. " +
-      "If the plan's best move is a customer-facing ACTION (book / create / refund / send), do NOT perform it — " +
+      "If the plan's best move is a customer-facing ACTION (book / create / refund / send), do NOT perform it - " +
       "recommend it to the human (an `action`-type suggestion) describing the action and why it advances the goal. " +
       "If no tool is needed, say so plainly in your reply suggestions. " +
       "OPTIONAL: include `signals` ONLY when the customer's latest message contains a clearly " +
@@ -92,7 +92,7 @@ const SUBMIT_SUGGESTIONS_TOOL = {
               approach: {
                 type: "string",
                 enum: ["best", "softer", "direct"],
-                description: "Which variant this is — keep the three distinct.",
+                description: "Which variant this is - keep the three distinct.",
               },
               rationale: {
                 type: "string",
@@ -364,7 +364,7 @@ export class OpenAIProvider implements AIProvider {
     const extIdForCal = context.conversationMeta?.customerExternalId;
 
     // SURFACE PARITY: ONE shared builder resolves calendar capability + active
-    // booking and assembles the calendar-gated advisory tool surface — the exact
+    // booking and assembles the calendar-gated advisory tool surface - the exact
     // SAME surface the CHAT Copilot path now consumes (no mirrored implementation).
     // Without it the model can't run check_availability (and invents times) nor
     // recommend a real schedule_meeting. READ tools auto-run (handler wired below);
@@ -402,7 +402,7 @@ export class OpenAIProvider implements AIProvider {
     // Build the SAME Current Plan the AI Employee reasons over, so the Copilot's
     // recommendation is driven by the identical goal / objective / next-action /
     // capability engine (assemblePlanContext → computeCurrentPlan, via
-    // buildAgentPrompt). There is NO copilot-specific reasoning here — only the
+    // buildAgentPrompt). There is NO copilot-specific reasoning here - only the
     // downstream EXECUTION differs (the Copilot recommends customer-facing actions
     // to the human and auto-runs only safe reads).
     let planCtx: AssembledPlanContext | undefined;
@@ -516,7 +516,7 @@ export class OpenAIProvider implements AIProvider {
                 text: typeof s === "string" ? s : (s.text || ""),
                 confidence: typeof s === "object" ? (s.confidence ?? 0.8) : 0.8,
                 type: (typeof s === "object" ? s.type : "reply") as AISuggestion["type"],
-                // The model already writes WHY each suggestion fits — carry it
+                // The model already writes WHY each suggestion fits - carry it
                 // to the inbox instead of dropping it (owner-trust surface).
                 approach: typeof s === "object" && typeof s.approach === "string" ? s.approach : undefined,
                 rationale: typeof s === "object" && typeof s.rationale === "string" ? s.rationale : undefined,
@@ -546,14 +546,14 @@ export class OpenAIProvider implements AIProvider {
           // The Copilot is not a tool caller; it decides WHO executes via the
           // shared routeCopilotTool (single source of truth, also used by CHAT).
           // Safe READ tools run automatically to enrich the suggestion. Customer-
-          // facing ACTIONS are NEVER executed here — they are surfaced to the
+          // facing ACTIONS are NEVER executed here - they are surfaced to the
           // human agent as a recommendation with the tool + args attached, and
           // the model is told it was surfaced so it keeps drafting the reply.
           dispatchedToolCount++;
 
           // CALENDAR → the ONE runtime pipeline (ADVISORY): READ auto-runs and
           // returns real facts; WRITE is recommended (never executed). No
-          // copilot-specific calendar logic remains — same pipeline as the
+          // copilot-specific calendar logic remains - same pipeline as the
           // employee, differing only in ExecutionMode.
           if (isCalendarTool(toolName)) {
             let calArgs: Record<string, unknown> = {};
@@ -604,7 +604,7 @@ export class OpenAIProvider implements AIProvider {
                 ok: true,
                 recommended: true,
                 executed: false,
-                note: "Surfaced to the human agent as a recommended action — NOT executed by the Co-Pilot. Continue and write the suggested reply for the human to send.",
+                note: "Surfaced to the human agent as a recommended action - NOT executed by the Co-Pilot. Continue and write the suggested reply for the human to send.",
               }),
             } as any);
             logCopilotTool({
@@ -845,7 +845,7 @@ export class OpenAIProvider implements AIProvider {
     }
     // ── SURFACE PARITY ────────────────────────────────────────────────────
     // Copilot CHAT now consumes the EXACT same tool surface as the primary
-    // Copilot path — and the same calendar gating the AI Employee uses — via the
+    // Copilot path - and the same calendar gating the AI Employee uses - via the
     // ONE shared builder, instead of the old generic built-in-only surface that
     // silently dropped the calendar tools and the check_availability handler.
     // Advisory gating (no close / follow-up / escalate) is baked into the builder:
@@ -996,7 +996,7 @@ export class OpenAIProvider implements AIProvider {
         } as any);
 
         for (const tc of toolCalls) {
-          // DECISION ENGINE: identical to the primary path — route through the
+          // DECISION ENGINE: identical to the primary path - route through the
           // shared routeCopilotTool. Safe READ tools auto-run; customer-facing
           // ACTIONS are recommended to the human, never executed.
           const toolName = tc.function?.name || "";
@@ -1034,7 +1034,7 @@ export class OpenAIProvider implements AIProvider {
                 ok: true,
                 recommended: true,
                 executed: false,
-                note: "Surfaced to the human agent as a recommended action — NOT executed by the Co-Pilot. Tell the agent you recommend this action and why it advances the goal.",
+                note: "Surfaced to the human agent as a recommended action - NOT executed by the Co-Pilot. Tell the agent you recommend this action and why it advances the goal.",
               }),
             } as any);
             logCopilotTool({

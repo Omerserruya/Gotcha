@@ -1,5 +1,5 @@
 /**
- * P1 live verification — run ONE real shadow loop for a conversation and print
+ * P1 live verification - run ONE real shadow loop for a conversation and print
  * what the persisted iterations prove: real grants-derived permissions, real
  * billing status, committed goal, dry_run gate probing, observation data.
  *

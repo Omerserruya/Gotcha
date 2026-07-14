@@ -12,7 +12,7 @@ import { selectActiveObjective } from "../services/objectives";
  * fact block; these tests pin that the keyed line makes the match work while the
  * raw Hebrew transcript alone does not.
  */
-describe("knowledge ledger — Hebrew answer needs a keyed fact to register", () => {
+describe("knowledge ledger - Hebrew answer needs a keyed fact to register", () => {
   const sales = requiredKnowledgeFor("sales");
   const isKnown = (factText: string, key: string) =>
     computeKnowledgeLedger(sales, factText).entries.find((e) => e.key === key)?.known;
@@ -39,7 +39,7 @@ describe("knowledge ledger — Hebrew answer needs a keyed fact to register", ()
   });
 });
 
-describe("objective promotion — Hebrew 'schedule a call' + value-based identity", () => {
+describe("objective promotion - Hebrew 'schedule a call' + value-based identity", () => {
   // Reproduces omer's blocked promotion: he asked to schedule (in Hebrew) and
   // gave an email, but the agent kept qualifying. The promotion needs the Hebrew
   // meeting intent AND value-detected identity to fire.

@@ -441,7 +441,7 @@ router.get("/features", ...ANY_USER, (_req: Request, res: Response): void => {
   });
 });
 
-// ─── Permission catalog (read-only) — single source of truth ────
+// ─── Permission catalog (read-only) - single source of truth ────
 // Drives the User Management UI: the permission picker + built-in roles +
 // scope options. Hierarchical (feature:sub-feature:action), grouped by domain.
 router.get("/catalog", ...ANY_USER, (_req: Request, res: Response): void => {

@@ -1,5 +1,5 @@
 /**
- * Oracle producer (shadow path) — composes Facts for the reasoner SHADOW
+ * Oracle producer (shadow path) - composes Facts for the reasoner SHADOW
  * comparison (Planner ↔ Reasoner over the SAME facts). It reads the money home
  * (billing wallet) and folds the live turn's signals into a single generic
  * capability world view, then composes canonical Facts via the pure

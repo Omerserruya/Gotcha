@@ -1,9 +1,9 @@
 /**
- * Grandfathered compatibility state — temporary, one-way.
+ * Grandfathered compatibility state - temporary, one-way.
  *
  *   • Backfill: every existing tenant gets a BillableEntity + a GRANDFATHERED
  *     subscription with enforcementEnabled=false (AI gate skipped, billing off,
- *     full features). NOT "unlimited Units" — there is simply no enforcement,
+ *     full features). NOT "unlimited Units" - there is simply no enforcement,
  *     so financial state stays deterministic.
  *   • Migration: an explicit one-way move to a real paid plan. Once migrated a
  *     tenant can NEVER return to GRANDFATHERED.

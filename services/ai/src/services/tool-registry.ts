@@ -329,7 +329,7 @@ export async function getAvailableTools(
     // Guard: the generic executor (tool-execution.service.ts) hard-fails any
     // catalog tool with no `endpoint` ("has no endpoint configured"). Such
     // rows are misconfigured stubs (e.g. the seeded calendar tools
-    // create_event/list_events) — exposing them can ONLY ever fail and traps
+    // create_event/list_events) - exposing them can ONLY ever fail and traps
     // the bot into calling a dead tool instead of the real path (calendar
     // booking goes through `schedule_meeting` → GoogleCalendarAdapter, not a
     // generic HTTP endpoint). Drop them from the surface so the model never

@@ -1,7 +1,7 @@
 /**
- * Capability Runtime — resolver behavior, proven with FAKE strategies/verifiers.
+ * Capability Runtime - resolver behavior, proven with FAKE strategies/verifiers.
  *
- * No real calendar, Prisma, or REST: the point is to validate the ARCHITECTURE —
+ * No real calendar, Prisma, or REST: the point is to validate the ARCHITECTURE -
  * that an OperationContract + injected bindings yields correct semantic outcomes,
  * the correctness envelope (MUST + success) is enforced regardless of strategy,
  * dependencies auto-satisfy in operation-space (probe-first), SHOULD never blocks,

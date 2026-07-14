@@ -3,11 +3,11 @@
 /**
  * Workspace-wide AI-credit alerts for admins:
  *   • ≥80% of the credit budget consumed → amber warning (dismissable per session)
- *   • balance at zero → red "AI paused" (persistent — this is a real outage)
+ *   • balance at zero → red "AI paused" (persistent - this is a real outage)
  *
  * Reads the same wallet snapshot the enforcement gate uses (billing
  * /credits/balance). Renders nothing when there is no budget in play (tenants
- * without a subscription/wallet) or when billing is unreachable — the banner
+ * without a subscription/wallet) or when billing is unreachable - the banner
  * must never be noise.
  */
 import { useEffect, useState } from "react";
@@ -45,19 +45,19 @@ export function CreditAlertBanner() {
   if (!balance || user?.role !== "ADMIN") return null;
   const allowance = Number(balance.includedAllowance || 0);
   const total = Number(balance.total || 0);
-  if (allowance <= 0) return null; // no budget in play — nothing honest to alert on
+  if (allowance <= 0) return null; // no budget in play - nothing honest to alert on
 
   const consumedPct = Math.min(100, Math.max(0, Math.round((1 - total / allowance) * 100)));
   const exhausted = total <= 0;
   if (!exhausted && (consumedPct < 80 || dismissed)) return null;
 
-  // Floating pill overlay — never participates in the page layout, so
+  // Floating pill overlay - never participates in the page layout, so
   // full-height screens are unaffected.
   return (
     <div className="absolute top-2 inset-x-0 z-30 flex justify-center pointer-events-none px-4" dir={he ? "rtl" : "ltr"}>
       {exhausted ? (
         <div className="pointer-events-auto flex items-center gap-3 px-4 py-2 rounded-full bg-red-600 text-white text-sm shadow-lg" role="alert">
-          <span className="font-semibold">{he ? "קרדיטי ה-AI נגמרו — עובדי ה-AI מושהים." : "AI credits exhausted — your AI employees are paused."}</span>
+          <span className="font-semibold">{he ? "קרדיטי ה-AI נגמרו - עובדי ה-AI מושהים." : "AI credits exhausted - your AI employees are paused."}</span>
           <Link href="/settings/billing" className="underline font-semibold hover:opacity-80 shrink-0">
             {he ? "הוסיפו קרדיטים ←" : "Add credits →"}
           </Link>

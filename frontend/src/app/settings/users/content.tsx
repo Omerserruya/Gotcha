@@ -39,7 +39,7 @@ interface AgentRow {
   email: string;
   isActive: boolean;
   phoneNumber?: string | null;
-  /** Legacy enum (ADMIN/AGENT) — fallback only. */
+  /** Legacy enum (ADMIN/AGENT) - fallback only. */
   legacyRole?: string;
   departmentId?: string | null;
   departmentRole?: string | null;
@@ -129,7 +129,7 @@ function roleBadgeColor(role?: string | null): string {
 
 function roleDisplayName(role?: string | null): string {
   const raw = (role ?? "").replace(/_/g, " ").trim();
-  if (!raw) return "—";
+  if (!raw) return "-";
   return raw
     .split(" ")
     .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
@@ -293,7 +293,7 @@ export function UsersContent() {
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 1 — Members
+// TAB 1 - Members
 // ════════════════════════════════════════════════════════════════════════════════
 
 interface MembersTabProps {
@@ -388,6 +388,7 @@ function MembersTab({
         </div>
         <button
           onClick={openCreate}
+          data-tour="invite-teammate"
           className="bg-primary-500 hover:bg-primary-600 text-white px-3 md:px-4 py-2 rounded-xl text-sm font-medium transition shadow-sm flex items-center gap-2 shrink-0"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -437,7 +438,7 @@ function MembersTab({
                     {agent.departmentName ? (
                       <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-violet-50 text-violet-600 ring-1 ring-violet-200">{agent.departmentName}</span>
                     ) : (
-                      <span className="text-xs text-gray-300">—</span>
+                      <span className="text-xs text-gray-300">-</span>
                     )}
                   </td>
                   <td className="py-3.5 px-5">
@@ -898,7 +899,7 @@ function MemberPanel({
                 </select>
               </div>
 
-              {/* Role select (create only — edit uses the rich role section below) */}
+              {/* Role select (create only - edit uses the rich role section below) */}
               {isCreate && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
@@ -1174,7 +1175,7 @@ function MemberPanel({
 }
 
 // ════════════════════════════════════════════════════════════════════════════════
-// TAB 2 — Roles
+// TAB 2 - Roles
 // ════════════════════════════════════════════════════════════════════════════════
 
 interface RolesTabProps {

@@ -1,18 +1,18 @@
 /**
- * iCount provider — Israeli PCI-compliant vault, payments + legal invoicing.
+ * iCount provider - Israeli PCI-compliant vault, payments + legal invoicing.
  *
  * Flow:
  *   1. Frontend opens iCount PayPage; customer enters card; iCount tokenizes
  *      and runs the J5 (1₪) preauthorization, releasing it immediately.
  *   2. The page returns a token reference; we confirm it here server-side.
  *   3. All future charges use the stored token via the iCount API.
- *   4. iCount issues the legal tax document (חשבונית מס) — the authoritative
+ *   4. iCount issues the legal tax document (חשבונית מס) - the authoritative
  *      record; we keep only a reference.
  *
  * Config (env):
  *   ICOUNT_API_BASE   default https://api.icount.co.il/api/v3.php
  *   ICOUNT_CID / ICOUNT_USER / ICOUNT_PASS   company credentials
- *   ICOUNT_MODE       "live" | "mock"  (mock = deterministic, no network — dev/E2E)
+ *   ICOUNT_MODE       "live" | "mock"  (mock = deterministic, no network - dev/E2E)
  *   ICOUNT_WEBHOOK_SECRET   shared secret for webhook signature verification
  *
  * NOTE: exact iCount request/response shapes are encapsulated here. When wiring
@@ -57,7 +57,7 @@ export const icountProvider: PaymentProvider = {
 
   async tokenizeAndVerify(input): Promise<TokenizeResult> {
     if (isMock) {
-      // Deterministic mock — no network. Mirrors a successful tokenize + J5.
+      // Deterministic mock - no network. Mirrors a successful tokenize + J5.
       return { token: `icmock_${input.pageToken}`, brand: "visa", last4: "4242", expMonth: 12, expYear: 2030 };
     }
     // Confirm the PayPage token; iCount returns stored-card metadata.

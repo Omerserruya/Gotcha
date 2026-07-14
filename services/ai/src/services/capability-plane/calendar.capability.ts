@@ -1,9 +1,9 @@
 /**
- * CALENDAR capability — the FIRST registered domain capability.
+ * CALENDAR capability - the FIRST registered domain capability.
  *
  * It SELF-DESCRIBES its world (facts + summary + operations + observations) and
  * executes its own operations through the existing `executeCalendarOperation`
- * (frozen CALENDAR contracts + prod port + shared resolver) — no execution logic
+ * (frozen CALENDAR contracts + prod port + shared resolver) - no execution logic
  * duplicated. The kernel never knows calendar exists; it only carries this view.
  *
  * Tomorrow, CRM/Commerce/Knowledge register the same way; this is the template.
@@ -64,7 +64,7 @@ export const CalendarCapability: CapabilityRegistration = {
     const activeBooking = first ? { when: new Date(first.startMs).toISOString(), ref: first.eventId } : null;
     // The agent's timezone lets the Reasoner present slots in local time + map a
     // customer's local request to an instant, instead of asking which timezone.
-    const tzNote = agentTimezone ? ` The agent's timezone is ${agentTimezone}; times are UTC ISO — interpret and present them in that timezone.` : "";
+    const tzNote = agentTimezone ? ` The agent's timezone is ${agentTimezone}; times are UTC ISO - interpret and present them in that timezone.` : "";
 
     return {
       capability: "CALENDAR",

@@ -1,9 +1,9 @@
 /**
- * P1-4 — advisory vs dry_run split at the resolver.
+ * P1-4 - advisory vs dry_run split at the resolver.
  * advisory: writes → RECOMMENDED before the gate (never probed).
  * dry_run:  writes → RECOMMENDED, but the approval gate is PROBED (probe:true,
  *           nothing created) and the trace records whether approval would be
- *           required — shadow evidence for the HITL surface.
+ *           required - shadow evidence for the HITL surface.
  */
 
 import { describe, it, expect } from "vitest";

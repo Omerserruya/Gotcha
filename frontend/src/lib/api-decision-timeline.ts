@@ -1,5 +1,5 @@
 /**
- * Decision Timeline API helper — talks to /api/decision-timeline on the AI
+ * Decision Timeline API helper - talks to /api/decision-timeline on the AI
  * service (backend: services/ai/src/routes/decision-timeline.ts, nginx-mounted).
  */
 

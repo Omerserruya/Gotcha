@@ -11,7 +11,7 @@ import {
   renderKnowledgeLedger,
 } from "../services/knowledge-ledger";
 
-describe("Skill model — structured operating systems", () => {
+describe("Skill model - structured operating systems", () => {
   it("maps roles to the right skill and falls back to GENERIC", () => {
     expect(roleToSkill("sales")).toBe("SALES");
     expect(roleToSkill("customer_success")).toBe("CUSTOMER_SUCCESS");
@@ -93,7 +93,7 @@ describe("Skill model — structured operating systems", () => {
   });
 });
 
-describe("Knowledge ledger — deterministic gap detection", () => {
+describe("Knowledge ledger - deterministic gap detection", () => {
   const sdrKnowledge = requiredKnowledgeFor("sdr"); // need, authority, budget, timeline
 
   it("marks everything missing on an empty context (drives discovery)", () => {

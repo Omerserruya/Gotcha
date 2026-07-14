@@ -3,7 +3,7 @@ import { hasPermission, type PermissionPrincipal } from "../lib/permissions";
 
 /**
  * Express middleware: gate a route on a hierarchical permission key
- * (`feature:sub-feature:action`). Fully data-driven — resolves through the
+ * (`feature:sub-feature:action`). Fully data-driven - resolves through the
  * permission resolver (License → grant → role). No role names are matched.
  *
  * Usage:

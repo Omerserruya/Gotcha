@@ -69,7 +69,7 @@ async function dispatchApprovedAction(args: {
   if (token) headers["Authorization"] = token.startsWith("Bearer ") ? token : `Bearer ${token}`;
   headers["x-tenant-id"] = args.tenantId;
 
-  // ── Kernel-originated approvals (P1-3/B6) — resume through the Capability
+  // ── Kernel-originated approvals (P1-3/B6) - resume through the Capability
   // Runtime, NOT the legacy executor: the stored ExecutionRequest re-enters
   // the Runtime so invariants/verification apply to the HITL write.
   try {

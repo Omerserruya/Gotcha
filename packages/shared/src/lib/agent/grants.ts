@@ -1,5 +1,5 @@
 /**
- * Agent — grants (permissions to PROPOSE, never to execute).
+ * Agent - grants (permissions to PROPOSE, never to execute).
  *
  * "Many minds, one hand." The Runtime is the single execution authority. An
  * Agent never executes; it proposes Execution Intents, and the Runtime enforces
@@ -11,7 +11,7 @@ import type { ExecutionMode } from "../capability-runtime";
 
 /** A spend ceiling the Runtime enforces on money-moving operations. */
 export interface SpendLimits {
-  /** Per-period currency ceiling (minor units or whole — runtime decides). */
+  /** Per-period currency ceiling (minor units or whole - runtime decides). */
   maxAmount?: number;
   currency?: string;
   /** Operations above this require approval regardless of mode. */
@@ -35,7 +35,7 @@ export interface AgentGrants {
 
 /**
  * Pure check: is `operation` within this agent's grant ceiling? This is an
- * advisory pre-filter only — the Runtime re-checks grants + RBAC at execution.
+ * advisory pre-filter only - the Runtime re-checks grants + RBAC at execution.
  * Never throws.
  */
 export function agentMayPropose(grants: AgentGrants | undefined, operation: string): boolean {

@@ -297,7 +297,7 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
 //
 // Makes Google Calendar a FIRST-CLASS adapter-framework provider (like Stripe,
 // Airtable, HubSpot) so its READ tools surface + execute through the SAME
-// connected-AND-allowed pipeline as every other integration — no calendar
+// connected-AND-allowed pipeline as every other integration - no calendar
 // special-casing in the surface/dispatch layers. WRITES are intentionally NOT
 // exposed here: booking goes through the validated `schedule_meeting` path
 // (working hours / buffers / conflicts), so `create_event` is never surfaced to
@@ -308,13 +308,13 @@ export class GoogleCalendarAdapter implements CalendarAdapter {
 // the scheduling policy (working hours, buffers, min-notice, meeting-type
 // windows). The model gets availability through the first-class
 // `check_availability` built-in tool instead, which runs the SAME
-// `resolveAvailability` resolver as `schedule_meeting` — one source of truth.
+// `resolveAvailability` resolver as `schedule_meeting` - one source of truth.
 // Only neutral reads (list_events) live on this adapter path.
 const GCAL_READ_TOOLS: ToolDefinition[] = [
   {
     name: "google_calendar.list_events",
     description: "List the assigned agent's upcoming calendar events in a window.",
-    whenToUse: "You need to see existing events (e.g. to reference or avoid a clash) — read only.",
+    whenToUse: "You need to see existing events (e.g. to reference or avoid a clash) - read only.",
     category: "READ",
     riskLevel: "LOW",
     parameters: {
@@ -333,7 +333,7 @@ const GCAL_READ_TOOLS: ToolDefinition[] = [
  * Resolve the per-agent CONNECTED Google calendar account for this conversation.
  * Calendar capability is per-agent (an agent books into a SPECIFIC calendar), so
  * the agent is taken from the conversation's assignment. Throws a clear error
- * (never a crash) when the agent has no connected calendar — the dispatcher
+ * (never a crash) when the agent has no connected calendar - the dispatcher
  * surfaces it as a structured failure.
  */
 async function resolveAgentCalendarAccountId(tenantId: string, conversationId?: string): Promise<string> {

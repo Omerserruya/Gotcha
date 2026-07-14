@@ -1,5 +1,5 @@
 /**
- * CALENDAR capability — integration through the real runtime (calendar.runtime)
+ * CALENDAR capability - integration through the real runtime (calendar.runtime)
  * over an in-memory fake CalendarPort (no network, no Prisma).
  *
  * Proves the business rules live ONCE (in verifiers): the same fake port + the

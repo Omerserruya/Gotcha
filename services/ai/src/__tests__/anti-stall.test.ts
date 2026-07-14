@@ -4,7 +4,7 @@ import { runAgentLoop } from "../services/agent-loop/agent-loop";
 import { setReasonerProvider } from "../services/reasoner";
 import { clearCapabilities, registerCapability, ensureCapabilitiesRegistered } from "../services/capability-plane";
 
-/** A capability whose only op ALWAYS returns the SAME NEEDS_INPUT — the dead-loop world. */
+/** A capability whose only op ALWAYS returns the SAME NEEDS_INPUT - the dead-loop world. */
 function stubbornCapability() {
   return {
     name: "STUB",
@@ -39,7 +39,7 @@ const baseInputs = {
 
 afterEach(() => { clearCapabilities(); setReasonerProvider(null); });
 
-describe("anti-stall guard — identical failing outcomes get ruled out", () => {
+describe("anti-stall guard - identical failing outcomes get ruled out", () => {
   it("after 2 identical NEEDS_INPUT outcomes, the op is ruled out and the ruling reaches the Reasoner", async () => {
     ensureCapabilitiesRegistered();
     clearCapabilities();
@@ -72,7 +72,7 @@ describe("anti-stall guard — identical failing outcomes get ruled out", () => 
     // 2 identical failing proposals → ruled out → iteration 3's reasoner saw it → asked.
     expect(sawRuledOutAtIteration).toBe(3);
     expect(result.terminationReason).toBe("need_input");
-    expect(result.iterations).toBe(3); // NOT max_iterations — the dead-loop was cut short
+    expect(result.iterations).toBe(3); // NOT max_iterations - the dead-loop was cut short
     const ruledOut = result.workingMemory.ruledOut.find((r) => r.operation === "DO_THING");
     expect(ruledOut?.why).toContain("identical outcome");
   });

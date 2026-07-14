@@ -1,5 +1,5 @@
 /**
- * Copilot diagnostics — deterministic formatting + decision derivation.
+ * Copilot diagnostics - deterministic formatting + decision derivation.
  * Proves the [copilot][plan] / [copilot][tool] logs accurately reflect the plan.
  */
 import { describe, it, expect } from "vitest";
@@ -58,8 +58,8 @@ describe("copilot-diagnostics - formatCopilotPlan", () => {
 
   it("degrades to placeholders for a null plan", () => {
     const out = formatCopilotPlan(null, CTX);
-    expect(out).toContain("Goal: —");
-    expect(out).toContain("BestAction: —");
+    expect(out).toContain("Goal: -");
+    expect(out).toContain("BestAction: -");
   });
 });
 
@@ -141,7 +141,7 @@ describe("copilot-diagnostics - summarizeToolResult", () => {
   });
 
   it("truncates long non-JSON results and never throws", () => {
-    expect(summarizeToolResult(undefined)).toBe("—");
+    expect(summarizeToolResult(undefined)).toBe("-");
     const long = "x".repeat(500);
     expect(summarizeToolResult(long).length).toBeLessThanOrEqual(240);
   });

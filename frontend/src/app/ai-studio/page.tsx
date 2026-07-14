@@ -145,7 +145,7 @@ function TeamTab({ t }: { t: (key: string) => string }) {
             <div className="flex items-center gap-2 mb-3 flex-wrap">
               <span className="text-sm font-semibold text-amber-700">Continue setup</span>
               <span className="text-xs text-amber-600/80">
-                {incompleteDrafts.length} unfinished {incompleteDrafts.length === 1 ? "employee" : "employees"} — resume where you stopped, or discard.
+                {incompleteDrafts.length} unfinished {incompleteDrafts.length === 1 ? "employee" : "employees"} - resume where you stopped, or discard.
               </span>
             </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
@@ -349,6 +349,7 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
         </Link>
         <Link
           href="/ai-studio/flows/new"
+          data-tour="new-workflow"
           className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-700 transition shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -693,7 +694,7 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
       </div>
 
       {/* Sub-view toggle */}
-      <div className="flex gap-1 bg-gray-100/80 rounded-xl p-1 mb-5 w-fit">
+      <div className="flex gap-1 bg-gray-100/80 rounded-xl p-1 mb-5 w-fit" data-tour="ai-tools">
         <button
           onClick={() => setSubView("connected")}
           className={clsx(

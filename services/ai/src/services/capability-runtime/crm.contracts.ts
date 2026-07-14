@@ -1,9 +1,9 @@
 /**
- * CRM capability — operation contracts, as DATA (business-only language; no vendor,
+ * CRM capability - operation contracts, as DATA (business-only language; no vendor,
  * tool, or endpoint appears here). Same shape as the frozen CALENDAR contracts, but
  * co-located with the driver so adding CRM touches nothing in the kernel or shared.
  *
- * Operations: SEARCH_CUSTOMER (READ), UPSERT_CUSTOMER (WRITE — identity foundation).
+ * Operations: SEARCH_CUSTOMER (READ), UPSERT_CUSTOMER (WRITE - identity foundation).
  * CREATE_LEAD / ADD_NOTE (WRITEs) follow.
  */
 
@@ -42,7 +42,7 @@ const UPSERT_CUSTOMER: OperationContract = {
   id: "UPSERT_CUSTOMER",
   capability: "CRM",
   effect: "write",
-  meaning: "ensure this customer exists in the CRM as a single record — resolve if known, create if new, reconcile duplicates",
+  meaning: "ensure this customer exists in the CRM as a single record - resolve if known, create if new, reconcile duplicates",
   params: [
     { key: "email", meaning: "the customer's email address", required: false },
     { key: "phone", meaning: "the customer's phone number", required: false },
@@ -64,11 +64,11 @@ const UPSERT_CUSTOMER: OperationContract = {
     },
   ],
   // Ambiguous 2+ matches are reconciled to an operator by the wrapped identity flow
-  // (it returns needs_approval instead of auto-merging — CLAUDE.md rule #9); surfaced
+  // (it returns needs_approval instead of auto-merging - CLAUDE.md rule #9); surfaced
   // as a recoverable stop so the loop escalates rather than guessing an identity.
   failureModes: ["no_crm_configured", "ambiguous_identity_needs_operator", "vendor_unavailable"],
   recoveryPosture: { retries: "bounded", alternatives: false, askCustomer: true, escalate: "last_resort" },
-  // Tenant HITL policy decides (floor "never"; overridable) — enforced by the
+  // Tenant HITL policy decides (floor "never"; overridable) - enforced by the
   // runtime's approvalGate, mapped to the governed semantic-create policy.
   approval: "configurable",
   dedupKey: ["customer"],
@@ -116,7 +116,7 @@ const GET_CUSTOMER_CONTEXT: OperationContract = {
   id: "GET_CUSTOMER_CONTEXT",
   capability: "CRM",
   effect: "read",
-  meaning: "pull up everything the CRM knows about this customer — recent activity, open deals, open tickets",
+  meaning: "pull up everything the CRM knows about this customer - recent activity, open deals, open tickets",
   params: [
     { key: "contact_id", meaning: "the CRM contact to hydrate (from resolving the customer first)", required: true },
   ],
@@ -141,7 +141,7 @@ const UPDATE_RECORD: OperationContract = {
   id: "UPDATE_RECORD",
   capability: "CRM",
   effect: "write",
-  meaning: "update specific fields on this customer's CRM record — write ONLY what changed, never wipe fields that weren't discussed",
+  meaning: "update specific fields on this customer's CRM record - write ONLY what changed, never wipe fields that weren't discussed",
   params: [
     { key: "contact_id", meaning: "the CRM record to update (from resolving the customer first)", required: true },
     { key: "fields", meaning: "ONLY the fields to change, as key→value (sparse patch)", required: true },

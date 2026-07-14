@@ -15,12 +15,15 @@ interface SettingsNavItem {
   icon: (props: { className?: string }) => React.ReactElement;
   exact?: boolean;
   voiceOnly?: boolean;
-  /** Permission-gated nav item — hidden unless the user holds this permission. */
+  /** Permission-gated nav item - hidden unless the user holds this permission. */
   perm?: string;
 }
 
 const settingsNav: SettingsNavItem[] = [
   { href: "/settings", labelKey: "settings.nav.general", icon: GeneralIcon, exact: true },
+  // The Digital Twin's permanent home (moved out of the main sidebar when
+  // Getting Started took that slot). Includes the "Scan again" action.
+  { href: "/settings/business", labelKey: "nav.business", icon: BusinessTwinIcon },
   // Unified Users page: replaces the old Agents + Roles & Permissions pages.
   { href: "/settings/users", label: "Users", icon: AgentsIcon, perm: "settings:members:manage" },
   { href: "/settings/departments", labelKey: "nav.departments", icon: DepartmentsIcon },
@@ -117,6 +120,14 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 }
 
 // ─── Icons ──────────────────────────────────────────────────
+
+function BusinessTwinIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4 21V7l8-4 8 4v14M9 21v-4a1 1 0 011-1h4a1 1 0 011 1v4M9 9h.01M15 9h.01M9 13h.01M15 13h.01" />
+    </svg>
+  );
+}
 
 function GeneralIcon({ className }: { className?: string }) {
   return (

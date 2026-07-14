@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
  * OAuth auto-refresh + retry-if-needed for framework integrations.
  *
  * The live bug (HubSpot): an OAuth access token expired, the integration latched
- * to ERROR, and the resolver/loadConnection only used CONNECTED integrations —
+ * to ERROR, and the resolver/loadConnection only used CONNECTED integrations -
  * so the adapter was never instantiated, the token was never refreshed, and it
  * stayed ERROR forever (no lead ever created). These tests pin the recovery:
  *   - expired token refreshes proactively on use,
@@ -89,7 +89,7 @@ beforeEach(() => {
   refreshTokens.mockResolvedValue({ accessToken: "new", refreshToken: "rt2", expiresAt: new Date(Date.now() + 1_800_000) });
 });
 
-describe("executeAdapterTool — OAuth auto-refresh + retry", () => {
+describe("executeAdapterTool - OAuth auto-refresh + retry", () => {
   it("expired token refreshes proactively on use (no 401 needed)", async () => {
     row.credentials.expiresAt = PAST;
     execute.mockResolvedValue({ done: true });

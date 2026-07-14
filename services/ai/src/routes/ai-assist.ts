@@ -33,16 +33,17 @@ const router = Router();
 // The deep 5-domain website scan that produces the Business Intelligence
 // Report + first recommendation (Bible Part II). The auth onboarding route
 // fetches the pages + detects signals (no LLM) and calls this with the admin
-// JWT forwarded — this is the one place onboarding is allowed to make an LLM
+// JWT forwarded - this is the one place onboarding is allowed to make an LLM
 // call. Best-effort: returns { ok:false } on a scan miss so the caller can
 // fall back to the shallow understanding and never block onboarding.
 router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
-    const { domain, locale, pages, signals } = req.body as {
+    const { domain, locale, pages, signals, businessType } = req.body as {
       domain?: string;
       locale?: string;
       pages?: Array<{ url: string; text: string }>;
       signals?: import("../services/business-discovery.service").DiscoverySignals;
+      businessType?: string;
     };
     if (!domain || !Array.isArray(pages) || pages.length === 0) {
       res.status(400).json({ error: "domain and pages are required" });
@@ -54,6 +55,7 @@ router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMI
       locale,
       pages: pages.filter((p) => p && typeof p.text === "string").slice(0, 8),
       signals: signals || {},
+      businessType,
     });
     if (!report) {
       res.json({ data: { ok: false } });
@@ -66,12 +68,12 @@ router.post("/discover-business", authenticate, resolveTenant, requireRole("ADMI
   }
 });
 
-// Onboarding Movement 8 — chat with the recommended employee before deploy.
+// Onboarding Movement 8 - chat with the recommended employee before deploy.
 router.post("/onboarding-employee-chat", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const { name, role, locale, context, persona, messages } = req.body as {
       name?: string; role?: string; locale?: string;
-      context?: { business?: string; industry?: string; summary?: string; brandVoice?: string };
+      context?: { business?: string; industry?: string; summary?: string; brandVoice?: string; goal?: string };
       persona?: import("../services/employee-tuning.service").EmployeePersona;
       messages?: Array<{ role: "user" | "assistant"; content: string }>;
     };

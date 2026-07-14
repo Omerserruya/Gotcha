@@ -1,5 +1,5 @@
 /**
- * CRM CONNECTOR — full-loop autonomous verification via SIMULATION.
+ * CRM CONNECTOR - full-loop autonomous verification via SIMULATION.
  *
  * The deferred "verify every CRM WRITE end-to-end" done without a real/disposable CRM:
  * the REAL CRM contracts + REAL runtime (`executeCrmOperation`) drive through the
@@ -7,7 +7,7 @@
  * simulates the vendor. This proves the connector's decision→AUTHORIZE→Runtime→port
  * chain executes real mutations, holds invariants, updates the world the Reasoner
  * re-reads, and chains SEARCH → UPSERT → ADD_NOTE → FINISH. (The real vendor API path
- * — HubSpot createLead/createNote — is already production-proven: the legacy brain uses
+ * - HubSpot createLead/createNote - is already production-proven: the legacy brain uses
  * the exact same functions daily. The only kernel-specific risk is the decision +
  * param flow, which is exactly what this simulation exercises.)
  */
@@ -93,7 +93,7 @@ function salesReasoner(): ReasonerProvider {
   };
 }
 
-describe("CRM connector — full-loop autonomous verification (simulated CRM)", () => {
+describe("CRM connector - full-loop autonomous verification (simulated CRM)", () => {
   afterEach(() => { clearCapabilities(); setReasonerProvider(null); });
 
   it("SEARCH → UPSERT (real create) → ADD_NOTE (real note) → FINISH", async () => {
@@ -135,7 +135,7 @@ describe("CRM connector — full-loop autonomous verification (simulated CRM)", 
     const result = await runAgentLoop({ ...baseInputs, conversationId: "c2" });
 
     expect(store.notes.length).toBe(0);
-    expect(store.contacts.length).toBe(2); // no new contact — the runtime never guessed an identity
+    expect(store.contacts.length).toBe(2); // no new contact - the runtime never guessed an identity
     expect(result.terminationReason).toBe("escalate"); // Reasoner's decision on the needs_approval observation
   });
 });

@@ -1,16 +1,16 @@
 /**
- * POC / pilot tenants — "free trial without a card".
+ * POC / pilot tenants - "free trial without a card".
  *
- * A POC is a REAL subscription (so the AI-Units gate enforces it — never the
+ * A POC is a REAL subscription (so the AI-Units gate enforces it - never the
  * fail-open no-subscription bypass) on a dedicated sales-only `poc` plan:
  *
- *   • no card, no charges, no dunning — `cancelAtPeriodEnd=true` keeps it out
+ *   • no card, no charges, no dunning - `cancelAtPeriodEnd=true` keeps it out
  *     of the renewal sweep, and the plan has no price to charge;
  *   • the operator sets the credit budget: granted as the INCLUDED allowance
  *     via rolloverIncluded(), so the 80/90/95/100% usage-threshold alerts and
  *     the hard-block at zero work exactly like a paying tenant;
  *   • optional expiry = currentPeriodEnd; expireDuePocs() (run by the billing
- *     cycle) cancels it — CANCELED is refused by the AI gate in hard mode —
+ *     cycle) cancels it - CANCELED is refused by the AI gate in hard mode -
  *     and reverts the POC's expired TRIAL feature entitlements so the UI
  *     locks down too.
  *
@@ -23,7 +23,7 @@ import { periodKeyFor } from "../lib/period";
 import { emitBillingEvent } from "../lib/events";
 
 export const POC_PLAN_KEY = "poc";
-const FAR_FUTURE_DAYS = 3650; // "no expiry" — far enough to be effectively unlimited
+const FAR_FUTURE_DAYS = 3650; // "no expiry" - far enough to be effectively unlimited
 
 async function ensurePocPlan(): Promise<void> {
   await prisma.plan.upsert({
@@ -55,7 +55,7 @@ export async function setupPoc(input: {
       planVersion: 1,
       status: "ACTIVE",
       enforcementEnabled: true, // the whole point: the credits gate BITES
-      cancelAtPeriodEnd: true, // keeps the renewal sweep away — no charges, ever
+      cancelAtPeriodEnd: true, // keeps the renewal sweep away - no charges, ever
       currentPeriodStart: now,
       currentPeriodEnd: periodEnd,
       trialEndsAt: null,
@@ -89,7 +89,7 @@ export async function setupPoc(input: {
 /**
  * Cancel POCs whose window closed and revert their expired TRIAL feature rows.
  * Expired TRIAL entitlements silently drop out of getEffectiveEntitlements(),
- * but their materialized TenantFeature rows would keep the last value forever —
+ * but their materialized TenantFeature rows would keep the last value forever -
  * flip those OFF explicitly so the workspace UI locks down with the POC.
  */
 export async function expireDuePocs(now = new Date()): Promise<number> {

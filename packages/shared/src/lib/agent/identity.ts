@@ -1,14 +1,14 @@
 /**
- * Agent — identity & persona.
+ * Agent - identity & persona.
  *
  * Part of the FROZEN Agent Contract (see docs/architecture/agent-contract.md and
- * reasoner-architecture.md). Phase 1: the envelope only — pure types, zero
+ * reasoner-architecture.md). Phase 1: the envelope only - pure types, zero
  * behaviour, not wired into the live path. The deterministic Planner keeps
  * driving the system; the Agent merely *exists* as the new abstraction.
  *
  * Principle: GOTCHA is a kernel (Capability Runtime) running employee PROCESSES
  * (Agents). An Agent reasons toward a goal on behalf of a principal. A capability
- * domain (Calendar/CRM/Billing) is NOT an agent — it's a syscall family in the
+ * domain (Calendar/CRM/Billing) is NOT an agent - it's a syscall family in the
  * Runtime.
  */
 
@@ -19,7 +19,7 @@ export interface AgentIdentity {
   /** Coarse role, e.g. "sales" | "support" | "research". Vocabulary, not an FSM. */
   role: string;
   /**
-   * The principal this agent acts for — the billable/ownership entity. Kept
+   * The principal this agent acts for - the billable/ownership entity. Kept
    * abstract on purpose (never hardcode Tenant == payer); see the billing model.
    */
   principal: {
@@ -29,7 +29,7 @@ export interface AgentIdentity {
   };
 }
 
-/** How the agent presents — informs the Writer, never the decision. */
+/** How the agent presents - informs the Writer, never the decision. */
 export interface AgentPersona {
   displayName?: string;
   /** Free-form voice description (e.g. "warm, concise, never pushy"). */

@@ -1,5 +1,5 @@
 /**
- * Agent Loop — the autonomous reasoning engine (control flow ONLY).
+ * Agent Loop - the autonomous reasoning engine (control flow ONLY).
  *
  *   Oracle → Reasoner → Decision → Runtime → Observation → Oracle updates → …
  *
@@ -62,7 +62,7 @@ export const LOOP_PROMPT_VERSION = "agent-loop-v0.1";
 /**
  * Stable signature of the world-relevant Facts (menu + domain world), excluding
  * `asOf` so an unchanged world hashes identically across re-reads. Used ONLY for
- * progress observability + anti-stall bookkeeping — never for decisions.
+ * progress observability + anti-stall bookkeeping - never for decisions.
  */
 function signatureOfFacts(f: { availableOperations: { name: string }[]; world: unknown }): string {
   const body = JSON.stringify({ menu: f.availableOperations.map((o) => o.name), world: f.world });
@@ -110,7 +110,7 @@ export interface AgentLoopInputs {
   /**
    * Production migration guard (P1-4), injected by the adapter. Given a
    * proposed operation, returns the execution mode the loop should actually
-   * use for it — the adapter supplies the OPERATION_STATUS ledger so an
+   * use for it - the adapter supplies the OPERATION_STATUS ledger so an
    * op not yet PROVEN autonomous dry-runs even inside an autonomous turn.
    * Absent (tests / hermetic runs) ⇒ the loop honours `mode` verbatim, so a
    * capability driven directly still executes for real.
@@ -130,7 +130,7 @@ export interface AgentLoopResult {
   wallMs: number;
   workingMemory: WorkingMemory;
   /**
-   * The Reasoner's carried-forward conclusions from its LAST reason() call —
+   * The Reasoner's carried-forward conclusions from its LAST reason() call -
    * "becomes next turn's `memory` input" (advisory continuity). Null when the
    * loop terminated before any reasoning happened.
    */
@@ -138,7 +138,7 @@ export interface AgentLoopResult {
 }
 
 /**
- * Run the autonomous reasoning loop. Never throws — a Reasoner/Runtime failure is
+ * Run the autonomous reasoning loop. Never throws - a Reasoner/Runtime failure is
  * turned into an observable termination, and the Writer always produces a reply.
  */
 export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResult> {
@@ -167,7 +167,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
   let spentUnits = 0;
   let iteration = 0;
 
-  // Anti-stall bookkeeping (deterministic, from real observations — the loop's
+  // Anti-stall bookkeeping (deterministic, from real observations - the loop's
   // documented role for `ruledOut`). Judgment stays with the Reasoner: a stalled
   // op is RULED OUT and re-enters reasoning, the loop never decides to give up.
   let lastObsSignature: string | null = null;
@@ -209,7 +209,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
   while (termination === null) {
     iteration++;
 
-    // ── Resource envelope (pre-reason) — iterations / time / budget only ──
+    // ── Resource envelope (pre-reason) - iterations / time / budget only ──
     const guard = preReasonTermination(
       { iteration, elapsedMs: Date.now() - startedAt, spentUnits },
       policy,
@@ -221,7 +221,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
 
     // ── Ownership probe: a human may have taken the conversation over while
     // earlier iterations ran (a loop can hold the turn for up to 60s). The
-    // first iteration is exempt — dispatch already validated ownership.
+    // first iteration is exempt - dispatch already validated ownership.
     // Fail-open: probe errors never kill a healthy turn.
     if (iteration > 1 && inp.ownershipCheck) {
       const stillOwned = await inp.ownershipCheck().catch(() => true);
@@ -269,7 +269,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
       latencyMs = res.usage?.latencyMs ?? null;
       spentUnits += (res.usage?.inputTokens ?? 0) + (res.usage?.outputTokens ?? 0);
     } catch (e: any) {
-      // The reasoning brain failed (metering block, provider error). Escalate —
+      // The reasoning brain failed (metering block, provider error). Escalate -
       // the loop never fabricates a decision.
       finalDecision = { type: "ESCALATE", reason: `reasoner_error:${String(e?.message || e)}` };
       finalReplyIntent = { purpose: "escalate", keyPoints: [] };
@@ -287,7 +287,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
     finalDecision = decision;
     finalReplyIntent = replyIntent;
     const control = decisionToControl(decision);
-    const reasoningSummary = [read.situation, read.rationale].filter(Boolean).join(" — ").slice(0, 500);
+    const reasoningSummary = [read.situation, read.rationale].filter(Boolean).join(" - ").slice(0, 500);
 
     // ── Terminal decision (FINISH / NEED_INPUT / ESCALATE / CONVERSE) ──
     if (control.kind === "terminate") {
@@ -317,7 +317,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
 
     // Guardrails: the single deterministic authorization checkpoint. Covers
     // off-menu/invented ops, missing permission, exhausted budget, suspended
-    // billing. A denial is an OBSERVABLE result the Reasoner re-reasons over — it
+    // billing. A denial is an OBSERVABLE result the Reasoner re-reasons over - it
     // NEVER reaches the Runtime, and the loop NEVER decides to give up on it.
     const verdict = authorizeOperation(operation, facts);
     if (!verdict.allow) {
@@ -369,7 +369,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
     }
 
     // ── Anti-stall: identical (operation, outcome) repeating means the world will
-    // not yield to this move — rule it out so the Reasoner must ask or pivot.
+    // not yield to this move - rule it out so the Reasoner must ask or pivot.
     // Deterministic maintenance of `ruledOut` from observations (its charter);
     // the DECISION about what to do next remains the Reasoner's.
     const obsSignature = observation
@@ -380,7 +380,7 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
       if (identicalObsCount >= 2 && observation!.status !== "EXECUTED" && ruledOut.length === 0) {
         ruledOut = [{
           operation,
-          why: `proposed ${identicalObsCount}× with an identical outcome (${observation!.status}${observation!.reason ? `: ${observation!.reason}` : ""}) — do NOT propose it again; ask the customer for the missing input or choose a different move`,
+          why: `proposed ${identicalObsCount}× with an identical outcome (${observation!.status}${observation!.reason ? `: ${observation!.reason}` : ""}) - do NOT propose it again; ask the customer for the missing input or choose a different move`,
         }];
       }
     } else {
@@ -425,11 +425,11 @@ export async function runAgentLoop(inp: AgentLoopInputs): Promise<AgentLoopResul
         break;
       }
     }
-    // else: observation re-enters — loop again.
+    // else: observation re-enters - loop again.
   }
 
   const reason = termination ?? "max_iterations";
-  // A superseded loop stood down because a human owns the conversation now —
+  // A superseded loop stood down because a human owns the conversation now -
   // it must produce NO customer-facing reply (the human is talking).
   const reply = reason === "superseded"
     ? null

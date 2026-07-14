@@ -409,7 +409,7 @@ function ChannelsPageContent() {
       )}
 
       {/* Connect Channel Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="channels-connect">
         <ConnectCard
           icon={
             <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="currentColor">

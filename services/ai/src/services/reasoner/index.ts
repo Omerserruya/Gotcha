@@ -1,10 +1,10 @@
 /**
- * Reasoner provider resolution — the single injection point that selects the
+ * Reasoner provider resolution - the single injection point that selects the
  * concrete reasoning engine. The platform code depends on `ReasonerProvider`
  * (from @chatcenter/shared); ONLY this file knows which vendor is wired.
  *
  * Add Claude / Gemini / DeepSeek / local by implementing `ReasonerProvider` in a
- * sibling file and registering it here — nothing above the boundary changes.
+ * sibling file and registering it here - nothing above the boundary changes.
  */
 
 import type { ReasonerProvider } from "@chatcenter/shared";

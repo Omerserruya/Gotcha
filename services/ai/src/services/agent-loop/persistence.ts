@@ -1,12 +1,12 @@
 /**
- * Agent Loop persistence — every iteration and every run is recorded so the loop
+ * Agent Loop persistence - every iteration and every run is recorded so the loop
  * is fully observable and replayable (the same corpus philosophy as the reasoner
  * shadow evals). Writes are guarded: a persistence failure must NEVER break the
  * loop or the customer turn.
  *
  * Two tables:
- *   agent_loop_runs        — one row per loop (goal, termination, totals, reply).
- *   agent_loop_iterations  — one row per iteration (oracle snapshot, reasoning,
+ *   agent_loop_runs        - one row per loop (goal, termination, totals, reply).
+ *   agent_loop_iterations  - one row per iteration (oracle snapshot, reasoning,
  *                            proposed operation, runtime result, observation).
  *
  * ORDERING CONTRACT: `agent_loop_iterations.loop_id` is a FK to `agent_loop_runs`,
@@ -26,7 +26,7 @@ export interface LoopIterationRecord {
   goal: string | null;
   /** Provider-neutral Facts snapshot the Reasoner saw (replayable). */
   oracleFactsSnapshot: unknown;
-  /** Short WHY from the Reasoner read (situation/rationale) — audit only. */
+  /** Short WHY from the Reasoner read (situation/rationale) - audit only. */
   reasoningSummary: string;
   decisionType: string;
   proposedOperation: string | null;
@@ -35,7 +35,7 @@ export interface LoopIterationRecord {
   runtimeResult: string | null;
   /** Neutral Observation projection (status/outcome/reason/invariants). */
   observation: unknown | null;
-  /** Goal-relevant Facts signature hash — powers goal-based progress detection. */
+  /** Goal-relevant Facts signature hash - powers goal-based progress detection. */
   factsSignature: string | null;
   progressed: boolean | null;
   inputTokens: number | null;
@@ -91,7 +91,7 @@ export async function persistLoopIteration(r: LoopIterationRecord): Promise<void
   }
 }
 
-/** Identity/provenance known at loop start — enough to satisfy the iteration FK. */
+/** Identity/provenance known at loop start - enough to satisfy the iteration FK. */
 export interface LoopRunStart {
   loopId: string;
   tenantId: string;

@@ -73,7 +73,7 @@ beforeEach(() => {
   ledger = new TurnOutcomeLedger();
 });
 
-describe("Scenario 1 — duplicate schedule_meeting in one turn → exactly one event", () => {
+describe("Scenario 1 - duplicate schedule_meeting in one turn → exactly one event", () => {
   it("the duplicate dedups; executor runs once; one committed booking", async () => {
     const exec = vi.fn().mockResolvedValue(dispatch({ ok: true, eventId: "evt_1" }));
     await orch.submit(action("schedule_meeting", BOOK_ARGS, "a1"), exec, { ledger, idempotency: true });
@@ -87,7 +87,7 @@ describe("Scenario 1 — duplicate schedule_meeting in one turn → exactly one 
   });
 });
 
-describe("Scenario 2 — create_lead + schedule_meeting → meeting confirmed, CRM invisible", () => {
+describe("Scenario 2 - create_lead + schedule_meeting → meeting confirmed, CRM invisible", () => {
   it("only the booking is customer-facing; the lead is background", async () => {
     await orch.submit(action("integration_create_lead", LEAD_ARGS, "a1"), () => Promise.resolve(dispatch({ ok: true, leadId: "ld_1" })), { ledger, idempotency: true });
     await orch.submit(action("schedule_meeting", BOOK_ARGS, "a2"), () => Promise.resolve(dispatch({ ok: true, eventId: "evt_1" })), { ledger, idempotency: true });
@@ -102,7 +102,7 @@ describe("Scenario 2 — create_lead + schedule_meeting → meeting confirmed, C
   });
 });
 
-describe("Scenario 3 — duplicate create_lead → exactly one lead", () => {
+describe("Scenario 3 - duplicate create_lead → exactly one lead", () => {
   it("the duplicate dedups; executor runs once; one committed create", async () => {
     const exec = vi.fn().mockResolvedValue(dispatch({ ok: true, leadId: "ld_1" }));
     await orch.submit(action("integration_create_lead", LEAD_ARGS, "a1"), exec, { ledger, idempotency: true });
@@ -113,7 +113,7 @@ describe("Scenario 3 — duplicate create_lead → exactly one lead", () => {
   });
 });
 
-describe("Scenario 4 — booking success then a failing duplicate → success authoritative", () => {
+describe("Scenario 4 - booking success then a failing duplicate → success authoritative", () => {
   it("the failing duplicate never executes; the committed booking stands", async () => {
     const goodExec = vi.fn().mockResolvedValue(dispatch({ ok: true, eventId: "evt_1" }));
     const failExec = vi.fn().mockResolvedValue(dispatch({ ok: false, reason: "agent_busy" }));
@@ -128,7 +128,7 @@ describe("Scenario 4 — booking success then a failing duplicate → success au
   });
 
   it("monotonic: even if a failure is recorded for the same key, it cannot downgrade the commit", async () => {
-    // direct ledger proof — a later failed record never lowers a committed status
+    // direct ledger proof - a later failed record never lowers a committed status
     await orch.submit(action("schedule_meeting", BOOK_ARGS, "a1"), () => Promise.resolve(dispatch({ ok: true, eventId: "evt_1" })), { ledger });
     const key = ledger.committed()[0].semanticKey;
     ledger.record({ semanticKey: key, tool: "schedule_meeting", kind: "booking", visibility: "customer_facing", status: "failed", result: { ok: false } });
@@ -136,7 +136,7 @@ describe("Scenario 4 — booking success then a failing duplicate → success au
   });
 });
 
-describe("Scenario 5 — claimed booking with no committed ledger entry → blocked", () => {
+describe("Scenario 5 - claimed booking with no committed ledger entry → blocked", () => {
   it("a booking claim against an empty ledger is fabricated_claim", () => {
     const v = evaluateReplyConsistency(ledger, "You're all set for tomorrow at 14:30!", {
       bookingClaimMatched: true,

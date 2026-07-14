@@ -218,12 +218,14 @@ export type BuilderSSEEvent =
   | { type: "error"; message: string }
   | { type: "close" };
 
-export function builderStart(token: string, departmentId?: string | null, locale?: string, forceNew?: boolean) {
+// `goal` activates the goal-first (system-led) entry: the backend seeds the
+// whole draft from the goal + business twin and the greeting presents it.
+export function builderStart(token: string, departmentId?: string | null, locale?: string, forceNew?: boolean, goal?: string) {
   return req<{ data: { agentId: string; draft: BuilderDraftSnapshot; greeting: string; resumed?: boolean } }>(
     "POST",
     "/api/ai-agents/builder/start",
     token,
-    { departmentId: departmentId ?? null, locale, forceNew: !!forceNew },
+    { departmentId: departmentId ?? null, locale, forceNew: !!forceNew, ...(goal ? { goal } : {}) },
   );
 }
 

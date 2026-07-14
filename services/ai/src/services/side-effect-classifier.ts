@@ -12,7 +12,7 @@
  *
  * Semantic-key STABILITY guarantee (see semanticKey): identical semantic
  * actions always produce the same key regardless of argument ordering, optional
- * fields, casing, or time/phone formatting — via (1) per-kind identity-field
+ * fields, casing, or time/phone formatting - via (1) per-kind identity-field
  * selection, (2) per-field normalization, (3) a fixed field order, and (4) a
  * sorted+normalized stable-stringify fallback for unknown tools.
  */

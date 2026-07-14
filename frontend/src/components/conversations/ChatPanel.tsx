@@ -461,7 +461,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
           </div>
 
           {/* Actions */}
-          <div className="flex flex-col items-end gap-1 shrink-0">
+          <div className="flex flex-col items-end gap-1 shrink-0" data-tour="chat-actions">
             {/* Top row: Agent name (full width of bottom row) */}
             {!isClosed && (
               <button
@@ -534,6 +534,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
               </button>
 
               <button
+                data-tour="chat-copilot-toggle"
                 onClick={() => { setCopilotOpen(!copilotOpen); if (!copilotOpen) { setHistoryOpen(false); setTimelineOpen(false); } }}
                 className={clsx(
                   "flex items-center gap-1.5 text-xs px-2.5 py-1 rounded-lg font-medium transition shrink-0",
@@ -548,7 +549,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
                 <span className="hidden sm:inline">{t("conversations.copilotButton")}</span>
               </button>
 
-              {/* Decision Timeline (P1-5) — admin-only "why did the AI do that?" trace. */}
+              {/* Decision Timeline (P1-5) - admin-only "why did the AI do that?" trace. */}
               {user?.role === "ADMIN" && (
                 <button
                   onClick={() => { setTimelineOpen(!timelineOpen); if (!timelineOpen) { setHistoryOpen(false); setCopilotOpen(false); } }}
@@ -839,7 +840,7 @@ export function ChatPanel({ conversationId, onBack }: Props) {
         />
       )}
 
-      {/* Decision Timeline (P1-5) — admin-only kernel loop trace. */}
+      {/* Decision Timeline (P1-5) - admin-only kernel loop trace. */}
       {timelineOpen && conversationId && (
         <DecisionTimelinePanel
           conversationId={conversationId}
@@ -1070,7 +1071,7 @@ function SystemDivider({ metadata, timestamp, t }: { metadata: any; timestamp: s
         </svg>
       );
       label = event === "ai_bot_escalation" ? t("conversations.systemAiEscalation") : t("conversations.systemBotHandover");
-      if (escalationReason) label = `${label} — ${escalationReason}`;
+      if (escalationReason) label = `${label} - ${escalationReason}`;
       colors = "bg-amber-50 text-amber-600";
       break;
     case "agent_claimed":

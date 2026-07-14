@@ -240,7 +240,7 @@ describe("booking store - schedule_meeting dedupe", () => {
 
   it("no new time → defers to check_availability (no create/update)", async () => {
     // schedule_meeting is now write-only: with no chosen time there's nothing to
-    // book, so it returns needsAvailabilityCheck and touches no calendar — even
+    // book, so it returns needsAvailabilityCheck and touches no calendar - even
     // when a booking already exists (the model uses reschedule/cancel for that).
     seedBooking("evt_existing", SLOT_A);
     const { makeScheduleMeetingHandler } = await import("../services/schedule-handler.service");

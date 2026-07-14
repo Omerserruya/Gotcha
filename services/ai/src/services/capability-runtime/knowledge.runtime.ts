@@ -1,5 +1,5 @@
 /**
- * KNOWLEDGE runtime — binds the KNOWLEDGE contracts to a concrete KnowledgePort
+ * KNOWLEDGE runtime - binds the KNOWLEDGE contracts to a concrete KnowledgePort
  * and runs them through the SHARED resolver (the sole executor). READ-only set;
  * no approval gate needed.
  */
@@ -64,7 +64,7 @@ export async function executeKnowledgeOperation(
         return {
           ok: true,
           outcome: n === 0
-            ? "the knowledge base has nothing on this — treat it as unknown, do not guess"
+            ? "the knowledge base has nothing on this - treat it as unknown, do not guess"
             : `${n} relevant passage(s) found`,
           data: { passages },
         };

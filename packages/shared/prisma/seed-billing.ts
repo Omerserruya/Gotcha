@@ -1,14 +1,14 @@
 /**
- * Billing catalog seeder — pricing engine + plan/credit catalog. Idempotent.
+ * Billing catalog seeder - pricing engine + plan/credit catalog. Idempotent.
  *
  *   npm run db:seed-billing        (from packages/shared)
  *
  * Seeds:
- *   • BillableModel       — cost-driven per-model provider rates + multipliers
+ *   • BillableModel       - cost-driven per-model provider rates + multipliers
  *                           (incl. gpt-5 family, fixing the stale AI_MODEL_PRICING).
- *   • UnitPricingConfig   — the cost→Unit conversion (1 Unit = unitCostBasisUsd).
- *   • Plan + PlanEntitlement — Light/Pro/Business/Enterprise + grandfathered.
- *   • CreditPackage       — purchasable AI-Unit packs.
+ *   • UnitPricingConfig   - the cost→Unit conversion (1 Unit = unitCostBasisUsd).
+ *   • Plan + PlanEntitlement - Light/Pro/Business/Enterprise + grandfathered.
+ *   • CreditPackage       - purchasable AI-Unit packs.
  *
  * Pricing/margins/limits are DATA. Re-run after editing the tables below.
  */

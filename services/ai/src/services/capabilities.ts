@@ -3,7 +3,7 @@
  *
  * Humans think in CAPABILITIES, not tools: "I can schedule things", "I can look
  * up the customer", "I can take a payment". The runtime should present the model
- * the same way — a capability, its purpose, and the tools under it — instead of a
+ * the same way - a capability, its purpose, and the tools under it - instead of a
  * flat tool list.
  *
  * This layer is COMPLETELY GENERIC and role-agnostic. A tool's capability is
@@ -32,7 +32,7 @@ export interface CapabilityGroup {
   capability: string;
   /** Human label for the prompt (e.g. "Scheduling & meetings"). */
   label: string;
-  /** What this capability is FOR — one sentence. */
+  /** What this capability is FOR - one sentence. */
   purpose: string;
   tools: CapabilityTool[];
 }
@@ -145,7 +145,7 @@ const CAPABILITY_ORDER = [
 ];
 
 // A business outcome needs a capability to be producible. The Goal Evaluator asks
-// this to decide FAILED(missing_capability) — keeping the outcome→capability
+// this to decide FAILED(missing_capability) - keeping the outcome→capability
 // mapping in the Capability Layer (its owner), not in the evaluator. Generic:
 // extend alongside new BusinessOutcome values.
 const OUTCOME_CAPABILITY: Record<string, string> = {
@@ -193,7 +193,7 @@ export function capabilityOfTool(name: string, hints?: Record<string, string>): 
  * This is the primitive the AI Copilot uses to decide WHO executes: it may
  * auto-run "read" tools in the background to enrich a recommendation, but it
  * must only RECOMMEND "action" tools to the human (never fire them). The AI
- * Employee ignores this split (it executes both) — same brain, different mode.
+ * Employee ignores this split (it executes both) - same brain, different mode.
  *
  * Classification is by naming convention + a small known-tool table, biased to
  * SAFETY: anything ambiguous or unrecognized is treated as "action" so the
@@ -261,7 +261,7 @@ export interface CopilotToolRouting {
 /**
  * The SINGLE source of truth for Copilot execution eligibility, derived purely
  * from `classifyToolEffect`. Both Copilot paths (suggestResponse + chatWithAgent)
- * route EVERY model-invoked tool through this — so "who executes" can never drift
+ * route EVERY model-invoked tool through this - so "who executes" can never drift
  * between the two entry points. The AI Employee ignores this split (it executes
  * everything); same brain, different mode.
  *
@@ -284,7 +284,7 @@ export function routeCopilotTool(name: string): CopilotToolRouting {
 /**
  * Group a turn's tool surface into capabilities. Pure, deterministic, never throws.
  * `hints` maps an integration tool name → its Integration.category (CRM, CALENDAR…)
- * — the orchestrator already has this when it builds the surface.
+ * - the orchestrator already has this when it builds the surface.
  */
 export function groupToolsIntoCapabilities(
   toolFunctionNames: string[],
@@ -321,7 +321,7 @@ export function groupToolsIntoCapabilities(
 }
 
 /**
- * Render capability groups for the prompt — Capability → Purpose → tools, instead
+ * Render capability groups for the prompt - Capability → Purpose → tools, instead
  * of a flat list. Returns null when there are no tools.
  */
 export function renderCapabilities(groups: CapabilityGroup[]): string | null {
@@ -330,9 +330,9 @@ export function renderCapabilities(groups: CapabilityGroup[]): string | null {
     "**Capabilities you have this turn** (think in capabilities, then pick the tool that fits the goal):",
   ];
   for (const g of groups) {
-    lines.push("", `- **${g.label}** — ${g.purpose}`);
+    lines.push("", `- **${g.label}** - ${g.purpose}`);
     for (const t of g.tools) {
-      lines.push(`    - \`${t.name}\`${t.summary ? ` — ${t.summary}` : ""}`);
+      lines.push(`    - \`${t.name}\`${t.summary ? ` - ${t.summary}` : ""}`);
     }
   }
   return lines.join("\n");

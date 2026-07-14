@@ -1,5 +1,5 @@
 /**
- * CALENDAR capability — the four operation contracts, as DATA.
+ * CALENDAR capability - the four operation contracts, as DATA.
  *
  * Frozen in docs/architecture/capability-runtime.md. Business-only language: no
  * tool / provider / endpoint appears anywhere. `satisfierOperation` references
@@ -57,14 +57,14 @@ const BOOK_MEETING: OperationContract = {
   invariants: [
     {
       id: "no_duplicate_meeting",
-      statement: "the customer does not already have an active meeting (would be a duplicate — move instead)",
+      statement: "the customer does not already have an active meeting (would be a duplicate - move instead)",
       strength: "MUST",
       checkpoint: "PRE",
       enforcement: "RUNTIME_VERIFIED",
       onUnsatisfied: { kind: "FAILED", reason: "active_booking_exists_use_move" },
     },
     // NOTE: "customer has agreed to meet" is a MEANING precondition owned by the
-    // PLANNER — it is asserted by the planner's choice to emit BOOK_MEETING, and
+    // PLANNER - it is asserted by the planner's choice to emit BOOK_MEETING, and
     // cannot be a RUNTIME_VERIFIED invariant (the runtime must not judge intent).
     // Kept out of the runtime face deliberately; see capability-runtime.md.
     {

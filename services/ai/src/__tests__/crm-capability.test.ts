@@ -58,7 +58,7 @@ const CONTACT = {
   phone: null, stage: "lead", vendor: "hubspot",
 };
 
-describe("CRM capability driver — SEARCH_CUSTOMER", () => {
+describe("CRM capability driver - SEARCH_CUSTOMER", () => {
   it("searches when an identifier is supplied in params → EXECUTED with contacts", async () => {
     const { port, calls } = fakePort({ search: { ok: true, contacts: [CONTACT] } });
     const { result, trace } = await executeCrmOperation(req("SEARCH_CUSTOMER", { email: "dana@x.com" }), { port, ...SILENT });
@@ -83,7 +83,7 @@ describe("CRM capability driver — SEARCH_CUSTOMER", () => {
     expect(calls.search).toBe(0);
   });
 
-  it("a READ still runs in advisory (shadow) mode — reads are never short-circuited", async () => {
+  it("a READ still runs in advisory (shadow) mode - reads are never short-circuited", async () => {
     const { port, calls } = fakePort();
     const { result } = await executeCrmOperation(req("SEARCH_CUSTOMER", { email: "a@b.com" }, {}, "advisory"), { port, ...SILENT });
     expect(result.status).toBe("EXECUTED");
@@ -111,7 +111,7 @@ describe("CRM capability driver — SEARCH_CUSTOMER", () => {
   });
 });
 
-describe("CRM connector — UPSERT_CUSTOMER (identity foundation, WRITE)", () => {
+describe("CRM connector - UPSERT_CUSTOMER (identity foundation, WRITE)", () => {
   it("new customer with an identifier → EXECUTED, resolution=created", async () => {
     const { port, calls } = fakePort({ upsert: { status: "created", contact: CONTACT } });
     const { result } = await executeCrmOperation(req("UPSERT_CUSTOMER", { email: "dana@x.com", name: "Dana" }), { port, ...SILENT });
@@ -155,7 +155,7 @@ describe("CRM connector — UPSERT_CUSTOMER (identity foundation, WRITE)", () =>
   });
 });
 
-describe("CRM connector — ADD_NOTE (WRITE)", () => {
+describe("CRM connector - ADD_NOTE (WRITE)", () => {
   it("resolved contact + note text → EXECUTED, note recorded", async () => {
     const { port, calls } = fakePort({ note: { ok: true, id: "note_42" } });
     const { result } = await executeCrmOperation(req("ADD_NOTE", { contact_id: "123", note: "Discussed pricing." }), { port, ...SILENT });
@@ -192,7 +192,7 @@ describe("CRM connector — ADD_NOTE (WRITE)", () => {
   });
 });
 
-describe("CRM operation set — GET_CUSTOMER_CONTEXT / UPDATE_RECORD / CREATE_TASK", () => {
+describe("CRM operation set - GET_CUSTOMER_CONTEXT / UPDATE_RECORD / CREATE_TASK", () => {
   it("GET_CUSTOMER_CONTEXT: resolved contact → EXECUTED with hydrated context (READ, runs in advisory too)", async () => {
     const { port, calls } = fakePort();
     const { result } = await executeCrmOperation(req("GET_CUSTOMER_CONTEXT", { contact_id: "123" }, {}, "advisory"), { port, ...SILENT });
@@ -229,8 +229,8 @@ describe("CRM operation set — GET_CUSTOMER_CONTEXT / UPDATE_RECORD / CREATE_TA
     expect(result).toMatchObject({ status: "FAILED", reason: "vendor_does_not_support_update" });
   });
 
-  it("CREATE_TASK: autonomous NEVER auto-executes — production floor is approval 'always'", async () => {
-    // The static policy floor for create_task is mode:"always" (tool-gate.ts) —
+  it("CREATE_TASK: autonomous NEVER auto-executes - production floor is approval 'always'", async () => {
+    // The static policy floor for create_task is mode:"always" (tool-gate.ts) -
     // an autonomous CREATE_TASK must go through approval, never straight to the
     // vendor. Hermetically (no DB) the approval creation fails closed → FAILED;
     // in production it becomes AWAITING_APPROVAL. Either way: NO vendor call.
@@ -242,7 +242,7 @@ describe("CRM operation set — GET_CUSTOMER_CONTEXT / UPDATE_RECORD / CREATE_TA
     expect(missing.result).toMatchObject({ status: "NEEDS_INPUT", field: "subject" });
   });
 
-  it("WRITE ops dry-run in advisory (shadow) mode — no vendor call", async () => {
+  it("WRITE ops dry-run in advisory (shadow) mode - no vendor call", async () => {
     const { port, calls } = fakePort();
     const u = await executeCrmOperation(req("UPDATE_RECORD", { contact_id: "1", fields: { a: 1 } }, {}, "advisory"), { port, ...SILENT });
     const t = await executeCrmOperation(req("CREATE_TASK", { contact_id: "1", subject: "s" }, {}, "advisory"), { port, ...SILENT });

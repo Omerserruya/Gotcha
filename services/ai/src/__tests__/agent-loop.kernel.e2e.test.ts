@@ -1,5 +1,5 @@
 /**
- * KERNEL END-TO-END — one AI Employee completes real Calendar work through the
+ * KERNEL END-TO-END - one AI Employee completes real Calendar work through the
  * full cognitive loop, WITHOUT bypassing the Capability Runtime and WITHOUT an
  * LLM key.
  *
@@ -11,7 +11,7 @@
  * Method: the Reasoner is scripted (via setReasonerProvider) so the test is
  * deterministic, but it reasons FROM the live Facts + observations (it only books
  * AFTER it observes availability, and only finishes AFTER the Oracle refresh shows
- * the booking exists) — proving observations genuinely re-enter the loop and that
+ * the booking exists) - proving observations genuinely re-enter the loop and that
  * there is NO predetermined execution chain. Execution goes through the real
  * calendar contracts + resolver over an in-memory port (no network, no Prisma
  * writes to the outside world).
@@ -42,7 +42,7 @@ import type { CalendarPort, CalendarBookingRef, ResolvedMeetingKind } from "../s
 const DEMO = { slug: "demo", durationMinutes: 30 };
 const SLOT = "2026-07-02T15:00:00.000Z";
 
-// ── In-memory calendar (the provider, below the Runtime — invisible to cognition) ──
+// ── In-memory calendar (the provider, below the Runtime - invisible to cognition) ──
 function fakePort(open: string[]): { port: CalendarPort; bookings: CalendarBookingRef[] } {
   const bookings: CalendarBookingRef[] = [];
   const openSet = new Set(open);
@@ -79,7 +79,7 @@ function toAvailableOperation(c: OperationContract): AvailableOperation {
 }
 
 // A Calendar capability backed by the in-memory port but routed through the REAL
-// runtime — identical shape to the production CalendarCapability, injected port.
+// runtime - identical shape to the production CalendarCapability, injected port.
 function fakeCalendarCapability(port: CalendarPort): CapabilityRegistration {
   const CONTRACTS = Object.values(CALENDAR_CONTRACTS);
   return {
@@ -146,7 +146,7 @@ function scriptedReasoner(calls: { n: number }): ReasonerProvider {
   };
 }
 
-describe("Cognitive kernel E2E — one employee books a meeting through the full loop", () => {
+describe("Cognitive kernel E2E - one employee books a meeting through the full loop", () => {
   beforeEach(() => {
     ensureCapabilitiesRegistered(); // set the registered flag (registers prod caps)
     clearCapabilities(); // …then swap in the in-memory calendar for hermetic test
@@ -197,14 +197,14 @@ describe("Cognitive kernel E2E — one employee books a meeting through the full
     const { port, bookings } = fakePort([SLOT]);
     registerCapability(fakeCalendarCapability(port));
     // Reasoner tries to book; permissions only allow CHECK_AVAILABILITY, so the
-    // menu excludes BOOK_MEETING and AUTHORIZE denies it — it never reaches the Runtime.
+    // menu excludes BOOK_MEETING and AUTHORIZE denies it - it never reaches the Runtime.
     const scripted: ReasonerProvider = {
       name: "scripted", model: "s",
       async reason(input) {
         const wm = input.context.workingMemory;
         const deniedBook = !!wm?.iterations?.some((it) => it.proposedOperation === "BOOK_MEETING");
         const decision = deniedBook
-          ? { type: "FINISH" as const, reason: "cannot book — not permitted" }
+          ? { type: "FINISH" as const, reason: "cannot book - not permitted" }
           : { type: "EXECUTE" as const, operation: "BOOK_MEETING", params: { desired_time: SLOT } };
         return {
           output: {
@@ -225,7 +225,7 @@ describe("Cognitive kernel E2E — one employee books a meeting through the full
       mission: { businessDescription: "Sales rep" }, goal: "booking", memory: EMPTY_AGENT_MEMORY,
     });
 
-    expect(bookings.length).toBe(0); // denied before the Runtime — no mutation
+    expect(bookings.length).toBe(0); // denied before the Runtime - no mutation
     const denied = result.workingMemory.iterations.find((i) => i.proposedOperation === "BOOK_MEETING");
     expect(denied?.runtimeResult).toBe("DENIED");
     expect(result.terminationReason).toBe("finish");
@@ -253,7 +253,7 @@ describe("Cognitive kernel E2E — one employee books a meeting through the full
     expect(result.reply && result.reply.length).toBeTruthy();
   });
 
-  it("ownership: a human takeover between iterations supersedes the loop — no reply, no further execution", async () => {
+  it("ownership: a human takeover between iterations supersedes the loop - no reply, no further execution", async () => {
     const { port, bookings } = fakePort([SLOT]);
     registerCapability(fakeCalendarCapability(port));
     setReasonerProvider(scriptedReasoner({ n: 0 }));
@@ -277,13 +277,13 @@ describe("Cognitive kernel E2E — one employee books a meeting through the full
     });
 
     expect(result.terminationReason).toBe("superseded");
-    // Stood down BEFORE the booking write — only the availability read ran.
+    // Stood down BEFORE the booking write - only the availability read ran.
     expect(bookings.length).toBe(0);
     // A superseded loop must stay silent: the human is talking now.
     expect(result.reply).toBeNull();
   });
 
-  it("ownership: takeover caught by the final pre-EXECUTE probe — the write never reaches the Runtime", async () => {
+  it("ownership: takeover caught by the final pre-EXECUTE probe - the write never reaches the Runtime", async () => {
     const { port, bookings } = fakePort([SLOT]);
     registerCapability(fakeCalendarCapability(port));
     setReasonerProvider(scriptedReasoner({ n: 0 }));
@@ -314,7 +314,7 @@ describe("Cognitive kernel E2E — one employee books a meeting through the full
   it("OPERATION_STATUS enforcement: an unproven op in an autonomous turn dry-runs (no mutation)", async () => {
     // A capability owning an operation the migration ledger has NOT proven
     // autonomous (UPSERT_CUSTOMER is "shadow"). The scripted reasoner proposes
-    // it in a real autonomous turn — the loop must downgrade the execution to
+    // it in a real autonomous turn - the loop must downgrade the execution to
     // dry_run: RECOMMENDED, never executed.
     const writes = { n: 0 };
     registerCapability({
@@ -372,13 +372,13 @@ describe("Cognitive kernel E2E — one employee books a meeting through the full
       operationExecutionMode: (op, mode) => (op === "UPSERT_CUSTOMER" ? "dry_run" : mode),
     });
 
-    expect(writes.n).toBe(0); // never executed autonomously — ledger says shadow
+    expect(writes.n).toBe(0); // never executed autonomously - ledger says shadow
     const attempt = result.workingMemory.iterations.find((i) => i.proposedOperation === "UPSERT_CUSTOMER");
     expect(attempt?.runtimeResult).toBe("RECOMMENDED");
     expect(result.terminationReason).toBe("finish");
   });
 
-  it("ownership: probe errors fail open — the loop completes normally", async () => {
+  it("ownership: probe errors fail open - the loop completes normally", async () => {
     const { port, bookings } = fakePort([SLOT]);
     registerCapability(fakeCalendarCapability(port));
     setReasonerProvider(scriptedReasoner({ n: 0 }));

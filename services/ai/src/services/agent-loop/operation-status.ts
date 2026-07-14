@@ -1,5 +1,5 @@
 /**
- * ⛔ TEMPORARY — MIGRATION SCAFFOLDING. NOT part of the final Kernel. ⛔
+ * ⛔ TEMPORARY - MIGRATION SCAFFOLDING. NOT part of the final Kernel. ⛔
  *
  * The FINAL architecture has NO routing and no operation ledger:
  *     Employee → Reasoner → Capability Runtime → Observation → Reasoner → …
@@ -11,11 +11,11 @@
  * `AGENT_LOOP_AGENTS` env): the moment `generateAIBotReplyInner` is deleted, i.e. the
  * Kernel is the sole production brain. Nothing here survives the migration.
  *
- * It is deliberately two tiny, dumb pieces — if either grows into real "routing logic",
+ * It is deliberately two tiny, dumb pieces - if either grows into real "routing logic",
  * STOP: we would be rebuilding a second architecture instead of deleting the first.
- *   1. OPERATION_STATUS — a flat progress ledger: which operations the Kernel is PROVEN
+ *   1. OPERATION_STATUS - a flat progress ledger: which operations the Kernel is PROVEN
  *      to own autonomously (telemetry + the record behind each opt-in). No behavior.
- *   2. agentKernelEligible — the deterministic routing floor: an explicit operator
+ *   2. agentKernelEligible - the deterministic routing floor: an explicit operator
  *      opt-in (`AGENT_LOOP_AGENTS`), exactly like `AGENT_LOOP_TENANTS`. NO LLM, NO
  *      tool-surface derivation, NO domain knowledge. The operator opts in only agents
  *      they have VERIFIED need nothing beyond autonomous operations. Reversible env flag.
@@ -25,13 +25,13 @@ export type OperationStatus = "shadow" | "autonomous";
 
 /**
  * Migration progress ledger. Absent ⇒ the Kernel has no capability for it yet
- * (Legacy-only). Pure record — read for telemetry and to justify an opt-in.
+ * (Legacy-only). Pure record - read for telemetry and to justify an opt-in.
  */
 export const OPERATION_STATUS: Record<string, OperationStatus> = {
   // ── CALENDAR ── whole set verified LIVE autonomous on the pilot (2026-07-02):
   // real Google Calendar insert/patch/delete, every invariant held, zero residual
   // (scripts/pilot-book-verify.ts + pilot-move-verify.ts). READ (CHECK) shadow-
-  // evidenced 2026-07-01. A taken slot is rejected at the strategy — never a double-book.
+  // evidenced 2026-07-01. A taken slot is rejected at the strategy - never a double-book.
   CHECK_AVAILABILITY: "autonomous",
   BOOK_MEETING: "autonomous",
   MOVE_MEETING: "autonomous",
@@ -63,7 +63,7 @@ export function isOperationAutonomous(op: string): boolean {
  * THE DETERMINISTIC ROUTING FLOOR (temporary). The Kernel drives a conversation ONLY
  * when its agent is explicitly opted in via `AGENT_LOOP_AGENTS` (comma-separated agent
  * ids). Empty ⇒ NO agent routes to the Kernel (safe default). No wildcard is supported
- * on purpose — routing a real customer to the Kernel must always be an explicit,
+ * on purpose - routing a real customer to the Kernel must always be an explicit,
  * per-agent, operator decision that the agent needs nothing beyond autonomous operations.
  *
  * This is the entire router. When Legacy is deleted, this and the ledger above go with it.
@@ -74,7 +74,7 @@ export function agentKernelEligible(aiAgentId: string): boolean {
   return raw.split(",").map((s) => s.trim()).filter(Boolean).includes(aiAgentId);
 }
 
-/** Count of operations at each status — migration telemetry only. */
+/** Count of operations at each status - migration telemetry only. */
 export function operationStatusSummary(): { autonomous: number; shadow: number; operations: number } {
   const vals = Object.values(OPERATION_STATUS);
   return {

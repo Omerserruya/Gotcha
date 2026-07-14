@@ -141,12 +141,12 @@ router.put(
 );
 
 // ─────────────────────────────────────────────────────────────
-// Entitlements, credits & POC — the special-tenant admin surface.
+// Entitlements, credits & POC - the special-tenant admin surface.
 //
 // Feature LICENSING (what the tenant's plan/contract allows) is separate from
 // the raw feature FLAGS above: it is written as TenantEntitlement rows
 // (OVERRIDE for manual grants, TRIAL for POC windows), materialized into
-// TenantFeature, and consumed by the permission resolver — so a disabled
+// TenantFeature, and consumed by the permission resolver - so a disabled
 // domain disappears from /api/permissions/me and the workspace UI hides it.
 // Money/wallet operations go through the billing service's internal API.
 // ─────────────────────────────────────────────────────────────
@@ -210,7 +210,7 @@ router.get(
   },
 );
 
-// ─── Toggle a licensed domain (manual OVERRIDE — strongest source) ─
+// ─── Toggle a licensed domain (manual OVERRIDE - strongest source) ─
 const entitlementSchema = z.object({ enabled: z.boolean() });
 router.put(
   "/tenants/:tenantId/entitlements/:key",
@@ -265,8 +265,8 @@ router.post(
     }
 
     // Feature set: license default-ALLOW means absent rows = allowed, so an
-    // exact POC feature set needs EXPLICIT rows for every domain — true for
-    // picked, false for the rest — all TRIAL-source with the POC's expiry.
+    // exact POC feature set needs EXPLICIT rows for every domain - true for
+    // picked, false for the rest - all TRIAL-source with the POC's expiry.
     for (const domain of LICENSE_DOMAINS) {
       await setTenantEntitlement({
         tenantId,

@@ -417,7 +417,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
       `Likely cause: prompt prefix < 1024 tokens, or >5min since last call (cache TTL).`,
     );
   }
-  // Positive telemetry too — operators need cache HEALTH visible in both directions.
+  // Positive telemetry too - operators need cache HEALTH visible in both directions.
   if (params.sessionId && cachedTokens > 0) {
     console.log(
       `[aiService] cache HIT sessionId=${params.sessionId} cached=${cachedTokens}/${usage.input_tokens} promptTokens`,
@@ -547,7 +547,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
   const model = params.model || defaultModel;
   const type = params.metadata?.type || "chat";
 
-  // Billing pre-flight — identical gate to the non-streaming generateResponse().
+  // Billing pre-flight - identical gate to the non-streaming generateResponse().
   // Without this, every streamed AI path (autonomous worker, agent-runtime,
   // agent-builder) would bypass the AI-Unit gate entirely. Throws
   // AiUnitsExhaustedError ONLY in BILLING_ENFORCEMENT_MODE=hard; off/observe/soft
@@ -621,7 +621,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
 
   // Same fire-and-forget tracking + audit + AI-Unit metering as the
   // non-streaming path. meterAndReact debits the wallet, writes the billing
-  // ledger, and fires threshold notifications — without it the streaming path
+  // ledger, and fires threshold notifications - without it the streaming path
   // would consume model capacity without ever billing it.
   void meterAndReact(params.tenantId, model, usage, params.metadata?.conversationId);
 
@@ -669,7 +669,7 @@ export function getDefaultModel(): string {
 /**
  * Micro-call tier (P1-7). The cheap, high-frequency helper calls that block
  * EVERY turn (knowledge_resolve, wizard_binding) don't need the flagship
- * reasoning model — they extract/classify from a bounded prompt. Route them to
+ * reasoning model - they extract/classify from a bounded prompt. Route them to
  * a smaller/faster model (default gpt-5-nano) to cut per-turn latency and cost.
  * Override with OPENAI_MICRO_MODEL; falls back to the default model if unset so
  * the tier can be disabled by pointing it at the same model.

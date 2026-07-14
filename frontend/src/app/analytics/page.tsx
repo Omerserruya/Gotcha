@@ -21,7 +21,7 @@ import {
   getDailyVolume,
 } from "@/lib/api";
 
-// Every number on this page comes from /api/analytics/* — no demo data.
+// Every number on this page comes from /api/analytics/* - no demo data.
 // A fresh tenant sees honest zeros/empty states, never fabricated metrics.
 
 const CHANNEL_COLORS: Record<string, string> = {
@@ -46,7 +46,7 @@ function rangeParams(range: string): Record<string, string> {
 }
 
 function formatMs(ms: number | null | undefined): string {
-  if (ms == null) return "—";
+  if (ms == null) return "-";
   if (ms < 60000) return `${Math.round(ms / 1000)}s`;
   if (ms < 3600000) return `${Math.round(ms / 60000)}m`;
   return `${(ms / 3600000).toFixed(1)}h`;
@@ -181,14 +181,14 @@ export default function AnalyticsPage() {
           </div>
         )}
 
-        {/* KPI Overview — real numbers only */}
+        {/* KPI Overview - real numbers only */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2 md:gap-3">
           <KpiCard label={t("analytics.overview.totalConversations")} value={(overview?.totalConversations ?? 0).toLocaleString()} delta={overview?.deltas?.totalConversationsPct} icon="chat" />
           <KpiCard label={t("analytics.overview.resolutionRate")} value={`${overview?.resolutionRate ?? 0}%`} delta={overview?.deltas?.resolvedConversationsPct} icon="check" />
           <KpiCard label={t("analytics.overview.avgResponseTime")} value={formatMs(overview?.avgResponseTimeMs)} delta={null} icon="bolt" />
           <KpiCard label={t("analytics.overview.avgResolutionTime")} value={formatMs(overview?.avgResolutionTimeMs)} delta={null} icon="timer" />
           <KpiCard label={t("analytics.overview.aiHandledShare")} value={`${overview?.aiHandledPct ?? 0}%`} delta={null} icon="sparkle" />
-          <KpiCard label={t("analytics.overview.approvalRate")} value={approvals?.approvalRate != null ? `${approvals.approvalRate}%` : "—"} delta={null} icon="sparkle" />
+          <KpiCard label={t("analytics.overview.approvalRate")} value={approvals?.approvalRate != null ? `${approvals.approvalRate}%` : "-"} delta={null} icon="sparkle" />
         </div>
 
         {/* Message volume trend (real daily volumes) */}
@@ -216,7 +216,7 @@ export default function AnalyticsPage() {
 
         {/* AI vs Human Performance */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-3 md:gap-4">
-          {/* AI Performance — governance metrics included */}
+          {/* AI Performance - governance metrics included */}
           <div className="bg-white rounded-2xl p-3 md:p-6 shadow-card border border-gray-100">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 bg-gradient-to-br from-violet-500 to-purple-600 rounded-xl flex items-center justify-center">
@@ -243,11 +243,11 @@ export default function AnalyticsPage() {
             <p className="text-[10px] font-semibold text-gray-500 uppercase tracking-wider mb-2">{t("analytics.aiPerformance.governance")}</p>
             <div className="grid grid-cols-3 gap-3">
               <div className="bg-gray-50 rounded-xl p-3 text-center">
-                <p className="text-lg font-bold text-gray-700">{approvals?.approvalRate != null ? `${approvals.approvalRate}%` : "—"}</p>
+                <p className="text-lg font-bold text-gray-700">{approvals?.approvalRate != null ? `${approvals.approvalRate}%` : "-"}</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">{t("analytics.aiPerformance.approvalRate")}</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-3 text-center">
-                <p className="text-lg font-bold text-gray-700">{approvals?.overrideRate != null ? `${approvals.overrideRate}%` : "—"}</p>
+                <p className="text-lg font-bold text-gray-700">{approvals?.overrideRate != null ? `${approvals.overrideRate}%` : "-"}</p>
                 <p className="text-[10px] text-gray-500 mt-0.5">{t("analytics.aiPerformance.overrideRate")}</p>
               </div>
               <div className="bg-gray-50 rounded-xl p-3 text-center">
@@ -260,7 +260,7 @@ export default function AnalyticsPage() {
             )}
           </div>
 
-          {/* Human Performance — real agent stats */}
+          {/* Human Performance - real agent stats */}
           <div className="bg-white rounded-2xl p-3 md:p-6 shadow-card border border-gray-100">
             <div className="flex items-center gap-2 mb-4">
               <div className="w-8 h-8 bg-gradient-to-br from-primary-400 to-primary-600 rounded-xl flex items-center justify-center">

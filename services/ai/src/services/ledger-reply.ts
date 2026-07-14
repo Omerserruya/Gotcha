@@ -3,19 +3,19 @@
  * truth for side effects this turn) into:
  *
  *   1. An AUTHORITATIVE committed-outcome block injected into the model context
- *      so the customer-facing reply is DERIVED FROM ledger state — not from
+ *      so the customer-facing reply is DERIVED FROM ledger state - not from
  *      whichever tool result the model happens to focus on (the original bug:
  *      a real booking existed but a later duplicate's `agent_busy` shaped the
  *      reply into "the slot is unavailable").
  *
  *   2. A consistency verdict the post-loop gate enforces:
- *        - `fabricated_claim`   — the reply asserts a booking is done but NO
+ *        - `fabricated_claim`   - the reply asserts a booking is done but NO
  *          customer-facing booking committed this turn (scenario 5).
- *        - `unconfirmed_commit` — a customer-facing outcome DID commit but the
- *          draft reply fails to confirm it (empty / passive closer) — e.g. the
+ *        - `unconfirmed_commit` - a customer-facing outcome DID commit but the
+ *          draft reply fails to confirm it (empty / passive closer) - e.g. the
  *          objective regen rewrote a post-booking reply into a discovery
  *          question, so the meeting got booked but the customer was never told.
- *        - `ok`                 — reply is consistent with the ledger.
+ *        - `ok`                 - reply is consistent with the ledger.
  *
  * This module is PURE and ledger-only: no booking-guard / capability coupling.
  * The caller passes in the phrase-level signals it already computes
@@ -53,7 +53,7 @@ function describeCommitted(e: LedgerEntry): string {
  * Build the authoritative committed-outcome block injected into the model
  * context. Returns null when nothing customer-facing committed (nothing to
  * confirm). Background commits (lead/contact/note/tag) are deliberately NOT
- * listed as things to confirm — they must stay invisible to the customer.
+ * listed as things to confirm - they must stay invisible to the customer.
  */
 export function buildCommittedOutcomeBlock(ledger: TurnOutcomeLedger): string | null {
   const cf = ledger.customerFacingCommitted();
@@ -71,7 +71,7 @@ export function buildCommittedOutcomeBlock(ledger: TurnOutcomeLedger): string | 
   if (hasBackground) {
     lines.push(
       "",
-      "Background CRM actions (creating/updating a lead, contact, note, or tag) also succeeded but are INTERNAL — NEVER mention them, the CRM, or any record to the customer.",
+      "Background CRM actions (creating/updating a lead, contact, note, or tag) also succeeded but are INTERNAL - NEVER mention them, the CRM, or any record to the customer.",
     );
   }
   lines.push(
@@ -111,7 +111,7 @@ export function evaluateReplyConsistency(
 /**
  * Corrective injected before the single regen when a customer-facing outcome
  * committed but the draft reply didn't confirm it. Pairs with the committed
- * block (already in context) — this is the stronger nudge to actually say it.
+ * block (already in context) - this is the stronger nudge to actually say it.
  */
 export function buildUnconfirmedCommitCorrective(kinds: OutcomeKind[]): string {
   const what = kinds.includes("booking")

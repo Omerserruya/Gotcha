@@ -71,7 +71,7 @@ function idemKey() {
   return `idem:tool:${TENANT}:${CONV}:${key}`;
 }
 
-describe("ActionOrchestrator — cross-turn idempotency", () => {
+describe("ActionOrchestrator - cross-turn idempotency", () => {
   beforeEach(() => {
     redisStore.clear();
     redisMock.get.mockClear();
@@ -102,7 +102,7 @@ describe("ActionOrchestrator — cross-turn idempotency", () => {
     await orch.submit(action(), executor, { ledger, idempotency: true });
 
     expect(executor).toHaveBeenCalledTimes(1);
-    // fire-and-forget persist — allow the microtask to flush
+    // fire-and-forget persist - allow the microtask to flush
     await new Promise((r) => setTimeout(r, 5));
     expect(redisMock.set).toHaveBeenCalled();
     const setArgs = redisMock.set.mock.calls[0];

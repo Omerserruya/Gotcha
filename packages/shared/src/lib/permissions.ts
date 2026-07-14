@@ -248,7 +248,7 @@ export async function assertFeature(user: PermissionUser, feature: Feature): Pro
 //
 // This is the canonical RBAC path. Everything flows through here; there are
 // NO hardcoded tenant-role checks. The only role string consulted directly is
-// SYSTEM_ADMIN — the PLATFORM super-admin tier (not a tenant role).
+// SYSTEM_ADMIN - the PLATFORM super-admin tier (not a tenant role).
 //
 // Effective answer for hasPermission(user, key):
 //   SYSTEM_ADMIN                       → allow (platform bypass)
@@ -265,8 +265,8 @@ export async function assertFeature(user: PermissionUser, feature: Feature): Pro
 export interface PermissionPrincipal {
   userId: string;
   tenantId: string;
-  role: string; // SYSTEM_ADMIN | ADMIN | AGENT  (legacy enum — bridge only)
-  /** Legacy department role (AGENT | MANAGER) — used only by the migration bridge. */
+  role: string; // SYSTEM_ADMIN | ADMIN | AGENT  (legacy enum - bridge only)
+  /** Legacy department role (AGENT | MANAGER) - used only by the migration bridge. */
   departmentRole?: string | null;
 }
 
@@ -284,7 +284,7 @@ export function scopeToDb(scope: PermissionScope): "OWN" | "TEAM" | "DEPARTMENT"
 
 /**
  * Tenant license map: explicit entitlement rows keyed by catalog license keys
- * (feature or feature:sub-feature). Default-ALLOW — a permission is licensed
+ * (feature or feature:sub-feature). Default-ALLOW - a permission is licensed
  * unless an applicable key is explicitly disabled. This keeps every existing
  * tenant fully enabled until packaging (P3) writes a plan's license map.
  */
@@ -442,7 +442,7 @@ export async function getUserPermissions(user: PermissionPrincipal): Promise<str
   return [...effective].filter(isLicensed);
 }
 
-/** Full effective view for the current user — feeds /api/permissions/me. */
+/** Full effective view for the current user - feeds /api/permissions/me. */
 export async function getEffectiveAccess(user: PermissionPrincipal): Promise<{
   permissions: string[];
   scope: PermissionScope;

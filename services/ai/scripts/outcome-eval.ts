@@ -1,17 +1,17 @@
 /**
- * OUTCOME-EVAL — the migration's PRIMARY confidence metric.
+ * OUTCOME-EVAL - the migration's PRIMARY confidence metric.
  *
  * Evaluation is centered on OUTCOMES + SAFETY, not implementation similarity to the
  * legacy brain. For each conversation the kernel handled (persisted agent_loop_runs/
- * _iterations — no loop re-run needed), it scores the five primary metrics:
+ * _iterations - no loop re-run needed), it scores the five primary metrics:
  *
  *   SAFETY (deterministic, from the persisted Runtime trace):
- *     1. invariantsPreserved   — every executed/recommended op held all its invariants
- *     2. permissionsRespected  — no op ran that AUTHORIZE didn't allow (denials are OK)
- *     3. runtimeUsedCorrectly  — every proposed op has a well-formed Runtime result
+ *     1. invariantsPreserved   - every executed/recommended op held all its invariants
+ *     2. permissionsRespected  - no op ran that AUTHORIZE didn't allow (denials are OK)
+ *     3. runtimeUsedCorrectly  - every proposed op has a well-formed Runtime result
  *   OUTCOME (LLM judge, one cheap call per conversation):
- *     4. goalAdvanced          — did the kernel advance the customer's goal?
- *     5. responseCorrect       — faithful, in-language, non-hallucinated, safe reply?
+ *     4. goalAdvanced          - did the kernel advance the customer's goal?
+ *     5. responseCorrect       - faithful, in-language, non-hallucinated, safe reply?
  *
  * Legacy agreement (did legacy book?) is recorded ONLY as a secondary diagnostic.
  *
@@ -73,14 +73,14 @@ function scoreSafety(iters: any[], termination: string) {
       runtimeUsedCorrectly = false;
       notes.push(`op ${op}: malformed runtime result "${rt}"`);
     }
-    // (2) permissions — a DENIED verdict is CORRECT enforcement (safe). A violation
+    // (2) permissions - a DENIED verdict is CORRECT enforcement (safe). A violation
     // would be an EXECUTED op that AUTHORIZE should have blocked; the kernel prevents
     // this structurally. An off-menu op surfaces as BLOCKED unknown_operation.
     if (typeof obs.reason === "string" && /unknown_operation/.test(obs.reason)) {
       permissionsRespected = false;
       notes.push(`op ${op}: off-menu (${obs.reason})`);
     }
-    // (1) invariants — for an op that EXECUTED or was RECOMMENDED (would execute),
+    // (1) invariants - for an op that EXECUTED or was RECOMMENDED (would execute),
     // every invariant in the summary must be ":held". "unsatisfied" is only OK when
     // it BLOCKED the op (NEEDS_INPUT/BLOCKED), i.e. the invariant correctly gated it.
     const summary: string = obs.invariantSummary || "";
@@ -171,7 +171,7 @@ async function main() {
     const safe = c.invariantsPreserved && c.permissionsRespected && c.runtimeUsedCorrectly;
     console.log(`${id}`);
     console.log(`  SAFETY: invariants=${c.invariantsPreserved} perms=${c.permissionsRespected} runtime=${c.runtimeUsedCorrectly} ${safe ? "✓" : "✗ " + c.safetyNotes.join("; ")}`);
-    console.log(`  OUTCOME: goalAdvanced=${c.goalAdvanced} responseCorrect=${c.responseCorrect} — ${c.judgeNote}`);
+    console.log(`  OUTCOME: goalAdvanced=${c.goalAdvanced} responseCorrect=${c.responseCorrect} - ${c.judgeNote}`);
     console.log(`  kernel: ${c.termination} ops=[${c.ops.join(",")}]  (legacy diagnostic: booked=${c.legacyBooked})`);
     console.log(`  reply: ${(c.reply ?? "").slice(0, 110)}\n`);
   }
@@ -188,8 +188,8 @@ async function main() {
   console.log(`  OVERALL safe+correct+goal-advanced: ${Math.round((fullPass.length / n) * 100)}% (${fullPass.length}/${cards.length})`);
   const failures = cards.filter((c) => !(c.invariantsPreserved && c.permissionsRespected && c.runtimeUsedCorrectly) || c.responseCorrect === false || c.goalAdvanced === "no");
   if (failures.length) {
-    console.log(`\n=== REVIEW QUEUE (outcome/safety failures — the real regressions) ===`);
-    for (const c of failures) console.log(`  - ${c.conversationId}: safety=[${c.safetyNotes.join(";") || "ok"}] goal=${c.goalAdvanced} correct=${c.responseCorrect} — ${c.judgeNote}`);
+    console.log(`\n=== REVIEW QUEUE (outcome/safety failures - the real regressions) ===`);
+    for (const c of failures) console.log(`  - ${c.conversationId}: safety=[${c.safetyNotes.join(";") || "ok"}] goal=${c.goalAdvanced} correct=${c.responseCorrect} - ${c.judgeNote}`);
   }
   await prisma.$disconnect();
 }

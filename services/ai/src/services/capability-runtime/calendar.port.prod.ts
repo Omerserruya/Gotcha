@@ -1,8 +1,8 @@
 /**
- * Production CalendarPort (Slice 3A) — the existing calendar handlers BECOME the
+ * Production CalendarPort (Slice 3A) - the existing calendar handlers BECOME the
  * adapter. Each port method delegates to one concrete handler / store call and
  * maps its result to the abstract port shape. NO business rules live here (those
- * are the contracts + verifiers in calendar.runtime.ts) — this file only
+ * are the contracts + verifiers in calendar.runtime.ts) - this file only
  * translates between the abstract port and the concrete scheduling primitives.
  *
  * Slice 3A is wiring only: NOTHING calls this port yet (the live tool path is

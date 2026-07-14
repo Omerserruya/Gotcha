@@ -1,9 +1,9 @@
 /**
- * LOOP-REPLAY-BATCH — populate the loop-eval corpus with REALISTIC loop behavior.
+ * LOOP-REPLAY-BATCH - populate the loop-eval corpus with REALISTIC loop behavior.
  *
  * Runs the UNCHANGED loop in AUTONOMOUS mode over N real historical transcripts, but
  * with SIMULATED in-memory connectors (calendar + CRM). Autonomous = writes EXECUTE, so
- * the simulated world UPDATES and the loop progresses exactly as it would in production —
+ * the simulated world UPDATES and the loop progresses exactly as it would in production -
  * without the advisory-shadow artifact (dry-run writes → world never updates → the loop
  * re-proposes the same write until max_iterations). Zero real side effects: every write
  * lands in an in-memory store that is discarded. The Reasoner is the REAL LLM.
@@ -107,7 +107,7 @@ async function main() {
       registerSimWorld(); // fresh simulated world per conversation
       const r = await runAgentLoopForBotTurn({ tenantId: TENANT_ID, conversationId: c.id, aiAgentId: AGENT_ID, incomingMessage: incoming }, "autonomous");
       ok++;
-      console.log(`[${i + 1}/${convs.length}] ${c.id} term=${(r as any)?.escalation ? "escalate" : "ok"} — "${incoming.slice(0, 45)}"`);
+      console.log(`[${i + 1}/${convs.length}] ${c.id} term=${(r as any)?.escalation ? "escalate" : "ok"} - "${incoming.slice(0, 45)}"`);
     } catch (e: any) {
       err++;
       console.log(`[${i + 1}/${convs.length}] ${c.id} ERROR: ${String(e?.message || e).slice(0, 100)}`);

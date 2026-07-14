@@ -8,7 +8,7 @@ async function main() {
     where: { tenantId: TENANT_ID, aiAgentId: AGENT_ID, isAllowed: true },
     include: { tenantTool: { include: { catalogTool: { select: { slug: true } }, tenantIntegration: { include: { integration: { select: { slug: true } } } } } } },
   });
-  console.log(`\nagent ${AGENT_ID} — allowed AgentToolPermission rows: ${perms.length}`);
+  console.log(`\nagent ${AGENT_ID} - allowed AgentToolPermission rows: ${perms.length}`);
   for (const p of perms) {
     const tt = p.tenantTool;
     console.log(`  - ${tt?.tenantIntegration?.integration?.slug ?? "?"}:${tt?.catalogTool?.slug ?? "?"} (enabled=${tt?.isEnabled}, integStatus=${tt?.tenantIntegration?.status})`);

@@ -20,7 +20,7 @@ export default function HelpHomePage() {
           {he ? "איך אפשר לעזור?" : "How can we help?"}
         </h1>
         <p className="text-gray-500 mt-3 md:text-lg">
-          {he ? "מדריכים, תשובות והגדרות ל-GOTCHA — הדור הבא של התקשורת עם הלקוחות." : "Guides, answers and setup for GOTCHA — the next generation of customer engagement."}
+          {he ? "מדריכים, תשובות והגדרות ל-GOTCHA - הדור הבא של התקשורת עם הלקוחות." : "Guides, answers and setup for GOTCHA - the next generation of customer engagement."}
         </p>
         <div className="mt-7 flex justify-center">
           <HelpSearch big autoFocus />

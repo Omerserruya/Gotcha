@@ -1,17 +1,17 @@
 /**
- * CUSTOM operation set — tenant-defined HTTP + DB-query tools as generic
+ * CUSTOM operation set - tenant-defined HTTP + DB-query tools as generic
  * Operations. The menu is DYNAMIC per tenant: `describeWorld` lists the tenant's
  * active custom tools (the same `listCustomApiTools`/`listCustomDbQueryTools`
  * the legacy surface uses); `execute` delegates to the EXISTING production
- * executors (`executeCustomApiTool` / `executeCustomDbQueryTool` — host
+ * executors (`executeCustomApiTool` / `executeCustomDbQueryTool` - host
  * whitelists, template rendering, SQL/Mongo runners all untouched).
  *
  * Operation ids are the EXACT legacy names (`custom.<slug>` / `custom_db.<slug>`)
  * so the production policy layer prices them natively: `evaluatePolicies` has a
- * dedicated custom-tool branch (risk-based floor — read+non-HIGH auto-runs,
+ * dedicated custom-tool branch (risk-based floor - read+non-HIGH auto-runs,
  * write/HIGH requires approval). The approval mapping is therefore IDENTITY.
  *
- * Contracts are built from tenant data at read time — still contracts-as-data,
+ * Contracts are built from tenant data at read time - still contracts-as-data,
  * the data just lives in the DB. Nothing in the kernel changes.
  */
 
@@ -78,7 +78,7 @@ function contractOf(def: CustomToolDef): OperationContract {
     id: def.opName,
     capability: "CUSTOM",
     effect: isRead ? "read" : "write",
-    meaning: `${def.description} — when to use: ${def.whenToUse}${def.whenNotToUse ? `; do NOT use: ${def.whenNotToUse}` : ""}`,
+    meaning: `${def.description} - when to use: ${def.whenToUse}${def.whenNotToUse ? `; do NOT use: ${def.whenNotToUse}` : ""}`,
     params: paramsOf(def).map((p) => ({ key: p.name, meaning: p.meaning, required: p.required })),
     outcome: "the tool's result, verbatim from the business's own system",
     success: { id: "custom_tool_completed", statement: "the tenant-defined tool ran and returned its result" },
@@ -158,12 +158,12 @@ export const CustomCapability: CapabilityRegistration = {
     return {
       capability: "CUSTOM",
       summary: defs.length
-        ? `${defs.length} business-specific tool(s) are available — each description says when to use it.`
+        ? `${defs.length} business-specific tool(s) are available - each description says when to use it.`
         : "No business-specific tools are configured.",
       facts: { customToolCount: defs.length },
       operations: defs.map((d) => ({
         name: d.opName,
-        meaning: `${d.description} — when to use: ${d.whenToUse}${d.whenNotToUse ? `; do NOT use: ${d.whenNotToUse}` : ""}`,
+        meaning: `${d.description} - when to use: ${d.whenToUse}${d.whenNotToUse ? `; do NOT use: ${d.whenNotToUse}` : ""}`,
         params: paramsOf(d),
       })),
     };

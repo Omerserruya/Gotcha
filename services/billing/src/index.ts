@@ -1,5 +1,5 @@
 /**
- * Billing service — subscriptions, payments (iCount), invoices, AI-Unit
+ * Billing service - subscriptions, payments (iCount), invoices, AI-Unit
  * purchases, auto-purchase, dunning. Internal DNS: http://billing:4009.
  *
  * Owns MONEY state + provider webhooks + schedulers. The AI-Unit WALLET and

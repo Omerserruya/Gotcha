@@ -1,10 +1,10 @@
 /**
- * Decision Timeline (P1-5) — the read surface that turns the kernel's persisted
+ * Decision Timeline (P1-5) - the read surface that turns the kernel's persisted
  * loop trace into an owner-facing "why did the AI do that?" story. Read-only
  * over agent_loop_runs + agent_loop_iterations (already written every turn);
  * it never triggers reasoning.
  *
- *   GET /conversation/:id  — the ordered runs for one conversation, each with
+ *   GET /conversation/:id  - the ordered runs for one conversation, each with
  *                            its iterations projected to a compact trace:
  *                            what it read (situation), what it decided, which
  *                            operation ran, what it observed, tokens/latency.

@@ -124,7 +124,7 @@ export function stripLeakedToolContent(text: string): { cleaned: string; leaked:
 // remains the language-agnostic first line of defence, this is the deterministic
 // backstop for the languages we ship.
 const INTERNAL_OPS_PATTERNS: RegExp[] = [
-  // EN: <verb> ... <internal object> — "create a lead", "log a ticket", "update the record/CRM"
+  // EN: <verb> ... <internal object> - "create a lead", "log a ticket", "update the record/CRM"
   /\b(creat(?:e|ing)|log(?:ging)?|sav(?:e|ing)|updat(?:e|ing)|add(?:ing)?|register(?:ing)?|set(?:ting)?\s+up|open(?:ing)?)\b[^.!?\n]{0,40}\b(?:a |an |the |your )?(lead|contact|deal|opportunity|ticket|case|record|profile|entry|crm)\b/i,
   /\b(in|into|on)\s+(?:our|the|your)\s+(system|crm|database|records?|back[\s-]?end)\b/i,
   /\b(internally|behind the scenes|on our end|in our records)\b/i,
@@ -168,7 +168,7 @@ export interface ValidationContext {
   /** Successful tool calls in this turn, for fabricated-action detection. */
   toolCallLog?: Array<{ tool: string; decision?: string; sideEffect?: string }>;
   /** Tools the Turn Outcome Ledger recorded as COMMITTED this turn (real
-   * external ref). The authoritative success set — unioned with the toolCallLog
+   * external ref). The authoritative success set - unioned with the toolCallLog
    * decisions so the final fabrication check shares the single source of truth
    * (e.g. a booking deduped from a prior turn has no fresh "executed" log entry
    * but IS a real commit, and must not be flagged as fabricated). */
@@ -205,7 +205,7 @@ export function validateAssistantOutput(
 
   // Tool-output leak protection FIRST: strip machine / tool-shaped content, then
   // run every other check against the CLEANED text. A leaked blob must never
-  // count as legitimate content — and must never reach the customer.
+  // count as legitimate content - and must never reach the customer.
   const { cleaned, leaked, sample } = stripLeakedToolContent(text);
   if (leaked) violations.push({ category: "tool_output_leak", match: sample || "tool-shaped output" });
   // Internal-operations leak: strip clauses narrating internal workflow (create a

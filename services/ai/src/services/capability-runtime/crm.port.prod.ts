@@ -1,5 +1,5 @@
 /**
- * Production CrmPort — the existing CRM code BECOMES the adapter. Each method
+ * Production CrmPort - the existing CRM code BECOMES the adapter. Each method
  * delegates to one concrete production call and maps its result to the abstract port
  * shape. NO business rules here; NO reimplementation. The vendor-neutral `CRMAdapter`
  * (HubSpot/Salesforce/Zoho/Shopify/Fireberry/Airtable) is the source of truth.

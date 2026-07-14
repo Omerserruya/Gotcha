@@ -1,9 +1,9 @@
 /**
- * PLUG-AND-PLAY PROOF — a COMPLETELY FOREIGN domain (Commerce) runs through the
+ * PLUG-AND-PLAY PROOF - a COMPLETELY FOREIGN domain (Commerce) runs through the
  * cognitive kernel with ZERO changes to any cognitive component.
  *
  * Commerce has nothing in common with Calendar: stock quantities, order placement,
- * insufficient-stock failure — not times, availability, or bookings. If the kernel
+ * insufficient-stock failure - not times, availability, or bookings. If the kernel
  * (loop / Reasoner / Oracle assembler / Facts / guardrails / renderer) needed ANY
  * edit to support it, this file could not exist as it does: a SINGLE new file that
  * imports only the public contract types + `resolveExecution` + the registry
@@ -40,7 +40,7 @@ import {
 } from "../services/capability-plane";
 
 // ─────────────────────────────────────────────────────────────────────────────
-// 1. RUNTIME CONTRACTS (business model — foreign domain, no calendar semantics)
+// 1. RUNTIME CONTRACTS (business model - foreign domain, no calendar semantics)
 // ─────────────────────────────────────────────────────────────────────────────
 const COMMERCE_CONTRACTS: Record<string, OperationContract> = {
   CHECK_STOCK: {
@@ -195,7 +195,7 @@ function emptyTrace(req: ExecutionRequest, result: ExecutionTrace["result"], rea
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Scripted Reasoner — reasons GENERICALLY over the world (no domain code)
+// Scripted Reasoner - reasons GENERICALLY over the world (no domain code)
 // ─────────────────────────────────────────────────────────────────────────────
 function commerceReasoner(): ReasonerProvider {
   return {

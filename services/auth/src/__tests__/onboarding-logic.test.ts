@@ -18,7 +18,7 @@ function snap(over: Partial<OnboardingSnapshot> = {}): OnboardingSnapshot {
 const HEBREW = /[֐-׿]/;
 
 describe("contentForSnapshot (Nudge Engine)", () => {
-  it("returns null when live & reachable (active + a channel) — structurally cannot nag", () => {
+  it("returns null when live & reachable (active + a channel) - structurally cannot nag", () => {
     expect(contentForSnapshot(snap({ status: "ACTIVE", channelsConnected: 1 }))).toBeNull();
   });
 

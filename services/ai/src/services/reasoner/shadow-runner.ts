@@ -1,14 +1,14 @@
 /**
- * Shadow runner — per turn, compute the Reasoner's decision over the SAME Oracle
+ * Shadow runner - per turn, compute the Reasoner's decision over the SAME Oracle
  * Facts, compare it to the (production-driving) Planner's decision, and persist a
  * row of the permanent evaluation corpus.
  *
  * SAFETY: this is dark. It runs only when AGENT_ARCHITECTURE_ENABLED=true, is
- * fire-and-forget, and is fully try/caught — it can NEVER affect the live turn
+ * fire-and-forget, and is fully try/caught - it can NEVER affect the live turn
  * (the Planner still drives; the Reasoner never executes anything here).
  *
  * PROVIDER-NEUTRAL: it persists only neutral data (ReasonerInput, canonical
- * decisions, neutral usage). No OpenAI request/response ever reaches this layer —
+ * decisions, neutral usage). No OpenAI request/response ever reaches this layer -
  * that stays behind the ReasonerProvider boundary.
  */
 
@@ -51,7 +51,7 @@ function toOperation(tool: string | undefined): string {
   return TOOL_TO_OPERATION[tool] ?? tool;
 }
 
-/** The reasoning prompt/strategy version — the key regression axis in the corpus. */
+/** The reasoning prompt/strategy version - the key regression axis in the corpus. */
 export const PROMPT_VERSION = "reasoner-v0.1";
 
 export interface ShadowTurnContext {
@@ -271,7 +271,7 @@ export async function getAgreementSummary(opts?: {
 
 // ── Divergence review feed (the evidence a human reviews before promoting) ───
 
-/** One divergence row — enough to judge without loading the full input blob. */
+/** One divergence row - enough to judge without loading the full input blob. */
 export interface DivergenceRow {
   id: string;
   createdAt: string;
@@ -290,7 +290,7 @@ export interface DivergenceRow {
 }
 
 /**
- * Recent DISAGREEMENTS for a tenant, newest first — the review queue. Tenant-
+ * Recent DISAGREEMENTS for a tenant, newest first - the review queue. Tenant-
  * scoped by contract (never cross-tenant). `axis` narrows to one bucket.
  */
 export async function listRecentDivergences(opts: {
@@ -350,7 +350,7 @@ export async function listRecentDivergences(opts: {
 }
 
 /**
- * The FULL corpus record incl. the replayable `reasonerInput` — for deep review
+ * The FULL corpus record incl. the replayable `reasonerInput` - for deep review
  * of one turn and for replaying it against a future model. Tenant-scoped; returns
  * null if not found under this tenant.
  */

@@ -1,5 +1,5 @@
 /**
- * Guardrail: the agent runtime toolbox must follow ONE authority —
+ * Guardrail: the agent runtime toolbox must follow ONE authority -
  *   surface a catalog tool  IFF  (integration CONNECTED)  AND  (AgentToolPermission allowed)
  *   AND TenantTool enabled  AND  allowedModes ∋ the runtime mode.
  *
@@ -24,7 +24,7 @@ const ct = (slug: string, allowedModes: string[]) => ({
   },
 });
 
-describe("tool surface authority — connected AND allowed (single source of truth)", () => {
+describe("tool surface authority - connected AND allowed (single source of truth)", () => {
   beforeEach(() => {
     (prisma as any).agentToolPermission.findMany.mockReset().mockResolvedValue([]);
   });

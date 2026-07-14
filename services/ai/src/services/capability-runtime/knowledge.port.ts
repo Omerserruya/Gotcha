@@ -1,9 +1,9 @@
 /**
- * KnowledgePort — the concrete knowledge surface the KNOWLEDGE operation set runs
+ * KnowledgePort - the concrete knowledge surface the KNOWLEDGE operation set runs
  * on. Adapter boundary only: "is a knowledge base available?" and "retrieve the
  * passages relevant to a query". No business rules here (those are the contracts +
  * verifiers in knowledge.runtime.ts). The production port wraps the EXISTING RAG
- * (`retrieveRelevantChunks` — embeddings + vector search); tests inject a fake.
+ * (`retrieveRelevantChunks` - embeddings + vector search); tests inject a fake.
  */
 
 export interface KnowledgeOpContext {

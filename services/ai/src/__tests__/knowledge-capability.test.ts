@@ -23,7 +23,7 @@ const req = (params: Record<string, unknown> = {}, mode: ExecutionMode = "autono
   operation: "SEARCH_KNOWLEDGE", params, context: { tenantId: "t1", conversationId: "c1" }, mode,
 });
 
-describe("KNOWLEDGE operation set — SEARCH_KNOWLEDGE", () => {
+describe("KNOWLEDGE operation set - SEARCH_KNOWLEDGE", () => {
   it("query → EXECUTED with the real passages", async () => {
     const { port, calls } = fakePort({ passages: [{ text: "Pricing starts at ₪99/mo", source: "Pricing.pdf", score: 0.91 }] });
     const { result, trace } = await executeKnowledgeOperation(req({ query: "how much does it cost" }), { port, ...SILENT });
@@ -33,7 +33,7 @@ describe("KNOWLEDGE operation set — SEARCH_KNOWLEDGE", () => {
     expect(trace.successVerified).toBe(true);
   });
 
-  it("no results → EXECUTED with an honest 'unknown — do not guess' outcome", async () => {
+  it("no results → EXECUTED with an honest 'unknown - do not guess' outcome", async () => {
     const { port } = fakePort({ passages: [] });
     const { result } = await executeKnowledgeOperation(req({ query: "warranty policy" }), { port, ...SILENT });
     expect(result.status).toBe("EXECUTED");

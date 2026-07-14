@@ -1,7 +1,7 @@
 /**
- * CRM runtime — binds the CRM contracts to a concrete CrmPort and runs them through
+ * CRM runtime - binds the CRM contracts to a concrete CrmPort and runs them through
  * the SHARED resolver (the sole executor). Every CRM business rule lives here as a
- * verifier over the port's concrete reads — NOT in the port, NOT in the adapter. The
+ * verifier over the port's concrete reads - NOT in the port, NOT in the adapter. The
  * driver stays a thin wrapper: the runtime calls the port, the port calls existing
  * production CRM code, the result comes back with a structured trace.
  */
@@ -137,7 +137,7 @@ function buildCrmBindings(
             case "merged":
               return { ok: true, outcome: "reconciled duplicate CRM contacts", data: { contact: r.contact, resolution: "merged" } };
             case "needs_approval":
-              // Don't guess an identity — stop for an operator (recoverable → loop escalates).
+              // Don't guess an identity - stop for an operator (recoverable → loop escalates).
               return { ok: false, reason: `ambiguous_identity_needs_operator:${r.candidates?.length ?? 0}_candidates`, data: { candidates: r.candidates }, recoverable: true };
             case "not_found":
               return { ok: false, reason: "not_found", recoverable: true };

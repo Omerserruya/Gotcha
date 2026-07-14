@@ -193,6 +193,14 @@ export function ConversationList({ selectedId, onSelect }: Props) {
     fetchConversations();
   }, [fetchConversations]);
 
+  // Guided-tour demo mode toggled while we're already mounted (the tour can
+  // start from /conversations): swap between real and fixture data live.
+  useEffect(() => {
+    const onMockChanged = () => fetchConversations();
+    window.addEventListener("tour:mock-changed", onMockChanged);
+    return () => window.removeEventListener("tour:mock-changed", onMockChanged);
+  }, [fetchConversations]);
+
   // Fetch departments for filter (admin only)
   useEffect(() => {
     if (!token || user?.role !== "ADMIN") return;
@@ -459,7 +467,7 @@ export function ConversationList({ selectedId, onSelect }: Props) {
       </div>
 
       {/* List */}
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pt-2 space-y-2" ref={listRef}>
+      <div className="flex-1 overflow-y-auto overflow-x-hidden px-3 pt-2 space-y-2" ref={listRef} data-tour="inbox-list">
         {/* Phase 1 - Live voice calls. Renders null unless tenant has
             `voiceInboxUiEnabled = true` AND there is at least one RINGING
             or live session, so non-voice tenants see today's inbox. */}
@@ -568,6 +576,11 @@ export function ConversationList({ selectedId, onSelect }: Props) {
                     key={conv.id}
                     onClick={() => handleSelect(conv.id)}
                     onContextMenu={(e) => handleContextMenu(e, conv.id)}
+                    // Guided-tour anchor: the tour spotlights ONLY the demo
+                    // conversation it narrates (Dana, tour-1) - other rows are
+                    // deliberately not targetable so a stray click can't derail
+                    // the walkthrough.
+                    data-tour={conv.id === "tour-1" ? "inbox-row-primary" : "inbox-row"}
                     className={clsx(
                       "w-full text-start px-4 py-3 hover:bg-gray-50/80 transition-colors",
                       selectedId === conv.id && "bg-primary-50/60 rounded-lg mx-2"

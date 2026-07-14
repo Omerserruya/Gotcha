@@ -1,5 +1,5 @@
 /**
- * LIVE AUTONOMOUS BOOK_MEETING VERIFICATION — the write-op evidence gating BOOK's
+ * LIVE AUTONOMOUS BOOK_MEETING VERIFICATION - the write-op evidence gating BOOK's
  * shadow→autonomous flip (the analogue of CHECK's pre-flip live verify).
  *
  * Drives the EXACT production pipeline the loop uses (executeCalendarOperation → prod
@@ -18,7 +18,7 @@ import { createProdCalendarPort } from "../src/services/capability-runtime/calen
 import type { ExecutionRequest, ExecutionResult, ExecutionTrace } from "@chatcenter/shared";
 
 const TENANT_ID = "cmmov5qh10000ltnqm7pmxqzc";
-const AGENT_ID = "cm5aabb73f8d574c5b909ca1e9fcd6a142"; // דניאל — CONNECTED Google Calendar
+const AGENT_ID = "cm5aabb73f8d574c5b909ca1e9fcd6a142"; // דניאל - CONNECTED Google Calendar
 const CONV_ID = "pilot-book-verify-conv";
 const CUSTOMER = "pilot-book-verify-cust";
 const EMAIL = "pilot-book-verify@example.com";
@@ -73,7 +73,7 @@ async function main() {
     const slots: string[] = ((chk.result as any).data?.proposedSlotsIso as string[]) ?? [];
     console.log(`\n1) CHECK_AVAILABILITY → ${chk.result.status}; open slots: ${slots.slice(0, 5).join(", ") || "(none)"}`);
     console.log(`   invariants: ${invStr(chk.trace)}`);
-    if (chk.result.status !== "EXECUTED" || slots.length === 0) throw new Error("no open slot to book — cannot verify BOOK");
+    if (chk.result.status !== "EXECUTED" || slots.length === 0) throw new Error("no open slot to book - cannot verify BOOK");
     const slot = slots[0];
 
     // 2. BOOK the slot (REAL event)
@@ -100,9 +100,9 @@ async function main() {
     console.log(`  BOOK executed + all invariants held : ${bookOk}`);
     console.log(`  exactly one active booking after    : ${singleOk}`);
     console.log(`  cleanup left zero residual bookings  : ${cleanOk}`);
-    console.log(`  → BOOK_MEETING autonomous write-path ${bookOk && singleOk && cleanOk ? "VERIFIED LIVE ✓ (safe to flip)" : "NOT verified — inspect above"}`);
+    console.log(`  → BOOK_MEETING autonomous write-path ${bookOk && singleOk && cleanOk ? "VERIFIED LIVE ✓ (safe to flip)" : "NOT verified - inspect above"}`);
   } finally {
-    if (booked) console.log("\n⚠ residual booking may remain — re-run to clean.");
+    if (booked) console.log("\n⚠ residual booking may remain - re-run to clean.");
     await prisma.conversation.deleteMany({ where: { id: CONV_ID, tenantId: TENANT_ID } }).catch(() => {});
     await prisma.$disconnect();
   }

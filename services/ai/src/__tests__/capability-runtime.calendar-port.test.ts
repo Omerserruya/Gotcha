@@ -1,9 +1,9 @@
 /**
- * Slice 3A — production CalendarPort delegation contract.
+ * Slice 3A - production CalendarPort delegation contract.
  *
  * Proves the prod port faithfully TRANSLATES between the abstract port and the
  * concrete handlers (no business logic of its own), with the handlers/store/prisma
- * mocked — no DB, no network. Behavioral parity on real data is 3B (shadow mode).
+ * mocked - no DB, no network. Behavioral parity on real data is 3B (shadow mode).
  */
 
 import { describe, it, expect, beforeEach, vi } from "vitest";

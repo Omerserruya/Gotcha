@@ -68,7 +68,7 @@ const SYSTEM_TOOL_POLICIES: Record<string, HitlPolicy> = {
   close_conversation:          { mode: "never" },
   tag_contact:                 { mode: "never" },
   generate_followup:           { mode: "never" },
-  // Read-only availability lookup — never books, never needs approval.
+  // Read-only availability lookup - never books, never needs approval.
   check_availability:          { mode: "never" },
 
   // Write-side / external-facing - require approval by default.

@@ -202,7 +202,7 @@ const TEMPLATES: Record<SystemEventType, TemplateFn> = {
   },
   "subscription.past_due": () => ({
     title: `Payment overdue`,
-    body: `We couldn't renew your subscription. We'll retry shortly — please check your payment method.\n\n- Hebrew -\nלא הצלחנו לחדש את המנוי. נסו לעדכן את אמצעי התשלום.`,
+    body: `We couldn't renew your subscription. We'll retry shortly - please check your payment method.\n\n- Hebrew -\nלא הצלחנו לחדש את המנוי. נסו לעדכן את אמצעי התשלום.`,
     link: "/settings/billing",
   }),
   "invoice.issued": (e) => ({

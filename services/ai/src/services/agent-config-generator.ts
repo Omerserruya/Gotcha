@@ -69,7 +69,57 @@ function generateIdentityBlock(profile: BusinessProfileData, dept: DepartmentDat
   };
 }
 
-function generateGoalsBlock(profile: BusinessProfileData, dept: DepartmentData) {
+// The owner's ONE earned answer in onboarding ("What's your primary goal?")
+// maps to a concrete objective + success criteria the employee actually runs
+// on. Before this, that answer was saved but never reached the employee's goals
+// block - so a "Sales" pick produced a support-shaped employee.
+const ONBOARDING_GOAL: Record<string, { objective: string; success: string[] }> = {
+  customer_support: {
+    objective: "Resolve customer questions accurately and quickly, and deflect repetitive ones on your own.",
+    success: ["Answer correctly on the first reply", "Keep response times low", "Escalate anything you're unsure about instead of guessing"],
+  },
+  sales: {
+    objective: "Turn inbound conversations into qualified opportunities and booked meetings or orders.",
+    success: ["Qualify every real buyer", "Book the meeting or close the order", "Never let an inbound lead go unanswered"],
+  },
+  lead_qualification: {
+    objective: "Qualify and route every new lead against fit, and hand hot ones over fast.",
+    success: ["Qualify and tag every lead", "Hand off hot leads immediately", "Keep CRM records clean and complete"],
+  },
+  operations: {
+    objective: "Handle bookings, orders and logistics requests end to end.",
+    success: ["Process bookings and orders correctly", "Answer order and logistics questions", "Give accurate, up-to-date status"],
+  },
+  internal_assistant: {
+    objective: "Help the team get accurate, sourced answers quickly from company knowledge.",
+    success: ["Answer team questions from the knowledge base", "Give correct, cited answers", "Flag gaps where knowledge is missing"],
+  },
+};
+
+// Combine one OR MORE onboarding use-cases into a single objective + success set.
+// The owner can now pick several ("customer service" + "lead management") - the
+// employee is built to do all of them, not just the first. Primary goal leads;
+// each additional goal's objective is appended and its success criteria merged
+// (deduped, capped) so the employee genuinely runs on the combined mandate.
+function resolveOnboardingGoal(
+  primaryGoal?: string | null,
+  extraGoals?: string[],
+): { objective: string; success: string[] } | undefined {
+  const keys: string[] = [];
+  const push = (g?: string | null) => {
+    if (g && ONBOARDING_GOAL[g] && !keys.includes(g)) keys.push(g);
+  };
+  push(primaryGoal);
+  (extraGoals || []).forEach((g) => push(typeof g === "string" ? g : null));
+  if (!keys.length) return undefined;
+  if (keys.length === 1) return ONBOARDING_GOAL[keys[0]!];
+  const objective = keys.map((k) => ONBOARDING_GOAL[k]!.objective).join(" ");
+  const success: string[] = [];
+  for (const k of keys) for (const s of ONBOARDING_GOAL[k]!.success) if (!success.includes(s)) success.push(s);
+  return { objective, success: success.slice(0, 6) };
+}
+
+function generateGoalsBlock(profile: BusinessProfileData, dept: DepartmentData, primaryGoal?: string | null) {
   const priorityGoals: Record<string, string[]> = {
     MAXIMIZE_SALES: [
       "Identify and capitalize on sales opportunities in every interaction",
@@ -100,13 +150,21 @@ function generateGoalsBlock(profile: BusinessProfileData, dept: DepartmentData) 
     "Operations": "operational_efficiency",
   };
 
+  // The owner's onboarding goal, when present, is the AUTHORITATIVE objective +
+  // success criteria; the business-priority goals fall in behind it as quality
+  // expectations. Without it we keep the prior business-priority behaviour.
+  const onboarding = primaryGoal ? ONBOARDING_GOAL[primaryGoal] : undefined;
+
   return {
     focus: deptFocus[dept.name] || "general_assistance",
     slaAwareness: dept.slaTarget
       ? `Respond within ${dept.slaTarget} minutes SLA target`
       : "Respond as quickly as possible",
-    conversionObjective: priorityGoals[profile.businessPriority]?.[0] || "Assist customers effectively",
+    primaryGoal: onboarding?.objective || undefined,
+    conversionObjective: onboarding?.objective || priorityGoals[profile.businessPriority]?.[0] || "Assist customers effectively",
+    successCriteria: onboarding?.success || undefined,
     qualityExpectations: [
+      ...(onboarding?.success || []),
       "Provide accurate and helpful information",
       "Maintain professional communication standards",
       ...(priorityGoals[profile.businessPriority]?.slice(1) || []),
@@ -192,7 +250,7 @@ function generateBehavioralBlock(profile: BusinessProfileData, dept: DepartmentD
 // the runtime prompt-builder renders (identity.representationGuidelines,
 // persona.customAttributes, customGuardrails) so the employee sounds like the
 // brand from day one. Reading businessDiscovery here is services/ai's own
-// generation concern (same DB) — no cross-service API and no new LLM call.
+// generation concern (same DB) - no cross-service API and no new LLM call.
 interface DiscoveryEnrichment {
   representationGuidelines: string[];
   personaAttributes: Record<string, string>;
@@ -241,9 +299,9 @@ async function buildDiscoveryEnrichment(tenantId: string): Promise<DiscoveryEnri
   if (langs.length) persona["Languages we speak"] = langs.join(", ");
 
   // Forbidden words → hard guardrails (the AI never says them).
-  for (const w of strArr(brand.forbiddenWords, 10)) guardrails.push(`Never use the word or phrase "${w}" — it is off-brand.`);
+  for (const w of strArr(brand.forbiddenWords, 10)) guardrails.push(`Never use the word or phrase "${w}" - it is off-brand.`);
 
-  // toneConfig patch — the structured, settings-visible record of the brand
+  // toneConfig patch - the structured, settings-visible record of the brand
   // (also what "≥4 discovered brand fields" is asserted against).
   if (typeof brand.voice === "string" && brand.voice.trim()) tone.brandVoice = brand.voice.trim();
   if (typeof brand.tone === "string" && brand.tone.trim()) tone.brandTone = brand.tone.trim();
@@ -269,9 +327,10 @@ export async function generateAgentConfig(
   personaOverride?: PersonaData,
   agentId?: string,
 ): Promise<string> {
-  const [profile, department] = await Promise.all([
+  const [profile, department, discovery] = await Promise.all([
     prisma.businessProfile.findUnique({ where: { tenantId } }),
     prisma.department.findUnique({ where: { id: departmentId } }),
+    prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { primaryGoal: true } }).catch(() => null),
   ]);
 
   if (!profile || !department) {
@@ -298,7 +357,7 @@ export async function generateAgentConfig(
 
   const config = {
     identity: generateIdentityBlock(profileData, deptData),
-    goals: generateGoalsBlock(profileData, deptData),
+    goals: generateGoalsBlock(profileData, deptData, discovery?.primaryGoal),
     tone: generateToneBlock(profileData, deptData),
     behavioral: generateBehavioralBlock(profileData, deptData),
     persona: personaOverride,
@@ -324,9 +383,24 @@ export async function generateAgentConfig(
 
   // The runtime prompt is built from these structured fields by
   // `prompt-builder.service.ts` - no pre-baked systemPrompt is stored.
+  // First-class goal + success criteria are what buildGoals() actually renders
+  // into the prompt (the `goals` JSON above is legacy). The onboarding goal must
+  // land HERE or the employee ships with no meaningful goal/success text - which
+  // is exactly the "goal is set but no success criteria" bug.
+  // Combine every use-case the owner selected in onboarding (primaryGoal +
+  // any additional goals mirrored onto businessProfile.businessGoals).
+  const extraGoals = Array.isArray((profile as any).businessGoals)
+    ? ((profile as any).businessGoals as unknown[]).filter((x): x is string => typeof x === "string")
+    : [];
+  const onboardingGoal = resolveOnboardingGoal(discovery?.primaryGoal, extraGoals);
+
   const agentData = {
     identity: JSON.parse(JSON.stringify(config.identity)),
     goals: JSON.parse(JSON.stringify(config.goals)),
+    ...(onboardingGoal ? {
+      goal: onboardingGoal.objective,
+      successCriteria: onboardingGoal.success.map((s) => `• ${s}`).join("\n"),
+    } : {}),
     toneConfig: JSON.parse(JSON.stringify(config.tone)),
     behavioral: JSON.parse(JSON.stringify(config.behavioral)),
     persona: mergedPersona ? JSON.parse(JSON.stringify(mergedPersona)) : undefined,
@@ -378,8 +452,8 @@ export async function generateAgentConfig(
   }
 
   // Attach the tenant's knowledge bases. An ACTIVE employee without knowledge
-  // is a contradiction — the agents API refuses it and retrieval finds
-  // nothing — yet generation used to leave the link empty, so the onboarding
+  // is a contradiction - the agents API refuses it and retrieval finds
+  // nothing - yet generation used to leave the link empty, so the onboarding
   // employee reported "not connected" to the knowledge it was taught.
   const kbs = await prisma.knowledgeBase.findMany({
     where: { tenantId, isActive: true },
@@ -391,6 +465,32 @@ export async function generateAgentConfig(
       create: { aiAgentId: agent.id, knowledgeBaseId: kb.id },
       update: {},
     }).catch((err: any) => console.warn("[agent-config] KB link failed:", err?.message));
+  }
+
+  // Let the freshly-hired employee actually USE what the owner connected. On the
+  // CREATE path (onboarding), grant it every tool from a CONNECTED integration -
+  // otherwise a connected Shopify/CRM is invisible to it and it can't look
+  // customers or orders up. High/critical-risk tools (e.g. refunds) are left for
+  // an explicit grant, keeping day-one authority conservative.
+  if (!agentId) {
+    try {
+      const connectedTools = await prisma.tenantTool.findMany({
+        where: { tenantId, isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
+        select: { id: true, catalogTool: { select: { riskLevel: true } } },
+        take: 200,
+      });
+      const grantable = connectedTools
+        .filter((t: any) => !/high|critical/i.test(String(t.catalogTool?.riskLevel || "")))
+        .map((t: any) => t.id);
+      if (grantable.length > 0) {
+        await prisma.agentToolPermission.createMany({
+          data: grantable.map((tenantToolId: string) => ({ tenantId, aiAgentId: agent.id, tenantToolId, isAllowed: true })),
+          skipDuplicates: true,
+        });
+      }
+    } catch (err: any) {
+      console.warn("[agent-config] tool auto-grant failed:", err?.message);
+    }
   }
 
   return agent.id;

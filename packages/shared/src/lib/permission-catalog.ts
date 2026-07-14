@@ -1,5 +1,5 @@
 /**
- * Permission Catalog — the SINGLE SOURCE OF TRUTH for RBAC, licensing and
+ * Permission Catalog - the SINGLE SOURCE OF TRUTH for RBAC, licensing and
  * future packaging.
  *
  * Everything authorization-related is derived from this file:
@@ -15,10 +15,10 @@
  *      is an INDEPENDENT dimension carried on the role assignment. Future
  *      "Team Leader" vs "Department Manager" differ ONLY by scope.
  *   3. Runtime vs Configuration is a property of the permission, not the role.
- *   4. Roles are data — collections of permission keys + a default scope.
+ *   4. Roles are data - collections of permission keys + a default scope.
  *      No authorization decision is ever made by hardcoding a role name
  *      (the lone exception is the SYSTEM_ADMIN PLATFORM tier, which is not a
- *      tenant role — it is the super-admin who operates across tenants).
+ *      tenant role - it is the super-admin who operates across tenants).
  *
  * The resolver (permissions.ts) reads role/grant rows from the DB and only
  * consults this catalog for: the set of known permission keys, wildcard
@@ -167,7 +167,7 @@ export function listPermissionsByDomain(): Record<string, PermissionDef[]> {
 }
 
 // ─────────────────────────────────────────────────────────────
-// Licensing — derive the entitlement key for a permission.
+// Licensing - derive the entitlement key for a permission.
 //
 // A plan/package entitles at FEATURE or SUB-FEATURE granularity
 // (`analytics`, `analytics:dashboard`). A permission is licensed when its
@@ -225,7 +225,7 @@ export function expandPermissionPatterns(patterns: Iterable<string>): Set<string
 }
 
 // ─────────────────────────────────────────────────────────────
-// Built-in roles — seeded as system TenantRoles per tenant, editable later.
+// Built-in roles - seeded as system TenantRoles per tenant, editable later.
 //
 // `permissions` are stored verbatim (wildcards allowed) as TenantRoleFeature
 // rows so the DB stays the source of truth and the set is editable. The
@@ -311,10 +311,10 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
 export const BUILTIN_ROLE_ORDER: BuiltinRoleKey[] = ["owner", "admin", "department_manager", "agent"];
 
 // ─────────────────────────────────────────────────────────────
-// Migration bridge — map the legacy coarse `Role` enum + departmentRole to a
+// Migration bridge - map the legacy coarse `Role` enum + departmentRole to a
 // built-in role. Used ONLY as a fallback when a user has no explicit
 // UserRoleAssignment yet (pre-backfill / freshly-created). Permissions still
-// come from the role's catalog definition — this maps an identity to a role,
+// come from the role's catalog definition - this maps an identity to a role,
 // it does not make an authorization decision.
 // ─────────────────────────────────────────────────────────────
 

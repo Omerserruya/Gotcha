@@ -1,5 +1,5 @@
 /**
- * P1-2 — bounded observation `data` projection. Reads (KNOWLEDGE/CRM/CUSTOM)
+ * P1-2 - bounded observation `data` projection. Reads (KNOWLEDGE/CRM/CUSTOM)
  * must re-enter the loop with WHAT they returned, hard-capped for prompt and
  * persistence safety.
  */

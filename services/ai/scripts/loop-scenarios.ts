@@ -1,5 +1,5 @@
 /**
- * LOOP-SCENARIOS — a controllable behavioral eval suite for the Agent Loop.
+ * LOOP-SCENARIOS - a controllable behavioral eval suite for the Agent Loop.
  *
  * The pilot tenant has only ~24 real historical conversations (not "hundreds"), so real
  * history alone can't give statistical confidence. This suite is the primary + permanent
@@ -111,7 +111,7 @@ async function main() {
       registerSim(!!sc.seedBooking);
       const r = await runAgentLoopForBotTurn({ tenantId: TENANT_ID, conversationId: convId, aiAgentId: AGENT_ID, incomingMessage: sc.msg }, "autonomous");
       ok++;
-      console.log(`[${i + 1}/${S.length}] ${sc.id} — ${sc.note}\n     reply: ${String((r as any)?.reply ?? "").slice(0, 100)}`);
+      console.log(`[${i + 1}/${S.length}] ${sc.id} - ${sc.note}\n     reply: ${String((r as any)?.reply ?? "").slice(0, 100)}`);
     } catch (e: any) { err++; console.log(`[${i + 1}/${S.length}] ${sc.id} ERROR: ${String(e?.message || e).slice(0, 120)}`); }
   }
   console.log(`\nDONE: ${ok} ok, ${err} err. Analyze: npx tsx scripts/loop-eval.ts 1 autonomous`);

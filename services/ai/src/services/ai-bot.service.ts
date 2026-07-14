@@ -408,7 +408,7 @@ async function evaluateEscalationGates(opts: {
 const TOOL_OK_RE = /"ok"\s*:\s*true/;
 
 // loadCommittedActionTools, loadCommittedGoal and loadToolCapabilityHints now
-// live in plan-context.service.ts (assemblePlanContext) — the single source of
+// live in plan-context.service.ts (assemblePlanContext) - the single source of
 // truth shared by the AI Employee and the AI Copilot.
 
 /**
@@ -526,7 +526,7 @@ function checkExitCriteriaGate(
   };
 }
 
-// (Removed: `checkAllowedActionsGate` and `checkContractGate` — both were disabled
+// (Removed: `checkAllowedActionsGate` and `checkContractGate` - both were disabled
 // stubs that returned `{blocked:false}` by user mandate. Their only call sites (in the
 // tool-dispatch loop) were therefore unreachable and have been removed. Move-selection
 // is still steered by the behavior prompt; the action taxonomy still powers
@@ -561,7 +561,7 @@ function computeUnmetRequiredActions(
 //   (1) a poor-fit prospect (judgment fit="disqualified") → create NOTHING;
 //   (2) a high-commitment object (deal/opportunity/quote/order/contract/invoice)
 //       requires a real, known contact to attach to (prospectState ≠ NEW_PROSPECT)
-//       — you don't open a deal/opportunity for an anonymous or unqualified party.
+//       - you don't open a deal/opportunity for an anonymous or unqualified party.
 // Capture objects (lead/contact/ticket/case) remain available for engaged
 // prospects. Works for any role and any future creation tool by name shape.
 function filterCreationToolsByEngagement(
@@ -706,7 +706,7 @@ function extractRecentEmail(messages: Array<{ direction: string; body: string | 
  * for the phone when it's already in the channel metadata.
  */
 // Calendar booking capability is computed by computeCalendarCapability()
-// (calendar-capability.service.ts) — a single three-valued signal that gates
+// (calendar-capability.service.ts) - a single three-valued signal that gates
 // schedule_meeting surfacing, the prompt fail-safe, and the output validator.
 
 function pickKnownIdentifier(conv: any, kind: "email" | "phone"): string | undefined {
@@ -817,8 +817,10 @@ async function lookupLastAssistantMove(
 function humanizeReply(text: string | null): string | null {
   if (!text) return text;
   let out = text;
-  // Em/en dash used as a clause connector (with or without surrounding spaces).
-  out = out.replace(/\s*[—–]\s*/g, ", ");
+  // Em/en dash used as a clause connector (with or without surrounding
+  // spaces). The wide em-dash "—" (U+2014) and horizontal bar "―" (U+2015)
+  // were missing from this class, so they leaked through to customers.
+  out = out.replace(/\s*[-–—―]\s*/g, ", ");
   // ASCII hyphen used as a dash: space(s) on BOTH sides → comma. " word - word"
   out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
   // Don't leave a stray ", " right before sentence punctuation or newline.
@@ -846,12 +848,12 @@ export async function generateAIBotReply(opts: {
     const loopMode = agentLoopMode(opts.tenantId);
     // TEMPORARY migration routing floor (see agent-loop/operation-status.ts): the Kernel
     // may DRIVE a conversation only for an agent explicitly opted in via AGENT_LOOP_AGENTS
-    // — one the operator has verified needs nothing beyond autonomous operations. Empty ⇒
+    // - one the operator has verified needs nothing beyond autonomous operations. Empty ⇒
     // no agent, so autonomous mode stays safe even before a fully-autonomous employee
     // exists. Deleted together with the Legacy brain (one brain → no routing).
     const kernelDrivesTurn = loopMode === "autonomous" && agentKernelEligible(opts.aiAgentId);
 
-    // AUTONOMOUS — the loop DRIVES the customer turn (real execution). Fail-soft:
+    // AUTONOMOUS - the loop DRIVES the customer turn (real execution). Fail-soft:
     // any loop error falls back to the Planner, so the flag can never break a turn.
     if (kernelDrivesTurn) {
       try {
@@ -863,10 +865,10 @@ export async function generateAIBotReply(opts: {
       }
     }
 
-    // SHADOW — EVALUATION only. Run the complete loop + Runtime (writes dry-run to
+    // SHADOW - EVALUATION only. Run the complete loop + Runtime (writes dry-run to
     // RECOMMENDED) to persist iterations/metrics/observations under real traffic, but
     // NEVER surface its output: the legacy Planner remains the customer-facing brain.
-    // Fire-and-forget OFF the live turn's critical path (no `turn.signal` — the eval
+    // Fire-and-forget OFF the live turn's critical path (no `turn.signal` - the eval
     // runs to completion independently), fail-soft, so it can neither slow nor break
     // the turn. This is how a capability earns the evidence to graduate to autonomous.
     // Also runs for an autonomous-mode agent NOT (yet) opted into the routing floor, so
@@ -892,12 +894,12 @@ export async function generateAIBotReply(opts: {
  * Build the live-conversation fact block fed into the Knowledge Ledger +
  * Objective Engine (via ContextSlot.sessionFactsBlock). Two layers:
  *
- *   1. Structured persisted facts (CustomerProfile.facts) — keyed, so the
+ *   1. Structured persisted facts (CustomerProfile.facts) - keyed, so the
  *      ledger matches them language-independently (e.g. `business_type`). These
  *      accumulate as the live extractor folds conversation facts into the V2
  *      model, so a fact stated earlier in the conversation counts on later
  *      turns regardless of phrasing/language.
- *   2. Verbatim recent customer utterances — immediate, same-turn. Anything the
+ *   2. Verbatim recent customer utterances - immediate, same-turn. Anything the
  *      customer literally typed (emails, company names, channels, explicit
  *      terms) becomes part of the resolved-fact text the SAME turn it's said.
  *
@@ -911,13 +913,13 @@ export async function generateAIBotReply(opts: {
  * "known" by matching its English key/sourceHints (e.g. `business_type`,
  * `industry`) as substrings of the resolved-fact text. For a brand-new prospect
  * the structured/persisted layer is empty, so matching falls back to the
- * VERBATIM transcript — which is in the customer's language. A Hebrew answer
+ * VERBATIM transcript - which is in the customer's language. A Hebrew answer
  * ("פלטפורמה לניהול מלאי") never contains the English token `business_type`, so
  * the field stayed permanently "missing" and the objective froze in GENERATE_LEAD
  * (observed live with omer: never reached BOOK_MEETING, looped, lost context).
  *
  * This reads the customer's messages in ANY language and returns the fields they
- * have actually provided, KEYED — emitted into the fact block so the ledger
+ * have actually provided, KEYED - emitted into the fact block so the ledger
  * matches on the literal key regardless of phrasing/language. Cheap model, JSON
  * output, fail-soft (any error → empty, i.e. prior behavior).
  */
@@ -947,7 +949,7 @@ async function resolveSessionKnowledge(opts: {
           content:
             "You read a customer's messages (in ANY language) and decide which of the listed facts they have ALREADY provided a concrete value for. " +
             'Return JSON exactly: {"facts":[{"key":"<one of the given field keys>","value":"<short English summary of what they said>"}]}. ' +
-            "Include a field ONLY if the customer stated a real value for it — NOT if they merely asked about it, declined, or it is still unknown. " +
+            "Include a field ONLY if the customer stated a real value for it - NOT if they merely asked about it, declined, or it is still unknown. " +
             "Use the EXACT field keys given; omit every field not yet provided. If none are provided, return {\"facts\":[]}.",
         },
         { role: "user", content: `Fields to look for:\n${fieldList}\n\nCustomer messages:\n${transcript}` },
@@ -996,13 +998,13 @@ async function buildSessionFactsBlock(opts: {
         .map(([k, v]) => `- ${k}: ${String(v.value).slice(0, 120)}`);
       if (lines.length) {
         parts.push(
-          "## Facts already known about this customer (treat as established — do NOT re-ask)\n" +
+          "## Facts already known about this customer (treat as established - do NOT re-ask)\n" +
             lines.join("\n"),
         );
       }
     }
   } catch {
-    /* non-fatal — fall through to transcript layer */
+    /* non-fatal - fall through to transcript layer */
   }
 
   // (2) Verbatim recent customer utterances (immediate, this session).
@@ -1012,7 +1014,7 @@ async function buildSessionFactsBlock(opts: {
     .map((m) => (m.body as string).trim().slice(0, 200));
   if (inboundMsgs.length) {
     parts.push(
-      "## What the customer said this conversation (verbatim — treat as known facts)\n" +
+      "## What the customer said this conversation (verbatim - treat as known facts)\n" +
         inboundMsgs.map((t) => `- "${t}"`).join("\n"),
     );
   }
@@ -1030,7 +1032,7 @@ async function buildSessionFactsBlock(opts: {
     });
     if (resolved.length) {
       parts.push(
-        "## Facts established this conversation (keyed — treat as known, do NOT re-ask)\n" +
+        "## Facts established this conversation (keyed - treat as known, do NOT re-ask)\n" +
           resolved.map((f) => `- ${f.key}: ${f.value}`).join("\n"),
       );
     }
@@ -1135,7 +1137,7 @@ async function generateAIBotReplyInner(
       escalation: {
         reason: `units_exhausted:${aiAllowance.reason}`,
         priority: "medium",
-        summary: `AI paused — ${aiAllowance.reason}. Remaining AI Units: ${aiAllowance.balance}.`,
+        summary: `AI paused - ${aiAllowance.reason}. Remaining AI Units: ${aiAllowance.balance}.`,
       },
       awaitingApproval: null,
       toolCallLog: [],
@@ -1433,7 +1435,7 @@ async function generateAIBotReplyInner(
           customerEmail: resolvedCustomerEmail,
         })
       : undefined,
-    // Read-only availability lookup — surfaced together with schedule_meeting so
+    // Read-only availability lookup - surfaced together with schedule_meeting so
     // the bot answers "what's free / what are your hours?" from the calendar and
     // never invents times.
     checkAvailability: hasConnectedCalendar
@@ -1920,7 +1922,7 @@ async function generateAIBotReplyInner(
   // records (lead/contact/deal/opportunity/ticket/case/…) unless creation is
   // meaningful progress. Generic rules, no per-role logic: (a) a poor-fit prospect
   // gets NO records created; (b) a high-commitment object (deal/opportunity/quote/
-  // order) requires a real, known contact to attach to (prospectState ≠ NEW) —
+  // order) requires a real, known contact to attach to (prospectState ≠ NEW) -
   // you don't open a deal for an anonymous/hostile/unqualified contact. Capture
   // objects (lead/contact/ticket) stay available for genuinely engaged prospects.
   // Filtering the SURFACE is the single choke point: the model cannot call an
@@ -1956,7 +1958,7 @@ async function generateAIBotReplyInner(
   //    carries a join key regardless).
   const shadowTurnId = randomUUID();
   // Compute the SAME CurrentPlan the prompt rendered, once, when the reasoner-shadow
-  // is engaged — it feeds the Planner↔Reasoner decision comparison below.
+  // is engaged - it feeds the Planner↔Reasoner decision comparison below.
   const runtimePlan = isAgentArchitectureEnabled()
     ? (() => { try { return computeCurrentPlanForOpts(promptOpts); } catch { return null; } })()
     : null;
@@ -1964,7 +1966,7 @@ async function generateAIBotReplyInner(
   // Reasoner shadow (Agent architecture, Phase 3): compare the Planner's decision
   // to the Reasoner's over the SAME Oracle Facts and persist an eval-corpus row.
   // Dark + fire-and-forget: gated by AGENT_ARCHITECTURE_ENABLED, fully try/caught
-  // — it can NEVER affect this turn (the Planner drives; the Reasoner never acts).
+  // - it can NEVER affect this turn (the Planner drives; the Reasoner never acts).
   try {
     runShadowEvaluationInBackground(
       toShadowContext({
@@ -2015,7 +2017,7 @@ async function generateAIBotReplyInner(
         `📅 ACTIVE MEETING: a meeting is already booked in this conversation for ${whenIso} (${durMin} min). ` +
         `If the customer wants to MOVE/change the time, call reschedule_meeting with the new time. ` +
         `If they want to CANCEL it, call cancel_meeting. ` +
-        `NEVER call schedule_meeting again for this customer — that creates a DUPLICATE event.`,
+        `NEVER call schedule_meeting again for this customer - that creates a DUPLICATE event.`,
     });
   }
 
@@ -2029,7 +2031,7 @@ async function generateAIBotReplyInner(
   // tool call. The worker sends these first, then the reply (two-bubble flow).
   const interimMessages: string[] = [];
   const toolCallLog: AIBotReplyResult["toolCallLog"] = [];
-  // Turn Outcome Ledger — single source of truth for side effects this turn.
+  // Turn Outcome Ledger - single source of truth for side effects this turn.
   // Passed to every orchestrator.submit() so duplicate semantic actions dedup
   // and a committed success can never be downgraded by a later failure.
   const ledger = new TurnOutcomeLedger();
@@ -2090,7 +2092,7 @@ async function generateAIBotReplyInner(
       });
 
       // Two-bubble flow: when the model emits a short ack ALONGSIDE a calendar
-      // tool call (schedule/reschedule/cancel — these have real check latency),
+      // tool call (schedule/reschedule/cancel - these have real check latency),
       // send that ack as its OWN message now; the post-tool reply becomes the
       // second bubble ("רגע אחד, בודק 🙏" → "הפגישה ב-17:00, להעביר ל-11:00?").
       const callsCalendarTool = toolCalls.some((t) =>
@@ -2192,8 +2194,8 @@ async function generateAIBotReplyInner(
         }
 
         // (Removed: the BEL allowedActions gate and the Action-Contract dispatch
-        // gate. Both were disabled stubs — `checkAllowedActionsGate` /
-        // `checkContractGate` returned `{blocked:false}` by user mandate — so these
+        // gate. Both were disabled stubs - `checkAllowedActionsGate` /
+        // `checkContractGate` returned `{blocked:false}` by user mandate - so these
         // call sites were unreachable dead code. Move-selection is still steered by
         // the behavior prompt; contract progress is still tracked below.)
 
@@ -2356,7 +2358,7 @@ async function generateAIBotReplyInner(
 
   // ── Action Contract violations (tool-name level) ──────────────
   // (Removed: post-loop recomputation of still-pending blocking-contract tools.
-  // Action-Contract co-steps are best-effort — that block only `console.warn`ed the
+  // Action-Contract co-steps are best-effort - that block only `console.warn`ed the
   // pending tools; the force-retry it once fed was already removed. Genuine BEL
   // required actions still force a retry via `unmetToForce` below.)
 
@@ -2491,16 +2493,16 @@ async function generateAIBotReplyInner(
 
   // ── Action Preference (Unit B) ──────────────────────────────────
   // Goal ownership creates pressure to ACT, not narrate. If the committed goal
-  // has a RIPE action — its completion tool is dispatchable this turn AND every
+  // has a RIPE action - its completion tool is dispatchable this turn AND every
   // REQUIRED input is already captured AND policy allows it (exactly the
-  // condition under which resolveNextActions emits an `act` candidate) — but the
+  // condition under which resolveNextActions emits an `act` candidate) - but the
   // model produced a NON-ADVANCING reply (passive closer / generic opener) and
   // executed nothing, re-roll ONCE with tool_choice:"required" so the model must
   // commit to a tool instead of talking. This is intelligent PREFERENCE, not
   // blind forcing: it fires only when an action is genuinely ready and the turn
   // would otherwise be pure talk, and the model still picks WHICH tool. The
   // dispatch input/policy/approval gates run on the forced call exactly as in the
-  // main loop, so an under-specified or disallowed write can never slip through —
+  // main loop, so an under-specified or disallowed write can never slip through -
   // worst case the model is steered back to asking for the one missing value.
   // Generic + metadata-driven: the trigger is the goal's readiness, never a
   // specific tool name, so it covers background AND customer-facing actions alike.
@@ -2586,7 +2588,7 @@ async function generateAIBotReplyInner(
         // Force the SPECIFIC ripe tool, not a bare "required". With "required"
         // the model can satisfy the constraint by grabbing the always-present
         // escalate_to_human (observed: a stray escalate fired under forcing).
-        // Naming the goal's ready tool keeps this preference, not a handoff — and
+        // Naming the goal's ready tool keeps this preference, not a handoff - and
         // it stays generic (the tool comes from the NBA, never hardcoded).
         toolChoice: { type: "function", function: { name: ripeAct.tool } },
         metadata: { type: "ai_bot_action_preference", conversationId: opts.conversationId, aiAgentId: config.id },
@@ -2703,7 +2705,7 @@ async function generateAIBotReplyInner(
   // ── Failure Recovery (Unit C) ────────────────────────────────────
   // A committed goal creates pressure toward RECOVERY, not handoff. If a
   // goal-advancing action was ATTEMPTED this turn but FAILED (ok:false), a strong
-  // owner does not give up or escalate on the first hiccup — they retry with
+  // owner does not give up or escalate on the first hiccup - they retry with
   // corrected inputs, use a different tool that reaches the same outcome, ask the
   // customer for the one detail that was missing/rejected, or offer a workaround;
   // escalation is the LAST resort. This runs ONE bounded recovery re-roll and,
@@ -2925,7 +2927,7 @@ async function generateAIBotReplyInner(
   // the customer didn't actually say goodbye, regenerate ONCE with a
   // corrective that forces a forward move. Skipped during approval/escalation
   // handoffs and when the per-turn budget is spent.
-  // Decision context — computed once, used by BOTH the gate and the trace log
+  // Decision context - computed once, used by BOTH the gate and the trace log
   // below. Cheap, pure string-matching; safe even when replyText is null.
   const decisionFactText = [ctxSlot.customerBlock, ctxSlot.crmBlock, ctxSlot.memoryBlock, ctxSlot.sessionFactsBlock]
     .filter((s): s is string => !!s && !!s.trim())
@@ -2982,7 +2984,7 @@ async function generateAIBotReplyInner(
 
   // ── Guaranteed Background Actions (deterministic CRM integrity) ──────────
   // A background CRM write (create lead/contact/deal) whose objective's required
-  // info is already present MUST happen this turn — never left to whether the
+  // info is already present MUST happen this turn - never left to whether the
   // model remembered to call it (the audit's 65 missed create_lead). Runs a
   // SILENT, tool-only round per ripe background action against a COPY of the
   // message thread, so it NEVER changes the customer reply. Deliberately NOT
@@ -3085,7 +3087,7 @@ async function generateAIBotReplyInner(
   // so the meeting gets booked on the calendar but the customer is never told
   // (observed live: schedule_meeting ok:true → regen produced "what type of
   // business?"). The Turn Outcome Ledger is the single source of truth for
-  // "did a real side effect land" — replacing the old regex scan over tool-result
+  // "did a real side effect land" - replacing the old regex scan over tool-result
   // strings, which read whichever result text the model happened to surface.
   const committedActionThisTurn = ledger.committed().length > 0;
 
@@ -3154,7 +3156,7 @@ async function generateAIBotReplyInner(
   // When the agent is NOT bookable, schedule_meeting was never surfaced, so a
   // successful booking is impossible this turn. If the draft reply still
   // commits to a day/time (or implies a booking), regenerate ONCE with a
-  // corrective — prompt text alone does not reliably stop this (the Saturday
+  // corrective - prompt text alone does not reliably stop this (the Saturday
   // regression). Bookable agents are unaffected; their "claimed booking with no
   // tool" case is covered by the fabricated-action output validator.
   let bookingFailsafeRegenerated = false;
@@ -3163,7 +3165,7 @@ async function generateAIBotReplyInner(
     replyText &&
     !awaitingApproval &&
     !pendingEscalation &&
-    // Single bounded quality regen — exempt from the per-turn cap (see the
+    // Single bounded quality regen - exempt from the per-turn cap (see the
     // passive-closer gate note above).
     !calendarCapability.bookable &&
     bookingCommitment.matched
@@ -3212,7 +3214,7 @@ async function generateAIBotReplyInner(
   //   - proposing a time / stating availability is also satisfied by real
   //     proposed slots a schedule_meeting result returned this turn.
   // Observed live (omer): the model invented Saturday availability, accepted a
-  // past time (14:00 "today" at 15:15), AND claimed "I booked 14:00" — all with
+  // past time (14:00 "today" at 15:15), AND claimed "I booked 14:00" - all with
   // ZERO schedule_meeting calls, so working-hours / min-notice / past-time /
   // freeBusy validation was entirely bypassed and the replies contradicted each
   // other. When ungrounded, regenerate ONCE forcing the tool so its REAL result
@@ -3348,7 +3350,7 @@ async function generateAIBotReplyInner(
 
     // Deterministic backstop. If the regenerated reply STILL asserts an
     // ungrounded time/availability/booking (the model refused the tool and kept
-    // free-texting — exactly what bit omer), strip it to a safe reply that
+    // free-texting - exactly what bit omer), strip it to a safe reply that
     // invents nothing rather than ship the lie. Never trust a second LLM pass to
     // self-correct a fabrication.
     const postAssertion = detectBookingAssertion(replyText);
@@ -3356,7 +3358,7 @@ async function generateAIBotReplyInner(
       const isHe = /[֐-׿]/.test(replyText || opts.incomingMessage || "");
       console.warn(
         `[ai-bot] booking-grounding fallback: reply still asserts ${postAssertion.kind} ` +
-          `("${postAssertion.phrase}") with no grounding after regen — using deterministic safe reply.`,
+          `("${postAssertion.phrase}") with no grounding after regen - using deterministic safe reply.`,
       );
       replyText = buildBookingGroundingFallback(isHe);
     }
@@ -3371,7 +3373,7 @@ async function generateAIBotReplyInner(
 
   // ── Ledger consistency gate: unconfirmed commit ─────────────────
   // A customer-facing outcome (e.g. a booking) ACTUALLY committed this turn but
-  // the draft reply fails to confirm it (empty / passive closer) — the meeting
+  // the draft reply fails to confirm it (empty / passive closer) - the meeting
   // is on the calendar yet the customer would be told nothing, or asked an
   // unrelated discovery question. The committed-summary block is already in
   // context (injected mid-loop); push the stronger corrective and regenerate
@@ -3454,7 +3456,7 @@ async function generateAIBotReplyInner(
     });
   }
 
-  // NOTE: a self-repetition regen gate was tried here and REMOVED — pushing the
+  // NOTE: a self-repetition regen gate was tried here and REMOVED - pushing the
   // model off a near-duplicate reply made it over-correct into giving up /
   // escalating ("I'll transfer you to the team"), which is far worse than a
   // mildly repetitive but on-track reply. Repetition is handled softly by the
@@ -3589,7 +3591,7 @@ async function generateAIBotReplyInner(
         tenantId: opts.tenantId,
         conversationId: opts.conversationId,
         toolCallLog,
-        // Ledger is the single source of truth for committed actions — feed it
+        // Ledger is the single source of truth for committed actions - feed it
         // to the fabrication check so a deduped/cross-turn commit isn't flagged.
         ledgerCommittedTools: ledger.committed().map((e) => e.tool),
       });

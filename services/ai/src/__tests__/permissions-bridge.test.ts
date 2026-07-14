@@ -1,5 +1,5 @@
 /**
- * Permissions bridge — RBAC home → kernel allow-list projection (P1-1).
+ * Permissions bridge - RBAC home → kernel allow-list projection (P1-1).
  * Pure-function tests over deriveAllowedOperations; loadToolGrants is a thin
  * Prisma read exercised by the live stack.
  */

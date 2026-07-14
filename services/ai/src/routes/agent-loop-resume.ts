@@ -1,11 +1,11 @@
 /**
- * Agent-loop approval resume (P1-3 / B6) — internal-only.
+ * Agent-loop approval resume (P1-3 / B6) - internal-only.
  *
  * When a human approves a KERNEL-originated request (ApprovalRequest rows
  * carrying `resumeEnvelope.kind === "kernel_operation"`), the conversation
  * service dispatches here instead of the legacy tool executor. The stored
- * ExecutionRequest re-enters the Capability Runtime — invariants, verification
- * and observability all apply to the HITL write — with `approval.approvedRef`
+ * ExecutionRequest re-enters the Capability Runtime - invariants, verification
+ * and observability all apply to the HITL write - with `approval.approvedRef`
  * set so the gate recognises the human's decision instead of re-asking.
  *
  * Protected by the same `X-Internal-Key` shared secret as /api/ai-bot.

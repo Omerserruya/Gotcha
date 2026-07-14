@@ -1,5 +1,5 @@
 /**
- * Required-Knowledge Ledger — the deterministic half of the "stop behaving like
+ * Required-Knowledge Ledger - the deterministic half of the "stop behaving like
  * an FAQ bot" fix.
  *
  * A Skill declares `requiredKnowledge` (machine-readable KnowledgeField[]). Each
@@ -100,7 +100,7 @@ export function renderKnowledgeLedger(ledger: KnowledgeLedger): string | null {
   const lines: string[] = ["# Knowledge Ledger (this turn)"];
   for (const e of ledger.entries) {
     const mark = e.known ? "✓" : "✗";
-    const tag = e.known ? "" : e.importance === "required" ? " — MISSING [required]" : " — missing";
+    const tag = e.known ? "" : e.importance === "required" ? " - MISSING [required]" : " - missing";
     lines.push(`- ${mark} \`${e.key}\` (${e.label})${tag}`);
   }
   if (ledger.nextTarget) {

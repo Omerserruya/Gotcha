@@ -2,21 +2,26 @@
 
 import Link from "next/link";
 import Image from "next/image";
+import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import clsx from "clsx";
 import { NotificationBell } from "./NotificationBell";
+import { cachedJourneyIncomplete, refreshJourneyIncomplete } from "@/lib/journey-cache";
 import { IncomingCallBannerSidebar } from "./voice/IncomingCallBanner";
 import { MissionPanel } from "./onboarding/MissionPanel";
 
 // `domain` ties a nav item to its licensed feature domain: when the tenant's
 // license disables that domain (system console / plan / POC feature set), the
-// item disappears here — /api/permissions/me returns no keys under it.
+// item disappears here - /api/permissions/me returns no keys under it.
 const navItems = [
+  // journeyGated: shown only while the first-steps journey is incomplete
+  // (mirrors MissionPanel's auto-dismiss - once done it's gone for good).
+  // "Your Business" moved to /settings/business when this slot was added.
+  { href: "/getting-started", icon: RocketIcon, labelKey: "nav.gettingStarted", adminOnly: true, journeyGated: true },
   { href: "/conversations", icon: ChatIcon, labelKey: "nav.conversations" },
-  { href: "/business", icon: BusinessIcon, labelKey: "nav.business", adminOnly: true },
   { href: "/history", icon: HistoryIcon, labelKey: "nav.history", managerOrAdmin: true },
   { href: "/approvals", icon: ApprovalsIcon, labelKey: "nav.approvals", adminOnly: true, domain: "approvals" },
   { href: "/dashboard", icon: DashboardIcon, labelKey: "nav.dashboard", adminOnly: true, domain: "analytics" },
@@ -26,19 +31,18 @@ const navItems = [
   { href: "/settings", icon: SettingsIcon, labelKey: "nav.settings", adminOnly: true },
 ];
 
-function ApprovalsIcon({ className }: { className?: string }) {
+function RocketIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.59 14.37a6 6 0 01-5.84 7.38v-4.8m5.84-2.58a14.98 14.98 0 006.16-12.12A14.98 14.98 0 009.63 8.41m5.96 5.96a14.926 14.926 0 01-5.841 2.58m-.119-8.54a6 6 0 00-7.381 5.84h4.8m2.581-5.84a14.927 14.927 0 00-2.58 5.84m2.699 2.7c-.103.021-.207.041-.311.06a15.09 15.09 0 01-2.448-2.448 14.9 14.9 0 01.06-.312m-2.24 2.39a4.493 4.493 0 00-1.757 4.306 4.493 4.493 0 004.306-1.758M16.5 9a1.5 1.5 0 11-3 0 1.5 1.5 0 013 0z" />
     </svg>
   );
 }
 
-// "Your Business" — the permanent home of the Digital Twin.
-function BusinessIcon({ className }: { className?: string }) {
+function ApprovalsIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-      <path strokeLinecap="round" strokeLinejoin="round" d="M3 21h18M4 21V7l8-4 8 4v14M9 21v-4a1 1 0 011-1h4a1 1 0 011 1v4M9 9h.01M15 9h.01M9 13h.01M15 13h.01" />
+      <path strokeLinecap="round" strokeLinejoin="round" d="M14.857 17.082a23.848 23.848 0 005.454-1.31A8.967 8.967 0 0118 9.75v-.7V9A6 6 0 006 9v.75a8.967 8.967 0 01-2.312 6.022c1.733.64 3.56 1.085 5.455 1.31m5.714 0a24.255 24.255 0 01-5.714 0m5.714 0a3 3 0 11-5.714 0" />
     </svg>
   );
 }
@@ -50,10 +54,22 @@ interface SidebarProps {
 }
 
 export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
-  const { user, logout } = useAuth();
+  const { user, token, logout } = useAuth();
   const { atLeastRole, permissions, loaded, roleKey } = usePermissions();
   const { t } = useI18n();
   const pathname = usePathname();
+
+  // Getting Started nav: instant answer from the localStorage cache (the
+  // Sidebar remounts on every navigation - a per-mount fetch made every click
+  // feel laggy and the item pop in late, shifting the menu). The cache
+  // refreshes from the server at most once per page load, in the background.
+  const [journeyIncomplete, setJourneyIncomplete] = useState<boolean>(() => cachedJourneyIncomplete() === true);
+  useEffect(() => {
+    if (!token || user?.role !== "ADMIN") return;
+    refreshJourneyIncomplete(token).then((v) => {
+      if (v !== null) setJourneyIncomplete(v);
+    });
+  }, [token, user?.role]);
 
   return (
     <aside
@@ -104,9 +120,10 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         {navItems
           .filter((item) => {
             // Gated by effective built-in role (consistent with the backend
-            // requireRole bridge — assigned roles drive nav, no dead links).
+            // requireRole bridge - assigned roles drive nav, no dead links).
             if (item.adminOnly && !atLeastRole("admin")) return false;
             if ((item as any).managerOrAdmin && !atLeastRole("department_manager")) return false;
+            if ((item as any).journeyGated && !journeyIncomplete) return false;
             // License gate: hide areas the tenant isn't entitled to. Only once
             // /permissions/me has loaded (never flicker-hide during boot), and
             // never for SYSTEM_ADMIN.

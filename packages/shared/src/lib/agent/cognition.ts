@@ -1,10 +1,10 @@
 /**
- * Cognition — the Reasoner & Writer contracts (the Agent's mind & voice).
+ * Cognition - the Reasoner & Writer contracts (the Agent's mind & voice).
  *
  * Reasoning is ONE capability of the Agent. The Reasoner owns judgment and emits
- * STRUCTURED INTENT — never probabilities, never a ranked score list. Uncertainty
+ * STRUCTURED INTENT - never probabilities, never a ranked score list. Uncertainty
  * is expressed as a MOVE (REQUEST_INPUT / CONVERSE), not a confidence number.
- * The Writer owns expression only and has no tools — it cannot take an unsafe
+ * The Writer owns expression only and has no tools - it cannot take an unsafe
  * action by construction.
  *
  * Phase 1 freezes these I/O types (the contract). Phase 3 implements a Reasoner
@@ -24,18 +24,18 @@ export interface Context {
     businessDescription?: string;
     disqualifiers?: string[];
   };
-  /** Tenant playbook TEXT — advice the Reasoner MAY override, never a hard rule. */
+  /** Tenant playbook TEXT - advice the Reasoner MAY override, never a hard rule. */
   guidance?: string;
   /** Semantic descriptions of the operation vocabulary (no tool names). */
   operationCatalog: { name: string; meaning: string; whenItApplies?: string }[];
   brandVoice?: AgentPersona;
 
   // ── Agent Loop context (optional; absent in single-shot Planner use) ──────
-  /** Evolving intra-loop scratchpad — established facts, ruled-out ops, questions. */
+  /** Evolving intra-loop scratchpad - established facts, ruled-out ops, questions. */
   workingMemory?: WorkingMemory;
   /** 1-based iteration counter, so the Reasoner knows how deep the loop is. */
   iteration?: number;
-  /** Loop budget headroom (AI units) remaining — pressure to converge. */
+  /** Loop budget headroom (AI units) remaining - pressure to converge. */
   budgetRemaining?: number;
 }
 
@@ -46,11 +46,11 @@ export interface ReasonerInput {
 }
 
 /**
- * The committed next move — a discriminated union, no scores.
+ * The committed next move - a discriminated union, no scores.
  *
  * Loop semantics (single-shot Planner ignores these and treats EXECUTE as "act"):
  *   EXECUTE       → PROPOSE an operation to the Runtime; its observation re-enters
- *                   the loop (the ONE continuing move — everything else terminates).
+ *                   the loop (the ONE continuing move - everything else terminates).
  *   REQUEST_INPUT → NEED_INPUT: stop, ask the customer the one blocking thing.
  *   FINISH        → the goal is reached / nothing left to do: stop, hand to Writer.
  *   ESCALATE      → the Reasoner JUDGES it is stuck (missing capability, contradiction,
@@ -66,14 +66,14 @@ export type ReasonerDecision =
   | { type: "ESCALATE"; reason: string }
   | { type: "WAIT" };
 
-/** Free-form JUDGMENT — for audit/analytics. It must NEVER gate control flow. */
+/** Free-form JUDGMENT - for audit/analytics. It must NEVER gate control flow. */
 export interface ReasonerRead {
   situation: string;
-  /** Natural language ("hesitant"/"ready") — deliberately not an enum. */
+  /** Natural language ("hesitant"/"ready") - deliberately not an enum. */
   customerState: string;
   goal: BusinessOutcome | null;
   missingInformation: { what: string; why: string; source: "customer" | "system" }[];
-  /** Why this decision — UNTRUSTED; audit/eval only, never executed. */
+  /** Why this decision - UNTRUSTED; audit/eval only, never executed. */
   rationale: string;
 }
 
@@ -96,7 +96,7 @@ export interface Cognition {
   reason(input: ReasonerInput): Promise<ReasonerOutput>;
 }
 
-/** The Agent's expression capability — language only, no tools, no decisions. */
+/** The Agent's expression capability - language only, no tools, no decisions. */
 export interface Writer {
   write(
     replyIntent: ReplyIntent,

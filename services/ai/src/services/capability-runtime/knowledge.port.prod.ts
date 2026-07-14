@@ -1,6 +1,6 @@
 /**
- * Production KnowledgePort — the existing RAG BECOMES the adapter. `search`
- * delegates to `retrieveRelevantChunks` (embedding + vector search — the same
+ * Production KnowledgePort - the existing RAG BECOMES the adapter. `search`
+ * delegates to `retrieveRelevantChunks` (embedding + vector search - the same
  * function the legacy brain's KB retrieval uses); availability is a cheap
  * tenant-scoped KB presence check. No reimplementation.
  */

@@ -1,31 +1,31 @@
 /**
- * Copilot Tool-Surface Assembly — the single source of truth for the per-turn
+ * Copilot Tool-Surface Assembly - the single source of truth for the per-turn
  * TOOL SURFACE both Copilot entry points reason and act over. This is the surface
  * analog of `assemblePlanContext` (which owns the per-turn PLANNER inputs).
  *
  * The AI Employee (executes) and the AI Copilot (recommends) are ONE brain with
  * two execution modes. For the reasoning to be identical, the *surface* the model
- * sees — which capabilities exist, which tools are dispatchable, how the calendar
- * is gated — must be derived IDENTICALLY for both Copilot paths. Before this
+ * sees - which capabilities exist, which tools are dispatchable, how the calendar
+ * is gated - must be derived IDENTICALLY for both Copilot paths. Before this
  * module, `suggestResponse` built a full calendar-gated per-agent surface while
  * `chatWithAgent` built a generic built-in-only surface with NO calendar tools and
- * NO `check_availability` handler — so the CHAT Copilot could neither check real
+ * NO `check_availability` handler - so the CHAT Copilot could neither check real
  * availability nor recommend a real booking, and silently diverged from the
  * primary path. This builder removes that mirror: both callers now consume ONE
  * surface.
  *
  * What it owns (one place, no duplication):
- *   1. calendar capability + active booking — resolved via the SAME functions the
+ *   1. calendar capability + active booking - resolved via the SAME functions the
  *      Employee uses, so the Copilot's tool surface carries the SAME calendar tools.
- *   2. the surfaced tool set — the agent's allowed integration tools + the
+ *   2. the surfaced tool set - the agent's allowed integration tools + the
  *      calendar built-ins, gated identically, under the advisory ("ASSIST") policy
- *      (never close / follow-up / escalate — those are the human agent's call).
- *   3. the `check_availability` READ handler — wired so the decision-gate can
+ *      (never close / follow-up / escalate - those are the human agent's call).
+ *   3. the `check_availability` READ handler - wired so the decision-gate can
  *      auto-run it (the Employee's same read path); ACTION calendar tools are
  *      surfaced for recommend-only and need no handler.
  *
  * The terminator (`submit_suggestions`, primary path only) and the free-text CHAT
- * surface differ ONLY in whether the caller prepends that terminator — every
+ * surface differ ONLY in whether the caller prepends that terminator - every
  * dispatchable tool is identical. Fully fail-soft: a calendar / catalog hiccup
  * degrades to a smaller surface, never blocks the Copilot.
  */
@@ -49,7 +49,7 @@ export interface CopilotToolSurfaceInput {
 export interface CopilotToolSurface {
   /**
    * The dispatchable agent tool surface (calendar-gated, advisory). Does NOT
-   * include the `submit_suggestions` terminator — the primary path prepends it,
+   * include the `submit_suggestions` terminator - the primary path prepends it,
    * the CHAT path returns free text and omits it. Everything ELSE is identical.
    */
   tools: any[];
@@ -69,7 +69,7 @@ export interface CopilotToolSurface {
 
 /**
  * Assemble the per-turn Copilot tool surface ONCE for BOTH entry points. Faithful
- * aggregation of the three derivations above — no business decisions, no mode
+ * aggregation of the three derivations above - no business decisions, no mode
  * branching beyond the advisory gating that is common to all Copilot surfaces.
  */
 export async function assembleCopilotToolSurface(
@@ -78,7 +78,7 @@ export async function assembleCopilotToolSurface(
   const { tenantId, conversationId, aiAgentId } = input;
   const extId = input.customerExternalId ?? undefined;
 
-  // 1) Calendar capability + active booking — via the SAME functions the Employee
+  // 1) Calendar capability + active booking - via the SAME functions the Employee
   //    uses, so the surface carries the SAME calendar tools, gated identically.
   let calendarBookable = false;
   let hasActiveBooking = false;
@@ -134,7 +134,7 @@ export async function assembleCopilotToolSurface(
     .map((t: any) => t?.function?.name)
     .filter((n: any): n is string => typeof n === "string");
 
-  // 3) The check_availability READ handler — only when bookable AND we know the
+  // 3) The check_availability READ handler - only when bookable AND we know the
   //    agent (the handler needs the agent's calendar + scheduling policy).
   const checkAvailabilityHandler =
     calendarBookable && tenantId && aiAgentId

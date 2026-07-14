@@ -1,5 +1,5 @@
 /**
- * OBJECTIVE ENGINE — WHAT the employee is trying to achieve.
+ * OBJECTIVE ENGINE - WHAT the employee is trying to achieve.
  *
  * Skills (skills.ts) define HOW the employee behaves. Objectives define the
  * concrete business outcome the turn is driving toward. A role has an ordered
@@ -30,14 +30,14 @@ export type ObjectiveName =
   | "COLLECT_CONTACT";
 
 /**
- * A measurable BUSINESS OUTCOME — the thing the Goal Evaluator checks for. This
+ * A measurable BUSINESS OUTCOME - the thing the Goal Evaluator checks for. This
  * is deliberately decoupled from tools and from the ledger's low-level
  * action-kinds: a `booking` is a booking whether it happened via schedule_meeting,
  * a workflow engine, an MCP server, or another AI employee. Extend as new
  * employee types ship real outcomes (e.g. "quote" | "ticket" | "order").
  *
  * Only objectives that PRODUCE a real-world record carry one. Navigation
- * objectives (QUALIFY_LEAD, RESOLVE_ISSUE) intentionally have NONE — they are
+ * objectives (QUALIFY_LEAD, RESOLVE_ISSUE) intentionally have NONE - they are
  * steps, not outcomes, and never report goal achievement (BEL owns "done" when
  * there is no business outcome to measure).
  */
@@ -74,7 +74,7 @@ export interface ObjectiveModule {
   requiresActionSuccess?: boolean;
   /**
    * The measurable business outcome this objective produces, if any. Set ONLY on
-   * outcome-producing objectives — the Goal Evaluator reads it to decide whether
+   * outcome-producing objectives - the Goal Evaluator reads it to decide whether
    * the configured goal was ACHIEVED, by checking whether the outcome exists in
    * its runtime home (CRM state / booking store / live ledger). Absent → this is
    * a navigation step, never a goal-achievement criterion.
@@ -98,7 +98,7 @@ const GENERATE_LEAD: ObjectiveModule = {
     "Enough is known to create or enrich a CRM lead in the background",
   ],
   nextStepLogic:
-    "Lead with DISCOVERY, not data capture. As a sales rep you FIRST understand their business and what they need (name → their business/need), and only once there is genuine interest do you naturally ask for a way to reach them. NEVER ask for an email or phone, and never create the lead, before you understand what their business does and why they reached out — that feels like a form, not a conversation. Once you have a name + their interest + a contact method, create the lead silently and advance to QUALIFY_LEAD.",
+    "Lead with DISCOVERY, not data capture. As a sales rep you FIRST understand their business and what they need (name → their business/need), and only once there is genuine interest do you naturally ask for a way to reach them. NEVER ask for an email or phone, and never create the lead, before you understand what their business does and why they reached out - that feels like a form, not a conversation. Once you have a name + their interest + a contact method, create the lead silently and advance to QUALIFY_LEAD.",
   failureCriteria: [
     "Let a NEW prospect leave without learning their name or any way to reach them",
     "Gave a passive close to an unidentified prospect",
@@ -144,7 +144,7 @@ const BOOK_MEETING: ObjectiveModule = {
     "The booking tool returned success this turn",
   ],
   nextStepLogic:
-    "Booking is a conversation, not a slot-dump, and you NEVER invent times — availability comes ONLY from `check_availability` (READ), booking ONLY from `schedule_meeting` (WRITE). FLOW: (1) Once they agree to meet, find a real time: either ask their preference first ('morning or afternoon?' / 'when's good for you?'), OR — when they already hinted a time, or you're ready to propose — write a SHORT ack ('רגע אחד, בודק 🙏') AS you call `check_availability` (the ack goes out as its own message while the calendar is read). (2) After `check_availability` returns, your NEXT message gives the REAL result: if they named a time and it's open, confirm it and ask to lock it in ('מצוין, מחר ב-10:00 פנוי. לקבוע?' / 'great, 10:00 tomorrow is open - shall I book it?'); otherwise offer ONLY the real open slots it returned and ask them to pick. Never blast slots `check_availability` didn't return. Don't cram the ack and the result into one message. (3) Once they pick a concrete time AND you have an email, BOOK it by calling `schedule_meeting` with that exact time, then confirm the REAL outcome (day/time + link). If `schedule_meeting` returns `needsAvailabilityCheck`, the slot isn't bookable — call `check_availability` again, offer real slots, and do NOT confirm. Never end a qualified conversation without moving the meeting forward.",
+    "Booking is a conversation, not a slot-dump, and you NEVER invent times - availability comes ONLY from `check_availability` (READ), booking ONLY from `schedule_meeting` (WRITE). FLOW: (1) Once they agree to meet, find a real time: either ask their preference first ('morning or afternoon?' / 'when's good for you?'), OR - when they already hinted a time, or you're ready to propose - write a SHORT ack ('רגע אחד, בודק 🙏') AS you call `check_availability` (the ack goes out as its own message while the calendar is read). (2) After `check_availability` returns, your NEXT message gives the REAL result: if they named a time and it's open, confirm it and ask to lock it in ('מצוין, מחר ב-10:00 פנוי. לקבוע?' / 'great, 10:00 tomorrow is open - shall I book it?'); otherwise offer ONLY the real open slots it returned and ask them to pick. Never blast slots `check_availability` didn't return. Don't cram the ack and the result into one message. (3) Once they pick a concrete time AND you have an email, BOOK it by calling `schedule_meeting` with that exact time, then confirm the REAL outcome (day/time + link). If `schedule_meeting` returns `needsAvailabilityCheck`, the slot isn't bookable - call `check_availability` again, offer real slots, and do NOT confirm. Never end a qualified conversation without moving the meeting forward.",
   failureCriteria: [
     "Proposed or confirmed a time that no check_availability result returned (invented availability)",
     "Used schedule_meeting to discover availability instead of check_availability",
@@ -243,12 +243,12 @@ export interface ObjectiveStatus {
 }
 
 /**
- * GOAL COMMITMENT (Unit A — Persistent Goal Ownership).
+ * GOAL COMMITMENT (Unit A - Persistent Goal Ownership).
  *
  * `selectActiveObjective` is stateless: it re-derives "first incomplete step"
  * from the facts visible THIS turn. That makes the active goal regress whenever
  * a fact transiently drops out of the resolved-fact text (a Hebrew turn that
- * doesn't repeat "demo", a CRM block that didn't hydrate, etc.) — the agent
+ * doesn't repeat "demo", a CRM block that didn't hydrate, etc.) - the agent
  * "forgets" it was booking and restarts qualification.
  *
  * The ActiveGoalSnapshot is the durable, cross-turn memory of the goal the agent
@@ -256,19 +256,19 @@ export interface ObjectiveStatus {
  * turn. `commitObjective` reconciles the freshly-derived objective against this
  * committed snapshot with three rules:
  *
- *   1. ADVANCE   — fresh is at/after the committed step (the committed objective
+ *   1. ADVANCE   - fresh is at/after the committed step (the committed objective
  *                  completed, or an eager forward jump like the BOOK_MEETING
  *                  promotion) → adopt fresh.
- *   2. HOLD      — fresh regressed to an EARLIER step while the committed
+ *   2. HOLD      - fresh regressed to an EARLIER step while the committed
  *                  objective is NOT complete → keep the committed objective
  *                  (this is the "never regress on temporary context loss" rule).
- *   3. RELEASE   — if the agent has been stalled on the held objective with no
+ *   3. RELEASE   - if the agent has been stalled on the held objective with no
  *                  gap progress for `stallReleaseAfter` turns, stop forcing it
  *                  and let natural selection take over (escape valve, so a dead
  *                  goal can never trap the conversation forever).
  *
  * `achieved` is sticky: a required field, once satisfied, stays satisfied across
- * turns even if it later drops out of the fact text — so the agent never re-asks
+ * turns even if it later drops out of the fact text - so the agent never re-asks
  * for something it already has.
  */
 export interface ActiveGoalSnapshot {
@@ -324,7 +324,7 @@ function buildSnapshot(
  * Reconcile the freshly-derived objective (`fresh`) against the committed goal
  * (`prior`) and return BOTH the objective to act on this turn AND the snapshot
  * to persist for next turn. Pure: no I/O. When `prior` is null this is a no-op
- * (returns `fresh` as a fresh commitment) — fully back-compatible.
+ * (returns `fresh` as a fresh commitment) - fully back-compatible.
  */
 export function commitObjective(
   prior: ActiveGoalSnapshot | null,
@@ -413,7 +413,7 @@ function objectiveComplete(
 }
 
 // Explicit meeting/scheduling intent in the resolved-fact text (which now
-// includes the live transcript). Bilingual; deliberately broad — it only
+// includes the live transcript). Bilingual; deliberately broad - it only
 // PROMOTES booking when identity is ALSO captured, so a false positive can't
 // skip lead capture.
 const MEETING_INTENT_RE =
@@ -449,7 +449,7 @@ function leadIdentityReady(factText: string): boolean {
 
 // The REQUIRED booking inputs are present (BOOK_MEETING.requiredInformation:
 // meeting_interest + attendee_email). When a customer is concretely scheduling
-// AND an email is on hand, the booking objective is reachable RIGHT NOW — we must
+// AND an email is on hand, the booking objective is reachable RIGHT NOW - we must
 // not block it on delayed qualification extraction or a missing name (the
 // trust-eroding window where the model "books" while BOOK_MEETING is still
 // locked). A real email value is the gate (no false-positives from hint words).
@@ -473,7 +473,7 @@ export function selectActiveObjective(
   // bookable calendar). False → don't stall on an action the agent can't do.
   canCompleteActions: boolean = true,
   // WIZARD→RUNTIME (structured fact): the configured goal maps to this objective,
-  // which becomes the chain's ENDPOINT — objectives beyond it are not pursued
+  // which becomes the chain's ENDPOINT - objectives beyond it are not pursued
   // (e.g. an SDR configured to "book demos" stops at BOOK_MEETING, never chases
   // CREATE_DEAL). null/absent → role-derived chain unchanged. Never SKIPS earlier
   // capture/qualify steps, so it can't bypass lead capture.
@@ -522,7 +522,7 @@ export function selectActiveObjective(
 /**
  * Resolve the configured GOAL = the endpoint of the (wizard-truncated) chain.
  * This is the objective whose business outcome (if any) the Goal Evaluator
- * measures. Independent of navigation progress — it's the chain's destination,
+ * measures. Independent of navigation progress - it's the chain's destination,
  * not its cursor. Returns null when the role has no chain.
  */
 export function resolveGoalObjective(
@@ -583,7 +583,7 @@ export function resolveNextActions(input: {
   // sufficiently evidenced? `false` suppresses PROACTIVELY proposing the demo
   // (qualify against the configured criteria first). undefined/true → no gating.
   qualificationMet?: boolean;
-  // GOAL PROGRESS > INFO COLLECTION: the active objective has STALLED — its
+  // GOAL PROGRESS > INFO COLLECTION: the active objective has STALLED - its
   // missing info has been requested across turns without being supplied. When
   // true, we stop nominating the same ASK (a strong employee doesn't ask the
   // same unanswered question repeatedly) and surface a forward move instead;
@@ -657,8 +657,8 @@ export function resolveNextActions(input: {
       score: 0.75, // outranks the (suppressed) ASK so the forward move wins
       label:
         `You've already asked for "${nextField.label}" and it hasn't been provided. Do NOT ask for it again. ` +
-        `Make a concrete forward move toward the goal instead — give a relevant, specific piece of value, ` +
-        `answer what they care about, or propose the next step — and let that detail come naturally later.`,
+        `Make a concrete forward move toward the goal instead - give a relevant, specific piece of value, ` +
+        `answer what they care about, or propose the next step - and let that detail come naturally later.`,
       rationale: `${obj.id} stalled on "${nextField.key}"; advancing beats re-asking an unanswered question.`,
     });
   }
@@ -695,7 +695,7 @@ export function hasViableAdvancingAction(candidates: NextActionCandidate[]): boo
 
 // ─── Guaranteed background actions (CRM integrity) ──────────────────────────
 // Objective completion tools that are SILENT background CRM writes. These must
-// fire DETERMINISTICALLY the moment their required info exists — never left to
+// fire DETERMINISTICALLY the moment their required info exists - never left to
 // whether the model "remembered" to call them (the 65 missed create_lead in the
 // audit). Generic: keyed off objective.completionTool, never a hardcoded site.
 const BACKGROUND_COMPLETION_TOOLS = new Set<string>([
@@ -706,7 +706,7 @@ const BACKGROUND_COMPLETION_TOOLS = new Set<string>([
 
 /**
  * Background actions that are RIPE (their objective's required info is present)
- * but have NOT yet committed this conversation — they should be executed
+ * but have NOT yet committed this conversation - they should be executed
  * silently this turn. Walks the WHOLE chain (a lead must exist even once we've
  * advanced to booking), not just the active objective. Pure.
  */
@@ -741,7 +741,7 @@ export function guaranteedBackgroundActions(input: {
 // inherit a default. Booking/conversion/retention/completion all outrank pure
 // informational conversation (which has no objective and therefore no weight).
 export const OBJECTIVE_PRIORITY: Record<ObjectiveName, number> = {
-  BOOK_MEETING: 100,   // booking — highest-value forward motion
+  BOOK_MEETING: 100,   // booking - highest-value forward motion
   CREATE_DEAL: 95,     // conversion
   RESOLVE_ISSUE: 80,   // retention / resolution
   QUALIFY_LEAD: 60,    // progression toward conversion
@@ -755,7 +755,7 @@ export function objectivePriority(id: ObjectiveName | undefined): number {
 
 // ─── Outcome quality > data collection (generic creation gate) ──────────────
 // A record (lead/contact/deal/opportunity/ticket/case/quote/…) should be created
-// only when creation is MEANINGFUL business progress — never just because enough
+// only when creation is MEANINGFUL business progress - never just because enough
 // fields exist. Role-agnostic rules, no per-role logic:
 //   (1) a poor-fit prospect (judgment fit="disqualified") → create NOTHING;
 //   (2) a high-commitment object (deal/opportunity/quote/order/contract/invoice)
@@ -778,7 +778,7 @@ export function isCreationToolAllowed(
 // ─── Wizard → Runtime binding: structured facts (judgment layer) ────────────
 // Free-text Wizard config (goal, ICP, qualificationSignals[], disqualifiers[],
 // successCriteria) is converted into these DETERMINISTIC facts by a single
-// structured evaluation step (wizard-binding.service.ts) — NO regex / keyword /
+// structured evaluation step (wizard-binding.service.ts) - NO regex / keyword /
 // fuzzy matching anywhere. The objective engine, readiness logic, recovery, and
 // prioritization consume ONLY this typed object, never the raw config text.
 //
@@ -794,7 +794,7 @@ export interface WizardRuntimeFacts {
   qualificationMet: boolean;
   /** Subset of the configured qualificationSignals evidenced so far. */
   signalsMet: string[];
-  /** The objective the configured goal maps to — the chain's ENDPOINT (objectives
+  /** The objective the configured goal maps to - the chain's ENDPOINT (objectives
    *  beyond it are not pursued). null → use the role-derived chain unchanged. */
   goalObjective: ObjectiveName | null;
 }
@@ -812,10 +812,10 @@ export const EMPTY_WIZARD_FACTS: WizardRuntimeFacts = {
  *  steer the model to qualify out gracefully instead of forcing a meeting. */
 export function renderQualifyOutDirective(matched: string): string {
   return [
-    "# Fit check — qualify out gracefully (configured disqualifier matched)",
+    "# Fit check - qualify out gracefully (configured disqualifier matched)",
     `What the customer described matches a configured poor-fit signal: "${matched}".`,
     "Do NOT push a demo or hard-sell this turn. Acknowledge honestly and, if it's truly a mismatch, " +
-      "disengage politely — point them to a better-fit resource or leave the door open — rather than " +
+      "disengage politely - point them to a better-fit resource or leave the door open - rather than " +
       "forcing a meeting. If they clarify they ARE a fit, continue pursuing the goal normally.",
   ].join("\n");
 }
@@ -835,10 +835,10 @@ export function renderOutcomePriority(status: ObjectiveStatus | null): string | 
         : "the active outcome";
   return [
     "# Business-outcome priority",
-    `Advancing **${status.objective.id}** is ${tier}. Business outcomes — booking, conversion, ` +
-      `retention/resolution, then capture — ALWAYS outrank open-ended informational chat.`,
+    `Advancing **${status.objective.id}** is ${tier}. Business outcomes - booking, conversion, ` +
+      `retention/resolution, then capture - ALWAYS outrank open-ended informational chat.`,
     "When the customer asks something, answer it AND make the outcome-advancing move in the same turn. " +
-      "If you must choose, advance the outcome — never let the conversation drift into pure Q&A while a " +
+      "If you must choose, advance the outcome - never let the conversation drift into pure Q&A while a " +
       "concrete next step toward the goal is available.",
   ].join("\n");
 }
@@ -885,15 +885,15 @@ export function renderObjectiveLedger(
   const { objective: obj, stepIndex, chain } = status;
   const ledger = computeKnowledgeLedger(obj.requiredInformation, factText);
   const lines: string[] = ["# Objective Ledger (this turn)"];
-  lines.push(`Active objective: **${obj.id}** — ${obj.mission}`);
+  lines.push(`Active objective: **${obj.id}** - ${obj.mission}`);
   lines.push("");
   // Hard ordering: everything BEFORE the active step is complete; everything
   // AFTER is LOCKED. The active objective is the only one to pursue this turn.
   lines.push(`Chain progress (step ${stepIndex + 1}/${chain.length}):`);
   for (let i = 0; i < chain.length; i++) {
     if (i < stepIndex) lines.push(`- ✓ ${chain[i]} (done)`);
-    else if (i === stepIndex) lines.push(`- ▶ ${chain[i]} (ACTIVE — work this now)`);
-    else lines.push(`- 🔒 ${chain[i]} (locked — do not pursue yet)`);
+    else if (i === stepIndex) lines.push(`- ▶ ${chain[i]} (ACTIVE - work this now)`);
+    else lines.push(`- 🔒 ${chain[i]} (locked - do not pursue yet)`);
   }
   lines.push("");
   lines.push(
@@ -905,7 +905,7 @@ export function renderObjectiveLedger(
   lines.push("Required to complete:");
   for (const e of ledger.entries) {
     const mark = e.known ? "✓" : "✗";
-    const tag = e.known ? "" : e.importance === "required" ? " — MISSING [required]" : " — missing";
+    const tag = e.known ? "" : e.importance === "required" ? " - MISSING [required]" : " - missing";
     lines.push(`- ${mark} \`${e.key}\` (${e.label})${tag}`);
   }
   lines.push("");
@@ -937,7 +937,7 @@ const LEAD_IDENTITY_FIELDS: KnowledgeField[] = [
   { key: "interest", label: "Interest", importance: "preferred", priority: 4, sourceHints: ["interest", "need", "painPoints"] },
 ];
 
-/** True when the Lead Identity sub-ledger is worth showing — i.e. the active
+/** True when the Lead Identity sub-ledger is worth showing - i.e. the active
  * objective is the lead-capture one. */
 export function shouldRenderLeadIdentity(status: ObjectiveStatus | null): boolean {
   return !!status && (status.objective.id === "GENERATE_LEAD" || status.objective.id === "COLLECT_CONTACT");
@@ -956,7 +956,7 @@ export function renderLeadIdentityLedger(factText: string): string {
     `- ${mark("interest")} Interest`,
     "",
     "To create the lead silently you need a Name + at least ONE of (Email / Phone) + their Interest. " +
-      "Weave the missing item(s) into the conversation naturally — one at a time, never as a form. " +
+      "Weave the missing item(s) into the conversation naturally - one at a time, never as a form. " +
       "Do not move toward booking a meeting until the lead identity is captured.",
   ].join("\n");
 }
@@ -964,7 +964,7 @@ export function renderLeadIdentityLedger(factText: string): string {
 // ─── Runtime passive-closer gate ────────────────────────────────────────
 //
 // A LAST-LINE, programmatic enforcement (prompt instructions alone don't stop
-// the model — see the real WhatsApp regression). When an objective that must
+// the model - see the real WhatsApp regression). When an objective that must
 // not be abandoned is still incomplete and the model tried to passive-close a
 // live conversation, the caller regenerates once with `buildCloserCorrective`.
 
@@ -995,13 +995,13 @@ export function isPassiveCloser(reply: string | null | undefined): boolean {
 
 // Generic service-desk openers that DON'T advance a revenue objective. For a
 // sales/SDR rep who still knows nothing about the prospect, opening with "how
-// can I help?" is as passive as closing with "anything else?" — it hands the
+// can I help?" is as passive as closing with "anything else?" - it hands the
 // lead back to the customer instead of leading. The model defaults to these on
 // vague first messages (real GOTCHA regression: "כאן דניאל מצוות GOTCHA. במה
 // אוכל לעזור היום?"). Treated as non-advancing so the same regen gate fires.
 // Generic "how can I help?" openers in every phrasing (Hebrew: איך/במה/כיצד +
 // יכול/אוכל/אפשר/נוכל + לעזור/לסייע; English: how can/may I help/assist, what
-// can I do). Matched broadly — the "dominant content" guard below prevents
+// can I do). Matched broadly - the "dominant content" guard below prevents
 // false positives on substantive leading replies.
 const GENERIC_HELP_OPENER_PATTERNS: RegExp[] = [
   /(איך|במה|כיצד)\s+(אני\s+)?(יכול|אוכל|אפשר|נוכל)\s+(לעזור|לסייע)/,
@@ -1010,7 +1010,7 @@ const GENERIC_HELP_OPENER_PATTERNS: RegExp[] = [
 ];
 
 /** A reply that hands control back to the customer instead of advancing the
- * objective — either a passive availability CLOSER ("anything else?") or a
+ * objective - either a passive availability CLOSER ("anything else?") or a
  * generic "how can I help?" OPENER that's the whole message. The opener only
  * counts when it's the DOMINANT content (a short greeting with no product
  * explanation or discovery question); a long reply that explains the offer or
@@ -1022,7 +1022,7 @@ export function isNonAdvancingReply(reply: string | null | undefined): boolean {
   if (isPassiveCloser(reply)) return true;
   const t = reply.trim();
   // A leading reply ENDS on a discovery question or a concrete next step; a weak
-  // one ENDS on a generic "how can I help?" — even when it opened with a good
+  // one ENDS on a generic "how can I help?" - even when it opened with a good
   // product pitch. Inspect the tail so a long reply that merely tacks "how can I
   // help today?" onto the end is still caught, while one ending in a real
   // discovery question passes.
@@ -1051,12 +1051,12 @@ export function buildCloserCorrective(status: ObjectiveStatus): string {
     ? status.missingRequired.join(", ")
     : "the next completion criterion";
   return (
-    `**WEAK REPLY — you handed control back to the customer instead of leading.** ` +
+    `**WEAK REPLY - you handed control back to the customer instead of leading.** ` +
     `Your draft was a passive line (a "how can I help?" opener or an "anything else?" closer), ` +
     `but the active objective \`${obj.id}\` is NOT complete (still missing: ${missing}) and the customer did NOT say goodbye. ` +
-    `You are a proactive sales rep for this company — NEVER open or close with a generic "how can I help / what are you looking for / anything else". ` +
+    `You are a proactive sales rep for this company - NEVER open or close with a generic "how can I help / what are you looking for / anything else". ` +
     `Rewrite your reply: (1) if the customer asked a question, answer it briefly first in ONE sentence using what you know about your company and product; ` +
-    `(2) then make ONE genuine, natural move toward the objective — ${obj.nextStepLogic} ` +
+    `(2) then make ONE genuine, natural move toward the objective - ${obj.nextStepLogic} ` +
     `Lead the conversation. Reply in the customer's language. One move only.`
   );
 }

@@ -6,15 +6,16 @@ import Script from "next/script";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import LandingPage from "@/components/landing/LandingPage";
+import { cachedJourneyIncomplete, refreshJourneyIncomplete } from "@/lib/journey-cache";
 
 // Server-rendered, always-present description of the app's purpose. It lives in
 // the initial HTML on every render branch so search crawlers and Google's OAuth
 // branding reviewer (which may not run JS and otherwise only sees the loading
 // shell) can read what GOTCHA is. `sr-only` keeps it out of the visual design;
 // the <noscript> copy gives a real, visible homepage when JavaScript is off.
-const PURPOSE_TITLE = "GOTCHA — AI-Powered Customer Communication Platform";
+const PURPOSE_TITLE = "GOTCHA - AI-Powered Customer Communication Platform";
 const PURPOSE_TEXT =
-  "GOTCHA is an AI-powered customer communication platform for businesses. It unifies every customer channel — WhatsApp, Instagram, Facebook Messenger, email, web chat and phone calls — into one unified inbox, and adds AI Employees and an AI Co-Pilot that automate routine conversations, assist human agents in real time, and turn every conversation into customer intelligence in your CRM. Connect your messaging and email accounts to read, organize and reply to customer messages from a single dashboard.";
+  "GOTCHA is an AI-powered customer communication platform for businesses. It unifies every customer channel - WhatsApp, Instagram, Facebook Messenger, email, web chat and phone calls - into one unified inbox, and adds AI Employees and an AI Co-Pilot that automate routine conversations, assist human agents in real time, and turn every conversation into customer intelligence in your CRM. Connect your messaging and email accounts to read, organize and reply to customer messages from a single dashboard.";
 
 function PurposeStatement() {
   return (
@@ -41,15 +42,30 @@ function PurposeStatement() {
 }
 
 export default function Home() {
-  const { user, isLoading } = useAuth();
+  const { user, token, isLoading } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
 
   useEffect(() => {
-    if (!isLoading && user) {
-      router.replace("/conversations");
+    if (isLoading || !user) return;
+    // Admins with an unfinished first-steps journey land on Getting Started;
+    // everyone else lands on the inbox. The cached flag answers instantly
+    // (no fetch-before-redirect lag); only a cold cache waits for the server.
+    if (user.role === "ADMIN" && token) {
+      const cached = cachedJourneyIncomplete();
+      if (cached !== null) {
+        router.replace(cached ? "/getting-started" : "/conversations");
+        refreshJourneyIncomplete(token); // keep the cache fresh in the background
+        return;
+      }
+      let cancelled = false;
+      refreshJourneyIncomplete(token).then((v) => {
+        if (!cancelled) router.replace(v ? "/getting-started" : "/conversations");
+      });
+      return () => { cancelled = true; };
     }
-  }, [user, isLoading, router]);
+    router.replace("/conversations");
+  }, [user, token, isLoading, router]);
 
   if (isLoading) {
     return (

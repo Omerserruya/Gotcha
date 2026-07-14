@@ -16,7 +16,6 @@ import TestChatModal from "@/components/TestChatModal";
 // FunnelSection import removed - funnels are now managed at /settings/funnels.
 // The agent is funnel-guided at runtime via resolveActiveStage; there is no
 // per-agent funnel override config to edit on this page.
-import ActionContractsSection from "@/components/ActionContractsSection";
 import AgentBuilder from "./AgentBuilder";
 
 // ─── Types ────────────────────────────────────────────────────
@@ -748,7 +747,7 @@ export default function AgentEditorPage() {
             </div>
           )}
 
-          {/* Effective permissions (P1-8): the runtime AND-rule made visible —
+          {/* Effective permissions (P1-8): the runtime AND-rule made visible -
               what this employee can ACTUALLY do right now (capability live AND
               granted). Only shown for saved employees with at least one live
               capability. */}
@@ -1130,7 +1129,7 @@ export default function AgentEditorPage() {
           {(["sales", "sdr", "customer_success"] as string[]).includes(form.role) && (
             <SectionCard
               title="Sales Context"
-              subtitle="What you sell and who you sell to — used to qualify prospects against your actual offer."
+              subtitle="What you sell and who you sell to - used to qualify prospects against your actual offer."
             >
               <div className="space-y-4">
                 <div>
@@ -1319,13 +1318,9 @@ export default function AgentEditorPage() {
             </a>
           </SectionCard>
 
-          {/* ── Section 6: Action Contracts (deterministic tool chains) ── */}
-          <SectionCard
-            title="Action Contracts"
-            subtitle="When a business action fires, the bot is forced to call specific tools - no skipping, no reordering."
-          >
-            <ActionContractsSection />
-          </SectionCard>
+          {/* Action Contracts removed: the planner, capability layer and
+              objective engine now decide the tool chain at runtime, so hand-wired
+              deterministic contracts are no longer part of setting up an employee. */}
 
           {/* ── Section 7: Escalation Rules ── */}
           <SectionCard

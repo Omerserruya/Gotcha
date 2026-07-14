@@ -3,12 +3,12 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
- * CustomerStorySection — the landing "how it works" centerpiece.
+ * CustomerStorySection - the landing "how it works" centerpiece.
  *
  * A scripted, scroll-scrubbed film. A tall section pins an inner stage; page
  * scroll 0→1 maps onto 8 shots. The middle five shots share ONE persistent
- * conversation window — the same chat, with messages appended one-by-one as
- * you scroll — while the side panel and header morph per shot. All demo copy
+ * conversation window - the same chat, with messages appended one-by-one as
+ * you scroll - while the side panel and header morph per shot. All demo copy
  * is localized (EN/HE) and the layout is RTL-aware.
  */
 
@@ -28,12 +28,12 @@ const CHAT: ChatMsg[] = [
   { at: 1.12, side: "in", en: <>Hi! I ordered the <b>blue</b> shirt but received <b>grey</b> 😕</>, he: <>היי! הזמנתי חולצה <b>כחולה</b> אבל קיבלתי <b>אפורה</b> 😕</> },
   { at: 3.04, side: "out", en: <>So sorry! Let me pull up your order…</>, he: <>סליחה על כך! בודק את ההזמנה שלך…</> },
   { at: 3.14, side: "out", chipEn: "🔎 Looked up order #4812", chipHe: "🔎 אותרה הזמנה #4812" },
-  { at: 3.26, side: "out", en: <>Done — I started a <b>free exchange</b> for the blue one 📦</>, he: <>בוצע — פתחתי <b>החלפה חינם</b> לכחולה 📦</>, highlight: true },
+  { at: 3.26, side: "out", en: <>Done - I started a <b>free exchange</b> for the blue one 📦</>, he: <>בוצע - פתחתי <b>החלפה חינם</b> לכחולה 📦</>, highlight: true },
   { at: 3.36, side: "out", chipEn: "✓ Exchange created", chipHe: "✓ ההחלפה נוצרה" },
-  { at: 3.48, side: "out", en: <>Ships today, arrives <b>Thu Jun 18</b> — tracking sent 📬</>, he: <>נשלח היום, מגיע ב<b>יום ה׳ 18.6</b> — מספר מעקב נשלח 📬</> },
+  { at: 3.48, side: "out", en: <>Ships today, arrives <b>Thu Jun 18</b> - tracking sent 📬</>, he: <>נשלח היום, מגיע ב<b>יום ה׳ 18.6</b> - מספר מעקב נשלח 📬</> },
   { at: 3.58, side: "out", chipEn: "✓ Tracking sent", chipHe: "✓ מעקב נשלח" },
   { at: 4.35, side: "in", en: <>Can I also change the size to <b>M</b>?</>, he: <>אפשר גם לשנות מידה ל-<b>M</b>?</> },
-  { at: 5.62, side: "out", en: <>Of course! Set it to size <b>M</b> and kept the free exchange — plus a <b>10%</b> coupon for the trouble 💜</>, he: <>בטח! שיניתי למידה <b>M</b> ושמרתי על ההחלפה חינם — בנוסף קופון <b>10%</b> על אי הנוחות 💜</>, copilot: true },
+  { at: 5.62, side: "out", en: <>Of course! Set it to size <b>M</b> and kept the free exchange - plus a <b>10%</b> coupon for the trouble 💜</>, he: <>בטח! שיניתי למידה <b>M</b> ושמרתי על ההחלפה חינם - בנוסף קופון <b>10%</b> על אי הנוחות 💜</>, copilot: true },
 ];
 
 function CustomerStorySection({ t, isRtl }: { t: (key: string) => string; isRtl: boolean }) {
@@ -402,7 +402,7 @@ function CopilotPanel({ lp, he }: { lp: number; he: boolean }) {
           <div>
             <p className="text-[9px] uppercase tracking-wide text-gray-400 mb-1">{he ? "תשובה מוצעת · מוכנה" : "Suggested reply · ready"}</p>
             <div className={`rounded-xl ${he ? "rounded-br-sm" : "rounded-bl-sm"} border border-primary-200 bg-primary-50/70 p-2.5 text-[12px] leading-snug text-gray-700`}>
-              {he ? <>״בטח! שיניתי למידה <b>M</b> ושמרתי על ההחלפה חינם — בנוסף קופון נאמנות <b>10%</b> על הבלבול. 💜״</> : <>"Of course! I've set it to size <b>M</b> and kept your free exchange — plus a <b>10% loyalty</b> coupon for the mix-up. 💜"</>}
+              {he ? <>״בטח! שיניתי למידה <b>M</b> ושמרתי על ההחלפה חינם - בנוסף קופון נאמנות <b>10%</b> על הבלבול. 💜״</> : <>"Of course! I've set it to size <b>M</b> and kept your free exchange - plus a <b>10% loyalty</b> coupon for the mix-up. 💜"</>}
             </div>
           </div>
           <div>
@@ -424,7 +424,7 @@ function CopilotPanel({ lp, he }: { lp: number; he: boolean }) {
 
 /* ────────────────────────  standalone full-stage shots  ──────────────────── */
 
-/* Shot 1 (story position 1) — everything in one place (omnichannel) */
+/* Shot 1 (story position 1) - everything in one place (omnichannel) */
 function Shot2({ lp, isRtl }: ShotProps) {
   const he = isRtl;
   const channels = [
@@ -490,17 +490,17 @@ function Shot2({ lp, isRtl }: ShotProps) {
   );
 }
 
-/* Shot 7 — AI Call-Pilot, live */
+/* Shot 7 - AI Call-Pilot, live */
 function Shot7({ lp, isRtl }: ShotProps) {
   const he = isRtl;
   const lines = he
     ? [
         { who: "לקוחה", txt: "…ואשמח לקבל את זה לפני סוף השבוע אם אפשר." },
-        { who: "נציגה", txt: "בהחלט — בודקת אפשרויות משלוח עבורך." },
+        { who: "נציגה", txt: "בהחלט - בודקת אפשרויות משלוח עבורך." },
       ]
     : [
         { who: "Customer", txt: "…and I'd like it before the weekend if possible." },
-        { who: "Agent", txt: "Absolutely — let me check delivery options for you." },
+        { who: "Agent", txt: "Absolutely - let me check delivery options for you." },
       ];
   return (
     <div className="flex items-stretch justify-center gap-3">
@@ -529,7 +529,7 @@ function Shot7({ lp, isRtl }: ShotProps) {
         <div className="w-[210px] rounded-2xl bg-white border border-gray-200/70 shadow-[0_24px_60px_-28px_rgba(124,92,252,0.5)] p-3.5">
           <p className="text-[10px] font-semibold uppercase tracking-wide text-primary-600 mb-2.5">⚡ Call-Pilot</p>
           <div className="space-y-2">
-            <Reveal lp={lp} at={0.5}><div className="rounded-lg bg-primary-50/70 border border-primary-100 p-2 text-[11.5px] text-gray-700">{he ? <>הצע משלוח ל<b>יום ה׳</b> — במלאי בחנות שלה.</> : <>Offer <b>Thu delivery</b> — in stock at her store.</>}</div></Reveal>
+            <Reveal lp={lp} at={0.5}><div className="rounded-lg bg-primary-50/70 border border-primary-100 p-2 text-[11.5px] text-gray-700">{he ? <>הצע משלוח ל<b>יום ה׳</b> - במלאי בחנות שלה.</> : <>Offer <b>Thu delivery</b> - in stock at her store.</>}</div></Reveal>
             <Reveal lp={lp} at={0.65}><div className="rounded-lg bg-primary-50/70 border border-primary-100 p-2 text-[11.5px] text-gray-700">{he ? <>הזכר את הטבת ה-<b>VIP</b> שלה.</> : <>Mention her <b>VIP loyalty</b> perk.</>}</div></Reveal>
             <Reveal lp={lp} at={0.8}><div className="flex items-center gap-1.5 text-[11px] text-emerald-600 font-medium"><span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />{he ? "סנטימנט: מתחמם" : "Sentiment: warming up"}</div></Reveal>
           </div>
@@ -539,7 +539,7 @@ function Shot7({ lp, isRtl }: ShotProps) {
   );
 }
 
-/* Shot 8 — seamless back office */
+/* Shot 8 - seamless back office */
 function Shot8({ lp, isRtl }: ShotProps) {
   const he = isRtl;
   return (
@@ -547,7 +547,7 @@ function Shot8({ lp, isRtl }: ShotProps) {
       <div className="w-[330px] rounded-2xl bg-white border border-gray-200/70 shadow-[0_30px_80px_-28px_rgba(0,0,0,0.5)] p-4">
         <div className="flex items-center gap-2 mb-3">
           <span className="w-6 h-6 rounded-full bg-green-500 text-white flex items-center justify-center"><Check className="w-3.5 h-3.5" /></span>
-          <p className="text-[13px] font-semibold text-gray-900">{he ? "השיחה נסגרה — אוטומטית" : "Conversation wrapped — automatically"}</p>
+          <p className="text-[13px] font-semibold text-gray-900">{he ? "השיחה נסגרה - אוטומטית" : "Conversation wrapped - automatically"}</p>
         </div>
         <div className="space-y-2">
           <TickRow lp={lp} at={0.18} label={he ? "סיכום נשמר ב-CRM" : "Summary stored in CRM"} sub={he ? "החלפה · חולצה כחולה · נפתר ע״י AI" : "Exchange · blue shirt · resolved by AI"} />

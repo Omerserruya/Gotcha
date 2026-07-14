@@ -1,5 +1,5 @@
 /**
- * Observation — the neutral projection of a Runtime ExecutionResult (+ its trace)
+ * Observation - the neutral projection of a Runtime ExecutionResult (+ its trace)
  * back into the loop. This is what "re-enters" the Reasoner: a provider-neutral
  * summary of what the world did, never the raw provider payload.
  */
@@ -14,14 +14,14 @@ export interface Observation {
   reason?: string;
   recoverable?: boolean;
   /**
-   * Bounded projection of the result's `data` payload — what a READ actually
+   * Bounded projection of the result's `data` payload - what a READ actually
    * returned (knowledge passages, CRM context, custom-tool rows). Without this
    * the Reasoner learns THAT a read succeeded but never WHAT it said, making
    * KNOWLEDGE/CUSTOM/CRM reads useless. Hard-capped so a fat provider payload
    * can never blow up the prompt or the persisted iteration row.
    */
   data?: string;
-  /** Compact invariant story from the trace (id:outcome, …) — audit-grade WHY. */
+  /** Compact invariant story from the trace (id:outcome, …) - audit-grade WHY. */
   invariantSummary: string;
 }
 

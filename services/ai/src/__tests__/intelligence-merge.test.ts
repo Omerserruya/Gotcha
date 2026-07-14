@@ -7,7 +7,7 @@ function entry(value: unknown, confidence: number, source: FactSnapshotEntry["so
   return { value, confidence, source, observedAt, conversationId: "c1", evidence: null };
 }
 
-describe("decideMerge — Customer Intelligence conflict resolution", () => {
+describe("decideMerge - Customer Intelligence conflict resolution", () => {
   it("first confident value → apply", () => {
     expect(decideMerge(undefined, entry("Healthcare", 0.9), T)).toMatchObject({ action: "apply" });
   });

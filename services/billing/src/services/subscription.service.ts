@@ -174,7 +174,7 @@ export async function changePlan(input: { tenantId: string; targetPlanKey: strin
     const tenantId = input.tenantId;
 
     // Charge the prorated difference FIRST. We must NOT grant the new plan's
-    // features/units on a failed charge — otherwise an upgrade with a declined
+    // features/units on a failed charge - otherwise an upgrade with a declined
     // (or missing) card silently hands out paid entitlements. A TRIALING
     // subscription has no money due yet, so it upgrades without an immediate
     // charge (the higher price lands at trial-end activation).

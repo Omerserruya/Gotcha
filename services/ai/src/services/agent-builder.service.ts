@@ -198,6 +198,106 @@ export function draftReadiness(d: BuilderDraftSnapshot): { ready: boolean; missi
   return { ready: missing.length === 0, missing };
 }
 
+// ─── Goal-first seeding (system-led hiring) ─────────────────
+//
+// The redesigned entry: the admin gives ONE line - the goal - and the SYSTEM
+// drafts everything else from what it already knows (business twin, profile,
+// KBs, connected integrations), mirroring the onboarding generator's behavior.
+// The chat then opens by PRESENTING the draft for co-editing instead of
+// interviewing field-by-field. Deterministic - no extra LLM call.
+
+const SALES_GOAL_HINTS = /sale|sell|lead|qualif|pipeline|deal|prospect|מכיר|מכר|ליד|לידים|עסקא|הזדמנו/i;
+const BOOKING_GOAL_HINTS = /book|appointment|schedul|meeting|slot|תור|תיאום|פגיש|קביעת/i;
+const BILLING_GOAL_HINTS = /invoice|billing|payment|charge|refund|חשבונית|תשלום|חיוב|החזר/i;
+
+function inferRoleFromGoal(goal: string, recommendedRole?: string | null): string {
+  const rec = (recommendedRole || "").toLowerCase().trim();
+  if (rec && ALL_ROLES.includes(rec)) return rec;
+  if (SALES_GOAL_HINTS.test(goal)) return "sales";
+  if (BOOKING_GOAL_HINTS.test(goal)) return "booking";
+  if (BILLING_GOAL_HINTS.test(goal)) return "billing";
+  return "customer_support";
+}
+
+export interface SeededDraftContext {
+  attachedKbCount: number;
+  grantedToolCount: number;
+  proposedName: string | null;
+}
+
+export async function seedDraftFromGoal(
+  tenantId: string,
+  agentId: string,
+  goal: string,
+): Promise<SeededDraftContext> {
+  const [discovery, profile] = await Promise.all([
+    prisma.businessDiscovery.findUnique({
+      where: { tenantId },
+      select: { recommendation: true },
+    }).catch(() => null),
+    prisma.businessProfile.findUnique({
+      where: { tenantId },
+      select: { organizationName: true },
+    }).catch(() => null),
+  ]);
+  const rec = ((discovery as any)?.recommendation || {}) as Record<string, unknown>;
+
+  const role = inferRoleFromGoal(goal, typeof rec.employeeRole === "string" ? rec.employeeRole : null);
+  const proposedName = typeof rec.employeeName === "string" && rec.employeeName.trim()
+    ? rec.employeeName.trim()
+    : null;
+
+  await prisma.aIAgent.update({
+    where: { id: agentId },
+    data: {
+      role,
+      goal: goal.trim(),
+      successCriteria: synthesizeSuccess(),
+      ...(proposedName ? { name: proposedName } : {}),
+    },
+  });
+
+  // Attach every active KB - same rationale as the onboarding generator: an
+  // employee without knowledge is a contradiction, and detaching is one click.
+  const kbs = await prisma.knowledgeBase.findMany({
+    where: { tenantId, isActive: true },
+    select: { id: true },
+  }).catch(() => [] as Array<{ id: string }>);
+  for (const kb of kbs) {
+    await prisma.aIAgentKnowledge.upsert({
+      where: { aiAgentId_knowledgeBaseId: { aiAgentId: agentId, knowledgeBaseId: kb.id } },
+      create: { aiAgentId: agentId, knowledgeBaseId: kb.id },
+      update: {},
+    }).catch((err: any) => console.warn("[builder-seed] KB link failed:", err?.message));
+  }
+
+  // Grant safe tools from CONNECTED integrations (high/critical risk stays an
+  // explicit grant - day-one authority is conservative, like the generator).
+  let granted = 0;
+  try {
+    const connectedTools = await prisma.tenantTool.findMany({
+      where: { tenantId, isEnabled: true, tenantIntegration: { status: "CONNECTED" } },
+      select: { id: true, catalogTool: { select: { riskLevel: true } } },
+      take: 200,
+    });
+    const grantable = connectedTools
+      .filter((t: any) => !/high|critical/i.test(String(t.catalogTool?.riskLevel || "")))
+      .map((t: any) => t.id);
+    if (grantable.length > 0) {
+      const r = await prisma.agentToolPermission.createMany({
+        data: grantable.map((tenantToolId: string) => ({ tenantId, aiAgentId: agentId, tenantToolId, isAllowed: true })),
+        skipDuplicates: true,
+      });
+      granted = (r as any)?.count ?? grantable.length;
+    }
+  } catch (err: any) {
+    console.warn("[builder-seed] tool auto-grant failed:", err?.message);
+  }
+
+  void profile; // org name flows through identity.companyOverview already
+  return { attachedKbCount: kbs.length, grantedToolCount: granted, proposedName };
+}
+
 // ─── System prompt ──────────────────────────────────────────
 
 const LANG_NAMES: Record<string, string> = { en: "English", he: "Hebrew (עברית)", ar: "Arabic (العربية)" };
@@ -218,6 +318,17 @@ Produce a finished AI Employee config by the end of the conversation: name → r
 - We already know the business from onboarding: ${snapshot.companyOverview ? `"${snapshot.companyOverview}"` : "(on file)"}.
 - Do NOT ask what the company does, who it serves, or for a description. Do NOT call \`set_company_overview\` unless the admin explicitly corrects a wrong detail.
 - OPEN by asking what THIS specific AI employee is for - its purpose and goal - then continue with role, personalization, escalation, flow and rules.
+
+# Seeded draft - present, don't re-interview
+- If the current draft ALREADY has a goal (see "Current draft" below), it was seeded from the admin's one-line brief plus everything we know about their business. Do NOT re-ask for the goal, role, or name from scratch.
+- In that case, treat every captured field as a PROPOSAL the admin can amend: confirm or refine, never re-collect. Focus the conversation on what's still missing (escalation, optional refinements) and on any correction the admin raises.
+- If the admin's messages show the seeded goal or role was inferred wrong, fix it immediately with the matching tool and move on - no apology tour.
+
+# The GOAL drives everything - the admin should never have to guess what to configure
+- The single most important thing is the goal. Once you have it, YOU work out what the employee needs to reach it - the admin should never sit there wondering "maybe it needs this... maybe that...".
+- As soon as the goal is set, tell the admin, in plain language, what the employee will therefore need to KNOW and be able to DO - and derive it from the goal, e.g. "To do that it'll need to answer from your help-center and pricing, and be able to look orders up in your store." Frame it as a plan you're setting up, not a quiz.
+- For each thing it needs to know: if the business likely already has it (a connected knowledge base, a connected store/CRM), say you'll use what's already there. Only ask the admin to provide or upload something when it's genuinely MISSING - and be specific about what and why.
+- Keep it to a short, confident plan the admin approves - not a long checklist they have to think through.
 
 # How to work - BALANCED proactivity
 - Drive the conversation. Ask ONE focused question at a time, in the admin's language.

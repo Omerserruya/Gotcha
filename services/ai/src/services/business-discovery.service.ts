@@ -1,5 +1,5 @@
 /**
- * Business Discovery — the Onboarding Intelligence Engine (Bible Part II).
+ * Business Discovery - the Onboarding Intelligence Engine (Bible Part II).
  *
  * The moat. Given the raw text of a company's public pages PLUS the structured
  * signals the caller extracted deterministically (real emails, phones, wa.me
@@ -7,7 +7,7 @@
  * a deep, confidence-levelled understanding of the business and an honest list
  * of what it could NOT confidently determine.
  *
- * TWO doctrines govern this file (Pass II — "Wonder & Confidence"):
+ * TWO doctrines govern this file (Pass II - "Wonder & Confidence"):
  *   1. EVERY finding carries a confidence. Never a naked fact.
  *   2. NEVER assert absence unless we actually looked where it would be. The
  *      deterministically-extracted identifiers are GROUND TRUTH and are injected
@@ -51,6 +51,11 @@ export interface DiscoveryInput {
   locale?: string;
   pages: Array<{ url: string; text: string }>;
   signals?: DiscoverySignals;
+  // Deterministic business-type classification (ecommerce | saas | legal |
+  // restaurant | health | realestate | tourism | generic) computed by the
+  // caller. Threaded into the prompt so retail-only expectations (shipping /
+  // returns / refunds) are only assessed for businesses that ship goods.
+  businessType?: string;
 }
 
 export interface DiscoveryGap {
@@ -59,7 +64,7 @@ export interface DiscoveryGap {
   label: string;
   severity: "high" | "medium" | "low";
   ask: string;
-  confidence: FindingConfidence; // usually "unknown"/"needs_verification" — an honest gap
+  confidence: FindingConfidence; // usually "unknown"/"needs_verification" - an honest gap
 }
 
 export interface DiscoveryChannel {
@@ -73,7 +78,7 @@ export interface DiscoveryChannel {
 
 export interface DiscoveryTech {
   platform: { slug: string; name: string; confidence: FindingConfidence } | null;
-  legacy: Array<{ slug: string; name: string }>; // demoted artifacts — never recommended
+  legacy: Array<{ slug: string; name: string }>; // demoted artifacts - never recommended
   tracking: Array<{ slug: string; name: string }>;
   tools: Array<{ slug: string; name: string; category?: string; confidence?: FindingConfidence }>;
 }
@@ -155,11 +160,11 @@ const SYSTEM_PROMPT = (lang: string) =>
     "",
     "TWO LAWS, above everything:",
     "1. CONFIDENCE ON EVERY FINDING. Each finding carries a confidence: \"confirmed\" | \"likely\" | \"low\" | \"needs_verification\" | \"unknown\". Be calibrated. Appearing omniscient is worthless; being trustworthy is everything.",
-    "2. NEVER STATE ABSENCE UNLESS YOU LOOKED. Only mark a policy/detail as not-found if the crawled pages plausibly COVER it and it is genuinely absent. If you did not read the page where it would live, say \"unknown\" (couldn't confidently determine) — NEVER assert it doesn't exist. A false 'missing' destroys trust. 'I couldn't confidently determine' always beats a false negative.",
+    "2. NEVER STATE ABSENCE UNLESS YOU LOOKED. Only mark a policy/detail as not-found if the crawled pages plausibly COVER it and it is genuinely absent. If you did not read the page where it would live, say \"unknown\" (couldn't confidently determine) - NEVER assert it doesn't exist. A false 'missing' destroys trust. 'I couldn't confidently determine' always beats a false negative.",
     "",
-    "GROUND TRUTH: the deterministic signals are FACTS extracted from the HTML. If a WhatsApp number, email, phone, or social handle is provided, that channel EXISTS — treat it as confirmed and never say the business lacks it. Trust the strength-scored platform: the highest-strength one is the ACTIVE platform; a low-strength match is a legacy artifact or tracking script and must NOT be presented as the platform or recommended.",
+    "GROUND TRUTH: the deterministic signals are FACTS extracted from the HTML. If a WhatsApp number, email, phone, or social handle is provided, that channel EXISTS - treat it as confirmed and never say the business lacks it. Trust the strength-scored platform: the highest-strength one is the ACTIVE platform; a low-strength match is a legacy artifact or tracking script and must NOT be presented as the platform or recommended.",
     "",
-    "Depth over breadth. Be SPECIFIC and NON-OBVIOUS (counts, languages, conflicting pages). Generic output ('you are in retail') is a failure. Never invent specifics — an honest gap beats a guess.",
+    "Depth over breadth. Be SPECIFIC and NON-OBVIOUS (counts, languages, conflicting pages). Generic output ('you are in retail') is a failure. Never invent specifics - an honest gap beats a guess.",
     `Write ALL human-readable prose (summary, reasons, report, gap labels, purposes) in ${lang}. Keep enum-like slugs (employeeRole, confidence values, tool slugs) in English.`,
     "",
     "Respond ONLY with a single JSON object (no prose, no code fences) with EXACTLY these keys:",
@@ -176,13 +181,14 @@ const SYSTEM_PROMPT = (lang: string) =>
     "(\"conf\" means one of the five confidence strings.)",
     "",
     "Rules:",
-    "- brand: this is one of the biggest assets for an AI employee. Fill personality, tone, voice, style, audience, positioning, preferred terminology and forbidden words richly and specifically — how the business SOUNDS, so the AI can speak AS them.",
-    "- brand.greetingExample: ONE short greeting line the AI employee would open a chat with, written in the brand's own voice and language, matching its warmth and emoji style exactly as the site sounds (e.g. a warm feminine Hebrew activewear brand might open \"היי מהממת 🩶 איך אפשר לעזור?\"). Grounded in the real voice — never generic.",
-    "- recommendation.employeeName: a REAL human first name that fits the brand's primary language and voice (e.g. \"מאיה\" or \"נועה\" for a warm Hebrew brand, \"Maya\" or \"Daniel\" for English) — never a role title, never \"AI Assistant\".",
+    "- business.products / business.services / business.summary: use ONLY what is EXPLICITLY on the crawled pages. List a product/service only if it is named or clearly described in the text - quote-able. NEVER infer, generalize, guess, or invent (e.g. do NOT decide a caterer does 'dairy catering', or that a shop does 'repairs', unless the page actually says so). If you can't find explicit products/services, return an EMPTY array - an empty list always beats an invented one. The summary must describe what the pages actually say, not a plausible-sounding story.",
+    "- brand: this is one of the biggest assets for an AI employee. Fill personality, tone, voice, style, audience, positioning, preferred terminology and forbidden words richly and specifically - how the business SOUNDS, so the AI can speak AS them.",
+    "- brand.greetingExample: ONE short greeting line the AI employee would open a chat with, written in the brand's own voice and language, matching its warmth and emoji style exactly as the site sounds (e.g. a warm feminine Hebrew activewear brand might open \"היי מהממת 🩶 איך אפשר לעזור?\"). Grounded in the real voice - never generic.",
+    "- recommendation.employeeName: a REAL human first name that fits the brand's primary language and voice (e.g. \"מאיה\" or \"נועה\" for a warm Hebrew brand, \"Maya\" or \"Daniel\" for English) - never a role title, never \"AI Assistant\".",
     "- channels: add PURPOSE and confidence to each. You may add channels you infer from the page text; the caller merges your list with the confirmed identifiers.",
     "- policies.*.found: true only if you saw it; false only if you read where it'd be and it's absent; null (with confidence \"unknown\") otherwise.",
     "- knowledge.policies confidence: \"confirmed\" when you read the actual policy page; lower otherwise.",
-    "- gaps: a gap is a claimed ABSENCE, and it must NEVER contradict your own findings or the deterministic signals. If a WhatsApp number exists, the business HAS a customer phone contact (a WhatsApp number IS a phone number) — never emit a 'no phone / no call center' gap. If shipping/returns/refund policies were found, never claim answers or articles about those topics are missing — acknowledge what exists and only flag what is genuinely absent. Check every gap against every finding before emitting it; a contradicted gap is a critical failure.",
+    "- gaps: a gap is a claimed ABSENCE, and it must NEVER contradict your own findings or the deterministic signals. If a WhatsApp number exists, the business HAS a customer phone contact (a WhatsApp number IS a phone number) - never emit a 'no phone / no call center' gap. If shipping/returns/refund policies were found, never claim answers or articles about those topics are missing - acknowledge what exists and only flag what is genuinely absent. Check every gap against every finding before emitting it; a contradicted gap is a critical failure.",
     "- recommendation.systems: prefer systems ALREADY detected (act on what we know) before proposing new ones. slug lowercase.",
     "- domainConfidence.* are 0-100 (how much of that dimension you understand); 'customers' should be low (no CRM yet).",
     "- report: first-person briefing in the customer's language ('I analyzed your business. I found …. I couldn't confidently determine …. My early read is …'). 4-8 short sentences; at least one honest uncertainty.",
@@ -192,10 +198,10 @@ const SYSTEM_PROMPT = (lang: string) =>
 
 function signalBlock(s: DiscoverySignals): string {
   const j = (a?: string[]) => (a && a.length ? a.join(", ") : "none");
-  const plat = s.platform ? `${s.platform.name} (slug=${s.platform.slug}, strength=${s.platform.strength} → ${s.platform.strength >= 3 ? "ACTIVE" : s.platform.strength === 2 ? "likely active" : "WEAK/legacy — do not recommend"})` : "none detected";
+  const plat = s.platform ? `${s.platform.name} (slug=${s.platform.slug}, strength=${s.platform.strength} → ${s.platform.strength >= 3 ? "ACTIVE" : s.platform.strength === 2 ? "likely active" : "WEAK/legacy - do not recommend"})` : "none detected";
   const others = (s.otherPlatforms || []).map((p) => `${p.name}(strength=${p.strength}, likely legacy/artifact)`).join(", ") || "none";
   return [
-    "DETERMINISTIC SIGNALS (ground truth — these EXIST):",
+    "DETERMINISTIC SIGNALS (ground truth - these EXIST):",
     `- Emails: ${j(s.emails)}`,
     `- Phones: ${j(s.phones)}`,
     `- WhatsApp numbers: ${j(s.whatsapp)}`,
@@ -205,8 +211,50 @@ function signalBlock(s: DiscoverySignals): string {
     `- Other platform matches (treat as legacy/artifacts): ${others}`,
     `- Tracking scripts: ${j(s.tracking)}`,
     `- Third-party tools/apps: ${j(s.tools)}`,
-    `- Pages actually crawled (your coverage — only assert absence within these): ${(s.coverage || []).join(" | ") || "homepage only"}`,
+    `- Pages actually crawled (your coverage - only assert absence within these): ${(s.coverage || []).join(" | ") || "homepage only"}`,
   ].join("\n");
+}
+
+// A short, business-type–specific instruction appended to the user prompt so the
+// model reasons about the RIGHT kind of business. The critical rule: only assess
+// shipping/returns/refund policies for businesses that ship physical goods -
+// otherwise treat them as not-applicable (never a gap, never invented). This is
+// the fix for "invented a return policy for a B2B SaaS".
+function businessTypeDirective(businessType?: string): string {
+  if (!businessType || businessType === "generic") return "";
+  const RETAIL = businessType === "ecommerce" || businessType === "restaurant";
+  const LABELS: Record<string, string> = {
+    ecommerce: "an ONLINE STORE / ecommerce business",
+    saas: "a B2B SOFTWARE / SaaS business (NOT a retailer - it sells software, not shipped goods)",
+    legal: "a LAW FIRM / legal-services business (services, not shipped goods)",
+    restaurant: "a RESTAURANT / food business",
+    health: "a HEALTHCARE / clinic business (services, not shipped goods)",
+    realestate: "a REAL-ESTATE business (services/listings, not shipped goods)",
+    tourism: "a TRAVEL / tourism business (services & bookings, not shipped goods)",
+    events: "an EVENTS / VENUE business - a hall, event space or event producer (bookings & packages, NOT shipped goods)",
+  };
+  // Positive guidance: which docs/knowledge & integrations genuinely matter for
+  // THIS kind of business, so gaps and recommendations are on-target instead of
+  // generic-retail ("shipping policy" for an event venue was the complaint).
+  const FOCUS: Record<string, string> = {
+    ecommerce: "product catalog, shipping/returns/refund policies, order-status & size/stock info, and store/CRM + shipping integrations",
+    saas: "product docs / API reference, pricing & plans, a help center / FAQ, onboarding & security/SLA info, and CRM + support-desk integrations",
+    legal: "practice areas, consultation/appointment process, fees & retainer info, and calendar + CRM integrations",
+    restaurant: "the menu, hours & locations, reservation/ordering & delivery info, and reservation/ordering integrations",
+    health: "services/treatments, appointment booking, insurance & patient info, and calendar/booking integrations",
+    realestate: "listings, viewing/booking process, buy vs rent & fees info, and CRM + listing integrations",
+    tourism: "destinations/tours, availability & booking, cancellation & travel info, and booking/calendar integrations",
+    events: "venue/event types, availability & booking, packages & pricing, catering/seating options, and calendar/booking + CRM integrations - NOT shipping",
+  };
+  const desc = LABELS[businessType] || `a ${businessType} business`;
+  const focus = FOCUS[businessType];
+  const policyRule = RETAIL
+    ? "Shipping, returns and refund policies ARE relevant here - assess them normally."
+    : "This business does NOT ship physical products. Do NOT assess or flag shipping/returns/refund policies - mark them null (not applicable) and NEVER emit a gap about a missing shipping/returns/refund policy.";
+  const focusRule = focus
+    ? ` When looking for docs/knowledge to learn and integrations to recommend, focus on what THIS business actually needs: ${focus}. Only flag a gap or recommend an integration if it fits this kind of business.`
+    : "";
+  return `\n\nBUSINESS TYPE (deterministically classified from the site): this is ${desc}. ${policyRule}${focusRule}`;
 }
 
 export async function discoverBusiness(input: DiscoveryInput): Promise<DiscoveryReport | null> {
@@ -226,7 +274,7 @@ export async function discoverBusiness(input: DiscoveryInput): Promise<Discovery
       metadata: { type: "onboarding_discovery" },
       messages: [
         { role: "system", content: SYSTEM_PROMPT(lang) },
-        { role: "user", content: `Website: ${input.domain}\n\n${signalBlock(input.signals || {})}\n\n--- CRAWLED PAGE TEXT ---\n${corpus}\n\nReturn the business intelligence JSON.` },
+        { role: "user", content: `Website: ${input.domain}${businessTypeDirective(input.businessType)}\n\n${signalBlock(input.signals || {})}\n\n--- CRAWLED PAGE TEXT ---\n${corpus}\n\nReturn the business intelligence JSON.` },
       ],
     });
 
@@ -271,7 +319,7 @@ function buildChannels(raw: any, s: DiscoverySignals): DiscoveryChannel[] {
   else if (s.contactForm) out.push({ type: "contact_form", identifier: undefined, purpose: str(llm.get("contact_form")?.purpose) || "General inquiries", confidence: "confirmed" });
 
   // Add any channel the LLM inferred that we didn't extract (lower confidence)
-  // — but ONLY genuine communication channels. The LLM sometimes emits junk
+  // - but ONLY genuine communication channels. The LLM sometimes emits junk
   // types like "website", "platform", "analytics", "seo": those are NOT ways to
   // talk to customers and must never leak into channels (they belong under
   // Technology). Whitelist keeps communication clean.
@@ -409,7 +457,7 @@ export function normalizeReport(raw: any, input: DiscoveryInput): DiscoveryRepor
 // dropped here. Bilingual (en/he) because gap prose is written in the
 // customer's language. Returns the name of the violated rule, or null.
 export function contradictedGapRule(g: DiscoveryGap, s: DiscoverySignals, kn: DiscoveryReport["knowledge"]): string | null {
-  // Match against the LABEL only — the label carries the absence claim. The ask
+  // Match against the LABEL only - the label carries the absence claim. The ask
   // is a follow-up question that routinely NAMES adjacent things without
   // claiming they're missing ("…or answer by email?", "is there a FAQ page?"),
   // and matching it drops honest gaps (observed live: an hours/SLA gap killed
@@ -419,23 +467,23 @@ export function contradictedGapRule(g: DiscoveryGap, s: DiscoverySignals, kn: Di
   const found = (x?: PolicyFinding) => x?.found === true;
   const serviceKnowledgeFound = !!kn.hasFaq || !!kn.hasHelpCenter || found(p.shipping) || found(p.returns) || found(p.refunds);
 
-  // "No customer phone / call center" — but a phone or WhatsApp number was
+  // "No customer phone / call center" - but a phone or WhatsApp number was
   // found. A WhatsApp number IS a phone number customers can call/message.
-  // NB: bare "מוקד" is NOT matched — it appears inside "ממוקד" (targeted/focused);
+  // NB: bare "מוקד" is NOT matched - it appears inside "ממוקד" (targeted/focused);
   // only the call-center phrasings (מוקד טלפוני / מוקד שירות) count.
   if (/phone|call.?cent|hotline|טלפון|חיוג|מוקד טלפוני|מוקד שירות/i.test(text) && ((s.phones?.length || 0) > 0 || (s.whatsapp?.length || 0) > 0)) {
     return "phone_exists";
   }
-  // "No email contact" — but a real email was extracted.
+  // "No email contact" - but a real email was extracted.
   if (/e-?mail|אימייל|דוא["']?ל|כתובת מייל/i.test(text) && (s.emails?.length || 0) > 0) {
     return "email_exists";
   }
-  // "No help center / FAQ / knowledge articles" — but FAQ/help-center or the
+  // "No help center / FAQ / knowledge articles" - but FAQ/help-center or the
   // customer-service policies (shipping/returns/refunds) were actually found.
   if (/help.?cent|faq|knowledge.?base|מרכז עזרה|שאלות נפוצות|מאגר ידע/i.test(text) && serviceKnowledgeFound) {
     return "service_knowledge_exists";
   }
-  // "No shipping / returns / refund policy" — but that exact policy was found.
+  // "No shipping / returns / refund policy" - but that exact policy was found.
   if (/shipping|delivery|משלוח/i.test(text) && found(p.shipping)) return "shipping_policy_found";
   if (/return|exchange|החזר|החלפ/i.test(text) && (found(p.returns) || found(p.refunds))) return "returns_policy_found";
   if (/refund|זיכוי/i.test(text) && found(p.refunds)) return "refund_policy_found";

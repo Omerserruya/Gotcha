@@ -255,7 +255,7 @@ export default function TenantDetailPage() {
     );
     if (confirmName === null) return;
     if (confirmName.trim() !== tenant.name) {
-      showMsg("Name did not match — deletion cancelled", "error");
+      showMsg("Name did not match - deletion cancelled", "error");
       return;
     }
     setDeletingTenant(true);
@@ -714,7 +714,7 @@ export default function TenantDetailPage() {
         <div className="bg-white rounded-2xl border border-red-200 p-6">
           <h2 className="font-semibold text-red-600 mb-1">Danger Zone</h2>
           <p className="text-xs text-gray-500 mb-4">
-            Permanently delete this tenant and everything it owns — users, channels, conversations,
+            Permanently delete this tenant and everything it owns - users, channels, conversations,
             integrations and all data. This cannot be undone.
           </p>
           <button

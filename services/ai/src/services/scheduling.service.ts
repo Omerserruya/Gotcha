@@ -96,7 +96,7 @@ export interface ResolveAvailabilityOpts {
   /**
    * Optional lower bound (Unix ms) for slot enumeration. Used by
    * check_availability to answer windowed questions ("what's free TOMORROW",
-   * "anything SATURDAY", "next WEEK"). Clamped against now+minNotice — never
+   * "anything SATURDAY", "next WEEK"). Clamped against now+minNotice - never
    * proposes a slot earlier than the policy allows. Ignored for a requested-time
    * point check. Omit for "soonest available".
    */
@@ -184,7 +184,7 @@ const DEFAULT_PROPOSE_COUNT = 3;
 /**
  * Strip an RFC-9557 IANA zone-name suffix (e.g. `2026-07-02T09:00:00+03:00[Asia/Jerusalem]`)
  * that `Date.parse` cannot handle. The numeric offset (`+03:00`) is preserved, so the
- * instant is unchanged — only the trailing `[…]` bracket is removed. LLM reasoners emit
+ * instant is unchanged - only the trailing `[…]` bracket is removed. LLM reasoners emit
  * this format; without normalization it was rejected as `bad_iso_input`.
  */
 function normalizeRequestedIso(iso: string): string {

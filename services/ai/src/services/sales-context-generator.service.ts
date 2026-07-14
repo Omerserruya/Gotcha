@@ -1,20 +1,20 @@
 /**
- * Sales Context generator — auto-fills an AI Employee's Product Qualification
+ * Sales Context generator - auto-fills an AI Employee's Product Qualification
  * Context (`agent.salesContext`) at the end of the creation wizard, so the admin
  * never starts from six blank fields.
  *
  * Source of truth, in priority order:
- *   1. The tenant's onboarding `BusinessProfile` (what the company does/sells) —
+ *   1. The tenant's onboarding `BusinessProfile` (what the company does/sells) -
  *      via getCompanyContext(). This is the universal anchor.
  *   2. The agent's own role + goal (and funnel, if sales-oriented).
  *   3. The titles of the knowledge bases attached to the agent (hints at the
  *      product surface area the employee was trained on).
  *
  * An LLM turns that into the six structured fields. The result is NORMALIZED and
- * only PROPOSED — the admin can edit every field afterward in the editor. This is
+ * only PROPOSED - the admin can edit every field afterward in the editor. This is
  * best-effort: any failure returns null and the wizard completes unchanged.
  *
- * Layers under per-agent `salesContext` semantics — see company-context.service.ts
+ * Layers under per-agent `salesContext` semantics - see company-context.service.ts
  * and prompt-builder.service.ts (buildSalesContextBlock).
  */
 
@@ -71,7 +71,7 @@ function stripFences(s: string): string {
 
 /**
  * Generate a salesContext object for an agent from company + agent context.
- * Returns null on any failure or when there is not enough signal — the caller
+ * Returns null on any failure or when there is not enough signal - the caller
  * decides whether to persist. Never throws.
  */
 export async function generateSalesContext(
@@ -94,7 +94,7 @@ export async function generateSalesContext(
       }),
     ]);
 
-    // Need at least SOMETHING to ground on — a company description or a goal.
+    // Need at least SOMETHING to ground on - a company description or a goal.
     // Otherwise the model would invent a generic offer, which is worse than blank.
     const companyDesc = company?.businessDescription?.trim();
     if (!companyDesc && !agent.goal?.trim() && !company?.organizationName) return null;
@@ -119,18 +119,18 @@ export async function generateSalesContext(
       .join("\n");
 
     const system = [
-      "You write the SALES CONTEXT for a company's AI employee — the offer and qualification frame it uses to size up prospects.",
+      "You write the SALES CONTEXT for a company's AI employee - the offer and qualification frame it uses to size up prospects.",
       "Ground everything STRICTLY in the company details provided. Do NOT invent products, markets, or claims that aren't implied by them.",
       "Write in the SAME LANGUAGE as the company description.",
-      "Be concrete and specific to THIS company — avoid generic SaaS boilerplate.",
+      "Be concrete and specific to THIS company - avoid generic SaaS boilerplate.",
       "",
       "Respond ONLY with a JSON object (no prose, no code fences) with EXACTLY these keys:",
-      '  "whatWeSell": string — 1-3 sentences naming the actual product/offer and who it is for.',
-      '  "idealCustomerProfile": string — 1-2 sentences describing the best-fit customer.',
-      '  "problemsSolved": string[] — 3-5 short bullet phrases, one problem each.',
-      '  "expectedOutcomes": string[] — 3-5 short bullet phrases, one outcome each.',
-      '  "qualificationSignals": string[] — 3-5 short signals that a prospect is a good fit.',
-      '  "disqualifiers": string[] — 2-4 short signals that a prospect is NOT a fit.',
+      '  "whatWeSell": string - 1-3 sentences naming the actual product/offer and who it is for.',
+      '  "idealCustomerProfile": string - 1-2 sentences describing the best-fit customer.',
+      '  "problemsSolved": string[] - 3-5 short bullet phrases, one problem each.',
+      '  "expectedOutcomes": string[] - 3-5 short bullet phrases, one outcome each.',
+      '  "qualificationSignals": string[] - 3-5 short signals that a prospect is a good fit.',
+      '  "disqualifiers": string[] - 2-4 short signals that a prospect is NOT a fit.',
       "Omit a key only if the company details give you no honest basis for it.",
     ].join("\n");
 

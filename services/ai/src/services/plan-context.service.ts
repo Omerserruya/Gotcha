@@ -1,25 +1,25 @@
 /**
- * Plan Context Assembly — the single source of truth for the per-turn inputs the
+ * Plan Context Assembly - the single source of truth for the per-turn inputs the
  * Action Planner (`computeCurrentPlan` via `buildAgentPrompt`) consumes.
  *
  * The AI Employee (executes) and the AI Copilot (recommends) are ONE brain with
- * two execution modes. The reasoning — goal, objective, situation, best next
- * action, capabilities — must be derived IDENTICALLY for both. This module owns
+ * two execution modes. The reasoning - goal, objective, situation, best next
+ * action, capabilities - must be derived IDENTICALLY for both. This module owns
  * the four per-turn derivations that feed the planner so neither caller computes
  * them inline:
  *
- *   1. completedActionTools — action tools that already SUCCEEDED this
+ *   1. completedActionTools - action tools that already SUCCEEDED this
  *      conversation (drives action-complete objectives like BOOK_MEETING).
- *   2. priorGoal            — the goal committed last turn (Goal Ownership,
+ *   2. priorGoal            - the goal committed last turn (Goal Ownership,
  *      resumed per-customer across their conversations).
- *   3. wizardFacts          — the structured wizard→runtime binding (goal /
+ *   3. wizardFacts          - the structured wizard→runtime binding (goal /
  *      qualification / fit) the objective engine consumes.
- *   4. toolCapabilityHints  — integration tool → Integration.category, so the
+ *   4. toolCapabilityHints  - integration tool → Integration.category, so the
  *      Capability Layer groups tools by their real domain.
  *
  * `crmFlags`, `calendarBookable` and `hasActiveBooking` are resolved by the
  * caller's CONTEXT layer (CRM prefetch, calendar capability, booking store) and
- * passed in — both modes already have them and re-resolving here would duplicate
+ * passed in - both modes already have them and re-resolving here would duplicate
  * that work. This function performs no LLM call beyond the wizard binding and is
  * fully fail-soft: every derivation degrades to an empty/neutral value.
  */
@@ -106,7 +106,7 @@ export async function loadCommittedGoal(
     }
     // Latest turns across the customer's conversations; pick the most recent one
     // that actually carries a committed goal (a completed-then-empty turn has
-    // none — keep looking back so we resume the last MEANINGFUL goal).
+    // none - keep looking back so we resume the last MEANINGFUL goal).
     const rows = await prisma.auditLog.findMany({
       where: { tenantId, targetId: { in: conversationIds }, action: "ai.bot_turn" },
       select: { metadata: true },
@@ -207,12 +207,12 @@ export interface AssembledPlanContext {
 
 /**
  * Assemble the per-turn plan context ONCE for both the Employee and the Copilot.
- * Faithful aggregation of the four derivations above — no business decisions, no
+ * Faithful aggregation of the four derivations above - no business decisions, no
  * mode branching. Both callers feed the result into `buildAgentPrompt` (which
  * runs `computeCurrentPlan`) so the rendered `# Current Plan` is identical.
  */
 export async function assemblePlanContext(input: AssemblePlanContextInput): Promise<AssembledPlanContext> {
-  // Cross-turn action completion — which action tools already SUCCEEDED.
+  // Cross-turn action completion - which action tools already SUCCEEDED.
   const completedActionTools = await loadCommittedActionTools(input.tenantId, input.conversationId);
 
   // Goal Ownership (Unit A): the goal committed last turn, resumed per-customer.

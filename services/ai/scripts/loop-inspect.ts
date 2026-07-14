@@ -1,5 +1,5 @@
 /** Dump a single conversation's latest loop run: per-iteration decision, reasoning,
- *  op, runtime result, observation — to root-cause a pathology. */
+ *  op, runtime result, observation - to root-cause a pathology. */
 import { prisma } from "@chatcenter/shared";
 const TENANT_ID = process.env.PILOT_TENANT_ID || "cmmov5qh10000ltnqm7pmxqzc";
 async function main() {

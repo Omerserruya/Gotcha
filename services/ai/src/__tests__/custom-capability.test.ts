@@ -32,7 +32,7 @@ beforeEach(() => {
   vi.mocked(executeCustomApiTool).mockReset();
 });
 
-describe("CUSTOM operation set — tenant-defined tools as generic operations", () => {
+describe("CUSTOM operation set - tenant-defined tools as generic operations", () => {
   it("describeWorld exposes each tenant tool with its when-to-use meaning and schema params", async () => {
     const world = await CustomCapability.describeWorld({ tenantId: "t1", conversationId: "c1" });
     expect(world.operations).toHaveLength(1);

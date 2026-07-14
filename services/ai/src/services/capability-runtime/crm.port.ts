@@ -1,13 +1,13 @@
 /**
- * CrmPort — the concrete CRM surface the CRM capability driver runs on.
+ * CrmPort - the concrete CRM surface the CRM capability driver runs on.
  *
- * ADAPTER boundary (same shape as CalendarPort): exposes only concrete CRM I/O —
+ * ADAPTER boundary (same shape as CalendarPort): exposes only concrete CRM I/O -
  * "is a CRM connected?" and "search for a customer". It contains NO business rules;
  * every rule (a search key must be known, …) lives ONCE in the operation contracts +
  * verifiers (crm.runtime.ts), never in the port.
  *
  * The production port (crm.port.prod.ts) translates these calls to the EXISTING
- * production CRM code (`getCrmAdapter(tenantId)` → vendor-neutral `CRMAdapter`) — it
+ * production CRM code (`getCrmAdapter(tenantId)` → vendor-neutral `CRMAdapter`) - it
  * wraps, it does not reimplement. Tests inject an in-memory fake.
  */
 
@@ -62,7 +62,7 @@ export interface CrmPort {
   ): Promise<CrmSearchResult>;
 
   /**
-   * Concrete: ensure a single canonical customer record exists — resolve if known,
+   * Concrete: ensure a single canonical customer record exists - resolve if known,
    * create if new, reconcile duplicates (surfacing ambiguous ones for approval).
    * Wraps the production identity-resolution flow.
    */
@@ -77,7 +77,7 @@ export interface CrmPort {
     args: { contactId: string; kind?: string; body: string },
   ): Promise<{ ok: boolean; id?: string; reason?: string }>;
 
-  /** Concrete: hydrate a resolved contact — recent activities, open deals, tickets. */
+  /** Concrete: hydrate a resolved contact - recent activities, open deals, tickets. */
   getContext(
     ctx: CrmOpContext,
     args: { contactId: string; kind?: string },

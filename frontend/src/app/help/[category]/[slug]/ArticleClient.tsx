@@ -77,7 +77,7 @@ export function ArticleClient() {
               <span className="text-sm text-emerald-700 font-medium">{he ? "תודה! שמחים שעזרנו." : "Thanks! Glad it helped."}</span>
             ) : (
               <span className="text-sm text-gray-700">
-                {he ? "תודה על המשוב — " : "Thanks for the feedback — "}
+                {he ? "תודה על המשוב - " : "Thanks for the feedback - "}
                 <a href="mailto:support@gotcha.co.il" className="text-primary-600 font-medium underline underline-offset-2">
                   {he ? "ספרו לנו מה חסר" : "tell us what's missing"}
                 </a>

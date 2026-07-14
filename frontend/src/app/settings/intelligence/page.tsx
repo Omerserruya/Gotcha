@@ -33,7 +33,7 @@ function IntelligencePageInner() {
       );
       setPendingCount(pending.length);
     } catch {
-      // non-critical — badge simply stays at 0
+      // non-critical - badge simply stays at 0
     }
   }, [token]);
 

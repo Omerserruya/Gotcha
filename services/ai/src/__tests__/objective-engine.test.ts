@@ -139,11 +139,11 @@ describe("Passive-closer gate detection", () => {
     expect(isPassiveCloser(real)).toBe(true);
   });
   it("flags English availability closers", () => {
-    expect(isPassiveCloser("Sure — anything else I can help with?")).toBe(true);
+    expect(isPassiveCloser("Sure - anything else I can help with?")).toBe(true);
     expect(isPassiveCloser("Feel free to reach out anytime!")).toBe(true);
   });
   it("does NOT flag a forward-moving discovery reply", () => {
-    expect(isPassiveCloser("בשמחה. לפני שאצלול, ספר לי קצת על העסק — איפה העומס הכי גדול היום?")).toBe(false);
+    expect(isPassiveCloser("בשמחה. לפני שאצלול, ספר לי קצת על העסק - איפה העומס הכי גדול היום?")).toBe(false);
   });
   it("'לא' / 'no' is not a customer farewell; 'ביי' is", () => {
     expect(customerIsClosing("לא")).toBe(false);
@@ -159,7 +159,7 @@ describe("Passive-closer gate detection", () => {
   });
 });
 
-describe("E2E — Objective Engine in the assembled prompt", () => {
+describe("E2E - Objective Engine in the assembled prompt", () => {
   const agent: AgentRecord = {
     name: "Aria", role: "sales", persona: { brand_archetype: "sage" },
     conversationFlow: null, customGuardrails: null, escalationRules: null, behavioralAnchors: null,
@@ -194,7 +194,7 @@ describe("E2E — Objective Engine in the assembled prompt", () => {
     expect(p).toContain("# Current Plan");
     expect(p).toContain("CUSTOMER");
     expect(p).toContain("objective QUALIFY_LEAD");
-    // Lead generation is skipped — it must NOT be the active objective.
+    // Lead generation is skipped - it must NOT be the active objective.
     expect(p).not.toContain("objective GENERATE_LEAD");
   });
 });
@@ -420,7 +420,7 @@ describe("Goal prioritization (business-outcome layer)", () => {
 });
 
 describe("Wizard→Runtime: structured facts consumed by the engine (no heuristics)", () => {
-  // goalObjective truncates the chain at the configured endpoint — the engine
+  // goalObjective truncates the chain at the configured endpoint - the engine
   // never pursues objectives BEYOND the configured goal, and never SKIPS earlier
   // capture/qualify steps.
   it("goalObjective=BOOK_MEETING → engine stops at booking, never reaches CREATE_DEAL", () => {
@@ -458,7 +458,7 @@ describe("Wizard→Runtime: structured facts consumed by the engine (no heuristi
 
 describe("Goal progress > info collection (generic anti-loop)", () => {
   // When stalled, the same required field must NOT be re-asked; a forward move
-  // outranks it. Role-agnostic — keys off the objective's requiredInformation.
+  // outranks it. Role-agnostic - keys off the objective's requiredInformation.
   it("stalled=true suppresses the repeated ASK and surfaces a higher-scored forward move", () => {
     const status = selectActiveObjective("sales", "NEW_PROSPECT", ""); // GENERATE_LEAD, missing name
     const normal = resolveNextActions({ status, capability: [], calendarBookable: false, stalled: false });
@@ -477,7 +477,7 @@ describe("Outcome quality > data collection (generic creation gate)", () => {
     expect(isCreationToolAllowed("integration_create_lead", ctx)).toBe(false);
     expect(isCreationToolAllowed("integration_create_deal", ctx)).toBe(false);
   });
-  it("blocks a commitment object (deal) for an anonymous NEW prospect — the live bug", () => {
+  it("blocks a commitment object (deal) for an anonymous NEW prospect - the live bug", () => {
     const ctx = { fit: "neutral" as const, prospectState: "NEW_PROSPECT" as const };
     expect(isCreationToolAllowed("integration_create_deal", ctx)).toBe(false);   // no deal for anon/hostile
     expect(isCreationToolAllowed("integration_create_lead", ctx)).toBe(true);    // capture still allowed

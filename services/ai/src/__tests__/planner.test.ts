@@ -132,7 +132,7 @@ describe("planner - computeCurrentPlan", () => {
 });
 
 // The decoupling fix: when the objective CURSOR is exhausted (goal/currentState
-// null), the GoalStatus — not the bare null — decides the terminal message.
+// null), the GoalStatus - not the bare null - decides the terminal message.
 describe("planner - renderCurrentPlan terminal branch driven by GoalStatus", () => {
   function terminal(goalStatus: CurrentPlan["goalStatus"]): string {
     const plan: CurrentPlan = {

@@ -8,7 +8,7 @@ export * from "./provider";
 const REGISTRY: Record<BillingProvider, PaymentProvider> = {
   ICOUNT: icountProvider,
   MANUAL: manualProvider,
-  // STRIPE: stripeProvider,  // future — same interface, no call-site changes.
+  // STRIPE: stripeProvider,  // future - same interface, no call-site changes.
   STRIPE: manualProvider,
 };
 

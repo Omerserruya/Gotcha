@@ -1,5 +1,5 @@
 /**
- * Turn Outcome Ledger — the single source of truth for side effects within ONE
+ * Turn Outcome Ledger - the single source of truth for side effects within ONE
  * autonomous turn.
  *
  * Problem it solves (observed live): the model emits duplicate/parallel
@@ -15,7 +15,7 @@
  *  - A semantic action that succeeded this turn can NEVER be downgraded by a
  *    later duplicate/failed call (monotonic commit).
  *  - "Already executed successfully" (committed OR succeeded_unverified) is the
- *    dedup signal — NOT "committed". An unverified success still blocks a
+ *    dedup signal - NOT "committed". An unverified success still blocks a
  *    duplicate re-execution.
  *  - A success becomes COMMITTED only with a real externalRef (eventId /
  *    leadId / messageId / …). ok:true without a ref → succeeded_unverified:
@@ -149,7 +149,7 @@ export class TurnOutcomeLedger {
     return this.committed().filter((e) => e.visibility === "customer_facing");
   }
 
-  /** ok:true but missing a real externalRef — deduped, but not safe to claim.
+  /** ok:true but missing a real externalRef - deduped, but not safe to claim.
    * Surfaced so handlers that don't return a ref get fixed. */
   unverified(): LedgerEntry[] {
     return this.sorted(

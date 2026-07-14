@@ -154,7 +154,7 @@ export default function BillingSettingsPage() {
             {sub.trialEndsAt && <div>Trial ends: {new Date(sub.trialEndsAt).toLocaleDateString()}</div>}
             {sub.currentPeriodEnd && <div>Renews: {new Date(sub.currentPeriodEnd).toLocaleDateString()}</div>}
             {sub.cancelAtPeriodEnd && <div className="text-amber-700">Cancels at period end.</div>}
-            {isGrandfathered && <div className="text-purple-700">Legacy plan — choose a paid plan below to migrate (one-way).</div>}
+            {isGrandfathered && <div className="text-purple-700">Legacy plan - choose a paid plan below to migrate (one-way).</div>}
             <div className="pt-2">
               {sub.cancelAtPeriodEnd ? (
                 <button disabled={busy !== null} onClick={() => run("resume", () => resumeSubscription(token!), "Subscription resumed")}
@@ -202,7 +202,7 @@ export default function BillingSettingsPage() {
             return (
               <div key={p.id} className={`rounded-lg border p-4 ${current ? "border-blue-500 ring-1 ring-blue-500" : "border-gray-200"}`}>
                 <div className="font-semibold text-gray-900">{p.name}</div>
-                <div className="mt-1 text-2xl font-bold text-gray-900">{p.salesOnly ? "Custom" : `₪${p.basePrice ?? "—"}`}</div>
+                <div className="mt-1 text-2xl font-bold text-gray-900">{p.salesOnly ? "Custom" : `₪${p.basePrice ?? "-"}`}</div>
                 <div className="text-xs text-gray-500">{p.salesOnly ? "Contact sales" : "/ month"}</div>
                 <div className="mt-2 text-sm text-gray-600">{fmt(p.includedAiUnits)} AI Units / mo</div>
                 <div className="mt-3">

@@ -34,7 +34,7 @@ describe("migration ledger + deterministic routing floor (TEMPORARY)", () => {
     expect(agentKernelEligible("agent-1")).toBe(true);
     expect(agentKernelEligible("agent-2")).toBe(true);
     expect(agentKernelEligible("agent-3")).toBe(false);
-    // no wildcard support — "*" is a literal id, never "all"
+    // no wildcard support - "*" is a literal id, never "all"
     process.env.AGENT_LOOP_AGENTS = "*";
     expect(agentKernelEligible("agent-1")).toBe(false);
   });

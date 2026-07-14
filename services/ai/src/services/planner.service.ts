@@ -5,15 +5,15 @@
  * (wizard facts), the committed goal, and the candidate next actions. Today that
  * knowledge is scattered across ~6 prompt sections and the model has to
  * re-assemble it. The planner aggregates it ONCE, before the model reasons, into
- * a single compact `CurrentPlan` — "here is the goal, the situation, and the best
- * next action" — exactly how a real employee thinks.
+ * a single compact `CurrentPlan` - "here is the goal, the situation, and the best
+ * next action" - exactly how a real employee thinks.
  *
  * It does NOT replace model reasoning: it gives the model the best CURRENT plan;
  * the model may still deviate if the customer's latest message changes things.
  *
  * Completely generic / role-agnostic. It reuses the existing runtime functions
  * (computeProspectState, selectActiveObjective, commitObjective,
- * resolveNextActions, groupToolsIntoCapabilities) — zero recomputation of new
+ * resolveNextActions, groupToolsIntoCapabilities) - zero recomputation of new
  * state, no new LLM call, pure and never throws.
  */
 
@@ -47,7 +47,7 @@ import {
 
 /**
  * Everything the planner needs, as a narrow structural input. The prompt builder
- * passes a superset (BuildPromptOpts) which satisfies this — keeping the planner
+ * passes a superset (BuildPromptOpts) which satisfies this - keeping the planner
  * decoupled from the builder (no circular import).
  */
 export interface PlanInput {
@@ -74,7 +74,7 @@ export interface PlanInput {
   /**
    * Whether the customer has an ACTIVE booking right now (the MeetingBooking
    * store's current state). One of the runtime homes the Goal Evaluator reads to
-   * decide whether a `booking` outcome exists — no audit reconstruction.
+   * decide whether a `booking` outcome exists - no audit reconstruction.
    */
   hasActiveBooking?: boolean;
   /** Recovery (Unit C) signal for the goal's action, when known (post-action). */
@@ -111,7 +111,7 @@ export interface PlanState {
  * top-ranked candidate; `candidateActions` are the ranked alternatives.
  */
 export interface CurrentPlan {
-  /** Objective mission — the goal in one line. Null when the chain is complete. */
+  /** Objective mission - the goal in one line. Null when the chain is complete. */
   goal: string | null;
   currentObjective: ObjectiveName | null;
   currentState: PlanState | null;
@@ -119,14 +119,14 @@ export interface CurrentPlan {
   candidateActions: NextActionCandidate[];
   preferredTool?: string;
   preferredCapability?: string;
-  /** 0..1 — score of the best next action. */
+  /** 0..1 - score of the best next action. */
   confidence: number;
   /** Why the best next action advances the goal. */
   why: string;
   /** The turn's tool surface, grouped into capabilities. */
   capabilities: CapabilityGroup[];
   /**
-   * Did the configured BUSINESS OUTCOME happen — and if not, can it progress?
+   * Did the configured BUSINESS OUTCOME happen - and if not, can it progress?
    * Derived (not persisted) by the Goal Evaluator. Null when the employee has no
    * measurable business outcome → conversation completion is BEL's call, not the
    * goal's. Decoupled from objective navigation and from closure.
@@ -143,7 +143,7 @@ function labelOf(status: ObjectiveStatus, key: string): string {
 
 /**
  * Compute the current execution plan. Pure; never throws. Reuses the existing
- * objective engine + capability layer — no new state is invented or recomputed.
+ * objective engine + capability layer - no new state is invented or recomputed.
  */
 export function computeCurrentPlan(input: PlanInput): CurrentPlan {
   const wf = input.wizardFacts ?? EMPTY_WIZARD_FACTS;
@@ -151,7 +151,7 @@ export function computeCurrentPlan(input: PlanInput): CurrentPlan {
 
   const prospectState = computeProspectState(input.prospectFlags);
 
-  // Same derivation the prompt builder did inline — just centralized here.
+  // Same derivation the prompt builder did inline - just centralized here.
   const fresh = selectActiveObjective(
     input.role,
     prospectState,
@@ -228,7 +228,7 @@ const ACTION_TAG: Record<NextActionKind, string> = {
 };
 
 /**
- * Render the plan as ONE compact "# Current Plan" block — Goal → Situation →
+ * Render the plan as ONE compact "# Current Plan" block - Goal → Situation →
  * Best next action → alternatives → capabilities. Replaces the former six
  * objective/NBA sub-sections and the flat tool list. Reuses the exact imperative
  * action labels the model is already tuned to (from resolveNextActions).
@@ -240,7 +240,7 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
   const advisory = opts?.advisory === true;
   const lines: string[] = [
     advisory
-      ? "# Current Plan (recommend the next move to the human agent — do NOT act yourself)"
+      ? "# Current Plan (recommend the next move to the human agent - do NOT act yourself)"
       : "# Current Plan (decide and ACT this turn)",
   ];
 
@@ -252,7 +252,7 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
     const what = (o: string) => o.replace(/_/g, " ");
     if (gs?.kind === "ACHIEVED") {
       lines.push(
-        `**Goal achieved:** the ${what(gs.outcome)} is done. Confirm it warmly and wrap with a concrete next step — ` +
+        `**Goal achieved:** the ${what(gs.outcome)} is done. Confirm it warmly and wrap with a concrete next step - ` +
           `never a passive "anything else?". (Whether to actually close the chat is a separate call.)`,
       );
     } else if (gs?.kind === "BLOCKED") {
@@ -264,27 +264,27 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
       if (gs.reason === "disqualified") {
         lines.push(
           `**Not a fit for this goal:** this prospect doesn't qualify for the ${what(gs.outcome)}. Wrap up warmly and ` +
-            `politely — do NOT push the ${what(gs.outcome)}, and do NOT escalate; this isn't a human-handoff case.`,
+            `politely - do NOT push the ${what(gs.outcome)}, and do NOT escalate; this isn't a human-handoff case.`,
         );
       } else {
         lines.push(
           `**Goal can't be completed right now (${gs.reason}):** ${gs.detail ? gs.detail + ". " : ""}Do NOT claim the ` +
             `${what(gs.outcome)} happened. Be honest that it can't be done this moment and offer that the team will ` +
-            `follow up. (Don't call escalate just for this — only if the customer explicitly asks for a human.)`,
+            `follow up. (Don't call escalate just for this - only if the customer explicitly asks for a human.)`,
         );
       }
     } else if (gs?.kind === "ACTIVE") {
       // The navigation cursor ran out, but the business OUTCOME hasn't happened.
-      // This is the case the old ALL_COMPLETE masked — do NOT close; drive it.
+      // This is the case the old ALL_COMPLETE masked - do NOT close; drive it.
       lines.push(
         `**Goal still open:** the ${what(gs.outcome)} has NOT happened yet. Keep driving toward it this turn ` +
-          `(propose / book / create), do NOT wrap up or ask "anything else?" — the goal isn't done until the ${what(gs.outcome)} exists.`,
+          `(propose / book / create), do NOT wrap up or ask "anything else?" - the goal isn't done until the ${what(gs.outcome)} exists.`,
       );
     } else {
       // No measurable business goal → conversation completion is BEL's call.
       // Never a passive closer; end on a concrete next step.
       lines.push(
-        "**Goal:** No open business outcome to drive. You may close naturally — clear summary and a concrete next " +
+        "**Goal:** No open business outcome to drive. You may close naturally - clear summary and a concrete next " +
           'step, never a passive "anything else?". If the customer asks for something you have a tool for, still DO it.',
       );
     }
@@ -298,7 +298,7 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
     `**Goal:** ${plan.goal} _(objective ${plan.currentObjective}, step ${st.stepIndex + 1}/${st.chainLength})_`,
   );
 
-  // Situation — who this is + the strategic posture, in one line.
+  // Situation - who this is + the strategic posture, in one line.
   const sit: string[] = [st.prospectState];
   if (st.strategy) sit.push(`${st.strategy} strategy`);
   if (st.qualificationMet === true) sit.push("qualified");
@@ -315,17 +315,17 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
         `${gs.detail ? ` (${gs.detail})` : ""}. Don't claim it's done; tell the customer honestly it's in progress.`,
     );
   } else if (gs?.kind === "FAILED" && gs.reason !== "disqualified") {
-    // disqualified is handled by the qualify-out directive below — not a handoff.
+    // disqualified is handled by the qualify-out directive below - not a handoff.
     lines.push(
       `🚫 **Goal can't be completed right now (${gs.reason}):** ${gs.detail ? gs.detail + ". " : ""}don't claim the ${gs.outcome.replace(/_/g, " ")} happened; be honest it can't be done this moment and offer that the team will follow up. Don't escalate unless the customer asks for a human.`,
     );
   }
 
-  // What's still needed — the objective ledger, compressed.
+  // What's still needed - the objective ledger, compressed.
   if (st.missingRequired.length > 0) {
     lines.push(`**Still needed for the goal:** ${st.missingRequired.map((m) => m.label).join("; ")}.`);
   } else {
-    lines.push("**Still needed for the goal:** nothing — every required detail is captured. Act, don't re-ask.");
+    lines.push("**Still needed for the goal:** nothing - every required detail is captured. Act, don't re-ask.");
   }
 
   // Hard ordering: a later objective is LOCKED until this one completes. Prevents
@@ -333,7 +333,7 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
   if (st.stepIndex < st.chainLength - 1) {
     lines.push(
       "⛔ Work ONLY this goal now. Do NOT jump ahead to a later step (e.g. proposing/booking a meeting, or " +
-        "creating a deal) until this one is complete — jumping ahead is a failure.",
+        "creating a deal) until this one is complete - jumping ahead is a failure.",
     );
   }
 
@@ -350,8 +350,8 @@ export function renderCurrentPlan(plan: CurrentPlan, opts?: { advisory?: boolean
     lines.push(`_Why:_ ${b.rationale} _(confidence ${plan.confidence.toFixed(2)})_`);
     lines.push(
       advisory
-        ? "This is the move to RECOMMEND. Draft reply options that take it — for an [ACT]/[PROPOSE] (book / create / refund / send), surface it as a recommended action with the details; for an [ASK], draft the one question. Never perform a customer-facing action yourself; the human sends it."
-        : "Pick the ONE move that best fits what the customer just said and DO it this turn — call the tool or ask the one question. Prefer an [ACT]/[PROPOSE] over talking when you already have what you need.",
+        ? "This is the move to RECOMMEND. Draft reply options that take it - for an [ACT]/[PROPOSE] (book / create / refund / send), surface it as a recommended action with the details; for an [ASK], draft the one question. Never perform a customer-facing action yourself; the human sends it."
+        : "Pick the ONE move that best fits what the customer just said and DO it this turn - call the tool or ask the one question. Prefer an [ACT]/[PROPOSE] over talking when you already have what you need.",
     );
     const rest = plan.candidateActions.slice(1);
     if (rest.length > 0) {

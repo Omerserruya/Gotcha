@@ -111,7 +111,7 @@ export function snapMeetingType(
 
 /**
  * Shared scheduling environment, loaded once and reused by BOTH the read
- * (check_availability) and write (schedule_meeting) paths — so availability math
+ * (check_availability) and write (schedule_meeting) paths - so availability math
  * lives in exactly ONE place (resolveAvailability) and the meeting-type/policy/
  * adapter plumbing is never duplicated. Loads + snaps the meeting type, resolves
  * the connected calendar, and builds the constraints policy + adapter.
@@ -130,7 +130,7 @@ async function loadSchedulingEnv(
 ): Promise<{ ok: true; env: SchedulingEnv } | { ok: false; reason: string }> {
   // 1) Load the meeting type, snapping the model's wording to a configured slug.
   // Guard the compound-key lookup: check_availability may omit meeting_type, and
-  // Prisma THROWS on a findUnique with an undefined key field — so only do the
+  // Prisma THROWS on a findUnique with an undefined key field - so only do the
   // direct lookup when a slug was actually given; otherwise fall through to the
   // snap path (which picks the only type for single-type tenants).
   let mt = meetingTypeArg
@@ -222,7 +222,7 @@ export function makeCheckAvailabilityHandler(opts: ScheduleHandlerOpts) {
     }
 
     // The hours that actually apply to THIS meeting type (its own window if set,
-    // else the tenant working hours) — returned structurally so the model can
+    // else the tenant working hours) - returned structurally so the model can
     // answer "what are your hours?" / "do you work Saturday?" precisely.
     const windowSource = policy.meetingTypeWindows?.[meetingType.id] ?? policy.workingHours;
     const base = {
@@ -235,7 +235,7 @@ export function makeCheckAvailabilityHandler(opts: ScheduleHandlerOpts) {
       meetingTypeSlug: meetingType.id,
     };
 
-    // Soonest open slot overall (ignoring any window) — fallback for a "closed
+    // Soonest open slot overall (ignoring any window) - fallback for a "closed
     // Saturday" style answer where the asked-about window has nothing.
     const soonest = resolveAvailability({ policy, meetingType, busy, nowMs, proposeCount: 1 });
     const soonestIso =
@@ -315,7 +315,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
     );
 
     // WRITE-ONLY precondition: a concrete chosen time is required. Without one
-    // there's nothing to book — bounce the model to the read/discovery tool.
+    // there's nothing to book - bounce the model to the read/discovery tool.
     if (!args.requested_at_iso) {
       console.warn(`[schedule_handler] no_time_selected → defer to check_availability`);
       return { ok: false, reason: "no_time_selected", needsAvailabilityCheck: true };
@@ -339,7 +339,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
     );
 
     // 2) DEDUPE: if this customer already has an ACTIVE booking, NEVER create a
-    //    second event — MOVE the existing one to the chosen time instead. This
+    //    second event - MOVE the existing one to the chosen time instead. This
     //    enforces the one-active-meeting-per-customer invariant.
     const existing = await findActiveBookings({
       tenantId: opts.tenantId,
@@ -352,7 +352,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
       if (existing.length > 1) {
         console.warn(
           `[schedule_handler] dedupe: ${existing.length} active bookings for customer ` +
-            `${opts.customerExternalId || "-"} — rescheduling the soonest (${target.eventId})`,
+            `${opts.customerExternalId || "-"} - rescheduling the soonest (${target.eventId})`,
         );
       }
       console.log(
@@ -378,7 +378,7 @@ export function makeScheduleMeetingHandler(opts: ScheduleHandlerOpts) {
       return { ok: false, reason: `calendar_unavailable:${err?.message || "unknown"}` };
     }
 
-    // 4) Validate the EXACT chosen slot (a point check for write safety — NOT a
+    // 4) Validate the EXACT chosen slot (a point check for write safety - NOT a
     //    search). If it isn't bookable we do NOT propose alternatives here; the
     //    model calls check_availability for that.
     const verdict = resolveAvailability({
@@ -923,7 +923,7 @@ export function makeRescheduleMeetingHandler(opts: RescheduleHandlerOpts) {
       return { ok: false, reason: "no_existing_meeting" };
     }
     if (bookings.length > 1) {
-      console.warn(`[schedule_handler] reschedule: ${bookings.length} active meetings — asking which`);
+      console.warn(`[schedule_handler] reschedule: ${bookings.length} active meetings - asking which`);
       return { ok: false, reason: ambiguousMeetingsReason(bookings) };
     }
     return performReschedule(opts, bookings[0], args);
@@ -946,7 +946,7 @@ export function makeCancelMeetingHandler(opts: RescheduleHandlerOpts) {
     });
     if (!bookings.length) return { ok: false, reason: "no_existing_meeting" };
     if (bookings.length > 1) {
-      console.warn(`[schedule_handler] cancel: ${bookings.length} active meetings — asking which`);
+      console.warn(`[schedule_handler] cancel: ${bookings.length} active meetings - asking which`);
       return { ok: false, reason: ambiguousMeetingsReason(bookings) };
     }
     const booking = bookings[0];
@@ -971,7 +971,7 @@ export function makeCancelMeetingHandler(opts: RescheduleHandlerOpts) {
 
 /**
  * Build the "slot was taken between validate and create" failure result. The
- * write path does NOT search for alternatives — it sets `needsAvailabilityCheck`
+ * write path does NOT search for alternatives - it sets `needsAvailabilityCheck`
  * and defers slot discovery to check_availability. Carries pre-localized copy in
  * `userMessage` so the model can relay the exact wording verbatim.
  */

@@ -1,4 +1,4 @@
-// Billing shared library — pricing engine, AI-Unit wallet, entitlement layering.
+// Billing shared library - pricing engine, AI-Unit wallet, entitlement layering.
 // Money/subscription orchestration lives in services/billing; this package holds
 // the cross-service read model + pure math, consumed in-process like permissions.
 export {

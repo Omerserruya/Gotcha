@@ -1,5 +1,5 @@
 /**
- * P1-6 — per-employee usage rollup. Groups usage rows by aiAgentId; computes
+ * P1-6 - per-employee usage rollup. Groups usage rows by aiAgentId; computes
  * cost/tokens/turns/latency/cache-hit from the denormalized columns.
  */
 

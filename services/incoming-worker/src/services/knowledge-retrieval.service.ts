@@ -41,7 +41,7 @@ async function generateEmbedding(text: string, tenantId?: string): Promise<numbe
       totalTokens: response.usage.total_tokens,
     }).catch((err: any) => console.error("[Knowledge] Usage tracking failed:", err.message));
 
-    // Meter AI Units so embeddings are NOT an enforcement exception — every AI
+    // Meter AI Units so embeddings are NOT an enforcement exception - every AI
     // surface debits the wallet + writes the billing ledger. No-op when
     // BILLING_ENFORCEMENT_MODE=off. Fire-and-forget; never block retrieval.
     meterAiUnits({

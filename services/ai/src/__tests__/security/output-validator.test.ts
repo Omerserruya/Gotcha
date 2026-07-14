@@ -176,7 +176,7 @@ describe("validateAndPersist", () => {
   });
 });
 
-describe("tool-output leak protection (P0 — the live E2E leak)", () => {
+describe("tool-output leak protection (P0 - the live E2E leak)", () => {
   // The exact content that reached the customer in the amorphous E2E: an
   // interim ack, a tool-call-as-text blob, a fabricated result envelope, then a
   // human confirmation. The JSON lines must be stripped; the human text kept.
@@ -256,7 +256,7 @@ describe("internal-operations leak protection (customers see outcomes, not mecha
   });
 
   it("does NOT touch a clean reply with no internal-ops language", () => {
-    const ok = "Great — I can show you how it handles WhatsApp DMs. What day works for a quick demo?";
+    const ok = "Great - I can show you how it handles WhatsApp DMs. What day works for a quick demo?";
     expect(stripInternalOpsNarration(ok).leaked).toBe(false);
     expect(validateAssistantOutput(ok, ctx).ok).toBe(true);
   });

@@ -21,7 +21,7 @@ const RICH_AGENT = {
   behavioralAnchors: [{ condition: "customer is angry", guidance: "acknowledge before solving" }],
 };
 
-describe("employee binding — AIAgent row → kernel mission/guidance/persona", () => {
+describe("employee binding - AIAgent row → kernel mission/guidance/persona", () => {
   it("maps a rich agent row into all three slots", () => {
     const b = buildEmployeeBinding(RICH_AGENT);
     // mission: who + goal + product + ICP + disqualifiers
@@ -60,7 +60,7 @@ describe("employee binding — AIAgent row → kernel mission/guidance/persona",
     expect(b.guidance).toBe("Guardrail: real one");
   });
 
-  it("is deterministic (byte-stable) for the same agent row — cache-safe", () => {
+  it("is deterministic (byte-stable) for the same agent row - cache-safe", () => {
     const a = buildEmployeeBinding(RICH_AGENT);
     const b = buildEmployeeBinding(RICH_AGENT);
     expect(JSON.stringify(a)).toBe(JSON.stringify(b));

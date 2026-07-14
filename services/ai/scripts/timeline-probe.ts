@@ -1,4 +1,4 @@
-/** P1-5 probe — exercise the decision-timeline projection over real loop rows. */
+/** P1-5 probe - exercise the decision-timeline projection over real loop rows. */
 import { prisma } from "@chatcenter/shared";
 
 const [tenantId, conversationId] = process.argv.slice(2);

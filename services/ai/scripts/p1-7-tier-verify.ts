@@ -1,4 +1,4 @@
-/** P1-7 — run one full bot turn directly, then report the model each micro-call used. */
+/** P1-7 - run one full bot turn directly, then report the model each micro-call used. */
 import { prisma } from "@chatcenter/shared";
 import { initAIService } from "../src/services/ai.service";
 import { generateAIBotReply } from "../src/services/ai-bot.service";

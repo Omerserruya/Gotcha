@@ -18,7 +18,7 @@ function reasonLabel(reason: string, he: boolean): string {
 }
 
 function formatValue(v: unknown): string {
-  if (v == null) return "—";
+  if (v == null) return "-";
   if (typeof v === "string") return v;
   return JSON.stringify(v);
 }
@@ -90,8 +90,8 @@ export default function ReviewTab() {
     <div>
       <p className="text-xs text-gray-500 mb-4 max-w-4xl">
         {he
-          ? "ערכים שה-AI חילץ וזקוקים לאישור לפני שמירה — ביטחון נמוך או התנגשות עם ערך קיים."
-          : "AI-extracted values that need human review before being saved — low confidence or conflict with existing data."}
+          ? "ערכים שה-AI חילץ וזקוקים לאישור לפני שמירה - ביטחון נמוך או התנגשות עם ערך קיים."
+          : "AI-extracted values that need human review before being saved - low confidence or conflict with existing data."}
       </p>
 
       {error && (

@@ -1,5 +1,5 @@
 /**
- * KNOWLEDGE operation set — contracts as DATA (business-only language; no vector
+ * KNOWLEDGE operation set - contracts as DATA (business-only language; no vector
  * store, embeddings, or vendor appears here). Same shape as the CALENDAR/CRM
  * contracts; co-located with the runtime so adding Knowledge touched nothing in
  * the kernel or shared.
@@ -15,7 +15,7 @@ const SEARCH_KNOWLEDGE: OperationContract = {
   params: [
     { key: "query", meaning: "the question or topic to look up, in the customer's own terms", required: true },
   ],
-  outcome: "the relevant knowledge-base passages (possibly none) — authoritative over general knowledge",
+  outcome: "the relevant knowledge-base passages (possibly none) - authoritative over general knowledge",
   success: {
     id: "knowledge_search_established",
     statement: "a set of relevant passages (possibly empty) has been established from the knowledge base",

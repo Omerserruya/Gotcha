@@ -45,7 +45,7 @@ function salesPrompt(lastMessage: string, messageCount: number, context: any) {
   } as any);
 }
 
-describe("E2E #1 — discovery conversation (sales, cold)", () => {
+describe("E2E #1 - discovery conversation (sales, cold)", () => {
   const prompt = salesPrompt("hi, what do you guys do?", 1, {
     customerBlock: "## Customer\n- Name: Dana\n- Channel: whatsapp",
     locale: "en",
@@ -72,7 +72,7 @@ describe("E2E #1 — discovery conversation (sales, cold)", () => {
   });
 });
 
-describe("E2E #2 — low-engagement lead (anti-give-up)", () => {
+describe("E2E #2 - low-engagement lead (anti-give-up)", () => {
   const prompt = salesPrompt("meh, not really interested", 5, {
     customerBlock: "## Customer\n- Name: Sam\n- Channel: whatsapp",
     locale: "en",
@@ -89,7 +89,7 @@ describe("E2E #2 — low-engagement lead (anti-give-up)", () => {
   });
 });
 
-describe("E2E #3 — returning customer with memory", () => {
+describe("E2E #3 - returning customer with memory", () => {
   // CRM/memory already hold several discovery facts from prior conversations.
   const context = {
     customerBlock: "## Customer\n- Name: Omer\n- Channel: whatsapp",
@@ -121,7 +121,7 @@ describe("E2E #3 — returning customer with memory", () => {
   });
 });
 
-describe("E2E #4 — tool requiring missing inputs", () => {
+describe("E2E #4 - tool requiring missing inputs", () => {
   const TOOLS = [
     { type: "function", function: { name: "issue_refund", parameters: { required: ["reason"] } } },
     { type: "function", function: { name: "check_shipment", parameters: { properties: {} } } }, // loose schema

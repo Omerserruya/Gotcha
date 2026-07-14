@@ -1,15 +1,15 @@
 /**
- * AI runtime enforcement — the pre-flight gate + post-call metering consumed
+ * AI runtime enforcement - the pre-flight gate + post-call metering consumed
  * in-process by services/ai at the generateResponse() choke point.
  *
  * Rollout is staged via BILLING_ENFORCEMENT_MODE:
- *   off     — billing tables not consulted (default; safe pre-seed).
- *   observe — meter Units (ledger + usage), never block, never notify.
- *   soft    — meter + notify thresholds, never block.
- *   hard    — block AI at zero Units / suspended subscription.
+ *   off     - billing tables not consulted (default; safe pre-seed).
+ *   observe - meter Units (ledger + usage), never block, never notify.
+ *   soft    - meter + notify thresholds, never block.
+ *   hard    - block AI at zero Units / suspended subscription.
  *
  * Grandfathered (or any subscription with enforcementEnabled=false) is always
- * allowed and never metered as a hard stop — financial state stays deterministic
+ * allowed and never metered as a hard stop - financial state stays deterministic
  * (no "infinite balance" hack).
  */
 import { prisma } from "../prisma";
@@ -44,7 +44,7 @@ export interface AiAllowance {
 }
 
 /**
- * Pre-flight: may this tenant run an AI request right now? Cheap — reads the
+ * Pre-flight: may this tenant run an AI request right now? Cheap - reads the
  * subscription + the materialized balance snapshot. Never throws.
  */
 export async function checkAiAllowed(tenantId: string): Promise<AiAllowance> {
@@ -59,7 +59,7 @@ export async function checkAiAllowed(tenantId: string): Promise<AiAllowance> {
     });
     sub = link?.entity.subscription ?? null;
   } catch {
-    // Fail-open on read error — never block paying customers on a DB blip.
+    // Fail-open on read error - never block paying customers on a DB blip.
     return { allowed: true, wouldBlock: false, mode, balance: Infinity };
   }
 

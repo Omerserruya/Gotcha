@@ -100,6 +100,7 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+      INTEGRATION_REQUEST_EMAIL: ${INTEGRATION_REQUEST_EMAIL:-}
       SYSTEM_ADMIN_SETUP_SECRET: ${SYSTEM_ADMIN_SETUP_SECRET:-change-me-in-production}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
@@ -287,7 +288,7 @@ services:
       QDRANT_URL: ${QDRANT_URL:-http://qdrant:6333}
       QDRANT_API_KEY: ${QDRANT_API_KEY:-}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
-      # Must match the receivers' INTERNAL_SERVICE_KEY default below — the AI sends
+      # Must match the receivers' INTERNAL_SERVICE_KEY default below - the AI sends
       # this token and authenticate() accepts either. Empty default desyncs them.
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-chatcenter-internal-2026}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}

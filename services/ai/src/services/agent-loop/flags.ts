@@ -1,20 +1,20 @@
 /**
- * Agent Loop feature flag — per-tenant, env-driven, INSTANT rollback (flip env,
+ * Agent Loop feature flag - per-tenant, env-driven, INSTANT rollback (flip env,
  * recreate, no deploy). The legacy Planner is the production path; the loop only
  * runs when explicitly enabled for a tenant.
  *
- * Capability lifecycle ladder (AGENT_LOOP_MODE) — the STANDARD migration path for
+ * Capability lifecycle ladder (AGENT_LOOP_MODE) - the STANDARD migration path for
  * every capability (Calendar, CRM, Knowledge, Commerce, Voice, …):
- *   off        — Planner drives (default). The loop code is never entered.
- *   shadow     — EVALUATION mode. The complete loop + Runtime run on real traffic:
+ *   off        - Planner drives (default). The loop code is never entered.
+ *   shadow     - EVALUATION mode. The complete loop + Runtime run on real traffic:
  *                every observation, iteration, metric and safety check is collected
- *                and persisted — but the customer NEVER sees the loop's output; the
+ *                and persisted - but the customer NEVER sees the loop's output; the
  *                legacy brain remains the customer-facing source of truth. Writes are
  *                dry-run (RECOMMENDED, no real mutation). Sole purpose: prove the new
  *                kernel behaves correctly under production traffic. Runs off the live
  *                turn's critical path (fire-and-forget), so it can neither slow nor
  *                break the turn.
- *   autonomous — the loop drives the customer turn and executes real operations
+ *   autonomous - the loop drives the customer turn and executes real operations
  *                (only after shadow evidence reaches confidence). Never the first
  *                production execution path for a capability.
  *

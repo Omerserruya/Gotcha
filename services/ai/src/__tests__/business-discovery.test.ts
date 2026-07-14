@@ -81,7 +81,7 @@ describe("normalizeReport", () => {
   });
 });
 
-// A gap is a claimed ABSENCE — it must never survive when the report itself
+// A gap is a claimed ABSENCE - it must never survive when the report itself
 // proves the thing exists (Doctrine law 2, enforced deterministically).
 describe("gap contradiction filter", () => {
   const knFound = { policies: { refunds: { found: true, confidence: "confirmed" }, returns: { found: true, confidence: "confirmed" }, shipping: { found: true, confidence: "confirmed" } } };

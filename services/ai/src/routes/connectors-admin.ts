@@ -158,9 +158,59 @@ router.post(
 
 // ─── API-key style connect (airtable, postgres, mongodb, custom api-key) ──
 
+// Verify the pasted credential actually works BEFORE storing it as CONNECTED.
+// Without this, any garbage token connected "successfully" and only failed
+// later at first sync/tool call - which reads as "the integration is broken".
+async function validateApiKeyCredentials(
+  slug: string,
+  credentials: Record<string, string>,
+): Promise<{ ok: boolean; error?: string }> {
+  const withTimeout = (ms: number) => {
+    const ctl = new AbortController();
+    const t = setTimeout(() => ctl.abort(), ms);
+    return { signal: ctl.signal, done: () => clearTimeout(t) };
+  };
+  try {
+    if (slug === "fireberry") {
+      const tokenid = credentials.tokenid || credentials.apiKey || credentials.token;
+      if (!tokenid) return { ok: false, error: "missing_tokenid" };
+      const t = withTimeout(8000);
+      const resp = await fetch("https://api.fireberry.com/api/query", {
+        method: "POST",
+        headers: { "Content-Type": "application/json", tokenid },
+        body: JSON.stringify({ objecttype: 1, page_size: 1, fields: "accountid" }),
+        signal: t.signal,
+      }).finally(t.done);
+      return resp.ok
+        ? { ok: true }
+        : { ok: false, error: resp.status === 401 || resp.status === 403 ? "invalid_token" : `fireberry_http_${resp.status}` };
+    }
+    if (slug === "airtable") {
+      const pat = credentials.apiKey || credentials.token || credentials.pat;
+      if (!pat) return { ok: false, error: "missing_api_key" };
+      const t = withTimeout(8000);
+      const resp = await fetch("https://api.airtable.com/v0/meta/whoami", {
+        headers: { Authorization: `Bearer ${pat}` },
+        signal: t.signal,
+      }).finally(t.done);
+      return resp.ok
+        ? { ok: true }
+        : { ok: false, error: resp.status === 401 || resp.status === 403 ? "invalid_token" : `airtable_http_${resp.status}` };
+    }
+    return { ok: true }; // no validator for this provider - keep prior behavior
+  } catch (e: any) {
+    // Network failure/timeouts on OUR side must not hard-block connecting.
+    console.warn(`[connectors] ${slug} credential validation unreachable: ${e?.message}`);
+    return { ok: true };
+  }
+}
+
 router.post(
   "/connectors/:slug/connect",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding connects the CRM (Fireberry / Airtable-PAT) BEFORE the tenant is
+  // ACTIVE - connecting is what flips it. requireActiveTenant() 403'd here, which
+  // is exactly why "connect Fireberry" looked broken. Match the OAuth routes.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -168,6 +218,11 @@ router.post(
     const config = req.body?.config || {};
     if (!credentials || Object.keys(credentials).length === 0) {
       res.status(400).json({ error: "credentials_required" });
+      return;
+    }
+    const check = await validateApiKeyCredentials(String(req.params.slug), credentials);
+    if (!check.ok) {
+      res.status(400).json({ error: "invalid_credentials", detail: check.error });
       return;
     }
     await upsertConnection({
@@ -271,8 +326,14 @@ router.get(
     // Default = every object the HubSpot adapter actually uses: contacts,
     // companies, deals, and leads (the adapter has create_lead/update_lead/
     // get_lead/search_leads via /crm/v3/objects/leads). Leads scopes 403 silently
-    // for tenants without the Leads object (Pro/Starter) - harmless. Appointments
-    // is intentionally NOT here: the adapter has no appointments calls.
+    // for tenants without the Leads object (Pro/Starter) - harmless.
+    // Appointments read/write are included because the CURRENT HubSpot app marks
+    // them "Required" in its dashboard - HubSpot then rejects any install URL that
+    // omits a Required scope ("provided scopes are missing [crm.objects.appointments...]").
+    // The adapter makes no appointments calls; the scope is requested only to
+    // satisfy HubSpot's exact-match contract so the connection completes. (If the
+    // dashboard later drops them as Required, remove them here or override via
+    // HUBSPOT_SCOPES.)
     const DEFAULT_SCOPES = [
       "crm.objects.contacts.read",
       "crm.objects.contacts.write",
@@ -282,6 +343,8 @@ router.get(
       "crm.objects.deals.write",
       "crm.objects.leads.read",
       "crm.objects.leads.write",
+      "crm.objects.appointments.read",
+      "crm.objects.appointments.write",
     ];
     const parseScopes = (raw: string | undefined): string[] =>
       (raw ?? "").split(/[\s,]+/).map((s) => s.trim()).filter(Boolean);

@@ -21,7 +21,10 @@ import {
   runBuilder,
   loadDraftSnapshot,
   draftReadiness,
+  seedDraftFromGoal,
   type BuilderEvent,
+  type BuilderDraftSnapshot,
+  type SeededDraftContext,
 } from "../services/agent-builder.service";
 import { generateReadinessReport } from "../services/agent-readiness.service";
 import { generateSalesContext } from "../services/sales-context-generator.service";
@@ -42,6 +45,46 @@ function buildGreeting(lang: string, orgName: string): string {
   if (lang === "ar") return `مرحبًا! أعرف عملك${whoAr} بالفعل من الإعداد، لذا سنتخطى ذلك. لنحدد موظف الذكاء الاصطناعي هذا - ما هدفه وما الذي يجب أن يتولاه مع العملاء؟`;
   return `Hi! I already know your business${who} from onboarding, so we'll skip that. Let's define this AI employee - what's its purpose, and what should it handle for your customers?`;
 }
+// Goal-first opener: the system just drafted the whole employee from the
+// admin's one-line goal + the business twin - present the draft and invite
+// corrections. Deterministic (no LLM), mirrors buildGreeting's localization.
+function buildSeededGreeting(lang: string, draft: BuilderDraftSnapshot, seeded: SeededDraftContext): string {
+  const name = draft.name && draft.name !== "Untitled AI Employee" ? draft.name : null;
+  const roleLabelHe: Record<string, string> = {
+    customer_support: "שירות לקוחות", sales: "מכירות", sdr: "טיפול בלידים", recruiting: "גיוס",
+    booking: "תיאום תורים", billing: "חיובים ותשלומים", research: "מענה מבוסס ידע", custom: "מותאם אישית",
+  };
+  const roleLabelEn: Record<string, string> = {
+    customer_support: "customer support", sales: "sales", sdr: "lead qualification", recruiting: "recruiting",
+    booking: "booking", billing: "billing", research: "knowledge answers", custom: "custom",
+  };
+  if (lang === "he") {
+    const lines = [
+      `הכנתי טיוטה מלאה של העובד לפי המטרה שנתתם ולפי מה שאני כבר יודע על העסק:`,
+      `• **תפקיד:** ${roleLabelHe[draft.role] || draft.role}${name ? `  ·  **שם מוצע:** ${name}` : ""}`,
+      `• **מטרה:** ${draft.goal}`,
+      seeded.attachedKbCount > 0 ? `• חיברתי ${seeded.attachedKbCount} מאגרי ידע קיימים` : null,
+      seeded.grantedToolCount > 0 ? `• נתתי גישה ל-${seeded.grantedToolCount} כלים מהמערכות המחוברות (ללא פעולות רגישות)` : null,
+      ``,
+      `מה תרצו לשנות או לחדד? אפשר גם פשוט לומר "ממשיכים" ונסגור יחד את כללי ההסלמה.`,
+    ].filter((l): l is string => l !== null);
+    return lines.join("\n");
+  }
+  if (lang === "ar") {
+    return `أعددت مسودة كاملة للموظف بناءً على هدفك وما أعرفه عن عملك - الدور: ${draft.role}، الهدف: ${draft.goal}. ما الذي تريد تعديله؟ أو قل "تابع" وسننهي قواعد التصعيد معًا.`;
+  }
+  const lines = [
+    `I've drafted the whole employee from your goal plus everything I already know about your business:`,
+    `• **Role:** ${roleLabelEn[draft.role] || draft.role}${name ? `  ·  **Proposed name:** ${name}` : ""}`,
+    `• **Goal:** ${draft.goal}`,
+    seeded.attachedKbCount > 0 ? `• Attached ${seeded.attachedKbCount} existing knowledge base${seeded.attachedKbCount > 1 ? "s" : ""}` : null,
+    seeded.grantedToolCount > 0 ? `• Granted ${seeded.grantedToolCount} tools from your connected systems (no sensitive actions)` : null,
+    ``,
+    `What would you like to change or sharpen? Or just say "continue" and we'll settle the escalation rules together.`,
+  ].filter((l): l is string => l !== null);
+  return lines.join("\n");
+}
+
 async function resolveLocale(tenantId: string, bodyLocale: unknown): Promise<string> {
   if (typeof bodyLocale === "string" && bodyLocale.length >= 2) return bodyLocale.toLowerCase();
   try {
@@ -56,8 +99,9 @@ async function resolveLocale(tenantId: string, bodyLocale: unknown): Promise<str
 router.post("/start", async (req: Request, res: Response) => {
   try {
     const tenantId = req.tenantId! as string;
-    const { departmentId, locale, forceNew } = req.body || {};
+    const { departmentId, locale, forceNew, goal } = req.body || {};
     const lang = await resolveLocale(tenantId, locale);
+    const goalText = typeof goal === "string" ? goal.trim().slice(0, 600) : "";
 
     // The company is already known from onboarding - seed it onto the draft so
     // the builder never has to ask "what does your business do?".
@@ -94,13 +138,28 @@ router.post("/start", async (req: Request, res: Response) => {
       });
     }
 
+    // Goal-first (system-led) entry: the admin gave a one-line goal, so the
+    // SYSTEM drafts the rest from the business twin + connected surface, and
+    // the chat opens by presenting that draft instead of interviewing.
+    // Never overwrite a goal an existing (resumed) draft already captured.
+    let seeded: Awaited<ReturnType<typeof seedDraftFromGoal>> | null = null;
+    if (goalText && !(agent as any).goal) {
+      try {
+        seeded = await seedDraftFromGoal(tenantId, agent.id, goalText);
+      } catch (e: any) {
+        console.warn("Builder goal-seed failed (falling back to interview):", e?.message);
+      }
+    }
+
     const draft = await loadDraftSnapshot(tenantId, agent.id);
     res.status(201).json({
       data: {
         agentId: agent.id,
         draft,
         resumed,
-        greeting: buildGreeting(lang, orgName),
+        greeting: seeded && draft
+          ? buildSeededGreeting(lang, draft, seeded)
+          : buildGreeting(lang, orgName),
       },
     });
   } catch (err: any) {
@@ -360,7 +419,7 @@ router.post("/:id/complete", async (req: Request, res: Response) => {
     // Auto-fill the Sales Context (Product Qualification Context) the first time
     // an employee finishes the wizard, so the admin lands in the editor with the
     // six fields pre-proposed (still fully editable) instead of blank. Only when
-    // the admin hasn't authored one already. Best-effort — never blocks the
+    // the admin hasn't authored one already. Best-effort - never blocks the
     // promotion. See sales-context-generator.service.ts.
     let salesContext: unknown = undefined;
     const hasSalesContext =

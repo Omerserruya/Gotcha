@@ -120,7 +120,7 @@ export {
 } from "./lib/permissions";
 export type { PermissionUser, PermissionPrincipal } from "./lib/permissions";
 
-// Permission catalog — single source of truth for RBAC, licensing, packaging.
+// Permission catalog - single source of truth for RBAC, licensing, packaging.
 export {
   PERMISSIONS,
   ALL_PERMISSION_KEYS,
@@ -344,7 +344,7 @@ export {
 // impls live in services/ai and are injected via RuntimeBindings.
 export * from "./lib/capability-runtime";
 
-// Agent Contract (FROZEN architecture, Phase 1: envelope only — pure types +
+// Agent Contract (FROZEN architecture, Phase 1: envelope only - pure types +
 // pure binder + master flag, not wired into the live path). The kernel above
 // stays the single execution authority; an Agent only proposes through it.
 export * from "./lib/agent";

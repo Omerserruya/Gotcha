@@ -1,7 +1,7 @@
 /**
  * Agent architecture flag.
  *
- * (The dormant Phase-1 `Agent` envelope — `assembleAgent`/`AgentRuntime`/grants —
+ * (The dormant Phase-1 `Agent` envelope - `assembleAgent`/`AgentRuntime`/grants -
  * was deleted per the 2026-07-03 architecture audit's wire-or-delete rule: it had
  * zero consumers, and the LIVE composition is the Agent Loop (`runAgentLoop`) +
  * capability registry + `MemoryStore` (implemented in agent-loop/memory-store.ts).

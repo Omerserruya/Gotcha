@@ -1,4 +1,4 @@
-// Billing API client — subscription, AI-Unit balance/credits, payment methods,
+// Billing API client - subscription, AI-Unit balance/credits, payment methods,
 // auto-purchase, invoices. Routed through the gateway to services/billing.
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 

@@ -1,27 +1,27 @@
 /**
- * Capability Runtime — the Resolver (pure orchestration).
+ * Capability Runtime - the Resolver (pure orchestration).
  *
  * Given an OperationContract + an ExecutionRequest + injected RuntimeBindings
  * (verifiers, satisfiers, strategy, approval), it GUARANTEES the contract's
  * correctness envelope and returns a semantic ExecutionResult. It is fully pure:
- * no Prisma, no REST, no provider knowledge — all of that is injected. This is
+ * no Prisma, no REST, no provider knowledge - all of that is injected. This is
  * the layer that "guarantees, never decides": when it cannot proceed without
  * customer meaning or a value judgment, it returns NEEDS_INPUT / FAILED to the
  * caller (the planner) rather than deciding.
  *
  * Pipeline:
- *   1. PRE invariants  — probe-first (skips fresh reads); a runtime_read dep is
+ *   1. PRE invariants  - probe-first (skips fresh reads); a runtime_read dep is
  *      auto-satisfied by running its satisfier OPERATION; still-unsatisfied ->
  *      NEEDS_INPUT / FAILED / BLOCKED (MUST) or proceed (SHOULD).
- *   2. Mode eligibility — advisory mode short-circuits a WRITE to RECOMMENDED.
- *   3. Approval gate    — HITL -> AWAITING_APPROVAL.
- *   4. Execute strategy — provider / workflow / MCP / worker (opaque).
- *   5. POST invariants + success — the CORRECTNESS ENVELOPE, re-verified against
+ *   2. Mode eligibility - advisory mode short-circuits a WRITE to RECOMMENDED.
+ *   3. Approval gate    - HITL -> AWAITING_APPROVAL.
+ *   4. Execute strategy - provider / workflow / MCP / worker (opaque).
+ *   5. POST invariants + success - the CORRECTNESS ENVELOPE, re-verified against
  *      world-state regardless of the path the optimizer took. This is why
  *      aggressive optimization (skipped reads, batching, provider swaps) is safe.
  *
  * Instrumentation (Constraint 2): the resolver builds an ExecutionTrace as it
- * runs and emits it via `bind.emitTrace` on every terminal return — so WHY an
+ * runs and emits it via `bind.emitTrace` on every terminal return - so WHY an
  * operation succeeded or failed is observable without provider logs.
  */
 
@@ -87,7 +87,7 @@ async function verify(
   const v = bind.verifiers[inv.id];
   // A PROVIDER_ATTESTED invariant with no runtime verifier is trusted to the
   // strategy (the POST/success check is the backstop). A RUNTIME_VERIFIED
-  // invariant with no verifier is a CONFIG ERROR — fail loud, never silently pass.
+  // invariant with no verifier is a CONFIG ERROR - fail loud, never silently pass.
   if (!v) {
     if (inv.enforcement === "PROVIDER_ATTESTED") return { holds: true, attested: true };
     throw new Error(
@@ -159,7 +159,7 @@ export async function resolveExecution(
       }
     }
 
-    // Still unsatisfied — return control rather than deciding.
+    // Still unsatisfied - return control rather than deciding.
     if (inv.onUnsatisfied?.kind === "NEEDS_INPUT") {
       record(inv, "unsatisfied");
       return done({ status: "NEEDS_INPUT", field: inv.onUnsatisfied.field, reason: inv.statement });
@@ -176,11 +176,11 @@ export async function resolveExecution(
     record(inv, "skipped_should");
   }
 
-  // ── 2. Mode eligibility — advisory/dry_run recommend WRITES, never execute.
-  // advisory (copilot): short-circuit before the gate — a human is already in
+  // ── 2. Mode eligibility - advisory/dry_run recommend WRITES, never execute.
+  // advisory (copilot): short-circuit before the gate - a human is already in
   // the loop. dry_run (shadow/evaluation): PROBE the gate first (no request
   // created) so the trace proves whether the write WOULD have required
-  // approval — shadow evidence must cover the HITL surface, not just writes.
+  // approval - shadow evidence must cover the HITL surface, not just writes.
   if (contract.effect === "write" && req.mode === "advisory") {
     return done({ status: "RECOMMENDED", proposal: { operation: contract.id, params: req.params } });
   }

@@ -50,10 +50,10 @@ const FUNNEL_ROLES = new Set(["sales", "sdr", "recruiting"]);
 // "" = neutral default. Persisted on persona.brand_archetype.
 const BRAND_ARCHETYPE_OPTIONS: { value: string; en: string; he: string }[] = [
   { value: "", en: "Neutral / Professional (default)", he: "ניטרלי / מקצועי (ברירת מחדל)" },
-  { value: "trusted_advisor", en: "Trusted Advisor — measured, credible, no hype", he: "יועץ מהימן — שקול, אמין, בלי הייפ" },
-  { value: "high_energy_coach", en: "High-Energy Coach — short, fast, motivating", he: "מאמן אנרגטי — קצר, מהיר, מניע לפעולה" },
-  { value: "luxury_concierge", en: "Luxury Concierge — refined, formal, deliberate", he: "קונסיירז' יוקרתי — מעודן, רשמי, מדוד" },
-  { value: "beauty_consultant", en: "Beauty Consultant — warm, intimate, expressive", he: "יועצת יופי — חמה, אישית, אקספרסיבית" },
+  { value: "trusted_advisor", en: "Trusted Advisor - measured, credible, no hype", he: "יועץ מהימן - שקול, אמין, בלי הייפ" },
+  { value: "high_energy_coach", en: "High-Energy Coach - short, fast, motivating", he: "מאמן אנרגטי - קצר, מהיר, מניע לפעולה" },
+  { value: "luxury_concierge", en: "Luxury Concierge - refined, formal, deliberate", he: "קונסיירז' יוקרתי - מעודן, רשמי, מדוד" },
+  { value: "beauty_consultant", en: "Beauty Consultant - warm, intimate, expressive", he: "יועצת יופי - חמה, אישית, אקספרסיבית" },
 ];
 
 // Transient "agent is doing X" labels - [en, he].
@@ -107,6 +107,14 @@ export default function AgentBuilder({
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(true);
 
+  // Goal-first gate: on a fresh draft the admin gives ONE line - the goal -
+  // and the system drafts the whole employee from it + the business twin.
+  // The chat then opens by presenting that draft for co-editing.
+  const [goalGate, setGoalGate] = useState(false);
+  const [goalText, setGoalText] = useState("");
+  const [seeding, setSeeding] = useState(false);
+  const [pendingGreeting, setPendingGreeting] = useState("");
+
   // Wizard stage: conversational config → KB → Refinements → Tools → readiness.
   const [wizardStep, setWizardStep] = useState<"chat" | "kb" | "refine" | "tools">("chat");
   const [savingRefine, setSavingRefine] = useState(false);
@@ -151,7 +159,7 @@ export default function AgentBuilder({
         } catch { /* keep empty */ }
       }
     };
-    const resumeGreeting = L("Welcome back — let's pick up where we left off.", "ברוכים השבים — נמשיך מהמקום שבו עצרנו.");
+    const resumeGreeting = L("Welcome back - let's pick up where we left off.", "ברוכים השבים - נמשיך מהמקום שבו עצרנו.");
 
     (async () => {
       try {
@@ -164,10 +172,17 @@ export default function AgentBuilder({
           const d = res.data.draft;
           if (res.data.resumed && d.builderStep && d.builderStep !== "chat") {
             await resumeInto(res.data.agentId, d.builderStep, d, resumeGreeting);
-          } else {
+          } else if (d.goal) {
+            // Mid-chat draft that already captured a goal - no gate, resume talk.
             setAgentId(res.data.agentId);
             setDraft(d);
-            setMessages([{ role: "assistant", content: res.data.greeting }]);
+            setMessages([{ role: "assistant", content: res.data.resumed ? resumeGreeting : res.data.greeting }]);
+          } else {
+            // Fresh start → goal-first gate; stash the interview greeting for "skip".
+            setAgentId(res.data.agentId);
+            setDraft(d);
+            setPendingGreeting(res.data.greeting);
+            setGoalGate(true);
           }
         }
       } catch (e: any) {
@@ -360,6 +375,41 @@ export default function AgentBuilder({
 
   const reviewEnabled = !!draft && (ready || draftLooksReady(draft));
 
+  // Goal-first submit: re-call /start with the goal - the backend reuses this
+  // same draft, seeds everything from the business twin, and returns a greeting
+  // that PRESENTS the draft. Skip falls back to the classic interview opener.
+  const submitGoal = useCallback(async (skip?: boolean) => {
+    if (skip) {
+      setGoalGate(false);
+      setMessages([{ role: "assistant", content: pendingGreeting }]);
+      focusInput();
+      return;
+    }
+    const g = goalText.trim();
+    if (!g || seeding) return;
+    setSeeding(true);
+    setError(null);
+    try {
+      const res = await builderStart(token, departmentId ?? null, locale, false, g);
+      setAgentId(res.data.agentId);
+      setDraft(res.data.draft);
+      setMessages([{ role: "assistant", content: res.data.greeting }]);
+      setGoalGate(false);
+      focusInput();
+    } catch (e: any) {
+      setError(e?.message || L("Couldn't draft the employee - try again.", "לא הצלחתי להכין את הטיוטה - נסו שוב."));
+    } finally {
+      setSeeding(false);
+    }
+  }, [goalText, seeding, token, departmentId, locale, pendingGreeting, focusInput, L]);
+
+  const GOAL_SUGGESTIONS: Array<[string, string]> = [
+    ["Answer customer questions and resolve issues", "לענות ללקוחות ולפתור פניות"],
+    ["Qualify leads and book meetings", "לסנן לידים ולקבוע פגישות"],
+    ["Handle appointment scheduling", "לתאם תורים ופגישות"],
+    ["Answer order & shipping questions from our store", "לענות על שאלות הזמנות ומשלוחים מהחנות"],
+  ];
+
   return (
     <div className="flex flex-col h-[calc(100vh-48px)] md:h-[calc(100vh-16px)]">
       {/* Header */}
@@ -396,6 +446,58 @@ export default function AgentBuilder({
         <div className="flex flex-col min-h-0 bg-white rounded-2xl border border-gray-100 shadow-card overflow-hidden">
           <div ref={chatRef} className="flex-1 overflow-y-auto p-4 space-y-4">
             {starting && <ThinkingBubble label={L("Starting the builder…", "מפעיל את הבונה…")} />}
+
+            {/* Goal-first gate: one question, then the system drafts the rest. */}
+            {goalGate && !starting && (
+              <div className="mx-auto flex h-full max-w-md flex-col items-center justify-center gap-4 text-center">
+                <div className="text-3xl">✨</div>
+                <h2 className="text-xl font-bold text-gray-900">
+                  {L("What should this employee achieve?", "מה העובד הזה צריך להשיג?")}
+                </h2>
+                <p className="text-sm text-gray-500">
+                  {L(
+                    "One line is enough - I already know your business, and I'll draft the role, goal, knowledge and tools for you to approve.",
+                    "שורה אחת מספיקה - אני כבר מכיר את העסק, ואכין לבד את התפקיד, המטרה, הידע והכלים לאישורכם.",
+                  )}
+                </p>
+                <textarea
+                  value={goalText}
+                  onChange={(e) => setGoalText(e.target.value)}
+                  onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submitGoal(); } }}
+                  rows={2}
+                  autoFocus
+                  placeholder={L("e.g. answer customers on WhatsApp and book meetings", "למשל: לענות ללקוחות בוואטסאפ ולקבוע פגישות")}
+                  className="w-full resize-none rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-sm outline-none transition focus:border-violet-300 focus:bg-white focus:ring-2 focus:ring-violet-200"
+                />
+                <div className="flex flex-wrap justify-center gap-2">
+                  {GOAL_SUGGESTIONS.map(([en, hebrew]) => (
+                    <button
+                      key={en}
+                      onClick={() => setGoalText(L(en, hebrew))}
+                      className="rounded-full border border-violet-200 bg-white px-3 py-1.5 text-xs text-violet-600 transition hover:bg-violet-50"
+                    >
+                      {L(en, hebrew)}
+                    </button>
+                  ))}
+                </div>
+                <button
+                  onClick={() => submitGoal()}
+                  disabled={!goalText.trim() || seeding}
+                  className="w-full rounded-xl bg-violet-600 px-4 py-3 text-sm font-medium text-white transition hover:bg-violet-700 disabled:opacity-40"
+                >
+                  {seeding
+                    ? L("Drafting your employee…", "מכין את העובד שלכם…")
+                    : L("Draft it for me", "הכינו לי טיוטה")}
+                </button>
+                <button
+                  onClick={() => submitGoal(true)}
+                  disabled={seeding}
+                  className="text-xs text-gray-400 underline-offset-2 transition hover:text-gray-600 hover:underline"
+                >
+                  {L("I'd rather answer in chat", "אעדיף לענות בצ'אט")}
+                </button>
+              </div>
+            )}
             {messages.map((m, i) =>
               m.role === "assistant" ? (
                 <div key={i} className="flex items-start gap-3">
@@ -476,7 +578,7 @@ export default function AgentBuilder({
 
           {/* Input - only during the conversational step. Once we move to the
               KB/Tools steps the actions live inside the step cards. */}
-          {wizardStep === "chat" && (
+          {wizardStep === "chat" && !goalGate && (
             <div className="shrink-0 border-t border-gray-100 p-3 bg-white">
               <div className="flex gap-2">
                 <input

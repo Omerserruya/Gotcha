@@ -1,5 +1,5 @@
 /**
- * Agent Contract — public surface (FROZEN architecture, Phase 1: envelope only).
+ * Agent Contract - public surface (FROZEN architecture, Phase 1: envelope only).
  *
  * GOTCHA as an OS for AI Employees:
  *   - Capability Runtime = the kernel (single execution authority).

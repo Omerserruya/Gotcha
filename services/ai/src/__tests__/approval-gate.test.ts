@@ -30,7 +30,7 @@ beforeEach(() => {
   vi.mocked(findPendingByConversation).mockReset();
 });
 
-describe("kernel approval gate — wraps the production HITL stack", () => {
+describe("kernel approval gate - wraps the production HITL stack", () => {
   it("ALLOW → not required; nothing created", async () => {
     vi.mocked(evaluatePolicies).mockResolvedValue({ decision: "ALLOW", reason: "auto", snapshot: {} } as any);
     const v = await kernelApprovalGate(BOOK, req(), { policyTool: "schedule_meeting", args: { duration_minutes: 30 } });

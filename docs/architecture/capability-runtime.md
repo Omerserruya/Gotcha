@@ -1,6 +1,6 @@
-# Capability Runtime — Architecture Design (FROZEN)
+# Capability Runtime - Architecture Design (FROZEN)
 
-> Status: **Model frozen 2026-06-27. Design only — not implemented.**
+> Status: **Model frozen 2026-06-27. Design only - not implemented.**
 > Rollout: CALENDAR pilot first, then decide migration shape.
 > Core principle: **LLM owns meaning. Runtime owns mechanics. The Planner decides WHAT
 > should happen; the Runtime guarantees THAT it happened correctly.**
@@ -21,7 +21,7 @@ shares: AI Employee, Copilot, Workflow engine, MCP, external APIs, future AI wor
 - Does this depend on system state, dependencies, capabilities, policies, APIs, execution? → **Runtime.**
 
 The Planner decides **what** should happen. The Runtime guarantees **that it happened
-correctly** — and never decides whether/which/at-what-cost.
+correctly** - and never decides whether/which/at-what-cost.
 
 ## Layer model
 
@@ -43,14 +43,14 @@ correctly** — and never decides whether/which/at-what-cost.
 
 ## What is / is not an Operation
 
-- **Business Goal** — multi-turn outcome reached by reasoning (`QUALIFY_PROSPECT`,
+- **Business Goal** - multi-turn outcome reached by reasoning (`QUALIFY_PROSPECT`,
   `RESOLVE_SUPPORT_REQUEST`). Owned by LLM. NOT in the operation vocabulary.
-- **Conversation move** — ask/explain/acknowledge. Owned by LLM. Not an operation.
-- **Execution Operation** — a discrete runtime transaction against state/world with a
+- **Conversation move** - ask/explain/acknowledge. Owned by LLM. Not an operation.
+- **Execution Operation** - a discrete runtime transaction against state/world with a
   semantic outcome (`MOVE_MEETING`, `GET_ORDER`, `ISSUE_REFUND`). Owned by runtime.
 
 Definition: *the smallest unit of world-change/read the platform can guarantee, name in
-business terms, and report a semantic outcome for — independent of provider or tool.*
+business terms, and report a semantic outcome for - independent of provider or tool.*
 
 ## Carving principle (assertion-based)
 
@@ -67,17 +67,17 @@ Granularity ceiling: small, curated vocabulary; merge aggressively via this rule
 
 ## Operations are semantic contracts (not callable units)
 
-A contract expresses business **invariants** — predicates that must hold — never steps.
+A contract expresses business **invariants** - predicates that must hold - never steps.
 A step prescribes HOW (rejected: that is a workflow). An invariant is a truth the runtime
 **checks**, free to satisfy any way.
 
 ### Two faces
 
-| Public face (meaning — Planner sees) | Runtime face (mechanics — hidden) |
+| Public face (meaning - Planner sees) | Runtime face (mechanics - hidden) |
 |---|---|
-| meaning — what the requester wants | goalState — target world-state |
-| params — meaning-level inputs | success — predicate over world-state |
-| outcome — semantic result to narrate | failureModes, invariants, recoveryPosture, approval, dedupKey |
+| meaning - what the requester wants | goalState - target world-state |
+| params - meaning-level inputs | success - predicate over world-state |
+| outcome - semantic result to narrate | failureModes, invariants, recoveryPosture, approval, dedupKey |
 
 The planner never sees an invariant; it emits the intent and consumes the semantic result.
 Success/failure is the runtime's determination against the world, not something the LLM tracks.
@@ -105,7 +105,7 @@ satisfier `CHECK_AVAILABILITY`). The dependency resolver is one mode of invarian
    inside is free; the envelope itself is non-bypassable (re-verified at POST regardless of path).
 8. Runtime **guarantees, never decides.** Recovery bottoms out by returning control to the planner.
 
-## Constraint A — contracts stay business-owned
+## Constraint A - contracts stay business-owned
 
 1. **Product test / lint**: a contract is invalid if it contains any implementation token
    (tool name, provider name, endpoint, protocol). It may reference only business state and
@@ -117,7 +117,7 @@ satisfier `CHECK_AVAILABILITY`). The dependency resolver is one mode of invarian
    for this customer"); a runtime oracle translates it to a store/provider query. The predicate
    never knows where the truth lives.
 
-## Constraint B — runtime free to optimize
+## Constraint B - runtime free to optimize
 
 The correctness envelope (MUST + success) is the only bound. Inside it the runtime may:
 skip fresh reads (probe-first), batch invariants into one call, parallelize independent PRE
@@ -158,7 +158,7 @@ read satisfiers auto-run; customer_input -> NEEDS_INPUT)  4. Eligibility gate (m
 + allowed-actions + contract order)  5. Approval gate (HITL -> AWAITING_APPROVAL)  6. Execute
 strategy  7. Verify POST invariants + success vs world-state  8. Audit (single usage-record site).
 
-## CALENDAR — frozen contracts (business-only language)
+## CALENDAR - frozen contracts (business-only language)
 
 ```
 CHECK_AVAILABILITY                                          effect: read

@@ -94,7 +94,7 @@ export class ActionOrchestrator {
     // OR succeeded_unverified), short-circuit and return the stored result.
     // Prevents duplicate external objects and self-collisions (e.g. a second
     // schedule_meeting seeing the first booking as agent_busy). Generic: no
-    // per-tool logic — classification is derived from the existing taxonomy.
+    // per-tool logic - classification is derived from the existing taxonomy.
     const ledger = opts?.ledger;
     let info: SideEffectInfo | undefined;
     let key: string | undefined;
@@ -209,7 +209,7 @@ export class ActionOrchestrator {
     if (status === "succeeded_unverified") {
       console.warn(
         `[orchestrator] LEDGER_GAP: ${tool} (kind=${info.kind}) returned ok:true with no ` +
-          `externalRef — recorded as succeeded_unverified (deduped, but not confidently ` +
+          `externalRef - recorded as succeeded_unverified (deduped, but not confidently ` +
           `claimable). Add a real id (eventId/leadId/messageId/…) to the handler result.`,
       );
     }
@@ -253,8 +253,8 @@ export class ActionOrchestrator {
 
   /**
    * Persist a COMMITTED result for cross-turn dedup. Only real commits (ok:true
-   * WITH an external ref) are stored — never failures, denials, or unverified
-   * successes — so a redelivery can never reuse a non-result and a failed first
+   * WITH an external ref) are stored - never failures, denials, or unverified
+   * successes - so a redelivery can never reuse a non-result and a failed first
    * attempt does not block a later genuine retry. SET NX → the first committer
    * wins; concurrent redeliveries can't clobber each other.
    */

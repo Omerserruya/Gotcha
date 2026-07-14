@@ -47,7 +47,7 @@ app.use("/api/waitlist", waitlistRoutes);
 
 startService(app, config);
 
-// Lifecycle Nudge Engine — repeatable sweep that sends due onboarding nudges.
+// Lifecycle Nudge Engine - repeatable sweep that sends due onboarding nudges.
 // Best-effort: a failure here must never stop the auth service from serving.
 startNudgeWorker().catch((err) => console.error("[auth] nudge worker start failed:", err?.message));
 

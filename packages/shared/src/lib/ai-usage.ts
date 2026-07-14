@@ -20,7 +20,7 @@ import { prisma } from "./prisma";
  *
  * `cachedPrompt` is the per-1M rate for prompt tokens served from OpenAI's
  * prefix cache (gpt-5 family: 90% off; older models billed at 50% of prompt
- * when the provider reports cached tokens — expressed here explicitly).
+ * when the provider reports cached tokens - expressed here explicitly).
  */
 export const AI_MODEL_PRICING: Record<string, { prompt: number; completion: number; cachedPrompt?: number }> = {
   "gpt-5":                  { prompt: 1.25,  completion: 10.00, cachedPrompt: 0.125  },
@@ -62,7 +62,7 @@ export function estimateAICost(
 /**
  * Full cost of one call, splitting prompt tokens into uncached (full rate)
  * and cached (model's cachedPrompt rate; 50% of prompt when unlisted).
- * Single source of truth — trackAIUsage and any reporting must use this.
+ * Single source of truth - trackAIUsage and any reporting must use this.
  */
 export function computeAICostUsd(opts: {
   model?: string | null;
@@ -100,7 +100,7 @@ export interface AIUsageEvent {
    * Per-turn attribution (P1-6). turnId groups every micro-call of ONE customer
    * turn (knowledge_resolve + wizard_binding + ai_bot + …); durationMs is this
    * call's wall time; aiAgentId is the employee (denormalized for rollups).
-   * All optional — legacy callers keep working.
+   * All optional - legacy callers keep working.
    */
   turnId?: string;
   durationMs?: number;

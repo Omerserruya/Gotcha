@@ -3,7 +3,7 @@
  *
  * The Copilot has NO calendar execution logic of its own: whenever its model emits
  * a calendar tool (check_availability / schedule_meeting / …) we map tool→operation
- * +params and run the SAME `executeCalendarOperation` pipeline in ADVISORY mode —
+ * +params and run the SAME `executeCalendarOperation` pipeline in ADVISORY mode -
  * READs auto-run and return real facts; WRITEs short-circuit to a RECOMMENDATION
  * (never executed). Dependency resolution, invariants, approval, recovery, and
  * tracing are all owned by the runtime, parameterized only by execution mode.
@@ -51,7 +51,7 @@ export interface AdvisoryCalendarResult {
 }
 
 /**
- * Copilot (ADVISORY) calendar execution — the SAME `executeCalendarOperation`
+ * Copilot (ADVISORY) calendar execution - the SAME `executeCalendarOperation`
  * pipeline as the employee, only `mode: "advisory"`. READs auto-run and return
  * their real facts; WRITEs short-circuit to a RECOMMENDATION (never executed).
  * This is what lets the Copilot drop ALL of its own calendar execution logic:
@@ -79,13 +79,13 @@ export async function executeCalendarToolAdvisory(input: {
     case "EXECUTED": {
       const data = (result.data ?? {}) as Record<string, unknown>;
       return {
-        content: JSON.stringify({ ok: true, ...data, outcome: result.outcome, note: "Read auto-ran — weave these REAL facts into your reply suggestions; do NOT promise to check later." }),
+        content: JSON.stringify({ ok: true, ...data, outcome: result.outcome, note: "Read auto-ran - weave these REAL facts into your reply suggestions; do NOT promise to check later." }),
         trace,
       };
     }
     case "RECOMMENDED":
       return {
-        content: JSON.stringify({ ok: true, recommended: true, executed: false, note: "Surfaced to the human agent as a recommended action — NOT executed by the Co-Pilot. Continue and draft the suggested reply." }),
+        content: JSON.stringify({ ok: true, recommended: true, executed: false, note: "Surfaced to the human agent as a recommended action - NOT executed by the Co-Pilot. Continue and draft the suggested reply." }),
         quickAction: { tool: input.toolName, args: input.toolArgs ?? {}, reason: `Recommended by Co-Pilot (${op})` },
         trace,
       };

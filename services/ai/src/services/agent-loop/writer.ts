@@ -1,7 +1,7 @@
 /**
- * Writer — the loop's expression capability. It runs EXACTLY ONCE, at the end of
+ * Writer - the loop's expression capability. It runs EXACTLY ONCE, at the end of
  * the loop, turning the terminal `ReplyIntent` into the single customer-facing
- * message. The Writer has NO tools and makes NO decisions — it cannot take an
+ * message. The Writer has NO tools and makes NO decisions - it cannot take an
  * unsafe action by construction.
  *
  * The Reasoner emits a ReplyIntent (purpose + keyPoints) that is a SPEC for what to
@@ -10,7 +10,7 @@
  * every other AI call), and is FAIL-SOFT: any LLM/metering failure degrades to the
  * deterministic renderer so a turn is never broken by expression.
  *
- * Swapping the expression strategy changes only this file — the loop is unaffected.
+ * Swapping the expression strategy changes only this file - the loop is unaffected.
  */
 
 import type { ReplyIntent, TerminationReason } from "@chatcenter/shared";
@@ -18,7 +18,7 @@ import { generateResponse } from "../ai.service";
 
 export interface WriteOptions {
   language?: string;
-  /** How the loop ended — lets the Writer frame need-input / escalation honestly. */
+  /** How the loop ended - lets the Writer frame need-input / escalation honestly. */
   termination: TerminationReason;
   /** Metering owner + session routing (required for the LLM path; absent → deterministic). */
   tenantId?: string;
@@ -76,18 +76,18 @@ export async function writeReply(intent: ReplyIntent, opts: WriteOptions): Promi
     const text = res.content?.trim();
     return text && text.length > 0 ? text : deterministic;
   } catch {
-    // Metering block / provider error / abort — never break the turn on expression.
+    // Metering block / provider error / abort - never break the turn on expression.
     return deterministic;
   }
 }
 
-/** Honest, zero-LLM render — also the fail-soft fallback. */
+/** Honest, zero-LLM render - also the fail-soft fallback. */
 function renderDeterministic(intent: ReplyIntent, opts: WriteOptions): string {
   const points = (intent.keyPoints ?? []).map((p) => p.trim()).filter(Boolean);
   if (points.length) return points.join(" ");
   if (intent.purpose && intent.purpose.trim()) return intent.purpose.trim();
 
-  // Honest fallbacks by termination — never claim a false success.
+  // Honest fallbacks by termination - never claim a false success.
   switch (opts.termination) {
     case "need_input":
       return "Could you share a bit more so I can help with this?";
@@ -96,8 +96,8 @@ function renderDeterministic(intent: ReplyIntent, opts: WriteOptions): string {
       return "I've flagged this for a team member who'll follow up shortly.";
     case "blocked":
     case "failed":
-      return "I hit a snag completing that — a team member will take it from here.";
+      return "I hit a snag completing that - a team member will take it from here.";
     default:
-      return "Thanks — is there anything else I can help with?";
+      return "Thanks - is there anything else I can help with?";
   }
 }

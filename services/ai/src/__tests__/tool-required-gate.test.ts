@@ -8,7 +8,7 @@ const TOOLS = [
   { type: "function", function: { name: "list_events", parameters: { properties: {} } } }, // no required
 ];
 
-describe("missingRequiredArgs — structural tool-input gate", () => {
+describe("missingRequiredArgs - structural tool-input gate", () => {
   it("flags every missing required field", () => {
     expect(missingRequiredArgs("refund_order", { order_id: "A1" }, TOOLS)).toEqual(["reason", "confirmation"]);
   });
@@ -35,7 +35,7 @@ describe("missingRequiredArgs — structural tool-input gate", () => {
   });
 });
 
-describe("missingContractInputs — Tool Contract registry gate", () => {
+describe("missingContractInputs - Tool Contract registry gate", () => {
   it("blocks an integration tool whose contract-required input is missing", () => {
     const r = missingContractInputs("check_shipment", {});
     expect(r.missing).toEqual(["order_number"]);

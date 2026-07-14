@@ -1,5 +1,5 @@
 /**
- * Kernel approval gate — wires the Capability Runtime's `approvalGate` slot to the
+ * Kernel approval gate - wires the Capability Runtime's `approvalGate` slot to the
  * EXISTING production HITL stack. No new policy machinery: the decision comes from
  * the shared `evaluatePolicies` (CatalogTool/SYSTEM floor + authoritative tenant
  * overrides), and an approval surfaces through the shared `createApprovalRequest`
@@ -14,7 +14,7 @@
  *   ALLOW            → { required: false } (resolver proceeds to execute)
  *   REQUIRE_APPROVAL → reuse a still-PENDING request for the same tool+conversation
  *                      (idempotent across turns), else create one → { required, ref }
- *   DENY             → throw (the runtime converts to an observable FAILED — the
+ *   DENY             → throw (the runtime converts to an observable FAILED - the
  *                      operation must never run, and never silently)
  *
  * Only consulted for WRITE contracts with `approval !== "none"`, and only in
@@ -49,7 +49,7 @@ export async function kernelApprovalGate(
 
   // Approval-resume (P1-3/B6): the approved-action dispatcher re-enters the
   // Runtime with the approved request's id. A matching APPROVED row for THIS
-  // tool on THIS conversation satisfies the gate — the human already decided.
+  // tool on THIS conversation satisfies the gate - the human already decided.
   // Everything else about the execution (invariants, verification) still runs.
   if (req.approval?.approvedRef) {
     const row = await (prisma as any).approvalRequest.findFirst({
@@ -59,12 +59,12 @@ export async function kernelApprovalGate(
     if (row?.status === "APPROVED" && row.tool === map.policyTool && row.conversationId === conversationId) {
       return { required: false };
     }
-    // A stale/mismatched ref must NOT silently re-ask or auto-allow — fail loud.
+    // A stale/mismatched ref must NOT silently re-ask or auto-allow - fail loud.
     throw new Error(`approval_resume_ref_invalid:${req.approval.approvedRef}`);
   }
 
   // Production policy decision (catalog floor + tenant override). A throw here
-  // propagates: the runtime surfaces FAILED — never silently auto-execute.
+  // propagates: the runtime surfaces FAILED - never silently auto-execute.
   const gate = await evaluatePolicies({
     tenantId,
     toolName: map.policyTool,
@@ -78,11 +78,11 @@ export async function kernelApprovalGate(
     throw new Error(`policy_denied:${gate.reason}`);
   }
 
-  // PROBE (dry_run): report the policy decision without creating a request —
+  // PROBE (dry_run): report the policy decision without creating a request -
   // shadow evidence covers the HITL surface with zero inbox side effects.
   if (opts?.probe) return { required: true, ref: "dry_run_probe" };
 
-  // REQUIRE_APPROVAL — idempotent across turns: if a request for this tool is
+  // REQUIRE_APPROVAL - idempotent across turns: if a request for this tool is
   // already pending on this conversation, point at it instead of duplicating.
   const pending = await findPendingByConversation(tenantId, conversationId).catch(() => [] as any[]);
   const existing = (pending as any[]).find((p) => p?.tool === map.policyTool);

@@ -1,5 +1,5 @@
 -- CreateTable: Agent Loop cross-turn memory (AgentMemory per agent × customer).
--- Advisory continuity for the cognitive kernel — Facts always override it.
+-- Advisory continuity for the cognitive kernel - Facts always override it.
 CREATE TABLE "agent_customer_memory" (
     "id" TEXT NOT NULL,
     "tenant_id" TEXT NOT NULL,

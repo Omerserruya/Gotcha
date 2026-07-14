@@ -67,7 +67,7 @@ describe("goal-evaluator - the four states", () => {
     expect(r.reason).toBe("external_failure");
   });
 
-  it("ACTIVE by default — outcome not yet present, capability there, nothing blocking", () => {
+  it("ACTIVE by default - outcome not yet present, capability there, nothing blocking", () => {
     const r = evaluateGoalStatus(input())!;
     expect(r.kind).toBe("ACTIVE");
     expect(r.reason).toBeUndefined();

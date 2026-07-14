@@ -1,5 +1,5 @@
 /**
- * P1-1 live probe — assemble REAL Oracle facts for one agent and print the
+ * P1-1 live probe - assemble REAL Oracle facts for one agent and print the
  * three signals that used to be stubbed: billing.status, permissions
  * (grant-derived allow-list), and the committed goal.
  *

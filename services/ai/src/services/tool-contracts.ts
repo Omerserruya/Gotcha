@@ -1,10 +1,10 @@
 /**
- * Tool Contracts — first-class, declarative source of truth for what a tool
+ * Tool Contracts - first-class, declarative source of truth for what a tool
  * REQUIRES before it may execute.
  *
  * Two concerns, deliberately split to their correct owners:
  *
- *   1. requiredInputs (THIS file) — the inputs a tool genuinely needs from the
+ *   1. requiredInputs (THIS file) - the inputs a tool genuinely needs from the
  *      customer before it can run. Enforced at dispatch as defense-in-depth ON
  *      TOP of each tool's JSON-schema `required` (see `missingRequiredArgs` in
  *      ai-bot.service.ts). The schema gate covers well-formed core tools; this
@@ -12,7 +12,7 @@
  *      NOT control and may declare nothing as required - so a refund can't fire
  *      without an order id even if the tenant's CatalogTool schema is sloppy.
  *
- *   2. approvalPolicy (NOT here) — whether an action needs human approval. That
+ *   2. approvalPolicy (NOT here) - whether an action needs human approval. That
  *      already has a canonical, tenant-overridable, args-aware home: the shared
  *      HITL gate (`SYSTEM_TOOL_POLICIES` + `hitlPolicy` with the CEL-lite
  *      `on_condition` evaluator) in `@chatcenter/shared/lib/tool-gate.ts`.

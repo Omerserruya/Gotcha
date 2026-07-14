@@ -1,13 +1,13 @@
 /**
- * Reasoner shadow — agreement dashboard over the PERMANENT evaluation corpus
+ * Reasoner shadow - agreement dashboard over the PERMANENT evaluation corpus
  * (`reasoner_shadow_evals`). Read-only: it never triggers reasoning, only queries
  * rows the dark shadow runner already persisted. Provider-neutral throughout.
  *
  * This is the evidence surface the user reviews BEFORE the Reasoner is allowed to
  * own any business decision:
- *   GET /summary       — agreement rate + divergence-axis breakdown + avg latency
- *   GET /divergences   — the review queue (recent disagreements, newest first)
- *   GET /:id           — one full record incl. the replayable reasonerInput
+ *   GET /summary       - agreement rate + divergence-axis breakdown + avg latency
+ *   GET /divergences   - the review queue (recent disagreements, newest first)
+ *   GET /:id           - one full record incl. the replayable reasonerInput
  *
  * Tenant-scoped (never cross-tenant) + ADMIN-only, matching sibling admin routes.
  */
@@ -34,7 +34,7 @@ function parseSince(v: unknown): Date | undefined {
   return isNaN(d.getTime()) ? undefined : d;
 }
 
-// GET /summary — parity headline, sliceable by provider/model/promptVersion/since.
+// GET /summary - parity headline, sliceable by provider/model/promptVersion/since.
 router.get("/summary", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const { provider, model, promptVersion, since } = req.query;
@@ -52,7 +52,7 @@ router.get("/summary", requireRole("ADMIN"), async (req: Request, res: Response)
   }
 });
 
-// GET /divergences — the review queue: recent disagreements, newest first.
+// GET /divergences - the review queue: recent disagreements, newest first.
 router.get("/divergences", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const { provider, model, promptVersion, axis, since, limit } = req.query;
@@ -72,7 +72,7 @@ router.get("/divergences", requireRole("ADMIN"), async (req: Request, res: Respo
   }
 });
 
-// GET /:id — one full record (incl. replayable reasonerInput) for deep review.
+// GET /:id - one full record (incl. replayable reasonerInput) for deep review.
 router.get("/:id", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const record = await getShadowEvalById(req.tenantId!, req.params.id as string);

@@ -6,7 +6,7 @@
  *
  * Kept deliberately thin: it loads the turn's transcript + agent mission, runs the
  * loop, and translates the outcome. Anything richer (persona, RBAC-scoped menu,
- * committed goal) is a follow-up — this proves the loop on real traffic first.
+ * committed goal) is a follow-up - this proves the loop on real traffic first.
  */
 
 import { prisma } from "@chatcenter/shared";
@@ -57,7 +57,7 @@ export async function runAgentLoopForBotTurn(
     transcript.push({ role: "customer", text: opts.incomingMessage });
   }
 
-  // Employee binding: the AIAgent row IS the employee-as-data — thread its
+  // Employee binding: the AIAgent row IS the employee-as-data - thread its
   // mission / policies / persona into the kernel contract (which already has the
   // slots). Pure mapping; the kernel stays employee-agnostic.
   const binding = buildEmployeeBinding(agent);
@@ -77,12 +77,12 @@ export async function runAgentLoopForBotTurn(
   // Rollout mode → runtime EXECUTION semantics. `shadow` (evaluation) runs the full
   // Runtime as a dry_run: writes stay RECOMMENDED (no mutation) but the approval
   // gate IS probed (no request created), so shadow evidence proves the HITL
-  // surface too — distinct from copilot "advisory", which skips the gate because
+  // surface too - distinct from copilot "advisory", which skips the gate because
   // a human is already in the loop. Only `autonomous` performs real writes.
   const executionMode = mode === "autonomous" ? "autonomous" : "dry_run";
 
   // Cross-turn memory: load the Reasoner's prior conclusions for this agent ×
-  // customer (advisory — Facts override). No continuity key → empty memory.
+  // customer (advisory - Facts override). No continuity key → empty memory.
   const memoryKey = conversation?.customerExternalId
     ? { tenantId: opts.tenantId, agentId: opts.aiAgentId, customerExternalId: conversation.customerExternalId }
     : null;
@@ -104,7 +104,7 @@ export async function runAgentLoopForBotTurn(
     customerExternalId: conversation?.customerExternalId,
     customerEmail,
     mode: executionMode,
-    // Oracle base: identity + (RBAC unfiltered for the pilot — menu gates on world-state).
+    // Oracle base: identity + (RBAC unfiltered for the pilot - menu gates on world-state).
     customer: {
       id: conversation?.customerExternalId,
       knownFields: {
@@ -126,7 +126,7 @@ export async function runAgentLoopForBotTurn(
     signal,
     // Ownership probe (autonomous only): stand down mid-loop if a human takes
     // the conversation over while the loop holds the turn. Shadow runs are
-    // fire-and-forget dry-runs — nothing to protect, no probe.
+    // fire-and-forget dry-runs - nothing to protect, no probe.
     ownershipCheck:
       executionMode === "autonomous"
         ? async () => {
@@ -138,7 +138,7 @@ export async function runAgentLoopForBotTurn(
           }
         : undefined,
     // Migration guard (P1-4): an operation not yet PROVEN autonomous in the
-    // ledger dry-runs even in an autonomous turn — so a graduating capability
+    // ledger dry-runs even in an autonomous turn - so a graduating capability
     // (e.g. CRM writes in "shadow") never mutates production before its opt-in.
     operationExecutionMode: (operation, requestedMode) =>
       requestedMode === "autonomous" && !isOperationAutonomous(operation) ? "dry_run" : requestedMode,
@@ -148,7 +148,7 @@ export async function runAgentLoopForBotTurn(
   // Awaited (a single ~ms upsert) so it is never dropped on process exit;
   // fail-soft internally, so it can never break the reply.
   // AUTONOMOUS ONLY: shadow trajectories systematically diverge (dry-run
-  // writes, anti-stall rule-outs) — persisting their conclusions would boot
+  // writes, anti-stall rule-outs) - persisting their conclusions would boot
   // the first real autonomous turn from evaluation-mode hallucinated history.
   // A superseded run also skips: a human owns the conversation now.
   if (memoryKey && result.memoryUpdate && executionMode === "autonomous" && result.terminationReason !== "superseded") {
@@ -161,7 +161,7 @@ export async function runAgentLoopForBotTurn(
 export function mapResult(r: AgentLoopResult): LoopBotReply {
   // Escalation side-effects must match what the customer is TOLD. The Writer's
   // honest fallbacks for failed/blocked say "a team member will take it from
-  // here" — so those terminations MUST raise a real escalation (the worker's
+  // here" - so those terminations MUST raise a real escalation (the worker's
   // existing escalateToHuman flow consumes it), not just say so. Resource-guard
   // stops (max_iterations/timeout/budget) are also "stuck" → human, matching the
   // legacy brain's stuck-turn behavior. Shadow runs discard this object, so no
@@ -185,7 +185,7 @@ export function mapResult(r: AgentLoopResult): LoopBotReply {
           }
         : null;
   // The AWAITING_APPROVAL observation carries the REAL ApprovalRequest id
-  // ("… awaiting_approval:<id>") — surface that, so the worker/UI reference the
+  // ("… awaiting_approval:<id>") - surface that, so the worker/UI reference the
   // same row the Approvals inbox shows. loopId is only a last-resort fallback.
   const approvalRef =
     r.terminationReason === "awaiting_approval"
@@ -224,7 +224,7 @@ function emptyMemory() {
 }
 
 /**
- * Employee binding — AIAgent row → the kernel's mission / guidance / persona slots.
+ * Employee binding - AIAgent row → the kernel's mission / guidance / persona slots.
  *
  * Pure and fail-soft (every field optional; a bare agent yields a minimal binding).
  * Mapping principles:

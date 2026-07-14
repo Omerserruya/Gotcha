@@ -1,3 +1,5 @@
+import { resolveTourMock } from "./tour-mock";
+
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface FetchOptions extends RequestInit {
@@ -6,6 +8,11 @@ interface FetchOptions extends RequestInit {
 
 async function apiFetch<T = any>(path: string, options: FetchOptions = {}): Promise<T> {
   const { token, headers: extraHeaders, ...rest } = options;
+
+  // Guided-tour demo mode: while the tour walks an empty inbox, the inbox /
+  // copilot endpoints answer from local fixtures (see lib/tour-mock.ts).
+  const mocked = resolveTourMock(path, String(rest.method || "GET").toUpperCase());
+  if (mocked !== undefined) return JSON.parse(JSON.stringify(mocked)) as T;
 
   const headers: Record<string, string> = {
     "Content-Type": "application/json",
@@ -956,7 +963,7 @@ export function discoverBusiness(token: string, domain: string, locale?: string)
   );
 }
 // Fast, LLM-free plan for the discovery ceremony: business-typed steps that
-// reflect the real work the scan will do (Movement 1 — dynamic loader).
+// reflect the real work the scan will do (Movement 1 - dynamic loader).
 export function discoverPlan(token: string, domain: string, locale?: string) {
   return apiFetch<{ data: { ok: boolean; businessType: string; steps: Array<{ key: string; label: string }> } }>(
     "/api/onboarding/discover/plan",
@@ -966,7 +973,7 @@ export function discoverPlan(token: string, domain: string, locale?: string) {
 export function getBusinessDiscovery(token: string) {
   return apiFetch<{ data: { discovery: BusinessDiscoveryRecord | null } }>("/api/onboarding/discovery", { token });
 }
-export function patchBusinessDiscovery(token: string, patch: { business?: Record<string, unknown>; brand?: Record<string, unknown>; progress?: string; employeeName?: string }) {
+export function patchBusinessDiscovery(token: string, patch: { business?: Record<string, unknown>; brand?: Record<string, unknown>; communication?: { channels: Array<Record<string, unknown>> }; progress?: string; employeeName?: string }) {
   return apiFetch<{ data: { discovery: BusinessDiscoveryRecord } }>("/api/onboarding/discovery", {
     token, method: "PATCH", body: JSON.stringify(patch),
   });
@@ -982,17 +989,33 @@ export function correctDiscovery(token: string, target: "channel" | "tool" | "pl
     token, method: "POST", body: JSON.stringify({ target, action, key }),
   });
 }
-// Movement 8 — chat with the recommended employee before deploy; the returned
+// Movement 8 - chat with the recommended employee before deploy; the returned
 // persona reflects any tuning the owner asked for ("be friendlier", …).
-export interface EmployeePersona { tone?: string; personality?: string; focus?: string; instructions?: string[] }
+export interface EmployeePersona { tone?: string; personality?: string; focus?: string; goal?: string; successCriteria?: string[]; instructions?: string[] }
 export function employeeChat(token: string, messages: Array<{ role: "user" | "assistant"; content: string }>, persona?: EmployeePersona, locale?: string) {
   return apiFetch<{ data: { ok: boolean; reply?: string; persona?: EmployeePersona } }>("/api/onboarding/employee-chat", {
     token, method: "POST", body: JSON.stringify({ messages, persona, locale }),
   });
 }
-export function saveOnboardingGoal(token: string, goal: string, detail?: string) {
-  return apiFetch<{ data: { primaryGoal: string } }>("/api/onboarding/goal", {
-    token, method: "POST", body: JSON.stringify(detail?.trim() ? { goal, detail: detail.trim() } : { goal }),
+// Tell the GOTCHA team about an integration we don't support yet (the owner
+// flagged it during onboarding). Best-effort - resolves ok even if mail isn't
+// configured server-side, so the UI can always confirm the click.
+export function notifyIntegrationRequest(token: string, integration: string, opts?: { note?: string; source?: string }) {
+  const body: Record<string, unknown> = { integration };
+  if (opts?.note?.trim()) body.note = opts.note.trim();
+  if (opts?.source) body.source = opts.source;
+  return apiFetch<{ data: { ok: boolean; notified: boolean } }>("/api/onboarding/notify-integration", {
+    token, method: "POST", body: JSON.stringify(body),
+  });
+}
+
+export function saveOnboardingGoal(token: string, goals: string | string[], detail?: string) {
+  // Accepts a single goal (legacy) or multiple selected use-cases.
+  const list = Array.isArray(goals) ? goals : [goals];
+  const body: Record<string, unknown> = { goals: list };
+  if (detail?.trim()) body.detail = detail.trim();
+  return apiFetch<{ data: { primaryGoal: string; goals: string[] } }>("/api/onboarding/goal", {
+    token, method: "POST", body: JSON.stringify(body),
   });
 }
 
@@ -1100,12 +1123,45 @@ export interface OnboardingMission {
   id: OnboardingMissionId;
   status: "done" | "active" | "pending";
   deepLink: string;
-  /** Live detail — e.g. detected channel identifiers or an open-gaps count. */
+  /** Live detail - e.g. detected channel identifiers or an open-gaps count. */
   hint?: string;
 }
 
 export function getOnboardingMissions(token: string) {
   return apiFetch<{ data: { missions: OnboardingMission[] } }>("/api/onboarding/missions", { token });
+}
+
+// Getting Started journey - the post-onboarding first-steps arc. Milestones are
+// live-derived server-side; `first_chat` completes via patchOnboardingGuide.
+export type JourneyMilestoneId =
+  | "meet_employee"
+  | "first_chat"
+  | "go_live_channel"
+  | "first_customer"
+  | "teach_knowledge";
+
+export interface JourneyMilestone {
+  id: JourneyMilestoneId;
+  status: "done" | "active" | "pending";
+  deepLink: string;
+  hint?: string;
+}
+
+export interface JourneyData {
+  complete: boolean;
+  employee: { id: string; name: string; role: string | null; status: string } | null;
+  business: { name: string | null; industry: string | null };
+  context: {
+    coreSystem: string | null;
+    kbCount: number;
+    channelHint: string | null;
+    detectedChannelCount: number;
+  };
+  milestones: JourneyMilestone[];
+}
+
+export function getOnboardingJourney(token: string) {
+  return apiFetch<{ data: JourneyData }>("/api/onboarding/journey", { token });
 }
 
 export function saveOnboardingDepartments(token: string, data: { departments: any[] }) {
@@ -1118,10 +1174,10 @@ export function getOnboardingDepartments(token: string) {
   return apiFetch<{ data: any[] }>("/api/onboarding/departments", { token });
 }
 
-export function completeOnboarding(token: string, opts?: { skipCoreSystem?: boolean }) {
+export function completeOnboarding(token: string, opts?: { skipCoreSystem?: boolean; skipEmployee?: boolean }) {
   return apiFetch<{ data: any }>("/api/onboarding/complete", {
     token, method: "POST",
-    body: JSON.stringify({ skipCoreSystem: opts?.skipCoreSystem === true }),
+    body: JSON.stringify({ skipCoreSystem: opts?.skipCoreSystem === true, skipEmployee: opts?.skipEmployee === true }),
   });
 }
 
@@ -2803,7 +2859,7 @@ export function updateSystemTenantFeature(
   );
 }
 
-// SYSTEM_ADMIN — entitlements (feature licensing), credits & POC provisioning.
+// SYSTEM_ADMIN - entitlements (feature licensing), credits & POC provisioning.
 export interface LicenseDomainRow { key: string; enabled: boolean; source?: string | null; expiresAt?: string | null }
 export interface TenantBillingSummary {
   error?: string;

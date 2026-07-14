@@ -1,5 +1,5 @@
 /**
- * KNOWLEDGE operation set — the vendor-neutral bridge between the Runtime and the
+ * KNOWLEDGE operation set - the vendor-neutral bridge between the Runtime and the
  * tenant's knowledge base (the existing RAG: embeddings + vector search). Three
  * jobs only: describeWorld (is a KB available?), expose SEARCH_KNOWLEDGE when it
  * is, execute via the shared Runtime → production `retrieveRelevantChunks`.
@@ -41,7 +41,7 @@ export const KnowledgeCapability: CapabilityRegistration = {
     return {
       capability: "KNOWLEDGE",
       summary: available
-        ? "A knowledge base is available — it is the authoritative source for questions about the business's products, prices, policies, and processes. Look things up rather than guessing."
+        ? "A knowledge base is available - it is the authoritative source for questions about the business's products, prices, policies, and processes. Look things up rather than guessing."
         : "No knowledge base is available.",
       facts: { knowledgeBaseAvailable: available },
       operations: available ? CONTRACTS.map(toAvailableOperation) : [],

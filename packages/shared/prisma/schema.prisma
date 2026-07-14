@@ -150,7 +150,7 @@ model Tenant {
   invites                 TenantInvite[]
   webhookTriggers         WebhookTrigger[]
   // Billing & AI Units. The MONEY side (subscription/profile/invoices) binds to
-  // a BillableEntity, NOT directly to a tenant — see BillableEntityTenant. The
+  // a BillableEntity, NOT directly to a tenant - see BillableEntityTenant. The
   // WALLET + ENTITLEMENT side stays tenant-scoped (a tenant consumes capability
   // and AI Units). In V1 these are 1:1; the abstraction lets them diverge later.
   billableEntityLink      BillableEntityTenant?
@@ -810,7 +810,7 @@ model BusinessDiscovery {
   // 6-9 returns to that movement instead of falling back to integrations.
   progress      String?
 
-  // Live ceremony phase (Movement 1) — updated between scan phases so the
+  // Live ceremony phase (Movement 1) - updated between scan phases so the
   // loader's checkmarks land on real events, not a timer:
   // homepage|links|pages|signals|synthesis|normalizing|done.
   scanPhase     String?  @map("scan_phase")
@@ -842,7 +842,7 @@ model Recommendation {
   id         String    @id @default(cuid())
   tenantId   String    @map("tenant_id")
   source     String    @default("discovery") // discovery | store_inspection | manual
-  kind       String // hire_employee | connect_system | connect_channel | import_knowledge | setup_workflow | tool_detected (detected on site, no connector — acknowledgment only)
+  kind       String // hire_employee | connect_system | connect_channel | import_knowledge | setup_workflow | tool_detected (detected on site, no connector - acknowledgment only)
   title      String
   reason     String?   @db.Text
   action     String? // machine hint, e.g. "connect:shopify" | "hire:customer_support" | "teach:refund_policy"
@@ -870,7 +870,7 @@ model Recommendation {
 // sweep sends the due ones. Onboarding is the first consumer, but `kind` keeps
 // it generic for future lifecycle nudges (trial-ending, re-engagement, …).
 //
-// Idempotency: unique (tenantId, dedupeKey) — scheduling the same logical nudge
+// Idempotency: unique (tenantId, dedupeKey) - scheduling the same logical nudge
 // again UPDATES the existing PENDING row (reschedule) instead of duplicating.
 // Content is computed at SEND time from live state, so a nudge whose reason no
 // longer holds (the customer already did the thing) is marked SKIPPED, not sent.
@@ -2166,7 +2166,7 @@ model AiUnitLot {
   grantType     AiUnitGrantType @map("grant_type")
   unitsGranted  Decimal         @map("units_granted") @db.Decimal(16, 6)
   unitsRemaining Decimal        @map("units_remaining") @db.Decimal(16, 6)
-  periodKey     String?         @map("period_key") // INCLUDED only — the billing period this allotment belongs to
+  periodKey     String?         @map("period_key") // INCLUDED only - the billing period this allotment belongs to
   expiresAt     DateTime?       @map("expires_at") // INCLUDED → period end; PURCHASED → null
   source        String? // "plan:pro" | "package:5000" | "promo:launch" | "auto"
   referenceId   String?         @map("reference_id") // invoice / order / subscription id
@@ -2241,7 +2241,7 @@ model PaymentMethod {
   id              String              @id @default(cuid())
   billingProfileId String             @map("billing_profile_id")
   provider        BillingProvider     @default(ICOUNT)
-  // Tokenized reference only — raw PAN is NEVER stored (iCount is the PCI vault).
+  // Tokenized reference only - raw PAN is NEVER stored (iCount is the PCI vault).
   token           String
   brand           String?
   last4           String?
@@ -2266,7 +2266,7 @@ model Subscription {
   planVersion        Int                @default(1) @map("plan_version")
   status             SubscriptionStatus @default(PENDING)
   // When false (GRANDFATHERED), the AI runtime gate is skipped and no billing
-  // runs. NOT an infinite-units balance — financial state stays deterministic.
+  // runs. NOT an infinite-units balance - financial state stays deterministic.
   enforcementEnabled Boolean            @default(true) @map("enforcement_enabled")
   trialEndsAt        DateTime?          @map("trial_ends_at")
   currentPeriodStart DateTime?          @map("current_period_start")
@@ -2324,7 +2324,7 @@ model Invoice {
   id               String        @id @default(cuid())
   billableEntityId String        @map("billable_entity_id")
   provider         BillingProvider @default(ICOUNT)
-  // Reference to the iCount-issued legal tax document (חשבונית מס) — the
+  // Reference to the iCount-issued legal tax document (חשבונית מס) - the
   // authoritative record. This row is a thin mirror for in-app display.
   providerInvoiceRef String?     @map("provider_invoice_ref")
   providerPdfUrl   String?       @map("provider_pdf_url")
@@ -2402,7 +2402,7 @@ model DunningState {
   @@map("dunning_states")
 }
 
-// Immutable log of every provider webhook received — the audit + idempotency
+// Immutable log of every provider webhook received - the audit + idempotency
 // spine for refunds/chargebacks/payment confirmations. `providerEventId` is
 // unique so a redelivered webhook is processed at most once; the raw payload is
 // retained so any money event can be reconstructed months later.
@@ -2430,7 +2430,7 @@ model BillingWebhookEvent {
 // comparison, fine-tuning, Planner-retirement decisions, and future automated
 // evals. `reasonerInput` stores the full neutral input so any FUTURE model can
 // be replayed against the exact same inputs. NEVER stores provider-specific
-// request/response — that stays behind the ReasonerProvider boundary.
+// request/response - that stays behind the ReasonerProvider boundary.
 model ReasonerShadowEval {
   id             String   @id @default(cuid())
   schemaVersion  Int      @default(1) @map("schema_version")
@@ -2479,7 +2479,7 @@ model ReasonerShadowEval {
   @@map("reasoner_shadow_evals")
 }
 
-// ─── Agent Loop (autonomous reasoning loop — observability corpus) ─────────
+// ─── Agent Loop (autonomous reasoning loop - observability corpus) ─────────
 // One run per loop; one iteration row per reason→execute cycle. Fully replayable
 // (each iteration stores the provider-neutral Oracle Facts snapshot the Reasoner
 // saw). Additive + flag-gated; the legacy Planner remains production.
@@ -2536,7 +2536,7 @@ model AgentLoopIteration {
   goal                String?
   /// Provider-neutral Facts snapshot the Reasoner saw this iteration (replayable).
   oracleFactsSnapshot Json     @map("oracle_facts_snapshot")
-  /// Short WHY from the Reasoner read (situation/rationale) — audit only.
+  /// Short WHY from the Reasoner read (situation/rationale) - audit only.
   reasoningSummary    String   @map("reasoning_summary")
 
   decisionType        String   @map("decision_type")
@@ -2546,7 +2546,7 @@ model AgentLoopIteration {
   runtimeResult       String?  @map("runtime_result")
   /// Neutral Observation projection (status/outcome/reason/invariants).
   observation         Json?
-  /// Goal-relevant Facts signature — powers goal-based progress detection.
+  /// Goal-relevant Facts signature - powers goal-based progress detection.
   factsSignature      String?  @map("facts_signature")
   progressed          Boolean?
 
@@ -2560,10 +2560,10 @@ model AgentLoopIteration {
   @@map("agent_loop_iterations")
 }
 
-/// Agent Loop cross-turn memory — the Reasoner's carried-forward conclusions
+/// Agent Loop cross-turn memory - the Reasoner's carried-forward conclusions
 /// (AgentMemory: committedGoal, workingHypotheses, alreadyAsked, priorReads,
 /// openCommitments), scoped per agent × customer so memory follows the customer
-/// across conversations. ADVISORY continuity only — Facts always override it.
+/// across conversations. ADVISORY continuity only - Facts always override it.
 model AgentCustomerMemory {
   id                 String   @id @default(cuid())
   tenantId           String   @map("tenant_id")

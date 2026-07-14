@@ -1,5 +1,5 @@
 /**
- * BLOCK 1 — Skill System (the AI Employee's professional operating system).
+ * BLOCK 1 - Skill System (the AI Employee's professional operating system).
  *
  * A Skill is NOT a prompt fragment - it is a structured behavior engine. Each
  * Skill is a typed object (mission, methodology, flow, success/failure criteria,
@@ -461,9 +461,9 @@ export function renderSkill(skill: Skill): string {
   lines.push("**You FAIL if you:**");
   for (const f of skill.failureCriteria) lines.push(`- ${f}`);
   lines.push("");
-  lines.push("**Required knowledge** — listed in discovery-priority order (chase the top missing one first; constantly ask what you already know vs. what's still missing, and steer toward the most natural next question):");
+  lines.push("**Required knowledge** - listed in discovery-priority order (chase the top missing one first; constantly ask what you already know vs. what's still missing, and steer toward the most natural next question):");
   for (const k of [...skill.requiredKnowledge].sort((a, b) => a.priority - b.priority)) {
-    lines.push(`- \`${k.key}\` — ${k.label}${k.importance === "required" ? " [required]" : ""}`);
+    lines.push(`- \`${k.key}\` - ${k.label}${k.importance === "required" ? " [required]" : ""}`);
   }
   lines.push("");
   lines.push(`**Discovery strategy:** ${skill.discoveryStrategy}`);

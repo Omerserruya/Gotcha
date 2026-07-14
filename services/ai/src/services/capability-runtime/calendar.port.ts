@@ -1,8 +1,8 @@
 /**
- * CalendarPort — the concrete calendar surface the CALENDAR capability runs on.
+ * CalendarPort - the concrete calendar surface the CALENDAR capability runs on.
  *
  * This is the ADAPTER boundary (Slice 2, Constraint 1): a port exposes only
- * concrete calendar I/O — read bookings, check if a time is open, compute slots,
+ * concrete calendar I/O - read bookings, check if a time is open, compute slots,
  * create/move/cancel events. It contains NO business rules. Every business rule
  * (must have an email, no duplicate, existing booking present, unambiguous,
  * availability verified) lives ONCE in the operation contracts + verifiers
@@ -11,7 +11,7 @@
  * The production port (calendar.port.prod.ts) translates these calls to the
  * existing scheduling primitives (resolveAvailability + calendar adapters +
  * booking-store). Tests inject an in-memory fake. The contracts/resolver never
- * import either — the port is passed in.
+ * import either - the port is passed in.
  */
 
 export interface CalendarOpContext {
@@ -52,7 +52,7 @@ export interface CalendarPort {
    * Concrete: the agent's IANA timezone (e.g. "Asia/Jerusalem") from the configured
    * meeting types, or null if unknown. Optional so in-memory fakes need not implement
    * it. Surfaced into the Oracle so the Reasoner can present slots in local time and
-   * map a customer's local request to an instant — instead of asking for a timezone.
+   * map a customer's local request to an instant - instead of asking for a timezone.
    */
   agentTimezone?(ctx: CalendarOpContext): Promise<string | null>;
 

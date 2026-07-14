@@ -1,9 +1,9 @@
 /**
- * Agent Loop — pure control logic (no I/O).
+ * Agent Loop - pure control logic (no I/O).
  *
  * The loop enforces ONLY safety/resource envelopes; it makes NO business decision.
  * It never judges progress, never decides to stop or continue on business grounds
- * — those belong exclusively to the Reasoner (which sees the observations, the
+ * - those belong exclusively to the Reasoner (which sees the observations, the
  * ruled-out operations, and the working plan, and chooses ASK / ESCALATE / FINISH).
  *
  * This module owns: the DECISION→CONTROL mapping, the resource-bound checks
@@ -41,7 +41,7 @@ export function decisionToControl(d: ReasonerDecision): LoopControl {
 }
 
 /**
- * Resource envelope — checked BEFORE each reason() call. Returns the termination
+ * Resource envelope - checked BEFORE each reason() call. Returns the termination
  * reason if a hard RESOURCE bound is exceeded, else null. These are pure resource
  * ceilings (cost/latency safety), NOT business judgments about the work.
  */
@@ -60,8 +60,8 @@ export function preReasonTermination(
  * the observation re-enter the loop.
  *
  * ONLY two runtime outcomes end the loop: AWAITING_APPROVAL (a genuine async
- * boundary — a human must act before anything can proceed) and an unrecoverable
- * FAILED. Everything else — including BLOCKED and guardrail denials — RE-ENTERS:
+ * boundary - a human must act before anything can proceed) and an unrecoverable
+ * FAILED. Everything else - including BLOCKED and guardrail denials - RE-ENTERS:
  * the loop must NOT decide to give up; the Reasoner re-reasons and chooses ASK /
  * ESCALATE / an alternative / FINISH. Runaway is bounded by max-iterations/time.
  */

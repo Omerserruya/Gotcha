@@ -1,5 +1,5 @@
 /**
- * Billing event emitter — fire-and-forget, enqueues a SystemEvent onto the
+ * Billing event emitter - fire-and-forget, enqueues a SystemEvent onto the
  * shared "notifications" BullMQ queue (same shape the notifications service's
  * dispatcher consumes). Never throws; instrumentation must not break billing.
  *

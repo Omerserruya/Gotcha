@@ -1,9 +1,9 @@
 /**
- * Onboarding Nudge Engine — a generic, restart-safe, idempotent, tenant-aware,
+ * Onboarding Nudge Engine - a generic, restart-safe, idempotent, tenant-aware,
  * PERSONALIZED lifecycle-nudge scheduler.
  *
  * Design (smallest architecture that satisfies every requirement):
- *  - Source of truth is the `ScheduledNudge` DB row, NOT a Redis job — so a
+ *  - Source of truth is the `ScheduledNudge` DB row, NOT a Redis job - so a
  *    nudge survives a full Redis flush. (Answers: survive restarts.)
  *  - A repeatable BullMQ sweep (every few minutes) sends the DUE ones. Reuses
  *    the existing shared queue/worker infra. (Answers: infra reuse.)
@@ -11,7 +11,7 @@
  *    again re-arms the same row; the sweep marks a row SENT exactly once.
  *  - Cancel / reschedule: cancelOnboardingNudges / re-calling schedule.
  *  - Personalized: content is computed at SEND time from the live onboarding
- *    snapshot, so it always reflects where the customer actually is — and if the
+ *    snapshot, so it always reflects where the customer actually is - and if the
  *    reason no longer holds (they already did it), the nudge is SKIPPED, not sent.
  *
  * `kind` keeps it generic so future lifecycle nudges (trial-ending,
@@ -117,7 +117,7 @@ export function contentForSnapshot(s: OnboardingSnapshot, locale: string = "en")
           : `Everything's set up. Connect WhatsApp and ${employee} can start handling real customer conversations today.`,
       };
     }
-    return null; // live and reachable — nothing to nudge
+    return null; // live and reachable - nothing to nudge
   }
 
   if (!s.discoveryComplete) {
@@ -132,15 +132,15 @@ export function contentForSnapshot(s: OnboardingSnapshot, locale: string = "en")
   }
   if (!s.reviewComplete) {
     const extra = refundGap
-      ? (he ? `מצאתי הרבה — אבל עדיין לא מצאתי את מדיניות ההחזרים שלכם.` : `I found a lot — but I couldn't find your refund policy yet.`)
+      ? (he ? `מצאתי הרבה - אבל עדיין לא מצאתי את מדיניות ההחזרים שלכם.` : `I found a lot - but I couldn't find your refund policy yet.`)
       : (he ? `כבר למדתי הרבה על העסק שלכם.` : `I already learned a lot about your business.`);
     return {
       reason: "stopped_after_discovery",
-      subject: he ? `כבר ניתחתי את ${company} — הציצו` : `I already analyzed ${company} — take a look`,
+      subject: he ? `כבר ניתחתי את ${company} - הציצו` : `I already analyzed ${company} - take a look`,
       headline: he ? "שמתי לב שעצרתם ממש אחרי גילוי העסק" : "I noticed you stopped right after Business Discovery",
       body: he
-        ? `${extra} עברו על מה שמצאתי ואשרו — אתם במרחק כשתי דקות מעובד ה-AI שלכם.`
-        : `${extra} Review what I found and confirm — you're about two minutes from your AI employee.`,
+        ? `${extra} עברו על מה שמצאתי ואשרו - אתם במרחק כשתי דקות מעובד ה-AI שלכם.`
+        : `${extra} Review what I found and confirm - you're about two minutes from your AI employee.`,
     };
   }
   if (!s.goalSelected) {
@@ -169,14 +169,14 @@ export function contentForSnapshot(s: OnboardingSnapshot, locale: string = "en")
       subject: he ? `תנו ל-AI שלכם את המפתחות, ${company}` : `Give your AI the keys, ${company}`,
       headline: he ? "חיבור אחד ואנחנו שם" : "One connection away",
       body: he
-        ? `חברו את מערכת הלקוחות שלכם כדי שה-AI יידע עם מי הוא מדבר — ואז הוא מוכן לעבודה.`
-        : `Connect your customer system so your AI knows who it's talking to — then it's ready to get to work.`,
+        ? `חברו את מערכת הלקוחות שלכם כדי שה-AI יידע עם מי הוא מדבר - ואז הוא מוכן לעבודה.`
+        : `Connect your customer system so your AI knows who it's talking to - then it's ready to get to work.`,
     };
   }
   if (s.crmConnected && s.channelsConnected === 0) {
     return {
       reason: "crm_then_channel",
-      subject: he ? `יופי — ${s.crmSlug} חובר. הבא: וואטסאפ` : `Nice — ${s.crmSlug} connected. Next: WhatsApp`,
+      subject: he ? `יופי - ${s.crmSlug} חובר. הבא: וואטסאפ` : `Nice - ${s.crmSlug} connected. Next: WhatsApp`,
       headline: he ? `חיברתם את ${s.crmSlug}. מעולה!` : `You connected ${s.crmSlug}. Great!`,
       body: he
         ? `הצעד הבא הכי טוב הוא וואטסאפ, כדי שה-AI ידבר עם הלקוחות במקום שבו הם כבר מתכתבים אתכם.`
@@ -196,7 +196,7 @@ export function contentForSnapshot(s: OnboardingSnapshot, locale: string = "en")
   return null;
 }
 
-// The Voice's email — composed from the shared light premium shell so a nudge
+// The Voice's email - composed from the shared light premium shell so a nudge
 // looks exactly like the product speaking, in the tenant's own language.
 export function nudgeHtml(headline: string, body: string, ctaUrl: string, locale = "en"): string {
   const he = locale === "he";
@@ -210,7 +210,7 @@ export function nudgeHtml(headline: string, body: string, ctaUrl: string, locale
     bodyHtml: emailParagraph(escapeHtml(body), locale),
     cta: { label: he ? "המשיכו בהגדרה" : "Continue setup", url: ctaUrl },
     closingHtml: he
-      ? `<p style="margin:0;font-size:13px;color:#8f89a0;line-height:1.7;">אני כאן כשתחזרו — שום דבר לא הולך לאיבוד.</p>`
+      ? `<p style="margin:0;font-size:13px;color:#8f89a0;line-height:1.7;">אני כאן כשתחזרו - שום דבר לא הולך לאיבוד.</p>`
       : `<p style="margin:0;font-size:13px;color:#8f89a0;line-height:1.7;">I'll be here when you're back &mdash; nothing you've done is lost.</p>`,
     footerNote: he
       ? "זה ה-AI שלכם, ששומר על סביבת העבודה בתנועה. קיבלתם את זה כי ההגדרה שלכם ב-GOTCHA עדיין לא הושלמה."
@@ -228,14 +228,14 @@ export interface NudgeResult {
 
 /**
  * Process one scheduled nudge row: recompute content from live state, deliver,
- * and settle the row's status. Never throws — returns the outcome.
+ * and settle the row's status. Never throws - returns the outcome.
  */
 export async function processNudgeRow(row: any): Promise<NudgeResult> {
   const tenantId = row.tenantId as string;
 
   // Atomic claim: PENDING → SENDING before any work. This is the at-most-once
   // guard: even if the post-send settle fails (the bug class that caused a
-  // 5-minute email loop — a settle that throws and a row that stays PENDING),
+  // 5-minute email loop - a settle that throws and a row that stays PENDING),
   // a claimed row is never picked up by the sweep again. Worst case is one
   // email and a row parked in SENDING, which the sweep flags as FAILED later.
   const claimed = await prisma.scheduledNudge.updateMany({
@@ -275,7 +275,7 @@ export async function processNudgeRow(row: any): Promise<NudgeResult> {
   try {
     const token = await createMagicLink(tenantId, admin.id);
     ctaUrl = `${frontendUrl}/setup/verify?token=${token}`;
-  } catch { /* fall back to bare /setup — still valid */ }
+  } catch { /* fall back to bare /setup - still valid */ }
 
   const html = nudgeHtml(content.headline, content.body, ctaUrl, locale);
   const cta = locale === "he" ? "המשיכו בהגדרה" : "Continue setup";
@@ -283,7 +283,7 @@ export async function processNudgeRow(row: any): Promise<NudgeResult> {
   const ok = await sendNudgeEmail(tenantId, admin.email, content.subject, html, text, row.dedupeKey);
 
   if (ok) {
-    // `reason` is not a column — it rides in the payload Json. (Passing it as
+    // `reason` is not a column - it rides in the payload Json. (Passing it as
     // a top-level field made the update THROW, the old settle swallowed the
     // error, the row stayed PENDING, and the sweep re-sent the email every
     // 5 minutes. Typed `extra` + the SENDING claim make that impossible now.)
@@ -301,7 +301,7 @@ export async function processNudgeRow(row: any): Promise<NudgeResult> {
   return { tenantId, outcome: "failed", reason: content.reason };
 }
 
-// Typed extra so tsc validates every field against the Prisma model — the
+// Typed extra so tsc validates every field against the Prisma model - the
 // spread-of-unknowns version let a non-existent column reach the DB at runtime.
 interface SettleExtra {
   sentAt?: Date;
@@ -324,7 +324,7 @@ async function settle(id: string, status: string, extra: SettleExtra = {}): Prom
  *  every interval; only PENDING rows whose time has come are touched. */
 export async function sendDueNudges(limit = 100): Promise<{ sent: number; skipped: number; failed: number }> {
   // Failsafe: a row claimed (SENDING) over an hour ago was sent but never
-  // settled (crash or settle error). Mark it FAILED for visibility — never
+  // settled (crash or settle error). Mark it FAILED for visibility - never
   // back to PENDING, which would re-send the email.
   await prisma.scheduledNudge.updateMany({
     where: { status: "SENDING", updatedAt: { lte: new Date(Date.now() - 60 * 60_000) } },
@@ -349,7 +349,7 @@ export async function sendDueNudges(limit = 100): Promise<{ sent: number; skippe
 }
 
 /**
- * Admin-triggered "send a nudge now" — arms a manual nudge for immediate
+ * Admin-triggered "send a nudge now" - arms a manual nudge for immediate
  * delivery and processes it inline so the operator gets instant feedback.
  */
 export async function triggerNudgeNow(tenantId: string): Promise<NudgeResult> {

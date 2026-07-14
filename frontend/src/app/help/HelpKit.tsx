@@ -3,8 +3,8 @@
 /**
  * Help Center building blocks: locale context (he default, persisted),
  * category icons, the search box, a RTL-safe markdown renderer, and the
- * page shell (header + footer). The help center is public — no auth,
- * no app chrome — and lives at /help (served as help.gotcha.co.il).
+ * page shell (header + footer). The help center is public - no auth,
+ * no app chrome - and lives at /help (served as help.gotcha.co.il).
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
@@ -37,7 +37,7 @@ export function L({ en, heText }: { en: string; heText: string }) {
 
 // ─── Identity ───────────────────────────────────────────────
 
-// The real brand mark — identical to the main landing page's Logo.
+// The real brand mark - identical to the main landing page's Logo.
 export function Wordmark({ className = "h-7 w-auto" }: { className?: string }) {
   // eslint-disable-next-line @next/next/no-img-element
   return <img src="/logo_icon.png" alt="GOTCHA" className={className} />;
@@ -143,7 +143,7 @@ export function HelpSearch({ big = false, autoFocus = false }: { big?: boolean; 
   );
 }
 
-// ─── Markdown (RTL-safe, no `prose` — logical paddings) ─────
+// ─── Markdown (RTL-safe, no `prose` - logical paddings) ─────
 
 export function Md({ children }: { children: string }) {
   return (
@@ -206,7 +206,7 @@ export function HelpShell({ children }: { children: ReactNode }) {
         <div className="max-w-6xl mx-auto px-5 md:px-8 py-10 flex flex-col md:flex-row items-start md:items-center justify-between gap-6">
           <div>
             <p className="font-semibold text-gray-900">{he ? "לא מצאתם תשובה?" : "Didn't find your answer?"}</p>
-            <p className="text-sm text-gray-500 mt-1">{he ? "בן אדם אמיתי קורא כל הודעה — בדרך כלל עונים תוך שעות." : "A real human reads every message — we usually reply within hours."}</p>
+            <p className="text-sm text-gray-500 mt-1">{he ? "בן אדם אמיתי קורא כל הודעה - בדרך כלל עונים תוך שעות." : "A real human reads every message - we usually reply within hours."}</p>
           </div>
           <a href="mailto:support@gotcha.co.il" className="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-gray-900 text-white text-sm font-semibold hover:bg-gray-800 transition">
             support@gotcha.co.il

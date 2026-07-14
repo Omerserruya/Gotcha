@@ -103,8 +103,8 @@
   "hotPaths": [
     {
       "path": "src/routes/onboarding.ts",
-      "accessCount": 45,
-      "lastAccessed": 1783603160294,
+      "accessCount": 47,
+      "lastAccessed": 1783884039652,
       "type": "file"
     },
     {

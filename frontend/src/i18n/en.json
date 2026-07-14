@@ -4,6 +4,7 @@
     "loading": "Loading..."
   },
   "nav": {
+    "gettingStarted": "Getting started",
     "home": "Home",
     "conversations": "Inbox",
     "dashboard": "Dashboard",
@@ -1084,7 +1085,7 @@
     },
     "integrations": {
       "crmTitle": "CRM Integrations",
-      "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) — or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM."
+      "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) - or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM."
     }
   },
   "outbound": {
@@ -1576,9 +1577,9 @@
         "ai_employees": "Create and configure the AI Employee that will handle conversations.",
         "connect_channel": "Link WhatsApp, Instagram, or web chat to start receiving messages.",
         "workflows": "Wire channels to your AI Employee, teams, and subflows in the main workflow.",
-        "connect_source_of_truth": "Your CRM or store — so your AI knows every customer.",
-        "add_webchat": "No chat widget was found on your site — let visitors talk to your AI right on the page.",
-        "teach_knowledge": "A few gaps are still open — teach them on Your Business."
+        "connect_source_of_truth": "Your CRM or store - so your AI knows every customer.",
+        "add_webchat": "No chat widget was found on your site - let visitors talk to your AI right on the page.",
+        "teach_knowledge": "A few gaps are still open - teach them on Your Business."
       },
       "viewBusiness": "See your full business profile →"
     }
@@ -2031,7 +2032,7 @@
     },
     "cta": {
       "title": "Be first to put your AI Employee to work",
-      "subtitle": "Leave your details and we'll set you up with early access — no credit card, no commitment.",
+      "subtitle": "Leave your details and we'll set you up with early access - no credit card, no commitment.",
       "button": "Get Early Access",
       "form": {
         "namePlaceholder": "Your name",
@@ -2235,7 +2236,7 @@
       "highImpact": "High impact"
     },
     "noData": "No analytics data available for this period",
-    "partialData": "Some analytics are temporarily unavailable — showing what we have.",
+    "partialData": "Some analytics are temporarily unavailable - showing what we have.",
     "noDataYet": "No data for this period yet.",
     "noAgentsYet": "No human agents yet.",
     "noToolUsageYet": "The AI hasn't used any tools in this period.",
@@ -2427,7 +2428,7 @@
     "team": {
       "title": "Team Members",
       "subtitle": "Your AI employees that handle customer conversations",
-      "addMember": "Add Team Member",
+      "addMember": "Hire an AI Employee",
       "addMemberHint": "Create a new AI employee for your team",
       "knowledge": "knowledge",
       "skills": "skills",
@@ -2602,12 +2603,12 @@
         "reachability": {
           "title": "This employee isn't receiving conversations yet",
           "noNode": "It's live, but no playbook routes conversations to it. Add it to your Main Playbook so customers actually reach it.",
-          "noCanvas": "It's live, but you don't have a playbook yet — without one, no conversations are routed to any AI employee.",
+          "noCanvas": "It's live, but you don't have a playbook yet - without one, no conversations are routed to any AI employee.",
           "cta": "Open Playbooks"
         },
         "effectivePerms": {
           "title": "What this employee can do",
-          "subtitle": "Actions it can actually take right now — a capability must be connected AND the action allowed for this employee.",
+          "subtitle": "Actions it can actually take right now - a capability must be connected AND the action allowed for this employee.",
           "allowed": "Allowed",
           "blocked": "Not available (capability off or not granted)"
         }
@@ -3246,6 +3247,66 @@
       "tierJuniorDesc": "More cues, all lanes, animations on",
       "tierMidDesc": "Default",
       "tierSeniorDesc": "Whisper mode - pulse only"
+    }
+  },
+  "gettingStarted": {
+    "tourCta": "Take the guided tour",
+    "title": "Welcome to GOTCHA",
+    "titleWithBiz": "Welcome, {business}",
+    "subtitle": "Your AI employee already knows your business. Take your first steps - talk to it, take it live, and watch it work.",
+    "progress": "First steps",
+    "chips": {
+      "core": "Connected to {system}",
+      "kb": "Knowledge loaded",
+      "channels": "{n} channels detected"
+    },
+    "chat": {
+      "title": "Talk to {name}",
+      "subtitle": "A private sandbox - nothing is sent to customers.",
+      "ready": "Ready to work",
+      "empty": "Say hello - ask anything a customer would.",
+      "s1": "What do you know about our business?",
+      "s2": "How would you answer a customer asking about prices?",
+      "s3": "What can you do for me?",
+      "placeholder": "Write a message…",
+      "send": "Send",
+      "error": "Something went wrong - try again.",
+      "noEmployeeTitle": "Create your AI employee",
+      "noEmployeeSub": "You skipped this during setup",
+      "noEmployeeBody": "Your workspace is ready - all that's missing is the employee. It takes about two minutes: tell us the goal and we'll draft everything else.",
+      "createCta": "Create my AI employee"
+    },
+    "milestones": {
+      "title": "Your first steps",
+      "meet_employee": {
+        "title": "Meet your AI employee",
+        "desc": "See its profile, persona and skills"
+      },
+      "first_chat": {
+        "title": "Have your first conversation",
+        "desc": "Ask it anything in the sandbox"
+      },
+      "go_live_channel": {
+        "title": "Go live on a channel",
+        "desc": "Connect WhatsApp, Instagram or webchat"
+      },
+      "first_customer": {
+        "title": "First real customer answered",
+        "desc": "Happens on its own once you're live"
+      },
+      "teach_knowledge": {
+        "title": "Teach what's missing",
+        "desc": "Close the open knowledge gaps"
+      }
+    },
+    "features": {
+      "title": "Get to know the platform",
+      "inbox": "Inbox",
+      "business": "Your Business",
+      "aiStudio": "AI Studio",
+      "channels": "Channels",
+      "knowledge": "Knowledge",
+      "analytics": "Analytics"
     }
   }
 }

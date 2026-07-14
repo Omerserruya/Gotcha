@@ -118,7 +118,7 @@ export async function executeTool(params: {
 
   // Endpoint-less catalog tools are backed by a provider ADAPTER (HubSpot,
   // Salesforce, Monday, …) rather than an HTTP template. Route them to the
-  // adapter framework instead of failing — otherwise the bot's CRM action tools
+  // adapter framework instead of failing - otherwise the bot's CRM action tools
   // (create_lead/create_contact/create_deal on HubSpot/Salesforce) are dead and
   // every lead-creation attempt errors. Providers WITH an HTTP template (Zoho,
   // …) keep the endpoint path below.
@@ -134,7 +134,7 @@ export async function executeTool(params: {
       args: input,
     });
     // Mutating writes change the lead/contact rows the prefetch cache is keyed
-    // on — invalidate so the next bot turn rebuilds context against fresh data.
+    // on - invalidate so the next bot turn rebuilds context against fresh data.
     if (adapterRes.ok && CRM_MUTATING_SLUGS.has(catalogTool.slug || "")) {
       try {
         const { invalidateCrmPrefetch } = await import("./crm-prefetch.service");

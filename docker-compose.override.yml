@@ -1,7 +1,7 @@
 # Dev-only override (auto-loaded by `docker compose`).
 #
 # The AI service Dockerfile runs `tsx src/index.ts` directly (no compiled dist),
-# but bakes `services/ai/src` at BUILD time — so code changes don't go live
+# but bakes `services/ai/src` at BUILD time - so code changes don't go live
 # until the image is rebuilt, and the COPY layer frequently cache-hits. This
 # bind-mounts the live working-tree source over the baked copy so the container
 # always runs the current code; a plain `docker compose restart ai` picks up

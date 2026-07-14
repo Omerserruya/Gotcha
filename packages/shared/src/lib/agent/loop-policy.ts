@@ -1,16 +1,16 @@
 /**
- * Agent Loop — policy & bounds (pure, capability-composable).
+ * Agent Loop - policy & bounds (pure, capability-composable).
  *
  * The loop is NOT bounded by one global iteration cap. Each Capability declares
  * its own loop policy (a WRITE-heavy or destructive capability may allow fewer
  * iterations or a tighter budget than a read-only one). The effective policy for
  * a turn is the TIGHTEST of the platform default and every ENGAGED capability's
- * stated limit — capabilities may only tighten safety, never loosen it.
+ * stated limit - capabilities may only tighten safety, never loosen it.
  *
  * Nothing here decides; it only computes the envelope the driver enforces.
  */
 
-/** Why a loop stopped — every run persists exactly one of these. */
+/** Why a loop stopped - every run persists exactly one of these. */
 export type TerminationReason =
   // ── Reasoner-chosen (judgment) ──
   | "finish" // goal reached / nothing left to do
@@ -37,14 +37,14 @@ export interface LoopPolicy {
   maxBudgetUnits: number;
 }
 
-/** Platform default envelope — the loosest allowed; capabilities only tighten it. */
+/** Platform default envelope - the loosest allowed; capabilities only tighten it. */
 export const DEFAULT_LOOP_POLICY: LoopPolicy = {
   maxIterations: 6,
   maxWallMs: 60_000,
   maxBudgetUnits: Number.POSITIVE_INFINITY,
 };
 
-/** A capability's stated limits — any omitted field inherits the default. */
+/** A capability's stated limits - any omitted field inherits the default. */
 export type CapabilityLoopPolicy = Partial<LoopPolicy>;
 
 /**

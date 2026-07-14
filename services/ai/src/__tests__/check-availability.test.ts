@@ -102,7 +102,7 @@ describe("check_availability - read-only availability", () => {
   it("working-hours question (no time, NO meeting_type) → structured workingHours + slots, never books", async () => {
     // Regression: check_availability is often called with no meeting_type. The
     // env loader must NOT do a Prisma findUnique with an undefined slug key (it
-    // throws live) — it snaps to the single configured type instead.
+    // throws live) - it snaps to the single configured type instead.
     const { makeCheckAvailabilityHandler } = await import("../services/schedule-handler.service");
     const r = await makeCheckAvailabilityHandler(opts)({});
     expect(r.ok).toBe(true);
@@ -121,7 +121,7 @@ describe("check_availability - read-only availability", () => {
     const { makeCheckAvailabilityHandler } = await import("../services/schedule-handler.service");
     const r = await makeCheckAvailabilityHandler(opts)({
       meeting_type: "discovery_call",
-      requested_at_iso: "2026-05-05T11:00:00+03:00", // Tue 11:00 — open, > minNotice
+      requested_at_iso: "2026-05-05T11:00:00+03:00", // Tue 11:00 - open, > minNotice
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -135,7 +135,7 @@ describe("check_availability - read-only availability", () => {
     const { makeCheckAvailabilityHandler } = await import("../services/schedule-handler.service");
     const r = await makeCheckAvailabilityHandler(opts)({
       meeting_type: "discovery_call",
-      requested_at_iso: "2026-05-05T20:00:00+03:00", // Tue 20:00 — after 18:00 close
+      requested_at_iso: "2026-05-05T20:00:00+03:00", // Tue 20:00 - after 18:00 close
     });
     expect(r.ok).toBe(true);
     if (r.ok) {
@@ -150,7 +150,7 @@ describe("check_availability - read-only availability", () => {
     const { makeCheckAvailabilityHandler } = await import("../services/schedule-handler.service");
     const r = await makeCheckAvailabilityHandler(opts)({
       meeting_type: "discovery_call",
-      from_iso: "2026-05-09T08:00:00+03:00", // Saturday — closed all day
+      from_iso: "2026-05-09T08:00:00+03:00", // Saturday - closed all day
       to_iso: "2026-05-09T20:00:00+03:00",
     });
     expect(r.ok).toBe(true);
@@ -163,7 +163,7 @@ describe("check_availability - read-only availability", () => {
 
   it("unknown meeting type with none configured-match → structured failure, never books", async () => {
     const { makeCheckAvailabilityHandler } = await import("../services/schedule-handler.service");
-    // Only one type is configured, so it snaps regardless — assert it still
+    // Only one type is configured, so it snaps regardless - assert it still
     // resolves rather than throwing, and never books.
     const r = await makeCheckAvailabilityHandler(opts)({ meeting_type: "totally_made_up" });
     expect(r.ok).toBe(true); // single configured type → snapped

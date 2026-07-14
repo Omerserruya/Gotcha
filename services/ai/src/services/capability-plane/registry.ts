@@ -1,5 +1,5 @@
 /**
- * Capability Registry — the Runtime's capability plane.
+ * Capability Registry - the Runtime's capability plane.
  *
  * The ONE place the Agent Loop talks to for "what is the world?" and "do this
  * operation". The loop NEVER imports a concrete capability. Each capability
@@ -9,7 +9,7 @@
  * Oracle assembler, and the Reasoner are untouched.
  *
  * Domain capabilities only. Kernel truth (identity, billing, permissions) is NOT
- * a capability — the Oracle assembler reads it directly.
+ * a capability - the Oracle assembler reads it directly.
  */
 
 import type {
@@ -66,7 +66,7 @@ export function registeredCapabilities(): CapabilityRegistration[] {
 
 /**
  * Every capability's self-described world view this tick (in parallel). A read
- * that throws degrades to a minimal empty view — never blocks the Oracle.
+ * that throws degrades to a minimal empty view - never blocks the Oracle.
  */
 export async function describeAllWorlds(ctx: CapabilityContext): Promise<CapabilityWorldView[]> {
   return Promise.all(

@@ -1,11 +1,11 @@
 /**
- * Permissions bridge — RBAC "home" → kernel allow-list.
+ * Permissions bridge - RBAC "home" → kernel allow-list.
  *
  * The kernel's `permissions.allowedOperations` is a ceiling the Oracle
  * intersects the menu with (empty = unrestricted, by convention). This bridge
- * reads the SAME guest-list the legacy autonomous surface uses — the AND-rule:
+ * reads the SAME guest-list the legacy autonomous surface uses - the AND-rule:
  * AgentToolPermission.isAllowed ∧ TenantTool.isEnabled ∧ integration CONNECTED
- * (see ai-bot.service `allowedAdapterTools`) — and projects it onto kernel
+ * (see ai-bot.service `allowedAdapterTools`) - and projects it onto kernel
  * operation names.
  *
  * Scope honesty: AgentToolPermission governs INTEGRATION (marketplace) tools
@@ -30,7 +30,7 @@ export interface ToolGrants {
   allowedToolSlugs: Set<string>;
 }
 
-/** Read the agent's tool grants from their home. Never throws — degrades to ungoverned. */
+/** Read the agent's tool grants from their home. Never throws - degrades to ungoverned. */
 export async function loadToolGrants(tenantId: string, aiAgentId: string): Promise<ToolGrants> {
   try {
     const [total, allowedRows] = await Promise.all([
@@ -94,7 +94,7 @@ export function deriveAllowedOperations(
     allowed.push(op); // governed-elsewhere domains pass through untouched
   }
   // Kernel convention: [] = unrestricted. A governed agent whose ceiling came
-  // out empty must NOT be promoted to "all" — return a non-matching sentinel
+  // out empty must NOT be promoted to "all" - return a non-matching sentinel
   // so the menu intersection blocks everything instead.
   return allowed.length > 0 ? allowed : ["__no_operations_granted__"];
 }

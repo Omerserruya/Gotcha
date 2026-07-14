@@ -5,7 +5,7 @@ const discovery = { slug: "discovery_call", name: "Discovery Call", durationMinu
 const demo = { slug: "product_demo", name: "Product Demo", durationMinutes: 45 };
 const audit = { slug: "tech_audit", name: "Technical Audit", durationMinutes: 60 };
 
-describe("snapMeetingType — model invented a meeting_type slug", () => {
+describe("snapMeetingType - model invented a meeting_type slug", () => {
   it("single configured type → always use it (the only thing bookable)", () => {
     // The omer/HubSpot tenant case: only `discovery_call` exists, model sent 'demo'.
     expect(snapMeetingType("demo", [discovery])).toEqual(discovery);

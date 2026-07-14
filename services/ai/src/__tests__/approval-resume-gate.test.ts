@@ -1,5 +1,5 @@
 /**
- * P1-3 (B6) — the kernel approval gate's approval-RESUME path. When the
+ * P1-3 (B6) - the kernel approval gate's approval-RESUME path. When the
  * dispatcher re-enters the Runtime with a matching APPROVED request, the gate
  * treats it as satisfied (no re-ask); a stale/mismatched ref fails loud.
  */
@@ -36,7 +36,7 @@ beforeEach(() => {
   Object.values(h).forEach((fn) => fn.mockReset());
 });
 
-describe("kernelApprovalGate — approval resume", () => {
+describe("kernelApprovalGate - approval resume", () => {
   it("APPROVED ref matching tool+conversation → gate satisfied (required:false), policy NOT re-evaluated", async () => {
     h.findFirst.mockResolvedValue({ status: "APPROVED", tool: "schedule_meeting", conversationId: "c1" });
     const out = await kernelApprovalGate(contract, baseReq({ approval: { approvedRef: "ap1" } }), map);

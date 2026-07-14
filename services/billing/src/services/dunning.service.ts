@@ -1,5 +1,5 @@
 /**
- * Dunning — retry failed renewals on a ladder, then suspend.
+ * Dunning - retry failed renewals on a ladder, then suspend.
  *
  *   PAST_DUE → retry on days 0/3/7 (configurable) → SUSPENDED.
  *

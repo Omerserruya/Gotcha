@@ -90,7 +90,7 @@ export async function loadConnection(opts: { tenantId: string; slug: string }): 
 } | null> {
   // Load CONNECTED *or* ERROR integrations. An OAuth integration whose access
   // token merely expired latches to ERROR, but it is recoverable via its refresh
-  // token — excluding ERROR here is what created the deadlock (ERROR → never
+  // token - excluding ERROR here is what created the deadlock (ERROR → never
   // loaded → never refreshed → stays ERROR forever). We load it and let
   // ensureFreshToken / the 401-retry recover it. DISCONNECTED stays excluded.
   // Prefer a CONNECTED row when both somehow exist (CONNECTED < ERROR lexically).
@@ -199,7 +199,7 @@ export async function ensureFreshToken(opts: {
     return next;
   } catch (err: any) {
     // Only a refresh FAILURE (e.g. revoked/invalid refresh token) is a real,
-    // unrecoverable error — a mere access-token expiry is handled above.
+    // unrecoverable error - a mere access-token expiry is handled above.
     await setConnectionStatus({
       tenantIntegrationId: opts.tenantIntegrationId,
       status: "ERROR",
@@ -370,7 +370,7 @@ export async function executeAdapterTool(opts: {
       currentStatus: conn.status,
     });
   } catch (err: any) {
-    // Refresh itself failed (revoked/invalid refresh token) — unrecoverable.
+    // Refresh itself failed (revoked/invalid refresh token) - unrecoverable.
     const reason = (err?.message || "token_refresh_failed").slice(0, 240);
     await auditAdapterCall({
       tenantId: opts.tenantId, conversationId: opts.conversationId, contactId: opts.contactId,
@@ -395,7 +395,7 @@ export async function executeAdapterTool(opts: {
     });
   // Lenient 401/expiry detection (superset of the original `/401|unauthorized|
   // invalid.*token/`). NB: a bare `\b401\b` does NOT match "hubspot_401" (an
-  // underscore is a word char, so there's no boundary before the digits) — match
+  // underscore is a word char, so there's no boundary before the digits) - match
   // 401 as a substring instead, as adapters embed it in messages like that.
   const isAuthError = (m: string) => /401|unauthorized|invalid.*token|token.*expired|expired.*token|expired_authentication/i.test(m);
 

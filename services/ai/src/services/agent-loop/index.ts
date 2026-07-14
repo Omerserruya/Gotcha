@@ -1,5 +1,5 @@
 /**
- * Agent Loop — public surface. The one entry the live turn calls is `runAgentLoop`
+ * Agent Loop - public surface. The one entry the live turn calls is `runAgentLoop`
  * (gated by `isAgentLoopEnabled` / `agentLoopMode`). Everything else is internal.
  */
 

@@ -1,14 +1,14 @@
 /**
- * Oracle Assembler — the modular Oracle for the Agent Loop.
+ * Oracle Assembler - the modular Oracle for the Agent Loop.
  *
  * The Oracle is the ONLY source of truth. It assembles KERNEL facts (identity,
- * billing/entitlements, permissions — universal to every employee) plus the
+ * billing/entitlements, permissions - universal to every employee) plus the
  * DOMAIN world (each registered capability's self-described `CapabilityWorldView`),
  * then composes canonical `Facts` via the pure `assembleFacts` (which derives the
  * operation menu generically from the world). It re-runs every loop iteration so
  * Facts reflect the last operation's effect (re-read, never trust return values).
  *
- * Domain-agnostic: adding a capability changes NOTHING here — its world view flows
+ * Domain-agnostic: adding a capability changes NOTHING here - its world view flows
  * through `describeAllWorlds` untouched.
  */
 
@@ -21,9 +21,9 @@ import {
 import { deriveAllowedOperations, type ToolGrants } from "./permissions-bridge";
 
 export interface OracleBase {
-  /** Customer identity — kernel truth owned by the turn, not a capability. */
+  /** Customer identity - kernel truth owned by the turn, not a capability. */
   customer: KernelSignals["customer"];
-  /** RBAC-permitted operations — the menu is intersected with these. */
+  /** RBAC-permitted operations - the menu is intersected with these. */
   permissions: KernelSignals["permissions"];
 }
 
@@ -32,7 +32,7 @@ export interface AssembleOracleOptions {
   base: OracleBase;
   /**
    * The agent's tool grants (RBAC home). When present, the allow-list is
-   * derived from these against the LIVE world each tick — `base.permissions`
+   * derived from these against the LIVE world each tick - `base.permissions`
    * then only acts as an additional explicit ceiling if non-empty.
    */
   grants?: ToolGrants;
@@ -42,7 +42,7 @@ export interface AssembleOracleOptions {
 
 /**
  * Read the money home (kernel truth). Never throws. Failure posture: fail toward
- * the LAST KNOWN billing state for the tenant (never silently invent "healthy") —
+ * the LAST KNOWN billing state for the tenant (never silently invent "healthy") -
  * a transient billing-read outage must not flip an exhausted tenant back to
  * spendable. Only with no prior knowledge at all (cold start / dev envs) does it
  * degrade to permissive, and then loudly. The metered AI choke point remains the
@@ -58,7 +58,7 @@ async function readBilling(tenantId: string): Promise<KernelSignals["billing"]> 
     // (below) instead of silently flipping an exhausted tenant to spendable.
     const bal = await getBalance(tenantId);
     // Subscription STATUS (the previously-stubbed field) comes from the billing
-    // home via checkAiAllowed — which encodes enforcement-mode semantics (off /
+    // home via checkAiAllowed - which encodes enforcement-mode semantics (off /
     // no-subscription / grandfathered → serviceable). It fail-OPENS by design
     // (never block a paying customer on a DB blip), so it only ever RELAXES the
     // status; the balance above stays the hard exhaustion signal. Best-effort:
@@ -84,7 +84,7 @@ async function readBilling(tenantId: string): Promise<KernelSignals["billing"]> 
       console.warn(`[oracle] billing read failed (${err?.message}); using last-known state for ${tenantId}`);
       return known.billing;
     }
-    console.warn(`[oracle] billing read failed with NO known state for ${tenantId} (${err?.message}); degrading permissive — metered AI calls remain the enforcement backstop`);
+    console.warn(`[oracle] billing read failed with NO known state for ${tenantId} (${err?.message}); degrading permissive - metered AI calls remain the enforcement backstop`);
     return { status: "active", withinLimits: true };
   }
 }

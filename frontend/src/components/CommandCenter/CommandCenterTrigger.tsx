@@ -31,6 +31,9 @@ export function CommandCenterTrigger() {
         <path strokeLinecap="round" strokeLinejoin="round" d="M21 21l-4.35-4.35M10 18a8 8 0 100-16 8 8 0 000 16z" />
       </svg>
       <span className="text-xs">{t("commandCenter.triggerLabel")}</span>
+      <span className="text-[9px] font-bold uppercase tracking-wide text-violet-600 bg-violet-50 border border-violet-100 rounded-full px-1.5 py-0.5">
+        Beta
+      </span>
       <kbd className="text-[10px] font-mono bg-gray-100 border border-gray-200 rounded px-1.5 py-0.5">
         {isMac ? "⌘" : "Ctrl"}K
       </kbd>

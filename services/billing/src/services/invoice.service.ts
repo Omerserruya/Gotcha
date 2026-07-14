@@ -63,7 +63,7 @@ export async function chargeFor(input: ChargeForInput): Promise<ChargeForResult>
   // the Invoice + a PENDING Charge in one transaction; the Charge's UNIQUE
   // idempotencyKey is the concurrency guard. If a sibling request already
   // claimed it, the create throws P2002, the whole tx rolls back (no orphan
-  // invoice), and we return the existing charge's outcome — so the provider is
+  // invoice), and we return the existing charge's outcome - so the provider is
   // hit AT MOST ONCE per key even under concurrent calls / retries.
   let invoiceId: string;
   let chargeId: string;

@@ -1,24 +1,24 @@
 /**
- * Copilot Diagnostics — deterministic, structured observability for every Copilot
+ * Copilot Diagnostics - deterministic, structured observability for every Copilot
  * turn, the advisory analog of the AI Employee's `[ai-bot]` diagnostics.
  *
  * The Copilot writes no per-tool audit row (it recommends, it doesn't act), so
  * before this module the only way to know WHY it said what it said was to guess.
  * These logs make any Copilot decision debuggable from stdout alone:
  *
- *   [copilot][plan]   — the planner's view BEFORE the model reasons: the goal, the
+ *   [copilot][plan]   - the planner's view BEFORE the model reasons: the goal, the
  *                       active objective, the best next action, confidence, and the
  *                       business-goal status. This is the EXACT CurrentPlan rendered
  *                       into the prompt (see `computeCurrentPlanForOpts`), so the
  *                       log can never disagree with what the model received.
  *
- *   [copilot][tool]   — one per decision the turn makes:
- *                         • READ  — a safe tool the Copilot auto-ran (with the
+ *   [copilot][tool]   - one per decision the turn makes:
+ *                         • READ  - a safe tool the Copilot auto-ran (with the
  *                                   facts it returned, summarized);
- *                         • ACTION— a customer-facing tool it RECOMMENDED, never ran
+ *                         • ACTION- a customer-facing tool it RECOMMENDED, never ran
  *                                   (with the planner's reason);
- *                         • NO_TOOL— it answered with no tool (pure reply);
- *                         • MISSING_INFORMATION — it could not act because the
+ *                         • NO_TOOL- it answered with no tool (pure reply);
+ *                         • MISSING_INFORMATION - it could not act because the
  *                                   planner still needs a required input (named).
  *
  * Pure formatting + a thin console emitter. Never throws; diagnostics must never
@@ -39,7 +39,7 @@ export interface CopilotDiagContext {
 
 export interface CopilotToolDiag {
   decision: CopilotToolDecision;
-  /** WHY the planner did/didn't select this — for MISSING_INFORMATION, the blocker. */
+  /** WHY the planner did/didn't select this - for MISSING_INFORMATION, the blocker. */
   plannerReason: string;
   tool?: string;
   executed: boolean;
@@ -55,17 +55,17 @@ const tag = (ctx: CopilotDiagContext, kind: string) =>
 /** Render the `[copilot][plan]` block from the EXACT plan the prompt rendered. */
 export function formatCopilotPlan(plan: CurrentPlan | null, ctx: CopilotDiagContext): string {
   if (!plan) {
-    return `${tag(ctx, "plan")}\n  Goal: —\n  Objective: —\n  BestAction: —\n  Confidence: —\n  GoalStatus: —`;
+    return `${tag(ctx, "plan")}\n  Goal: -\n  Objective: -\n  BestAction: -\n  Confidence: -\n  GoalStatus: -`;
   }
   const best = plan.bestNextAction;
-  const bestStr = best ? `[${best.kind.toUpperCase()}] ${best.tool ?? best.label}` : "—";
+  const bestStr = best ? `[${best.kind.toUpperCase()}] ${best.tool ?? best.label}` : "-";
   return (
     `${tag(ctx, "plan")}\n` +
-    `  Goal: ${plan.goal ?? "—"}\n` +
-    `  Objective: ${plan.currentObjective ?? "—"}\n` +
+    `  Goal: ${plan.goal ?? "-"}\n` +
+    `  Objective: ${plan.currentObjective ?? "-"}\n` +
     `  BestAction: ${bestStr}\n` +
     `  Confidence: ${plan.confidence.toFixed(2)}\n` +
-    `  GoalStatus: ${plan.goalStatus?.kind ?? "—"}`
+    `  GoalStatus: ${plan.goalStatus?.kind ?? "-"}`
   );
 }
 
@@ -74,11 +74,11 @@ export function formatCopilotTool(e: CopilotToolDiag, ctx: CopilotDiagContext): 
   return (
     `${tag(ctx, "tool")}\n` +
     `  Decision: ${e.decision}\n` +
-    `  PlannerReason: ${e.plannerReason || "—"}\n` +
-    `  Tool: ${e.tool ?? "—"}\n` +
+    `  PlannerReason: ${e.plannerReason || "-"}\n` +
+    `  Tool: ${e.tool ?? "-"}\n` +
     `  Executed: ${e.executed}\n` +
     `  ExecutionMode: ${e.executionMode}\n` +
-    `  Result: ${e.result ?? "—"}`
+    `  Result: ${e.result ?? "-"}`
   );
 }
 
@@ -106,15 +106,15 @@ export function logCopilotTool(e: CopilotToolDiag, ctx: CopilotDiagContext): voi
 export function plannerReasonForTool(plan: CurrentPlan | null, toolName: string): string {
   if (!plan) return "no plan computed for this turn";
   if (toolName === plan.preferredTool && plan.why) {
-    return `planner's best action — ${plan.why} (confidence ${plan.confidence.toFixed(2)})`;
+    return `planner's best action - ${plan.why} (confidence ${plan.confidence.toFixed(2)})`;
   }
   const cand = plan.candidateActions.find((c) => c.tool === toolName);
   if (cand) {
-    return `planner candidate [${cand.kind.toUpperCase()}] — ${cand.rationale} (score ${cand.score.toFixed(2)})`;
+    return `planner candidate [${cand.kind.toUpperCase()}] - ${cand.rationale} (score ${cand.score.toFixed(2)})`;
   }
-  // Not an objective action the planner ranked — typically a READ the model ran to
+  // Not an objective action the planner ranked - typically a READ the model ran to
   // enrich the recommendation, or a tool it chose off the customer's latest message.
-  return "not the planner's ranked action — model-selected for this turn (e.g. a read to enrich the recommendation)";
+  return "not the planner's ranked action - model-selected for this turn (e.g. a read to enrich the recommendation)";
 }
 
 /**
@@ -130,7 +130,7 @@ export function noToolDecision(plan: CurrentPlan | null): CopilotToolDiag {
       decision: "MISSING_INFORMATION",
       plannerReason:
         `blocked: the planner needs ${missing.map((m) => m.label).join("; ")} before the goal's action can run ` +
-        `(objective ${plan?.currentObjective ?? "—"})`,
+        `(objective ${plan?.currentObjective ?? "-"})`,
       executed: false,
       executionMode: "none",
       result: "recommended asking for the missing detail (no tool run)",
@@ -139,8 +139,8 @@ export function noToolDecision(plan: CurrentPlan | null): CopilotToolDiag {
   return {
     decision: "NO_TOOL",
     plannerReason: best
-      ? `planner best move is [${best.kind.toUpperCase()}] ${best.label} — no tool needed to advance it this turn`
-      : "no objective action this turn — reply only",
+      ? `planner best move is [${best.kind.toUpperCase()}] ${best.label} - no tool needed to advance it this turn`
+      : "no objective action this turn - reply only",
     executed: false,
     executionMode: "none",
     result: "reply-only suggestions",
@@ -148,12 +148,12 @@ export function noToolDecision(plan: CurrentPlan | null): CopilotToolDiag {
 }
 
 /**
- * Summarize a tool result for the `Result:` line — the FACTS a READ returned, so a
+ * Summarize a tool result for the `Result:` line - the FACTS a READ returned, so a
  * reader can confirm the Copilot wove real data into its recommendation. Parses the
  * dispatcher's JSON envelope when present; otherwise truncates. Never throws.
  */
 export function summarizeToolResult(raw: unknown): string {
-  if (raw === undefined || raw === null) return "—";
+  if (raw === undefined || raw === null) return "-";
   let s = typeof raw === "string" ? raw : safeStringify(raw);
   try {
     const o = JSON.parse(s);
@@ -173,7 +173,7 @@ export function summarizeToolResult(raw: unknown): string {
       if (bits.length) s = bits.join(", ");
     }
   } catch {
-    /* not JSON — fall through to truncation */
+    /* not JSON - fall through to truncation */
   }
   return truncate(s, 240);
 }

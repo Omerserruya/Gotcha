@@ -1042,7 +1042,7 @@ http {
         listen 80;
         server_name help.gotcha.co.il help.dev.gotcha.co.il;
 
-        # Next.js internals + shared static assets — no rewrite (regex wins
+        # Next.js internals + shared static assets - no rewrite (regex wins
         # over the prefix locations below).
         location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {
             proxy_pass http://frontend;
@@ -1055,7 +1055,7 @@ http {
             proxy_set_header X-Forwarded-Proto $scheme;
         }
 
-        # In-page links already carry the /help prefix — pass through as-is.
+        # In-page links already carry the /help prefix - pass through as-is.
         location /help {
             proxy_pass http://frontend;
             proxy_http_version 1.1;
