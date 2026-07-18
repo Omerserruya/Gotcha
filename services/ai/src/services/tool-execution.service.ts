@@ -13,7 +13,7 @@
  * No silent fallback: missing endpoint, unreachable host, 4xx/5xx →
  * structured failure with { ok:false, error }.
  */
-import { prisma, analyticsQueue } from "@chatcenter/shared";
+import { prisma, analyticsQueue, assertPublicUrl } from "@chatcenter/shared";
 import axios from "axios";
 import { trackToolCall } from "./usage.service";
 import { logAudit } from "./audit.service";
@@ -197,6 +197,11 @@ export async function executeTool(params: {
   let errorMessage: string | undefined;
 
   try {
+    // SSRF guard: for relative catalog endpoints the host comes from tenant
+    // integrationConfig.baseUrl. Block private/link-local/metadata targets at
+    // DNS resolution before dispatching. (Absolute catalog URLs are platform-
+    // authored, but validating uniformly costs nothing and is defense in depth.)
+    await assertPublicUrl(url);
     const axiosConfig: any = {
       url,
       method,

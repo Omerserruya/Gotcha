@@ -1,0 +1,63 @@
+# Disaster-recovery drill stack. Fully isolated from the live dev stack:
+# own project name (gotchadr), own network, own volumes, distinct host ports.
+# Proves the nightly dumps restore AND that a restored system authenticates.
+services:
+  dr-gotcha-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: whatsapp_cc
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  dr-authentik-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik
+      POSTGRES_DB: authentik
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  dr-redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  dr-authentik-server:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: server
+    environment:
+      # Same secret key as the source deployment - required to decrypt the
+      # signing keypair restored from the dump. A DIFFERENT key here would make
+      # the restored certs undecryptable: exactly the DR failure we are testing.
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY}
+      AUTHENTIK_POSTGRESQL__HOST: dr-authentik-db
+      AUTHENTIK_POSTGRESQL__USER: authentik
+      AUTHENTIK_POSTGRESQL__PASSWORD: authentik
+      AUTHENTIK_POSTGRESQL__NAME: authentik
+      AUTHENTIK_REDIS__HOST: dr-redis
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+    ports:
+      - "9100:9000"
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 30
+      start_period: 60s
+    depends_on:
+      dr-authentik-db: { condition: service_healthy }
+      dr-redis: { condition: service_healthy }

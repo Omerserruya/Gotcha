@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import { Prisma } from "@prisma/client";
@@ -159,7 +160,7 @@ async function billingInternal(path: string, init?: { method?: string; body?: un
       method: init?.method ?? "GET",
       headers: {
         "Content-Type": "application/json",
-        "x-internal-key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+        "x-internal-key": getInternalServiceKey(),
       },
       ...(init?.body !== undefined ? { body: JSON.stringify(init.body) } : {}),
     });

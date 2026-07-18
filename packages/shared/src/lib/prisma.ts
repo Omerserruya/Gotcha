@@ -34,7 +34,6 @@ const TENANT_SCOPED_MODELS = new Set<string>([
   "KnowledgeBase",
   "KnowledgeDocument",
   "KnowledgeIntegration",
-  "MagicLink",
   "Message",
   "NotificationLog",
   "RouterRule",

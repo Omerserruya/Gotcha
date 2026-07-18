@@ -26,7 +26,8 @@ cp .env.example .env
 | Variable | Description |
 |----------|-------------|
 | `DATABASE_URL` | PostgreSQL connection string |
-| `JWT_SECRET` | Secret key for JWT tokens (min 32 chars) |
+| `OIDC_ISSUER` / `OIDC_JWKS_URI` | Authentik OIDC issuer (public URL) and JWKS endpoint (internal DNS) |
+| `SYSTEM_ADMIN_SETUP_SECRET` | One-time secret gating the system-admin seed endpoint |
 | `REDIS_URL` | Redis connection string |
 | `FRONTEND_URL` | Your frontend URL (e.g., `http://localhost:3000`) |
 | `NEXT_PUBLIC_API_URL` | API URL for the frontend |
@@ -64,18 +65,17 @@ curl -X POST http://localhost:4000/api/system/seed \
   -H "Content-Type: application/json" \
   -d '{
     "email": "admin@yourdomain.com",
-    "password": "your-secure-password",
     "name": "System Admin",
-    "setupSecret": "<your JWT_SECRET value>"
+    "setupSecret": "<your SYSTEM_ADMIN_SETUP_SECRET value>"
   }'
 ```
 
-> The `setupSecret` must match your `JWT_SECRET` environment variable (or `SYSTEM_ADMIN_SETUP_SECRET` if set). This endpoint can only be called once.
+> The `setupSecret` must match your `SYSTEM_ADMIN_SETUP_SECRET` environment variable. This endpoint can only be called once. No password is sent or returned: the seed provisions an Authentik identity, and the admin sets their password through an Authentik recovery link (create one in the Authentik admin under Directory > Users, or via `scripts/authentik`).
 
 ## 6. Login as System Admin
 
 1. Navigate to your frontend URL (e.g., `http://localhost:3000/login`)
-2. Click **"System Admin Login"** at the top of the form
+2. Click **Sign in**; you are redirected to Authentik, the identity provider
 3. Enter the email and password you used in the seed step
 4. You'll be redirected to the **System Dashboard**
 
@@ -202,7 +202,7 @@ ChatCenter is a multi-tenant, multi-channel customer communication platform:
 ## Troubleshooting
 
 ### Can't create system admin
-- Ensure the `setupSecret` matches your `JWT_SECRET` exactly
+- Ensure the `setupSecret` matches your `SYSTEM_ADMIN_SETUP_SECRET` exactly
 - The seed endpoint can only be called once; check if a system admin already exists
 
 ### Tenant login fails

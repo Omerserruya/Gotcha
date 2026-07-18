@@ -12,14 +12,14 @@
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { prisma } from "@chatcenter/shared";
+import { prisma, verifyInternalServiceKey } from "@chatcenter/shared";
 import { ensureCapabilitiesRegistered, executeOperation } from "../services/capability-plane";
 
 const router = Router();
 
 function internalOnly(req: Request, res: Response, next: NextFunction): void {
-  const key = req.headers["x-internal-key"];
-  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
+  // Hardened check: constant-time, fail-closed, no committed default.
+  if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
     res.status(401).json({ error: "unauthorized" });
     return;
   }

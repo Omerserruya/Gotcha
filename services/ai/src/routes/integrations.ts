@@ -1,11 +1,16 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
 import { executeAdapterTool, getAdapter } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache } from "../services/connectors/crm-adapter-resolver";
 
 const router = Router();
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// PENDING_ONBOARDING tenants may browse and connect the marketplace too - the
+// setup wizard's integrations movement matches detected tools against this
+// catalog and offers real connects. requireActiveTenant() 403'd during
+// onboarding, which made EVERY detected tool (ReturnGO included) render as
+// "not supported yet" because the catalog fetch came back empty.
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
 
 // GET / - List all published catalog integrations with tenant connection status
 router.get("/", async (req: Request, res: Response) => {
@@ -28,7 +33,13 @@ router.get("/", async (req: Request, res: Response) => {
         },
         tenantConnections: {
           where: { tenantId: req.tenantId! },
-          select: { id: true, status: true, createdAt: true },
+          // `config` carries non-secret per-tenant settings (useAsCrm,
+          // shopDomain, …) and the detail route already returns it. Without it
+          // here, list consumers cannot tell an elected customer system of
+          // record from a plain connection: the Settings toggle rendered OFF
+          // for a tenant whose config.useAsCrm was true. `credentials` stays
+          // out - it is the encrypted secret and no list view needs it.
+          select: { id: true, status: true, createdAt: true, config: true },
         },
       },
       orderBy: { sortOrder: "asc" },
@@ -359,6 +370,78 @@ router.put("/:slug/credentials", async (req: Request, res: Response) => {
   }
 });
 
+/**
+ * Grant every READ tool of an integration to every AI employee of the tenant.
+ *
+ * Used when an integration is elected the CRM source of truth: reading the
+ * system of record is implied by that choice, so the tenant should not have to
+ * tick 40 boxes by hand for the employee to see its own customers.
+ *
+ * Idempotent, and never downgrades: rows the operator has explicitly turned
+ * OFF are left alone rather than silently re-enabled on every toggle.
+ * Returns the number of permissions newly granted.
+ */
+async function enableReadToolsForIntegration(
+  tenantId: string,
+  tenantIntegrationId: string,
+  catalogIntegrationId: string,
+): Promise<number> {
+  const readTools = await prisma.catalogTool.findMany({
+    where: { integrationId: catalogIntegrationId, category: "READ" },
+    select: { id: true },
+  });
+  if (readTools.length === 0) return 0;
+
+  // A TenantTool row must exist before it can be permissioned. Upsert is not
+  // available here: the shared TenantGuard rejects any where clause without
+  // tenantId, and the compound unique key (tenantIntegrationId, catalogToolId)
+  // cannot carry one. So read what exists, then create only the gaps.
+  const readToolIds = readTools.map((t) => t.id);
+  const existingTools = await prisma.tenantTool.findMany({
+    where: { tenantId, tenantIntegrationId, catalogToolId: { in: readToolIds } },
+    select: { catalogToolId: true },
+  });
+  const haveTool = new Set(existingTools.map((t) => t.catalogToolId));
+  const missingTools = readToolIds.filter((id) => !haveTool.has(id));
+  if (missingTools.length > 0) {
+    await prisma.tenantTool.createMany({
+      data: missingTools.map((catalogToolId) => ({ tenantId, tenantIntegrationId, catalogToolId, isEnabled: true })),
+      skipDuplicates: true,
+    });
+  }
+
+  const [tenantTools, aiAgents] = await Promise.all([
+    prisma.tenantTool.findMany({
+      where: { tenantId, tenantIntegrationId, catalogToolId: { in: readToolIds } },
+      select: { id: true },
+    }),
+    prisma.aIAgent.findMany({ where: { tenantId }, select: { id: true } }),
+  ]);
+  if (aiAgents.length === 0) return 0;
+
+  // The unique index is [tenantToolId, departmentId, agentId] - it does NOT
+  // cover aiAgentId, so an upsert keyed on the AI agent is not expressible.
+  // Read what exists, then create only the gaps.
+  const existing = await prisma.agentToolPermission.findMany({
+    where: { tenantId, aiAgentId: { in: aiAgents.map((a) => a.id) }, tenantToolId: { in: tenantTools.map((t) => t.id) } },
+    select: { aiAgentId: true, tenantToolId: true },
+  });
+  const seen = new Set(existing.map((p) => `${p.aiAgentId}:${p.tenantToolId}`));
+
+  const toCreate = aiAgents.flatMap((agent) =>
+    tenantTools
+      .filter((tt) => !seen.has(`${agent.id}:${tt.id}`))
+      .map((tt) => ({ tenantId, aiAgentId: agent.id, tenantToolId: tt.id, isAllowed: true })),
+  );
+  if (toCreate.length === 0) return 0;
+
+  const { count } = await prisma.agentToolPermission.createMany({ data: toCreate, skipDuplicates: true });
+  console.log("[integrations] source-of-truth read tools granted", JSON.stringify({
+    tenantId, tenantIntegrationId, readTools: readTools.length, aiAgents: aiAgents.length, granted: count,
+  }));
+  return count;
+}
+
 // PUT /:slug/crm-source - Opt this integration in/out as the tenant's CRM
 // source of truth. Today only Shopify supports this (it's an ECOMMERCE
 // integration a tenant may elect as their customer system of record). Sets
@@ -402,7 +485,15 @@ router.put("/:slug/crm-source", async (req: Request, res: Response) => {
     });
     invalidateCrmAdapterCache(req.tenantId!);
 
-    res.json({ data: { id: updated.id, useAsCrm, config: updated.config } });
+    // Electing a source of truth is a statement about where customer data
+    // LIVES, so every read of that system must follow automatically. Without
+    // this the resolver routes customer lookups at Shopify while the tool gate
+    // still denies the reads (surface requires CONNECTED *and* an allowing
+    // AgentToolPermission), and the employee goes blind on both known and
+    // unknown callers. READ only - writes stay an explicit per-agent decision.
+    const readToolsEnabled = useAsCrm ? await enableReadToolsForIntegration(req.tenantId!, ti.id, entry.id) : 0;
+
+    res.json({ data: { id: updated.id, useAsCrm, config: updated.config, readToolsEnabled } });
   } catch (err) {
     console.error("crm-source toggle error:", err);
     res.status(500).json({ error: "Failed to update CRM source" });

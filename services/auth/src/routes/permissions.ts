@@ -7,6 +7,8 @@ import {
   resolveTenant,
   validate,
   assertTenantId,
+  writeAudit,
+  AuditAction,
   invalidatePermissionsCache,
   getUserFeatures,
   getEffectiveAccess,
@@ -221,12 +223,15 @@ router.put(
       return;
     }
     const { granted, reason } = req.body as { granted: boolean; reason?: string };
+    const _auditTenantId = assertTenantId(req);
     const row = await prisma.userFeatureGrant.upsert({
       where: { userId_feature: { userId, feature: feature as Feature } },
       create: { userId, feature, granted, reason, updatedBy: req.user?.userId },
       update: { granted, reason, updatedBy: req.user?.userId },
     });
     invalidatePermissionsCache({ userId });
+    void writeAudit({ tenantId: _auditTenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.FEATURE_GRANT_CHANGED, targetType: "user", targetId: userId, metadata: { feature } });
     res.json({ data: row });
   },
 );
@@ -243,6 +248,8 @@ router.delete(
       return;
     }
     await prisma.userFeatureGrant.deleteMany({ where: { userId, feature } });
+    void writeAudit({ tenantId: assertTenantId(req), actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.PERMISSION_REVOKED, targetType: "user", targetId: userId, metadata: { feature } });
     invalidatePermissionsCache({ userId });
     res.status(204).end();
   },
@@ -289,6 +296,8 @@ router.post(
         },
         include: { features: true },
       });
+      void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
+        action: AuditAction.ROLE_CREATED, targetType: "role", targetId: role.id, metadata: { name: role.name } });
       res.status(201).json({ data: role });
     } catch (err: unknown) {
       if (err && typeof err === "object" && "code" in err && (err as { code: string }).code === "P2002") {
@@ -321,10 +330,18 @@ router.patch(
       res.status(403).json({ error: "System roles cannot be modified" });
       return;
     }
+    // Explicit allowlist (updateRoleSchema fields). isSystem, tenantId, and
+    // feature grants are never settable via this body.
+    const { name, description } = req.body as { name?: string; description?: string | null };
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description;
     const updated = await prisma.tenantRole.update({
       where: { id: roleId },
-      data: req.body,
+      data,
     });
+    void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_UPDATED, targetType: "role", targetId: roleId, metadata: { fields: Object.keys(data) } });
     res.json({ data: updated });
   },
 );
@@ -345,6 +362,8 @@ router.delete(
       return;
     }
     await prisma.tenantRole.delete({ where: { id: roleId } });
+    void writeAudit({ tenantId, actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_DELETED, targetType: "role", targetId: roleId });
     // Cascade deletes assignments + role_features; invalidate user caches broadly.
     invalidatePermissionsCache();
     res.status(204).end();
@@ -413,6 +432,8 @@ router.post(
       update: {},
     });
     invalidatePermissionsCache({ userId });
+    void writeAudit({ tenantId: assertTenantId(req), actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_ASSIGNED, targetType: "user", targetId: userId, metadata: { roleId } });
     res.status(201).json({ data: assignment });
   },
 );
@@ -429,6 +450,8 @@ router.delete(
       return;
     }
     await prisma.userRoleAssignment.deleteMany({ where: { userId, roleId } });
+    void writeAudit({ tenantId: assertTenantId(req), actorType: "user", actorId: req.user?.userId,
+      action: AuditAction.ROLE_UNASSIGNED, targetType: "user", targetId: userId, metadata: { roleId } });
     invalidatePermissionsCache({ userId });
     res.status(204).end();
   },

@@ -29,6 +29,23 @@ x-logging: &default-logging
 x-restart: &default-restart
   restart: unless-stopped
 
+# ─── OIDC verification config ────────────────────────────
+# Every service that authenticates a request verifies Authentik's RS256 token
+# via JWKS (packages/shared/src/lib/jwt.ts). Both vars are REQUIRED there and
+# throw if absent, so a service without them 401s every request.
+#
+# The two are deliberately DIFFERENT hosts - read this before debugging a 401:
+#   OIDC_ISSUER   is string-COMPARED against the `iss` claim inside the token.
+#                 It must be the PUBLIC url the browser used. Never fetched.
+#   OIDC_JWKS_URI is FETCHED from inside the container, so it must use docker
+#                 service DNS. Pointing it at the public url works only if the
+#                 container can route back out through Cloudflare; pointing it
+#                 at localhost makes a service resolve itself and reject every
+#                 token. Internal DNS is correct and has no egress dependency.
+x-oidc-env: &oidc-env
+  OIDC_ISSUER: ${OIDC_ISSUER:?OIDC_ISSUER required in prod (public url, e.g. https://auth.gotcha.co.il/application/o/gotcha/)}
+  OIDC_JWKS_URI: ${OIDC_JWKS_URI:-http://authentik-server:9000/application/o/gotcha/jwks/}
+
 services:
   # ─── Infrastructure ──────────────────────────────────────
   db:
@@ -75,6 +92,128 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Authentik (identity provider) ───────────────────────
+  # Authentik owns ALL authentication: credentials, sessions, MFA, recovery,
+  # email verification. GOTCHA implements none of it and only verifies the
+  # tokens Authentik signs (packages/shared/src/lib/jwt.ts). See
+  # docs/security/authentik-architecture.md.
+  #
+  # It gets its OWN database: identity data and GOTCHA business data must
+  # never share a schema, so a GOTCHA migration can never touch credentials.
+  #
+  # Reached from the internet at https://auth.gotcha.co.il, routed by the
+  # gateway vhost (gateway/nginx.prod.conf.template). No host port is
+  # published here - same rule as db/redis/qdrant.
+  authentik-db:
+    image: postgres:16-alpine
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:?AUTHENTIK_PG_PASS required in prod}
+      POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
+    volumes:
+      - authentik_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_PG_USER:-authentik}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: server
+    <<: *default-restart
+    logging: *default-logging
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?AUTHENTIK_SECRET_KEY required in prod}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:?AUTHENTIK_PG_PASS required in prod}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+      # Shared redis, dedicated logical DB so Authentik keys never collide
+      # with BullMQ queues on db 0.
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      # TLS terminates at Cloudflare, so Authentik only ever sees plain HTTP on
+      # the internal network. It must TRUST the gateway's X-Forwarded-Proto to
+      # know the public scheme is https - otherwise it builds http:// URLs and
+      # signs tokens whose `iss` does not match OIDC_ISSUER (https://…), and
+      # every token 401s. These CIDRs are the docker bridge ranges the gateway
+      # talks from; a request from anywhere else has its headers ignored.
+      AUTHENTIK_LISTEN__TRUSTED_PROXY_CIDRS: ${AUTHENTIK_TRUSTED_PROXY_CIDRS:-10.0.0.0/8,172.16.0.0/12,192.168.0.0/16}
+      AUTHENTIK_WEB__THREADS: ${AUTHENTIK_WEB_THREADS:-2}
+      # Scoped to the apex so the session cookie is valid on auth.gotcha.co.il.
+      AUTHENTIK_COOKIE_DOMAIN: ${AUTHENTIK_COOKIE_DOMAIN:-gotcha.co.il}
+      # Bootstrap only seeds the very first admin on an empty database; it is
+      # a no-op afterwards. Leave unset in prod once the admin exists.
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@gotcha.co.il}
+      # Authentik sends its own recovery / verification mail - GOTCHA never does.
+      AUTHENTIK_EMAIL__HOST: ${SMTP_HOST:-}
+      AUTHENTIK_EMAIL__PORT: ${SMTP_PORT:-587}
+      AUTHENTIK_EMAIL__USERNAME: ${SMTP_USER:-}
+      AUTHENTIK_EMAIL__PASSWORD: ${SMTP_PASS:-}
+      AUTHENTIK_EMAIL__USE_TLS: ${SMTP_USE_TLS:-true}
+      AUTHENTIK_EMAIL__FROM: ${SMTP_FROM:-noreply@gotcha.co.il}
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # GOTCHA-branded recovery email (referenced by the email stage's template
+      # field, set in scripts/authentik/bootstrap.mjs).
+      - ./scripts/authentik/templates/gotcha_password_reset.html:/templates/gotcha_password_reset.html:ro
+      # GOTCHA theme (same files as dev): requires the repo checkout next to
+      # this compose file on the host. Served at /static/dist/... and injected
+      # into the flow UI's shadow roots via the data-inject stylesheet hook.
+      - ./scripts/authentik/custom.css:/web/dist/custom.css:ro
+      - ./frontend/public/logo_icon.png:/web/dist/assets/custom/logo_icon.png:ro
+      # GOTCHA favicon for the Authentik browser tab (served at
+      # /static/dist/assets/custom/gotcha-favicon.ico). Referenced by the brand's
+      # branding_favicon, set in scripts/authentik/bootstrap.mjs.
+      - ./frontend/public/favicon.ico:/web/dist/assets/custom/gotcha-favicon.ico:ro
+      - ./frontend/public/full_icon_white.png:/web/dist/assets/custom/full_icon_white.png:ro
+      - ./frontend/public/authentik-enhance.js:/web/dist/assets/custom/authentik-enhance.js:ro
+    # No host port in prod - the gateway proxies auth.gotcha.co.il to :9000.
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: worker
+    <<: *default-restart
+    logging: *default-logging
+    environment: *authentik-env
+    # Authentik's worker writes to /media and reads /templates as root.
+    user: root
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # The worker is the process that actually renders + sends stage emails.
+      - ./scripts/authentik/templates/gotcha_password_reset.html:/templates/gotcha_password_reset.html:ro
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # ─── API Gateway + Static Frontend (single nginx image) ────────────
   # Prod merges the gateway and the Next.js static export into one image
   # (built from gateway/Dockerfile.prod). The dev compose still has a
@@ -95,6 +234,11 @@ services:
       AI_PORT: ${AI_PORT:-4006}
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
       NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
+      BILLING_PORT: ${BILLING_PORT:-4009}
+      # Consumed by envsubst in gateway/Dockerfile.prod for the
+      # auth.gotcha.co.il upstream. envsubst uses an allowlist, so a var that
+      # is not listed there survives as a literal and nginx fails to start.
+      AUTHENTIK_PORT: ${AUTHENTIK_PORT:-9000}
     depends_on:
       - auth
       - conversation
@@ -104,6 +248,8 @@ services:
       - ai
       - voice-copilot
       - notifications
+      - billing
+      - authentik-server
 
   # ─── Microservices ───────────────────────────────────────
   auth:
@@ -116,8 +262,17 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${AUTH_PORT:-4001}
-      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET required}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
+      # auth is the ONLY service holding Authentik admin credentials. It uses
+      # them to create identities for invited users and to mint one-time
+      # recovery links (services/auth/src/services/invitation.service.ts).
+      # This token can create and disable identities - treat it as a root
+      # credential and use a dedicated non-bootstrap token in prod.
+      AUTHENTIK_URL: ${AUTHENTIK_URL:-http://authentik-server:9000}
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:?AUTHENTIK_API_TOKEN required in prod}
+      # Signs the `state` param for third-party OAuth (Google/Meta/etc).
+      # Unrelated to user authentication.
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET:?OAUTH_STATE_SECRET required in prod}
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
@@ -164,8 +319,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${CONVERSATION_PORT:-4002}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       FRONTEND_URL: ${FRONTEND_URL}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
@@ -190,12 +344,16 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${WEBHOOK_PORT:-4003}
-      JWT_SECRET: ${JWT_SECRET}
+      <<: *oidc-env
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:-}
+      GMAIL_PUBSUB_TOKEN: ${GMAIL_PUBSUB_TOKEN:-}
+      OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
     depends_on:
@@ -212,8 +370,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${ANALYTICS_PORT:-4004}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -228,8 +385,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${CHATBOT_PORT:-4005}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -244,8 +400,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${AI_PORT:-4006}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
       OPENAI_API_KEY: ${OPENAI_API_KEY:?OPENAI_API_KEY required}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
@@ -312,8 +467,7 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: production
       PORT: ${NOTIFICATIONS_PORT:-4008}
-      JWT_SECRET: ${JWT_SECRET}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      <<: *oidc-env
       FRONTEND_URL: ${FRONTEND_URL}
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -321,6 +475,44 @@ services:
       SMTP_USER: ${SMTP_USER:-}
       SMTP_PASS: ${SMTP_PASS:-}
       SMTP_FROM: ${SMTP_FROM:-}
+    depends_on:
+      db: { condition: service_healthy }
+      redis: { condition: service_healthy }
+
+  # Billing - subscriptions, credits/wallet, invoices, dunning, iCount webhooks.
+  # NOT dormant: the frontend calls /api/billing/* (api-billing.ts), and both
+  # ai (ai.service.ts:320 usage-threshold) and auth (onboarding.ts:39
+  # ensure-entity, system-features.ts:158) call it service-to-service on
+  # http://billing:4009. Absent from prod, onboarding degrades and the whole
+  # billing UI 404s - which is why it is added here.
+  billing:
+    image: ${REGISTRY}/${REPO:-gotcha}:billing-${TAG:-latest}
+    pull_policy: always
+    <<: *default-restart
+    logging: *default-logging
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      NODE_ENV: production
+      PORT: ${BILLING_PORT:-4009}
+      <<: *oidc-env
+      FRONTEND_URL: ${FRONTEND_URL}
+      # Validates the internal calls from ai/auth. Fail closed if unset - a
+      # missing key must stop the deploy, not silently open the mesh boundary.
+      INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:?INTERNAL_SERVICE_KEY required in prod}
+      # Billing config
+      BILLING_PROVIDER: ${BILLING_PROVIDER:-ICOUNT}
+      BILLING_TRIAL_DAYS: ${BILLING_TRIAL_DAYS:-14}
+      BILLING_DUNNING_DAYS: ${BILLING_DUNNING_DAYS:-0,3,7}
+      BILLING_SCHEDULER_ENABLED: ${BILLING_SCHEDULER_ENABLED:-true}
+      BILLING_CYCLE_INTERVAL_MS: ${BILLING_CYCLE_INTERVAL_MS:-3600000}
+      # iCount. Defaults to mock; set ICOUNT_MODE=live + creds for real billing.
+      ICOUNT_MODE: ${ICOUNT_MODE:-mock}
+      ICOUNT_API_BASE: ${ICOUNT_API_BASE:-https://api.icount.co.il/api/v3.php}
+      ICOUNT_CID: ${ICOUNT_CID:-}
+      ICOUNT_USER: ${ICOUNT_USER:-}
+      ICOUNT_PASS: ${ICOUNT_PASS:-}
+      ICOUNT_WEBHOOK_SECRET: ${ICOUNT_WEBHOOK_SECRET:-}
     depends_on:
       db: { condition: service_healthy }
       redis: { condition: service_healthy }
@@ -343,7 +535,7 @@ services:
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL}
-      JWT_SECRET: ${JWT_SECRET}
+      <<: *oidc-env
       DATABASE_URL: ${DATABASE_URL}
     depends_on:
       redis: { condition: service_healthy }
@@ -376,10 +568,10 @@ services:
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:-}
       AI_SERVICE_URL: ${AI_SERVICE_URL:-http://ai:4006}
       CONVERSATION_SERVICE_URL: ${CONVERSATION_SERVICE_URL:-http://conversation:4002}
-      # Required by shared/jwt.ts at module-load - even workers that don't
-      # mint tokens import the shared barrel, which triggers the prod
-      # JWT_SECRET length check.
-      JWT_SECRET: ${JWT_SECRET}
+      # No OIDC vars here on purpose: the workers consume queue jobs and never
+      # verify a bearer token, so they never call into jwt.ts. (They also no
+      # longer need JWT_SECRET - shared/jwt.ts has no signing path and reads
+      # OIDC_* lazily at verification time, not at module-load.)
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -402,8 +594,7 @@ services:
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY}
       FACEBOOK_API_URL: ${FACEBOOK_API_URL:-https://graph.facebook.com/v21.0}
-      # Required by shared/jwt.ts at module-load (see incoming-worker note).
-      JWT_SECRET: ${JWT_SECRET}
+      # No OIDC vars - this worker never verifies a token (see incoming-worker).
       UPLOADS_DIR: /app/uploads
     volumes:
       - uploads:/app/uploads
@@ -450,3 +641,9 @@ volumes:
   qdrant_data:
   redis_data:
   uploads:
+  # Authentik state. authentik_pgdata holds every credential and MFA secret -
+  # it is the most sensitive volume in the stack and is NOT covered by the
+  # nightly pg_dump (terraform/user_data.sh dumps the GOTCHA db only).
+  authentik_pgdata:
+  authentik_media:
+  authentik_templates:

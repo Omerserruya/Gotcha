@@ -1,0 +1,250 @@
+/*
+ * GOTCHA theme for Authentik's hosted pages (login, MFA, recovery, consent).
+ *
+ * Loaded via the <link data-inject> hook, which injects this sheet into every
+ * web-component shadow root, so PatternFly selectors reach inside the flow
+ * executor. Mounted at /web/dist/custom.css by docker-compose (dev + prod).
+ *
+ * Recreates the split-screen look of frontend/src/app/login/page.tsx with CSS
+ * only (Authentik's flow UI has no template overrides): the left half is the
+ * brand gradient panel with logo + copy drawn by pseudo-elements on
+ * .pf-c-background-image, the right half is a plain white surface with the
+ * form sitting directly on it. Under 1024px the panel disappears and the form
+ * centers, mirroring the app page's mobile behavior.
+ *
+ * DOM map (2024.10, verified):
+ *   ak-flow-executor > ak-locale-context > .pf-c-background-image
+ *     + drawer chain > .pf-c-login.stacked > .ak-login-container
+ *       > .pf-c-login__main (.ak-brand header + ak-stage-*) + footer
+ * Palette = frontend tailwind `primary` (900 #3b2880, 500 #7c5cfc, 300 #a78bfa).
+ */
+
+/* ── Left half: brand gradient panel ── */
+.pf-c-background-image {
+  position: fixed !important;
+  inset: 0 auto 0 0 !important;
+  width: 50vw !important;
+  height: 100vh !important;
+  background-color: #3b2880 !important;
+  background-image:
+    radial-gradient(circle at 100% 0%, rgba(255, 255, 255, 0.22), transparent 42%),
+    radial-gradient(rgba(255, 255, 255, 0.13) 1px, transparent 1px),
+    linear-gradient(135deg, #3b2880 0%, #7c5cfc 55%, #a78bfa 100%) !important;
+  background-size: auto, 22px 22px, auto !important;
+  filter: none !important;
+  z-index: 0 !important;
+}
+
+/* White wordmark, top-start of the gradient panel. Uses the white logo asset
+ * directly on the dark gradient - no chip needed (a white chip on a brand panel
+ * reads as a bolted-on badge; the wordmark sitting on the gradient is cleaner
+ * and matches how premium SaaS IdP screens brand). */
+.pf-c-background-image::before {
+  content: "" !important;
+  position: fixed;
+  top: 48px;
+  left: 56px;
+  width: 190px;
+  height: 46px;
+  background: url("/static/dist/assets/custom/full_icon_white.png") left center / contain no-repeat;
+}
+
+/* Panel copy. CSS `content` is the only way to put text on a page we cannot
+ * add HTML to; each type size needs its own pseudo-element. The headline and
+ * body hang off drawer elements guarded by :has(.pf-c-login) so they can
+ * never bleed into Authentik's admin/user interfaces, which reuse the same
+ * drawer classes. */
+.pf-c-background-image::after {
+  content: "The next generation of customer engagement";
+  position: fixed;
+  left: 56px;
+  right: 52vw;
+  top: 118px;
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: 500;
+}
+.pf-c-drawer__content:has(.pf-c-login)::before {
+  content: "AI employees that know\A your business.";
+  white-space: pre-line;
+  position: fixed;
+  left: 56px;
+  right: 52vw;
+  top: 38%;
+  color: #ffffff;
+  font-size: 2rem;
+  font-weight: 800;
+  line-height: 1.25;
+}
+.pf-c-drawer__content:has(.pf-c-login)::after {
+  content: "They answer customers, book meetings and update your CRM, all in your brand voice.";
+  position: fixed;
+  left: 56px;
+  right: 54vw;
+  top: calc(38% + 6rem);
+  color: rgba(255, 255, 255, 0.85);
+  font-size: 15px;
+  line-height: 1.6;
+  font-weight: 500;
+}
+
+/* ── Right half: the form on plain white ── */
+.pf-c-login,
+.pf-c-login.stacked {
+  position: fixed !important;
+  top: 0 !important;
+  left: 50vw !important;
+  right: 0 !important;
+  bottom: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  background: #ffffff !important;
+  padding: 48px !important;
+  overflow-y: auto !important;
+  z-index: 1 !important;
+}
+.ak-login-container {
+  width: 100% !important;
+  max-width: 440px !important;
+}
+
+/* No card: the form sits directly on the page. */
+.pf-c-login__main {
+  background: transparent !important;
+  box-shadow: none !important;
+  border-radius: 0 !important;
+  overflow: visible !important;
+}
+.pf-c-login__main-header,
+.pf-c-login__main-body,
+.pf-c-login__main-footer {
+  background: transparent !important;
+  padding-left: 0 !important;
+  padding-right: 0 !important;
+}
+
+/* The in-card logo duplicates the panel's - hide it on desktop. */
+.pf-c-login__main-header.ak-brand {
+  display: none !important;
+}
+
+/* Big warm heading, matching the app page's hierarchy. */
+.pf-c-title {
+  color: #111827 !important;
+  font-weight: 800 !important;
+  font-size: 2rem !important;
+  line-height: 1.2 !important;
+}
+
+/* ── Inputs ── */
+.pf-c-form-control {
+  border: 1px solid #d1d5db !important;
+  border-radius: 14px !important;
+  background: #ffffff !important;
+  color: #111827 !important;
+  padding: 1.4rem 1rem !important;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+.pf-c-form-control:hover {
+  border-color: #a78bfa !important;
+}
+.pf-c-form-control:focus {
+  border-color: #7c5cfc !important;
+  box-shadow: 0 0 0 4px rgba(124, 92, 252, 0.15) !important;
+  outline: none !important;
+}
+.pf-c-form__label-text {
+  font-weight: 700 !important;
+  color: #1f2937 !important;
+}
+
+/* ── Buttons ── */
+.pf-c-button.pf-m-primary {
+  background: linear-gradient(90deg, #6d4fe0, #7c5cfc) !important;
+  border: none !important;
+  border-radius: 14px !important;
+  font-weight: 700 !important;
+  padding: 0.9rem 1rem !important;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+.pf-c-button.pf-m-primary:hover {
+  background: linear-gradient(90deg, #5b3dc4, #6d4fe0) !important;
+  box-shadow: 0 10px 24px rgba(124, 92, 252, 0.35) !important;
+  transform: translateY(-1px);
+}
+.pf-c-button.pf-m-link {
+  color: #6d4fe0 !important;
+  font-weight: 600 !important;
+}
+
+/* Links inside stages (forgot password, "Not you?", sign-up prompts) */
+.pf-c-login__main a,
+.pf-c-login__main-footer-band a {
+  color: #6d4fe0 !important;
+  font-weight: 600;
+}
+
+/* ── Quiet the chrome ── */
+/* "Powered by authentik" list. NOTE: do NOT hide
+ * `.pf-c-login__main-footer-band-item:last-child` here - the recovery
+ * ("Forgot username or password?") link is the only footer-band item on the
+ * identification stage, so a :last-child hide would swallow it. */
+.pf-c-login__footer {
+  display: none !important;
+}
+
+/* Recovery ("Forgot username or password?") link. Render it as a clean brand
+ * link centered under the form, not the default gray footer band. */
+.pf-c-login__main-footer-band {
+  background: transparent !important;
+  border: 0 !important;
+  margin: 0 !important;
+  padding: 8px 0 0 0 !important;
+  text-align: center !important;
+}
+.pf-c-login__main-footer-band-item {
+  background: transparent !important;
+  color: #6b7280 !important;
+}
+a#recovery {
+  color: #6d4fe0 !important;
+  font-weight: 600 !important;
+  text-decoration: none !important;
+}
+a#recovery:hover { text-decoration: underline !important; }
+
+/* ── Mobile: panel disappears, centered form with the logo back ── */
+@media (max-width: 1023px) {
+  .pf-c-background-image,
+  .pf-c-drawer__content:has(.pf-c-login)::before,
+  .pf-c-drawer__content:has(.pf-c-login)::after {
+    display: none !important;
+  }
+  .pf-c-login,
+  .pf-c-login.stacked {
+    left: 0 !important;
+    padding: 24px !important;
+  }
+  .pf-c-login__main-header.ak-brand {
+    display: flex !important;
+    justify-content: center !important;
+  }
+}
+
+/* Force the light look even when the OS prefers dark - the brand design is a
+ * light form over the gradient, same as the app's login page. */
+@media (prefers-color-scheme: dark) {
+  .pf-c-login,
+  .pf-c-login.stacked {
+    background: #ffffff !important;
+  }
+  .pf-c-form-control {
+    background: #ffffff !important;
+    color: #111827 !important;
+  }
+  .pf-c-title {
+    color: #111827 !important;
+  }
+}

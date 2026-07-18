@@ -18,6 +18,8 @@ vi.mock("axios", () => ({ default: axiosMock }));
 vi.mock("@chatcenter/shared", () => ({
   prisma: prismaMock,
   analyticsQueue: analyticsQueueMock,
+  // SSRF guard is a no-op passthrough in tests (returns the parsed URL).
+  assertPublicUrl: async (u: string) => new URL(u),
 }));
 vi.mock("../services/usage.service", () => ({ trackToolCall: vi.fn().mockResolvedValue(undefined) }));
 vi.mock("../services/audit.service", () => ({ logAudit: vi.fn().mockResolvedValue(undefined) }));

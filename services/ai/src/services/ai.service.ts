@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Central AI Service - ALL LLM calls MUST go through this service.
  *
@@ -321,7 +322,7 @@ async function meterAndReact(
       method: "POST",
       headers: {
         "content-type": "application/json",
-        "x-internal-key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+        "x-internal-key": getInternalServiceKey(),
       },
       body: JSON.stringify({ tenantId, thresholds: m.thresholds }),
     }).catch(() => {});

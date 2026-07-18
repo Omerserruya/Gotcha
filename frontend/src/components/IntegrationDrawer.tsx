@@ -86,6 +86,7 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; msg: string } | null>(null);
   const [tools, setTools] = useState<any[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
 
   useEffect(() => {
     if (!isOpen || !token) return;
@@ -173,6 +174,70 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
       setTestResult({ ok: false, msg: e.message || t("marketplace.connectionFailed") });
     } finally {
       setTesting(false);
+    }
+  }
+
+  /**
+   * Enable/disable EVERY tool of the selected integration in one action.
+   *
+   * The creation wizard has had a select-all since day one; the editing drawer
+   * did not, so changing an integration meant ticking each tool by hand.
+   *
+   * Deliberately NOT a loop over handleToggleTool: that reads `tools` from its
+   * own closure, so N calls in a row would each compute from the same stale
+   * array and the last setTools would silently drop the other N-1 flips. This
+   * flips local state once, then reconciles each tool against the server.
+   */
+  async function handleToggleAllTools(target: boolean) {
+    if (!token || !selected || bulkBusy) return;
+
+    const affected = tools.filter((t) => {
+      const enabled = aiAgentId ? (t.agentPermission?.isAllowed ?? false) : (t.tenantTool?.isEnabled ?? false);
+      return enabled !== target;
+    });
+    if (affected.length === 0) return;
+
+    const previous = tools;
+    setBulkBusy(true);
+    const optimistic = tools.map((t) =>
+      aiAgentId
+        ? { ...t, agentPermission: { ...(t.agentPermission || {}), isAllowed: target } }
+        : { ...t, tenantTool: { ...(t.tenantTool || {}), isEnabled: target } },
+    );
+    setTools(optimistic);
+    onToolsChanged?.(optimistic);
+
+    try {
+      // Sequential on purpose: the tenant-tool upsert below must not race with
+      // itself for the same integration, and these lists are small (tens).
+      for (const tool of affected) {
+        if (aiAgentId) {
+          let tenantToolId: string | undefined = tool.tenantTool?.id;
+          if (target) {
+            if (!tenantToolId || !tool.tenantTool?.isEnabled) {
+              const res: any = await toggleIntegrationTool(token, selected.slug, tool.slug, true);
+              tenantToolId = res?.data?.id || tenantToolId;
+            }
+            if (!tenantToolId) continue;
+            await toggleAgentTool(token, aiAgentId, tenantToolId, true);
+          } else {
+            if (!tenantToolId) continue; // never granted - nothing to revoke
+            await toggleAgentTool(token, aiAgentId, tenantToolId, false);
+          }
+        } else {
+          await toggleIntegrationTool(token, selected.slug, tool.slug, target);
+        }
+      }
+      // Re-read from the server so tenantTool ids created above are captured
+      // (a later single toggle needs them to know what to revoke).
+      const fresh = await getIntegrationTools(token, selected.slug, aiAgentId ? { aiAgentId } : undefined);
+      setTools(fresh.data || []);
+      onToolsChanged?.(fresh.data || []);
+    } catch {
+      setTools(previous);
+      onToolsChanged?.(previous);
+    } finally {
+      setBulkBusy(false);
     }
   }
 
@@ -311,6 +376,8 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
               onConnect={handleConnect}
               onTest={handleTest}
               onToggleTool={handleToggleTool}
+              onToggleAllTools={handleToggleAllTools}
+              bulkBusy={bulkBusy}
               onDone={() => { backToList(); onClose(); }}
               t={t}
               aiAgentId={aiAgentId}
@@ -416,15 +483,23 @@ function ListView({
 // ─── Detail View ───────────────────────────────────────────
 function DetailView({
   integration, credentials, setCredentials, credError, connecting, testing, testResult, tools,
-  onConnect, onTest, onToggleTool, onDone, t, aiAgentId,
+  onConnect, onTest, onToggleTool, onToggleAllTools, bulkBusy, onDone, t, aiAgentId,
 }: {
   integration: any; credentials: Record<string, string>; setCredentials: (c: Record<string, string>) => void;
   credError: string | null; connecting: boolean; testing: boolean; testResult: { ok: boolean; msg: string } | null;
   tools: any[]; onConnect: () => void; onTest: () => void; onToggleTool: (slug: string, enabled: boolean) => void;
+  onToggleAllTools: (target: boolean) => void; bulkBusy: boolean;
   onDone: () => void; t: (key: string) => string; aiAgentId?: string;
 }) {
   const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
+
+  // Same rule the per-tool rows use: agent mode reads the per-agent permission,
+  // marketplace mode reads tenant state.
+  const isToolEnabled = (tool: any) =>
+    aiAgentId ? (tool.agentPermission?.isAllowed ?? false) : (tool.tenantTool?.isEnabled ?? false);
+  const enabledCount = tools.filter(isToolEnabled).length;
+  const allEnabled = tools.length > 0 && enabledCount === tools.length;
   const authSchema = integration?.authSchema || {};
   const credFields = authSchema.fields || (integration?.authType === "API_KEY" ? [{ key: "apiKey", label: t("marketplace.apiKey"), type: "password", required: true }] : []);
   const logoSrc = integration?.logoUrl || INTEGRATION_LOGOS[integration?.slug] || null;
@@ -519,7 +594,27 @@ function DetailView({
       {/* Tools section (when connected) */}
       {isConnected && tools.length > 0 && (
         <div className="space-y-3">
-          <h4 className="text-sm font-semibold text-gray-700">{t("marketplace.availableTools")}</h4>
+          <div className="flex items-center gap-2">
+            <h4 className="text-sm font-semibold text-gray-700">{t("marketplace.availableTools")}</h4>
+            <span className={clsx(
+              "px-2 py-0.5 rounded-full text-[10px] font-medium border",
+              enabledCount > 0 ? "bg-violet-50 text-violet-600 border-violet-200" : "bg-gray-50 text-gray-400 border-gray-200",
+            )}>
+              {enabledCount}/{tools.length}
+            </span>
+            <button
+              type="button"
+              onClick={() => onToggleAllTools(!allEnabled)}
+              disabled={bulkBusy}
+              className="ms-auto shrink-0 text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition disabled:opacity-50"
+            >
+              {bulkBusy
+                ? t("marketplace.applying")
+                : allEnabled
+                  ? t("marketplace.clearAllTools")
+                  : t("marketplace.selectAllTools")}
+            </button>
+          </div>
           {tools.map((tool) => {
             // In agent mode, the toggle reflects whether THIS agent has
             // permission for the tool - not whether the tenant has it

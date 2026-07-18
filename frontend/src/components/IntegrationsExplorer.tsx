@@ -66,9 +66,13 @@ export interface IntegrationsExplorerProps {
    *  show only CRM integrations and avoid surfacing the full marketplace
    *  surface there. */
   restrictToCategory?: string;
+  /** Rendered between the header and the integration list. Lets a host page add
+   *  account-level controls (e.g. the customer system-of-record picker) without
+   *  the explorer knowing anything about them. */
+  beforeContent?: React.ReactNode;
 }
 
-export default function IntegrationsExplorer({ subtitle, title, initialCategory, restrictToCategory }: IntegrationsExplorerProps) {
+export default function IntegrationsExplorer({ subtitle, title, initialCategory, restrictToCategory, beforeContent }: IntegrationsExplorerProps) {
   const { token } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
@@ -134,6 +138,8 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
           {subtitle ?? t("marketplace.subtitle")}
         </p>
       </div>
+
+      {beforeContent}
 
       {/* Search + filters */}
       <div className="mb-5 flex flex-col gap-3">

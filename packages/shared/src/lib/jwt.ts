@@ -1,28 +1,67 @@
-import jwt from "jsonwebtoken";
-import crypto from "crypto";
+import { createRemoteJWKSet, jwtVerify, type JWTPayload } from "jose";
 
 /**
- * JWT signing secret.
+ * OIDC access-token verification.
  *
- * In production we refuse to start with the placeholder - the previous
- * fallback (`"change-me"`) meant a missing env var silently produced a
- * verifiable token any attacker could forge. Dev/test still gets the
- * placeholder so the toolchain boots without env wiring.
+ * GOTCHA does not issue tokens. Authentik does. This module's only job is to
+ * verify a token Authentik signed, using Authentik's published JWKS.
+ *
+ * There is deliberately no `signToken` here: if this service could mint a
+ * token, it would be an identity provider, and the whole point of the
+ * Authentik migration is that it is not one.
  */
-function resolveJwtSecret(): string {
-  const v = process.env.JWT_SECRET;
-  if (v && v.length >= 16) return v;
-  if (process.env.NODE_ENV === "production") {
-    throw new Error(
-      "[jwt] JWT_SECRET is required in production (>=16 chars). Refusing to boot with a default secret.",
-    );
-  }
-  return v || "change-me";
-}
-const JWT_SECRET = resolveJwtSecret();
-const JWT_EXPIRES_IN = process.env.JWT_EXPIRES_IN || "24h";
-const REFRESH_TOKEN_DAYS = parseInt(process.env.REFRESH_TOKEN_DAYS || "30", 10);
 
+function required(name: string): string {
+  const v = process.env[name];
+  if (v && v.length > 0) return v;
+  throw new Error(
+    `[jwt] ${name} is required. Authentication cannot start without a trusted OIDC issuer.`,
+  );
+}
+
+let jwks: ReturnType<typeof createRemoteJWKSet> | null = null;
+let cachedIssuer: string | null = null;
+
+/**
+ * The JWKS is fetched lazily and cached in-process by jose, which also
+ * handles key rotation: on an unknown `kid` it re-fetches (rate-limited, so a
+ * bogus-kid flood cannot be used to hammer Authentik). This is why rotating
+ * Authentik's signing key needs no GOTCHA deploy.
+ */
+function getJwks() {
+  if (!jwks) {
+    const uri = required("OIDC_JWKS_URI");
+    jwks = createRemoteJWKSet(new URL(uri), {
+      cooldownDuration: 30_000,
+      cacheMaxAge: 10 * 60_000,
+    });
+  }
+  return jwks;
+}
+
+function getIssuer(): string {
+  if (!cachedIssuer) cachedIssuer = required("OIDC_ISSUER");
+  return cachedIssuer;
+}
+
+/**
+ * Claims GOTCHA reads off a verified Authentik token.
+ *
+ * Note what is NOT here: no tenantId, no role. Those are GOTCHA business
+ * facts, resolved from the local database by `sub`. Authentik must never be
+ * the source of authorization data - a token claim could be shaped by IdP
+ * config, whereas the local DB is the system of record for tenancy and RBAC.
+ */
+export interface VerifiedIdentity {
+  subject: string;
+  email?: string;
+  name?: string;
+}
+
+/**
+ * The request principal after `authenticate()` has resolved the token's
+ * subject against the local database.
+ */
 export interface JwtPayload {
   userId: string;
   tenantId: string;
@@ -36,28 +75,33 @@ export interface SystemAdminJwtPayload {
   userId: string;
   role: "SYSTEM_ADMIN";
   email: string;
-  tenantId: string; // system tenant
+  tenantId: string;
 }
 
-export function signToken(payload: JwtPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: JWT_EXPIRES_IN } as any);
+/**
+ * Verify an Authentik-issued access token.
+ *
+ * Throws on any failure - bad signature, expired, wrong issuer, wrong
+ * algorithm. Callers must treat a throw as a hard 401 and never fall through.
+ */
+export async function verifyAccessToken(token: string): Promise<VerifiedIdentity> {
+  const { payload } = await jwtVerify(token, getJwks(), {
+    issuer: getIssuer(),
+    // Pin the algorithm. Without this, a token could assert `alg: "none"` or a
+    // symmetric alg and sidestep the JWKS entirely - the classic JWT
+    // confusion attack.
+    algorithms: ["RS256"],
+    ...(process.env.OIDC_AUDIENCE ? { audience: process.env.OIDC_AUDIENCE } : {}),
+  });
+
+  const claims = payload as JWTPayload & { email?: string; name?: string };
+  if (!claims.sub) throw new Error("[jwt] token has no subject claim");
+
+  return { subject: claims.sub, email: claims.email, name: claims.name };
 }
 
-export function verifyToken(token: string): JwtPayload {
-  return jwt.verify(token, JWT_SECRET) as JwtPayload;
-}
-
-export function generateRefreshToken(): { token: string; expiresAt: Date } {
-  const token = crypto.randomUUID();
-  const expiresAt = new Date(Date.now() + REFRESH_TOKEN_DAYS * 24 * 60 * 60 * 1000);
-  return { token, expiresAt };
-}
-
-export function getJwtExpiresInMs(): number {
-  const match = JWT_EXPIRES_IN.match(/^(\d+)(h|m|d|s)?$/);
-  if (!match) return 24 * 60 * 60 * 1000; // default 24h
-  const value = parseInt(match[1], 10);
-  const unit = match[2] || "s";
-  const multipliers: Record<string, number> = { s: 1000, m: 60000, h: 3600000, d: 86400000 };
-  return value * (multipliers[unit] || 1000);
+/** Reset cached JWKS/issuer. Tests only. */
+export function __resetJwtCaches(): void {
+  jwks = null;
+  cachedIssuer = null;
 }

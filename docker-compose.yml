@@ -37,6 +37,100 @@ services:
       timeout: 5s
       retries: 5
 
+  # ─── Authentik (identity provider) ───────────────────────
+  # Authentik owns ALL authentication: credentials, sessions, MFA, recovery,
+  # email verification. It gets its OWN database - GOTCHA business data and
+  # identity data must never share a schema. GOTCHA never writes to it except
+  # via the admin API (invitations).
+  authentik-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${AUTHENTIK_PG_USER:-authentik}
+      POSTGRES_PASSWORD: ${AUTHENTIK_PG_PASS:-authentik}
+      POSTGRES_DB: ${AUTHENTIK_PG_DB:-authentik}
+    volumes:
+      - authentik_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_PG_USER:-authentik}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  authentik-server:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: server
+    environment: &authentik-env
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-dev-only-authentik-secret-key-change-in-production}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-db
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_PG_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_PG_PASS:-authentik}
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_PG_DB:-authentik}
+      # Shared redis, dedicated logical DB so Authentik keys never collide
+      # with BullMQ queues on db 0.
+      AUTHENTIK_REDIS__HOST: redis
+      AUTHENTIK_REDIS__DB: 1
+      AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+      AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-admin@gotcha.co.il}
+      AUTHENTIK_EMAIL__HOST: ${SMTP_HOST:-}
+      AUTHENTIK_EMAIL__PORT: ${SMTP_PORT:-587}
+      AUTHENTIK_EMAIL__USERNAME: ${SMTP_USER:-}
+      AUTHENTIK_EMAIL__PASSWORD: ${SMTP_PASS:-}
+      # STARTTLS is mandatory for Gmail on 587 - without it the server never
+      # advertises AUTH and every send fails with SMTPNotSupportedError.
+      AUTHENTIK_EMAIL__USE_TLS: ${SMTP_USE_TLS:-true}
+      AUTHENTIK_EMAIL__FROM: ${SMTP_FROM:-noreply@gotcha.co.il}
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # GOTCHA-branded recovery email (referenced by the email stage's template
+      # field, set in scripts/authentik/bootstrap.mjs).
+      - ./scripts/authentik/templates/gotcha_password_reset.html:/templates/gotcha_password_reset.html:ro
+      # GOTCHA theme: served at /static/dist/..., injected into the flow UI's
+      # shadow roots via the data-inject stylesheet hook.
+      - ./scripts/authentik/custom.css:/web/dist/custom.css:ro
+      - ./frontend/public/logo_icon.png:/web/dist/assets/custom/logo_icon.png:ro
+      # GOTCHA favicon for the Authentik browser tab (served at
+      # /static/dist/assets/custom/gotcha-favicon.ico). Referenced by the brand's
+      # branding_favicon, set in scripts/authentik/bootstrap.mjs.
+      - ./frontend/public/favicon.ico:/web/dist/assets/custom/gotcha-favicon.ico:ro
+      - ./frontend/public/full_icon_white.png:/web/dist/assets/custom/full_icon_white.png:ro
+      - ./frontend/public/authentik-enhance.js:/web/dist/assets/custom/authentik-enhance.js:ro
+    ports:
+      - "${AUTHENTIK_PORT:-9000}:9000"
+    healthcheck:
+      test: ["CMD", "ak", "healthcheck"]
+      interval: 10s
+      timeout: 10s
+      retries: 20
+      start_period: 60s
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:2024.10
+    command: worker
+    environment: *authentik-env
+    user: root
+    volumes:
+      - authentik_media:/media
+      - authentik_templates:/templates
+      # The worker is the process that actually renders + sends stage emails.
+      - ./scripts/authentik/templates/gotcha_password_reset.html:/templates/gotcha_password_reset.html:ro
+      # NOTE: the host Docker socket is intentionally NOT mounted. Authentik's
+      # worker does not need it for our deployment, and exposing the socket to a
+      # root container is a container-escape path (M-7). Prod never mounted it.
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+
   # ─── API Gateway ─────────────────────────────────────────
   gateway:
     image: nginx:alpine
@@ -55,8 +149,11 @@ services:
       VOICE_COPILOT_PORT: ${VOICE_COPILOT_PORT:-4007}
       NOTIFICATIONS_PORT: ${NOTIFICATIONS_PORT:-4008}
       BILLING_PORT: ${BILLING_PORT:-4009}
+      # envsubst uses an allowlist - a var missing from the list below stays a
+      # literal in the rendered config and nginx refuses to start.
+      AUTHENTIK_PORT: ${AUTHENTIK_PORT:-9000}
     command: >
-      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT'
+      sh -c "envsubst '$$AUTH_PORT $$CONVERSATION_PORT $$WEBHOOK_PORT $$ANALYTICS_PORT $$CHATBOT_PORT $$AI_PORT $$FRONTEND_PORT $$VOICE_COPILOT_PORT $$NOTIFICATIONS_PORT $$BILLING_PORT $$AUTHENTIK_PORT'
       < /etc/nginx/nginx.conf.template > /etc/nginx/nginx.conf
       && nginx -g 'daemon off;'"
     depends_on:
@@ -69,6 +166,9 @@ services:
       - frontend
       - voice-copilot
       - notifications
+      # nginx resolves every upstream at startup, so the authentik-server name
+      # must exist or the gateway dies with "host not found in upstream".
+      - authentik-server
 
   # ─── Microservices ───────────────────────────────────────
   auth:
@@ -80,8 +180,13 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${AUTH_PORT:-4001}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
+      # Admin API access for provisioning invited identities. ONLY the auth
+      # service gets this token - no other service may create identities.
+      AUTHENTIK_URL: ${AUTHENTIK_URL:-http://authentik-server:9000}
+      AUTHENTIK_API_TOKEN: ${AUTHENTIK_API_TOKEN:-${AUTHENTIK_BOOTSTRAP_TOKEN:-}}
       META_APP_ID: ${META_APP_ID:-}
       META_APP_SECRET: ${META_APP_SECRET:-}
       WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
@@ -134,8 +239,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${CONVERSATION_PORT:-4002}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
@@ -167,12 +273,18 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${WEBHOOK_PORT:-4003}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       WHATSAPP_API_URL: ${WHATSAPP_API_URL:-https://graph.facebook.com/v19.0}
       WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
       WHATSAPP_ACCESS_TOKEN: ${WHATSAPP_ACCESS_TOKEN:-}
       WHATSAPP_WEBHOOK_VERIFY_TOKEN: ${WHATSAPP_WEBHOOK_VERIFY_TOKEN:-}
       WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      META_APP_SECRET: ${META_APP_SECRET:-}
+      EMAIL_WEBHOOK_SECRET: ${EMAIL_WEBHOOK_SECRET:-}
+      GMAIL_PUBSUB_TOKEN: ${GMAIL_PUBSUB_TOKEN:-}
+      OUTLOOK_WEBHOOK_CLIENT_STATE: ${OUTLOOK_WEBHOOK_CLIENT_STATE:-}
       SLACK_SIGNING_SECRET: ${SLACK_SIGNING_SECRET:-}
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
     depends_on:
@@ -190,8 +302,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${ANALYTICS_PORT:-4004}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
     depends_on:
       db:
         condition: service_healthy
@@ -207,8 +320,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${CHATBOT_PORT:-4005}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
     depends_on:
       db:
         condition: service_healthy
@@ -224,8 +338,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${AI_PORT:-4006}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       OPENAI_BASE_URL: ${OPENAI_BASE_URL:-}
       OPENAI_DEFAULT_MODEL: ${OPENAI_DEFAULT_MODEL:-gpt-5-mini}
@@ -315,8 +430,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${NOTIFICATIONS_PORT:-4008}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       NOTIFICATIONS_ENABLED: ${NOTIFICATIONS_ENABLED:-true}
       SMTP_HOST: ${SMTP_HOST:-}
@@ -339,8 +455,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       NODE_ENV: ${NODE_ENV:-development}
       PORT: ${BILLING_PORT:-4009}
-      JWT_SECRET: ${JWT_SECRET:-change-me-in-production-min-32-chars!!}
-      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       INTERNAL_SERVICE_KEY: ${INTERNAL_SERVICE_KEY:-chatcenter-internal-2026}
       # Billing config
@@ -380,7 +497,9 @@ services:
       CHANNEL_ENCRYPTION_KEY: ${CHANNEL_ENCRYPTION_KEY:-}
       PUBLIC_BASE_URL: ${PUBLIC_BASE_URL:-http://localhost}
       PUBLIC_URL: ${NEXT_PUBLIC_API_URL:-http://localhost}
-      JWT_SECRET: ${JWT_SECRET}
+      OIDC_ISSUER: ${OIDC_ISSUER}
+      OIDC_JWKS_URI: ${OIDC_JWKS_URI}
+      OAUTH_STATE_SECRET: ${OAUTH_STATE_SECRET}
       DATABASE_URL: ${DATABASE_URL}
     depends_on:
       redis:
@@ -483,6 +602,11 @@ services:
       NEXT_PUBLIC_WS_URL: ${NEXT_PUBLIC_WS_URL:-}
       NEXT_PUBLIC_META_APP_ID: ${META_APP_ID:-}
       NEXT_PUBLIC_WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID: ${WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID:-}
+      # The browser talks to Authentik directly, so these must be the PUBLIC
+      # URL (auth.gotcha.co.il in production), not the internal service DNS.
+      NEXT_PUBLIC_OIDC_ISSUER: ${NEXT_PUBLIC_OIDC_ISSUER}
+      NEXT_PUBLIC_OIDC_CLIENT_ID: ${NEXT_PUBLIC_OIDC_CLIENT_ID:-gotcha-app}
+      NEXT_PUBLIC_OIDC_REDIRECT_URI: ${NEXT_PUBLIC_OIDC_REDIRECT_URI:-}
     # Bind-mount source for hot reload; keep container's node_modules/.next.
     volumes:
       - ./frontend:/app
@@ -493,6 +617,9 @@ volumes:
   pgdata:
   qdrant_data:
   uploads:
+  authentik_pgdata:
+  authentik_media:
+  authentik_templates:
 
 # Lower MTU to 1442 to match this host's path MTU (~1492, PPPoE-style link).
 # Without this, container bulk transfers (external HTTPS to OpenAI/CRMs) stall

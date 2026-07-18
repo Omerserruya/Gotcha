@@ -20,6 +20,7 @@
     "settings": "הגדרות",
     "more": "עוד",
     "logout": "התנתק",
+    "account": "חשבון ואבטחה",
     "tools": "כלים",
     "integrations": "אינטגרציות",
     "aiStudio": "סטודיו AI",
@@ -27,15 +28,6 @@
     "usage": "צריכה",
     "approvals": "אישורים",
     "business": "העסק שלכם"
-  },
-  "auth": {
-    "login": "התחברות",
-    "email": "אימייל",
-    "password": "סיסמה",
-    "tenant": "מזהה ארגון",
-    "loginButton": "התחבר",
-    "loginError": "אימייל או סיסמה שגויים",
-    "welcome": "ברוך שובך"
   },
   "conversations": {
     "title": "תיבת דואר",
@@ -248,7 +240,6 @@
     "inactive": "לא פעיל",
     "addAgent": "הוסף נציג",
     "registerAgent": "רשום נציג חדש",
-    "password": "סיסמה",
     "registerButton": "צור נציג",
     "registerSuccess": "הנציג נוצר בהצלחה",
     "editAgent": "ערוך נציג",
@@ -260,10 +251,8 @@
     "phoneNumberHint": "מספר נייד בפורמט E.164 (לדוגמה +972501234567). משמש להעברת שיחות קוליות לנציג ולזיהויו כשהוא מתקשר חזרה למספר העסקי.",
     "agentIsActive": "נציג זה יכול לקבל ולטפל בשיחות",
     "agentIsInactive": "נציג זה מושבת ולא יכול לטפל בשיחות",
-    "resetPassword": "איפוס סיסמה",
-    "newPasswordPlaceholder": "סיסמה חדשה (מינימום 8 תווים)",
-    "passwordReset": "הסיסמה אופסה",
-    "passwordResetSuccess": "הסיסמה אופסה בהצלחה",
+    "resetPassword": "יצירת קישור להגדרת סיסמה",
+    "passwordResetSuccess": "הקישור נוצר. העבירו אותו אליהם - ניתן להשתמש בו פעם אחת.",
     "dangerZone": "אזור מסוכן",
     "autoGreeting": "תבנית ברכה אוטומטית",
     "autoGreetingDesc": "הודעה זו נשלחת אוטומטית כשנציג מקבל שיחה. השתמש ב-{agentName} כמציין מיקום.",
@@ -292,7 +281,9 @@
     "copilotActive": "עוזר AI פעיל",
     "copilotActiveDesc": "הפעל או השבת את עוזר ה-AI עבור ארגון זה.",
     "saveCopilot": "שמור הגדרות",
-    "copilotSaved": "הגדרות העוזר נשמרו"
+    "copilotSaved": "הגדרות העוזר נשמרו",
+    "invitePasswordNote": "נשלח אליהם במייל קישור חד-פעמי להגדרת סיסמה בשירות ההתחברות המאובטח שלנו. הקישור יוצג גם כאן אם תרצו לשתף אותו ישירות.",
+    "resetPasswordNote": "יצירת קישור חד-פעמי שבאמצעותו אפשר להגדיר סיסמה חדשה. אתם לא רואים ולא בוחרים את הסיסמה."
   },
   "crmPanel": {
     "title": "הקשר CRM",
@@ -714,7 +705,16 @@
     "selectSpaces": "בחר spaces לייבוא",
     "importSelected": "ייבא נבחרים",
     "connecting": "מתחבר...",
-    "oauthNotConfigured": "אינטגרציה זו לא מוגדרת. פנה למנהל המערכת."
+    "oauthNotConfigured": "אינטגרציה זו לא מוגדרת. פנה למנהל המערכת.",
+    "sourcesTab": "מקורות",
+    "sourceConnected": "מחובר - עיון וייבוא בניהול הידע",
+    "sourceNotConnected": "לא מחובר",
+    "sourceConnect": "חיבור",
+    "sourceConnecting": "מתחבר...",
+    "sourceBrowse": "עיון",
+    "active": "פעיל",
+    "inactive": "לא פעיל",
+    "docTitlePlaceholder": "כותרת המסמך"
   },
   "settings": {
     "nav": {
@@ -722,6 +722,7 @@
       "general": "כללי",
       "integrations": "אינטגרציות",
       "policy": "מדיניות",
+      "security": "אבטחה",
       "tools": "כלים",
       "voiceCopilot": "Voice Copilot",
       "intelligence": "מודיעין",
@@ -834,6 +835,8 @@
     "language": {
       "title": "שפה",
       "subtitle": "קובע את שפת הדאשבורד והתוכן שה-AI יוצר (תקצירים, סיכומים, תובנות קופיילוט, הערות שיחה). תגובות מוצעות עדיין מותאמות לשפת הלקוח.",
+      "workspaceTitle": "שפת סביבת העבודה",
+      "workspaceSubtitle": "שפת ברירת המחדל שחברים חדשים יורשים. כל חבר יכול לשנות אותה עבור עצמו ב„חשבון”.",
       "myLanguage": "השפה שלי",
       "myLanguageHint": "כרגע: {effective}",
       "useTenantDefault": "השתמש בברירת המחדל של הארגון",
@@ -843,6 +846,7 @@
       "savedTenant": "ברירת המחדל של הארגון נשמרה",
       "saveFailed": "לא ניתן לשמור את השפה. נסה שוב."
     },
+    "goToAccountForPreferences": "נהל את השפה וההעדפות האישיות שלך ב„חשבון”.",
     "phoneCountry": "מדינה ברירת מחדל",
     "phoneCountryHelp": "משמש לעיצוב מספרי טלפון לפורמט בינלאומי.",
     "reminderDelay": "השהיית תזכורת (דקות)",
@@ -1058,22 +1062,6 @@
     "adminRequired": "נדרשת הרשאת מנהל",
     "closed": "סגור",
     "defaultLabel": "ברירת מחדל",
-    "password": {
-      "title": "שינוי סיסמה",
-      "subtitle": "עדכון סיסמת החשבון",
-      "current": "סיסמה נוכחית",
-      "currentPlaceholder": "הזן סיסמה נוכחית",
-      "new": "סיסמה חדשה",
-      "newPlaceholder": "הזן סיסמה חדשה (לפחות 8 תווים)",
-      "confirm": "אישור סיסמה חדשה",
-      "confirmPlaceholder": "אישור סיסמה חדשה",
-      "action": "שנה סיסמה",
-      "changing": "משנה…",
-      "changed": "הסיסמה שונתה בהצלחה",
-      "errMismatch": "הסיסמאות אינן תואמות",
-      "errTooShort": "הסיסמה חייבת להיות באורך 8 תווים לפחות",
-      "errFail": "שינוי הסיסמה נכשל"
-    },
     "days": {
       "sunday": "ראשון",
       "monday": "שני",
@@ -1085,7 +1073,14 @@
     },
     "integrations": {
       "crmTitle": "אינטגרציות CRM",
-      "crmSubtitle": "חברו את ה-CRM שלכם (Zoho, HubSpot, Salesforce, Monday) - או השתמשו ב-Shopify כמקור האמת. בונה הקהלים, השידורים והעברות ה-AI של הפלטפורמה קוראים מה-CRM המחובר."
+      "crmSubtitle": "חברו את ה-CRM שלכם (Zoho, HubSpot, Salesforce, Monday) - או השתמשו ב-Shopify כמקור האמת. בונה הקהלים, השידורים והעברות ה-AI של הפלטפורמה קוראים מה-CRM המחובר.",
+      "systemOfRecord": {
+        "title": "מערכת האמת ללקוחות",
+        "subtitle": "איזו מערכת מחוברת עונה על השאלה “מי הלקוח הזה?”. ה-AI קורא ממנה זהות, היסטוריה וסיכומים, וכותב אליה הערות ותגיות.",
+        "active": "פעיל - זו מערכת האמת ללקוחות שלכם",
+        "inactiveHint": "מחובר, אך לא משמש כמערכת האמת ללקוחות",
+        "note": "כשמופעל, זה גובר על כל CRM מחובר. כיבוי מחזיר את ה-CRM. כל כלי הקריאה של המערכת הזו מופעלים אוטומטית."
+      }
     }
   },
   "outbound": {
@@ -2356,7 +2351,12 @@
     "categoryShipping": "משלוחים",
     "categoryProjectManagement": "ניהול פרויקטים",
     "categoryCalendar": "לוח שנה",
-    "subtitle": "חברו שירותים חיצוניים כדי להפעיל את סוכני ה-AI שלכם"
+    "subtitle": "חברו שירותים חיצוניים כדי להפעיל את סוכני ה-AI שלכם",
+    "systemOfRecordActive": "מערכת האמת ללקוחות שלכם",
+    "manageInSettings": "ניהול בהגדרות ←",
+    "selectAllTools": "בחר הכל",
+    "clearAllTools": "נקה הכל",
+    "applying": "מחיל..."
   },
   "usage": {
     "title": "צריכה",
@@ -2438,7 +2438,8 @@
       "modeAutonomous": "אוטונומי",
       "modeCopilot": "עוזר AI",
       "modeHuman": "אנושי בלבד",
-      "noAgents": "אין עדיין עובדי AI. צור את חבר הצוות הראשון שלך כדי להתחיל."
+      "noAgents": "אין עדיין עובדי AI. צור את חבר הצוות הראשון שלך כדי להתחיל.",
+      "readinessTitle": "ציון מוכנות. לחצו לדוח המלא"
     },
     "playbooks": {
       "title": "תהליכים",
@@ -2452,7 +2453,10 @@
       "subPlaybooks": "תת-תהליכים",
       "routeSubflow": "תהליך",
       "routeAgent": "חבר צוות",
-      "routeHuman": "אנושי"
+      "routeHuman": "אנושי",
+      "connectionNote": "כל תהליך אומר מתי הוא מופעל ומה העובד/ת עושה, העורך הוויזואלי במרחק לחיצה.",
+      "running": "פעיל",
+      "pausedFlow": "מושהה"
     },
     "resources": {
       "title": "משאבי צוות",
@@ -2526,7 +2530,11 @@
           "addMore": "הוסף כלים נוספים מאינטגרציות",
           "panelDesc": "חבר אינטגרציות והפעל כלים עבור סוכן זה",
           "notConnected": "לא מחובר",
-          "connectIntegration": "חבר אינטגרציה זו"
+          "connectIntegration": "חבר אינטגרציה זו",
+          "collapseAll": "כווץ הכל",
+          "expandAll": "הרחב הכל",
+          "enableGroup": "הפעל הכל",
+          "clearGroup": "נקה הכל"
         },
         "knowledge": {
           "title": "ידע",
@@ -2612,6 +2620,12 @@
           "subtitle": "הפעולות שהוא באמת יכול לבצע כרגע - היכולת צריכה להיות מחוברת וגם הפעולה מותרת לעובד הזה.",
           "allowed": "מותר",
           "blocked": "לא זמין (היכולת כבויה או לא הוענקה)"
+        },
+        "readiness": {
+          "title": "דוח מוכנות",
+          "subtitle": "מה העובד/ת כבר עונה טוב, ומה עוד חסר. סגרו פערים כדי להעלות את הציון.",
+          "open": "פתחו דוח",
+          "run": "הריצו בדיקה"
         }
       }
     },
@@ -2688,7 +2702,82 @@
         "deleteMsg": "פעולה זו תמחק לצמיתות את מקור הידע ותבטל את הקצאתו מכל חברי הצוות.",
         "cancel": "ביטול",
         "delete": "מחק"
-      }
+      },
+      "addTitle": "למדו את העובד/ת משהו חדש",
+      "addSub": "כל מה שעובד טוב היה בודק לפני שהוא עונה: מחירים, מדיניות, משלוחים, שאלות נפוצות, מדריכים.",
+      "addAnswer": "ענו על שאלה",
+      "addUrl": "הוסיפו עמוד",
+      "addFiles": "העלו קבצים",
+      "addDrive": "חברו דרייב",
+      "whyTitle": "למה זה חשוב",
+      "why1": "העובד/ת עונה רק ממה שנתתם לו/ה. בלי ידע תקבלו \"אבדוק\" כן, אבל לא תשובה.",
+      "why2": "כל מקור מעלה את ציון המוכנות, פחות שאלות שעוברות לצוות.",
+      "why3": "מלמדים פעם אחת, והוא/היא עונה תמיד, בכל ערוץ ובכל שפה שאתם תומכים בה.",
+      "editInManage": "עריכה בניהול הידע",
+      "deleteDoc": "מחיקת מסמך",
+      "deleting": "מוחק...",
+      "confirmDeleteKbTitle": "למחוק את מאגר הידע?",
+      "confirmDeleteKbBody": "“{name}” והמסמכים שבו ({count}) יוסרו. העובדים שלכם יפסיקו לענות ממנו.",
+      "confirmDeleteDocTitle": "למחוק את המסמך?",
+      "confirmDeleteDocBody": "“{name}” יוסר ממאגר הידע הזה.",
+      "confirmDeleteIrreversible": "לא ניתן לבטל פעולה זו.",
+      "confirmDeleteAction": "מחק",
+      "manage": {
+        "title": "מאגר ידע",
+        "subtitle": "ניהול מקורות הידע של הסוכנים והקופילוט",
+        "emptyList": "עדיין אין מאגרי ידע",
+        "emptyListHint": "צרו אחד כדי להתחיל",
+        "selectHint": "בחרו מאגר ידע כדי לראות פרטים",
+        "namePlaceholder": "שם מאגר הידע",
+        "descPlaceholder": "תיאור (לא חובה)",
+        "saving": "שומר...",
+        "editKb": "עריכת מאגר הידע",
+        "externalSources": "מקורות חיצוניים",
+        "noDocs": "עדיין אין מסמכים",
+        "noDocsHint": "העלו קבצים, הדביקו תוכן, הוסיפו קישורים או חברו Google Drive / Confluence",
+        "noIntegrations": "אין אינטגרציות מחוברות",
+        "noIntegrationsHint": "חברו Google Drive או Confluence כדי לייבא תוכן",
+        "browseSpaces": "עיון במרחבים",
+        "browseFiles": "עיון בקבצים",
+        "newKbTitle": "מאגר ידע חדש",
+        "fieldName": "שם",
+        "fieldNamePlaceholder": "לדוגמה: תיעוד מוצר",
+        "fieldDesc": "תיאור",
+        "fieldDescPlaceholder": "תיאור (לא חובה)...",
+        "fieldScope": "זמין עבור",
+        "scopeAll": "כל הסוכנים (כל החשבון)",
+        "creating": "יוצר...",
+        "create": "צור",
+        "addContentTitle": "הוספת תוכן",
+        "modeFile": "העלאת קבצים",
+        "modeUrl": "כתובת אתר",
+        "modeText": "הדבקת טקסט",
+        "fieldTitle": "כותרת",
+        "fieldFile": "קובץ",
+        "dropFiles": "גררו קבצים לכאן או לחצו לבחירה",
+        "fieldUrl": "כתובת אתר",
+        "urlPlaceholder": "https://example.com/help",
+        "urlHint": "נסרוק את העמוד ונחלץ את התוכן אוטומטית.",
+        "fieldContent": "תוכן",
+        "contentPlaceholder": "הדביקו כאן את התוכן...",
+        "processing": "מעבד...",
+        "crawlAdd": "סרוק והוסף",
+        "upload": "העלאה",
+        "noSpaces": "לא נמצאו מרחבים",
+        "noPages": "לא נמצאו עמודים",
+        "noSharedDrives": "לא נמצאו כוננים משותפים",
+        "emptyFolder": "התיקייה ריקה",
+        "scopeAllShort": "כל הסוכנים",
+        "scopeAgent": "סוכן",
+        "scopeDepartment": "מחלקה",
+        "document": "מסמך",
+        "documents": "מסמכים",
+        "spaces": "מרחבים",
+        "myDrive": "הדרייב שלי",
+        "sharedDrives": "כוננים משותפים"
+      },
+      "removeKb": "הסרת מאגר ידע",
+      "confirmRemoveKbBody": "“{name}” וכל המסמכים שבו יוסרו. העובדים שלכם יפסיקו לענות ממנו."
     },
     "tools": {
       "title": "כלים מחוברים",
@@ -2701,7 +2790,51 @@
       "disabled": "מושבת",
       "enabled": "פעיל",
       "noneConnected": "אין כלים מחוברים",
-      "noTools": "אין כלים זמינים"
+      "noTools": "אין כלים זמינים",
+      "enables": "מאפשר",
+      "actionsLive": "פעולות לעובד/ת",
+      "wouldEnable": "יאפשר:"
+    },
+    "workspace": {
+      "overview": "סקירה",
+      "working": "עובד/ת",
+      "paused": "מושהה",
+      "readiness": "מוכנות",
+      "talk": "דברו איתי",
+      "edit": "הגדרות",
+      "hire": "+ גיוס",
+      "attention": "דורש את תשומת הלב שלכם",
+      "allSet": "הכול מסודר. לעובד/ת יש כרגע את כל מה שצריך.",
+      "finishHiring": "סיימו את הגיוס של",
+      "newEmployee": "עובד/ת חדש/ה",
+      "finishHiringSub": "המשיכו בדיוק מאיפה שעצרתם",
+      "noChannel": "חברו ערוץ כדי שלקוחות יגיעו אליו/ה",
+      "noChannelSub": "וואטסאפ, אינסטגרם או צ'אט לאתר, בלחיצה אחת",
+      "open": "פתחו",
+      "cards": {
+        "knowledge": "מקורות ידע",
+        "knowledgeSub": "ממה הוא/היא עונה",
+        "tools": "כלים מחוברים",
+        "toolsSub": "מה אפשר לבצע",
+        "processes": "תהליכים",
+        "processesSub": "איך העבודה זורמת",
+        "inbox": "תיבת השיחות",
+        "inboxSub": "צפו בשיחות בזמן אמת",
+        "analytics": "אנליטיקות",
+        "analyticsSub": "מה יצא מהעבודה"
+      },
+      "mapAria": "איך המערכות של העובד/ת עובדות יחד",
+      "map": {
+        "employee": "העובד/ת שלכם",
+        "knowledge": "ידע",
+        "knowledgeSub": "מה הוא/היא יודע/ת",
+        "tools": "אינטגרציות",
+        "toolsSub": "מה אפשר לעשות",
+        "processes": "תהליכים",
+        "processesSub": "איך עובדים",
+        "channels": "ערוצים",
+        "channelsSub": "איפה מדברים"
+      }
     }
   },
   "confirm": {

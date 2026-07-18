@@ -16,12 +16,11 @@
  * agent + customer.
  */
 import { Router, Request, Response } from "express";
-import { prisma, getRedis, normalizePhone } from "@chatcenter/shared";
+import { prisma, getRedis, normalizePhone, verifyInternalServiceKey } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
 
-const DEFAULT_INTERNAL_KEY = "chatcenter-internal-2026";
 
 export function createVoiceAddParticipantRouter(opts: {
   resolveProvider: VoiceProviderResolver;
@@ -31,9 +30,7 @@ export function createVoiceAddParticipantRouter(opts: {
   const { resolveProvider, logger } = opts;
 
   router.post("/sessions/:sessionId/add-participant", async (req: Request, res: Response) => {
-    const expected = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
-    const got = req.headers["x-internal-key"];
-    if (!got || got !== expected) {
+    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
       res.status(403).json({ error: "forbidden" });
       return;
     }

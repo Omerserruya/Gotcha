@@ -1,6 +1,7 @@
 "use client";
 
 import IntegrationsExplorer from "@/components/IntegrationsExplorer";
+import CustomerSystemOfRecordCard from "@/components/CustomerSystemOfRecordCard";
 import { useI18n } from "@/context/I18nContext";
 
 /**
@@ -21,6 +22,10 @@ export default function SettingsIntegrationsPage() {
       title={t("settings.integrations.crmTitle")}
       subtitle={t("settings.integrations.crmSubtitle")}
       restrictToCategory="CRM"
+      // Which connected system answers "who is this customer?" is an
+      // account-level decision, so it belongs here rather than on one vendor's
+      // marketplace page (where it used to live, as "source of truth").
+      beforeContent={<CustomerSystemOfRecordCard />}
     />
   );
 }

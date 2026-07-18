@@ -46,6 +46,8 @@ vi.mock("@chatcenter/shared", () => ({
   requireRole: () => (_req: any, _res: any, next: any) => next(),
   encryptCredentials: (x: any) => x,
   decryptCredentials: (x: any) => x,
+  // SSRF guard is a no-op passthrough in tests (returns the parsed URL).
+  assertPublicUrl: async (u: string) => new URL(u),
 }));
 
 vi.mock("../services/connectors/integration-framework", async () => ({

@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Voice Flow Runner - bridges voice events into the existing ChatbotFlow
  * schema as an automation surface.
@@ -80,7 +81,7 @@ interface VoiceContext {
 
 let started = false;
 const VOICE_COPILOT_URL = () => process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-const INTERNAL_KEY = () => process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+const INTERNAL_KEY = () => getInternalServiceKey();
 
 // In-process idempotency for flow execution.
 //

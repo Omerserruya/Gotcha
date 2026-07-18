@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Autonomous AI bot - worker side.
  *
@@ -30,7 +31,7 @@ import {
 import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+const INTERNAL_SERVICE_KEY = getInternalServiceKey();
 
 interface SendContext {
   channel: "WHATSAPP" | "MESSENGER" | "INSTAGRAM";

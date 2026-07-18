@@ -1,6 +1,7 @@
 import { Router, Request, Response } from "express";
 import * as crypto from "crypto";
 import {
+  requireInternalKey,
   prisma,
   authenticate,
   resolveTenant,
@@ -147,14 +148,7 @@ router.post("/generate-config/:departmentId", authenticate, resolveTenant, requi
 
 // ─── Intent Classification (internal, called by incoming-worker) ───
 
-router.post("/intent", (req: Request, res: Response, next) => {
-  const key = req.headers["x-internal-key"];
-  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-}, async (req: Request, res: Response) => {
+router.post("/intent", requireInternalKey, async (req: Request, res: Response) => {
   try {
     const { message, intent, intents, tenantId } = req.body;
     // Accept both shapes:

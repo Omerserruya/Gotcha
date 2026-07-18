@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Voice Channels API - Live Call CoPilot.
  *
@@ -937,7 +938,7 @@ router.put("/:id/routing", async (req: Request, res: Response) => {
       ch.voiceChannel.outboundMode === "AGENT_FIRST";
     if (wantsTemplate && !previouslyWanted) {
       const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-      const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+      const key = getInternalServiceKey();
       fetch(`${url}/api/voice-copilot/callbacks/ensure-template`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-Internal-Key": key },

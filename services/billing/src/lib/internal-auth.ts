@@ -4,11 +4,13 @@
  * convention as services/ai (accepts INTERNAL_SERVICE_KEY or _TOKEN).
  */
 import type { Request, Response, NextFunction } from "express";
+import { verifyInternalServiceKey } from "@chatcenter/shared";
 
 export function requireInternalKey(req: Request, res: Response, next: NextFunction): void {
-  const key = req.headers["x-internal-key"];
-  const expected = process.env.INTERNAL_SERVICE_KEY || process.env.INTERNAL_SERVICE_TOKEN || "chatcenter-internal-2026";
-  if (!key || key !== expected) {
+  // Hardened, constant-time, fail-closed. No hardcoded default: an unset or
+  // weak key in production is rejected, not silently accepted against the
+  // historically committed public string.
+  if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
     res.status(401).json({ error: "unauthorized", scope: "internal" });
     return;
   }

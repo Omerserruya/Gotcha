@@ -12,7 +12,6 @@ import {
   getIdleAutomation, updateIdleAutomation,
   getDepartments, getDepartmentSla, updateDepartmentSla,
   getTenantSettings, updateTenantSettings,
-  changePassword as changePasswordApi,
 } from "@/lib/api";
 import clsx from "clsx";
 
@@ -95,7 +94,7 @@ const DEFAULT_IDLE: IdleAutomationConfig = {
 export default function SettingsPage() {
   const { token, user } = useAuth();
   const { atLeastRole } = usePermissions();
-  const { t, locale, setLocale, tenantDefault, userOverride, setTenantDefault } = useI18n();
+  const { t, tenantDefault, setTenantDefault } = useI18n();
   const [localeSaving, setLocaleSaving] = useState(false);
   const [localeMessage, setLocaleMessage] = useState("");
   // We let users (including non-admin agents) pick their personal
@@ -114,12 +113,6 @@ export default function SettingsPage() {
   const [showDeptSla, setShowDeptSla] = useState(false);
   const [defaultCountryCode, setDefaultCountryCode] = useState<string>("IL");
   const [supportedCountries, setSupportedCountries] = useState<Array<{ code: string; callingCode: string }>>([]);
-  const [currentPassword, setCurrentPassword] = useState("");
-  const [newPassword, setNewPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
-  const [passwordMessage, setPasswordMessage] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [changingPassword, setChangingPassword] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
@@ -208,55 +201,6 @@ export default function SettingsPage() {
     }));
   }
 
-  async function handleChangePassword() {
-    if (!token) return;
-    if (newPassword !== confirmPassword) {
-      setPasswordError(t("settings.password.errMismatch"));
-      return;
-    }
-    if (newPassword.length < 8) {
-      setPasswordError(t("settings.password.errTooShort"));
-      return;
-    }
-    setChangingPassword(true);
-    setPasswordError("");
-    setPasswordMessage("");
-    try {
-      await changePasswordApi(token, currentPassword, newPassword);
-      setPasswordMessage(t("settings.password.changed"));
-      setCurrentPassword("");
-      setNewPassword("");
-      setConfirmPassword("");
-    } catch (err: any) {
-      setPasswordError(err.message || t("settings.password.errFail"));
-    } finally {
-      setChangingPassword(false);
-      setTimeout(() => { setPasswordMessage(""); setPasswordError(""); }, 5000);
-    }
-  }
-
-  const handleAgentLocale = useCallback(
-    async (value: string) => {
-      setLocaleSaving(true);
-      setLocaleMessage("");
-      try {
-        // "system" collapses to NULL → inherit the tenant default.
-        const next: Locale | null = value === "system" ? null : (value as Locale);
-        await setLocale(next);
-        setLocaleMessage(t("settings.language.saved"));
-      } catch (err: any) {
-        // Show the actual server reason (e.g. "unsupported_locale",
-        // "failed_to_set_locale") so the user - and we, while debugging -
-        // can tell what went wrong instead of just "try again".
-        const reason = err?.message ? ` (${err.message})` : "";
-        setLocaleMessage(`${t("settings.language.saveFailed")}${reason}`);
-      } finally {
-        setLocaleSaving(false);
-        setTimeout(() => setLocaleMessage(""), 5000);
-      }
-    },
-    [setLocale, t],
-  );
 
   const handleTenantLocale = useCallback(
     async (value: string) => {
@@ -276,13 +220,13 @@ export default function SettingsPage() {
     [setTenantDefault, t],
   );
 
-  // Language card - shown to EVERY user (including non-admin agents).
-  // Tenant-default row is admin-only inside the card; agents see only
-  // their personal override row.
-  const languageCard = (
+  // Workspace default LANGUAGE (admin only). A user's OWN language lives in
+  // Account -> Preferences, not here - General is workspace configuration, so it
+  // only carries the tenant-wide default new/unset members inherit.
+  const languageCard = atLeastRole("admin") ? (
     <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
-      <h2 className="font-semibold text-gray-900">{t("settings.language.title")}</h2>
-      <p className="text-xs text-gray-500 mt-1">{t("settings.language.subtitle")}</p>
+      <h2 className="font-semibold text-gray-900">{t("settings.language.workspaceTitle")}</h2>
+      <p className="text-xs text-gray-500 mt-1">{t("settings.language.workspaceSubtitle")}</p>
 
       {localeMessage && (
         <div className="mt-3 bg-emerald-50 text-emerald-700 text-xs px-3 py-2 rounded-lg border border-emerald-200">
@@ -290,71 +234,46 @@ export default function SettingsPage() {
         </div>
       )}
 
-      <div className="mt-4 space-y-4">
-        {/* Per-agent override (everyone) */}
-        <div>
-          <label className="text-xs font-medium text-gray-600 block mb-1">
-            {t("settings.language.myLanguage")}
-          </label>
-          <select
-            value={userOverride ?? "system"}
-            onChange={(e) => handleAgentLocale(e.target.value)}
-            disabled={localeSaving}
-            className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
-          >
-            <option value="system">
-              {t("settings.language.useTenantDefault")}
-              {tenantDefault ? ` (${localeConfig[tenantDefault]?.label ?? tenantDefault})` : ""}
+      <div className="mt-4">
+        <label className="text-xs font-medium text-gray-600 block mb-1">
+          {t("settings.language.tenantDefault")}
+        </label>
+        <select
+          value={tenantDefault ?? "en"}
+          onChange={(e) => handleTenantLocale(e.target.value)}
+          disabled={localeSaving}
+          className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
+        >
+          {Object.entries(localeConfig).map(([key, config]) => (
+            <option key={key} value={key}>
+              {config.label}
             </option>
-            {Object.entries(localeConfig).map(([key, config]) => (
-              <option key={key} value={key}>
-                {config.label}
-              </option>
-            ))}
-          </select>
-          <p className="text-[10px] text-gray-400 mt-1">
-            {t("settings.language.myLanguageHint")
-              .replace("{effective}", localeConfig[locale]?.label ?? locale)}
-          </p>
-        </div>
-
-        {/* Tenant default (admin only) */}
-        {atLeastRole("admin") && (
-          <div>
-            <label className="text-xs font-medium text-gray-600 block mb-1">
-              {t("settings.language.tenantDefault")}
-            </label>
-            <select
-              value={tenantDefault ?? "en"}
-              onChange={(e) => handleTenantLocale(e.target.value)}
-              disabled={localeSaving}
-              className="w-full sm:max-w-xs text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white disabled:opacity-50"
-            >
-              {Object.entries(localeConfig).map(([key, config]) => (
-                <option key={key} value={key}>
-                  {config.label}
-                </option>
-              ))}
-            </select>
-            <p className="text-[10px] text-gray-400 mt-1">
-              {t("settings.language.tenantDefaultHint")}
-            </p>
-          </div>
-        )}
+          ))}
+        </select>
+        <p className="text-[10px] text-gray-400 mt-1">
+          {t("settings.language.tenantDefaultHint")}
+        </p>
       </div>
     </div>
-  );
+  ) : null;
 
   if (!atLeastRole("admin")) {
-    // Non-admins see ONLY the language card. Other admin surfaces
-    // (SLA, business hours, etc.) remain hidden behind this gate.
+    // Non-admins have no workspace settings to manage - their personal
+    // preferences (including language) live in Account. Point them there
+    // instead of showing an empty page.
     return (
       <div className="max-w-4xl mx-auto p-4 md:p-6 space-y-8 overflow-y-auto h-full pb-20">
         <div>
           <h1 className="text-2xl font-bold text-gray-900 ">{t("settings.title")}</h1>
           <p className="text-sm text-gray-500 mt-1">{t("settings.personalSubtitle")}</p>
         </div>
-        {languageCard}
+        <a
+          href="/settings/account"
+          className="block bg-white rounded-2xl border border-gray-200 p-4 md:p-6 hover:border-primary-300 transition"
+        >
+          <h2 className="font-semibold text-gray-900">{t("settings.language.title")}</h2>
+          <p className="text-xs text-gray-500 mt-1">{t("settings.goToAccountForPreferences")}</p>
+        </a>
       </div>
     );
   }
@@ -805,63 +724,6 @@ export default function SettingsPage() {
               rows={3}
               className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
             />
-          </div>
-
-          {/* Change Password */}
-          <div className="bg-white rounded-2xl border border-gray-200 p-4 md:p-6">
-            <h2 className="font-semibold text-gray-900 mb-1">{t("settings.password.title")}</h2>
-            <p className="text-xs text-gray-500 mb-5">{t("settings.password.subtitle")}</p>
-
-            {passwordMessage && (
-              <div className="bg-green-50 text-green-700 text-sm px-4 py-2.5 rounded-xl border border-green-200 mb-4">
-                {passwordMessage}
-              </div>
-            )}
-            {passwordError && (
-              <div className="bg-red-50 text-red-700 text-sm px-4 py-2.5 rounded-xl border border-red-200 mb-4">
-                {passwordError}
-              </div>
-            )}
-
-            <div className="space-y-4 max-w-md">
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.current")}</label>
-                <input
-                  type="password"
-                  value={currentPassword}
-                  onChange={(e) => setCurrentPassword(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder={t("settings.password.currentPlaceholder")}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.new")}</label>
-                <input
-                  type="password"
-                  value={newPassword}
-                  onChange={(e) => setNewPassword(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder={t("settings.password.newPlaceholder")}
-                />
-              </div>
-              <div>
-                <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.password.confirm")}</label>
-                <input
-                  type="password"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  className="w-full text-sm border border-gray-200 rounded-lg px-3 py-2 bg-white focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
-                  placeholder={t("settings.password.confirmPlaceholder")}
-                />
-              </div>
-              <button
-                onClick={handleChangePassword}
-                disabled={changingPassword || !currentPassword || !newPassword || !confirmPassword}
-                className="px-5 py-2.5 min-h-[44px] bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition font-medium text-sm disabled:opacity-40"
-              >
-                {changingPassword ? t("settings.password.changing") : t("settings.password.action")}
-              </button>
-            </div>
           </div>
 
           {/* Save Button */}

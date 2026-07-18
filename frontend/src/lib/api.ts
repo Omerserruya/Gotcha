@@ -53,47 +53,13 @@ export function submitWaitlistEntry(data: {
 }
 
 // ─── Auth ───────────────────────────────────────────────────
-
-export function login(email: string, password: string, tenantSlug: string) {
-  return apiFetch<{ token: string; refreshToken: string; user: any }>("/api/auth/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password, tenantSlug }),
-  });
-}
-
-export function refreshAccessToken(refreshToken: string) {
-  return apiFetch<{ token: string; refreshToken: string; expiresIn: number }>("/api/auth/refresh", {
-    method: "POST",
-    body: JSON.stringify({ refreshToken }),
-  });
-}
+//
+// Only the profile lookup lives here. Login, refresh, and every password
+// operation are Authentik's - see @/lib/oidc. There is no GOTCHA endpoint that
+// accepts a credential.
 
 export function getMe(token: string) {
-  return apiFetch<{ user: any }>("/api/auth/me", { token });
-}
-
-// ─── Password Management ───────────────────────────────────
-
-export function changePassword(token: string, currentPassword: string, newPassword: string) {
-  return apiFetch<{ success: boolean }>("/api/auth/change-password", {
-    token,
-    method: "POST",
-    body: JSON.stringify({ currentPassword, newPassword }),
-  });
-}
-
-export function forgotPassword(email: string, tenantSlug: string) {
-  return apiFetch<{ success: boolean; message: string }>("/api/auth/forgot-password", {
-    method: "POST",
-    body: JSON.stringify({ email, tenantSlug }),
-  });
-}
-
-export function resetPassword(resetToken: string, newPassword: string) {
-  return apiFetch<{ success: boolean }>("/api/auth/reset-password", {
-    method: "POST",
-    body: JSON.stringify({ token: resetToken, newPassword }),
-  });
+  return apiFetch<{ user: any; tenantStatus?: string }>("/api/auth/me", { token });
 }
 
 // ─── Conversations ──────────────────────────────────────────
@@ -266,7 +232,9 @@ export function getAgents(token: string) {
   return apiFetch<any[]>("/api/agents", { token });
 }
 
-export function createAgent(token: string, data: { name: string; email: string; password: string }) {
+// Inviting an agent takes no password: the invitee sets their own inside
+// Authentik via the returned setupLink.
+export function createAgent(token: string, data: { name: string; email: string }) {
   return apiFetch<any>("/api/agents", {
     token,
     method: "POST",
@@ -290,8 +258,10 @@ export function deleteAgent(token: string, id: string) {
   return apiFetch<any>(`/api/agents/${id}`, { token, method: "DELETE" });
 }
 
-export function resetAgentPassword(token: string, id: string, newPassword: string) {
-  return apiFetch<any>(`/api/agents/${id}/reset-password`, { token, method: "POST", body: JSON.stringify({ newPassword }) });
+// Issues a fresh Authentik password-setup link for an agent. An admin can
+// restore access without ever choosing or seeing someone else's credential.
+export function resetAgentPassword(token: string, id: string) {
+  return apiFetch<{ success: boolean; setupLink: string }>(`/api/agents/${id}/reset-password`, { token, method: "POST" });
 }
 
 export function assignAgentToDepartment(token: string, departmentId: string, userId: string, departmentRole?: string) {
@@ -658,13 +628,6 @@ export function getAgentWorkload(token: string) {
 
 // ─── System Admin ───────────────────────────────────────────
 
-export function systemLogin(email: string, password: string) {
-  return apiFetch<{ token: string; user: any }>("/api/system/login", {
-    method: "POST",
-    body: JSON.stringify({ email, password }),
-  });
-}
-
 export function getSystemStats(token: string) {
   return apiFetch<{ data: any }>("/api/system/stats", { token });
 }
@@ -678,7 +641,7 @@ export function getSystemTenant(token: string, id: string) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token });
 }
 
-export function createTenant(token: string, data: { name: string; slug: string; adminEmail: string; adminPassword: string; adminName: string }) {
+export function createTenant(token: string, data: { name: string; slug: string; adminEmail: string; adminName: string }) {
   return apiFetch<{ data: any }>("/api/system/tenants", { token, method: "POST", body: JSON.stringify(data) });
 }
 
@@ -686,11 +649,11 @@ export function updateTenant(token: string, id: string, data: { name?: string; i
   return apiFetch<{ data: any }>(`/api/system/tenants/${id}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
 
-export function createTenantUser(token: string, tenantId: string, data: { email: string; password: string; name: string; role?: string }) {
+export function createTenantUser(token: string, tenantId: string, data: { email: string; name: string; role?: string }) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users`, { token, method: "POST", body: JSON.stringify(data) });
 }
 
-export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string; name?: string; email?: string; password?: string }) {
+export function updateTenantUser(token: string, tenantId: string, userId: string, data: { isActive?: boolean; role?: string; name?: string; email?: string }) {
   return apiFetch<{ data: any }>(`/api/system/tenants/${tenantId}/users/${userId}`, { token, method: "PATCH", body: JSON.stringify(data) });
 }
 
@@ -746,10 +709,6 @@ export function resendOnboardingLink(token: string, tenantId: string) {
   return apiFetch<{ data: { message: string; sentTo: string } }>(`/api/system/tenants/${tenantId}/resend-onboarding`, {
     token, method: "POST",
   });
-}
-
-export function seedSystemAdmin(data: { email: string; password: string; name: string; setupSecret: string }) {
-  return apiFetch<{ data: any }>("/api/system/seed", { method: "POST", body: JSON.stringify(data) });
 }
 
 // ─── System Admin Chat (RAG) ────────────────────────────────
@@ -814,15 +773,6 @@ export function getTokenUsage(token: string, params?: Record<string, string>) {
 export function getTokenUsageByTenants(token: string, params?: Record<string, string>) {
   const qs = params ? "?" + new URLSearchParams(params).toString() : "";
   return apiFetch<{ data: any[] }>(`/api/system-chat/token-usage/tenants${qs}`, { token });
-}
-
-// ─── Magic Link ────────────────────────────────────────────
-
-export function verifyMagicLink(token: string) {
-  return apiFetch<{ token: string; refreshToken: string; user: any; tenantStatus: string }>("/api/auth/verify-magic-link", {
-    method: "POST",
-    body: JSON.stringify({ token }),
-  });
 }
 
 // ─── Onboarding ────────────────────────────────────────────
@@ -997,6 +947,14 @@ export function employeeChat(token: string, messages: Array<{ role: "user" | "as
     token, method: "POST", body: JSON.stringify({ messages, persona, locale }),
   });
 }
+// Persist the tuned persona WITHOUT a chat turn - used when the owner adds a
+// standing rule via a quick-tune chip (rules land in the rules row, never in
+// the transcript).
+export function saveTunedPersona(token: string, persona: EmployeePersona) {
+  return apiFetch<{ data: { ok: boolean; persona?: EmployeePersona } }>("/api/onboarding/employee-chat", {
+    token, method: "POST", body: JSON.stringify({ personaOnly: true, persona }),
+  });
+}
 // Tell the GOTCHA team about an integration we don't support yet (the owner
 // flagged it during onboarding). Best-effort - resolves ok even if mail isn't
 // configured server-side, so the UI can always confirm the click.
@@ -1103,12 +1061,14 @@ export function createInviteLink(token: string, role?: "ADMIN" | "AGENT") {
 
 // Public - fetch invite details by token (used by /join page).
 export function getPublicInvite(inviteToken: string) {
-  return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string; requiresPassword: boolean } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
+  return apiFetch<{ data: { tenant: { name: string; slug: string }; email: string | null; role: string } }>(`/api/public/onboarding/invite/${encodeURIComponent(inviteToken)}`, {});
 }
 
 // Public - accept an invite (creates the user / sets their password).
-export function acceptPublicInvite(payload: { token: string; name: string; email?: string; password: string }) {
-  return apiFetch<{ data: { ok: true; tenantId: string } }>("/api/public/onboarding/invite/accept", {
+// No password: accepting an invite links the person to the tenant and returns
+// the one-time Authentik link where they set their own credential.
+export function acceptPublicInvite(payload: { token: string; name: string; email?: string }) {
+  return apiFetch<{ data: { ok: true; tenantId: string; setupLink: string } }>("/api/public/onboarding/invite/accept", {
     method: "POST", body: JSON.stringify(payload),
   });
 }
@@ -3055,4 +3015,113 @@ export function setUserPrimaryRole(
     method: "PUT",
     body: JSON.stringify(body),
   });
+}
+
+// ─── Account (self-service) ─────────────────────────────────
+
+export interface AccountProfile {
+  user: { id: string; name: string; email: string; phoneNumber: string | null; locale: string | null; role: string; createdAt: string };
+  departmentName: string | null;
+  tenantName: string | null;
+  tenantDefaultLocale: string;
+}
+export function getAccount(token: string) {
+  return apiFetch<AccountProfile>("/api/account", { token });
+}
+export function updateAccount(token: string, body: { name?: string; phoneNumber?: string | null; locale?: string }) {
+  return apiFetch<{ user: AccountProfile["user"] }>("/api/account", { token, method: "PATCH", body: JSON.stringify(body) });
+}
+
+export interface AccountSecurity {
+  available: boolean;
+  reason?: string;
+  mfaEnabled?: boolean;
+  totp?: Array<{ id: string; name: string; createdAt: string | null }>;
+  passkeys?: Array<{ id: string; name: string; createdAt: string | null }>;
+  recoveryCodes?: Array<{ id: string; name: string }>;
+  lastLogin?: string | null;
+}
+export function getAccountSecurity(token: string) {
+  return apiFetch<AccountSecurity>("/api/account/security", { token });
+}
+export function getAccountPasswordLink(token: string) {
+  return apiFetch<{ link: string }>("/api/account/password-link", { token, method: "POST" });
+}
+
+export interface AccountSession {
+  id: string; current: boolean; ip: string | null; userAgent: string | null;
+  city: string | null; country: string | null; lastUsed: string | null; expires: string | null;
+}
+export function getAccountSessions(token: string) {
+  return apiFetch<{ available: boolean; sessions: AccountSession[] }>("/api/account/sessions", { token });
+}
+export function terminateAccountSession(token: string, id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/account/sessions/${encodeURIComponent(id)}`, { token, method: "DELETE" });
+}
+export function terminateAllAccountSessions(token: string) {
+  return apiFetch<{ ok: boolean; terminated: number }>("/api/account/sessions", { token, method: "DELETE" });
+}
+
+export interface AccountLoginEvent {
+  id: string; action: string; success: boolean; ip: string | null;
+  city: string | null; country: string | null; userAgent: string | null; timestamp: string;
+}
+export function getAccountLoginHistory(token: string) {
+  return apiFetch<{ available: boolean; events: AccountLoginEvent[] }>("/api/account/login-history", { token });
+}
+
+export function requestEmailChange(token: string, newEmail: string) {
+  return apiFetch<{ sent: boolean }>("/api/account/email-change", { token, method: "POST", body: JSON.stringify({ newEmail }) });
+}
+export function verifyEmailChange(token: string, changeToken: string) {
+  return apiFetch<{ ok: boolean; email: string }>("/api/account/email-change/verify", { token, method: "POST", body: JSON.stringify({ token: changeToken }) });
+}
+
+export interface MemberLoginStatus { status: "active" | "invited" | "disabled"; lastLogin: string | null }
+export function getMembersLoginStatus(token: string) {
+  return apiFetch<Record<string, MemberLoginStatus>>("/api/agents/login-status", { token });
+}
+
+// ─── MFA enforcement ─────────────────────────────────────────
+
+export type MfaRequirementReason = "system_admin" | "tenant_admins" | "all_users" | null;
+export interface MfaGate {
+  required: boolean;
+  reason: MfaRequirementReason;
+  enrolled: boolean;
+  hasAuthenticator: boolean;
+  hasRecovery: boolean;
+  mustEnroll: boolean;
+  identityAvailable: boolean;
+}
+/** Is the current user required to have MFA, and have they enrolled (auth + recovery)? */
+export function getMfaGate(token: string) {
+  return apiFetch<MfaGate>("/api/account/mfa-gate", { token });
+}
+/** Remove one of the caller's own authenticator devices. */
+export function removeMfaDevice(token: string, type: "totp" | "webauthn" | "static", id: string) {
+  return apiFetch<{ ok: boolean }>(`/api/account/security/device/${type}/${encodeURIComponent(id)}`, { token, method: "DELETE" });
+}
+
+export interface TenantMfaPolicy { mfaRequiredForAdmins: boolean; mfaRequiredForAllUsers: boolean }
+export interface MfaComplianceCounts { protected: number; total: number }
+export interface TenantSecurity {
+  policy: TenantMfaPolicy;
+  systemAdminAlways: boolean;
+  idpAvailable: boolean;
+  compliance: { admins: MfaComplianceCounts; users: MfaComplianceCounts };
+}
+export function getTenantSecurity(token: string) {
+  return apiFetch<TenantSecurity>("/api/tenant/security", { token });
+}
+export function updateTenantSecurity(token: string, patch: Partial<TenantMfaPolicy>) {
+  return apiFetch<TenantSecurity>("/api/tenant/security", { token, method: "PATCH", body: JSON.stringify(patch) });
+}
+export interface TenantSecurityMember {
+  id: string; name: string; email: string; role: string; isActive: boolean;
+  hasAuthenticator: boolean; hasRecovery: boolean; enrolled: boolean;
+  required: boolean; requirementReason: MfaRequirementReason; compliant: boolean;
+}
+export function getTenantSecurityReview(token: string) {
+  return apiFetch<{ idpAvailable: boolean; members: TenantSecurityMember[] }>("/api/tenant/security/review", { token });
 }

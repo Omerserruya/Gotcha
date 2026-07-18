@@ -8,19 +8,14 @@
  * messages on its own - it just computes the next AI move.
  */
 
-import { Router, Request, Response, NextFunction } from "express";
+import { Router, Request, Response } from "express";
+import { requireInternalKey } from "@chatcenter/shared";
 import { generateAIBotReply, generateAIBotOneshot } from "../services/ai-bot.service";
 
 const router = Router();
 
-router.use((req: Request, res: Response, next: NextFunction) => {
-  const key = req.headers["x-internal-key"];
-  if (!key || key !== (process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026")) {
-    res.status(403).json({ error: "Forbidden" });
-    return;
-  }
-  next();
-});
+// Hardened internal gate: constant-time, fail-closed, no committed default.
+router.use(requireInternalKey);
 
 // POST /api/ai-bot/reply
 //   body: { tenantId, conversationId, aiAgentId, incomingMessage }

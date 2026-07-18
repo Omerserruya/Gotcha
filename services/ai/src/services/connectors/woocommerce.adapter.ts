@@ -18,6 +18,7 @@
  * API: WC REST v3 - /wp-json/wc/v3/
  */
 
+import { assertPublicUrl } from "@chatcenter/shared";
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
 
 const TOOLS: ToolDefinition[] = [
@@ -200,6 +201,9 @@ const WooCommerceAdapter: ProviderAdapter = {
 };
 
 async function wooRequest(authHeader: string, method: string, url: string, body?: unknown): Promise<unknown> {
+  // SSRF guard: storeUrl is free-form tenant config. Block private/metadata
+  // targets at DNS resolution before dispatching.
+  await assertPublicUrl(url);
   const init: RequestInit = {
     method,
     headers: {

@@ -11,6 +11,9 @@ http {
     include /etc/nginx/mime.types;
     default_type application/octet-stream;
 
+    # Never advertise the nginx version (L-4).
+    server_tokens off;
+
     upstream auth_service {
         server auth:${AUTH_PORT};
     }
@@ -43,13 +46,46 @@ http {
         server notifications:${NOTIFICATIONS_PORT};
     }
 
+    upstream billing_service {
+        server billing:${BILLING_PORT};
+    }
+
+    # Authentik - the identity provider. Fronted at auth.gotcha.co.il by the
+    # vhost at the bottom of this file. See docs/security/authentik-architecture.md.
+    upstream authentik_server {
+        server authentik-server:${AUTHENTIK_PORT};
+    }
+
     # No `frontend` upstream in prod - the static export is baked into THIS
     # nginx image at /usr/share/nginx/html and served from `location /` below.
     # See gateway/Dockerfile.prod. Dev still uses an upstream (separate Node
     # SSR container) via nginx/nginx.conf.template.
 
+    # Real public scheme. TLS terminates at Cloudflare, so $scheme is always
+    # "http" inside this container - passing it to Authentik would make it
+    # advertise http:// URLs and sign tokens whose `iss` never matches
+    # OIDC_ISSUER (https://…), 401ing every request. Cloudflare sends the true
+    # scheme in X-Forwarded-Proto; prefer it and fall back to $scheme when the
+    # header is absent (direct/local requests).
+    map $http_x_forwarded_proto $public_proto {
+        default $scheme;
+        "~.+"   $http_x_forwarded_proto;
+    }
+
+    # WebSocket upgrade: "upgrade" when the client asked for it, "close"
+    # otherwise. A hardcoded Connection: upgrade breaks plain HTTP requests.
+    map $http_upgrade $connection_upgrade {
+        default upgrade;
+        ''      close;
+    }
+
     # Rate limiting zone
     limit_req_zone $binary_remote_addr zone=api:10m rate=100r/s;
+
+    # Authentik gets its own zone. Login/token endpoints deserve a tighter
+    # limit than the general API, and they must not share a bucket with it -
+    # a burst of app traffic must never throttle someone's ability to log in.
+    limit_req_zone $binary_remote_addr zone=authentik:10m rate=20r/s;
 
     server {
         listen 80;
@@ -58,10 +94,32 @@ http {
         # Increase body size for webhooks
         client_max_body_size 10m;
 
+        # ── Security headers (H-5) ──────────────────────────────
+        # Emitted at server scope; repeated inside any location that declares
+        # its own add_header (nginx add_header inheritance stops there).
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+        # CSP: blast-radius cap for XSS. unsafe-inline/eval are required by the
+        # Next.js static export today; tightening to nonces is a follow-up.
+        # frame-ancestors 'self' (embedded chat is a script widget, not an
+        # iframe of this origin, so it is unaffected).
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
+
         # Health check for the gateway itself
         location /health {
             return 200 '{"status":"ok","service":"gateway"}';
             add_header Content-Type application/json;
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # ─── Auth Service ─────────────────────────────────
@@ -69,6 +127,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -78,6 +137,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -87,6 +147,54 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── GDPR: contact DSRs (conversation svc) - more specific prefix,
+        #     matched before /api/gdpr below. ────────────────
+        # ─── Account (self-service profile / sessions / security) ──
+        location /api/account {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── Workspace security policy (MFA enforcement) - auth svc ──
+        location /api/tenant/security {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        location /api/gdpr/contacts {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://conversation_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # ─── GDPR: user/tenant DSRs, consent, retention (auth svc) ──
+        # NOTE: /api/gdpr-internal is deliberately NOT routed here - it is an
+        # in-mesh-only endpoint gated by the internal key.
+        location /api/gdpr {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://auth_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -96,6 +204,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -106,6 +215,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -119,6 +229,7 @@ http {
             limit_req zone=api burst=10 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -129,6 +240,7 @@ http {
             limit_req zone=api burst=10 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -139,6 +251,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -149,6 +262,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://auth_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -159,6 +273,7 @@ http {
             client_max_body_size 20m;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -169,6 +284,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -178,6 +294,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -187,6 +304,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -196,6 +314,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -205,6 +324,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -214,6 +334,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -224,6 +345,7 @@ http {
             limit_req zone=api burst=50 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -236,6 +358,7 @@ http {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -246,6 +369,7 @@ http {
         location /api/webhook {
             proxy_pass http://webhook_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -256,6 +380,7 @@ http {
         location /webhooks {
             proxy_pass http://webhook_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -267,6 +392,21 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://analytics_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $scheme;
+        }
+
+        # Billing. Covers the frontend UI routes AND the public iCount webhook
+        # at /api/billing/webhooks/icount (HMAC-verified in-service). Does NOT
+        # match /api/internal/billing/* - those are internal-key only and must
+        # never be reachable from the internet, so they stay off the gateway.
+        location /api/billing {
+            limit_req zone=api burst=20 nodelay;
+            proxy_pass http://billing_service;
+            proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -277,6 +417,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://chatbot_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -287,6 +428,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -297,6 +439,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -307,6 +450,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -317,6 +461,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -327,6 +472,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -337,6 +483,7 @@ http {
             client_max_body_size 12m;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -346,6 +493,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -356,6 +504,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -366,6 +515,7 @@ http {
             client_max_body_size 12m;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -375,6 +525,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -384,6 +535,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -393,6 +545,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -405,6 +558,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -414,6 +568,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -423,6 +578,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -432,6 +588,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -441,6 +598,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -460,6 +618,7 @@ http {
             proxy_cache off;
             proxy_read_timeout 600s;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -469,6 +628,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -478,6 +638,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -487,6 +648,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -496,6 +658,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -505,6 +668,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -514,6 +678,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -531,6 +696,7 @@ http {
             proxy_cache off;
             proxy_read_timeout 600s;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -540,6 +706,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -552,6 +719,7 @@ http {
             limit_req zone=api burst=10 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -562,6 +730,7 @@ http {
             limit_req zone=api burst=10 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -572,6 +741,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -582,6 +752,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -592,6 +763,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -602,6 +774,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://notifications_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -611,6 +784,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://notifications_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -624,6 +798,7 @@ http {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -636,6 +811,14 @@ http {
             add_header Access-Control-Allow-Origin * always;
             add_header Access-Control-Allow-Methods "GET, POST, OPTIONS" always;
             add_header Access-Control-Allow-Headers "Content-Type" always;
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
             if ($request_method = OPTIONS) {
                 return 204;
@@ -644,6 +827,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://ai_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -654,6 +838,7 @@ http {
             proxy_pass http://auth_service/api/auth$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -662,6 +847,7 @@ http {
             proxy_pass http://conversation_service/api/conversations$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -670,6 +856,7 @@ http {
             proxy_pass http://webhook_service/api/webhook$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -678,6 +865,7 @@ http {
             proxy_pass http://analytics_service/api/analytics$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -686,6 +874,7 @@ http {
             proxy_pass http://chatbot_service/api/chatbot-flows$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -694,6 +883,7 @@ http {
             proxy_pass http://ai_service/api/ai-assist$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -702,6 +892,7 @@ http {
             proxy_pass http://ai_service/api/knowledge-bases$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -710,6 +901,7 @@ http {
             proxy_pass http://ai_service/api/knowledge$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -718,6 +910,7 @@ http {
             proxy_pass http://auth_service/api/agents$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -726,6 +919,7 @@ http {
             proxy_pass http://auth_service/api/permissions$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -734,6 +928,7 @@ http {
             proxy_pass http://auth_service/api/departments$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -742,6 +937,7 @@ http {
             proxy_pass http://auth_service/api/channels$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -750,6 +946,7 @@ http {
             proxy_pass http://ai_service/api/tools$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -758,6 +955,7 @@ http {
             proxy_pass http://auth_service/api/onboarding$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -766,6 +964,7 @@ http {
             proxy_pass http://ai_service/api/integrations$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -773,6 +972,7 @@ http {
         location ~ ^/t/([^/]+)/api/customer-summary(.*)$ {
             proxy_pass http://ai_service/api/customer-summary$2$is_args$args;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -781,6 +981,7 @@ http {
         location ~ ^/t/([^/]+)/api/customer-snapshot(.*)$ {
             proxy_pass http://ai_service/api/customer-snapshot$2$is_args$args;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -789,6 +990,7 @@ http {
         location ~ ^/t/([^/]+)/api/post-conversation-config(.*)$ {
             proxy_pass http://ai_service/api/post-conversation-config$2$is_args$args;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -797,6 +999,7 @@ http {
         location ~ ^/t/([^/]+)/api/industry-packs(.*)$ {
             proxy_pass http://ai_service/api/industry-packs$2$is_args$args;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -805,6 +1008,7 @@ http {
         location ~ ^/t/([^/]+)/api/field-definitions(.*)$ {
             proxy_pass http://ai_service/api/field-definitions$2$is_args$args;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -814,6 +1018,7 @@ http {
             proxy_pass http://ai_service/api/crm$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -822,6 +1027,7 @@ http {
             proxy_pass http://ai_service/api/agent-scores$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -836,6 +1042,7 @@ http {
             proxy_read_timeout 600s;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -851,6 +1058,7 @@ http {
             client_max_body_size 12m;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -859,6 +1067,7 @@ http {
             proxy_pass http://ai_service/api/ai-agents$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -867,6 +1076,7 @@ http {
             proxy_pass http://ai_service/api/router-rules$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -875,6 +1085,7 @@ http {
             proxy_pass http://ai_service/api/flow-canvas$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -883,6 +1094,7 @@ http {
             proxy_pass http://conversation_service/api/templates$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -891,6 +1103,7 @@ http {
             proxy_pass http://conversation_service/api/broadcasts$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -899,6 +1112,7 @@ http {
             proxy_pass http://conversation_service/api/audiences$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -907,6 +1121,7 @@ http {
             proxy_pass http://conversation_service/api/scheduled-messages$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -915,6 +1130,7 @@ http {
             proxy_pass http://conversation_service/api/contacts$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -924,6 +1140,7 @@ http {
             proxy_pass http://conversation_service/api/identity$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -933,6 +1150,7 @@ http {
             proxy_pass http://ai_service/api/action-planner$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -942,6 +1160,7 @@ http {
             proxy_pass http://conversation_service/api/approvals$2$is_args$args;
             proxy_set_header X-Tenant-ID $1;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
         }
@@ -953,6 +1172,7 @@ http {
             proxy_set_header Upgrade $http_upgrade;
             proxy_set_header Connection "upgrade";
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Twilio-Signature $http_x_twilio_signature;
@@ -965,6 +1185,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -975,6 +1196,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://conversation_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -986,6 +1208,7 @@ http {
         location /api/voice/incoming {
             proxy_pass http://voice_copilot_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -998,6 +1221,7 @@ http {
             limit_req zone=api burst=20 nodelay;
             proxy_pass http://voice_copilot_service;
             proxy_set_header Host $host;
+            proxy_set_header X-Internal-Key "";
             proxy_set_header X-Real-IP $remote_addr;
             proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
             proxy_set_header X-Forwarded-Proto $scheme;
@@ -1013,6 +1237,14 @@ http {
             expires 1y;
             access_log off;
             add_header Cache-Control "public, immutable";
+            # Security headers repeated: this location declares add_header,
+            # which cancels server-level inheritance, so ALL six must be re-emitted.
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header X-Frame-Options "SAMEORIGIN" always;
+            add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+            add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
         }
 
         # Next.js static-export dynamic [id] routes are emitted ONLY as a "_"
@@ -1043,6 +1275,75 @@ http {
         }
     }
 
+    # ── Identity Provider: auth.gotcha.co.il → Authentik ──
+    # Authentik owns every credential, session, and MFA secret. GOTCHA never
+    # sees a password; it only verifies the tokens signed here.
+    #
+    # This host must stay reachable independently of the app: if it is down,
+    # nobody can log in, and no existing token can be refreshed.
+    server {
+        listen 80;
+        server_name auth.gotcha.co.il;
+
+        # Authentik serves its own static assets and accepts branding/icon
+        # uploads through the admin UI.
+        client_max_body_size 50m;
+
+        # ── Security headers (H-5) ── Authentik manages its own CSP and
+        # framing policy; only the universally-safe baseline is added here.
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+        location / {
+            limit_req zone=authentik burst=40 nodelay;
+
+            proxy_pass http://authentik_server;
+            proxy_http_version 1.1;
+
+            # Authentik builds absolute URLs (and the OIDC `iss` claim) from
+            # these. Host must be the PUBLIC hostname and the proto must be
+            # the PUBLIC scheme, or issued tokens will not match OIDC_ISSUER.
+            proxy_set_header Host              $host;
+            proxy_set_header X-Internal-Key "";
+            proxy_set_header X-Real-IP         $remote_addr;
+            proxy_set_header X-Forwarded-For   $proxy_add_x_forwarded_for;
+            proxy_set_header X-Forwarded-Proto $public_proto;
+            proxy_set_header X-Forwarded-Host  $host;
+
+            # Allow the GOTCHA app to EMBED Authentik flows (MFA / password /
+            # passkey setup) in an in-app modal so identity management feels
+            # native. Authentik sends X-Frame-Options: DENY, which blocks all
+            # framing; strip it and instead scope framing to gotcha.co.il via a
+            # CSP frame-ancestors allowlist (still blocks external clickjacking).
+            # add_header here cancels server-scope inheritance, so the baseline
+            # headers are repeated.
+            proxy_hide_header X-Frame-Options;
+            add_header X-Content-Type-Options "nosniff" always;
+            add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+            add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+            add_header Content-Security-Policy "frame-ancestors 'self' https://*.gotcha.co.il" always;
+
+            # Inject the GOTCHA enhancement script (adds a show/hide password
+            # toggle Authentik lacks) into every flow page. Authentik has no
+            # custom-JS hook, so we splice a same-origin <script> before </head>.
+            # Disable upstream compression so sub_filter can rewrite the body.
+            proxy_set_header Accept-Encoding "";
+            sub_filter_once on;
+            sub_filter_types text/html;
+            sub_filter '</head>' '<script src="/static/dist/assets/custom/authentik-enhance.js?v=7" defer></script></head>';
+
+            # The admin interface and outpost channels use WebSockets.
+            proxy_set_header Upgrade    $http_upgrade;
+            proxy_set_header Connection $connection_upgrade;
+
+            # Authentik's flow executor streams; don't buffer it.
+            proxy_buffering off;
+            proxy_read_timeout 300s;
+            proxy_send_timeout 300s;
+        }
+    }
+
     # ── Help Center: help.gotcha.co.il → the exported /help pages ──
     # The public knowledge base is part of the same static export; this vhost
     # maps the subdomain root onto /help. TLS terminates upstream of this
@@ -1050,6 +1351,20 @@ http {
     server {
         listen 80;
         server_name help.gotcha.co.il;
+
+        # ── Security headers (H-5) ──────────────────────────────
+        # Emitted at server scope; repeated inside any location that declares
+        # its own add_header (nginx add_header inheritance stops there).
+        add_header X-Content-Type-Options "nosniff" always;
+        add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+        add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+        add_header X-Frame-Options "SAMEORIGIN" always;
+        add_header Permissions-Policy "camera=(), geolocation=(), payment=()" always;
+        # CSP: blast-radius cap for XSS. unsafe-inline/eval are required by the
+        # Next.js static export today; tightening to nonces is a follow-up.
+        # frame-ancestors 'self' (embedded chat is a script widget, not an
+        # iframe of this origin, so it is unaffected).
+        add_header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https:; font-src 'self' data: https:; connect-src 'self' https: wss:; media-src 'self' blob: https:; object-src 'none'; frame-src 'self' https://*.gotcha.co.il; frame-ancestors 'self'; base-uri 'self'; form-action 'self' https:" always;
 
         # Next.js assets + shared statics resolve as-is from the export.
         location ~ ^/(_next|favicon\.ico|logo[^/]*\.png|apple-touch-icon\.png|icons/|images/) {

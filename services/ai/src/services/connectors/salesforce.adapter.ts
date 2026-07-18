@@ -19,6 +19,7 @@
  * API: REST v60.0 (`/services/data/v60.0`).
  */
 
+import { assertPublicUrl } from "@chatcenter/shared";
 import {
   registerAdapter,
   type ProviderAdapter,
@@ -177,6 +178,10 @@ const SalesforceAdapter: ProviderAdapter = {
     const loginHost = creds.loginHost || "https://login.salesforce.com";
     if (!clientId || !clientSecret) throw new Error("SALESFORCE_CLIENT_ID/SECRET not configured");
     if (!creds.refreshToken) throw new Error("no_refresh_token");
+    // SSRF guard on the token host too: loginHost is tenant-stored. The OAuth
+    // init path constrains it to *.salesforce.com, but the sink must not rely on
+    // that alone (defense in depth, consistent with the data-path sfRequest).
+    await assertPublicUrl(`${loginHost}${TOKEN_PATH}`);
     const res = await fetch(`${loginHost}${TOKEN_PATH}`, {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
@@ -257,6 +262,8 @@ const SalesforceAdapter: ProviderAdapter = {
 };
 
 async function sfRequest(token: string, method: string, url: string, body?: unknown): Promise<any> {
+  // SSRF guard: url derives from credentials.instanceUrl (per-tenant, stored).
+  await assertPublicUrl(url);
   const init: RequestInit = {
     method,
     headers: {

@@ -89,7 +89,51 @@ export {
 } from "./lib/ai-feature-categories";
 export type { AiFeatureCategory, AiFeatureCategoryDef } from "./lib/ai-feature-categories";
 export { getRedis, closeRedis } from "./lib/redis";
-export { signToken, verifyToken, generateRefreshToken, getJwtExpiresInMs } from "./lib/jwt";
+export { verifyAccessToken } from "./lib/jwt";
+export { resolvePrincipal, AuthError } from "./lib/principal";
+export { getOAuthStateSecret } from "./lib/oauth-state";
+export { verifyInternalServiceKey, requireInternalKey, getInternalServiceKey } from "./lib/internal-key";
+export { safeFetch, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
+export type { SafeFetchOptions, SafeFetchResult } from "./lib/safe-fetch";
+export { verifyWebhookSignature, verifySharedSecretToken, timingSafeEqualStr } from "./lib/webhook-verify";
+export type { WebhookVerifyResult } from "./lib/webhook-verify";
+export { writeAudit, auditUser, auditSystem, AuditAction } from "./lib/audit";
+export type { AuditEventInput, AuditActorType, AuditActionValue } from "./lib/audit";
+export {
+  ensureIdentity,
+  createRecoveryLink,
+  deactivateIdentity,
+  setIdentityActive,
+  deleteIdentity,
+  updateIdentity,
+  findIdentityBySubject,
+  publicAuthentikOrigin,
+  listUserSessions,
+  terminateSession,
+  terminateAllUserSessions,
+  listUserLoginEvents,
+  listUserDevices,
+  deleteUserDevice,
+  getMfaEnrollmentMap,
+  getUserLastLogin,
+  getLastLoginBySubject,
+  type AuthentikIdentity,
+  type AuthentikSession,
+  type AuthentikLoginEvent,
+  type AuthentikDevice,
+  type AuthentikSecuritySummary,
+  type MfaEnrollmentState,
+  type RemovableDeviceType,
+} from "./lib/authentik";
+export {
+  mfaRequirementFor,
+  isEnrolledWithRecovery,
+  type MfaRole,
+  type TenantMfaPolicy,
+  type MfaRequirement,
+  type MfaRequirementReason,
+  type MfaFactorCounts,
+} from "./lib/mfa";
 export {
   FEATURES,
   FEATURE_METADATA,
@@ -217,6 +261,7 @@ export type { SecretProvider } from "./secrets";
 // Middleware
 export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
+export { enforceMfaEnrollment } from "./middleware/mfa-guard";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
 export { requirePermission } from "./middleware/permission-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";

@@ -1,10 +1,11 @@
+import { getInternalServiceKey, safeFetch } from "@chatcenter/shared";
 import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
 import { promises as dns } from "dns";
-import * as bcrypt from "bcryptjs";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits } from "@chatcenter/shared";
-import { sendActivationConfirmation, createMagicLink, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
+import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
+import { inviteUser, resendSetupLink } from "../services/invitation.service";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
@@ -40,7 +41,7 @@ async function provisionBilling(tenantId: string): Promise<void> {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
-      "x-internal-key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+      "x-internal-key": getInternalServiceKey(),
     },
     body: JSON.stringify({ tenantId }),
   }, 10000);
@@ -1173,15 +1174,18 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
     const channelHint = detectedChannels.slice(0, 3)
       .map((c) => `${String(c.type)}${c.identifier ? ` · ${c.identifier}` : ""}`)
       .join("  ·  ");
-    const teachOpen = openRecs.filter((r) => r.kind === "import_knowledge").length;
+    void openRecs; // still fetched for parity with /missions; journey no longer surfaces a teach item
 
     type Milestone = { id: string; done: boolean; deepLink: string; hint?: string };
+    // The standalone "teach knowledge" journey item was REMOVED (it deep-linked
+    // to /settings/business, disconnected from the employee). Teaching now
+    // lives where the employee lives: the workspace's readiness/attention loop
+    // and its Knowledge tab. The journey keeps only the go-live milestones.
     const milestones: Milestone[] = [
       { id: "meet_employee", done: !!agent, deepLink: agent ? `/ai-studio/agents/${agent.id}` : "/ai-studio" },
       { id: "first_chat", done: firstChatUsers > 0, deepLink: "/getting-started#chat" },
       { id: "go_live_channel", done: !!connectedChannel, deepLink: "/channels", hint: channelHint || undefined },
       { id: "first_customer", done: inboundCount > 0, deepLink: "/conversations" },
-      { id: "teach_knowledge", done: teachOpen === 0, deepLink: "/settings/business", hint: teachOpen > 0 ? String(teachOpen) : undefined },
     ];
 
     let activeAssigned = false;
@@ -1397,22 +1401,22 @@ function normalizeDomain(raw: string): string | null {
 }
 
 async function fetchHomepageText(origin: string, timeoutMs = 8000): Promise<string | null> {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
-    const r = await fetch(origin, {
+    // SSRF-hardened: the origin is user-supplied. safeFetch enforces the
+    // scheme allowlist, blocks private/link-local/metadata addresses at DNS
+    // resolution, and revalidates every redirect hop.
+    const r = await safeFetch(origin, {
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (compatible; GotchaOnboarding/1.0; +https://gotcha.co.il)",
         Accept: "text/html,application/xhtml+xml",
       },
-      signal: ctl.signal,
-      redirect: "follow",
+      timeoutMs,
     });
     if (!r.ok) return null;
-    const ct = r.headers.get("content-type") || "";
+    const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
-    const html = await r.text();
+    const html = r.text;
     // Cheap extraction - strip scripts/styles/tags, collapse whitespace,
     // cap to ~6KB so we don't blow the LLM context on huge pages.
     const stripped = html
@@ -1429,8 +1433,6 @@ async function fetchHomepageText(origin: string, timeoutMs = 8000): Promise<stri
     return stripped.slice(0, 6000) || null;
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -1578,13 +1580,14 @@ Set any field you cannot determine to an empty string. Do not invent specifics.`
 /** Fetch a page returning BOTH raw HTML (for signal regexes) and stripped text
  *  (for the LLM). Best-effort - returns null on any failure. */
 async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: string; text: string } | null> {
-  const ctl = new AbortController();
-  const timer = setTimeout(() => ctl.abort(), timeoutMs);
   try {
     // Present as a real browser. Many stores sit behind bot filters that 403 a
     // generic crawler UA - a partial/blocked fetch is a root cause of false
     // negatives, so we look like Chrome and send the browser header set.
-    const r = await fetch(url, {
+    // SSRF-hardened: the crawl target is user-supplied, so safeFetch enforces
+    // the scheme allowlist, blocks private/link-local/metadata addresses at
+    // DNS resolution, and revalidates every redirect hop.
+    const r = await safeFetch(url, {
       method: "GET",
       headers: {
         "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
@@ -1596,13 +1599,12 @@ async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: stri
         "Sec-Fetch-Mode": "navigate",
         "Sec-Fetch-Site": "none",
       },
-      signal: ctl.signal,
-      redirect: "follow",
+      timeoutMs,
     });
     if (!r.ok) return null;
-    const ct = r.headers.get("content-type") || "";
+    const ct = r.contentType || "";
     if (!ct.includes("text/html") && !ct.includes("xhtml")) return null;
-    const html = await r.text();
+    const html = r.text;
     const text = html
       .replace(/<script[\s\S]*?<\/script>/gi, " ")
       .replace(/<style[\s\S]*?<\/style>/gi, " ")
@@ -1617,8 +1619,6 @@ async function fetchPageRaw(url: string, timeoutMs = 8000): Promise<{ html: stri
     return { html: html.slice(0, 400000), text };
   } catch {
     return null;
-  } finally {
-    clearTimeout(timer);
   }
 }
 
@@ -2621,15 +2621,33 @@ const employeeChatSchema = z.object({
     successCriteria: z.array(z.string().max(300)).max(8).optional(),
     instructions: z.array(z.string().max(400)).max(20).optional(),
   }).optional(),
-  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).min(1).max(20),
+  messages: z.array(z.object({ role: z.enum(["user", "assistant"]), content: z.string().min(1).max(2000) })).max(20).optional(),
   locale: z.string().min(2).max(10).optional(),
+  // personaOnly: persist the tuned persona WITHOUT an LLM turn. Used when the
+  // owner adds a standing rule via a quick-tune chip - the rule must land in
+  // tunedPersona (deploy reads it) but should NOT become a chat message.
+  personaOnly: z.boolean().optional(),
+}).refine((b) => b.personaOnly === true || (Array.isArray(b.messages) && b.messages.length >= 1), {
+  message: "messages required unless personaOnly",
 });
 
 router.post("/employee-chat", requireRole("ADMIN"), validate(employeeChatSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { persona, messages, locale } = req.body as { persona?: any; messages: Array<{ role: string; content: string }>; locale?: string };
+    const { persona, messages = [], locale, personaOnly } = req.body as { persona?: any; messages?: Array<{ role: string; content: string }>; locale?: string; personaOnly?: boolean };
     const disc = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! } });
     const rec = (disc?.recommendation || {}) as any;
+
+    // Rule-only save: no LLM round-trip, no transcript append.
+    if (personaOnly) {
+      if (disc && persona) {
+        await prisma.businessDiscovery.update({
+          where: { tenantId: req.tenantId! },
+          data: { recommendation: { ...rec, tunedPersona: persona } },
+        }).catch(() => {});
+      }
+      res.json({ data: { ok: true, persona } });
+      return;
+    }
     const dbiz = (disc?.business as any) || {};
     const dbrand = (disc?.brand as any) || {};
     const startPersona = persona || rec.tunedPersona || {};
@@ -2713,23 +2731,17 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           continue;
         }
 
-        // Create a placeholder user with a random password - they will
-        // log in via the magic link and can change it later from /settings.
-        const tempPassword = crypto.randomBytes(24).toString("hex");
-        const hashed = await bcrypt.hash(tempPassword, 12);
-        const user = await prisma.user.create({
-          data: {
-            tenantId,
-            email,
-            password: hashed,
-            name: email.split("@")[0] || "Teammate",
-            role,
-            isActive: true,
-          },
-          select: { id: true },
-        });
+        // Provision identity + local account together. No placeholder password
+        // exists to leak: the invitee sets their own credential inside
+        // Authentik via the setup link below.
+        const invited = await inviteUser(
+          tenantId,
+          email,
+          email.split("@")[0] || "Teammate",
+          role,
+        );
+        const user = { id: invited.user.id };
 
-        const linkToken = await createMagicLink(tenantId, user.id);
         const inviteToken = crypto.randomBytes(24).toString("hex");
         const expiresAt = new Date(Date.now() + INVITE_LINK_EXPIRY_DAYS * 24 * 60 * 60 * 1000);
         await prisma.tenantInvite.create({
@@ -2749,7 +2761,7 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           tenantName: tenant.name,
           tenantSlug: tenant.slug,
           inviterName: inviter?.name || inviter?.email || "Your team",
-          magicLinkToken: linkToken,
+          setupUrl: invited.setupLink,
         });
 
         results.push({ email, status: "sent" });
@@ -2830,17 +2842,19 @@ publicRouter.get("/invite/:token", async (req: Request, res: Response): Promise<
   }
 });
 
+// Accepting an invite no longer takes a password: GOTCHA has nowhere to put
+// one. It links the person to the tenant and answers with the Authentik setup
+// link where they choose their own credential.
 const acceptInviteSchema = z.object({
   token: z.string().min(1),
   name: z.string().min(1).max(120),
   email: z.string().email().optional(),
-  password: z.string().min(8).max(128),
 });
 
 publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { token, name, email, password } = req.body as {
-      token: string; name: string; email?: string; password: string;
+    const { token, name, email } = req.body as {
+      token: string; name: string; email?: string;
     };
 
     const invite = await prisma.tenantInvite.findUnique({ where: { token } });
@@ -2855,20 +2869,22 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
       return;
     }
 
-    const hashed = await bcrypt.hash(password, 12);
-    let user;
+    let user: { id: string; tenantId: string };
+    let setupLink: string;
 
     if (invite.userId) {
-      // Targeted invite - user row exists from invite-team. Just set
-      // their real password + name and mark the invite accepted.
-      user = await prisma.user.update({
+      // Targeted invite - the row already exists from invite-team, and its
+      // identity was provisioned then. Confirm the name and re-issue a setup
+      // link (the emailed one may have expired or been lost).
+      const updated = await prisma.user.update({
         where: { id: invite.userId },
-        data: { name, password: hashed, isActive: true },
-        select: { id: true, email: true, name: true, role: true, tenantId: true },
+        data: { name, isActive: true },
+        select: { id: true, tenantId: true },
       });
+      user = updated;
+      setupLink = await resendSetupLink(updated.id);
     } else {
-      // Open-link invite - create the user now. Reject if the email is
-      // already in this tenant (collision = ask them to log in instead).
+      // Open-link invite - provision identity + account now.
       const existing = await prisma.user.findUnique({
         where: { tenantId_email: { tenantId: invite.tenantId, email: finalEmail } },
         select: { id: true },
@@ -2877,17 +2893,14 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
         res.status(409).json({ error: "email_already_in_tenant" });
         return;
       }
-      user = await prisma.user.create({
-        data: {
-          tenantId: invite.tenantId,
-          email: finalEmail,
-          name,
-          password: hashed,
-          role: invite.role === "ADMIN" ? "ADMIN" : "AGENT",
-          isActive: true,
-        },
-        select: { id: true, email: true, name: true, role: true, tenantId: true },
-      });
+      const invited = await inviteUser(
+        invite.tenantId,
+        finalEmail,
+        name,
+        invite.role === "ADMIN" ? "ADMIN" : "AGENT",
+      );
+      user = { id: invited.user.id, tenantId: invited.user.tenantId };
+      setupLink = invited.setupLink;
     }
 
     await prisma.tenantInvite.update({
@@ -2895,9 +2908,7 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
       data: { acceptedAt: new Date(), userId: user.id },
     });
 
-    // Don't sign a session here - the /join page redirects to /login
-    // with the email pre-filled. Keeps this route stateless and simple.
-    res.json({ data: { ok: true, tenantId: user.tenantId } });
+    res.json({ data: { ok: true, tenantId: user.tenantId, setupLink } });
   } catch (err) {
     console.error("Accept invite error:", err);
     res.status(500).json({ error: "Failed to accept invite" });

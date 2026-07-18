@@ -1,9 +1,9 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, requireDepartmentRole, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, requireDepartmentRole, enforceMfaEnrollment, validate } from "@chatcenter/shared";
 
 const router = Router();
-router.use(authenticate, resolveTenant);
+router.use(authenticate, resolveTenant, enforceMfaEnrollment());
 
 // GET / - List departments (any authenticated user)
 router.get("/", async (req: Request, res: Response) => {
@@ -117,9 +117,17 @@ router.patch("/:id", requireRole("ADMIN"), validate(updateDepartmentSchema), asy
     const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
 
+    // Explicit allowlist (updateDepartmentSchema fields); tenantId never settable.
+    const { name, description, queueMode, isActive, parentId } = req.body as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name;
+    if (description !== undefined) data.description = description;
+    if (queueMode !== undefined) data.queueMode = queueMode;
+    if (isActive !== undefined) data.isActive = isActive;
+    if (parentId !== undefined) data.parentId = parentId;
     const updated = await prisma.department.update({
       where: { id: String(req.params.id) },
-      data: req.body,
+      data,
     });
     res.json({ data: updated });
   } catch (err) {

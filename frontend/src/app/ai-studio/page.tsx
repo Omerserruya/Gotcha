@@ -6,10 +6,12 @@ import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow, deleteAIAgent } from "@/lib/api";
+import { getMarketplaceIntegrations, getAIAgents, getChatbotFlows, getFlowCanvas, getKnowledgeBases, deleteChatbotFlow, deleteAIAgent, deleteKnowledgeBase } from "@/lib/api";
 import { INTEGRATION_LOGOS, logoForIntegration } from "@/lib/integration-logos";
 import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
+import { ReadinessReportModal, readinessBadgeTone } from "@/components/ReadinessReport";
+import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 
 // ─── Tab types ────────────────────────────────────────────────
 type Tab = "team" | "playbooks" | "knowledge" | "skills";
@@ -85,6 +87,22 @@ function TeamTab({ t }: { t: (key: string) => string }) {
   const [agents, setAgents] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [testAgent, setTestAgent] = useState<{ id: string; name: string } | null>(null);
+  // Readiness is an ONGOING optimization surface, not a one-time wizard step:
+  // each card shows the last score and opens the full, actionable report.
+  const [readinessAgent, setReadinessAgent] = useState<{ id: string; name: string; kbId: string | null; report: ReadinessReport | null } | null>(null);
+  const [readinessBusy, setReadinessBusy] = useState(false);
+  const { locale } = useI18n();
+
+  async function rerunReadiness() {
+    if (!token || !readinessAgent || readinessBusy) return;
+    setReadinessBusy(true);
+    try {
+      const res = await builderReadinessTest(token, readinessAgent.id, locale);
+      setReadinessAgent((prev) => (prev ? { ...prev, report: res.data } : prev));
+      setAgents((prev) => prev.map((a) => (a.id === readinessAgent.id ? { ...a, readinessReport: res.data } : a)));
+    } catch { /* keep the previous report visible */ }
+    finally { setReadinessBusy(false); }
+  }
 
   const load = useCallback(() => {
     if (!token) return;
@@ -197,7 +215,31 @@ function TeamTab({ t }: { t: (key: string) => string }) {
               <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-lg shadow-sm">
                 {agent.name.charAt(0)}
               </div>
-              <StatusBadge status={status} />
+              <div className="flex items-center gap-1.5">
+                {/* Readiness score - click for the full actionable report. */}
+                <button
+                  type="button"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setReadinessAgent({
+                      id: agent.id,
+                      name: agent.name,
+                      kbId: agent.knowledgeSources?.[0]?.id || null,
+                      report: (agent.readinessReport as ReadinessReport | null) || null,
+                    });
+                  }}
+                  title={t("aiStudio.team.readinessTitle")}
+                  className={clsx(
+                    "px-2 py-0.5 rounded-full text-xs font-semibold border transition hover:opacity-80",
+                    agent.readinessReport?.score != null
+                      ? readinessBadgeTone(Number(agent.readinessReport.score))
+                      : "bg-gray-50 text-gray-400 border-gray-200",
+                  )}
+                >
+                  {agent.readinessReport?.score != null ? `${agent.readinessReport.score}%` : "?"}
+                </button>
+                <StatusBadge status={status} />
+              </div>
             </div>
             <h3 className="font-semibold text-gray-900">{agent.name}</h3>
             <p className="text-xs text-gray-400 mt-0.5 mb-2">{agent.role}</p>
@@ -282,6 +324,19 @@ function TeamTab({ t }: { t: (key: string) => string }) {
           token={token}
         />
       )}
+
+      {readinessAgent && token && (
+        <ReadinessReportModal
+          open={!!readinessAgent}
+          onClose={() => setReadinessAgent(null)}
+          report={readinessAgent.report}
+          token={token}
+          kbId={readinessAgent.kbId}
+          busy={readinessBusy}
+          onRerun={rerunReadiness}
+          agentName={readinessAgent.name}
+        />
+      )}
     </div>
   );
 }
@@ -347,15 +402,20 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
           </svg>
           Templates
         </Link>
+        {/* "New playbook" used to sit here, beside "edit the main workflow",
+            with nothing to say which one a new user should press. Authoring now
+            has ONE entrance - the main workflow - and sub-flows are created from
+            the route node that needs them. `data-tour` stays on the main
+            workflow card so the guided tour still has its anchor. */}
         <Link
-          href="/ai-studio/flows/new"
+          href="/ai-studio/router"
           data-tour="new-workflow"
           className="flex items-center gap-2 px-4 py-2 bg-violet-600 text-white rounded-xl text-sm font-medium hover:bg-violet-700 transition shadow-sm"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+            <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
           </svg>
-          {t("aiStudio.playbooks.newPlaybook")}
+          {t("aiStudio.playbooks.editMainPlaybook")}
         </Link>
       </div>
 
@@ -390,23 +450,24 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
         </div>
       </div>
 
-      {/* Sub-Playbooks */}
-      <div className="flex items-center gap-2 mb-3">
-        <h3 className="text-sm font-semibold text-gray-700">{t("aiStudio.playbooks.subPlaybooks")}</h3>
-        <span className="text-xs text-gray-400">({flows.length})</span>
-      </div>
+      {/* Sub-flows are deliberately NOT listed as a sibling of the main
+          workflow. Presented side by side they read as two things the user must
+          author, with no way to tell which one to start in or what belongs in
+          each. A sub-flow only means anything as the target of a route node, so
+          it is created and opened from that node inside the main workflow.
+          The list below stays available behind a disclosure for tenants who
+          already built sub-flows and need to reach one directly. */}
+      {!loading && flows.length > 0 && (
+        <details className="group">
+          <summary className="flex items-center gap-2 mb-3 cursor-pointer list-none text-sm font-semibold text-gray-500 hover:text-gray-700 transition">
+            <svg className="w-3.5 h-3.5 transition-transform group-open:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+            </svg>
+            {t("aiStudio.playbooks.subPlaybooks")}
+            <span className="text-xs font-normal text-gray-400">({flows.length})</span>
+          </summary>
 
-      {loading ? (
-        <div className="flex items-center justify-center h-24">
-          <div className="w-6 h-6 border-2 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
-        </div>
-      ) : (
       <div className="bg-white rounded-2xl shadow-card border border-gray-100 overflow-hidden">
-        {flows.length === 0 && (
-          <div className="px-5 py-8 text-center text-gray-400">
-            <p className="text-sm">No playbooks yet</p>
-          </div>
-        )}
         {flows.map((flow, i) => (
           <div
             key={flow.id}
@@ -471,19 +532,8 @@ function PlaybooksTab({ t }: { t: (key: string) => string }) {
           </div>
         ))}
       </div>
+        </details>
       )}
-
-      <Link
-        href="/ai-studio/flows/new"
-        className="mt-4 bg-white rounded-2xl border-2 border-dashed border-gray-200 px-5 py-4 flex items-center gap-4 hover:border-violet-300 hover:bg-violet-50/30 transition cursor-pointer"
-      >
-        <div className="w-9 h-9 rounded-lg bg-gray-100 flex items-center justify-center shrink-0">
-          <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <path strokeLinecap="round" strokeLinejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
-          </svg>
-        </div>
-        <p className="text-sm text-gray-400 font-medium">{t("aiStudio.playbooks.newPlaybook")}</p>
-      </Link>
     </div>
   );
 }
@@ -503,8 +553,30 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
       .finally(() => setLoading(false));
   }, [token]);
 
+  // Deleting a knowledge base takes every document and embedding with it, so it
+  // always goes through a confirm step - never a single stray click.
+  const [confirmKb, setConfirmKb] = useState<{ id: string; name: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
+
+  async function runDelete() {
+    if (!token || !confirmKb || deleting) return;
+    setDeleting(true);
+    try {
+      await deleteKnowledgeBase(token, confirmKb.id);
+      setKnowledgeBases((prev) => prev.filter((k) => k.id !== confirmKb.id));
+      setConfirmKb(null);
+    } catch (err) {
+      console.error("Failed to delete knowledge base:", err);
+    } finally {
+      setDeleting(false);
+    }
+  }
+
   return (
-    <div>
+    // "kb-overview" - GuidedTour anchor: the knowledge step spotlights the
+    // whole tab (read-only overview) instead of an action button the tour
+    // wouldn't let the user click anyway.
+    <div data-tour="kb-overview">
       <div className="flex items-center justify-between mb-5">
         <div>
           <h2 className="text-lg font-semibold text-gray-900">{t("aiStudio.knowledge.title")}</h2>
@@ -545,7 +617,7 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
           <div
             key={src.id}
             className={clsx(
-              "grid grid-cols-[1fr_100px_100px_120px_40px] gap-3 items-center px-5 py-3.5 hover:bg-gray-50/60 transition",
+              "grid grid-cols-[1fr_100px_100px_120px_76px] gap-3 items-center px-5 py-3.5 hover:bg-gray-50/60 transition",
               i < knowledgeBases.length - 1 && "border-b border-gray-50"
             )}
           >
@@ -560,15 +632,66 @@ function KnowledgeTab({ t }: { t: (key: string) => string }) {
             <span className="text-xs text-gray-500">{src.type || "Document"}</span>
             <StatusBadge status={status} />
             <span className="text-xs text-gray-400">{lastSync}</span>
-            <button className="p-1.5 rounded-lg text-gray-300 hover:text-violet-600 hover:bg-violet-50 transition justify-self-end">
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
-              </svg>
-            </button>
+            {/* This tab is a read-only overview. Editing a knowledge base lives
+                in one place - the Manage Knowledge page - so this opens that KB
+                there rather than duplicating the editor. It used to be a button
+                with no handler at all, which simply did nothing when clicked. */}
+            <div className="flex items-center gap-1 justify-self-end">
+              <Link
+                href={`/ai-studio/knowledge?kb=${encodeURIComponent(src.id)}`}
+                title={t("aiStudio.knowledge.editInManage")}
+                aria-label={t("aiStudio.knowledge.editInManage")}
+                className="p-1.5 rounded-lg text-gray-300 hover:text-violet-600 hover:bg-violet-50 transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" />
+                </svg>
+              </Link>
+              <button
+                type="button"
+                onClick={() => setConfirmKb({ id: src.id, name: src.name })}
+                title={t("aiStudio.knowledge.removeKb")}
+                aria-label={t("aiStudio.knowledge.removeKb")}
+                className="p-1.5 rounded-lg text-gray-300 hover:text-red-600 hover:bg-red-50 transition"
+              >
+                <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                  <path strokeLinecap="round" strokeLinejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
+                </svg>
+              </button>
+            </div>
           </div>
           );
         })}
       </div>
+
+      {confirmKb && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+          <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={() => !deleting && setConfirmKb(null)} />
+          <div className="relative w-full max-w-md bg-white rounded-2xl shadow-2xl p-6">
+            <h3 className="text-lg font-bold text-gray-900">{t("aiStudio.knowledge.confirmDeleteKbTitle")}</h3>
+            <p className="text-sm text-gray-500 mt-2">
+              {t("aiStudio.knowledge.confirmRemoveKbBody").replace("{name}", confirmKb.name)}
+            </p>
+            <p className="text-xs text-gray-400 mt-2">{t("aiStudio.knowledge.confirmDeleteIrreversible")}</p>
+            <div className="flex items-center justify-end gap-2 mt-5">
+              <button
+                onClick={() => setConfirmKb(null)}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-sm font-medium text-gray-600 border border-gray-200 hover:bg-gray-50 transition disabled:opacity-50"
+              >
+                {t("common.cancel")}
+              </button>
+              <button
+                onClick={runDelete}
+                disabled={deleting}
+                className="px-4 py-2 rounded-xl text-sm font-semibold text-white bg-red-600 hover:bg-red-700 transition disabled:opacity-50 shadow-sm"
+              >
+                {deleting ? t("aiStudio.knowledge.deleting") : t("aiStudio.knowledge.confirmDeleteAction")}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -1050,8 +1173,9 @@ function AIStudioPageInner() {
           />
         </div>
 
-        {/* Tabs */}
-        <div className="flex gap-1 bg-gray-100/80 rounded-2xl p-1 mb-6 overflow-x-auto">
+        {/* Tabs - "ai-studio-tabs" is the GuidedTour's AI Studio overview
+            anchor (it introduces the four sections via this bar). */}
+        <div data-tour="ai-studio-tabs" className="flex gap-1 bg-gray-100/80 rounded-2xl p-1 mb-6 overflow-x-auto">
           {tabs.map((tab) => (
             <button
               key={tab.key}

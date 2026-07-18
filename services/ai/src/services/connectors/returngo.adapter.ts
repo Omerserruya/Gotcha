@@ -24,6 +24,7 @@
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
+import { assertPublicUrl } from "@chatcenter/shared";
 
 const DEFAULT_BASE_URL = "https://api.returngo.ai";
 
@@ -143,6 +144,8 @@ function clampLimit(v: unknown, def: number, max: number): number {
 }
 
 async function rgRequest(ctx: Ctx, method: string, path: string, body?: unknown): Promise<any> {
+  // SSRF guard: ctx.base derives from free-form tenant config.baseUrl.
+  await assertPublicUrl(`${ctx.base}${path}`);
   const res = await fetch(`${ctx.base}${path}`, {
     method,
     headers: {

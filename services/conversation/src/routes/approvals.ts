@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Approval request REST surface.
  *
@@ -82,7 +83,7 @@ async function dispatchApprovedAction(args: {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "X-Internal-Key": process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026",
+          "X-Internal-Key": getInternalServiceKey(),
         },
         body: JSON.stringify({ tenantId: args.tenantId, approvalId: args.approvalId }),
       });
@@ -439,7 +440,7 @@ router.post("/:id/approve", async (req: Request, res: Response) => {
             `- Be brief, in-character, and propose the next step in the conversation if appropriate.\n`;
 
           const aiBase = (process.env.AI_SERVICE_URL ?? "http://ai:4006").replace(/\/$/, "");
-          const internalKey = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+          const internalKey = getInternalServiceKey();
           try {
             const oneshotRes = await fetch(`${aiBase}/api/ai-bot/oneshot`, {
               method: "POST",

@@ -15,6 +15,15 @@ vi.mock("@chatcenter/shared", () => {
       create: vi.fn(),
       update: vi.fn(),
     },
+    departmentMember: {
+      findUnique: vi.fn(),
+    },
+    conversation: {
+      updateMany: vi.fn(),
+    },
+    auditLog: {
+      create: vi.fn(),
+    },
   };
 
   return {
@@ -29,9 +38,24 @@ vi.mock("@chatcenter/shared", () => {
       next();
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    enforceMfaEnrollment: () => (_req: any, _res: any, next: any) => next(),
     validate: (_schema: any) => (_req: any, _res: any, next: any) => next(),
-    signToken: vi.fn().mockReturnValue("mock-token"),
-    verifyToken: vi.fn().mockReturnValue({ userId: "user-1", tenantId: "tenant-1", role: "ADMIN", email: "admin@test.com" }),
+    resolveEffectiveLocale: vi.fn().mockReturnValue("en"),
+    isSupportedLocale: vi.fn().mockReturnValue(true),
+    SUPPORTED_LOCALES: ["en", "he"],
+    getRedis: vi.fn(),
+    // The Authentik admin client is the only identity surface GOTCHA calls.
+    ensureIdentity: vi.fn(),
+    createRecoveryLink: vi.fn(),
+    deactivateIdentity: vi.fn(),
+    deleteIdentity: vi.fn(),
+    updateIdentity: vi.fn().mockResolvedValue(undefined),
+    findIdentityBySubject: vi.fn(),
+    // Shared audit primitive (fire-safe): no-op in tests.
+    writeAudit: vi.fn().mockResolvedValue(undefined),
+    auditUser: vi.fn().mockResolvedValue(undefined),
+    auditSystem: vi.fn().mockResolvedValue(undefined),
+    AuditAction: new Proxy({}, { get: (_t, prop) => String(prop) }),
     createServiceApp: (config: any) => {
       const app = express();
       app.use(express.json());
@@ -44,7 +68,7 @@ vi.mock("@chatcenter/shared", () => {
 
 import authRoutes from "../routes/auth";
 import agentRoutes from "../routes/agents";
-import { prisma } from "@chatcenter/shared";
+import { prisma, ensureIdentity, createRecoveryLink } from "@chatcenter/shared";
 
 function createTestApp() {
   const app = express();
@@ -59,69 +83,108 @@ describe("Auth Service", () => {
     vi.clearAllMocks();
   });
 
-  describe("POST /api/auth/login", () => {
-    it("should return 404 if tenant not found", async () => {
-      (prisma.tenant.findUnique as any).mockResolvedValue(null);
-
-      const app = createTestApp();
-      const res = await request(app)
-        .post("/api/auth/login")
-        .send({ email: "test@test.com", password: "password", tenantSlug: "unknown" });
-
+  // The point of the Authentik migration: GOTCHA exposes no endpoint that
+  // accepts, sets, or resets a credential. These assert that absence, so the
+  // endpoints cannot quietly come back.
+  describe("legacy credential endpoints are gone", () => {
+    it.each([
+      ["/api/auth/login"],
+      ["/api/auth/register"],
+      ["/api/auth/refresh"],
+      ["/api/auth/verify-magic-link"],
+      ["/api/auth/change-password"],
+      ["/api/auth/forgot-password"],
+      ["/api/auth/reset-password"],
+    ])("POST %s is not routed", async (path) => {
+      const res = await request(createTestApp())
+        .post(path)
+        .send({ email: "a@b.com", password: "hunter2222" });
       expect(res.status).toBe(404);
-      expect(res.body.error).toBe("Tenant not found");
-    });
-
-    it("should return token on valid login", async () => {
-      const mockTenant = { id: "tenant-1", slug: "demo" };
-      (prisma.tenant.findUnique as any).mockResolvedValue(mockTenant);
-
-      // Mock the auth service indirectly via the service module
-      const bcrypt = await import("bcryptjs");
-      const hashedPw = await bcrypt.hash("password123", 10);
-      (prisma.user.findFirst as any).mockResolvedValue({
-        id: "user-1", tenantId: "tenant-1", email: "test@test.com",
-        password: hashedPw, name: "Test", role: "ADMIN", isActive: true,
-      });
-
-      const app = createTestApp();
-      const res = await request(app)
-        .post("/api/auth/login")
-        .send({ email: "test@test.com", password: "password123", tenantSlug: "demo" });
-
-      expect(res.status).toBe(200);
-      expect(res.body.token).toBeDefined();
     });
   });
 
-  describe("POST /api/auth/register", () => {
-    it("should return 404 if tenant not found", async () => {
-      (prisma.tenant.findUnique as any).mockResolvedValue(null);
+  describe("GET /api/auth/me", () => {
+    it("returns the GOTCHA profile for an authenticated identity", async () => {
+      (prisma.user.findUnique as any).mockResolvedValue({
+        id: "user-1",
+        email: "admin@test.com",
+        name: "Admin",
+        role: "ADMIN",
+        tenantId: "tenant-1",
+        isActive: true,
+        createdAt: new Date(),
+      });
+      (prisma.departmentMember.findUnique as any).mockResolvedValue(null);
+      (prisma.tenant.findUnique as any).mockResolvedValue({ status: "ACTIVE" });
 
-      const app = createTestApp();
-      const res = await request(app)
-        .post("/api/auth/register")
-        .send({ email: "new@test.com", password: "password123", name: "New User", tenantSlug: "unknown" });
+      const res = await request(createTestApp()).get("/api/auth/me");
 
-      expect(res.status).toBe(404);
+      expect(res.status).toBe(200);
+      expect(res.body.user.email).toBe("admin@test.com");
+      expect(res.body.tenantStatus).toBe("ACTIVE");
+      // Nothing credential- or identity-shaped may leave this endpoint.
+      expect(res.body.user.password).toBeUndefined();
+      expect(res.body.user.authentikSubject).toBeUndefined();
     });
 
-    it("should create user for valid tenant", async () => {
-      const mockTenant = { id: "tenant-1", slug: "demo" };
-      (prisma.tenant.findUnique as any).mockResolvedValue(mockTenant);
-      (prisma.user.findFirst as any).mockResolvedValue(null); // No existing user
-      (prisma.user.create as any).mockResolvedValue({
-        id: "user-2", tenantId: "tenant-1", email: "new@test.com",
-        name: "New User", role: "AGENT",
-      });
+    it("404s when the token resolves to no user", async () => {
+      (prisma.user.findUnique as any).mockResolvedValue(null);
+      const res = await request(createTestApp()).get("/api/auth/me");
+      expect(res.status).toBe(404);
+    });
+  });
 
-      const app = createTestApp();
-      const res = await request(app)
-        .post("/api/auth/register")
-        .send({ email: "new@test.com", password: "password123", name: "New User", tenantSlug: "demo" });
+  describe("POST /api/agents (invitation)", () => {
+    it("provisions an Authentik identity and returns a setup link", async () => {
+      (prisma.user.findFirst as any).mockResolvedValue(null);
+      (prisma.user.findUnique as any).mockResolvedValue(null);
+      (ensureIdentity as any).mockResolvedValue({
+        subject: "uuid-123", pk: 7, email: "new@test.com", username: "new@test.com",
+      });
+      (prisma.user.create as any).mockResolvedValue({
+        id: "user-2", email: "new@test.com", name: "New", role: "AGENT", tenantId: "tenant-1",
+      });
+      (createRecoveryLink as any).mockResolvedValue("https://auth.example/flow/abc");
+
+      const res = await request(createTestApp())
+        .post("/api/agents")
+        .send({ email: "new@test.com", name: "New" });
 
       expect(res.status).toBe(201);
-      expect(res.body.token).toBeDefined();
+      expect(res.body.setupLink).toBe("https://auth.example/flow/abc");
+
+      // The local row carries the subject and no password.
+      const created = (prisma.user.create as any).mock.calls[0][0].data;
+      expect(created.authentikSubject).toBe("uuid-123");
+      expect(created.password).toBeUndefined();
+    });
+
+    it("rejects a duplicate email in the same tenant", async () => {
+      (prisma.user.findFirst as any).mockResolvedValue({ id: "existing" });
+
+      const res = await request(createTestApp())
+        .post("/api/agents")
+        .send({ email: "dupe@test.com", name: "Dupe" });
+
+      expect(res.status).toBe(409);
+      // No identity should be minted for a rejected invite.
+      expect(ensureIdentity).not.toHaveBeenCalled();
+    });
+
+    it("refuses to link an identity already bound to another account", async () => {
+      (prisma.user.findFirst as any).mockResolvedValue(null);
+      (ensureIdentity as any).mockResolvedValue({
+        subject: "uuid-taken", pk: 9, email: "shared@test.com", username: "shared@test.com",
+      });
+      // That subject already belongs to a different GOTCHA user.
+      (prisma.user.findUnique as any).mockResolvedValue({ id: "other-user", tenantId: "tenant-9" });
+
+      const res = await request(createTestApp())
+        .post("/api/agents")
+        .send({ email: "shared@test.com", name: "Shared" });
+
+      expect(res.status).toBe(409);
+      expect(prisma.user.create).not.toHaveBeenCalled();
     });
   });
 

@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 import { prisma, publishEvent, outgoingMessageQueue } from "@chatcenter/shared";
 import { getIO } from "../lib/socket";
 import * as messageService from "./message.service";
@@ -275,7 +276,7 @@ export async function getAgentWorkload(tenantId: string) {
 }
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
-const INTERNAL_SERVICE_KEY = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+const INTERNAL_SERVICE_KEY = getInternalServiceKey();
 
 /**
  * Ask the AI service for the CRM-side identifiers (phone, email, every

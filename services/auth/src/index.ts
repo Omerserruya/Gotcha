@@ -1,4 +1,4 @@
-import { createServiceApp, startService } from "@chatcenter/shared";
+import { createServiceApp, startService, seedAllTenantsRbac } from "@chatcenter/shared";
 import authRoutes from "./routes/auth";
 import agentRoutes from "./routes/agents";
 import departmentRoutes from "./routes/departments";
@@ -8,6 +8,9 @@ import systemFeatureRoutes from "./routes/system-features";
 import onboardingRoutes, { publicInviteRouter } from "./routes/onboarding";
 import waitlistRoutes from "./routes/waitlist";
 import permissionsRoutes from "./routes/permissions";
+import accountRoutes from "./routes/account";
+import tenantSecurityRoutes from "./routes/tenant-security";
+import gdprRoutes from "./routes/gdpr";
 import { startNudgeWorker } from "./services/nudge-engine.service";
 import rateLimit from "express-rate-limit";
 
@@ -37,6 +40,9 @@ app.use("/api/channels", channelRoutes);
 app.use("/api/system", systemFeatureRoutes);
 app.use("/api/system", systemRoutes);
 app.use("/api/permissions", permissionsRoutes);
+app.use("/api/account", accountRoutes);
+app.use("/api/tenant/security", tenantSecurityRoutes);
+app.use("/api/gdpr", gdprRoutes);
 app.use("/api/onboarding", onboardingRoutes);
 // Public invite endpoints - viewable / acceptable WITHOUT auth so a
 // teammate who clicked the link can land on /join, see the tenant
@@ -50,5 +56,13 @@ startService(app, config);
 // Lifecycle Nudge Engine - repeatable sweep that sends due onboarding nudges.
 // Best-effort: a failure here must never stop the auth service from serving.
 startNudgeWorker().catch((err) => console.error("[auth] nudge worker start failed:", err?.message));
+
+// RBAC seed sweep: ensure every tenant has the built-in TenantRole rows +
+// legacy-derived assignments (idempotent upserts; custom roles and manual
+// assignments are never touched). Without this the Users page role picker is
+// empty and fine-grained permission checks have nothing to resolve against.
+seedAllTenantsRbac()
+  .then((r) => console.log(`[auth] rbac seed: ${r.tenants} tenant(s), ${r.assignments} assignment(s) backfilled`))
+  .catch((err) => console.error("[auth] rbac seed failed:", err?.message));
 
 export { app };

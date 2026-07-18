@@ -11,9 +11,11 @@
 
 import { useEffect, useRef, useState, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
+import ReactMarkdown from "react-markdown";
 import clsx from "clsx";
 import { logoForIntegration } from "@/lib/integration-logos";
 import { useI18n } from "@/context/I18nContext";
+import { ReadinessReportView } from "@/components/ReadinessReport";
 import {
   builderStart,
   builderSaveStep,
@@ -489,13 +491,6 @@ export default function AgentBuilder({
                     ? L("Drafting your employee…", "מכין את העובד שלכם…")
                     : L("Draft it for me", "הכינו לי טיוטה")}
                 </button>
-                <button
-                  onClick={() => submitGoal(true)}
-                  disabled={seeding}
-                  className="text-xs text-gray-400 underline-offset-2 transition hover:text-gray-600 hover:underline"
-                >
-                  {L("I'd rather answer in chat", "אעדיף לענות בצ'אט")}
-                </button>
               </div>
             )}
             {messages.map((m, i) =>
@@ -503,7 +498,17 @@ export default function AgentBuilder({
                 <div key={i} className="flex items-start gap-3">
                   <BotAvatar />
                   <div className="bg-gray-50 border border-gray-200 rounded-2xl rounded-tl-sm px-4 py-3 max-w-[85%]">
-                    <p className="text-sm text-gray-800 whitespace-pre-wrap">{m.content || <span className="text-gray-300">…</span>}</p>
+                    {/* The builder writes lists, bold and headings - rendered as
+                        plain text those arrived as literal ** and - characters.
+                        Only the assistant side is Markdown; what the user typed
+                        is shown verbatim. */}
+                    {m.content ? (
+                      <div className="text-sm text-gray-800 prose prose-sm prose-gray max-w-none [&_p]:my-1 [&_ul]:my-1 [&_ol]:my-1 [&_li]:my-0.5 [&_h1]:text-base [&_h2]:text-sm [&_h3]:text-sm [&_strong]:text-gray-900 [&_:first-child]:mt-0 [&_:last-child]:mb-0">
+                        <ReactMarkdown>{m.content}</ReactMarkdown>
+                      </div>
+                    ) : (
+                      <p className="text-sm text-gray-300">…</p>
+                    )}
                   </div>
                 </div>
               ) : (
@@ -576,9 +581,13 @@ export default function AgentBuilder({
             )}
           </div>
 
-          {/* Input - only during the conversational step. Once we move to the
-              KB/Tools steps the actions live inside the step cards. */}
-          {wizardStep === "chat" && !goalGate && (
+          {/* Input - available on EVERY step, not just the conversational one.
+              The step cards carry the actions, but hiding the input alongside
+              them meant that from the KB step onward there was no way left to
+              ask the builder anything or correct it: the interview simply went
+              mute. Only the goal gate (which has its own single question) keeps
+              it hidden. */}
+          {!goalGate && (
             <div className="shrink-0 border-t border-gray-100 p-3 bg-white">
               <div className="flex gap-2">
                 <input
@@ -587,7 +596,13 @@ export default function AgentBuilder({
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } }}
-                  placeholder={streaming ? L("The builder is responding…", "הבונה עונה…") : L("Type your answer…", "כתבו את התשובה…")}
+                  placeholder={
+                    streaming
+                      ? L("The builder is responding…", "הבונה עונה…")
+                      : wizardStep === "chat"
+                        ? L("Type your answer…", "כתבו את התשובה…")
+                        : L("Ask or tell the builder anything…", "שאלו או ספרו לבונה כל דבר…")
+                  }
                   disabled={starting || !agentId}
                   autoFocus
                   className="flex-1 px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition disabled:opacity-60"
@@ -627,15 +642,32 @@ export default function AgentBuilder({
       )}
 
       {showReport && report && agentId && (
-        <ReadinessReportPanel
-          report={report}
-          busy={testing}
-          onRerun={runReadiness}
-          onClose={() => setShowReport(false)}
-          onAddKnowledge={() => setKbModalOpen(true)}
-          onSaveLive={goReview}
-          L={L}
-        />
+        <div className="fixed inset-0 z-40 bg-gray-50 overflow-y-auto">
+          <div className="max-w-3xl mx-auto px-4 py-8">
+            <div className="flex items-center justify-end mb-2">
+              <button onClick={() => setShowReport(false)} className="text-sm text-gray-500 hover:text-gray-800">
+                {L("← Back to editing", "→ חזרה לעריכה")}
+              </button>
+            </div>
+            {/* Shared, ACTIONABLE report - gaps are answerable right here
+                (inline answer / URL / connect a source). Same component that
+                powers the AI Studio card modal and the editor. */}
+            <ReadinessReportView
+              report={report}
+              token={token}
+              kbId={draft?.knowledge?.[0]?.id || null}
+              busy={testing}
+              onRerun={runReadiness}
+              onAddKnowledge={() => setKbModalOpen(true)}
+            />
+            <div className="flex justify-end -mt-10">
+              <button onClick={goReview}
+                className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl shadow-sm">
+                {L("Save & go live", "שמירה והפעלה")} →
+              </button>
+            </div>
+          </div>
+        </div>
       )}
 
       {kbModalOpen && agentId && (
@@ -1335,99 +1367,3 @@ function KnowledgeModal({ token, agentId, onClose, onAttached, L }: {
 
 // ─── Readiness Report ───────────────────────────────────────
 
-function ReadinessReportPanel({ report, busy, onRerun, onClose, onAddKnowledge, onSaveLive, L }: {
-  report: ReadinessReport;
-  busy: boolean;
-  onRerun: () => void;
-  onClose: () => void;
-  onAddKnowledge: () => void;
-  onSaveLive: () => void;
-  L: Tr;
-}) {
-  const scoreColor = report.score >= 80 ? "text-emerald-600" : report.score >= 50 ? "text-amber-600" : "text-red-600";
-  const cov = (c: ReadinessQuestion["coverage"]) =>
-    c === "full" ? { icon: "✅", cls: "text-emerald-600" } : c === "partial" ? { icon: "⚠️", cls: "text-amber-600" } : { icon: "❌", cls: "text-red-600" };
-
-  function recAction(r: ReadinessRecommendation) {
-    if (r.type === "add_knowledge" || r.type === "add_faq" || r.type === "add_business_data") {
-      return <button onClick={onAddKnowledge} className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Add knowledge", "הוסף ידע")}</button>;
-    }
-    if (r.type === "connect_tool") {
-      return <a href="/integrations" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Connect", "חבר")}</a>;
-    }
-    if (r.type === "create_workflow") {
-      return <a href="/ai-studio" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Open", "פתח")}</a>;
-    }
-    return null;
-  }
-
-  return (
-    <div className="fixed inset-0 z-40 bg-gray-50 overflow-y-auto">
-      <div className="max-w-3xl mx-auto px-4 py-8">
-        <div className="flex items-center gap-4 mb-6">
-          <div className={clsx("text-5xl font-bold", scoreColor)}>{report.score}<span className="text-2xl">%</span></div>
-          <div>
-            <h2 className="text-xl font-bold text-gray-900">{L("Readiness report", "דוח מוכנות")}</h2>
-            <p className="text-sm text-gray-500">
-              <span className="text-emerald-600">✅ {report.totals.full}</span>{" · "}
-              <span className="text-amber-600">⚠️ {report.totals.partial}</span>{" · "}
-              <span className="text-red-600">❌ {report.totals.none}</span>{" "}
-              {L("of", "מתוך")} {report.totals.total} {L("questions", "שאלות")}
-            </p>
-          </div>
-          <button onClick={onClose} className="ml-auto text-sm text-gray-500 hover:text-gray-800">{L("← Back to editing", "→ חזרה לעריכה")}</button>
-        </div>
-
-        {report.recommendations.length > 0 && (
-          <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-5 mb-5">
-            <h3 className="text-sm font-semibold text-gray-900 mb-3">{L("Recommended to close the gaps", "מומלץ לסגירת הפערים")}</h3>
-            <ul className="space-y-2.5">
-              {report.recommendations.map((r, i) => (
-                <li key={i} className="flex items-start gap-3">
-                  <span className="mt-0.5 text-violet-500">•</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium text-gray-800">{r.title}</div>
-                    {r.detail && <div className="text-xs text-gray-500">{r.detail}</div>}
-                  </div>
-                  {recAction(r)}
-                </li>
-              ))}
-            </ul>
-          </div>
-        )}
-
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-card p-5 mb-5">
-          <h3 className="text-sm font-semibold text-gray-900 mb-3">{L("Questions customers will ask", "שאלות שלקוחות ישאלו")}</h3>
-          <ul className="divide-y divide-gray-100">
-            {report.questions.map((q, i) => {
-              const c = cov(q.coverage);
-              return (
-                <li key={i} className="py-2.5 flex items-start gap-3">
-                  <span className={clsx("shrink-0", c.cls)}>{c.icon}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm text-gray-800">{q.question}</div>
-                    {q.reason && <div className="text-xs text-gray-500 mt-0.5">{q.reason}</div>}
-                  </div>
-                  {q.coverage !== "full" && (
-                    <span className="shrink-0 text-[10px] uppercase tracking-wide text-gray-400 border border-gray-200 rounded-full px-2 py-0.5">{q.gapType}</span>
-                  )}
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-
-        <div className="flex items-center justify-between gap-3">
-          <button onClick={onRerun} disabled={busy}
-            className="px-4 py-2.5 text-sm font-medium text-gray-600 hover:text-gray-900 disabled:opacity-50">
-            {busy ? L("Re-running…", "מריץ מחדש…") : L("↻ Re-run test", "↻ הרצה מחדש")}
-          </button>
-          <button onClick={onSaveLive}
-            className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl shadow-sm">
-            {L("Save & go live", "שמירה והפעלה")} →
-          </button>
-        </div>
-      </div>
-    </div>
-  );
-}

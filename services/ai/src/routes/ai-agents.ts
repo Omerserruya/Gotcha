@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole } from "@chatcenter/shared";
-import { buildConfigFromAIAgent, chatWithAgent } from "../services/ai-assist.service";
+import { sandboxEmployeeChat } from "../services/agent-sandbox-chat.service";
 import { computeCalendarCapability } from "../services/calendar-capability.service";
 import { generateResponse, getDefaultModel } from "../services/ai.service";
 import { computeBehaviorState } from "../services/behavior-engine.service";
@@ -454,7 +454,26 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
       return;
     }
 
-    const { knowledgeBaseIds, toolIds, tools: toolsWithOverrides, mode: _dropMode, ...updateData } = req.body;
+    const { knowledgeBaseIds, toolIds, tools: toolsWithOverrides } = req.body;
+
+    // Explicit column allowlist. NEVER rest-spread req.body into the update:
+    // AIAgent has tenantId (cross-tenant move) and server-owned columns
+    // (readinessReport, timestamps) that must not be client-settable.
+    const AGENT_EDITABLE_FIELDS = [
+      "name", "role", "avatarColor", "status", "tone", "languages", "style",
+      "channels", "escalationRules", "interactiveMessages", "systemPrompt",
+      "sharedPrompt", "autonomousPrompt", "model", "provider", "temperature",
+      "maxTokens", "persona", "identity", "goals", "toneConfig", "behavioral",
+      "salesContext", "goal", "successCriteria", "maxAutonomousMessages",
+      "maxAutonomousMinutes", "confidenceThreshold", "escalationMessage",
+      "conversationFlow", "customGuardrails", "capabilities",
+      "behavioralAnchors", "escalationGates", "departmentId", "funnelId",
+    ] as const;
+    const bodySrc = (req.body ?? {}) as Record<string, unknown>;
+    const updateData: Record<string, any> = {};
+    for (const k of AGENT_EDITABLE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(bodySrc, k)) updateData[k] = bodySrc[k];
+    }
 
     // Empty strings from the dropdowns mean "no binding" - coerce to NULL
     // so the FK constraint accepts it (Postgres won't accept "" as a cuid).
@@ -798,17 +817,18 @@ router.post("/:id/test-chat", authenticate, resolveTenant, requireActiveTenant()
       history: Array<{ role: "user" | "assistant"; content: string }>;
     };
 
-    const config = buildConfigFromAIAgent(agent as any, "agent");
-    const reply = await chatWithAgent({
+    // Sandbox employee chat: the agent answers AS ITSELF, to a customer, in
+    // its production voice (identity + goal + rules + knowledge). Replaced the
+    // copilot-flavored chatWithAgent path, which read like an assistant
+    // suggesting replies instead of the employee actually talking.
+    const reply = await sandboxEmployeeChat({
       tenantId: req.tenantId! as string,
-      conversationId: `test-${agent.id}`,
-      messages: [],
-      copilotConfig: config,
-      agentMessage: message,
-      chatHistory: history,
+      agentId: agent.id,
+      message,
+      history,
     });
 
-    res.json({ data: { reply } });
+    res.json({ data: { reply: reply || "" } });
   } catch (err) {
     console.error("Test chat error:", err);
     res.status(500).json({ error: "Failed to generate response" });
@@ -827,23 +847,33 @@ router.delete("/:id", authenticate, resolveTenant, requireActiveTenant(), requir
       return;
     }
 
-    // Check if any router rules reference this agent. Must be tenant-scoped -
-    // the shared TenantGuard rejects any query whose where clause is missing
-    // tenantId (a count without it 500s instead of returning a number).
-    const ruleCount = await prisma.routerRule.count({
-      where: { tenantId: req.tenantId! as string, aiAgentId: req.params.id as string, enabled: true },
+    // Router rules that point at this agent are deleted WITH it, in one
+    // transaction. Blocking the delete instead (the old 409) made every
+    // onboarding-created employee permanently undeletable, because onboarding
+    // always seeds a RouterRule for the employee it creates.
+    //
+    // The rules cannot simply be left behind: the schema relation is
+    // onDelete:SetNull, so an AI_AGENT rule would survive with aiAgentId=null
+    // and route to nothing. `routeTarget` holds the same id for AI_AGENT rules
+    // and has no FK at all, so it is matched explicitly.
+    //
+    // Queries stay tenant-scoped - the shared TenantGuard rejects any where
+    // clause missing tenantId (it 500s rather than returning a result).
+    const agentId = req.params.id as string;
+    const tenantId = req.tenantId! as string;
+
+    const removedRules = await prisma.$transaction(async (tx) => {
+      const { count } = await tx.routerRule.deleteMany({
+        where: {
+          tenantId,
+          OR: [{ aiAgentId: agentId }, { routeType: "AI_AGENT", routeTarget: agentId }],
+        },
+      });
+      await tx.aIAgent.delete({ where: { id: agentId } });
+      return count;
     });
 
-    if (ruleCount > 0) {
-      res.status(409).json({
-        error: "Cannot delete AI agent that is referenced by active routing rules",
-        activeRules: ruleCount,
-      });
-      return;
-    }
-
-    await prisma.aIAgent.delete({ where: { id: req.params.id as string } });
-    res.json({ success: true });
+    res.json({ success: true, removedRoutingRules: removedRules });
   } catch (err) {
     console.error("Delete AI agent error:", err);
     res.status(500).json({ error: "Failed to delete AI agent" });

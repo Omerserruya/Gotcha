@@ -20,7 +20,7 @@
 
 import { Queue } from "bullmq";
 import { prisma, createWorker } from "@chatcenter/shared";
-import { createMagicLink, sendNudgeEmail, renderBrandEmail, emailParagraph, escapeHtml } from "./notification.service";
+import { createSetupLink, sendNudgeEmail, renderBrandEmail, emailParagraph, escapeHtml } from "./notification.service";
 import { getOnboardingSnapshot, type OnboardingSnapshot } from "./onboarding-state.service";
 
 const REDIS_URL = process.env.REDIS_URL || "redis://localhost:6379";
@@ -270,11 +270,13 @@ export async function processNudgeRow(row: any): Promise<NudgeResult> {
     return { tenantId, outcome: "no_admin", reason: content.reason };
   }
 
+  // An admin who never finished setup has no password yet, so the nudge
+  // carries an Authentik setup link. If that cannot be minted we fall back to
+  // /setup, which bounces through Authentik login anyway.
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
   let ctaUrl = `${frontendUrl}/setup`;
   try {
-    const token = await createMagicLink(tenantId, admin.id);
-    ctaUrl = `${frontendUrl}/setup/verify?token=${token}`;
+    ctaUrl = await createSetupLink(admin.id);
   } catch { /* fall back to bare /setup - still valid */ }
 
   const html = nudgeHtml(content.headline, content.body, ctaUrl, locale);

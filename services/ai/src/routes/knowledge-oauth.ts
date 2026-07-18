@@ -1,12 +1,13 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, getOAuthStateSecret } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // ─── Confluence OAuth ───────────────────────────────────────
 
@@ -23,7 +24,7 @@ router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveT
 
   const state = jwt.sign(
     { tenantId: req.tenantId, kbId, userId: (req as any).userId },
-    JWT_SECRET,
+    OAUTH_STATE_SECRET,
     { expiresIn: "10m" }
   );
 
@@ -38,7 +39,7 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     const { tenantId, kbId } = payload;
 
     const clientId = process.env.CONFLUENCE_CLIENT_ID!;
@@ -121,7 +122,7 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboa
 
   const state = jwt.sign(
     { tenantId: req.tenantId, kbId, userId: (req as any).userId, flow: req.query.flow === "onboarding" ? "onboarding" : undefined },
-    JWT_SECRET,
+    OAUTH_STATE_SECRET,
     { expiresIn: "10m" }
   );
 
@@ -136,7 +137,7 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     const { tenantId, kbId } = payload;
 
     const clientId = process.env.GOOGLE_CLIENT_ID!;

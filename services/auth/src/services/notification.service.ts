@@ -1,6 +1,6 @@
 import crypto from "crypto";
 import nodemailer from "nodemailer";
-import { prisma, publishEvent } from "@chatcenter/shared";
+import { prisma, publishEvent, ensureIdentity, createRecoveryLink, findIdentityBySubject } from "@chatcenter/shared";
 
 type NotificationChannel = "email" | "slack" | "webhook" | "internal";
 
@@ -82,19 +82,37 @@ async function sendHtmlEmail(to: string, subject: string, html: string, text: st
   console.log(`[EMAIL] Sent to: ${to} | Subject: ${subject}`);
 }
 
-// ─── Magic Link Token Generation ────────────────────────────
+// ─── Setup / Sign-in Links ──────────────────────────────────
 
-const MAGIC_LINK_EXPIRY_HOURS = 48;
-
-export async function createMagicLink(tenantId: string, userId: string): Promise<string> {
-  const token = crypto.randomBytes(32).toString("hex");
-  const expiresAt = new Date(Date.now() + MAGIC_LINK_EXPIRY_HOURS * 60 * 60 * 1000);
-
-  await prisma.magicLink.create({
-    data: { token, tenantId, userId, expiresAt },
+/**
+ * One-time link that drops a user into Authentik to set their password.
+ *
+ * This replaces the old home-grown magic link. GOTCHA no longer mints
+ * credentials-bearing tokens of any kind: the link is issued by Authentik,
+ * expires on Authentik's schedule, and is single-use by Authentik's rules.
+ */
+export async function createSetupLink(userId: string): Promise<string> {
+  const user = await prisma.user.findUnique({
+    where: { id: userId },
+    select: { authentikSubject: true, email: true, name: true },
   });
+  if (!user) throw new Error("User not found");
 
-  return token;
+  const identity = user.authentikSubject
+    ? await findIdentityBySubject(user.authentikSubject)
+    : await ensureIdentity(user.email, user.name);
+  if (!identity) throw new Error("No Authentik identity for user");
+
+  return createRecoveryLink(identity.pk);
+}
+
+/**
+ * Where to send someone who just needs to log in (nudge emails, "come back"
+ * links). There is no token to embed: the app bounces them to Authentik, and
+ * if they still have a session they land straight in the workspace.
+ */
+export function signInUrl(): string {
+  return process.env.FRONTEND_URL || "http://localhost:3000";
 }
 
 // ─── Brand Email System (light, premium, RTL-aware) ─────────
@@ -424,67 +442,6 @@ export async function sendWaitlistWelcomeEmail(email: string, firstName: string,
 }
 
 /**
- * Send password reset email with magic link.
- */
-export async function sendPasswordResetEmail(
-  tenantId: string,
-  email: string,
-  userName: string,
-  tenantName: string,
-  token: string,
-): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
-  const resetUrl = `${frontendUrl}/login?resetToken=${token}`;
-
-  const subject = `Reset your password - ${tenantName}`;
-  const html = renderBrandEmail({
-    title: "Reset password - GOTCHA.",
-    eyebrow: "Account security",
-    icon: "&#128274;",
-    headline: "Reset your password",
-    subhead: `Hi ${escapeHtml(userName)}, we received a request to reset the password for your <strong style="color:#1d1a26;">${escapeHtml(tenantName)}</strong> account.`,
-    cta: { label: "Reset password", url: resetUrl },
-    fallbackUrl: resetUrl,
-    expiryNote: `This link expires in <strong style="color:#7C3291;">1 hour</strong>`,
-    closingHtml: `<p style="margin:0 0 12px;font-size:13px;color:#8f89a0;line-height:1.6;">If you didn't request this, you can safely ignore this email.</p>
-      <p style="margin:0;font-size:14px;color:#8f89a0;"><strong style="color:#1d1a26;">The GOTCHA. Team</strong></p>`,
-  });
-
-  const text = [
-    `Hi ${userName},`,
-    "",
-    "We received a request to reset your password.",
-    "",
-    "Click the link below to set a new password:",
-    resetUrl,
-    "",
-    "This link expires in 1 hour.",
-    "",
-    "If you didn't request this, you can safely ignore this email.",
-    "",
-    "- The GOTCHA. Team",
-  ].join("\n");
-
-  const payload: NotificationPayload = {
-    tenantId,
-    channel: "email",
-    type: "password_reset",
-    recipient: email,
-    subject,
-    body: text,
-    metadata: { resetUrl },
-  };
-
-  try {
-    await sendHtmlEmail(email, subject, html, text);
-    await logNotification(payload, "sent");
-  } catch (err: any) {
-    console.error("Failed to send password reset email:", err);
-    await logNotification(payload, "failed", err.message);
-  }
-}
-
-/**
  * Send onboarding email with magic link (no login required).
  */
 export async function sendOnboardingEmail(
@@ -497,9 +454,9 @@ export async function sendOnboardingEmail(
 ): Promise<void> {
   const frontendUrl = process.env.FRONTEND_URL || "http://localhost:3000";
 
-  // Generate magic link token
-  const token = await createMagicLink(tenantId, adminUserId);
-  const setupUrl = `${frontendUrl}/setup/verify?token=${token}`;
+  // One-time Authentik link: the admin sets their password there, then lands
+  // back in GOTCHA authenticated. GOTCHA never issues the credential.
+  const setupUrl = await createSetupLink(adminUserId);
 
   const subject = `Welcome to Gotcha. - Set up your ${tenantName} workspace`;
   const html = onboardingEmailHtml(adminName, tenantName, setupUrl);
@@ -686,7 +643,7 @@ interface TeammateInviteArgs {
   tenantName: string;
   tenantSlug: string;
   inviterName: string;
-  magicLinkToken: string;
+  setupUrl: string;
 }
 
 function teammateInviteHtml(args: TeammateInviteArgs, joinUrl: string): string {
@@ -704,8 +661,9 @@ function teammateInviteHtml(args: TeammateInviteArgs, joinUrl: string): string {
 }
 
 export async function sendTeammateInvite(args: TeammateInviteArgs): Promise<void> {
-  const frontendUrl = process.env.FRONTEND_URL || "https://gotcha.co.il";
-  const joinUrl = `${frontendUrl}/login?magic=${args.magicLinkToken}`;
+  // Authentik-issued one-time link: the teammate sets their own password there
+  // and arrives back in GOTCHA authenticated.
+  const joinUrl = args.setupUrl;
   const subject = `${args.inviterName} invited you to ${args.tenantName}`;
   const text = `${args.inviterName} invited you to join ${args.tenantName} on GOTCHA.\n\nAccept your invite: ${joinUrl}\n\nThis link is valid for 48 hours.`;
   const html = teammateInviteHtml(args, joinUrl);
@@ -803,4 +761,68 @@ export async function sendIntegrationRequestEmail(args: IntegrationRequestArgs):
     console.error("[notify] failed to send integration request email:", err?.message);
     return false;
   }
+}
+
+// ─── Email Change Verification ──────────────────────────────
+
+/**
+ * Send the verification link for a self-service email change to the NEW address.
+ * Proving control of the new inbox is what authorizes the change. Branded with
+ * renderBrandEmail so it never looks like a stock IdP email.
+ */
+export async function sendEmailChangeVerification(
+  newEmail: string,
+  name: string,
+  verifyUrl: string,
+): Promise<void> {
+  const subject = "Confirm your new email - GOTCHA";
+  const text =
+    `Hi ${name},\n\nConfirm this address to make it your new GOTCHA sign-in email:\n${verifyUrl}\n\n` +
+    `This link expires in 1 hour. If you didn't request this, you can ignore this email.`;
+  const html = renderBrandEmail({
+    title: "Confirm your new email - GOTCHA.",
+    preheader: "Confirm this address to finish changing your email.",
+    eyebrow: "Verify your email",
+    icon: "&#9993;",
+    headline: "Confirm your new email",
+    subhead: `${escapeHtml(name)}, confirm this address to make it your new GOTCHA sign-in email.`,
+    cta: { label: "Confirm email", url: verifyUrl },
+    fallbackUrl: verifyUrl,
+    expiryNote: `This link expires in <strong style="color:#7C3291;">1 hour</strong>`,
+    footerNote: "You're receiving this because someone requested to use this address on gotcha.co.il. If that wasn't you, ignore this email.",
+  });
+  await sendHtmlEmail(newEmail, subject, html, text);
+}
+
+// ─── Team Invitation ────────────────────────────────────────
+
+/**
+ * Send the invitee their one-time password-setup link. The admin still sees
+ * the link in the UI as a fallback, but the invitee should not depend on a
+ * copy-paste hand-off: the invite lands in their inbox like any SaaS invite.
+ */
+export async function sendTeamInviteEmail(
+  email: string,
+  name: string,
+  workspaceName: string,
+  setupLink: string,
+): Promise<void> {
+  const subject = `You've been invited to ${workspaceName} on GOTCHA`;
+  const text =
+    `Hi ${name},\n\nYou've been invited to join ${workspaceName} on GOTCHA.\n` +
+    `Set your password to activate your account:\n${setupLink}\n\n` +
+    `The link can be used once. If you weren't expecting this invite, you can ignore this email.`;
+  const html = renderBrandEmail({
+    title: `Join ${workspaceName} on GOTCHA.`,
+    preheader: `Set your password to join ${workspaceName}.`,
+    eyebrow: "Team invitation",
+    icon: "&#128075;",
+    headline: `Join ${escapeHtml(workspaceName)}`,
+    subhead: `${escapeHtml(name)}, you've been invited to join <strong>${escapeHtml(workspaceName)}</strong> on GOTCHA. Set your password and you're in.`,
+    cta: { label: "Set your password", url: setupLink },
+    fallbackUrl: setupLink,
+    expiryNote: `This link can be used <strong style="color:#7C3291;">once</strong>.`,
+    footerNote: `You're receiving this because an administrator of ${escapeHtml(workspaceName)} invited this address. If that wasn't expected, ignore this email.`,
+  });
+  await sendHtmlEmail(email, subject, html, text);
 }

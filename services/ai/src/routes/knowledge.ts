@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, safeFetch } from "@chatcenter/shared";
 import { processDocument } from "../services/embedding.service";
 import { deleteByDocumentId, deleteByKnowledgeBaseId } from "../services/qdrant.service";
 import { parseFile, isAllowedMimeType, resolveMimeType } from "../services/file-parser.service";
@@ -112,11 +112,17 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
 
     if (sourceType === "url" && sourceUrl) {
       try {
-        const response = await fetch(sourceUrl, {
+        // SSRF-hardened: scheme allowlist, DNS-resolved private/metadata IP
+        // block, per-hop redirect revalidation. Never bare-fetch a URL that
+        // came from a request body.
+        const response = await safeFetch(String(sourceUrl), {
           headers: { "User-Agent": "ChatCenter-Bot/1.0" },
-          signal: AbortSignal.timeout(30000),
+          timeoutMs: 30000,
         });
-        const html = await response.text();
+        if (!response.ok && response.status === 0) {
+          throw new Error(response.error || "fetch blocked");
+        }
+        const html = response.text;
         const textContent = html
           .replace(/<script[\s\S]*?<\/script>/gi, "")
           .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -147,6 +153,15 @@ router.post("/:id/documents", async (req: Request, res: Response) => {
         status: "pending",
       },
     });
+
+    // Auto-trigger processing, same as the file-upload route. Without this a
+    // document created here stays `pending` with no embeddings, so it is never
+    // retrievable - the readiness report's "answer it now" gap resolver looked
+    // like it saved while the employee never actually learned the answer.
+    processDocument(doc.id).catch((err) => {
+      console.error(`[Knowledge] Background processing failed for ${doc.id}:`, err.message);
+    });
+
     res.status(201).json({ data: doc });
   } catch (err) {
     console.error("Upload document error:", err);

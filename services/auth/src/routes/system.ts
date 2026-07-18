@@ -1,12 +1,12 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import bcrypt from "bcryptjs";
 import {
   prisma,
   authenticate,
   requireSystemAdmin,
   validate,
-  signToken,
+  ensureIdentity,
+  createRecoveryLink,
   publishEvent,
   crossTenantMiddleware,
   AI_MODEL_PRICING,
@@ -16,13 +16,17 @@ import {
   categorySqlCase,
   categoryLabel,
   type AiFeatureCategory,
+  writeAudit,
+  AuditAction,
+  seedTenantRbac,
 } from "@chatcenter/shared";
+import { eraseTenant } from "../services/gdpr.service";
 import { sendOnboardingEmail } from "../services/notification.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
+import { inviteUser, syncIdentityName, syncIdentityActive } from "../services/invitation.service";
 
 const router = Router();
-const SALT_ROUNDS = 10;
 
 // System-admin routes legitimately need cross-tenant reads (list all
 // tenants, aggregate usage across tenants, create new tenant admins,
@@ -31,54 +35,12 @@ const SALT_ROUNDS = 10;
 // requireSystemAdmin() - only SYSTEM_ADMIN users ever reach this code.
 router.use(crossTenantMiddleware);
 
-// ─── System Admin Login (no tenant slug needed) ──────────────
-
-const systemLoginSchema = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-router.post("/login", validate(systemLoginSchema), async (req: Request, res: Response): Promise<void> => {
-  try {
-    const { email, password } = req.body;
-
-    // Find user with SYSTEM_ADMIN role across all tenants
-    const user = await prisma.user.findFirst({
-      where: { email, role: "SYSTEM_ADMIN", isActive: true },
-    });
-    if (!user) {
-      res.status(401).json({ error: "Invalid credentials" });
-      return;
-    }
-
-    const isValid = await bcrypt.compare(password, user.password);
-    if (!isValid) {
-      res.status(401).json({ error: "Invalid credentials" });
-      return;
-    }
-
-    const token = signToken({
-      userId: user.id,
-      tenantId: user.tenantId,
-      role: user.role,
-      email: user.email,
-    });
-
-    res.json({
-      token,
-      user: {
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        role: user.role,
-        tenantId: user.tenantId,
-      },
-    });
-  } catch (err) {
-    console.error("System login error:", err);
-    res.status(500).json({ error: "Internal server error" });
-  }
-});
+// ─── System Admin Login ──────────────────────────────────────
+//
+// REMOVED. System admins authenticate through Authentik like everyone else;
+// there is no second password login. SYSTEM_ADMIN is a local RBAC role, so
+// requireSystemAdmin() still gates every route below - the role is read from
+// the database after Authentik proves the identity.
 
 // ─── System Stats ────────────────────────────────────────────
 
@@ -227,13 +189,12 @@ const createTenantSchema = z.object({
   name: z.string().min(1).max(100),
   slug: z.string().min(2).max(50).regex(/^[a-z0-9-]+$/, "Slug must be lowercase alphanumeric with hyphens"),
   adminEmail: z.string().email(),
-  adminPassword: z.string().min(8),
   adminName: z.string().min(1),
 });
 
 router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenantSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { name, slug, adminEmail, adminPassword, adminName } = req.body;
+    const { name, slug, adminEmail, adminName } = req.body;
 
     // Check slug uniqueness
     const existing = await prisma.tenant.findUnique({ where: { slug } });
@@ -242,20 +203,25 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       return;
     }
 
+    // Provision the identity BEFORE the transaction. Authentik is a remote
+    // system and cannot participate in a database transaction; doing it first
+    // means a failure here aborts cleanly with no tenant created, rather than
+    // leaving a tenant whose admin can never log in.
+    const identity = await ensureIdentity(adminEmail, adminName);
+
     // Create tenant + admin user + onboarding tracker in transaction
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: { name, slug, status: "PENDING_ADMIN_SETUP" },
       });
 
-      const hashedPassword = await bcrypt.hash(adminPassword, SALT_ROUNDS);
       const admin = await tx.user.create({
         data: {
           tenantId: tenant.id,
           email: adminEmail,
-          password: hashedPassword,
           name: adminName,
           role: "ADMIN",
+          authentikSubject: identity.subject,
         },
       });
 
@@ -265,6 +231,24 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       });
 
       return { tenant, admin };
+    });
+
+    // Seed the built-in TenantRole rows + the admin's role assignment so the
+    // Users page role picker and fine-grained permissions work from day one.
+    // Degrade-soft: the boot-time sweep re-covers any tenant this misses.
+    await seedTenantRbac(result.tenant.id).catch((err) =>
+      console.error("[system] rbac seed for new tenant failed:", err?.message),
+    );
+
+    void writeAudit({
+      tenantId: result.tenant.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.TENANT_CREATED, targetType: "tenant", targetId: result.tenant.id,
+      metadata: { name, slug, adminEmail },
+    });
+    void writeAudit({
+      tenantId: result.tenant.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_CREATED, targetType: "user", targetId: result.admin.id,
+      metadata: { email: adminEmail, role: "ADMIN" },
     });
 
     // Publish TenantCreated event
@@ -327,11 +311,8 @@ router.post("/tenants/:id/resend-onboarding", authenticate, requireSystemAdmin()
       return;
     }
 
-    // Invalidate previous unused magic links
-    await prisma.magicLink.updateMany({
-      where: { tenantId: tenant.id, usedAt: null },
-      data: { expiresAt: new Date() },
-    });
+    // Previous links do not need invalidating here: Authentik owns the
+    // lifetime of its own recovery links.
 
     // Send new onboarding email with fresh magic link
     await sendOnboardingEmail(tenant.id, admin.email, admin.name, tenant.name, tenant.slug, admin.id);
@@ -370,23 +351,14 @@ router.delete("/tenants/:id", authenticate, requireSystemAdmin(), async (req: Re
       return;
     }
 
-    // Cascade delete everything in a transaction
-    await prisma.$transaction([
-      prisma.magicLink.deleteMany({ where: { tenantId } }),
-      prisma.notificationLog.deleteMany({ where: { tenantId } }),
-      prisma.message.deleteMany({ where: { tenantId } }),
-      prisma.conversation.deleteMany({ where: { tenantId } }),
-      prisma.departmentMember.deleteMany({ where: { department: { tenantId } } }),
-      prisma.department.deleteMany({ where: { tenantId } }),
-      prisma.channelAccount.deleteMany({ where: { tenantId } }),
-      prisma.businessProfile.deleteMany({ where: { tenantId } }),
-      prisma.tenantOnboarding.deleteMany({ where: { tenantId } }),
-      prisma.chatbotFlow.deleteMany({ where: { tenantId } }),
-      prisma.user.deleteMany({ where: { tenantId } }),
-      prisma.tenant.delete({ where: { id: tenantId } }),
-    ]);
+    // Comprehensive GDPR off-boarding purge: DB (all tenant-scoped rows,
+    // including UsageLog/AuditLog/consent/retention that the FK cascade misses)
+    // + Qdrant vectors + Authentik identities, with a DataSubjectRequest and
+    // audit trail recorded before the tenant row is removed. Replaces the old
+    // partial cascade that orphaned Qdrant, UsageLog, AuditLog, and IdP data.
+    const purge = await eraseTenant(tenantId, (req as any).user?.userId);
 
-    res.json({ data: { deleted: true, tenantId, tenantName: tenant.name } });
+    res.json({ data: { deleted: true, tenantId, tenantName: tenant.name, ...purge } });
   } catch (err: any) {
     console.error("Delete tenant error:", err);
     res.status(500).json({ error: "Failed to delete tenant" });
@@ -511,12 +483,27 @@ router.patch("/tenants/:id", authenticate, requireSystemAdmin(), validate(update
       return;
     }
 
+    // Explicit allowlist (updateTenantSchema fields). slug is intentionally
+    // immutable and never accepted from the body.
+    const { name, isActive, voiceCopilotEnabled, voiceInboxUiEnabled, voiceIncomingEnabled } = req.body as Record<string, unknown>;
+    const data: Record<string, unknown> = {};
+    if (name !== undefined) data.name = name;
+    if (isActive !== undefined) data.isActive = isActive;
+    if (voiceCopilotEnabled !== undefined) data.voiceCopilotEnabled = voiceCopilotEnabled;
+    if (voiceInboxUiEnabled !== undefined) data.voiceInboxUiEnabled = voiceInboxUiEnabled;
+    if (voiceIncomingEnabled !== undefined) data.voiceIncomingEnabled = voiceIncomingEnabled;
     const updated = await prisma.tenant.update({
       where: { id: req.params.id as string },
-      data: req.body,
+      data,
       select: { id: true, name: true, slug: true, isActive: true, updatedAt: true },
     });
 
+    void writeAudit({
+      tenantId: updated.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: isActive === false ? AuditAction.TENANT_DEACTIVATED
+        : isActive === true ? AuditAction.TENANT_ACTIVATED : AuditAction.TENANT_UPDATED,
+      targetType: "tenant", targetId: updated.id, metadata: { fields: Object.keys(data) },
+    });
     res.json({ data: updated });
   } catch (err) {
     console.error("Update tenant error:", err);
@@ -526,9 +513,10 @@ router.patch("/tenants/:id", authenticate, requireSystemAdmin(), validate(update
 
 // ─── Create User in Tenant ───────────────────────────────────
 
+// No password field: the invite provisions an Authentik identity and the user
+// chooses their password through the emailed setup link.
 const createUserSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
   name: z.string().min(1),
   role: z.enum(["ADMIN", "AGENT"]).optional().default("AGENT"),
 });
@@ -541,33 +529,26 @@ router.post("/tenants/:id/users", authenticate, requireSystemAdmin(), validate(c
       return;
     }
 
-    const { email, password, name, role } = req.body;
+    const { email, name, role } = req.body;
 
-    const existing = await prisma.user.findFirst({ where: { tenantId: tenant.id, email } });
-    if (existing) {
-      res.status(409).json({ error: "User with this email already exists in this tenant" });
-      return;
-    }
-
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
-    const user = await prisma.user.create({
-      data: { tenantId: tenant.id, email, password: hashedPassword, name, role: role as any },
-      select: { id: true, email: true, name: true, role: true, isActive: true, createdAt: true },
+    const result = await inviteUser(tenant.id, email, name, role);
+    void writeAudit({
+      tenantId: tenant.id, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_CREATED, targetType: "user", targetId: result.user.id,
+      metadata: { email, role },
     });
-
-    res.status(201).json({ data: user });
+    res.status(201).json({ data: result.user, setupLink: result.setupLink });
   } catch (err) {
     console.error("Create user error:", err);
     res.status(500).json({ error: "Failed to create user" });
   }
 });
 
-// ─── Update User (SysAdmin: name, email, password, role, active) ──
+// ─── Update User (SysAdmin: name, email, role, active) ──
 
 const updateUserSchema = z.object({
   name: z.string().min(1).max(120).optional(),
   email: z.string().email().optional(),
-  password: z.string().min(8).max(200).optional(),
   role: z.enum(["ADMIN", "AGENT"]).optional(),
   isActive: z.boolean().optional(),
 });
@@ -582,7 +563,7 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), v
       return;
     }
 
-    const { isActive, role, name, email, password } = req.body;
+    const { isActive, role, name, email } = req.body;
     const data: any = {};
     if (typeof isActive === "boolean") data.isActive = isActive;
     // Never alter a SYSTEM_ADMIN's role through the tenant-scoped endpoint.
@@ -602,9 +583,9 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), v
         data.email = nextEmail;
       }
     }
-    if (typeof password === "string" && password.length >= 8) {
-      data.password = await bcrypt.hash(password, SALT_ROUNDS);
-    }
+    // Passwords are not GOTCHA's to set. A system admin who needs to restore
+    // access issues a setup link via POST /agents/:id/reset-password, which
+    // routes through Authentik's recovery flow.
 
     const updated = await prisma.user.update({
       where: { id: user.id },
@@ -612,6 +593,22 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), v
       select: { id: true, email: true, name: true, role: true, isActive: true },
     });
 
+    // Keep Authentik's display name in sync on a rename. (Email/username change
+    // is intentionally NOT propagated to Authentik here - that is a
+    // verification-gated identity change; see the identity operations guide.)
+    if (typeof data.name === "string" && data.name !== user.name) {
+      void syncIdentityName(user.authentikSubject, updated.name);
+    }
+    // Enable/disable must be consistent across both systems (see agents.ts).
+    if (typeof data.isActive === "boolean" && data.isActive !== user.isActive) {
+      void syncIdentityActive(user.authentikSubject, data.isActive);
+    }
+
+    void writeAudit({
+      tenantId: req.params.id as string, actorType: "user", actorId: (req as any).user?.userId,
+      action: (data as any).role !== undefined ? AuditAction.ROLE_CHANGED : AuditAction.USER_UPDATED,
+      targetType: "user", targetId: updated.id, metadata: { fields: Object.keys(data) },
+    });
     res.json({ data: updated });
   } catch (err) {
     console.error("Update user error:", err);
@@ -645,6 +642,11 @@ router.delete("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), 
     // assignedAgentId SetNull, departmentMember → Cascade), so a single
     // delete cleans up cleanly.
     await prisma.user.delete({ where: { id: user.id } });
+    void writeAudit({
+      tenantId: req.params.id as string, actorType: "user", actorId: (req as any).user?.userId,
+      action: AuditAction.USER_DELETED, targetType: "user", targetId: user.id,
+      metadata: { name: user.name, role: user.role },
+    });
     res.json({ data: { deleted: true, userId: user.id, name: user.name } });
   } catch (err) {
     console.error("Delete user error:", err);
@@ -727,18 +729,18 @@ router.patch("/tenants/:id/first-take-care", authenticate, requireSystemAdmin(),
 
 const seedSchema = z.object({
   email: z.string().email(),
-  password: z.string().min(8),
   name: z.string().min(1),
   setupSecret: z.string().min(1),
 });
 
 router.post("/seed", validate(seedSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { email, password, name, setupSecret } = req.body;
+    const { email, name, setupSecret } = req.body;
 
-    // Verify setup secret (use JWT_SECRET as the setup key)
-    const expectedSecret = process.env.SYSTEM_ADMIN_SETUP_SECRET || process.env.JWT_SECRET;
-    if (setupSecret !== expectedSecret) {
+    // JWT_SECRET is gone with the local signing key, so the setup secret must
+    // now be configured explicitly rather than silently borrowing it.
+    const expectedSecret = process.env.SYSTEM_ADMIN_SETUP_SECRET;
+    if (!expectedSecret || setupSecret !== expectedSecret) {
       res.status(403).json({ error: "Invalid setup secret" });
       return;
     }
@@ -758,28 +760,26 @@ router.post("/seed", validate(seedSchema), async (req: Request, res: Response): 
       });
     }
 
-    const hashedPassword = await bcrypt.hash(password, SALT_ROUNDS);
+    const identity = await ensureIdentity(email, name);
     const admin = await prisma.user.create({
       data: {
         tenantId: systemTenant.id,
         email,
-        password: hashedPassword,
         name,
         role: "SYSTEM_ADMIN",
+        authentikSubject: identity.subject,
       },
     });
 
-    const token = signToken({
-      userId: admin.id,
-      tenantId: systemTenant.id,
-      role: admin.role,
-      email: admin.email,
-    });
+    // No token is returned: GOTCHA cannot mint one. The new system admin sets
+    // a password via this link and then logs in through Authentik like anyone
+    // else.
+    const setupLink = await createRecoveryLink(identity.pk);
 
     res.status(201).json({
       data: {
         user: { id: admin.id, email: admin.email, name: admin.name, role: admin.role },
-        token,
+        setupLink,
       },
     });
   } catch (err) {

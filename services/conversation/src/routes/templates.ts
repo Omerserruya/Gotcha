@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireRole, decryptCredentials, assertPublicUrl } from "@chatcenter/shared";
 
 const router = Router();
 
@@ -28,7 +28,10 @@ async function uploadMediaForTemplateExample(
     return null;
   }
   try {
-    // 1. Download the example file.
+    // 1. Download the example file. SSRF guard: `url` is the tenant-supplied
+    // template media example (headerContent); block private/metadata targets
+    // at DNS resolution before fetching.
+    await assertPublicUrl(url);
     const fileRes = await fetch(url);
     if (!fileRes.ok) {
       console.warn("[meta-template-upload] download failed", url, fileRes.status);
@@ -364,7 +367,18 @@ router.patch("/:id", authenticate, resolveTenant, requireActiveTenant(), require
     });
     if (!existing) { res.status(404).json({ error: "Template not found" }); return; }
 
-    const data: any = { ...req.body };
+    // Explicit allowlist: this route has no zod schema, so never spread raw
+    // req.body into the write (would let an admin set tenantId or other
+    // columns). Only the template's own editable fields are copied.
+    const ALLOWED_TEMPLATE_FIELDS = [
+      "name", "body", "category", "language", "channel", "channelAccountId",
+      "headerType", "headerContent", "footer", "buttons", "variables", "status",
+    ] as const;
+    const src = (req.body ?? {}) as Record<string, unknown>;
+    const data: any = {};
+    for (const k of ALLOWED_TEMPLATE_FIELDS) {
+      if (Object.prototype.hasOwnProperty.call(src, k)) data[k] = src[k];
+    }
     // The UI sends "" when the picker is cleared; only null is valid as
     // "unset" for the FK column. Treat both as detach.
     if (data.channelAccountId === "" || data.channelAccountId === undefined) {

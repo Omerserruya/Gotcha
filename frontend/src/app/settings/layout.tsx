@@ -1,7 +1,9 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { useEffect } from "react";
+import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
+import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { AppLayout } from "@/components/AppLayout";
 import { useVoiceFlags } from "@/lib/use-voice-flags";
@@ -17,15 +19,26 @@ interface SettingsNavItem {
   voiceOnly?: boolean;
   /** Permission-gated nav item - hidden unless the user holds this permission. */
   perm?: string;
+  /** Role-gated nav item - shown only to workspace admins/owners (by role, not
+   * a fine-grained permission, so it stays discoverable even where per-tenant
+   * permission seeding is incomplete). The backend still enforces the role. */
+  adminOnly?: boolean;
+  /** IA grouping. Undefined is treated as "workspace". */
+  group?: "personal" | "workspace";
 }
 
 const settingsNav: SettingsNavItem[] = [
-  { href: "/settings", labelKey: "settings.nav.general", icon: GeneralIcon, exact: true },
+  // Personal account (self-service) rendered inside the Settings shell, so the
+  // IA reads as one Settings area: "your account" above "your workspace".
+  { href: "/settings/account", label: "Account", icon: AccountIcon, group: "personal" },
+  { href: "/settings", labelKey: "settings.nav.general", icon: GeneralIcon, exact: true, group: "workspace" },
   // The Digital Twin's permanent home (moved out of the main sidebar when
   // Getting Started took that slot). Includes the "Scan again" action.
   { href: "/settings/business", labelKey: "nav.business", icon: BusinessTwinIcon },
   // Unified Users page: replaces the old Agents + Roles & Permissions pages.
   { href: "/settings/users", label: "Users", icon: AgentsIcon, perm: "settings:members:manage" },
+  // Workspace security policy (MFA enforcement + compliance). Admin-only.
+  { href: "/settings/security", labelKey: "settings.nav.security", icon: SecurityIcon, adminOnly: true },
   { href: "/settings/departments", labelKey: "nav.departments", icon: DepartmentsIcon },
   { href: "/settings/channels", labelKey: "nav.channels", icon: ChannelsIcon },
   { href: "/settings/integrations", labelKey: "settings.nav.integrations", icon: IntegrationsIcon },
@@ -41,16 +54,36 @@ const settingsNav: SettingsNavItem[] = [
 export default function SettingsLayout({ children }: { children: React.ReactNode }) {
   const { t } = useI18n();
   const pathname = usePathname();
+  const router = useRouter();
   const flags = useVoiceFlags();
-  const { can } = usePermissions();
+  const { user } = useAuth();
+  const { can, atLeastRole } = usePermissions();
+
+  // Since Account moved under /settings, EVERY role legitimately enters this
+  // area - so workspace administration must be gated per item, not by "you got
+  // here at all". atLeastRole derives synchronously from user.role.
+  const isWorkspaceAdmin = atLeastRole("admin");
 
   const visibleNav = settingsNav.filter((item) => {
     if (item.voiceOnly && !flags.voiceCopilotEnabled) return false;
-    // Permission-gated items are hidden unless held. Items without `perm`
-    // keep their current visibility (this whole area is already ADMIN-gated).
+    // Workspace items are admin-only; non-admins get only the personal group.
+    if ((item.group ?? "workspace") === "workspace" && !isWorkspaceAdmin) return false;
+    // Permission-gated items are additionally hidden unless held.
     if (item.perm && !can(item.perm)) return false;
+    if (item.adminOnly && !isWorkspaceAdmin) return false;
     return true;
   });
+
+  // Deep links too, not just the nav: a non-admin typing /settings/usage (or
+  // any workspace page) is bounced to their Account page. The backend still
+  // enforces roles on every write; this keeps the UI honest.
+  const onPersonalRoute = pathname.startsWith("/settings/account");
+  useEffect(() => {
+    if (user && !isWorkspaceAdmin && !onPersonalRoute) {
+      router.replace("/settings/account");
+    }
+  }, [user, isWorkspaceAdmin, onPersonalRoute, router]);
+  if (user && !isWorkspaceAdmin && !onPersonalRoute) return null;
 
   function labelFor(item: SettingsNavItem): string {
     return item.labelKey ? t(item.labelKey) : item.label ?? "";
@@ -60,29 +93,44 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
     <AppLayout>
       <div className="flex h-[calc(100vh-16px)] md:gap-2 md:p-2">
         {/* Settings sidebar - hidden on mobile, shown on md+ */}
-        <aside className="hidden md:flex w-[220px] flex-col bg-white rounded-2xl shadow-subtle overflow-hidden shrink-0">
+        {/* data-tour hooks: the GuidedTour spotlights this menu ("settings-nav")
+            and individual entries ("settings-nav-channels") to teach the
+            Settings → section navigation path. */}
+        <aside data-tour="settings-nav" className="hidden md:flex w-[220px] flex-col bg-white rounded-2xl shadow-subtle overflow-hidden shrink-0">
           <div className="px-4 py-3 bg-gray-50/50">
             <h2 className="text-sm font-semibold text-gray-900">{t("nav.settings")}</h2>
           </div>
           <nav className="flex-1 py-2 px-2 space-y-0.5 overflow-y-auto">
-            {visibleNav.map((item) => {
-              const isActive = item.exact
+            {visibleNav.map((item, i) => {
+              const isActive = item.href === "/settings/account"
+                ? pathname.startsWith("/settings/account")
+                : item.exact
                 ? pathname === item.href
-                : pathname.startsWith(item.href);
+                : pathname.startsWith(item.href) && !pathname.startsWith("/settings/account");
+              const grp = item.group ?? "workspace";
+              const prevGrp = i === 0 ? null : (visibleNav[i - 1].group ?? "workspace");
+              const showHeader = grp !== prevGrp;
               return (
-                <Link
-                  key={item.href}
-                  href={item.href}
-                  className={clsx(
-                    "flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all",
-                    isActive
-                      ? "bg-primary-50/70 text-primary-600"
-                      : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                <div key={item.href}>
+                  {showHeader && (
+                    <p className={clsx("px-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-gray-300", i > 0 && "pt-3")}>
+                      {grp === "personal" ? "Account" : "Workspace"}
+                    </p>
                   )}
-                >
-                  <item.icon className="w-4 h-4 shrink-0" />
-                  {labelFor(item)}
-                </Link>
+                  <Link
+                    href={item.href}
+                    data-tour={`settings-nav-${item.href.split("/")[2] || item.href.split("/")[1] || "general"}`}
+                    className={clsx(
+                      "flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-medium transition-all",
+                      isActive
+                        ? "bg-primary-50/70 text-primary-600"
+                        : "text-gray-500 hover:text-gray-700 hover:bg-gray-50"
+                    )}
+                  >
+                    <item.icon className="w-4 h-4 shrink-0" />
+                    {labelFor(item)}
+                  </Link>
+                </div>
               );
             })}
           </nav>
@@ -91,7 +139,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
         {/* Main content */}
         <div className="flex-1 overflow-y-auto md:rounded-2xl md:bg-white md:shadow-subtle">
           {/* Mobile settings tabs */}
-          <div className="md:hidden flex overflow-x-auto bg-white shadow-subtle px-2 py-2 gap-1 sticky top-0 z-10">
+          <div data-tour="settings-nav" className="md:hidden flex overflow-x-auto bg-white shadow-subtle px-2 py-2 gap-1 sticky top-0 z-10">
             {visibleNav.map((item) => {
               const isActive = item.exact
                 ? pathname === item.href
@@ -100,6 +148,7 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
                 <Link
                   key={item.href}
                   href={item.href}
+                  data-tour={`settings-nav-${item.href.split("/")[2] || "general"}`}
                   className={clsx(
                     "flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[11px] font-medium whitespace-nowrap transition shrink-0",
                     isActive
@@ -120,6 +169,14 @@ export default function SettingsLayout({ children }: { children: React.ReactNode
 }
 
 // ─── Icons ──────────────────────────────────────────────────
+
+function AccountIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" />
+    </svg>
+  );
+}
 
 function BusinessTwinIcon({ className }: { className?: string }) {
   return (
@@ -230,6 +287,14 @@ function IntelligenceIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456z" />
+    </svg>
+  );
+}
+
+function SecurityIcon({ className }: { className?: string }) {
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 0h10.5a2.25 2.25 0 012.25 2.25v6a2.25 2.25 0 01-2.25 2.25H6.75a2.25 2.25 0 01-2.25-2.25v-6a2.25 2.25 0 012.25-2.25z" />
     </svg>
   );
 }

@@ -8,6 +8,7 @@ import { VoiceSessionsProvider } from "@/contexts/VoiceSessionsContext";
 import { ActiveCallWidget } from "@/components/voice/ActiveCallWidget";
 import { IncomingCallBannerMobile } from "@/components/voice/IncomingCallBanner";
 import { ActiveCallBar } from "@/components/voice/ActiveCallBar";
+import { MfaEnrollmentGate } from "@/components/MfaEnrollmentGate";
 
 export function Providers({ children }: { children: React.ReactNode }) {
   return (
@@ -24,6 +25,10 @@ export function Providers({ children }: { children: React.ReactNode }) {
             <ActiveCallWidget />
             <IncomingCallBannerMobile />
             <ActiveCallBar />
+            {/* Hierarchical MFA enforcement: blocks the app with an enrolment
+                gate when the user's role + tenant policy require MFA and they
+                have not enrolled. Renders nothing otherwise. */}
+            <MfaEnrollmentGate />
           </VoiceSessionsProvider>
         </VoiceCallProvider>
         </PermissionsProvider>

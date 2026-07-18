@@ -38,14 +38,6 @@ const MILESTONE_ICONS: Record<string, string> = {
   teach_knowledge: "📚",
 };
 
-const FEATURES: Array<{ id: string; href: string; icon: string }> = [
-  { id: "inbox", href: "/conversations", icon: "📥" },
-  { id: "business", href: "/settings/business", icon: "🏢" },
-  { id: "aiStudio", href: "/ai-studio", icon: "✨" },
-  { id: "channels", href: "/channels", icon: "📡" },
-  { id: "knowledge", href: "/ai-studio/knowledge", icon: "📚" },
-  { id: "analytics", href: "/analytics", icon: "📊" },
-];
 
 export default function GettingStartedPage() {
   return (
@@ -315,25 +307,6 @@ function GettingStartedInner() {
       </div>
 
       {/* ── Core features ── */}
-      <section className="mt-12">
-        <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-          {t("gettingStarted.features.title")}
-        </h2>
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-6">
-          {FEATURES.map((f) => (
-            <Link
-              key={f.id}
-              href={f.href}
-              className="group rounded-xl border border-slate-200 bg-white p-4 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-indigo-300 hover:shadow"
-            >
-              <div className="mb-2 text-2xl">{f.icon}</div>
-              <div className="text-sm font-medium text-slate-700 group-hover:text-indigo-600">
-                {t(`gettingStarted.features.${f.id}`)}
-              </div>
-            </Link>
-          ))}
-        </div>
-      </section>
     </div>
   );
 }

@@ -91,6 +91,16 @@ model Tenant {
   // affecting the rest of the org. ISO-639-1; today: "en" | "he".
   defaultLocale String @default("en") @map("default_locale")
 
+  // Multi-factor authentication policy (set by a TENANT ADMIN in
+  // Workspace -> Security). Both default OFF so every existing/new tenant is
+  // unchanged until an admin opts in. Enforcement is hierarchical and lives in
+  // GOTCHA (not Authentik's shared login flow): SYSTEM_ADMIN always requires
+  // MFA regardless of these flags; ADMINs require it when either flag is on;
+  // AGENTs require it only when mfaRequiredForAllUsers is on. See
+  // `mfaRequirementFor` in @chatcenter/shared and the account /mfa-gate route.
+  mfaRequiredForAdmins   Boolean @default(false) @map("mfa_required_for_admins")
+  mfaRequiredForAllUsers Boolean @default(false) @map("mfa_required_for_all_users")
+
   // Feature flags (set by SYSTEM_ADMIN)
   botEnabled           Boolean  @default(false) @map("bot_enabled")
   botType              BotType? @map("bot_type")
@@ -158,9 +168,86 @@ model Tenant {
   aiUnitLedger            AiUnitLedgerEntry[]
   aiBalance               TenantAiBalance?
   tenantEntitlements      TenantEntitlement[]
+  // GDPR data-lifecycle machinery.
+  consentRecords          ConsentRecord[]
+  retentionPolicies       DataRetentionPolicy[]
+  dataSubjectRequests     DataSubjectRequest[]
 
   @@index([status])
   @@map("tenants")
+}
+
+// ─── GDPR: Consent Records (Art. 6/7) ──────────────────────────
+// Proof-of-consent ledger. Append-only: a withdrawal is a NEW row with
+// granted=false, never a mutation of the prior grant, so the full consent
+// history is auditable. `subjectType`+`subjectId` identify who consented
+// (a Contact, a User, or a raw identifier like an email/phone captured
+// before a Contact row exists). `purpose` is the processing purpose
+// (e.g. "marketing_whatsapp", "cookies_functional", "data_processing").
+model ConsentRecord {
+  id          String   @id @default(cuid())
+  tenantId    String   @map("tenant_id")
+  subjectType String   @map("subject_type") // "contact" | "user" | "identifier"
+  subjectId   String   @map("subject_id") // Contact.id | User.id | raw email/phone
+  purpose     String // "marketing_whatsapp" | "cookies_functional" | "data_processing" | ...
+  granted     Boolean // true = consent given, false = withdrawn
+  source      String? // "onboarding" | "widget" | "import" | "api" | ...
+  evidence    Json? // { ip, userAgent, capturedText, channel, ... } - proof of consent
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, subjectType, subjectId])
+  @@index([tenantId, purpose])
+  @@map("consent_records")
+}
+
+// ─── GDPR: Data Retention Policies (Art. 5(1)(e)) ──────────────
+// Per-tenant retention windows. A purge job reads the ACTIVE policy for a
+// given data category and hard-deletes rows older than `retentionDays`.
+// One row per (tenantId, category); NULL/absent = no limit (grows unbounded,
+// which is the pre-GDPR default we are closing).
+model DataRetentionPolicy {
+  id            String    @id @default(cuid())
+  tenantId      String    @map("tenant_id")
+  category      String // "messages" | "usage_logs" | "audit_logs" | "billing_webhook_events" | "reasoner_shadow_evals" | ...
+  retentionDays Int       @map("retention_days") // rows older than now()-retentionDays are purged
+  enabled       Boolean   @default(true)
+  lastPurgeAt   DateTime? @map("last_purge_at")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, category])
+  @@index([tenantId])
+  @@map("data_retention_policies")
+}
+
+// ─── GDPR: Data Subject Requests (Art. 15/17/20/30) ────────────
+// Tracks every access/portability/erasure request and its execution, so
+// the platform can prove (Art. 30 record of processing) that a DSR was
+// received and fulfilled, and within what window.
+model DataSubjectRequest {
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  requestType String    @map("request_type") // "export" | "erasure"
+  subjectType String    @map("subject_type") // "contact" | "user" | "tenant"
+  subjectId   String    @map("subject_id")
+  status      String    @default("PENDING") // "PENDING" | "COMPLETED" | "FAILED"
+  requestedBy String?   @map("requested_by") // userId who initiated (null = self-service)
+  result      Json? // summary of what was exported/erased (counts per store)
+  error       String? // failure reason when status=FAILED
+  createdAt   DateTime  @default(now()) @map("created_at")
+  completedAt DateTime? @map("completed_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([tenantId, requestType])
+  @@index([tenantId, subjectType, subjectId])
+  @@map("data_subject_requests")
 }
 
 // ─── Channel Accounts ────────────────────────────────────────
@@ -254,7 +341,12 @@ model User {
   id                       String   @id @default(cuid())
   tenantId                 String   @map("tenant_id")
   email                    String
-  password                 String
+  // Authentik's `sub` claim - the ONLY link between a GOTCHA user row and an
+  // identity. GOTCHA stores no credentials of any kind: authentication,
+  // passwords, MFA, and sessions all live in Authentik. Nullable because a
+  // user row exists from the moment an owner invites them, and is bound to a
+  // subject the first time that identity actually authenticates.
+  authentikSubject         String?  @unique @map("authentik_subject")
   name                     String
   role                     Role     @default(AGENT)
   isActive                 Boolean  @default(true) @map("is_active")
@@ -271,19 +363,26 @@ model User {
   // layer. Map of feature key -> "unseen" | "snoozed" | "done", e.g.
   // {"knowledge":"done","ai-studio":"snoozed"}. NULL = nothing seen yet.
   onboardingGuides         Json?    @map("onboarding_guides")
+  // Cheap, local mirror of "this user has completed MFA enrolment (an
+  // authenticator AND recovery codes) in Authentik". Authentik remains the
+  // source of truth; this is stamped by the account /mfa-gate check and by the
+  // tenant-security backfill so the enforcement guard and the Workspace
+  // compliance counts can read enrolment without an IdP call per request.
+  // NULL = not known-enrolled.
+  mfaEnrolledAt            DateTime? @map("mfa_enrolled_at")
   createdAt                DateTime @default(now()) @map("created_at")
   updatedAt                DateTime @updatedAt @map("updated_at")
 
-  tenant             Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversations      Conversation[]      @relation("AssignedAgent")
-  departmentMember   DepartmentMember?
-  inAppNotifications InAppNotification[]
+  tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversations           Conversation[]       @relation("AssignedAgent")
+  departmentMember        DepartmentMember?
+  inAppNotifications      InAppNotification[]
   // Voice channels where this user is the default-ring target for inbound calls.
-  defaultVoiceChannels VoiceChannel[]    @relation("VoiceChannelDefaultAgent")
+  defaultVoiceChannels    VoiceChannel[]       @relation("VoiceChannelDefaultAgent")
   // Voice channels where this user is the AGENT_FIRST outbound target
   // (separate from the inbound default agent so outbound can route to a
   // different person - e.g. sales rep for outbound, support rep for inbound).
-  agentFirstVoiceChannels VoiceChannel[] @relation("VoiceChannelAgentFirstAgent")
+  agentFirstVoiceChannels VoiceChannel[]       @relation("VoiceChannelAgentFirstAgent")
   roleAssignments         UserRoleAssignment[]
   featureGrants           UserFeatureGrant[]
 
@@ -776,48 +875,48 @@ model BusinessProfile {
 // the customer reads ("I analyzed your business. I found 126 products…").
 // `gaps` are first-class findings ("I couldn't find a refund policy").
 model BusinessDiscovery {
-  id            String   @id @default(cuid())
-  tenantId      String   @unique @map("tenant_id")
-  websiteDomain String?  @map("website_domain")
+  id            String  @id @default(cuid())
+  tenantId      String  @unique @map("tenant_id")
+  websiteDomain String? @map("website_domain")
   // Lifecycle: PENDING (scan queued) → SCANNING → COMPLETE → FAILED.
-  status        String   @default("PENDING")
+  status        String  @default("PENDING")
 
   // The five intelligence domains (Bible Part II). Each is the structured
   // extraction the customer can see, confirm, and correct.
-  brand         Json?    // { voice, tone, style, vocabulary[], forbiddenWords[], ctaStyle, languages[], positioning }
-  business      Json?    // { industry, icp, personas[], products[], services[], pricingModel, valueProp, businessModel, summary }
-  knowledge     Json?    // { faq, helpCenter, docs, policies{shipping,returns,refunds,terms,privacy}, articleCount }
-  communication Json?    // { channels: [{ type, detail, confidence }] }
-  technology    Json?    // { storefront, cms, tools: [{ slug, name, category }] }
+  brand         Json? // { voice, tone, style, vocabulary[], forbiddenWords[], ctaStyle, languages[], positioning }
+  business      Json? // { industry, icp, personas[], products[], services[], pricingModel, valueProp, businessModel, summary }
+  knowledge     Json? // { faq, helpCenter, docs, policies{shipping,returns,refunds,terms,privacy}, articleCount }
+  communication Json? // { channels: [{ type, detail, confidence }] }
+  technology    Json? // { storefront, cms, tools: [{ slug, name, category }] }
 
   // Findings + honest gaps + the first recommendation + a calibrated
   // confidence read per domain. All reflected back in the UI.
-  gaps           Json?   // [{ id, domain, label, severity, ask }]
-  recommendation Json?   // { employeeRole, employeeName, reason, systems: [{ slug, reason }], knowledge: [{ label, reason }], channel }
-  health         Json?   // { knowledge: [{ label, ok }], communication: [...], tools: [...] } snapshot at scan time
-  confidence     Json?   // { business, brand, knowledge, customers, communication, integrations }  (0-100)
+  gaps           Json? // [{ id, domain, label, severity, ask }]
+  recommendation Json? // { employeeRole, employeeName, reason, systems: [{ slug, reason }], knowledge: [{ label, reason }], channel }
+  health         Json? // { knowledge: [{ label, ok }], communication: [...], tools: [...] } snapshot at scan time
+  confidence     Json? // { business, brand, knowledge, customers, communication, integrations }  (0-100)
 
   // First-person narrated briefing (Movement 1 / Output 1).
-  report        String?  @db.Text
+  report String? @db.Text
 
   // The single earned question (Movement 5): primary business goal slug.
-  primaryGoal   String?  @map("primary_goal")
+  primaryGoal String? @map("primary_goal")
 
   // Resume checkpoint (P0): the last movement key the owner reached
   // (review|connect|goal|integrations|knowledge|recommendation|tune|ready).
   // Derived state stays authoritative for stage; `progress` only refines the
   // resume position WITHIN the review→ready band so a reload during movements
   // 6-9 returns to that movement instead of falling back to integrations.
-  progress      String?
+  progress String?
 
   // Live ceremony phase (Movement 1) - updated between scan phases so the
   // loader's checkmarks land on real events, not a timer:
   // homepage|links|pages|signals|synthesis|normalizing|done.
-  scanPhase     String?  @map("scan_phase")
+  scanPhase String? @map("scan_phase")
 
   // Movement 8 tune-chat transcript, persisted (bounded to the last 20 turns)
   // so a reload mid-tune resumes the conversation instead of losing it.
-  tuneTranscript Json?   @map("tune_transcript")
+  tuneTranscript Json? @map("tune_transcript")
 
   scannedAt DateTime? @map("scanned_at")
   createdAt DateTime  @default(now()) @map("created_at")
@@ -839,23 +938,23 @@ model BusinessDiscovery {
 // the same logical rec instead of duplicating, and never resurrects one the
 // customer already completed or dismissed.
 model Recommendation {
-  id         String    @id @default(cuid())
-  tenantId   String    @map("tenant_id")
-  source     String    @default("discovery") // discovery | store_inspection | manual
-  kind       String // hire_employee | connect_system | connect_channel | import_knowledge | setup_workflow | tool_detected (detected on site, no connector - acknowledgment only)
-  title      String
-  reason     String?   @db.Text
-  action     String? // machine hint, e.g. "connect:shopify" | "hire:customer_support" | "teach:refund_policy"
-  targetSlug String?   @map("target_slug") // shopify | hubspot | whatsapp | ...
-  confidence String    @default("likely")
-  priority   Int       @default(0) // higher = surfaced first (already-detected systems rank up)
-  status     String    @default("OPEN") // OPEN | COMPLETED | DISMISSED | REPLACED
-  dedupeKey  String    @map("dedupe_key")
-  payload    Json?
+  id          String    @id @default(cuid())
+  tenantId    String    @map("tenant_id")
+  source      String    @default("discovery") // discovery | store_inspection | manual
+  kind        String // hire_employee | connect_system | connect_channel | import_knowledge | setup_workflow | tool_detected (detected on site, no connector - acknowledgment only)
+  title       String
+  reason      String?   @db.Text
+  action      String? // machine hint, e.g. "connect:shopify" | "hire:customer_support" | "teach:refund_policy"
+  targetSlug  String?   @map("target_slug") // shopify | hubspot | whatsapp | ...
+  confidence  String    @default("likely")
+  priority    Int       @default(0) // higher = surfaced first (already-detected systems rank up)
+  status      String    @default("OPEN") // OPEN | COMPLETED | DISMISSED | REPLACED
+  dedupeKey   String    @map("dedupe_key")
+  payload     Json?
   completedAt DateTime? @map("completed_at")
   dismissedAt DateTime? @map("dismissed_at")
-  createdAt  DateTime  @default(now()) @map("created_at")
-  updatedAt  DateTime  @updatedAt @map("updated_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -875,19 +974,19 @@ model Recommendation {
 // Content is computed at SEND time from live state, so a nudge whose reason no
 // longer holds (the customer already did the thing) is marked SKIPPED, not sent.
 model ScheduledNudge {
-  id          String    @id @default(cuid())
-  tenantId    String    @map("tenant_id")
-  kind        String // "onboarding" | future lifecycle kinds
-  dedupeKey   String    @map("dedupe_key") // stable per logical nudge, e.g. "onboarding_next_step"
-  scheduledFor DateTime @map("scheduled_for")
-  status      String    @default("PENDING") // PENDING | SENT | CANCELLED | SKIPPED | FAILED
-  channel     String    @default("email") // email | in_app | both
-  attempts    Int       @default(0)
-  lastError   String?   @map("last_error")
-  sentAt      DateTime? @map("sent_at")
-  payload     Json? // optional context for content computation / templating
-  createdAt   DateTime  @default(now()) @map("created_at")
-  updatedAt   DateTime  @updatedAt @map("updated_at")
+  id           String    @id @default(cuid())
+  tenantId     String    @map("tenant_id")
+  kind         String // "onboarding" | future lifecycle kinds
+  dedupeKey    String    @map("dedupe_key") // stable per logical nudge, e.g. "onboarding_next_step"
+  scheduledFor DateTime  @map("scheduled_for")
+  status       String    @default("PENDING") // PENDING | SENT | CANCELLED | SKIPPED | FAILED
+  channel      String    @default("email") // email | in_app | both
+  attempts     Int       @default(0)
+  lastError    String?   @map("last_error")
+  sentAt       DateTime? @map("sent_at")
+  payload      Json? // optional context for content computation / templating
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -1021,22 +1120,6 @@ model KnowledgeChunk {
 
 // ─── Token Usage Logs ────────────────────────────────────────
 
-// ─── Magic Links (passwordless onboarding) ──────────────────
-
-model MagicLink {
-  id        String    @id @default(cuid())
-  token     String    @unique
-  tenantId  String    @map("tenant_id")
-  userId    String    @map("user_id")
-  expiresAt DateTime  @map("expires_at")
-  usedAt    DateTime? @map("used_at")
-  createdAt DateTime  @default(now()) @map("created_at")
-
-  @@index([token])
-  @@index([tenantId])
-  @@map("magic_links")
-}
-
 // ─── Lead Status ────────────────────────────────────────────
 
 enum LeadStatus {
@@ -1069,21 +1152,6 @@ model WaitlistEntry {
   @@index([status])
   @@index([email])
   @@map("waitlist_entries")
-}
-
-// ─── Refresh Tokens ─────────────────────────────────────────
-
-model RefreshToken {
-  id        String   @id @default(cuid())
-  token     String   @unique
-  userId    String   @map("user_id")
-  tenantId  String   @map("tenant_id")
-  expiresAt DateTime @map("expires_at")
-  createdAt DateTime @default(now()) @map("created_at")
-
-  @@index([token])
-  @@index([userId])
-  @@map("refresh_tokens")
 }
 
 // ─── Integration Catalog (system-wide, not per-tenant) ──────
@@ -1366,14 +1434,14 @@ enum ApprovalStatus {
 // ─── Agent Tool Permissions ─────────────────────────────────
 
 model AgentToolPermission {
-  id              String   @id @default(cuid())
-  tenantId        String   @map("tenant_id")
-  departmentId    String?  @map("department_id")
-  agentId         String?  @map("agent_id") // human agent (User) ID
-  aiAgentId       String?  @map("ai_agent_id") // AI agent ID
-  tenantToolId    String   @map("tenant_tool_id")
-  isAllowed       Boolean  @default(true) @map("is_allowed")
-  requireApproval Boolean  @default(false) @map("require_approval")
+  id              String  @id @default(cuid())
+  tenantId        String  @map("tenant_id")
+  departmentId    String? @map("department_id")
+  agentId         String? @map("agent_id") // human agent (User) ID
+  aiAgentId       String? @map("ai_agent_id") // AI agent ID
+  tenantToolId    String  @map("tenant_tool_id")
+  isAllowed       Boolean @default(true) @map("is_allowed")
+  requireApproval Boolean @default(false) @map("require_approval")
 
   // Per-agent tool SEMANTICS (Tier 2). Override what the tool MEANS to
   // THIS agent - e.g. the same `create_task` is "schedule SDR callback"
@@ -1383,8 +1451,8 @@ model AgentToolPermission {
   description String? @db.Text // what this tool does FOR THIS AGENT
   usageRule   String? @map("usage_rule") @db.Text // when to use / preconditions / forbidden contexts for THIS AGENT
 
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
 
   tenantTool TenantTool  @relation(fields: [tenantToolId], references: [id], onDelete: Cascade)
   department Department? @relation(fields: [departmentId], references: [id], onDelete: Cascade)
@@ -2043,18 +2111,18 @@ model BillableEntityTenant {
 // ─── Plan & Pricing Catalog ────────────────────────────────
 
 model Plan {
-  id             String          @id @default(cuid())
-  key            String // light | pro | business | enterprise | grandfathered
-  name           String
-  version        Int             @default(1)
+  id              String          @id @default(cuid())
+  key             String // light | pro | business | enterprise | grandfathered
+  name            String
+  version         Int             @default(1)
   billingInterval BillingInterval @default(MONTHLY) @map("billing_interval")
-  basePrice      Decimal?        @map("base_price") @db.Decimal(12, 2) // null for sales-only / grandfathered
-  currency       String          @default("ILS")
-  includedAiUnits Int            @default(0) @map("included_ai_units")
-  salesOnly      Boolean         @default(false) @map("sales_only") // Enterprise = true (no public price)
-  active         Boolean         @default(true)
-  createdAt      DateTime        @default(now()) @map("created_at")
-  updatedAt      DateTime        @updatedAt @map("updated_at")
+  basePrice       Decimal?        @map("base_price") @db.Decimal(12, 2) // null for sales-only / grandfathered
+  currency        String          @default("ILS")
+  includedAiUnits Int             @default(0) @map("included_ai_units")
+  salesOnly       Boolean         @default(false) @map("sales_only") // Enterprise = true (no public price)
+  active          Boolean         @default(true)
+  createdAt       DateTime        @default(now()) @map("created_at")
+  updatedAt       DateTime        @updatedAt @map("updated_at")
 
   entitlements PlanEntitlement[]
 
@@ -2064,12 +2132,12 @@ model Plan {
 }
 
 model PlanEntitlement {
-  id            String               @id @default(cuid())
-  planId        String               @map("plan_id")
-  entitlementKey String              @map("entitlement_key") // license key OR limit key
-  valueType     EntitlementValueType @map("value_type")
-  value         Json // { bool } | { count } | arbitrary config
-  createdAt     DateTime             @default(now()) @map("created_at")
+  id             String               @id @default(cuid())
+  planId         String               @map("plan_id")
+  entitlementKey String               @map("entitlement_key") // license key OR limit key
+  valueType      EntitlementValueType @map("value_type")
+  value          Json // { bool } | { count } | arbitrary config
+  createdAt      DateTime             @default(now()) @map("created_at")
 
   plan Plan @relation(fields: [planId], references: [id], onDelete: Cascade)
 
@@ -2079,15 +2147,15 @@ model PlanEntitlement {
 }
 
 model CreditPackage {
-  id              String   @id @default(cuid())
-  key             String   @unique
-  name            String
-  units           Int
-  price           Decimal  @db.Decimal(12, 2)
-  currency        String   @default("ILS")
-  providerPriceRef String? @map("provider_price_ref")
-  active          Boolean  @default(true)
-  createdAt       DateTime @default(now()) @map("created_at")
+  id               String   @id @default(cuid())
+  key              String   @unique
+  name             String
+  units            Int
+  price            Decimal  @db.Decimal(12, 2)
+  currency         String   @default("ILS")
+  providerPriceRef String?  @map("provider_price_ref")
+  active           Boolean  @default(true)
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@map("credit_packages")
 }
@@ -2097,33 +2165,33 @@ model CreditPackage {
 // data change only (no code). Versioned by effectiveFrom (newest active wins).
 
 model BillableModel {
-  id                  String    @id @default(cuid())
-  model               String // e.g. "gpt-5-mini"
-  provider            String    @default("openai")
-  kind                String    @default("CHAT") // CHAT | EMBEDDING | VOICE | DEEP_RESEARCH
-  inputCostPer1M      Decimal   @map("input_cost_per_1m") @db.Decimal(12, 6)
-  outputCostPer1M     Decimal   @map("output_cost_per_1m") @db.Decimal(12, 6)
+  id                   String   @id @default(cuid())
+  model                String // e.g. "gpt-5-mini"
+  provider             String   @default("openai")
+  kind                 String   @default("CHAT") // CHAT | EMBEDDING | VOICE | DEEP_RESEARCH
+  inputCostPer1M       Decimal  @map("input_cost_per_1m") @db.Decimal(12, 6)
+  outputCostPer1M      Decimal  @map("output_cost_per_1m") @db.Decimal(12, 6)
   cachedInputCostPer1M Decimal? @map("cached_input_cost_per_1m") @db.Decimal(12, 6)
-  categoryMultiplier  Decimal   @default(1) @map("category_multiplier") @db.Decimal(8, 4) // voice 2x, deep-research 10x
-  active              Boolean   @default(true)
-  effectiveFrom       DateTime  @default(now()) @map("effective_from")
-  createdAt           DateTime  @default(now()) @map("created_at")
+  categoryMultiplier   Decimal  @default(1) @map("category_multiplier") @db.Decimal(8, 4) // voice 2x, deep-research 10x
+  active               Boolean  @default(true)
+  effectiveFrom        DateTime @default(now()) @map("effective_from")
+  createdAt            DateTime @default(now()) @map("created_at")
 
   @@index([model, active, effectiveFrom])
   @@map("billable_models")
 }
 
 model UnitPricingConfig {
-  id              String   @id @default(cuid())
+  id               String   @id @default(cuid())
   // The real provider cost (USD) that equals exactly 1 AI Unit (e.g. the cost
   // of 10k gpt-5-mini tokens @ 80/20). marginFactor scales cost→Units to set
   // commercial margin. Both are data so margin/cost changes never touch code.
   unitCostBasisUsd Decimal  @map("unit_cost_basis_usd") @db.Decimal(12, 8)
-  marginFactor    Decimal  @default(1) @map("margin_factor") @db.Decimal(8, 4)
-  currency        String   @default("USD")
-  active          Boolean  @default(true)
-  effectiveFrom   DateTime @default(now()) @map("effective_from")
-  createdAt       DateTime @default(now()) @map("created_at")
+  marginFactor     Decimal  @default(1) @map("margin_factor") @db.Decimal(8, 4)
+  currency         String   @default("USD")
+  active           Boolean  @default(true)
+  effectiveFrom    DateTime @default(now()) @map("effective_from")
+  createdAt        DateTime @default(now()) @map("created_at")
 
   @@index([active, effectiveFrom])
   @@map("unit_pricing_configs")
@@ -2135,17 +2203,17 @@ model UnitPricingConfig {
 // coexist without destroying each other.
 
 model TenantEntitlement {
-  id            String               @id @default(cuid())
-  tenantId      String               @map("tenant_id")
-  entitlementKey String              @map("entitlement_key")
-  valueType     EntitlementValueType @map("value_type")
-  value         Json
-  source        EntitlementSource
-  expiresAt     DateTime?            @map("expires_at") // temporary features (beta/promo/trial)
-  reason        String?
-  createdBy     String?              @map("created_by")
-  createdAt     DateTime             @default(now()) @map("created_at")
-  updatedAt     DateTime             @updatedAt @map("updated_at")
+  id             String               @id @default(cuid())
+  tenantId       String               @map("tenant_id")
+  entitlementKey String               @map("entitlement_key")
+  valueType      EntitlementValueType @map("value_type")
+  value          Json
+  source         EntitlementSource
+  expiresAt      DateTime?            @map("expires_at") // temporary features (beta/promo/trial)
+  reason         String?
+  createdBy      String?              @map("created_by")
+  createdAt      DateTime             @default(now()) @map("created_at")
+  updatedAt      DateTime             @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -2160,17 +2228,17 @@ model TenantEntitlement {
 // expires, FIFO). Balance = Σ ledger, reconcilable against lot.unitsRemaining.
 
 model AiUnitLot {
-  id            String          @id @default(cuid())
-  tenantId      String          @map("tenant_id")
-  bucket        AiUnitBucket
-  grantType     AiUnitGrantType @map("grant_type")
-  unitsGranted  Decimal         @map("units_granted") @db.Decimal(16, 6)
-  unitsRemaining Decimal        @map("units_remaining") @db.Decimal(16, 6)
-  periodKey     String?         @map("period_key") // INCLUDED only - the billing period this allotment belongs to
-  expiresAt     DateTime?       @map("expires_at") // INCLUDED → period end; PURCHASED → null
-  source        String? // "plan:pro" | "package:5000" | "promo:launch" | "auto"
-  referenceId   String?         @map("reference_id") // invoice / order / subscription id
-  createdAt     DateTime        @default(now()) @map("created_at")
+  id             String          @id @default(cuid())
+  tenantId       String          @map("tenant_id")
+  bucket         AiUnitBucket
+  grantType      AiUnitGrantType @map("grant_type")
+  unitsGranted   Decimal         @map("units_granted") @db.Decimal(16, 6)
+  unitsRemaining Decimal         @map("units_remaining") @db.Decimal(16, 6)
+  periodKey      String?         @map("period_key") // INCLUDED only - the billing period this allotment belongs to
+  expiresAt      DateTime?       @map("expires_at") // INCLUDED → period end; PURCHASED → null
+  source         String? // "plan:pro" | "package:5000" | "promo:launch" | "auto"
+  referenceId    String?         @map("reference_id") // invoice / order / subscription id
+  createdAt      DateTime        @default(now()) @map("created_at")
 
   tenant  Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   entries AiUnitLedgerEntry[]
@@ -2205,12 +2273,12 @@ model AiUnitLedgerEntry {
 // Materialized snapshot for the hot-path pre-flight gate + UI. Derived from the
 // ledger/lots; kept in sync transactionally. Shows INCLUDED vs PURCHASED apart.
 model TenantAiBalance {
-  tenantId          String   @id @map("tenant_id")
-  includedRemaining Decimal  @default(0) @map("included_remaining") @db.Decimal(16, 6)
-  purchasedRemaining Decimal @default(0) @map("purchased_remaining") @db.Decimal(16, 6)
-  includedAllowance Decimal  @default(0) @map("included_allowance") @db.Decimal(16, 6) // current plan's monthly grant (for % calc)
-  periodKey         String?  @map("period_key")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  tenantId           String   @id @map("tenant_id")
+  includedRemaining  Decimal  @default(0) @map("included_remaining") @db.Decimal(16, 6)
+  purchasedRemaining Decimal  @default(0) @map("purchased_remaining") @db.Decimal(16, 6)
+  includedAllowance  Decimal  @default(0) @map("included_allowance") @db.Decimal(16, 6) // current plan's monthly grant (for % calc)
+  periodKey          String?  @map("period_key")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
@@ -2220,16 +2288,16 @@ model TenantAiBalance {
 // ─── Money primitives (keyed by billableEntityId) ──────────
 
 model BillingProfile {
-  id                String               @id @default(cuid())
-  billableEntityId  String               @unique @map("billable_entity_id")
-  provider          BillingProvider      @default(ICOUNT)
-  providerCustomerId String?             @map("provider_customer_id")
-  currency          String               @default("ILS")
-  billingEmail      String?              @map("billing_email")
-  vatId             String?              @map("vat_id")
-  status            BillingProfileStatus @default(ACTIVE)
-  createdAt         DateTime             @default(now()) @map("created_at")
-  updatedAt         DateTime             @updatedAt @map("updated_at")
+  id                 String               @id @default(cuid())
+  billableEntityId   String               @unique @map("billable_entity_id")
+  provider           BillingProvider      @default(ICOUNT)
+  providerCustomerId String?              @map("provider_customer_id")
+  currency           String               @default("ILS")
+  billingEmail       String?              @map("billing_email")
+  vatId              String?              @map("vat_id")
+  status             BillingProfileStatus @default(ACTIVE)
+  createdAt          DateTime             @default(now()) @map("created_at")
+  updatedAt          DateTime             @updatedAt @map("updated_at")
 
   entity         BillableEntity  @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
   paymentMethods PaymentMethod[]
@@ -2238,19 +2306,19 @@ model BillingProfile {
 }
 
 model PaymentMethod {
-  id              String              @id @default(cuid())
-  billingProfileId String             @map("billing_profile_id")
-  provider        BillingProvider     @default(ICOUNT)
+  id               String              @id @default(cuid())
+  billingProfileId String              @map("billing_profile_id")
+  provider         BillingProvider     @default(ICOUNT)
   // Tokenized reference only - raw PAN is NEVER stored (iCount is the PCI vault).
-  token           String
-  brand           String?
-  last4           String?
-  expMonth        Int?                @map("exp_month")
-  expYear         Int?                @map("exp_year")
-  isDefault       Boolean             @default(false) @map("is_default")
-  status          PaymentMethodStatus @default(ACTIVE)
-  createdAt       DateTime            @default(now()) @map("created_at")
-  updatedAt       DateTime            @updatedAt @map("updated_at")
+  token            String
+  brand            String?
+  last4            String?
+  expMonth         Int?                @map("exp_month")
+  expYear          Int?                @map("exp_year")
+  isDefault        Boolean             @default(false) @map("is_default")
+  status           PaymentMethodStatus @default(ACTIVE)
+  createdAt        DateTime            @default(now()) @map("created_at")
+  updatedAt        DateTime            @updatedAt @map("updated_at")
 
   profile BillingProfile @relation(fields: [billingProfileId], references: [id], onDelete: Cascade)
 
@@ -2259,22 +2327,22 @@ model PaymentMethod {
 }
 
 model Subscription {
-  id                 String             @id @default(cuid())
-  billableEntityId   String             @unique @map("billable_entity_id") // V1: one active subscription per entity
-  billingProfileId   String?            @map("billing_profile_id")
-  planKey            String             @map("plan_key")
-  planVersion        Int                @default(1) @map("plan_version")
-  status             SubscriptionStatus @default(PENDING)
+  id                      String             @id @default(cuid())
+  billableEntityId        String             @unique @map("billable_entity_id") // V1: one active subscription per entity
+  billingProfileId        String?            @map("billing_profile_id")
+  planKey                 String             @map("plan_key")
+  planVersion             Int                @default(1) @map("plan_version")
+  status                  SubscriptionStatus @default(PENDING)
   // When false (GRANDFATHERED), the AI runtime gate is skipped and no billing
   // runs. NOT an infinite-units balance - financial state stays deterministic.
-  enforcementEnabled Boolean            @default(true) @map("enforcement_enabled")
-  trialEndsAt        DateTime?          @map("trial_ends_at")
-  currentPeriodStart DateTime?          @map("current_period_start")
-  currentPeriodEnd   DateTime?          @map("current_period_end")
-  cancelAtPeriodEnd  Boolean            @default(false) @map("cancel_at_period_end")
-  providerSubscriptionRef String?       @map("provider_subscription_ref")
-  createdAt          DateTime           @default(now()) @map("created_at")
-  updatedAt          DateTime           @updatedAt @map("updated_at")
+  enforcementEnabled      Boolean            @default(true) @map("enforcement_enabled")
+  trialEndsAt             DateTime?          @map("trial_ends_at")
+  currentPeriodStart      DateTime?          @map("current_period_start")
+  currentPeriodEnd        DateTime?          @map("current_period_end")
+  cancelAtPeriodEnd       Boolean            @default(false) @map("cancel_at_period_end")
+  providerSubscriptionRef String?            @map("provider_subscription_ref")
+  createdAt               DateTime           @default(now()) @map("created_at")
+  updatedAt               DateTime           @updatedAt @map("updated_at")
 
   entity        BillableEntity             @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
   pendingChange PendingSubscriptionChange?
@@ -2288,15 +2356,15 @@ model Subscription {
 }
 
 model PendingSubscriptionChange {
-  id              String            @id @default(cuid())
-  subscriptionId  String            @unique @map("subscription_id")
-  changeType      PendingChangeType @map("change_type")
-  targetPlanKey   String?           @map("target_plan_key")
-  targetPlanVersion Int?            @map("target_plan_version")
-  effectiveAt     DateTime          @map("effective_at") // = currentPeriodEnd
-  createdBy       String?           @map("created_by")
-  createdAt       DateTime          @default(now()) @map("created_at")
-  appliedAt       DateTime?         @map("applied_at")
+  id                String            @id @default(cuid())
+  subscriptionId    String            @unique @map("subscription_id")
+  changeType        PendingChangeType @map("change_type")
+  targetPlanKey     String?           @map("target_plan_key")
+  targetPlanVersion Int?              @map("target_plan_version")
+  effectiveAt       DateTime          @map("effective_at") // = currentPeriodEnd
+  createdBy         String?           @map("created_by")
+  createdAt         DateTime          @default(now()) @map("created_at")
+  appliedAt         DateTime?         @map("applied_at")
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
@@ -2321,23 +2389,23 @@ model SubscriptionEvent {
 }
 
 model Invoice {
-  id               String        @id @default(cuid())
-  billableEntityId String        @map("billable_entity_id")
-  provider         BillingProvider @default(ICOUNT)
+  id                 String          @id @default(cuid())
+  billableEntityId   String          @map("billable_entity_id")
+  provider           BillingProvider @default(ICOUNT)
   // Reference to the iCount-issued legal tax document (חשבונית מס) - the
   // authoritative record. This row is a thin mirror for in-app display.
-  providerInvoiceRef String?     @map("provider_invoice_ref")
-  providerPdfUrl   String?       @map("provider_pdf_url")
-  type             InvoiceType
-  amount           Decimal       @db.Decimal(12, 2)
-  currency         String        @default("ILS")
-  vat              Decimal?      @db.Decimal(12, 2)
-  status           InvoiceStatus @default(DRAFT)
-  lineItems        Json?         @map("line_items")
-  issuedAt         DateTime?     @map("issued_at")
-  paidAt           DateTime?     @map("paid_at")
-  createdAt        DateTime      @default(now()) @map("created_at")
-  updatedAt        DateTime      @updatedAt @map("updated_at")
+  providerInvoiceRef String?         @map("provider_invoice_ref")
+  providerPdfUrl     String?         @map("provider_pdf_url")
+  type               InvoiceType
+  amount             Decimal         @db.Decimal(12, 2)
+  currency           String          @default("ILS")
+  vat                Decimal?        @db.Decimal(12, 2)
+  status             InvoiceStatus   @default(DRAFT)
+  lineItems          Json?           @map("line_items")
+  issuedAt           DateTime?       @map("issued_at")
+  paidAt             DateTime?       @map("paid_at")
+  createdAt          DateTime        @default(now()) @map("created_at")
+  updatedAt          DateTime        @updatedAt @map("updated_at")
 
   entity  BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
   charges Charge[]
@@ -2348,17 +2416,17 @@ model Invoice {
 }
 
 model Charge {
-  id              String       @id @default(cuid())
-  invoiceId       String       @map("invoice_id")
-  provider        BillingProvider @default(ICOUNT)
-  providerChargeRef String?    @map("provider_charge_ref")
-  amount          Decimal      @db.Decimal(12, 2)
-  currency        String       @default("ILS")
-  status          ChargeStatus @default(PENDING)
-  attemptNumber   Int          @default(1) @map("attempt_number")
-  failureCode     String?      @map("failure_code")
-  idempotencyKey  String       @unique @map("idempotency_key")
-  createdAt       DateTime     @default(now()) @map("created_at")
+  id                String          @id @default(cuid())
+  invoiceId         String          @map("invoice_id")
+  provider          BillingProvider @default(ICOUNT)
+  providerChargeRef String?         @map("provider_charge_ref")
+  amount            Decimal         @db.Decimal(12, 2)
+  currency          String          @default("ILS")
+  status            ChargeStatus    @default(PENDING)
+  attemptNumber     Int             @default(1) @map("attempt_number")
+  failureCode       String?         @map("failure_code")
+  idempotencyKey    String          @unique @map("idempotency_key")
+  createdAt         DateTime        @default(now()) @map("created_at")
 
   invoice Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
@@ -2367,19 +2435,19 @@ model Charge {
 }
 
 model AutoPurchasePolicy {
-  id               String   @id @default(cuid())
-  billableEntityId String   @unique @map("billable_entity_id")
-  enabled          Boolean  @default(false)
-  thresholdPct     Int      @default(10) @map("threshold_pct") // trigger when remaining <= this % of allowance
-  packageKey       String?  @map("package_key")
-  maxMonthlySpend  Decimal? @map("max_monthly_spend") @db.Decimal(12, 2)
-  currency         String   @default("ILS")
-  monthSpendKey    String?  @map("month_spend_key") // current spend window (billing-cycle anchored)
-  monthSpentAmount Decimal  @default(0) @map("month_spent_amount") @db.Decimal(12, 2)
+  id               String    @id @default(cuid())
+  billableEntityId String    @unique @map("billable_entity_id")
+  enabled          Boolean   @default(false)
+  thresholdPct     Int       @default(10) @map("threshold_pct") // trigger when remaining <= this % of allowance
+  packageKey       String?   @map("package_key")
+  maxMonthlySpend  Decimal?  @map("max_monthly_spend") @db.Decimal(12, 2)
+  currency         String    @default("ILS")
+  monthSpendKey    String?   @map("month_spend_key") // current spend window (billing-cycle anchored)
+  monthSpentAmount Decimal   @default(0) @map("month_spent_amount") @db.Decimal(12, 2)
   lastTriggeredAt  DateTime? @map("last_triggered_at")
-  updatedBy        String?  @map("updated_by")
-  createdAt        DateTime @default(now()) @map("created_at")
-  updatedAt        DateTime @updatedAt @map("updated_at")
+  updatedBy        String?   @map("updated_by")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
 
   entity BillableEntity @relation(fields: [billableEntityId], references: [id], onDelete: Cascade)
 
@@ -2387,14 +2455,14 @@ model AutoPurchasePolicy {
 }
 
 model DunningState {
-  id             String    @id @default(cuid())
-  subscriptionId String    @unique @map("subscription_id")
-  stage          Int       @default(0)
-  nextRetryAt    DateTime? @map("next_retry_at")
-  attempts       Int       @default(0)
-  lastFailureCode String?  @map("last_failure_code")
-  createdAt      DateTime  @default(now()) @map("created_at")
-  updatedAt      DateTime  @updatedAt @map("updated_at")
+  id              String    @id @default(cuid())
+  subscriptionId  String    @unique @map("subscription_id")
+  stage           Int       @default(0)
+  nextRetryAt     DateTime? @map("next_retry_at")
+  attempts        Int       @default(0)
+  lastFailureCode String?   @map("last_failure_code")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
 
   subscription Subscription @relation(fields: [subscriptionId], references: [id], onDelete: Cascade)
 
@@ -2432,27 +2500,27 @@ model BillingWebhookEvent {
 // be replayed against the exact same inputs. NEVER stores provider-specific
 // request/response - that stays behind the ReasonerProvider boundary.
 model ReasonerShadowEval {
-  id             String   @id @default(cuid())
-  schemaVersion  Int      @default(1) @map("schema_version")
-  createdAt      DateTime @default(now()) @map("created_at")
+  id            String   @id @default(cuid())
+  schemaVersion Int      @default(1) @map("schema_version")
+  createdAt     DateTime @default(now()) @map("created_at")
 
-  tenantId       String   @map("tenant_id")
-  conversationId String   @map("conversation_id")
-  turnId         String   @map("turn_id")
-  agentId        String?  @map("agent_id")
+  tenantId       String  @map("tenant_id")
+  conversationId String  @map("conversation_id")
+  turnId         String  @map("turn_id")
+  agentId        String? @map("agent_id")
 
   /// Replayable, provider-neutral input (Facts + Context + Memory).
-  reasonerInput  Json     @map("reasoner_input")
+  reasonerInput Json @map("reasoner_input")
 
   /// Both decisions in the ONE canonical vocabulary.
-  plannerDecision  Json   @map("planner_decision")
-  reasonerDecision Json   @map("reasoner_decision")
+  plannerDecision  Json @map("planner_decision")
+  reasonerDecision Json @map("reasoner_decision")
 
   /// Agreement classification.
   agree          Boolean
-  moveTypeMatch  Boolean  @map("move_type_match")
-  detailMatch    Boolean  @map("detail_match")
-  divergenceAxis String   @map("divergence_axis") // none | move_type | operation | field
+  moveTypeMatch  Boolean @map("move_type_match")
+  detailMatch    Boolean @map("detail_match")
+  divergenceAxis String  @map("divergence_axis") // none | move_type | operation | field
 
   /// Live-turn correlation (the Planner drove production; nullable/backfilled).
   executedOperation    String? @map("executed_operation")
@@ -2462,10 +2530,10 @@ model ReasonerShadowEval {
   /// Provenance / eval axes (provider-neutral).
   provider      String
   model         String
-  promptVersion String  @map("prompt_version")
-  latencyMs     Int?    @map("latency_ms")
-  inputTokens   Int?    @map("input_tokens")
-  outputTokens  Int?    @map("output_tokens")
+  promptVersion String @map("prompt_version")
+  latencyMs     Int?   @map("latency_ms")
+  inputTokens   Int?   @map("input_tokens")
+  outputTokens  Int?   @map("output_tokens")
 
   /// Untrusted reasoning rationale (audit/eval only).
   reasoningTrace String? @map("reasoning_trace")
@@ -2485,35 +2553,35 @@ model ReasonerShadowEval {
 // saw). Additive + flag-gated; the legacy Planner remains production.
 
 model AgentLoopRun {
-  id                String   @id @default(cuid())
-  loopId            String   @unique @map("loop_id")
-  createdAt         DateTime @default(now()) @map("created_at")
+  id        String   @id @default(cuid())
+  loopId    String   @unique @map("loop_id")
+  createdAt DateTime @default(now()) @map("created_at")
 
-  tenantId          String   @map("tenant_id")
-  conversationId    String   @map("conversation_id")
-  turnId            String   @map("turn_id")
-  agentId           String?  @map("agent_id")
+  tenantId       String  @map("tenant_id")
+  conversationId String  @map("conversation_id")
+  turnId         String  @map("turn_id")
+  agentId        String? @map("agent_id")
 
   /// The business outcome the loop drove toward.
   goal              String?
   /// Exactly one TerminationReason (finish/need_input/escalate/max_iterations/…).
-  terminationReason String   @map("termination_reason")
-  iterationCount    Int      @map("iteration_count")
-  spentUnits        Int      @map("spent_units")
-  wallMs            Int      @map("wall_ms")
+  terminationReason String  @map("termination_reason")
+  iterationCount    Int     @map("iteration_count")
+  spentUnits        Int     @map("spent_units")
+  wallMs            Int     @map("wall_ms")
   /// advisory | autonomous
   mode              String
 
-  finalDecision     Json     @map("final_decision")
-  finalReplyIntent  Json     @map("final_reply_intent")
+  finalDecision    Json    @map("final_decision")
+  finalReplyIntent Json    @map("final_reply_intent")
   /// The single customer-facing message the Writer produced.
-  reply             String?
+  reply            String?
 
-  provider          String
-  model             String
-  promptVersion     String   @map("prompt_version")
+  provider      String
+  model         String
+  promptVersion String @map("prompt_version")
 
-  iterations        AgentLoopIteration[]
+  iterations AgentLoopIteration[]
 
   @@index([tenantId, createdAt])
   @@index([conversationId])
@@ -2523,36 +2591,36 @@ model AgentLoopRun {
 }
 
 model AgentLoopIteration {
-  id                  String   @id @default(cuid())
-  createdAt           DateTime @default(now()) @map("created_at")
+  id        String   @id @default(cuid())
+  createdAt DateTime @default(now()) @map("created_at")
 
-  loopId              String   @map("loop_id")
-  run                 AgentLoopRun @relation(fields: [loopId], references: [loopId], onDelete: Cascade)
+  loopId String       @map("loop_id")
+  run    AgentLoopRun @relation(fields: [loopId], references: [loopId], onDelete: Cascade)
 
-  tenantId            String   @map("tenant_id")
-  conversationId      String   @map("conversation_id")
-  iteration           Int
+  tenantId       String @map("tenant_id")
+  conversationId String @map("conversation_id")
+  iteration      Int
 
   goal                String?
   /// Provider-neutral Facts snapshot the Reasoner saw this iteration (replayable).
-  oracleFactsSnapshot Json     @map("oracle_facts_snapshot")
+  oracleFactsSnapshot Json    @map("oracle_facts_snapshot")
   /// Short WHY from the Reasoner read (situation/rationale) - audit only.
-  reasoningSummary    String   @map("reasoning_summary")
+  reasoningSummary    String  @map("reasoning_summary")
 
-  decisionType        String   @map("decision_type")
-  proposedOperation   String?  @map("proposed_operation")
-  proposedParams      Json?    @map("proposed_params")
+  decisionType      String   @map("decision_type")
+  proposedOperation String?  @map("proposed_operation")
+  proposedParams    Json?    @map("proposed_params")
   /// ExecutionResult status if an operation ran (EXECUTED/NEEDS_INPUT/FAILED/…).
-  runtimeResult       String?  @map("runtime_result")
+  runtimeResult     String?  @map("runtime_result")
   /// Neutral Observation projection (status/outcome/reason/invariants).
-  observation         Json?
+  observation       Json?
   /// Goal-relevant Facts signature - powers goal-based progress detection.
-  factsSignature      String?  @map("facts_signature")
-  progressed          Boolean?
+  factsSignature    String?  @map("facts_signature")
+  progressed        Boolean?
 
-  inputTokens         Int?     @map("input_tokens")
-  outputTokens        Int?     @map("output_tokens")
-  latencyMs           Int?     @map("latency_ms")
+  inputTokens  Int? @map("input_tokens")
+  outputTokens Int? @map("output_tokens")
+  latencyMs    Int? @map("latency_ms")
 
   @@unique([loopId, iteration])
   @@index([tenantId, createdAt])
@@ -3160,9 +3228,9 @@ model VoiceCallSession {
   // any browser context) still clears the inbox correctly.
   handledAt       DateTime?  @map("handled_at")
 
-  tenant         Tenant                   @relation(fields: [tenantId], references: [id], onDelete: Cascade)
-  conversation   Conversation             @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  channel        CommunicationChannel?    @relation(fields: [channelId], references: [id])
+  tenant         Tenant                    @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  conversation   Conversation              @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  channel        CommunicationChannel?     @relation(fields: [channelId], references: [id])
   postProcessing VoiceCallPostProcessing?
   actionItems    VoiceCallActionItem[]
   participants   VoiceSessionParticipant[]
@@ -3200,29 +3268,29 @@ enum VoiceParticipantStatus {
 }
 
 model VoiceSessionParticipant {
-  id            String                 @id @default(cuid())
-  sessionId     String                 @map("session_id")
-  role          VoiceParticipantRole
-  status        VoiceParticipantStatus @default(DIALING)
+  id          String                 @id @default(cuid())
+  sessionId   String                 @map("session_id")
+  role        VoiceParticipantRole
+  status      VoiceParticipantStatus @default(DIALING)
   // Provider leg SID (Twilio CallSid). Null until participant-join fires
   // for ADDED rows (we dial first, learn the SID from the webhook).
-  callSid       String?                @map("call_sid")
+  callSid     String?                @map("call_sid")
   // Free-form display label. For ADDED rows this is the label passed to
   // add-participant (used to match the webhook back to this row). For
   // AGENT/CUSTOMER rows it's a stable identifier ("agent"/"customer").
-  label         String?
-  phoneNumber   String?                @map("phone_number")
-  displayName   String?                @map("display_name")
+  label       String?
+  phoneNumber String?                @map("phone_number")
+  displayName String?                @map("display_name")
   // Optional FK to a Contact in this tenant matched by phone at
   // participant-join time. Drives multi-contact summary attribution.
-  contactId     String?                @map("contact_id")
+  contactId   String?                @map("contact_id")
   // Whisper/consult mode: true when the leg is parked on hold music.
-  onHold        Boolean                @default(false) @map("on_hold")
-  joinedAt      DateTime?              @map("joined_at")
-  leftAt        DateTime?              @map("left_at")
-  endReason     String?                @map("end_reason")
-  createdAt     DateTime               @default(now()) @map("created_at")
-  updatedAt     DateTime               @updatedAt @map("updated_at")
+  onHold      Boolean                @default(false) @map("on_hold")
+  joinedAt    DateTime?              @map("joined_at")
+  leftAt      DateTime?              @map("left_at")
+  endReason   String?                @map("end_reason")
+  createdAt   DateTime               @default(now()) @map("created_at")
+  updatedAt   DateTime               @updatedAt @map("updated_at")
 
   session VoiceCallSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
   contact Contact?         @relation(fields: [contactId], references: [id], onDelete: SetNull)
@@ -3692,40 +3760,40 @@ model VoiceCallActionItem {
 // Locale stored explicitly so a tenant with Hebrew + English agents gets one
 // brief per language without re-asking the LLM each time.
 model CustomerBrief {
-  id                String   @id @default(cuid())
-  tenantId          String   @map("tenant_id")
+  id       String @id @default(cuid())
+  tenantId String @map("tenant_id")
 
-  identityKey       String   @map("identity_key")
-  personId          String?  @map("person_id")
-  crmContactId     String?  @map("crm_contact_id")
-  crmObjectKind     String?  @map("crm_object_kind")
-  contactId         String?  @map("contact_id")
+  identityKey   String  @map("identity_key")
+  personId      String? @map("person_id")
+  crmContactId  String? @map("crm_contact_id")
+  crmObjectKind String? @map("crm_object_kind")
+  contactId     String? @map("contact_id")
 
-  locale            String   @default("en")
+  locale String @default("en")
 
   // Headline behavioral briefing (3-5 sentences). Plain prose, agent-facing.
-  brief             String
+  brief String
 
   // Short "things to keep in mind RIGHT NOW" phrases (≤5 items).
-  signals           Json     @default("[]")
+  signals Json @default("[]")
 
   // Behavioral tags - nullable so the LLM can omit when it lacks signal.
-  tone              String?
-  mood              String?
+  tone                 String?
+  mood                 String?
   // Free-form list of recommended behaviors for THIS customer (e.g.
   // "lead with empathy", "skip small talk", "confirm next step in writing").
-  recommendedBehaviors Json  @default("[]") @map("recommended_behaviors")
+  recommendedBehaviors Json    @default("[]") @map("recommended_behaviors")
 
   // Provenance - what the brief is summarizing.
-  channels          Json     @default("[]")
-  conversationCount Int      @default(0) @map("conversation_count")
-  lastSourceChannel String?  @map("last_source_channel")
-  lastSourceConvId  String?  @map("last_source_conv_id")
-  lastSourceEvent   String?  @map("last_source_event")
+  channels          Json    @default("[]")
+  conversationCount Int     @default(0) @map("conversation_count")
+  lastSourceChannel String? @map("last_source_channel")
+  lastSourceConvId  String? @map("last_source_conv_id")
+  lastSourceEvent   String? @map("last_source_event")
 
-  generatedAt       DateTime @default(now()) @map("generated_at")
-  createdAt         DateTime @default(now()) @map("created_at")
-  updatedAt         DateTime @updatedAt @map("updated_at")
+  generatedAt DateTime @default(now()) @map("generated_at")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@unique([tenantId, identityKey, locale])
   @@index([tenantId])
@@ -3782,7 +3850,7 @@ model CopilotCueOutcome {
 model TenantFeature {
   id        String   @id @default(cuid())
   tenantId  String   @map("tenant_id")
-  feature   String   // matches FEATURES key
+  feature   String // matches FEATURES key
   enabled   Boolean  @default(false)
   // Optional feature-specific config (e.g. auto-buy spending limits).
   config    Json?
@@ -3799,22 +3867,22 @@ model TenantFeature {
 }
 
 model TenantRole {
-  id          String   @id @default(cuid())
-  tenantId    String   @map("tenant_id")
-  name        String
-  description String?
+  id           String          @id @default(cuid())
+  tenantId     String          @map("tenant_id")
+  name         String
+  description  String?
   // System-managed roles (e.g. seeded "Default Agent") cannot be deleted
   // by tenant admins. Custom roles created by the tenant admin can.
-  isSystem    Boolean  @default(false) @map("is_system")
+  isSystem     Boolean         @default(false) @map("is_system")
   // Stable key for built-in roles (owner|admin|department_manager|agent).
   // NULL for tenant-created custom roles. Lets the resolver/seed identify
   // built-ins without matching on the (localizable) display name.
-  builtinKey  String?  @map("builtin_key")
+  builtinKey   String?         @map("builtin_key")
   // Default data-reach for users assigned this role. Overridable per
   // assignment (UserRoleAssignment.scope).
   defaultScope PermissionScope @default(OWN) @map("default_scope")
-  createdAt   DateTime @default(now()) @map("created_at")
-  updatedAt   DateTime @updatedAt @map("updated_at")
+  createdAt    DateTime        @default(now()) @map("created_at")
+  updatedAt    DateTime        @updatedAt @map("updated_at")
 
   tenant      Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   features    TenantRoleFeature[]
@@ -3827,7 +3895,7 @@ model TenantRole {
 
 model TenantRoleFeature {
   roleId    String   @map("role_id")
-  feature   String   // matches FEATURES key
+  feature   String // matches FEATURES key
   createdAt DateTime @default(now()) @map("created_at")
 
   role TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -3838,12 +3906,12 @@ model TenantRoleFeature {
 }
 
 model UserRoleAssignment {
-  userId     String   @map("user_id")
-  roleId     String   @map("role_id")
+  userId     String           @map("user_id")
+  roleId     String           @map("role_id")
   // Per-assignment scope override. NULL = inherit the role's defaultScope.
   scope      PermissionScope? @map("scope")
-  assignedAt DateTime @default(now()) @map("assigned_at")
-  assignedBy String?  @map("assigned_by")
+  assignedAt DateTime         @default(now()) @map("assigned_at")
+  assignedBy String?          @map("assigned_by")
 
   user User       @relation(fields: [userId], references: [id], onDelete: Cascade)
   role TenantRole @relation(fields: [roleId], references: [id], onDelete: Cascade)
@@ -3856,7 +3924,7 @@ model UserRoleAssignment {
 model UserFeatureGrant {
   id        String   @id @default(cuid())
   userId    String   @map("user_id")
-  feature   String   // matches FEATURES key
+  feature   String // matches FEATURES key
   // true  = explicit grant (overrides "no role grant")
   // false = explicit revoke (overrides "role grants this")
   granted   Boolean
@@ -3981,7 +4049,7 @@ model Opportunity {
   nextAction        String?           @map("next_action")
 
   // Denormalized snapshot of OPPORTUNITY-scope facts: { fieldKey: value }.
-  facts Json @default("{}")
+  facts         Json @default("{}")
   // Cross-entity edges (implicit graph): decision_maker, proposed_entity, …
   relationships Json @default("{}")
 
@@ -4023,32 +4091,32 @@ model IntelligencePack {
 // Per-tenant active schema registry. Each field declares the SCOPE it owns
 // (customer/opportunity/conversation) - the core anti-overwrite mechanic.
 model FieldDefinition {
-  id          String            @id @default(cuid())
-  tenantId    String            @map("tenant_id")
-  key         String // stable snake_case
-  label       String
-  description String?
-  type        FieldType         @default(TEXT)
-  scope       IntelligenceScope @default(OPPORTUNITY)
-  options     Json              @default("[]") // enum values
-  required    Boolean           @default(false)
+  id                  String            @id @default(cuid())
+  tenantId            String            @map("tenant_id")
+  key                 String // stable snake_case
+  label               String
+  description         String?
+  type                FieldType         @default(TEXT)
+  scope               IntelligenceScope @default(OPPORTUNITY)
+  options             Json              @default("[]") // enum values
+  required            Boolean           @default(false)
   // Few-shot extraction hints shown to the LLM: array of plain strings, e.g.
   // ["around 300 guests", "we're 250 people"]. Sharpen extraction accuracy.
-  examples       Json    @default("[]")
+  examples            Json              @default("[]")
   // Phrases that look similar but must NOT fill this field (optional). Kills
   // common false positives. Array of plain strings.
-  negativeExamples Json  @default("[]") @map("negative_examples")
+  negativeExamples    Json              @default("[]") @map("negative_examples")
   // Minimum extraction confidence (0-1) before a value is auto-applied. Below
   // this, the value is routed to the human-review queue instead of the CRM.
   // null → tenant/global default applies.
-  confidenceThreshold Float? @map("confidence_threshold")
+  confidenceThreshold Float?            @map("confidence_threshold")
   // Stages where the field is expected (Missing-Info engine).
-  stageRelevance Json    @default("[]") @map("stage_relevance")
-  aiExtract      Boolean @default(true) @map("ai_extract")
-  syncToCrm      Boolean @default(true) @map("sync_to_crm")
-  crmFieldMap    Json?   @map("crm_field_map")
-  origin         FieldOrigin @default(CUSTOM)
-  packSlug       String?     @map("pack_slug")
+  stageRelevance      Json              @default("[]") @map("stage_relevance")
+  aiExtract           Boolean           @default(true) @map("ai_extract")
+  syncToCrm           Boolean           @default(true) @map("sync_to_crm")
+  crmFieldMap         Json?             @map("crm_field_map")
+  origin              FieldOrigin       @default(CUSTOM)
+  packSlug            String?           @map("pack_slug")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -4114,9 +4182,9 @@ model IntelligenceReview {
   // Why it landed in review: "low_confidence" | "conflict" | "scope_review".
   reason        String
 
-  status     IntelligenceReviewStatus @default(PENDING)
-  source     FactSource
-  conversationId String? @map("conversation_id")
+  status         IntelligenceReviewStatus @default(PENDING)
+  source         FactSource
+  conversationId String?                  @map("conversation_id")
 
   resolvedAt DateTime? @map("resolved_at")
   resolvedBy String?   @map("resolved_by") // userId

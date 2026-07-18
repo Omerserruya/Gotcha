@@ -12,6 +12,8 @@ import {
   getRedis,
   encryptCredentials,
   decryptCredentials,
+  getOAuthStateSecret,
+  resolvePrincipal,
 } from "@chatcenter/shared";
 
 const router = Router();
@@ -22,7 +24,8 @@ const EMBEDDED_SIGNUP_CONFIG_ID = process.env.WHATSAPP_EMBEDDED_SIGNUP_CONFIG_ID
 const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || "";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // Instagram API with Instagram Login (direct IG Business connect - no Facebook Page).
 // These are the *Instagram* app credentials from the Meta App Dashboard
@@ -545,19 +548,25 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     return;
   }
 
-  let tokenPayload: any;
+  // This is a redirect from the frontend, so the token arrives as a query
+  // param instead of a Bearer header. Verify it the SAME way the rest of the
+  // app does - resolvePrincipal checks the Authentik RS256 signature via JWKS
+  // and resolves the local account - NOT jwt.verify() with the OAuth-state
+  // HMAC secret, which cannot validate an RS256 token and 401'd every real
+  // user after the Authentik migration.
+  let principal;
   try {
-    tokenPayload = jwt.verify(tokenParam, JWT_SECRET);
+    principal = await resolvePrincipal(tokenParam);
   } catch {
     res.status(401).json({ error: "Invalid token" });
     return;
   }
 
-  // Inject tenant/user context like middleware would
-  req.tenantId = tokenPayload.tenantId;
-  (req as any).userId = tokenPayload.userId;
+  // Inject tenant/user context like the authenticate middleware would.
+  req.tenantId = principal.tenantId;
+  (req as any).userId = principal.userId;
 
-  if (tokenPayload.role !== "ADMIN") {
+  if (principal.role !== "ADMIN") {
     res.status(403).json({ error: "Admin access required" });
     return;
   }
@@ -599,13 +608,13 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     const state = jwt.sign(
       {
         tenantId: req.tenantId!,
-        userId: tokenPayload.userId,
+        userId: principal.userId,
         platform,
         wabaId,        // From Embedded Signup popup session info
         phoneNumberId, // From Embedded Signup popup session info
         nonce: Math.random().toString(36).substring(2),
       },
-      JWT_SECRET,
+      OAUTH_STATE_SECRET,
       { expiresIn: "10m" }
     );
 
@@ -698,7 +707,7 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
     let statePayload: any;
     try {
       console.log("[OAUTH-CALLBACK] state param:", state);
-      statePayload = jwt.verify(state as string, JWT_SECRET);
+      statePayload = jwt.verify(state as string, OAUTH_STATE_SECRET);
     } catch (stateErr: any) {
       console.error("[OAUTH-CALLBACK] State JWT verify failed:", stateErr.message, "| state value:", state);
       res.redirect(`${frontendUrl}/channels?error=invalid_state`);

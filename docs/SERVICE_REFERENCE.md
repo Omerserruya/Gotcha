@@ -10,24 +10,15 @@ Detailed API reference and business logic for every service.
 
 | Method | Endpoint | Auth | Description |
 |--------|----------|------|-------------|
-| POST | `/register` | None | Register user (email, password, name, role, tenantSlug) |
-| POST | `/login` | None | Login with email/password/tenantSlug; returns JWT + user |
-| POST | `/verify-magic-link` | None | Verify passwordless magic link; transitions tenant status |
-| GET | `/me` | JWT | Get current authenticated user + department info |
+| GET | `/me` | Bearer (Authentik) | Get current authenticated user + department info |
 
-**Login Logic:**
-1. Find active user by email + tenantSlug
-2. Verify bcrypt password
-3. Get tenant status
-4. If ADMIN + status=PENDING_ADMIN_SETUP -> transition to PENDING_ONBOARDING
-5. Sign JWT with: userId, tenantId, role, email, departmentId, departmentRole
-6. Return `{token, user, tenantStatus}`
+There are no register/login/reset endpoints: sign-in happens at Authentik (OIDC Authorization Code + PKCE in the browser). Services verify the resulting RS256 access token against Authentik's JWKS (`packages/shared/src/lib/jwt.ts`, no signing path) and resolve `sub` to `User.authentikSubject` via `resolvePrincipal`.
 
-**Magic Link Logic:**
-1. Find MagicLink by token
-2. Validate: not used, not expired (48h)
-3. Mark as used
-4. If ADMIN + PENDING_ADMIN_SETUP -> transition to PENDING_ONBOARDING
+**Sign-in Logic (Authentik):**
+1. Browser is redirected to Authentik and authenticates there (password, MFA, recovery all Authentik-owned)
+2. The callback exchanges the code for tokens; every API call carries the Authentik access token
+3. `authenticate()` middleware verifies the token via JWKS, string-matches `iss` against `OIDC_ISSUER`, and loads the local user by `authentikSubject`
+4. If ADMIN + tenant status=PENDING_ADMIN_SETUP, first authenticated request transitions the tenant to PENDING_ONBOARDING
 5. Sign JWT, return `{token, user, tenantStatus}`
 
 ---
@@ -90,11 +81,11 @@ BUSINESS_PROFILE -> DEPARTMENTS -> AI_CONFIG -> COMPLETED
 | PATCH | `/tenants/:id/first-take-care` | SYSTEM_ADMIN | Enable/disable First-Take-Care |
 
 **Tenant Creation Flow:**
-1. Create Tenant (status=PENDING_ADMIN_SETUP)
-2. Create ADMIN user with hashed password
+1. Provision the admin's identity in Authentik (`ensureIdentity`)
+2. Create Tenant (status=PENDING_ADMIN_SETUP) + ADMIN user linked via `authentikSubject` (no password stored)
 3. Initialize TenantOnboarding (step=BUSINESS_PROFILE)
 4. Publish `tenant:created` event
-5. Send onboarding email with magic link (non-blocking)
+5. Send onboarding email with an Authentik setup link (non-blocking); the admin chooses their password there
 
 ---
 

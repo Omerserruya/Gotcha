@@ -19,12 +19,11 @@
  * SID) and fail clean with 409 when the conference isn't live.
  */
 import { Router, Request, Response } from "express";
-import { prisma, getRedis } from "@chatcenter/shared";
+import { prisma, getRedis, verifyInternalServiceKey } from "@chatcenter/shared";
 import type { Logger } from "../lib/logger";
 import type { VoiceProviderResolver } from "../providers/voice-provider";
 import { NoActiveVoiceChannelError } from "../providers/resolve-provider";
 
-const DEFAULT_INTERNAL_KEY = "chatcenter-internal-2026";
 
 interface ConferenceMeta {
   conferenceSid?: string;
@@ -62,9 +61,7 @@ export function createVoiceConferenceControlRouter(opts: {
   const { resolveProvider, logger } = opts;
 
   function guardInternal(req: Request, res: Response): boolean {
-    const expected = process.env.INTERNAL_SERVICE_KEY || DEFAULT_INTERNAL_KEY;
-    const got = req.headers["x-internal-key"];
-    if (!got || got !== expected) {
+    if (!verifyInternalServiceKey(req.headers["x-internal-key"])) {
       res.status(403).json({ error: "forbidden" });
       return false;
     }

@@ -20,6 +20,7 @@
     "settings": "Settings",
     "more": "More",
     "logout": "Logout",
+    "account": "Account & Security",
     "tools": "Tools",
     "integrations": "Integrations",
     "aiStudio": "AI Studio",
@@ -27,15 +28,6 @@
     "usage": "Usage",
     "approvals": "Approvals",
     "business": "Your Business"
-  },
-  "auth": {
-    "login": "Login",
-    "email": "Email",
-    "password": "Password",
-    "tenant": "Organization ID",
-    "loginButton": "Sign In",
-    "loginError": "Invalid email or password",
-    "welcome": "Welcome back"
   },
   "conversations": {
     "title": "Inbox",
@@ -248,7 +240,6 @@
     "inactive": "Inactive",
     "addAgent": "Add Agent",
     "registerAgent": "Register New Agent",
-    "password": "Password",
     "registerButton": "Create Agent",
     "registerSuccess": "Agent created successfully",
     "editAgent": "Edit Agent",
@@ -260,10 +251,8 @@
     "phoneNumberHint": "E.164 mobile (e.g. +972501234567). Used to forward voice calls to this agent and to recognize them when they call the business number back.",
     "agentIsActive": "This agent can receive and handle conversations",
     "agentIsInactive": "This agent is deactivated and cannot handle conversations",
-    "resetPassword": "Reset Password",
-    "newPasswordPlaceholder": "New password (min. 8 characters)",
-    "passwordReset": "Password Reset",
-    "passwordResetSuccess": "Password has been reset successfully",
+    "resetPassword": "Generate password setup link",
+    "passwordResetSuccess": "Link created. Share it with them - it can be used once.",
     "dangerZone": "Danger Zone",
     "autoGreeting": "Auto-Greeting Template",
     "autoGreetingDesc": "This message is sent automatically when an agent claims a chat. Use {agentName} as a placeholder.",
@@ -292,7 +281,9 @@
     "copilotActive": "Co-Pilot Active",
     "copilotActiveDesc": "Enable or disable the AI co-pilot for this organization.",
     "saveCopilot": "Save Settings",
-    "copilotSaved": "Co-Pilot settings saved"
+    "copilotSaved": "Co-Pilot settings saved",
+    "invitePasswordNote": "We'll email them a one-time setup link to choose their password on our secure sign-in service. You'll also get the link here in case you want to share it directly.",
+    "resetPasswordNote": "Generate a one-time link this person can use to set a new password. You never see or choose their password."
   },
   "crmPanel": {
     "title": "CRM Context",
@@ -714,7 +705,16 @@
     "selectSpaces": "Select spaces to import",
     "importSelected": "Import Selected",
     "connecting": "Connecting...",
-    "oauthNotConfigured": "This integration is not configured. Contact your administrator."
+    "oauthNotConfigured": "This integration is not configured. Contact your administrator.",
+    "sourcesTab": "Sources",
+    "sourceConnected": "Connected - browse and import in Manage Knowledge",
+    "sourceNotConnected": "Not connected",
+    "sourceConnect": "Connect",
+    "sourceConnecting": "Connecting...",
+    "sourceBrowse": "Browse",
+    "active": "Active",
+    "inactive": "Inactive",
+    "docTitlePlaceholder": "Document title"
   },
   "settings": {
     "nav": {
@@ -722,6 +722,7 @@
       "general": "General",
       "integrations": "Integrations",
       "policy": "Policy",
+      "security": "Security",
       "tools": "Tools",
       "voiceCopilot": "Voice Copilot",
       "intelligence": "Intelligence",
@@ -834,6 +835,8 @@
     "language": {
       "title": "Language",
       "subtitle": "Sets the language for the dashboard UI and AI-generated content (briefs, summaries, co-pilot insights, post-call notes). Suggested replies still match the customer's language.",
+      "workspaceTitle": "Workspace language",
+      "workspaceSubtitle": "The default language new members inherit. Each member can override it for themselves in Account.",
       "myLanguage": "My language",
       "myLanguageHint": "Currently: {effective}",
       "useTenantDefault": "Use organization default",
@@ -843,6 +846,7 @@
       "savedTenant": "Organization default saved",
       "saveFailed": "Couldn't save language. Try again."
     },
+    "goToAccountForPreferences": "Manage your language and personal preferences in Account.",
     "phoneCountry": "Default country",
     "phoneCountryHelp": "Used to format bare phone numbers into international form.",
     "reminderDelay": "Reminder delay (minutes)",
@@ -1058,22 +1062,6 @@
     "adminRequired": "Admin access required",
     "closed": "Closed",
     "defaultLabel": "default",
-    "password": {
-      "title": "Change Password",
-      "subtitle": "Update your account password",
-      "current": "Current password",
-      "currentPlaceholder": "Enter current password",
-      "new": "New password",
-      "newPlaceholder": "Enter new password (min 8 characters)",
-      "confirm": "Confirm new password",
-      "confirmPlaceholder": "Confirm new password",
-      "action": "Change password",
-      "changing": "Changing…",
-      "changed": "Password changed successfully",
-      "errMismatch": "Passwords do not match",
-      "errTooShort": "Password must be at least 8 characters",
-      "errFail": "Failed to change password"
-    },
     "days": {
       "sunday": "Sunday",
       "monday": "Monday",
@@ -1085,7 +1073,14 @@
     },
     "integrations": {
       "crmTitle": "CRM Integrations",
-      "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) - or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM."
+      "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) - or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM.",
+      "systemOfRecord": {
+        "title": "Customer system of record",
+        "subtitle": "Which connected system answers “who is this customer?”. Your AI reads identity, history and summaries from it, and writes notes and tags back to it.",
+        "active": "Active - this is your customer system of record",
+        "inactiveHint": "Connected, but not used as your customer system of record",
+        "note": "When on, this takes precedence over any connected CRM. Turning it off restores your CRM. All read tools for this system are enabled automatically."
+      }
     }
   },
   "outbound": {
@@ -2355,7 +2350,12 @@
     "categoryShipping": "Shipping",
     "categoryProjectManagement": "Project Management",
     "categoryCalendar": "Calendar",
-    "subtitle": "Connect external services to power your AI agents"
+    "subtitle": "Connect external services to power your AI agents",
+    "systemOfRecordActive": "Your customer system of record",
+    "manageInSettings": "Manage in Settings →",
+    "selectAllTools": "Select all",
+    "clearAllTools": "Clear all",
+    "applying": "Applying..."
   },
   "usage": {
     "title": "Usage",
@@ -2437,7 +2437,8 @@
       "modeAutonomous": "Autonomous",
       "modeCopilot": "Co-Pilot",
       "modeHuman": "Human Only",
-      "noAgents": "No AI employees yet. Create your first team member to get started."
+      "noAgents": "No AI employees yet. Create your first team member to get started.",
+      "readinessTitle": "Readiness score. Click for the full report"
     },
     "playbooks": {
       "title": "Playbooks",
@@ -2451,7 +2452,10 @@
       "subPlaybooks": "Sub-Playbooks",
       "routeSubflow": "Playbook",
       "routeAgent": "Team Member",
-      "routeHuman": "Human"
+      "routeHuman": "Human",
+      "connectionNote": "Each process states when it fires and what your employee does, the visual editor is one click deeper.",
+      "running": "Running",
+      "pausedFlow": "Paused"
     },
     "resources": {
       "title": "Team Resources",
@@ -2525,7 +2529,11 @@
           "addMore": "Add more tools from Integrations",
           "panelDesc": "Connect integrations and enable tools for this agent",
           "notConnected": "Not connected",
-          "connectIntegration": "Connect this integration"
+          "connectIntegration": "Connect this integration",
+          "collapseAll": "Collapse all",
+          "expandAll": "Expand all",
+          "enableGroup": "Enable all",
+          "clearGroup": "Clear all"
         },
         "knowledge": {
           "title": "Knowledge",
@@ -2611,6 +2619,12 @@
           "subtitle": "Actions it can actually take right now - a capability must be connected AND the action allowed for this employee.",
           "allowed": "Allowed",
           "blocked": "Not available (capability off or not granted)"
+        },
+        "readiness": {
+          "title": "Readiness report",
+          "subtitle": "What your employee already answers well, and what it's still missing. Close gaps to raise the score.",
+          "open": "Open report",
+          "run": "Run test"
         }
       }
     },
@@ -2687,7 +2701,82 @@
         "deleteMsg": "This will permanently remove this knowledge source and unassign it from all team members.",
         "cancel": "Cancel",
         "delete": "Delete"
-      }
+      },
+      "addTitle": "Teach your employee something new",
+      "addSub": "Anything a good employee would look up before answering: prices, policies, delivery, FAQs, how-tos.",
+      "addAnswer": "Answer a question",
+      "addUrl": "Add a page",
+      "addFiles": "Upload files",
+      "addDrive": "Connect a drive",
+      "whyTitle": "Why this matters",
+      "why1": "Your employee only answers from what you give it. No knowledge means an honest \"I'll check\" instead of an answer.",
+      "why2": "Every source raises its readiness score, fewer questions it has to hand off.",
+      "why3": "You teach once, it answers forever, on every channel and in every language you support.",
+      "editInManage": "Edit in Manage Knowledge",
+      "deleteDoc": "Delete document",
+      "deleting": "Deleting...",
+      "confirmDeleteKbTitle": "Delete this knowledge base?",
+      "confirmDeleteKbBody": "“{name}” and its {count} document(s) will be removed. Your employees will stop answering from it.",
+      "confirmDeleteDocTitle": "Delete this document?",
+      "confirmDeleteDocBody": "“{name}” will be removed from this knowledge base.",
+      "confirmDeleteIrreversible": "This cannot be undone.",
+      "confirmDeleteAction": "Delete",
+      "manage": {
+        "title": "Knowledge Base",
+        "subtitle": "Manage knowledge sources for your AI agents and copilot",
+        "emptyList": "No knowledge bases yet",
+        "emptyListHint": "Create one to get started",
+        "selectHint": "Select a knowledge base to view details",
+        "namePlaceholder": "Knowledge base name",
+        "descPlaceholder": "Description (optional)",
+        "saving": "Saving...",
+        "editKb": "Edit knowledge base",
+        "externalSources": "External Sources",
+        "noDocs": "No documents yet",
+        "noDocsHint": "Upload files, paste content, add URLs, or connect Google Drive / Confluence",
+        "noIntegrations": "No integrations connected",
+        "noIntegrationsHint": "Connect Google Drive or Confluence to import content",
+        "browseSpaces": "Browse Spaces",
+        "browseFiles": "Browse Files",
+        "newKbTitle": "New Knowledge Base",
+        "fieldName": "Name",
+        "fieldNamePlaceholder": "e.g. Product Documentation",
+        "fieldDesc": "Description",
+        "fieldDescPlaceholder": "Optional description...",
+        "fieldScope": "Available To",
+        "scopeAll": "All AI (entire tenant)",
+        "creating": "Creating...",
+        "create": "Create",
+        "addContentTitle": "Add Content",
+        "modeFile": "Upload Files",
+        "modeUrl": "Website URL",
+        "modeText": "Paste Text",
+        "fieldTitle": "Title",
+        "fieldFile": "File",
+        "dropFiles": "Drop files here or click to browse",
+        "fieldUrl": "Website URL",
+        "urlPlaceholder": "https://example.com/help",
+        "urlHint": "We will crawl this page and extract its content automatically.",
+        "fieldContent": "Content",
+        "contentPlaceholder": "Paste your content here...",
+        "processing": "Processing...",
+        "crawlAdd": "Crawl & Add",
+        "upload": "Upload",
+        "noSpaces": "No spaces found",
+        "noPages": "No pages found",
+        "noSharedDrives": "No shared drives found",
+        "emptyFolder": "This folder is empty",
+        "scopeAllShort": "All AI",
+        "scopeAgent": "Agent",
+        "scopeDepartment": "Department",
+        "document": "document",
+        "documents": "documents",
+        "spaces": "Spaces",
+        "myDrive": "My Drive",
+        "sharedDrives": "Shared Drives"
+      },
+      "removeKb": "Remove knowledge base",
+      "confirmRemoveKbBody": "“{name}” and all of its documents will be removed. Your employees will stop answering from it."
     },
     "tools": {
       "title": "Connected Tools",
@@ -2700,7 +2789,51 @@
       "disabled": "Disabled",
       "enabled": "Enabled",
       "noneConnected": "No tools connected",
-      "noTools": "No tools available"
+      "noTools": "No tools available",
+      "enables": "Enables",
+      "actionsLive": "actions for your employee",
+      "wouldEnable": "Would enable:"
+    },
+    "workspace": {
+      "overview": "Overview",
+      "working": "Working",
+      "paused": "Paused",
+      "readiness": "Readiness",
+      "talk": "Talk",
+      "edit": "Settings",
+      "hire": "+ Hire",
+      "attention": "Needs your attention",
+      "allSet": "All set. Your employee has everything it needs right now.",
+      "finishHiring": "Finish hiring",
+      "newEmployee": "a new employee",
+      "finishHiringSub": "Resume right where you stopped",
+      "noChannel": "Connect a channel so customers can reach them",
+      "noChannelSub": "WhatsApp, Instagram or webchat, one click",
+      "open": "Open",
+      "cards": {
+        "knowledge": "Knowledge sources",
+        "knowledgeSub": "What they answer from",
+        "tools": "Connected tools",
+        "toolsSub": "What they can do",
+        "processes": "Processes",
+        "processesSub": "How their work flows",
+        "inbox": "Inbox",
+        "inboxSub": "Watch conversations as they happen",
+        "analytics": "Analytics",
+        "analyticsSub": "What the work produced"
+      },
+      "mapAria": "How the employee's systems work together",
+      "map": {
+        "employee": "your employee",
+        "knowledge": "Knowledge",
+        "knowledgeSub": "what they know",
+        "tools": "Integrations",
+        "toolsSub": "what they can do",
+        "processes": "Processes",
+        "processesSub": "how they work",
+        "channels": "Channels",
+        "channelsSub": "where they talk"
+      }
     }
   },
   "confirm": {

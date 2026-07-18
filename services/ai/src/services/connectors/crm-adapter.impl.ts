@@ -788,7 +788,7 @@ function escapeSoql(s: string): string {
 // (e.g. https://www.zohoapis.com / .eu / .in). Token refresh routed through
 // the existing zoho.service.ts so 1h expiry is handled transparently.
 
-import { prisma } from "@chatcenter/shared";
+import { prisma, assertPublicUrl } from "@chatcenter/shared";
 import { maybeRefreshZohoToken } from "../zoho.service";
 
 interface ZohoConnection {
@@ -831,6 +831,8 @@ async function loadZohoConnection(tenantId: string): Promise<{ ok: true; conn: Z
 
 async function zohoFetch(conn: ZohoConnection, method: string, path: string, body?: unknown): Promise<{ ok: boolean; status: number; data?: any; reason?: string }> {
   const url = `${conn.baseUrl}${path}`;
+  // SSRF guard: conn.baseUrl is OAuth-seeded but a mutable tenant config field.
+  try { await assertPublicUrl(url); } catch (e: any) { return { ok: false, status: 0, reason: `blocked_host:${e?.message ?? "ssrf"}` }; }
   const headers: Record<string, string> = {
     "Authorization": `Zoho-oauthtoken ${conn.accessToken}`,
     "Content-Type": "application/json",

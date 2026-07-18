@@ -33,7 +33,10 @@ interface CustomerSummaryPayload {
 router.post("/", authenticate, resolveTenant, requireActiveTenant(), async (req: Request & { tenantId?: string }, res: Response) => {
   try {
     const body = req.body ?? {};
-    const tenantId = (body.tenantId as string) || req.tenantId || "";
+    // Tenant is ALWAYS the authenticated JWT tenant (resolveTenant), never a
+    // client-supplied body field. Trusting body.tenantId here would let a user
+    // in tenant A read tenant B's customer brief by naming B's conversation id.
+    const tenantId = req.tenantId || "";
     const conversationId = body.conversationId as string;
     const localeRaw = typeof body.locale === "string" ? body.locale.toLowerCase().slice(0, 8) : "";
     const locale = localeRaw || "en";

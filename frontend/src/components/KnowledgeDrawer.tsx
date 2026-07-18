@@ -8,6 +8,9 @@ import {
   createKnowledgeBase,
   uploadKnowledgeDocument,
   uploadKnowledgeFile,
+  getKnowledgeIntegrations,
+  initConfluenceOAuth,
+  initGoogleDriveOAuth,
 } from "@/lib/api";
 import clsx from "clsx";
 
@@ -20,6 +23,12 @@ interface KnowledgeDrawerProps {
 }
 
 type DrawerView = "list" | "create" | "upload";
+
+// "sources" covers the connected knowledge integrations (Google Drive /
+// Confluence). Uploading a file was previously the only way to fill a KB from
+// here, which meant a tenant with Drive connected still had to leave the
+// employee editor to use it.
+type UploadMode = "file" | "url" | "text" | "sources";
 
 const STATUS_ICON: Record<string, { color: string; icon: string }> = {
   ready: { color: "bg-green-100 text-green-600", icon: "M5 13l4 4L19 7" },
@@ -44,13 +53,44 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
 
   // Upload state
   const [uploadKbId, setUploadKbId] = useState<string | null>(null);
-  const [uploadMode, setUploadMode] = useState<"file" | "url" | "text">("file");
+  const [uploadMode, setUploadMode] = useState<UploadMode>("file");
   const [uploadTitle, setUploadTitle] = useState("");
   const [uploadContent, setUploadContent] = useState("");
   const [uploadUrl, setUploadUrl] = useState("");
   const [uploading, setUploading] = useState(false);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Which knowledge integrations this KB already has connected. Drives the
+  // "Drive / Confluence" source options: a connected provider offers browsing,
+  // an unconnected one offers connecting. Loaded per KB when the source tab
+  // opens - the drawer is otherwise KB-agnostic.
+  const [kbIntegrations, setKbIntegrations] = useState<any[]>([]);
+  const [connectingProvider, setConnectingProvider] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!token || !uploadKbId || uploadMode !== "sources") return;
+    let cancelled = false;
+    getKnowledgeIntegrations(token, uploadKbId)
+      .then((res) => { if (!cancelled) setKbIntegrations((res as any)?.data || []); })
+      .catch(() => { if (!cancelled) setKbIntegrations([]); });
+    return () => { cancelled = true; };
+  }, [token, uploadKbId, uploadMode]);
+
+  /** Start OAuth for a knowledge provider, scoped to the KB being filled. */
+  async function connectProvider(provider: "confluence" | "google_drive") {
+    if (!token || !uploadKbId) return;
+    setConnectingProvider(provider);
+    try {
+      const res = provider === "confluence"
+        ? await initConfluenceOAuth(token, uploadKbId)
+        : await initGoogleDriveOAuth(token, uploadKbId);
+      window.location.href = res.url;
+    } catch (err) {
+      console.error(`Failed to init ${provider} OAuth:`, err);
+      setConnectingProvider(null);
+    }
+  }
 
   useEffect(() => {
     if (!isOpen || !token) return;
@@ -209,6 +249,10 @@ export default function KnowledgeDrawer({ isOpen, onClose, linkedKbIds, onToggle
               onUpload={handleUpload}
               fileInputRef={fileInputRef}
               t={t}
+              kbId={uploadKbId}
+              integrations={kbIntegrations}
+              connectingProvider={connectingProvider}
+              onConnectProvider={connectProvider}
             />
           )}
         </div>
@@ -272,7 +316,7 @@ function KbListView({
                       "px-1.5 py-0.5 rounded-full text-[10px] font-medium",
                       kb.isActive ? "bg-green-100 text-green-600" : "bg-gray-100 text-gray-500"
                     )}>
-                      {kb.isActive ? "Active" : "Inactive"}
+                      {kb.isActive ? t("knowledge.active") : t("knowledge.inactive")}
                     </span>
                   </div>
                   {kb.description && <p className="text-xs text-gray-400 mt-0.5">{kb.description}</p>}
@@ -356,33 +400,87 @@ function CreateKbView({
 // ─── Upload View ───────────────────────────────────────────
 function UploadView({
   mode, setMode, file, setFile, title, setTitle, content, setContent, url, setUrl,
-  uploading, onUpload, fileInputRef, t,
+  uploading, onUpload, fileInputRef, t, kbId, integrations, connectingProvider, onConnectProvider,
 }: {
-  mode: "file" | "url" | "text"; setMode: (m: "file" | "url" | "text") => void;
+  mode: UploadMode; setMode: (m: UploadMode) => void;
   file: File | null; setFile: (f: File | null) => void;
   title: string; setTitle: (s: string) => void; content: string; setContent: (s: string) => void;
   url: string; setUrl: (s: string) => void; uploading: boolean; onUpload: () => void;
   fileInputRef: React.RefObject<HTMLInputElement>; t: (key: string) => string;
+  kbId: string | null;
+  integrations: any[];
+  connectingProvider: string | null;
+  onConnectProvider: (p: "confluence" | "google_drive") => void;
 }) {
-  const canUpload = mode === "file" ? !!file : mode === "url" ? !!url.trim() : !!content.trim();
+  const canUpload = mode === "file" ? !!file : mode === "url" ? !!url.trim() : mode === "text" ? !!content.trim() : false;
+
+  const MODE_LABEL: Record<UploadMode, string> = {
+    file: t("knowledge.fileUpload"),
+    url: t("knowledge.websiteUrl"),
+    text: t("knowledge.pasteText"),
+    sources: t("knowledge.sourcesTab"),
+  };
 
   return (
     <div className="space-y-4">
       {/* Mode tabs */}
       <div className="flex gap-1 bg-gray-100 rounded-xl p-1">
-        {(["file", "url", "text"] as const).map((m) => (
+        {(["file", "url", "text", "sources"] as const).map((m) => (
           <button
             key={m}
             onClick={() => setMode(m)}
             className={clsx(
-              "flex-1 px-3 py-2 rounded-lg text-xs font-medium transition",
+              "flex-1 px-2 py-2 rounded-lg text-xs font-medium transition",
               mode === m ? "bg-white text-emerald-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
             )}
           >
-            {m === "file" ? t("knowledge.fileUpload") : m === "url" ? t("knowledge.websiteUrl") : t("knowledge.pasteText")}
+            {MODE_LABEL[m]}
           </button>
         ))}
       </div>
+
+      {/* Knowledge integrations (Drive / Confluence). Connecting happens here;
+          browsing and importing reuse the full picker on the Manage Knowledge
+          page rather than a second, thinner copy of it inside this drawer. */}
+      {mode === "sources" && (
+        <div className="space-y-2">
+          {([
+            { provider: "google_drive", label: "Google Drive" },
+            { provider: "confluence", label: "Confluence" },
+          ] as const).map(({ provider, label }) => {
+            const connected = integrations.some((i: any) => i.provider === provider);
+            return (
+              <div key={provider} className="flex items-center gap-3 rounded-xl border border-gray-100 bg-gray-50/60 p-3">
+                <div className="min-w-0 flex-1">
+                  <p className="text-sm font-medium text-gray-800">{label}</p>
+                  <p className="text-xs text-gray-400">
+                    {connected ? t("knowledge.sourceConnected") : t("knowledge.sourceNotConnected")}
+                  </p>
+                </div>
+                {connected ? (
+                  <a
+                    href={kbId ? `/ai-studio/knowledge?kb=${encodeURIComponent(kbId)}` : "/ai-studio/knowledge"}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-700 hover:bg-emerald-100 transition"
+                  >
+                    {t("knowledge.sourceBrowse")}
+                  </a>
+                ) : (
+                  <button
+                    type="button"
+                    disabled={!kbId || connectingProvider === provider}
+                    onClick={() => onConnectProvider(provider)}
+                    className="shrink-0 text-xs font-semibold px-3 py-1.5 rounded-lg bg-white border border-gray-200 text-gray-700 hover:bg-gray-50 transition disabled:opacity-50"
+                  >
+                    {connectingProvider === provider ? t("knowledge.sourceConnecting") : t("knowledge.sourceConnect")}
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      )}
 
       {/* File upload */}
       {mode === "file" && (
@@ -436,7 +534,7 @@ function UploadView({
               type="text"
               value={title}
               onChange={(e) => setTitle(e.target.value)}
-              placeholder="Document title"
+              placeholder={t("knowledge.docTitlePlaceholder")}
               className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-emerald-200 focus:border-emerald-300 focus:bg-white outline-none transition"
             />
           </div>
@@ -453,14 +551,18 @@ function UploadView({
         </div>
       )}
 
-      <button
-        onClick={onUpload}
-        disabled={!canUpload || uploading}
-        className="w-full py-3 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm flex items-center justify-center gap-2"
-      >
-        {uploading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
-        {t("knowledge.uploadDocument")}
-      </button>
+      {/* Sources connect/browse via their own per-row action - there is nothing
+          for a single Upload button to submit in that tab. */}
+      {mode !== "sources" && (
+        <button
+          onClick={onUpload}
+          disabled={!canUpload || uploading}
+          className="w-full py-3 bg-emerald-600 text-white text-sm font-semibold rounded-xl hover:bg-emerald-700 disabled:opacity-50 transition shadow-sm flex items-center justify-center gap-2"
+        >
+          {uploading && <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />}
+          {t("knowledge.uploadDocument")}
+        </button>
+      )}
     </div>
   );
 }

@@ -5,7 +5,7 @@ export const envSchema = z.object({
   PORT: z.coerce.number().default(4007),
   REDIS_URL: z.string().default("redis://redis:6379"),
   AI_SERVICE_URL: z.string().default("http://ai:4006"),
-  INTERNAL_SERVICE_KEY: z.string().default("chatcenter-internal-2026"),
+  INTERNAL_SERVICE_KEY: z.string().default(""),
   STT_PROVIDER: z.enum(["stub", "google", "deepgram"]).default("stub"),
   STT_STUB_SEED: z.coerce.number().default(42),
   DEEPGRAM_API_KEY: z.string().default(""),

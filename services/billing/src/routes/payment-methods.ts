@@ -61,7 +61,19 @@ router.post("/billing/payment-methods", authenticate, resolveTenant, requirePerm
 });
 
 router.delete("/billing/payment-methods/:id", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
-  await prisma.paymentMethod.update({ where: { id: String(req.params.id) }, data: { status: "REMOVED", isDefault: false } }).catch(() => {});
+  // Ownership scoping (cross-tenant IDOR guard). PaymentMethod has no tenantId
+  // column - it hangs off BillingProfile -> BillableEntity -> tenant - so the
+  // Prisma tenant-guard does NOT cover it. Resolve THIS tenant's billing profile
+  // and scope the write with updateMany so a payment-method id belonging to
+  // another tenant matches zero rows instead of being mutated by raw id.
+  const link = await prisma.billableEntityTenant.findUnique({ where: { tenantId: req.tenantId! } });
+  if (!link) return res.json({ ok: true });
+  const profile = await prisma.billingProfile.findUnique({ where: { billableEntityId: link.billableEntityId }, select: { id: true } });
+  if (!profile) return res.json({ ok: true });
+  await prisma.paymentMethod.updateMany({
+    where: { id: String(req.params.id), billingProfileId: profile.id },
+    data: { status: "REMOVED", isDefault: false },
+  });
   res.json({ ok: true });
 });
 

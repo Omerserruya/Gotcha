@@ -118,7 +118,7 @@ async function resolveWhatsAppMedia(mediaId: string, accessToken: string, messag
     });
 
     // Determine file extension from content-type
-    const contentType = fileRes.headers["content-type"] || "";
+    const contentType = String(fileRes.headers["content-type"] ?? "");
     const ext = getExtensionFromMime(contentType, messageType);
     const fileName = `${crypto.randomUUID()}${ext}`;
     const filePath = path.join(UPLOADS_DIR, fileName);

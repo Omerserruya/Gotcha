@@ -1,3 +1,4 @@
+import { getInternalServiceKey } from "@chatcenter/shared";
 /**
  * Voice sessions API (Phase 1 - Live Call CoPilot).
  *
@@ -181,7 +182,7 @@ router.post("/missed/:id/callback", async (req: Request, res: Response) => {
       return;
     }
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     const upstream = await fetch(`${url}/api/voice-copilot/callbacks/initiate`, {
       method: "POST",
       headers: { "Content-Type": "application/json", "X-Internal-Key": key },
@@ -625,7 +626,7 @@ router.post("/:id/add-participant", async (req: Request, res: Response) => {
     }
 
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     try {
       const upstream = await fetch(
         `${url}/api/voice-copilot/sessions/${encodeURIComponent(session.id)}/add-participant`,
@@ -669,7 +670,7 @@ router.post("/:id/customer-hold", async (req: Request, res: Response) => {
     const hold = Boolean((req.body as { hold?: unknown })?.hold);
 
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     const upstream = await fetch(
       `${url}/api/voice-copilot/sessions/${encodeURIComponent(session.id)}/customer-hold`,
       {
@@ -703,7 +704,7 @@ router.post("/:id/agent-leave", async (req: Request, res: Response) => {
     }
 
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     const upstream = await fetch(
       `${url}/api/voice-copilot/sessions/${encodeURIComponent(session.id)}/agent-leave`,
       {
@@ -789,7 +790,7 @@ router.post("/start-outbound", async (req: Request, res: Response) => {
     }
 
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     try {
       const upstream = await fetch(`${url}/api/voice-copilot/callbacks/initiate`, {
         method: "POST",
@@ -903,7 +904,7 @@ router.post("/:id/participants/:participantId/hold", async (req: Request, res: R
     }
 
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     const upstream = await fetch(
       `${url}/api/voice-copilot/sessions/${encodeURIComponent(session.id)}/participants/${encodeURIComponent(participantId)}/hold`,
       {
@@ -945,7 +946,7 @@ router.post("/:id/participants/:participantId/kick", async (req: Request, res: R
     }
 
     const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-    const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+    const key = getInternalServiceKey();
     const upstream = await fetch(
       `${url}/api/voice-copilot/sessions/${encodeURIComponent(session.id)}/participants/${encodeURIComponent(participantId)}/kick`,
       {
@@ -992,7 +993,7 @@ router.post("/presence/heartbeat", async (req: Request, res: Response) => {
  */
 async function terminateUpstreamCall(sessionId: string, reason: string): Promise<void> {
   const url = process.env.VOICE_COPILOT_URL || "http://voice-copilot:4007";
-  const key = process.env.INTERNAL_SERVICE_KEY || "chatcenter-internal-2026";
+  const key = getInternalServiceKey();
   try {
     const res = await fetch(`${url}/api/voice-copilot/sessions/${encodeURIComponent(sessionId)}/terminate`, {
       method: "POST",

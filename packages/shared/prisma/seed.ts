@@ -1,5 +1,4 @@
 import { PrismaClient } from "@prisma/client";
-import bcrypt from "bcryptjs";
 import { seedIntelligencePacks } from "./seed-intelligence-packs";
 
 const prisma = new PrismaClient();
@@ -147,32 +146,75 @@ async function main() {
   });
 
   // ─── Users ───────────────────────────────────────────────────
-  const adminPassword = await bcrypt.hash("admin123", 10);
-  const agentPassword = await bcrypt.hash("agent123", 10);
+  //
+  // Seeded users need an Authentik identity or nobody can log in as them:
+  // GOTCHA stores no credential, so a user row without a subject is inert.
+  // We provision the identity and set a well-known dev password through
+  // Authentik's admin API.
+  //
+  // DEV SEED ONLY. This is the single place in the repo that puts a password
+  // anywhere, it talks to Authentik rather than storing anything locally, and
+  // it refuses to run against a production database.
+  if (process.env.NODE_ENV === "production") {
+    throw new Error("[seed] refusing to seed demo users with known passwords in production");
+  }
+
+  const AK_URL = process.env.AUTHENTIK_URL || "http://localhost:9000";
+  const AK_TOKEN = process.env.AUTHENTIK_API_TOKEN || process.env.AUTHENTIK_BOOTSTRAP_TOKEN;
+
+  async function seedIdentity(email: string, name: string, password: string): Promise<string> {
+    if (!AK_TOKEN) throw new Error("[seed] AUTHENTIK_BOOTSTRAP_TOKEN required to seed users");
+    const h = { Authorization: `Bearer ${AK_TOKEN}`, "Content-Type": "application/json" };
+
+    const found = await fetch(`${AK_URL}/api/v3/core/users/?email=${encodeURIComponent(email)}`, { headers: h })
+      .then((r) => r.json());
+    let user = found.results?.find((u: any) => u.email === email);
+
+    if (!user) {
+      const res = await fetch(`${AK_URL}/api/v3/core/users/`, {
+        method: "POST",
+        headers: h,
+        body: JSON.stringify({ username: email, email, name, is_active: true, path: "users", type: "internal" }),
+      });
+      if (!res.ok) throw new Error(`[seed] create identity failed: ${await res.text()}`);
+      user = await res.json();
+    }
+
+    const pw = await fetch(`${AK_URL}/api/v3/core/users/${user.pk}/set_password/`, {
+      method: "POST",
+      headers: h,
+      body: JSON.stringify({ password }),
+    });
+    if (!pw.ok) throw new Error(`[seed] set password failed: ${await pw.text()}`);
+
+    return user.uuid;
+  }
 
   // System Admin
+  const sysAdminSubject = await seedIdentity("system@demo.com", "System Admin", "admin123");
   const sysAdmin = await prisma.user.upsert({
     where: { tenantId_email: { tenantId: tenant.id, email: "system@demo.com" } },
-    update: {},
+    update: { authentikSubject: sysAdminSubject },
     create: {
       tenantId: tenant.id,
       email: "system@demo.com",
-      password: adminPassword,
       name: "System Admin",
       role: "SYSTEM_ADMIN",
+      authentikSubject: sysAdminSubject,
     },
   });
 
   // Admin
+  const adminSubject = await seedIdentity("admin@demo.com", "Admin User", "admin123");
   const admin = await prisma.user.upsert({
     where: { tenantId_email: { tenantId: tenant.id, email: "admin@demo.com" } },
-    update: {},
+    update: { authentikSubject: adminSubject },
     create: {
       tenantId: tenant.id,
       email: "admin@demo.com",
-      password: adminPassword,
       name: "Admin User",
       role: "ADMIN",
+      authentikSubject: adminSubject,
     },
   });
 
@@ -185,10 +227,11 @@ async function main() {
     { email: "eli@demo.com", name: "Eli Rosenberg" },
   ];
   for (const a of agentData) {
+    const subject = await seedIdentity(a.email, a.name, "agent123");
     const agent = await prisma.user.upsert({
       where: { tenantId_email: { tenantId: tenant.id, email: a.email } },
-      update: {},
-      create: { tenantId: tenant.id, email: a.email, password: agentPassword, name: a.name, role: "AGENT" },
+      update: { authentikSubject: subject },
+      create: { tenantId: tenant.id, email: a.email, name: a.name, role: "AGENT", authentikSubject: subject },
     });
     agents.push(agent);
   }

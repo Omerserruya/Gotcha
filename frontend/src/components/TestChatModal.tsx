@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect } from "react";
 import clsx from "clsx";
+import { useI18n } from "@/context/I18nContext";
 
 interface TestChatModalProps {
   isOpen: boolean;
@@ -20,11 +21,22 @@ interface ChatMessage {
 }
 
 export default function TestChatModal({ isOpen, onClose, agentId, agentName, avatarColor, token }: TestChatModalProps) {
+  const { locale } = useI18n();
+  const he = locale === "he";
+  const L = (en: string, hebrew: string) => (he ? hebrew : en);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [thinking, setThinking] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
+
+  // Customer-style openers: the point of the sandbox is to TALK like a real
+  // customer, not to inspect the bot - these make that the default move.
+  const STARTERS: Array<[string, string]> = [
+    ["What are your prices?", "מה המחירים אצלכם?"],
+    ["Do you deliver to my area?", "יש לכם משלוחים לאזור שלי?"],
+    ["I need help with my order", "אני צריך עזרה עם הזמנה"],
+  ];
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -35,13 +47,15 @@ export default function TestChatModal({ isOpen, onClose, agentId, agentName, ava
       setMessages([{
         id: "welcome",
         role: "assistant",
-        content: `Hi! I'm ${agentName}. Send me a message to test how I'll respond to customers.`,
+        content: he
+          ? `היי, אני ${agentName}. דברו איתי בדיוק כמו שלקוח היה כותב לכם, ואענה באמת.`
+          : `Hi, I'm ${agentName}. Write to me exactly like one of your customers would, and I'll answer for real.`,
         timestamp: new Date(),
       }]);
       setInput("");
       setTimeout(() => inputRef.current?.focus(), 100);
     }
-  }, [isOpen, agentName]);
+  }, [isOpen, agentName, he]);
 
   async function handleSend() {
     const text = input.trim();
@@ -98,11 +112,14 @@ export default function TestChatModal({ isOpen, onClose, agentId, agentName, ava
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-semibold text-gray-900 text-sm">{agentName}</h3>
-            <p className="text-[11px] text-gray-400">Test Mode - Autonomous</p>
+            <p className="text-[11px] text-gray-400 flex items-center gap-1.5">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+              {L("Online, answering like it would a real customer", "מחובר/ת, עונה כמו ללקוח אמיתי")}
+            </p>
           </div>
           <div className="flex items-center gap-2">
             <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-amber-50 text-amber-600 border border-amber-200">
-              Sandbox
+              {L("Sandbox", "ארגז חול")}
             </span>
             <button onClick={onClose} className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition">
               <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -126,6 +143,21 @@ export default function TestChatModal({ isOpen, onClose, agentId, agentName, ava
               </div>
             </div>
           ))}
+          {/* Customer-style starter chips - shown until the first real message. */}
+          {messages.length === 1 && !thinking && (
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {STARTERS.map(([en, hebrew]) => (
+                <button
+                  key={en}
+                  type="button"
+                  onClick={() => { setInput(L(en, hebrew)); setTimeout(() => inputRef.current?.focus(), 50); }}
+                  className="text-xs px-3 py-1.5 rounded-full bg-white border border-gray-200 text-gray-600 hover:border-violet-300 hover:text-violet-700 transition"
+                >
+                  {L(en, hebrew)}
+                </button>
+              ))}
+            </div>
+          )}
           {thinking && (
             <div className="flex justify-start">
               <div className="bg-white border border-gray-100 rounded-2xl rounded-bl-md px-4 py-3 shadow-sm">
@@ -148,7 +180,7 @@ export default function TestChatModal({ isOpen, onClose, agentId, agentName, ava
               value={input}
               onChange={e => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="Type a message..."
+              placeholder={L("Write like a customer would…", "כתבו כמו שלקוח היה כותב…")}
               rows={1}
               className="flex-1 resize-none px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition max-h-24"
             />

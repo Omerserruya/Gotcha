@@ -1568,6 +1568,33 @@ function RouteTargetBody({ data, onChange, shared }: { data: any; onChange: (p: 
           {(list || []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
         </select>
       </Field>
+      {/* Sub-flows are reached from the node that routes into them, not from a
+          separate top-level list: the node is the only place where "which
+          sub-flow, and what happens in it" is a question the author actually
+          has. Both links open in a new tab so an unsaved canvas is never lost
+          by stepping into a sub-flow. */}
+      {routeType === "flow" && (
+        <div className="flex items-center gap-3 pt-1">
+          {data.targetId && (
+            <a
+              href={`/ai-studio/flows/${data.targetId}`}
+              target="_blank"
+              rel="noreferrer"
+              className="text-xs font-semibold text-violet-600 hover:text-violet-700"
+            >
+              Open this sub-flow →
+            </a>
+          )}
+          <a
+            href="/ai-studio/flows/new"
+            target="_blank"
+            rel="noreferrer"
+            className="text-xs font-semibold text-violet-600 hover:text-violet-700 ms-auto"
+          >
+            + Create a sub-flow
+          </a>
+        </div>
+      )}
     </div>
   );
 }

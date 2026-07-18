@@ -13,6 +13,8 @@ import clsx from "clsx";
 import IntegrationDrawer from "@/components/IntegrationDrawer";
 import KnowledgeDrawer from "@/components/KnowledgeDrawer";
 import TestChatModal from "@/components/TestChatModal";
+import { ReadinessReportModal, readinessScoreColor } from "@/components/ReadinessReport";
+import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 // FunnelSection import removed - funnels are now managed at /settings/funnels.
 // The agent is funnel-guided at runtime via resolveActiveStage; there is no
 // per-agent funnel override config to edit on this page.
@@ -373,7 +375,17 @@ export default function AgentEditorPage() {
   const [showSkillsPanel, setShowSkillsPanel] = useState(false);
   const [showKnowledgePanel, setShowKnowledgePanel] = useState(false);
   const [showTestChat, setShowTestChat] = useState(false);
+  // Readiness as an ongoing improvement loop: last persisted report + rerun,
+  // accessible from the "what this employee can do" area of the editor.
+  const [readinessReport, setReadinessReport] = useState<ReadinessReport | null>(null);
+  const [readinessKbId, setReadinessKbId] = useState<string | null>(null);
+  const [readinessOpen, setReadinessOpen] = useState(false);
+  const [readinessBusy, setReadinessBusy] = useState(false);
   const [marketplaceIntegrations, setMarketplaceIntegrations] = useState<any[]>([]);
+  // Integration groups the user has expanded in the Skills section. Groups start
+  // collapsed: a tenant with several integrations connected has hundreds of
+  // tools, which buries every other section on the page.
+  const [expandedToolGroups, setExpandedToolGroups] = useState<Set<string>>(new Set());
   const [knowledgeBases, setKnowledgeBases] = useState<any[]>([]);
   const [panelLoading, setPanelLoading] = useState(false);
   const [calendarCapability, setCalendarCapability] = useState<{
@@ -406,6 +418,12 @@ export default function AgentEditorPage() {
         if (res.data) {
           setForm(mapApiToForm(res.data));
           setCalendarCapability(res.data.calendarCapability ?? null);
+          setReadinessReport((res.data.readinessReport as ReadinessReport | null) || null);
+          setReadinessKbId(
+            res.data.knowledgeSources?.[0]?.id
+              || res.data.knowledgeBases?.[0]?.knowledgeBase?.id
+              || null,
+          );
           // Incomplete wizard draft → resume the builder at its saved step.
           const status = String(res.data.status || "").toUpperCase();
           if (status === "DRAFT" && res.data.builderStep) {
@@ -592,6 +610,29 @@ export default function AgentEditorPage() {
     acc[tool.integration].push(tool);
     return acc;
   }, {});
+
+  const toolGroupNames = Object.keys(toolsByIntegration);
+  const allToolGroupsExpanded = toolGroupNames.length > 0 && toolGroupNames.every((g) => expandedToolGroups.has(g));
+
+  function toggleToolGroup(integration: string) {
+    setExpandedToolGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(integration)) next.delete(integration);
+      else next.add(integration);
+      return next;
+    });
+  }
+
+  function toggleAllToolGroups() {
+    setExpandedToolGroups(allToolGroupsExpanded ? new Set() : new Set(toolGroupNames));
+  }
+
+  /** Enable/disable every tool belonging to one integration in a single patch. */
+  function setIntegrationToolsEnabled(integration: string, enabled: boolean) {
+    patch({
+      tools: form.tools.map((t) => (t.integration === integration ? { ...t, enabled } : t)),
+    });
+  }
 
   const pageTitle = isNew
     ? t("aiStudio.agents.editor.newAgent")
@@ -787,6 +828,31 @@ export default function AgentEditorPage() {
             </div>
           )}
 
+          {/* Readiness - the permanent "what is it still missing" loop. Lives
+              next to "what this employee can do" so improving the employee is
+              one click away, not buried in the onboarding wizard. */}
+          {!isNew && (
+            <div className="rounded-xl border border-gray-200 bg-white p-4 flex items-center gap-4">
+              <div className={clsx("text-3xl font-bold shrink-0", readinessReport ? readinessScoreColor(readinessReport.score) : "text-gray-300")}>
+                {readinessReport ? `${readinessReport.score}%` : "-"}
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-sm font-semibold text-gray-800">{t("aiStudio.agents.editor.readiness.title")}</p>
+                <p className="text-xs text-gray-400">{t("aiStudio.agents.editor.readiness.subtitle")}</p>
+              </div>
+              {/* Opening only opens. The readiness test is an expensive LLM run,
+                  so it fires solely from an explicit user action - the modal's
+                  own "Run"/"Re-run" button - never as a side effect of viewing. */}
+              <button
+                type="button"
+                onClick={() => setReadinessOpen(true)}
+                className="shrink-0 text-xs font-semibold px-3.5 py-1.5 rounded-lg bg-violet-50 text-violet-700 hover:bg-violet-100 transition"
+              >
+                {readinessReport ? t("aiStudio.agents.editor.readiness.open") : t("aiStudio.agents.editor.readiness.run")}
+              </button>
+            </div>
+          )}
+
           {/* ── Section 1: Agent Setup ── */}
           <SectionCard
             title={t("aiStudio.agents.editor.setup.title")}
@@ -844,7 +910,14 @@ export default function AgentEditorPage() {
               </label>
               <select
                 value={form.role}
-                onChange={(e) => patch({ role: e.target.value as AgentRole })}
+                onChange={(e) => {
+                  const role = e.target.value as AgentRole;
+                  // The funnel picker only renders for pipeline roles, so drop
+                  // any existing binding when moving off one - otherwise the
+                  // agent stays bound to a funnel through a control the user
+                  // can no longer see.
+                  patch(roleRequiresFunnel(role) ? { role } : { role, funnelId: "" });
+                }}
                 className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:border-violet-300 focus:bg-white outline-none transition"
               >
                 <option value="customer_support">{t("aiStudio.agents.editor.setup.roleSupport")}</option>
@@ -1009,19 +1082,67 @@ export default function AgentEditorPage() {
               </div>
             )}
 
-            {Object.entries(toolsByIntegration).map(([integration, tools]) => (
+            {toolGroupNames.length > 1 && (
+              <div className="flex justify-end mb-2">
+                <button
+                  type="button"
+                  onClick={toggleAllToolGroups}
+                  className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition"
+                >
+                  {allToolGroupsExpanded
+                    ? t("aiStudio.agents.editor.skills.collapseAll")
+                    : t("aiStudio.agents.editor.skills.expandAll")}
+                </button>
+              </div>
+            )}
+
+            {Object.entries(toolsByIntegration).map(([integration, tools]) => {
+              const groupExpanded = expandedToolGroups.has(integration);
+              const enabledCount = tools.filter((t) => t.enabled).length;
+              const allEnabled = enabledCount === tools.length;
+              return (
               <div key={integration} className="mb-4 last:mb-0">
-                {/* Integration header */}
+                {/* Integration header - click to expand/collapse this group */}
                 <div className="flex items-center gap-2 mb-2">
-                  <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500">
-                    {integration.charAt(0)}
-                  </div>
-                  <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                    {integration}
-                  </span>
+                  <button
+                    type="button"
+                    onClick={() => toggleToolGroup(integration)}
+                    aria-expanded={groupExpanded}
+                    className="flex items-center gap-2 flex-1 min-w-0 text-left rounded-lg px-1 py-1 -mx-1 hover:bg-gray-50 transition"
+                  >
+                    <svg
+                      className={clsx("w-3.5 h-3.5 text-gray-400 shrink-0 transition-transform", groupExpanded && "rotate-90")}
+                      fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5l7 7-7 7" />
+                    </svg>
+                    <div className="w-6 h-6 rounded-lg bg-gray-100 flex items-center justify-center text-xs font-bold text-gray-500 shrink-0">
+                      {integration.charAt(0)}
+                    </div>
+                    <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide truncate">
+                      {integration}
+                    </span>
+                    <span className={clsx(
+                      "px-2 py-0.5 rounded-full text-[10px] font-medium border shrink-0",
+                      enabledCount > 0
+                        ? "bg-violet-50 text-violet-600 border-violet-200"
+                        : "bg-gray-50 text-gray-400 border-gray-200"
+                    )}>
+                      {enabledCount}/{tools.length}
+                    </span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIntegrationToolsEnabled(integration, !allEnabled)}
+                    className="text-xs font-medium text-violet-600 hover:text-violet-700 px-2 py-1 rounded hover:bg-violet-50 transition shrink-0"
+                  >
+                    {allEnabled
+                      ? t("aiStudio.agents.editor.skills.clearGroup")
+                      : t("aiStudio.agents.editor.skills.enableGroup")}
+                  </button>
                 </div>
 
-                <div className="space-y-2">
+                <div className={clsx("space-y-2", !groupExpanded && "hidden")}>
                   {tools.map((tool) => {
                     const hasOverrides = (tool.description ?? "").trim().length > 0 || (tool.usageRule ?? "").trim().length > 0;
                     return (
@@ -1105,7 +1226,8 @@ export default function AgentEditorPage() {
                   })}
                 </div>
               </div>
-            ))}
+              );
+            })}
 
             <button
               type="button"
@@ -1265,37 +1387,35 @@ export default function AgentEditorPage() {
               stage's goal, required questions, data fields, and exit
               criteria into the prompt. Picker below pins a specific
               funnel to THIS agent; leaving it blank falls through to the
-              channel override → department → tenant default. */}
+              channel override → department → tenant default.
+
+              Only pipeline roles see this. A support or billing employee has
+              no pipeline to run, so the picker was pure noise for them. The
+              gate deliberately matches the SERVER's FUNNEL_REQUIRED_ROLES
+              (ai-agents.ts) rather than a hand-written sales/sdr list: those
+              roles 422 on save without a funnel, so hiding the only control
+              that sets one would make them impossible to save. */}
+          {roleRequiresFunnel(form.role) && (
           <SectionCard
             title={
               <span className="inline-flex items-center gap-1.5">
                 Funnel
-                {roleRequiresFunnel(form.role) && (
-                  <span className="text-red-400 text-sm">*</span>
-                )}
+                <span className="text-red-400 text-sm">*</span>
               </span>
             }
-            subtitle={
-              roleRequiresFunnel(form.role)
-                ? "Pipeline this AI employee runs - REQUIRED for this role."
-                : "Pipeline this AI employee runs. Blank = use the department/tenant default."
-            }
+            subtitle="Pipeline this AI employee runs - REQUIRED for this role."
           >
             <select
               value={form.funnelId}
               onChange={(e) => patch({ funnelId: e.target.value })}
               className={clsx(
                 "w-full px-4 py-2.5 bg-gray-50 border rounded-xl text-sm focus:ring-2 focus:ring-violet-200 focus:bg-white outline-none transition",
-                roleRequiresFunnel(form.role) && !form.funnelId
+                !form.funnelId
                   ? "border-red-300 focus:border-red-400"
                   : "border-gray-200 focus:border-violet-300"
               )}
             >
-              <option value="">
-                {roleRequiresFunnel(form.role)
-                  ? "- Select a funnel (required) -"
-                  : "Use department / tenant default"}
-              </option>
+              <option value="">- Select a funnel (required) -</option>
               {funnels.map((f) => (
                 <option key={f.id} value={f.id}>
                   {f.funnelId}
@@ -1306,9 +1426,7 @@ export default function AgentEditorPage() {
               ))}
             </select>
             <p className="text-xs text-gray-400 mt-2">
-              {roleRequiresFunnel(form.role)
-                ? "Save will fail with 422 if no funnel is selected."
-                : "Per-turn goal, required questions, data fields, and exit criteria are read from the resolved funnel's active stage on every turn."}
+              Save will fail with 422 if no funnel is selected.
             </p>
             <a
               href="/settings/funnels"
@@ -1317,6 +1435,7 @@ export default function AgentEditorPage() {
               Manage funnels in Settings →
             </a>
           </SectionCard>
+          )}
 
           {/* Action Contracts removed: the planner, capability layer and
               objective engine now decide the tool chain at runtime, so hand-wired
@@ -1645,6 +1764,25 @@ export default function AgentEditorPage() {
         agentName={form.name || "AI Agent"}
         avatarColor={form.avatarColor}
         token={token || ""}
+      />
+
+      <ReadinessReportModal
+        open={readinessOpen}
+        onClose={() => setReadinessOpen(false)}
+        report={readinessReport}
+        token={token || ""}
+        kbId={readinessKbId}
+        busy={readinessBusy}
+        agentName={form.name || undefined}
+        onRerun={async () => {
+          if (!token || readinessBusy) return;
+          setReadinessBusy(true);
+          try {
+            const res = await builderReadinessTest(token, id, locale);
+            setReadinessReport(res.data);
+          } catch { /* keep last report */ }
+          finally { setReadinessBusy(false); }
+        }}
       />
     </AppLayout>
   );

@@ -205,6 +205,18 @@
       "type": "file"
     },
     {
+      "path": "src/lib/authentik.ts",
+      "accessCount": 2,
+      "lastAccessed": 1784319976437,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/audit.ts",
+      "accessCount": 2,
+      "lastAccessed": 1784319977609,
+      "type": "file"
+    },
+    {
       "path": "prisma/migrations/20260409120000_add_conversation_flow_and_custom_guardrails/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1775724158051,
@@ -376,6 +388,30 @@
       "path": "prisma/migrations/20260707160000_recommendations/migration.sql",
       "accessCount": 1,
       "lastAccessed": 1783451822716,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/__tests__/webhook-verify.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784301643644,
+      "type": "file"
+    },
+    {
+      "path": "src/middleware/__tests__/validate.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784301655007,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/safe-fetch.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784301743133,
+      "type": "file"
+    },
+    {
+      "path": "src/lib/internal-key.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784301753214,
       "type": "file"
     }
   ],

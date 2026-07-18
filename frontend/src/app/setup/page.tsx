@@ -33,6 +33,7 @@ import {
   resolveRecommendation,
   type RecommendationRow,
   employeeChat,
+  saveTunedPersona,
   type EmployeePersona,
   teachGap,
   saveOnboardingGoal,
@@ -1695,7 +1696,7 @@ function IntegrationCard({ he, logo, fallbackSlug, name, sub, badge, evidence, s
   );
 }
 
-// Movement 5 — one card language for everything: recommended systems, every
+// Movement 5 - one card language for everything: recommended systems, every
 // detected tool we ACTUALLY support in the marketplace (connect it right here),
 // and detected tools we don't support yet (same card, gray, "Ask for it" →
 // emails the team like the connect screen's inform-us). Channels get the same
@@ -1713,6 +1714,13 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
   const [keyError, setKeyError] = useState("");
   const [channelIntents, setChannelIntents] = useState<Set<string>>(() => {
     try { return new Set(JSON.parse(localStorage.getItem("onboarding.channelIntent") || "[]")); } catch { return new Set(); }
+  });
+  // Browse-the-whole-marketplace section ("Show what you have"), collapsible.
+  const [showCatalog, setShowCatalog] = useState(false);
+  // OAuth round-trips kicked off HERE come back to /setup?connected=<slug> -
+  // greet the return with an explicit success beat.
+  const [justConnectedSlug] = useState<string | null>(() => {
+    try { return new URLSearchParams(window.location.search).get("connected"); } catch { return null; }
   });
   useEffect(() => {
     getRecommendations(token, "OPEN")
@@ -1837,6 +1845,18 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
         </div>
       )}
 
+      {/* Fresh OAuth return from THIS screen - the success the owner must SEE. */}
+      {justConnectedSlug && justConnectedSlug !== connectedSlug && (() => {
+        const intg = marketplace.find((i) => normSlug(i.slug) === normSlug(justConnectedSlug));
+        const label = intg?.name || SYSTEMS.find((s) => s.slug === justConnectedSlug)?.name || justConnectedSlug;
+        return (
+          <div className="mt-6 flex items-center gap-3 p-4 rounded-2xl border border-emerald-200 bg-emerald-50">
+            <span className="w-9 h-9 rounded-xl bg-white border border-emerald-100 flex items-center justify-center text-emerald-500 text-lg shrink-0">✓</span>
+            <p className="text-sm text-emerald-800 font-medium">{he ? `${label} חובר בהצלחה - העובד/ת כבר יכול/ה להשתמש בו.` : `${label} connected successfully - your employee can already use it.`}</p>
+          </div>
+        );
+      })()}
+
       {/* ── Integrations ── every supported thing is a connectable card. */}
       <p className="mt-8 text-xs font-semibold text-gray-400 uppercase tracking-[0.16em]">{he ? "אינטגרציות" : "Integrations"}</p>
       {recs === null ? (
@@ -1912,6 +1932,46 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
           </div>
         </div>
       )}
+
+      {/* ── The full marketplace, on demand ── "show me what you have": every
+          integration GOTCHA supports, connectable right here, collapsible. */}
+      {(() => {
+        const shownSlugs = new Set<string>([
+          ...(connectedSlug ? [normSlug(connectedSlug)] : []),
+          ...sorted.map((r) => normSlug(r.targetSlug || "")),
+          ...detectedSupported.map(({ intg }) => normSlug(intg.slug)),
+        ]);
+        const rest = marketplace.filter((i) => !shownSlugs.has(normSlug(i.slug)));
+        if (rest.length === 0) return null;
+        if (!showCatalog) {
+          return (
+            <button type="button" onClick={() => setShowCatalog(true)}
+              className="mt-6 w-full flex items-center justify-center gap-2 p-3.5 rounded-2xl border border-dashed border-gray-200 text-sm font-medium text-primary-600 hover:text-primary-700 hover:border-primary-300 transition">
+              {he ? `הראו לי מה יש לכם - כל ${rest.length} האינטגרציות שאנחנו תומכים בהן ←` : `Show me what you have - all ${rest.length} integrations we support →`}
+            </button>
+          );
+        }
+        return (
+          <div className="mt-7">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-semibold text-gray-400 uppercase tracking-[0.16em]">{he ? "כל האינטגרציות שלנו" : "Everything we support"}</p>
+              <button type="button" onClick={() => setShowCatalog(false)} className="text-[11px] font-medium text-gray-400 hover:text-gray-600">{he ? "הסתירו ✕" : "Hide ✕"}</button>
+            </div>
+            <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+              {rest.map((intg) => (
+                <IntegrationCard key={intg.slug} he={he}
+                  logo={intg.logoUrl} fallbackSlug={normSlug(intg.slug)}
+                  name={intg.name || intg.slug}
+                  sub={intg.description || undefined}
+                  state={isMarketConnected(intg) ? "connected" : "connectable"}
+                  connecting={connectingSlug === intg.slug}
+                  onConnect={() => connectMarketplace(intg, intg.name || intg.slug)}
+                />
+              ))}
+            </div>
+          </div>
+        );
+      })()}
 
       {/* ── Channels ── same card language; WhatsApp always offered. */}
       <p className="mt-9 text-xs font-semibold text-gray-400 uppercase tracking-[0.16em]">{he ? "ערוצים" : "Channels"}</p>
@@ -2420,20 +2480,29 @@ function TuneScreen({ he, token, rec, disc, health, goal, goals, onConnect, onTe
   const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => { endRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, busy]);
 
-  async function send(text: string, opts?: { rule?: boolean }) {
+  // A rule NEVER becomes a chat message. It lands in the rules row instantly
+  // and persists straight onto the tuned persona (personaOnly save) - the
+  // transcript stays a conversation, the rules stay rules.
+  const [ruleFlash, setRuleFlash] = useState(false);
+  function addRule(text: string) {
+    const content = text.trim();
+    if (!content || busy) return;
+    if ((persona.instructions || []).some((i) => i.toLowerCase() === content.toLowerCase())) return;
+    const nextPersona: EmployeePersona = { ...persona, instructions: [...(persona.instructions || []), content].slice(0, 20) };
+    setPersona(nextPersona);
+    setRuleFlash(true);
+    window.setTimeout(() => setRuleFlash(false), 1600);
+    saveTunedPersona(token, nextPersona).catch(() => {});
+  }
+
+  async function send(text: string) {
     const content = text.trim();
     if (!content || busy) return;
     const next = [...messages, { role: "user" as const, content }];
     setMessages(next);
     setInput("");
     setBusy(true);
-    // A quick-tuning chip IS a rule - capture it deterministically so the owner
-    // SEES it land in the rules row immediately, instead of it living only as
-    // chat text the model may or may not fold into `instructions`.
-    const base: EmployeePersona = opts?.rule && !(persona.instructions || []).some((i) => i.toLowerCase() === content.toLowerCase())
-      ? { ...persona, instructions: [...(persona.instructions || []), content].slice(0, 20) }
-      : persona;
-    if (base !== persona) setPersona(base);
+    const base = persona;
     try {
       const res = await employeeChat(token, next, base, he ? "he" : "en");
       if (res.data.ok) {
@@ -2490,9 +2559,11 @@ function TuneScreen({ he, token, rec, disc, health, goal, goals, onConnect, onTe
         <div ref={endRef} />
       </div>
 
-      {/* Quick tuning chips - rule chips land in the rules row instantly. */}
-      <div className="flex flex-wrap gap-1.5 mt-3">
-        {chips.map((c) => <button key={c.text} type="button" onClick={() => send(c.text, { rule: c.rule })} disabled={busy} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-primary-300 disabled:opacity-50">{c.text}</button>)}
+      {/* Quick tuning chips - rule chips go STRAIGHT to the rules row above
+          (no chat message), goal-confirm chips talk to the employee. */}
+      <div className="flex flex-wrap gap-1.5 mt-3 items-center">
+        {chips.map((c) => <button key={c.text} type="button" onClick={() => (c.rule ? addRule(c.text) : send(c.text))} disabled={busy} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-primary-300 disabled:opacity-50">{c.rule ? "+ " : ""}{c.text}</button>)}
+        {ruleFlash && <span className="text-[11px] font-medium text-emerald-600">{he ? "✓ נוסף לכללי העובד" : "✓ Added to the employee's rules"}</span>}
       </div>
 
       {/* Composer */}
@@ -2977,7 +3048,7 @@ function ReadyScreen({ he, disc, rec, health, onFinish }: { he: boolean; disc: B
       )}
 
       <button type="button" onClick={() => onFinish()} className="inline-flex items-center justify-center px-8 py-4 bg-primary-500 hover:bg-primary-600 text-white text-base font-semibold rounded-2xl transition shadow-lg shadow-primary-500/25">
-        {he ? `הפעילו את ${name} ←` : `Put ${name} to work →`}
+        {he ? "בואו נתחיל ←" : "Let's get started →"}
       </button>
       <p className="text-[12px] text-gray-400">{he ? "מה שלא חיברתם נשמר כהמלצה וממשיך לחכות לכם." : "Anything you skipped is saved as a recommendation and keeps waiting for you."}</p>
     </div>

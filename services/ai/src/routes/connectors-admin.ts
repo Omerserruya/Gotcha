@@ -33,13 +33,15 @@ import {
   requireOnboardingOrActiveTenant,
   requireRole,
   encryptCredentials,
+  getOAuthStateSecret,
 } from "@chatcenter/shared";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
 import { loadConnection } from "../services/connectors/integration-framework";
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -246,7 +248,7 @@ router.get(
     const clientId = process.env.STRIPE_CLIENT_ID;
     const redirect = process.env.STRIPE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "stripe" }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "stripe" }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -262,7 +264,7 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "stripe") { res.status(400).send("bad_state"); return; }
 
     const secret = process.env.STRIPE_SECRET_KEY;
@@ -311,7 +313,7 @@ router.get(
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     // HubSpot enforces an EXACT scope contract between the install URL and the
     // app's configured scopes (HubSpot dashboard → Auth → Scopes):
     //   1. Every scope the app marks "Required" must appear in the install URL,
@@ -366,7 +368,7 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "hubspot") { res.status(400).send("bad_state"); return; }
 
     const clientId = process.env.HUBSPOT_CLIENT_ID!;
@@ -427,8 +429,22 @@ router.get(
       return;
     }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "shopify", shop, flow }, JWT_SECRET, { expiresIn: "10m" });
-    const scopes = "read_orders,write_orders,read_customers,write_discounts,read_products,read_returns";
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "shopify", shop, flow }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    // Discount tools talk to the REST PriceRule/DiscountCode resources
+    // (/price_rules.json, /discount_codes/lookup.json), which are gated on
+    // read_price_rules / write_price_rules. `write_discounts` covers the newer
+    // GraphQL Discounts API instead, so every discount tool - list_discounts,
+    // validate_discount, get_customer_discounts, the coupon writers - 403'd with
+    // "requires merchant approval for read_price_rules scope" no matter what.
+    // Existing connections keep their old grant: re-connect to pick these up.
+    const scopes = [
+      "read_orders", "write_orders",
+      "read_customers",
+      "read_price_rules", "write_price_rules",
+      "write_discounts",
+      "read_products",
+      "read_returns",
+    ].join(",");
     const params = new URLSearchParams({
       client_id: clientId,
       scope: scopes,
@@ -443,7 +459,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
   try {
     const { code, state, shop } = req.query;
     if (!code || !state || !shop) { res.status(400).send("missing_code_or_state_or_shop"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "shopify" || payload.shop !== shop) { res.status(400).send("bad_state"); return; }
 
     const clientId = process.env.SHOPIFY_API_KEY!;
@@ -525,7 +541,7 @@ router.get(
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
     const verifier = base64url(crypto.randomBytes(48));
     const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "airtable", flow, v: verifier }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "airtable", flow, v: verifier }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     const scope = "data.records:read data.records:write schema.bases:read schema.bases:write";
     const params = new URLSearchParams({
       client_id: clientId,
@@ -545,7 +561,7 @@ router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Resp
     const { code, state, error } = req.query;
     if (error) { res.status(400).send(`airtable_oauth_error:${String(error)}`); return; }
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "airtable") { res.status(400).send("bad_state"); return; }
     const clientId = process.env.AIRTABLE_CLIENT_ID!;
     const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
@@ -709,7 +725,7 @@ router.get(
     const appId = process.env.WIX_CLIENT_ID;            // Wix App ID
     const redirect = process.env.WIX_REDIRECT_URI;
     if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "wix" }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "wix" }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     // Wix App install flow - NOT the headless `oauth/authorize` flow.
     const params = new URLSearchParams({
       appId,
@@ -724,7 +740,7 @@ router.get("/connectors/wix/oauth/callback", async (req: Request, res: Response)
   try {
     const { code, state, instanceId } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "wix") { res.status(400).send("bad_state"); return; }
     const clientId = process.env.WIX_CLIENT_ID!;
     const clientSecret = process.env.WIX_CLIENT_SECRET!;
@@ -774,7 +790,7 @@ router.get(
     const redirect = process.env.SQUARE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "square_oauth_not_configured" }); return; }
     const env = String(req.query.environment || "production") === "sandbox" ? "sandbox" : "production";
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "square", env }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "square", env }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     const scopes = "PAYMENTS_WRITE PAYMENTS_READ CUSTOMERS_READ CUSTOMERS_WRITE ORDERS_READ ORDERS_WRITE INVOICES_READ INVOICES_WRITE MERCHANT_PROFILE_READ";
     const host = env === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
     const params = new URLSearchParams({
@@ -792,7 +808,7 @@ router.get("/connectors/square/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "square") { res.status(400).send("bad_state"); return; }
     const env = payload.env === "sandbox" ? "sandbox" : "production";
     const host = env === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
@@ -846,7 +862,7 @@ router.get(
       return;
     }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "salesforce", loginHost, flow }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "salesforce", loginHost, flow }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -862,7 +878,7 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "salesforce") { res.status(400).send("bad_state"); return; }
     const clientId = process.env.SALESFORCE_CLIENT_ID!;
     const clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
@@ -911,7 +927,7 @@ router.get(
     const clientId = process.env.MONDAY_CLIENT_ID;
     const redirect = process.env.MONDAY_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "monday_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "monday" }, JWT_SECRET, { expiresIn: "10m" });
+    const state = jwt.sign({ tenantId: req.tenantId, provider: "monday" }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirect,
@@ -926,7 +942,7 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "monday") { res.status(400).send("bad_state"); return; }
     const clientId = process.env.MONDAY_CLIENT_ID!;
     const clientSecret = process.env.MONDAY_CLIENT_SECRET!;

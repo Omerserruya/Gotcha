@@ -29,6 +29,7 @@
  */
 
 import { registerAdapter, type ProviderAdapter, type ToolDefinition } from "./integration-framework";
+import { assertPublicUrl } from "@chatcenter/shared";
 
 const API_VERSION = "2024-04";
 
@@ -849,6 +850,9 @@ function mapReturns(nodes: any[] | undefined): any[] {
 }
 
 async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string, unknown>): Promise<any> {
+  // SSRF guard: ctx.base derives from config.shopDomain (re-validated at the
+  // sink, not just at connect time).
+  await assertPublicUrl(`${ctx.base}/graphql.json`);
   const res = await fetch(`${ctx.base}/graphql.json`, {
     method: "POST",
     headers: { "X-Shopify-Access-Token": ctx.token, "Content-Type": "application/json" },
@@ -870,6 +874,8 @@ async function shopifyGraphQL(ctx: Ctx, query: string, variables: Record<string,
 }
 
 async function shopifyRequest(token: string, method: string, url: string, body?: unknown): Promise<any> {
+  // SSRF guard: url derives from config.shopDomain (per-tenant, stored).
+  await assertPublicUrl(url);
   const init: RequestInit = {
     method,
     headers: {

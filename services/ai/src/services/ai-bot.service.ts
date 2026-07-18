@@ -146,6 +146,26 @@ import type { SystemEventType } from "./notifications-emit";
  * level deny/propose decisions synthesize a side-effect shape that triggers
  * the existing chat loop's pause/handoff branches without new branches.
  */
+
+/**
+ * Language pin for every INTERNAL corrective we inject as `role: "user"`.
+ *
+ * Those nudges are our own scaffolding, but to the model they are literally the
+ * customer's most recent message - and the system prompt says to detect the
+ * reply language from exactly that. Written in English, they silently flip a
+ * Hebrew conversation to English on the regenerated turn.
+ *
+ * Observed live: a fully-Hebrew WhatsApp chat whose Shopify lookup failed got
+ * the recovery nudge and answered "Sorry, I can't pull the order from my side
+ * right now." - breaking the Language lock the prompt calls NON-NEGOTIABLE.
+ *
+ * Append this to any injected user-role corrective that leads to a
+ * customer-facing reply.
+ */
+const INTERNAL_NUDGE_LANGUAGE_PIN =
+  ` (Internal instruction from the platform - NOT the customer, and NOT a language switch. ` +
+  `Your reply must stay in the SAME language the CUSTOMER has been writing in.)`;
+
 function unwrapToolExec(
   toolCallId: string,
   toolName: string,
@@ -818,9 +838,9 @@ function humanizeReply(text: string | null): string | null {
   if (!text) return text;
   let out = text;
   // Em/en dash used as a clause connector (with or without surrounding
-  // spaces). The wide em-dash "—" (U+2014) and horizontal bar "―" (U+2015)
+  // spaces). The wide em-dash "-" (U+2014) and horizontal bar "―" (U+2015)
   // were missing from this class, so they leaked through to customers.
-  out = out.replace(/\s*[-–—―]\s*/g, ", ");
+  out = out.replace(/\s*[-–-―]\s*/g, ", ");
   // ASCII hyphen used as a dash: space(s) on BOTH sides → comma. " word - word"
   out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
   // Don't leave a stray ", " right before sentence punctuation or newline.
@@ -2377,7 +2397,7 @@ async function generateAIBotReplyInner(
       content:
         `**MISSING REQUIRED ACTION.** ${reasonParts.join(" ")} ` +
         `You MUST call the missing tool(s) NOW before producing any reply text. ` +
-        `This is the regeneration the original prompt warned about. Do not skip again.`,
+        `This is the regeneration the original prompt warned about. Do not skip again.` + INTERNAL_NUDGE_LANGUAGE_PIN,
     });
 
     const retryResponse = await generateResponse({
@@ -2575,7 +2595,7 @@ async function generateAIBotReplyInner(
         content:
           `A concrete action is ready that advances the current goal, and every input it needs is already known. ` +
           `Do NOT keep discussing or close the conversation - call the tool that advances the goal NOW, ` +
-          `then write your reply based on its real result.`,
+          `then write your reply based on its real result.` + INTERNAL_NUDGE_LANGUAGE_PIN,
       });
       const apResponse = await generateResponse({
         tenantId: opts.tenantId,
@@ -2796,7 +2816,7 @@ async function generateAIBotReplyInner(
             `something was wrong or missing; (2) use a different available tool that reaches the same outcome; (3) ask the ` +
             `customer for the ONE specific detail that was missing or rejected, then proceed; (4) offer a concrete workaround ` +
             `that still advances the goal. Escalate ONLY if none of these is possible. Never expose internal or technical ` +
-            `failure details to the customer - keep the reply natural.`,
+            `failure details to the customer - keep the reply natural.` + INTERNAL_NUDGE_LANGUAGE_PIN,
         });
         const recResponse = await generateResponse({
           tenantId: opts.tenantId,
@@ -3010,7 +3030,7 @@ async function generateAIBotReplyInner(
           content:
             `SYSTEM: A background CRM record is ready and must be created now. Call \`${bgTool}\` ` +
             `using the customer details already in context. This is a SILENT background action - it ` +
-            `does NOT change your reply to the customer; produce only the tool call.`,
+            `does NOT change your reply to the customer; produce only the tool call.` + INTERNAL_NUDGE_LANGUAGE_PIN,
         },
       ];
       const bgResp = await generateResponse({
@@ -3121,9 +3141,9 @@ async function generateAIBotReplyInner(
     chatMessages.push({ role: "assistant", content: replyText });
     chatMessages.push({
       role: "user",
-      content: decisionObjStatus
+      content: (decisionObjStatus
         ? buildCloserCorrective(decisionObjStatus)
-        : buildGoalPendingCorrective(decisionGoalStatus!),
+        : buildGoalPendingCorrective(decisionGoalStatus!)) + INTERNAL_NUDGE_LANGUAGE_PIN,
     });
     // Regenerate WITHOUT tools so the model must return forward-moving text
     // (a discovery question / next-step proposal), not a half-handled call.
@@ -3179,7 +3199,7 @@ async function generateAIBotReplyInner(
       role: "user",
       content: buildBookingFailsafeCorrective(
         calendarCapability.capability === "NO_CALENDAR" ? "no_calendar" : "not_bookable",
-      ),
+      ) + INTERNAL_NUDGE_LANGUAGE_PIN,
     });
     const regen = await generateResponse({
       tenantId: opts.tenantId,
@@ -3271,7 +3291,7 @@ async function generateAIBotReplyInner(
         `with no schedule_meeting grounding this turn. Regenerating with tools.`,
     );
     chatMessages.push({ role: "assistant", content: replyText });
-    chatMessages.push({ role: "user", content: buildBookingGroundingCorrective() });
+    chatMessages.push({ role: "user", content: buildBookingGroundingCorrective() + INTERNAL_NUDGE_LANGUAGE_PIN });
     const regen = await generateResponse({
       tenantId: opts.tenantId,
       sessionId: opts.conversationId,
@@ -3393,7 +3413,7 @@ async function generateAIBotReplyInner(
     );
     injectCommittedSummaryIfNeeded();
     if (replyText) chatMessages.push({ role: "assistant", content: replyText });
-    chatMessages.push({ role: "user", content: buildUnconfirmedCommitCorrective(kinds) });
+    chatMessages.push({ role: "user", content: buildUnconfirmedCommitCorrective(kinds) + INTERNAL_NUDGE_LANGUAGE_PIN });
     const regen = await generateResponse({
       tenantId: opts.tenantId,
       sessionId: opts.conversationId,

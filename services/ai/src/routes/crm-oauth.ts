@@ -14,7 +14,7 @@
  * trust anchor on the callback - so the callback is safe to leave public.
  */
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, getOAuthStateSecret } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 import {
   exchangeZohoCode,
@@ -24,7 +24,8 @@ import {
 
 const router = Router();
 
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // ─── Zoho CRM OAuth ─────────────────────────────────────────
 
@@ -45,7 +46,7 @@ router.get(
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
     const state = jwt.sign(
       { tenantId: req.tenantId, integrationSlug: "zoho_crm", userId: (req as any).userId, flow },
-      JWT_SECRET,
+      OAUTH_STATE_SECRET,
       { expiresIn: "10m" },
     );
 
@@ -80,7 +81,7 @@ router.get("/oauth/zoho_crm/callback", async (req: Request, res: Response) => {
 
     let payload: { tenantId: string; integrationSlug: string; userId?: string; flow?: string };
     try {
-      payload = jwt.verify(state as string, JWT_SECRET) as any;
+      payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     } catch {
       res.status(400).json({ error: "Invalid or expired state" });
       return;

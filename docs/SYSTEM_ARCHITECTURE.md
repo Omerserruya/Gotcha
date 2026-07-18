@@ -46,7 +46,8 @@ ChatCenter is a **multi-tenant SaaS platform** for omnichannel customer communic
 | BullMQ | Distributed job queue framework |
 | Socket.IO 4.8 | Real-time WebSocket server |
 | OpenAI SDK 6.22 | AI provider integration |
-| bcryptjs | Password hashing |
+| Authentik (external IdP) | Identity: passwords, MFA, sessions, recovery (no credentials in GOTCHA) |
+| jose | RS256 token verification via Authentik JWKS |
 | jsonwebtoken | JWT authentication |
 | Nodemailer | Email sending (SMTP) |
 | Zod | Request schema validation |
@@ -101,7 +102,7 @@ ChatCenter/
 
 | Domain | Endpoints | Description |
 |--------|-----------|-------------|
-| Authentication | `/api/auth/*` | Login, register, magic link verification, session |
+| Authentication | `/api/auth/*` | Current principal (`/me`); sign-in itself happens at Authentik via OIDC redirect |
 | Agents | `/api/agents/*` | Agent CRUD, settings (greeting, business hours, SLA, copilot, idle automation) |
 | Departments | `/api/departments/*` | Department CRUD, member management, dept copilot config |
 | Channels | `/api/channels/*` | OAuth connect/disconnect WhatsApp, Messenger, Instagram |
@@ -109,9 +110,9 @@ ChatCenter/
 | System Admin | `/api/system/*` | Tenant CRUD, system stats, user management, feature toggles |
 
 **Key Services:**
-- `AuthService` - Login/register with bcrypt + JWT
+- `InvitationService` - Provisions Authentik identities and emails setup links (users choose their password at Authentik; GOTCHA stores none)
 - `AgentConfigGenerator` - Generates structured AI agent configs per department
-- `NotificationService` - Email notifications (onboarding, activation) + magic links
+- `NotificationService` - Email notifications (onboarding, activation)
 
 ---
 
@@ -239,7 +240,7 @@ The shared package provides cross-cutting concerns used by all services:
 | Module | Exports |
 |--------|---------|
 | **Database** | Prisma client, generated types |
-| **Auth** | JWT sign/verify, bcrypt utilities |
+| **Auth** | `verifyAccessToken` (RS256 via Authentik JWKS, no signing path), `resolvePrincipal`, `authenticate()` middleware |
 | **Encryption** | Credential encrypt/decrypt (AES) |
 | **Queues** | 5 BullMQ queues (incoming, outgoing, analytics, channel-health, idle-conversation) |
 | **Event Bus** | Redis pub/sub (publishEvent, subscribeToEvents) |
@@ -354,7 +355,6 @@ Tenant (root)
   |-- BusinessProfile (1:1)
   |-- TenantOnboarding (1:1)
   |-- TenantChannelConfig (1:1)
-  |-- MagicLink
   |-- NotificationLog
 ```
 
@@ -394,9 +394,9 @@ Tenant (root)
 [System Admin creates tenant]
     |
     v
-PENDING_ADMIN_SETUP  -->  Magic link email sent (48h expiry)
+PENDING_ADMIN_SETUP  -->  Invitation email with Authentik setup link sent
     |
-    v  (Admin clicks magic link or logs in)
+    v  (Admin sets a password at Authentik and signs in)
 PENDING_ONBOARDING
     |
     v  Step 1: Business Profile (industry, priority, AI mode)
@@ -603,11 +603,11 @@ Channel ready to receive webhooks
 
 | Mechanism | Details |
 |-----------|---------|
-| Password Hashing | bcryptjs with 10 salt rounds |
-| JWT Tokens | Signed with HS256, 24h expiry |
-| Magic Links | 32-byte random hex, 48h expiry, one-time use |
+| Identity Provider | Authentik owns passwords, MFA, sessions, and recovery; GOTCHA stores no credentials |
+| Access Tokens | Minted by Authentik (RS256); services verify via JWKS and string-match `iss` against `OIDC_ISSUER`; GOTCHA cannot mint tokens |
+| Subject Mapping | Authentik `sub` (user UUID) resolves to `User.authentikSubject` |
 | Webhook Verification | HMAC SHA256 signature validation |
-| OAuth State | JWT-signed state parameter (10min expiry) |
+| OAuth State | Signed state parameter using `OAUTH_STATE_SECRET` (integration OAuth CSRF defence, not user auth) |
 
 ### 8.2 Authorization (RBAC)
 
@@ -679,7 +679,7 @@ Channel ready to receive webhooks
 
 See `.env.example` for the full list. Key categories:
 - **Database:** `DATABASE_URL`, `POSTGRES_*`
-- **Security:** `JWT_SECRET`, `CHANNEL_ENCRYPTION_KEY`, `SYSTEM_ADMIN_SETUP_SECRET`
+- **Security:** `OIDC_ISSUER`, `OIDC_JWKS_URI`, `OAUTH_STATE_SECRET`, `CHANNEL_ENCRYPTION_KEY`, `SYSTEM_ADMIN_SETUP_SECRET`
 - **Services:** `AUTH_PORT`, `CONVERSATION_PORT`, `WEBHOOK_PORT`, etc.
 - **Meta Platform:** `META_APP_ID`, `META_APP_SECRET`, `WHATSAPP_*`
 - **AI:** `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_DEFAULT_MODEL`

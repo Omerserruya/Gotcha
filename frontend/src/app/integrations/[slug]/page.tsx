@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { useDynamicParam } from "@/lib/useRouteParam";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
@@ -14,7 +15,6 @@ import {
   updateIntegrationCredentials,
   getIntegrationTools,
   toggleIntegrationTool,
-  setIntegrationCrmSource,
   initIntegrationOAuth,
   listPostgresTables,
   listMongoCollections,
@@ -106,9 +106,9 @@ export default function IntegrationDetailPage() {
   const [config, setConfig] = useState<Record<string, any>>({});
   const [credError, setCredError] = useState<string | null>(null);
 
-  // Shopify-as-CRM source-of-truth toggle (config.useAsCrm).
+  // Read-only mirror of config.useAsCrm - the toggle itself lives in
+  // Settings → Integrations; this page only reflects the resulting state.
   const [useAsCrm, setUseAsCrm] = useState(false);
-  const [crmSaving, setCrmSaving] = useState(false);
 
   // DB schema introspection (postgres / mongodb / aws_rds)
   const [dbObjects, setDbObjects] = useState<Array<{ name: string; qualified: string }>>([]);
@@ -160,20 +160,6 @@ export default function IntegrationDetailPage() {
   useEffect(() => {
     setUseAsCrm(((integration?.tenantConnection?.config as any)?.useAsCrm) === true);
   }, [integration]);
-
-  async function handleToggleCrmSource() {
-    if (!token) return;
-    const next = !useAsCrm;
-    setUseAsCrm(next);
-    setCrmSaving(true);
-    try {
-      await setIntegrationCrmSource(token, slug, next);
-    } catch {
-      setUseAsCrm(!next); // revert on failure
-    } finally {
-      setCrmSaving(false);
-    }
-  }
 
   const ti = integration?.tenantConnection;
   const isConnected = ti?.status === "CONNECTED";
@@ -823,44 +809,20 @@ export default function IntegrationDetailPage() {
             <CustomDbToolsSection providerSlug={slug as "postgresql" | "mongodb" | "aws_rds"} />
           )}
 
-          {/* Shopify as CRM source of truth (opt-in). Shopify is an
-              ecommerce integration, but a tenant can elect it as their
-              customer system of record - the bot then reads customer
-              context (and writes notes/tags) from Shopify instead of a
-              CRM-category integration. Leaving this off changes nothing. */}
-          {slug === "shopify" && isConnected && (
+          {/* The "use Shopify as my CRM" toggle used to live here. Electing the
+              customer system of record is an account-level decision across all
+              connected systems, not a property of this one vendor page, so it
+              now lives in Settings → Integrations (CustomerSystemOfRecordCard).
+              The marketplace stays about browsing and connecting. */}
+          {slug === "shopify" && isConnected && useAsCrm && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
-              <div className="flex items-start justify-between gap-4">
-                <div className="min-w-0">
-                  <h2 className="font-semibold text-gray-900">Use Shopify as my CRM</h2>
-                  <p className="text-sm text-gray-500 mt-1">
-                    Make Shopify the <strong>source of truth</strong> for customers - the AI reads
-                    customer identity, order history and summaries from Shopify, and writes notes,
-                    tags and metafields back here. When on, this takes precedence over any connected
-                    CRM (HubSpot, Zoho, Salesforce…). Your existing tools keep working either way.
-                  </p>
-                  {useAsCrm && (
-                    <span className="inline-block mt-2 px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200">
-                      Active - Shopify is your CRM source of truth
-                    </span>
-                  )}
-                </div>
-                <button
-                  type="button"
-                  role="switch"
-                  aria-checked={useAsCrm}
-                  disabled={crmSaving}
-                  onClick={handleToggleCrmSource}
-                  className={clsx(
-                    "relative w-12 h-7 rounded-full transition-colors shrink-0 mt-0.5 disabled:opacity-50",
-                    useAsCrm ? "bg-violet-500" : "bg-gray-200"
-                  )}
-                >
-                  <span className={clsx(
-                    "absolute top-0.5 left-0.5 w-6 h-6 bg-white rounded-full shadow transition-transform",
-                    useAsCrm && "translate-x-5"
-                  )} />
-                </button>
+              <div className="flex items-center gap-3">
+                <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 shrink-0">
+                  {t("marketplace.systemOfRecordActive")}
+                </span>
+                <Link href="/settings/integrations" className="text-sm font-medium text-violet-600 hover:text-violet-700 ms-auto shrink-0">
+                  {t("marketplace.manageInSettings")}
+                </Link>
               </div>
             </div>
           )}

@@ -198,6 +198,13 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               </div>
               <div className="flex items-center gap-1">
                 <NotificationBell />
+                <Link
+                  href="/settings/account"
+                  className="text-gray-400 hover:text-primary-600 transition p-1.5 rounded-lg hover:bg-primary-50"
+                  title={t("nav.account") || "Account & Security"}
+                >
+                  <AccountIcon className="w-5 h-5" />
+                </Link>
                 <button
                   onClick={logout}
                   className="text-red-400 hover:text-red-600 transition p-1.5 rounded-lg hover:bg-red-50"
@@ -357,6 +364,15 @@ function LogoutIcon({ className }: { className?: string }) {
   return (
     <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
       <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 9V5.25A2.25 2.25 0 0013.5 3h-6a2.25 2.25 0 00-2.25 2.25v13.5A2.25 2.25 0 007.5 21h6a2.25 2.25 0 002.25-2.25V15m3 0l3-3m0 0l-3-3m3 3H9" />
+    </svg>
+  );
+}
+
+function AccountIcon({ className }: { className?: string }) {
+  // Shield-check: account & security.
+  return (
+    <svg className={className} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
     </svg>
   );
 }

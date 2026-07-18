@@ -8,7 +8,7 @@
  *   GET  /oauth/calendly/callback          - finish exchange
  *   POST /api/calendar/disconnect          - revoke local row (status=DISCONNECTED)
  *
- * State carries `{ tenantId, aiAgentId, userId }` signed with JWT_SECRET so
+ * State carries `{ tenantId, aiAgentId, userId }` signed with OAUTH_STATE_SECRET so
  * the callback can persist the right CalendarAccount row.
  *
  * Tokens are encrypted with `encryptCredentials` before storage. Same
@@ -23,11 +23,13 @@ import {
   requireActiveTenant,
   requireRole,
   encryptCredentials,
+  getOAuthStateSecret,
 } from "@chatcenter/shared";
 import jwt from "jsonwebtoken";
 
 const router = Router();
-const JWT_SECRET = process.env.JWT_SECRET || "change-me";
+// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
+const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // ─── Google Calendar ────────────────────────────────────────
 
@@ -67,7 +69,7 @@ router.get(
     }
     const state = jwt.sign(
       { tenantId: req.tenantId, aiAgentId, userId: (req as any).userId, provider: "google" },
-      JWT_SECRET,
+      OAUTH_STATE_SECRET,
       { expiresIn: "10m" },
     );
     const params = new URLSearchParams({
@@ -90,7 +92,7 @@ router.get(["/oauth/google_calendar/callback", "/oauth/google-calendar/callback"
       res.status(400).json({ error: "Missing code or state" });
       return;
     }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "google") {
       res.status(400).json({ error: "state provider mismatch" });
       return;
@@ -198,7 +200,7 @@ router.get(
     }
     const state = jwt.sign(
       { tenantId: req.tenantId, aiAgentId, userId: (req as any).userId, provider: "calendly" },
-      JWT_SECRET,
+      OAUTH_STATE_SECRET,
       { expiresIn: "10m" },
     );
     const params = new URLSearchParams({
@@ -218,7 +220,7 @@ router.get("/oauth/calendly/callback", async (req: Request, res: Response) => {
       res.status(400).json({ error: "Missing code or state" });
       return;
     }
-    const payload = jwt.verify(state as string, JWT_SECRET) as any;
+    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
     if (payload.provider !== "calendly") {
       res.status(400).json({ error: "state provider mismatch" });
       return;

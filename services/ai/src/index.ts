@@ -39,6 +39,7 @@ import customerSummaryRoutes from "./routes/customer-summary";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
 import reasonerShadowRoutes from "./routes/reasoner-shadow";
 import decisionTimelineRoutes from "./routes/decision-timeline";
+import gdprInternalRoutes from "./routes/gdpr-internal";
 import { setProvider } from "./services/ai-assist.service";
 import { OpenAIProvider } from "./services/openai.provider";
 import { initAIService, getDefaultModel } from "./services/ai.service";
@@ -121,6 +122,7 @@ app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
 app.use("/api/reasoner-shadow", reasonerShadowRoutes);
 app.use("/api/decision-timeline", decisionTimelineRoutes);
+app.use("/api/gdpr-internal", gdprInternalRoutes);
 app.use("/api/copilot", copilotOutcomesRoutes);
 app.use("/api", postCallRoutes);
 
