@@ -1416,11 +1416,87 @@ model ApprovalRequest {
   createdAt      DateTime       @default(now()) @map("created_at")
   updatedAt      DateTime       @updatedAt @map("updated_at")
 
+  // ── Execution lifecycle (separate from the DECISION above) ──
+  // A manager approving is not the action happening. `status` records the
+  // human decision; `executionState` records what the system then did. Both
+  // are needed: without this, a dispatch that failed left an APPROVED row
+  // indistinguishable from one that succeeded, nothing could retry it, and
+  // the customer was simply never told anything.
+  executionState   ExecutionState @default(NOT_STARTED) @map("execution_state")
+  executionStartedAt DateTime?    @map("execution_started_at")
+  executionEndedAt   DateTime?    @map("execution_ended_at")
+  /// Provider/tool result summary. NEVER the raw credential-bearing payload.
+  executionResult  Json?          @map("execution_result")
+  executionError   String?        @map("execution_error")
+  executionAttempts Int           @default(0) @map("execution_attempts")
+  /// Set once the customer has been told the outcome. Presence of this value
+  /// is the once-only guard for the continuation message: delivery may be
+  /// retried, but the business action behind it is never re-run.
+  customerNotifiedAt DateTime?    @map("customer_notified_at")
+  /// Id of the OUTBOUND message that carried the outcome to the customer.
+  customerMessageId  String?      @map("customer_message_id")
+  /// How the decision arrived - web UI, WhatsApp button, API. Audit trail.
+  decisionChannel  String?        @map("decision_channel")
+  /// Ties every log line of one approval together across services.
+  correlationId    String?        @map("correlation_id")
+  /// Out-of-band (WhatsApp) manager notification: "sent" | "skipped" | "failed".
+  /// `skipped` is a FIRST-CLASS state - the inbox renders the reason so an
+  /// unconfigured tenant sees an actionable setup prompt rather than silence.
+  managerNotifyState String?      @map("manager_notify_state")
+  managerNotifyReason String?     @map("manager_notify_reason")
+  managerNotifiedAt DateTime?     @map("manager_notified_at")
+  /// Deterministic fingerprint of the BUSINESS operation (tool + normalized
+  /// identifying args, e.g. "shopify.process_refund:order=1004"). Row-level
+  /// guards are not enough when TWO rows describe the SAME operation - the
+  /// customer got two "your refund is done" messages that way. This key dedups
+  /// HITL creation (an open sibling wins) and the completion notification
+  /// (any notified sibling wins).
+  operationKey     String?        @map("operation_key")
+
+  @@index([tenantId, operationKey])
   @@index([tenantId, status])
   @@index([tenantId, conversationId])
   @@index([tenantId, contactId])
   @@index([expiresAt])
+  // Drives the resume sweeper: find approvals whose action still needs to run
+  // or whose customer was never told.
+  @@index([status, executionState])
   @@map("approval_requests")
+}
+
+/// Who may be pinged on WhatsApp to decide an approval, and where.
+///
+/// EXPLICIT ONLY. There is deliberately no "fall back to the tenant owner /
+/// first admin" path: silently routing a refund approval to whoever happens to
+/// be an admin is how the wrong person ends up authorising money movement.
+/// A row must exist, be `enabled`, point at a real ACTIVE membership of the
+/// tenant, and carry a validated E.164 number - otherwise the request simply
+/// stays in the in-app approval inbox and says why it was not sent.
+model ApprovalRecipient {
+  id        String   @id @default(cuid())
+  tenantId  String   @map("tenant_id")
+  /// The GOTCHA membership authorised to decide. Authorisation is re-checked
+  /// at decision time, never trusted from the notification itself.
+  userId    String   @map("user_id")
+  /// Delivery channel. Only "whatsapp" today; the column exists so adding
+  /// SMS/Telegram later does not need a migration.
+  channel   String   @default("whatsapp")
+  /// E.164, validated on write (normalised, digits only, leading +).
+  phoneE164 String   @map("phone_e164")
+  /// OFF by default - a tenant must deliberately turn this on.
+  enabled   Boolean  @default(false)
+  /// Cap what may be decided from a phone. HIGH-risk actions can be forced to
+  /// the web UI ("Open in GOTCHA") instead of one-tap approval.
+  maxRiskLevel String @default("medium") @map("max_risk_level")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId, channel])
+  @@index([tenantId, enabled])
+  @@map("approval_recipients")
 }
 
 enum ApprovalStatus {
@@ -1429,6 +1505,25 @@ enum ApprovalStatus {
   REJECTED
   EXPIRED
   CANCELLED
+}
+
+/// What happened to the ACTION after a human said yes. Distinct from
+/// ApprovalStatus, which only records the human decision.
+///   NOT_STARTED - no decision yet, or the decision was no.
+///   EXECUTING   - dispatch in flight (claimed by exactly one worker).
+///   SUCCEEDED   - the provider confirmed the action. ONLY this state may
+///                 produce a "we did it" message to the customer.
+///   FAILED      - dispatch ran and did not succeed; retryable or terminal.
+enum ExecutionState {
+  NOT_STARTED
+  EXECUTING
+  SUCCEEDED
+  FAILED
+  // Historical rows approved BEFORE the execution state machine existed. Their
+  // dispatch outcome was never recorded (many provably never ran). They must
+  // not read as SUCCEEDED (that falsifies history) and must not be retryable
+  // (re-running an old refund/booking is worse). Terminal, audit-only state.
+  LEGACY_UNVERIFIED
 }
 
 // ─── Agent Tool Permissions ─────────────────────────────────
@@ -4193,4 +4288,65 @@ model IntelligenceReview {
   @@index([tenantId, status])
   @@index([tenantId, entityType, entityId])
   @@map("intelligence_reviews")
+}
+
+// ─── Business action policies (deterministic AI-action rules) ───────────────
+//
+// Tenant-configured rules for sensitive AI actions (refunds, cancellations,
+// coupons/compensation, customer-data writes). The AI may EXPLAIN these rules,
+// but enforcement is this data + packages/shared/lib/business-policy.ts,
+// evaluated deterministically at three points: before the AI offers the
+// action, before the HITL request is created, and again immediately before
+// execution after approval. Prompts can never bypass it.
+
+model BusinessActionPolicy {
+  id            String   @id @default(cuid())
+  tenantId      String   @map("tenant_id")
+  /// REFUND | CANCEL_ORDER | COUPON | COMPENSATION | DISCOUNT | CUSTOMER_WRITE
+  actionKind    String   @map("action_kind")
+  enabled       Boolean  @default(true)
+  /// Policies are IMMUTABLE per version: an update writes a NEW row with
+  /// version+1. Historical PolicyDecision rows keep pointing at the version
+  /// that actually decided them - changing a rule never rewrites history.
+  version       Int      @default(1)
+  effectiveFrom DateTime @default(now()) @map("effective_from")
+  /// Rule payload - see BusinessPolicyConfig in business-policy.ts.
+  config        Json     @default("{}")
+  createdBy     String?  @map("created_by")
+  createdAt     DateTime @default(now()) @map("created_at")
+  updatedAt     DateTime @updatedAt @map("updated_at")
+
+  @@unique([tenantId, actionKind, version])
+  @@index([tenantId, actionKind])
+  @@map("business_action_policies")
+}
+
+/// Append-only audit of every policy evaluation - the reproducibility record.
+model PolicyDecision {
+  id              String   @id @default(cuid())
+  tenantId        String   @map("tenant_id")
+  policyId        String?  @map("policy_id")
+  policyVersion   Int?     @map("policy_version")
+  actionKind      String   @map("action_kind")
+  /// OFFER | HITL_CREATE | PRE_EXECUTION
+  evaluationPoint String   @map("evaluation_point")
+  conversationId  String?  @map("conversation_id")
+  contactId       String?  @map("contact_id")
+  aiEmployeeId    String?  @map("ai_employee_id")
+  tool            String?
+  /// Snapshot of the structured facts the decision was computed FROM.
+  inputFacts      Json     @default("{}") @map("input_facts")
+  /// ALLOWED | DENIED | REQUIRES_INFORMATION | REQUIRES_EVIDENCE |
+  /// REQUIRES_HUMAN_APPROVAL | ALLOWED_WITH_LIMIT | ALTERNATIVE_ACTION_REQUIRED |
+  /// FAIL_CLOSED
+  decision        String
+  matchedRules    Json     @default("[]") @map("matched_rules")
+  reasonCodes     Json     @default("[]") @map("reason_codes")
+  maxAmount       Float?   @map("max_amount")
+  correlationId   String?  @map("correlation_id")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@index([tenantId, actionKind])
+  @@map("policy_decisions")
 }
