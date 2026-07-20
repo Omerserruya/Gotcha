@@ -1,12 +1,19 @@
 import { Job } from "bullmq";
-import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError } from "@chatcenter/shared";
+import { prisma, createWorker, OutgoingMessageJob, analyticsQueue, publishEvent, getOutboundAdapter, decryptCredentials, describeSendError, sanitizeCustomerText } from "@chatcenter/shared";
 import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
 import { recordBroadcastResult } from "./broadcast.worker";
 
 const MEDIA_MESSAGE_TYPES = ["image", "video", "document"];
 
 async function processOutgoingMessage(job: Job<OutgoingMessageJob>): Promise<void> {
-  const { tenantId, channel, channelAccountId, recipientExternalId, body, messageId, messageType, mediaUrl, fileName, broadcastId, broadcastRecipientId } = job.data;
+  const { tenantId, channel, channelAccountId, recipientExternalId, body: rawBody, messageId, messageType, mediaUrl, fileName, broadcastId, broadcastRecipientId } = job.data;
+  // OUTBOX chokepoint: every customer-bound body from EVERY producer (bot
+  // replies, approval continuations, broadcasts, scheduled sends, voice
+  // callbacks) passes through the AI-signature sanitizer here, so no path -
+  // present or future - can leak an em dash to a customer even if it skipped
+  // the generation-side humanizer. Character-level only: business facts
+  // (amounts, ids, dates) are never altered.
+  const body = sanitizeCustomerText(rawBody);
 
   const channelAccount = await prisma.channelAccount.findUnique({ where: { id: channelAccountId } });
   if (!channelAccount) {
