@@ -2,8 +2,12 @@
  * Shopify adapter - production-grade, full support surface.
  *
  * Auth: Shopify Admin OAuth. Each tenant connects ONE shop; the shop domain
- * lives in `config.shopDomain` (e.g. "my-store.myshopify.com"). Offline
- * access tokens don't expire; we detect 401 and mark the connection ERROR.
+ * lives in `config.shopDomain` (e.g. "my-store.myshopify.com"). Shopify now
+ * requires EXPIRING offline tokens (non-expiring ones are rejected with a 403
+ * "no longer accepted"): the OAuth callback requests `expiring=1`, and
+ * refreshTokens() below rotates via the refresh grant. Connections that still
+ * hold a legacy non-expiring token are migrated in place through the one-way
+ * token-exchange grant on their first failing call - no re-connect needed.
  *
  * Two roles:
  *   1. ECOMMERCE integration - the rich tool surface below (customer, orders,
@@ -238,16 +242,195 @@ const TOOLS: ToolDefinition[] = [
   t("add_retention_segment", "WRITE", "LOW", "Add a customer to the 'retention' segment (tag-based).",
     "Flag a churn-risk customer for retention.", P.customerSel),
 
+  // ── Refund (money movement - always behind approval) ──
+  t("process_refund", "ACTION", "HIGH", "Refund an order: full refund by default, partial via `amount` or `line_items`.",
+    "Customer wants money back on an order (with approval). Verifies the refundable maximum, executes via Shopify's refund calculate+create flow, and reports whether the gateway transaction is processed or still pending.",
+    {
+      ...P.orderSel,
+      amount: { type: "number", description: "Partial refund amount in the order currency. Omit for a full refund of the remaining balance." },
+      line_items: { type: "array", items: { type: "object", properties: { line_item_id: { type: "string" }, quantity: { type: "number" } } }, description: "Specific line items (and quantities) to refund. Omit for all remaining items." },
+      restock: { type: "boolean", description: "Restock refunded items (default false)." },
+      refund_shipping: { type: "boolean", description: "Also refund shipping (default true on full refunds, false on partial)." },
+      reason: { type: "string" }, note: { type: "string" },
+      notify: { type: "boolean", description: "Send Shopify's refund notification email (default true)." },
+    }, [],
+    { sideEffects: "Moves real money back to the customer through the payment gateway." }),
+
   // ── Legacy (kept for back-compat) ──
   t("update_order_fulfillment", "WRITE", "LOW", "Add a note + tag to an order (non-destructive handoff).",
     "Flag an order for the ops team.", { order_id: { type: "string" }, note: { type: "string" }, tag: { type: "string" } }, ["order_id"]),
+  t("order_lookup", "READ", "LOW", "Look up an order by id or name (alias of get_order).",
+    "Legacy alias - prefer get_order.", P.orderSel),
 ];
+
+// ─── Required OAuth scopes per tool ─────────────────────────
+//
+// Drives two enforcement layers in the integration framework: the pre-flight
+// short-circuit in executeAdapterTool (a known-missing scope fails locally,
+// no HTTP) and the bot tool-surface filter (a tool the shop can't execute is
+// never offered to the model, so no impossible HITL can be opened). Tools
+// absent from this map (the degraded-by-design ones) need no scope - they
+// throw their honest "unsupported" reason before any API call.
+const TOOL_SCOPES: Record<string, string[]> = {
+  // customer read
+  get_customer: ["read_customers"], search_customers: ["read_customers"],
+  get_customer_by_email: ["read_customers"], get_customer_by_phone: ["read_customers"],
+  get_customer_addresses: ["read_customers"], get_customer_tags: ["read_customers"],
+  get_customer_metafields: ["read_customers"],
+  get_customer_orders: ["read_customers", "read_orders"],
+  summarize_customer: ["read_customers", "read_orders"],
+  get_customer_health: ["read_customers", "read_orders"],
+  find_latest_order: ["read_customers", "read_orders"],
+  find_delayed_order: ["read_customers", "read_orders"],
+  // customer write
+  create_customer: ["write_customers"], update_customer: ["write_customers"],
+  add_tag: ["write_customers"], remove_tag: ["write_customers"],
+  update_metafield: ["write_customers"], create_note: ["write_customers"],
+  add_customer_to_segment: ["write_customers"], remove_customer_from_segment: ["write_customers"],
+  add_vip_tag: ["write_customers"], add_retention_segment: ["write_customers"],
+  // orders read
+  get_orders: ["read_orders"], get_order: ["read_orders"], order_lookup: ["read_orders"],
+  search_orders: ["read_orders"], get_order_items: ["read_orders"],
+  get_financial_status: ["read_orders"], check_payment_status: ["read_orders"],
+  get_fulfillment_status: ["read_orders"], get_shipment_status: ["read_orders"],
+  track_shipment: ["read_orders"], get_tracking_number: ["read_orders"],
+  get_tracking_url: ["read_orders"], get_fulfillment_events: ["read_orders"],
+  check_delivery_eta: ["read_orders"], check_pickup_point: ["read_orders"],
+  get_refund_status: ["read_orders"], check_refund: ["read_orders"],
+  check_return_status: ["read_orders"],
+  // order actions
+  cancel_order: ["write_orders"], process_refund: ["write_orders"],
+  send_invoice: ["write_orders"], update_order_fulfillment: ["write_orders"],
+  // products
+  get_product: ["read_products"], search_products: ["read_products"],
+  inventory_status: ["read_products"], variant_information: ["read_products"],
+  // discounts
+  list_discounts: ["read_price_rules"], validate_discount: ["read_price_rules"],
+  get_customer_discounts: ["read_customers", "read_price_rules"],
+  create_discount_code: ["write_price_rules"], create_one_time_coupon: ["write_price_rules"],
+  create_vip_coupon: ["write_price_rules"], disable_coupon: ["write_price_rules"],
+  issue_compensation_coupon: ["write_price_rules"],
+  // returns (GraphQL)
+  get_returns: ["read_returns"], get_return_reason: ["read_returns"],
+};
+for (const def of TOOLS) {
+  const slug = def.name.slice(def.name.indexOf(".") + 1);
+  const scopes = TOOL_SCOPES[slug];
+  if (scopes) def.requiredScopes = scopes;
+}
 
 // ─── Adapter ────────────────────────────────────────────────
 
+// OAuth scopes the tool surface actually needs. Compared against the shop's
+// granted scopes in validate() so a connection missing write access shows a
+// precise, actionable error in the integration UI instead of write tools
+// silently failing (or worse, opening an approval flow that can never run).
+const REQUIRED_SCOPES: Array<{ scope: string; needs: string }> = [
+  { scope: "read_customers", needs: "customer lookup tools" },
+  { scope: "write_customers", needs: "tags / notes / customer updates" },
+  { scope: "read_orders", needs: "order lookup / tracking tools" },
+  { scope: "write_orders", needs: "cancel_order and process_refund" },
+  { scope: "read_products", needs: "product / inventory tools" },
+  { scope: "read_price_rules", needs: "discount lookup tools" },
+  { scope: "write_price_rules", needs: "coupon creation tools" },
+];
+
 const ShopifyAdapter: ProviderAdapter = {
   slug: "shopify",
+  migratesLegacyCredentials: true,
   tools: () => TOOLS,
+
+  /**
+   * Live credential + scope probe for the integration "Test" button.
+   * `access_scopes.json` is the cheapest authenticated call Shopify has AND
+   * tells us exactly which scopes the merchant granted - so a connection
+   * whose write scopes are missing fails the test with a message naming the
+   * scopes to re-grant, instead of read tools working while every write
+   * quietly dies.
+   */
+  async validate({ credentials, config }) {
+    const token = credentials.accessToken;
+    const shop = config.shopDomain || credentials.shopDomain;
+    if (!token) return { ok: false, error: "no access token stored - re-connect Shopify" };
+    if (!shop) return { ok: false, error: "no shop domain stored - re-connect Shopify" };
+    const url = `https://${shop}/admin/oauth/access_scopes.json`;
+    await assertPublicUrl(url);
+    const res = await fetch(url, { headers: { "X-Shopify-Access-Token": token } });
+    if (res.status === 401 || res.status === 403) {
+      return { ok: false, error: `Shopify rejected the token (${res.status}) - re-connect to re-authorize` };
+    }
+    if (!res.ok) return { ok: false, error: `Shopify returned ${res.status} while validating` };
+    const j: any = await res.json().catch(() => ({}));
+    const granted = new Set<string>(
+      (j.access_scopes || []).map((s: any) => String(s.handle || "")),
+    );
+    const missing = REQUIRED_SCOPES.filter((r) => !granted.has(r.scope));
+    if (missing.length) {
+      return {
+        ok: false,
+        error:
+          `connected, but missing scope(s): ` +
+          missing.map((m) => `${m.scope} (${m.needs})`).join(", ") +
+          ` - re-connect Shopify to grant them`,
+      };
+    }
+    return { ok: true };
+  },
+
+  /**
+   * Rotate the access token. Two shapes, one endpoint:
+   *   - refresh grant when we hold a refresh token (the steady state);
+   *   - token-exchange (`expiring=1`) when we only hold a legacy non-expiring
+   *     token - Shopify revokes the old token on success, so this is the
+   *     in-place migration path for pre-expiry connections.
+   * The framework persists whatever we return (spread over the old blob, so
+   * shopDomain survives).
+   */
+  async refreshTokens(credentials) {
+    const shop = credentials.shopDomain;
+    const clientId = process.env.SHOPIFY_API_KEY;
+    const clientSecret = process.env.SHOPIFY_API_SECRET;
+    if (!shop) throw new Error("shopify_refresh_no_shop_domain");
+    if (!clientId || !clientSecret) throw new Error("shopify_refresh_not_configured");
+
+    const body: Record<string, string> = credentials.refreshToken
+      ? {
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "refresh_token",
+          refresh_token: credentials.refreshToken,
+        }
+      : {
+          client_id: clientId,
+          client_secret: clientSecret,
+          grant_type: "urn:ietf:params:oauth:grant-type:token-exchange",
+          subject_token: credentials.accessToken,
+          subject_token_type: "urn:shopify:params:oauth:token-type:offline-access-token",
+          requested_token_type: "urn:shopify:params:oauth:token-type:offline-access-token",
+          expiring: "1",
+        };
+
+    const url = `https://${shop}/admin/oauth/access_token`;
+    await assertPublicUrl(url);
+    const res = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    if (!res.ok) {
+      const text = await res.text().catch(() => "");
+      throw new Error(`shopify_token_${credentials.refreshToken ? "refresh" : "migration"}_failed_${res.status}: ${text.slice(0, 200)}`);
+    }
+    const j: any = await res.json();
+    if (!j.access_token) throw new Error("shopify_token_rotation_no_access_token");
+    console.log(`[shopify] ${credentials.refreshToken ? "refreshed access token" : "migrated legacy token to expiring"} for ${shop}`);
+    return {
+      accessToken: j.access_token,
+      refreshToken: j.refresh_token,
+      expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000) : undefined,
+      scope: j.scope,
+    };
+  },
 
   async execute({ toolName, args, credentials, config }) {
     const token = credentials.accessToken;
@@ -356,7 +539,8 @@ const ShopifyAdapter: ProviderAdapter = {
         const r: any = await sreq(ctx, "GET", `/orders.json?${params}`);
         return r.orders;
       }
-      case "get_order": {
+      case "get_order":
+      case "order_lookup": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
         return o;
@@ -393,12 +577,52 @@ const ShopifyAdapter: ProviderAdapter = {
       case "cancel_order": {
         const o = await resolveOrder(ctx, args);
         if (!o) throw new Error("order_not_found");
+        // Idempotent retry: an approval re-dispatch (worker retry, FAILED→
+        // re-claim, timeout with unknown outcome) must not 422 on an order
+        // that is already cancelled - reconcile against current state and
+        // report it, flagged so the bot can phrase it honestly.
+        if (o.cancelled_at) {
+          return {
+            id: o.id, name: o.name, cancelled_at: o.cancelled_at,
+            financial_status: o.financial_status, already_cancelled: true,
+          };
+        }
         const body: any = {};
         if (args.reason) body.reason = String(args.reason);
-        if (args.refund != null) body.refund = !!args.refund;
         if (args.restock != null) body.restock = !!args.restock;
         const r: any = await sreq(ctx, "POST", `/orders/${o.id}/cancel.json`, body);
-        return r.order || r;
+        let cancelled = r.order || r;
+        // Shopify can 200 the cancel call while the order stays uncancelled
+        // (e.g. gateway-side rejection). Verify the business state changed
+        // before letting callers report success to a customer.
+        if (!cancelled?.cancelled_at) {
+          const check: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
+          if (!check?.order?.cancelled_at) {
+            throw new Error("cancel_not_applied: Shopify accepted the request but the order is not cancelled - check payment/fulfillment state in the Shopify admin.");
+          }
+          cancelled = check.order;
+        }
+        // `refund: true` means cancel AND return the money. The REST cancel
+        // endpoint silently ignores a boolean refund param (live-verified:
+        // the order cancels but stays `paid`), so run the real refund flow
+        // explicitly. A refund failure after a successful cancel is reported
+        // as partial success - never rolled into a fake full success.
+        if (args.refund) {
+          try {
+            const fresh: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
+            const refund = await executeRefund(ctx, fresh.order ?? cancelled, {
+              restock: args.restock, reason: args.reason ?? "order cancelled",
+            });
+            return { ...cancelled, refund };
+          } catch (err: any) {
+            return {
+              ...cancelled,
+              refund_error: (err?.message || "refund_failed").slice(0, 240),
+              refund_status: "failed",
+            };
+          }
+        }
+        return cancelled;
       }
       case "send_invoice": {
         const o = await resolveOrder(ctx, args);
@@ -680,6 +904,17 @@ const ShopifyAdapter: ProviderAdapter = {
       }
       case "issue_compensation_coupon": {
         const c = await resolveCustomer(ctx, args).catch(() => null);
+        // Idempotent retry: if the code already exists (a prior attempt
+        // succeeded but its result was lost), return it instead of failing
+        // the whole approval on Shopify's duplicate-code 422.
+        const existing = await lookupDiscountCode(ctx, String(args.code));
+        if (existing) {
+          return {
+            code: existing.code, price_rule_id: existing.price_rule_id,
+            percentage: Number(args.percentage), customer_id: c?.id ?? null,
+            already_existed: true,
+          };
+        }
         const disc = await createDiscount(ctx, {
           code: String(args.code), percentage: Number(args.percentage),
           usage_limit: 1, ends_at_iso: args.ends_at_iso ? String(args.ends_at_iso) : undefined,
@@ -688,6 +923,42 @@ const ShopifyAdapter: ProviderAdapter = {
         let tagged = false;
         if (c) { await mutateCustomerTags(ctx, { customer_id: String(c.id) }, "compensation", "add").catch(() => {}); tagged = true; }
         return { ...disc, customer_id: c?.id ?? null, tagged_compensation: tagged };
+      }
+
+      case "update_order_fulfillment": {
+        // Declared for years but never implemented - calls fell through to
+        // unknown_shopify_tool. Non-destructive ops handoff: append a note
+        // and/or add a tag on the order.
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        const note = args.note ? String(args.note) : "";
+        const tag = args.tag ? String(args.tag) : "";
+        if (!note && !tag) throw new Error("note_or_tag_required");
+        const upd: any = { id: o.id };
+        if (note) upd.note = o.note ? `${o.note}\n${note}` : note;
+        if (tag) {
+          const cur = splitTags(o.tags);
+          upd.tags = (cur.includes(tag) ? cur : [...cur, tag]).join(", ");
+        }
+        const r: any = await sreq(ctx, "PUT", `/orders/${o.id}.json`, { order: upd });
+        return { order_id: o.id, name: o.name, note: r.order?.note ?? null, tags: splitTags(r.order?.tags) };
+      }
+
+      case "process_refund": {
+        // Real money movement: Shopify's two-step calculate → create flow.
+        // Full refund by default; partial via `amount` or `line_items`.
+        // Success is verified against the created refund object and the
+        // re-fetched order, and gateway transaction status is reported so
+        // callers can distinguish "processed" from "pending".
+        const o = await resolveOrder(ctx, args);
+        if (!o) throw new Error("order_not_found");
+        if (o.cancelled_at && String(o.financial_status) === "refunded") {
+          return { order_id: o.id, name: o.name, already_refunded: true, financial_status: o.financial_status };
+        }
+        if (String(o.financial_status) === "refunded") {
+          return { order_id: o.id, name: o.name, already_refunded: true, financial_status: o.financial_status };
+        }
+        return await executeRefund(ctx, o, args);
       }
 
       default:
@@ -699,6 +970,115 @@ const ShopifyAdapter: ProviderAdapter = {
 // ─── Internal helpers ───────────────────────────────────────
 
 interface Ctx { token: string; base: string; }
+
+/**
+ * Shopify's two-step refund flow (calculate → create) with refundable-maximum
+ * validation and gateway-transaction verification. Shared by `process_refund`
+ * and by `cancel_order {refund:true}` - the REST cancel endpoint silently
+ * IGNORES a boolean `refund` param (live-verified 2026-07-20: order #1004
+ * cancelled but stayed `paid`), so cancel-with-refund must run this flow
+ * explicitly after the cancellation.
+ */
+async function executeRefund(ctx: Ctx, o: any, args: Record<string, any>): Promise<any> {
+  // Prior refunds → remaining refundable quantities and amount.
+  const prior: any = await sreq(ctx, "GET", `/orders/${o.id}/refunds.json`);
+  const refundedQty: Record<string, number> = {};
+  let refundedAmount = 0;
+  for (const rf of prior.refunds || []) {
+    for (const rli of rf.refund_line_items || []) {
+      refundedQty[String(rli.line_item_id)] = (refundedQty[String(rli.line_item_id)] || 0) + Number(rli.quantity || 0);
+    }
+    for (const tx of rf.transactions || []) {
+      if (tx.kind === "refund" && tx.status !== "failure" && tx.status !== "error") refundedAmount += Number(tx.amount || 0);
+    }
+  }
+
+  const isPartialAmount = args.amount != null;
+  const restockType = args.restock ? "restock" : "no_restock";
+  let refundLineItems: Array<{ line_item_id: number; quantity: number; restock_type: string }> = [];
+  if (Array.isArray(args.line_items) && args.line_items.length) {
+    refundLineItems = args.line_items.map((li: any) => ({
+      line_item_id: Number(li.line_item_id),
+      quantity: Number(li.quantity || 1),
+      restock_type: restockType,
+    }));
+    for (const li of refundLineItems) {
+      if (!Number.isFinite(li.line_item_id) || !(li.quantity > 0)) throw new Error("refund_line_items_invalid");
+    }
+  } else if (!isPartialAmount) {
+    // Full refund: every line item's remaining quantity.
+    refundLineItems = (o.line_items || [])
+      .map((li: any) => ({
+        line_item_id: Number(li.id),
+        quantity: Number(li.quantity || 0) - (refundedQty[String(li.id)] || 0),
+        restock_type: restockType,
+      }))
+      .filter((li: { quantity: number }) => li.quantity > 0);
+    if (!refundLineItems.length && refundedAmount > 0) {
+      return { order_id: o.id, name: o.name, already_refunded: true, refunded_amount: refundedAmount, financial_status: o.financial_status };
+    }
+  }
+
+  // Ask Shopify what is actually refundable (per-gateway transactions,
+  // shipping, taxes) instead of guessing.
+  const wantShipping = args.refund_shipping != null ? !!args.refund_shipping : !isPartialAmount;
+  const calcBody: any = { refund: { currency: o.currency } };
+  if (refundLineItems.length) calcBody.refund.refund_line_items = refundLineItems;
+  if (wantShipping) calcBody.refund.shipping = { full_refund: true };
+  const calc: any = await sreq(ctx, "POST", `/orders/${o.id}/refunds/calculate.json`, calcBody);
+  const suggested = calc.refund;
+  if (!suggested) throw new Error("refund_calculate_empty: Shopify returned no suggested refund");
+
+  let transactions: Array<{ parent_id: number; amount: string; kind: string; gateway?: string }> =
+    (suggested.transactions || []).map((tx: any) => ({
+      parent_id: tx.parent_id, amount: tx.amount, kind: "refund", gateway: tx.gateway,
+    }));
+  const maxRefundable = transactions.reduce((s, t) => s + Number(t.amount || 0), 0);
+  if (isPartialAmount) {
+    const requested = Number(args.amount);
+    if (!(requested > 0)) throw new Error("refund_amount_invalid");
+    if (requested > maxRefundable + 0.005) {
+      throw new Error(`refund_exceeds_refundable: requested ${requested} ${o.currency} but only ${maxRefundable.toFixed(2)} ${o.currency} is refundable`);
+    }
+    if (!transactions.length) throw new Error("refund_no_refundable_transaction");
+    transactions = [{ ...transactions[0], amount: requested.toFixed(2) }];
+  }
+  if (!transactions.length) throw new Error("nothing_to_refund");
+
+  const createBody: any = {
+    refund: {
+      currency: suggested.currency || o.currency,
+      notify: args.notify != null ? !!args.notify : true,
+      note: args.note ? String(args.note) : `GOTCHA refund${args.reason ? `: ${String(args.reason)}` : ""}`,
+      transactions,
+    },
+  };
+  if (refundLineItems.length) createBody.refund.refund_line_items = refundLineItems;
+  if (wantShipping && suggested.shipping?.amount && Number(suggested.shipping.amount) > 0) {
+    createBody.refund.shipping = { amount: suggested.shipping.amount };
+  }
+  const created: any = await sreq(ctx, "POST", `/orders/${o.id}/refunds.json`, createBody);
+  const refund = created.refund;
+  if (!refund?.id) throw new Error("refund_not_created: Shopify returned no refund object");
+
+  // Verify the business state actually changed before anyone tells a
+  // customer their money is on the way.
+  const verify: any = await sreq(ctx, "GET", `/orders/${o.id}.json`);
+  const txStatuses = (refund.transactions || []).map((tx: any) => ({ id: tx.id, status: tx.status, amount: tx.amount, gateway: tx.gateway }));
+  const allProcessed = txStatuses.length > 0 && txStatuses.every((t: any) => t.status === "success");
+  return {
+    order_id: o.id,
+    name: o.name,
+    refund_id: refund.id,
+    amount: (refund.transactions || []).reduce((s: number, t: any) => s + Number(t.amount || 0), 0),
+    currency: suggested.currency || o.currency,
+    transactions: txStatuses,
+    // "processed" = gateway confirmed; "pending" = accepted but money not moved yet.
+    refund_status: allProcessed ? "processed" : "pending",
+    financial_status: verify.order?.financial_status ?? null,
+    processed_at: refund.processed_at ?? null,
+  };
+}
 
 async function sreq(ctx: Ctx, method: string, path: string, body?: unknown): Promise<any> {
   return shopifyRequest(ctx.token, method, `${ctx.base}${path}`, body);
@@ -769,6 +1149,18 @@ async function mutateCustomerTags(ctx: Ctx, args: Record<string, any>, tag: stri
   else next = cur.filter((x) => x.toLowerCase() !== tag.toLowerCase());
   const r = await sreq(ctx, "PUT", `/customers/${c.id}.json`, { customer: { id: c.id, tags: next.join(", ") } });
   return { customer_id: c.id, tags: splitTags(r.customer?.tags) };
+}
+
+/** Look up an existing discount code; null when it doesn't exist (404). */
+async function lookupDiscountCode(ctx: Ctx, code: string): Promise<{ code: string; price_rule_id: number } | null> {
+  try {
+    const r: any = await sreq(ctx, "GET", `/discount_codes/lookup.json?code=${encodeURIComponent(code)}`);
+    const dc = r.discount_code;
+    return dc ? { code: dc.code, price_rule_id: dc.price_rule_id } : null;
+  } catch (err: any) {
+    if (/404/.test(err?.message || "")) return null;
+    throw err;
+  }
 }
 
 async function createDiscount(ctx: Ctx, opts: { code: string; percentage: number; usage_limit?: number; ends_at_iso?: string; customer_id?: string; title?: string }): Promise<any> {

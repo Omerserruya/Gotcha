@@ -25,6 +25,11 @@ import {
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
+import {
+  validateGroundedMessage,
+  buildFallbackMessage,
+  type ExecutionFacts,
+} from "./grounded-message.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -124,7 +129,12 @@ import {
 } from "./ledger-reply";
 import { actionCategoriesForTool } from "./side-effect-classifier";
 import { listCustomApiTools, executeCustomApiTool } from "./connectors/custom-api.service";
-import { executeAdapterTool, listAdapters } from "./connectors/integration-framework";
+import {
+  executeAdapterTool,
+  listAdapters,
+  missingScopesFromConfig,
+  toolBlockedByMissingScopes,
+} from "./connectors/integration-framework";
 import {
   loadActionContracts,
   loadContractProgress,
@@ -850,11 +860,21 @@ function humanizeReply(text: string | null): string | null {
   return out.trim();
 }
 
+/** Worker-computed "business is closed right now" context (active policy). */
+export interface ClosedHoursContext {
+  nextOpeningIso: string | null;
+  timezone: string;
+  nextOpeningText?: { en?: string; he?: string };
+}
+
 export async function generateAIBotReply(opts: {
   tenantId: string;
   conversationId: string;
   aiAgentId: string;
   incomingMessage: string;
+  /** Present only while the business is CLOSED under the "active" outside-
+   *  hours policy (worker-computed from persisted tenant business hours). */
+  closedHours?: ClosedHoursContext;
 }): Promise<AIBotReplyResult> {
   // Per-conversation cancellation: if a newer inbound for this conversation
   // hits the AI service mid-turn, it calls beginTurn() again which aborts
@@ -1067,6 +1087,7 @@ async function generateAIBotReplyInner(
     conversationId: string;
     aiAgentId: string;
     incomingMessage: string;
+    closedHours?: ClosedHoursContext;
   },
   signal: AbortSignal,
 ): Promise<AIBotReplyResult> {
@@ -1734,6 +1755,13 @@ async function generateAIBotReplyInner(
         // slug is the part after the dot.
         const toolSlug = def.name.includes(".") ? def.name.slice(def.name.indexOf(".") + 1) : def.name;
         if (!allowedAdapterTools.has(`${catalogSlug}:${toolSlug}`)) continue;
+        // Capability gate: never offer a tool the shop cannot execute. When a
+        // provider proved a scope missing ("requires merchant approval"), the
+        // framework persists it on config.missingScopes - offering the tool
+        // anyway would let the model open an approval that can never run
+        // (exactly the Matan coupon HITL). State self-heals on re-connect or
+        // a passing integration test.
+        if (toolBlockedByMissingScopes(def, missingScopesFromConfig(cfg))) continue;
         tools.push({
           type: "function",
           function: {
@@ -2008,6 +2036,28 @@ async function generateAIBotReplyInner(
   } catch { /* shadow must never break the turn */ }
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
+  // Outside-hours context ("active" policy): the business is CLOSED right now.
+  // The bot keeps helping, but must never imply a human is immediately
+  // available - handoff talk names the REAL next opening time (worker-
+  // computed from the tenant's persisted schedule + timezone). A separate
+  // system block (not part of the stable agent prompt) because it appears
+  // and disappears with the clock, and the stable prefix must stay cacheable.
+  if (opts.closedHours) {
+    const ch = opts.closedHours;
+    chatMessages.push({
+      role: "system",
+      content:
+        `# OUTSIDE BUSINESS HOURS\n` +
+        `The business is currently CLOSED. Human team members are NOT available right now; ` +
+        `they return ${ch.nextOpeningText?.en || "during the next business hours"}` +
+        (ch.nextOpeningText?.he ? ` (Hebrew wording: "${ch.nextOpeningText.he}")` : "") +
+        `.\nRules:\n` +
+        `- Keep helping the customer normally with everything you can do yourself.\n` +
+        `- If the customer needs a human, or you would escalate, say the team will get back to them ${ch.nextOpeningText?.en || "when the business reopens"} (use the Hebrew wording above when replying in Hebrew).\n` +
+        `- NEVER imply immediate human availability ("right away", "shortly", "connecting you now").\n` +
+        `- Do not invent different hours or reopening times.`,
+    });
+  }
   // The output-contract instruction is now rendered inside the per-turn
   // block of the system prompt (see buildExecutionContract). Sending it
   // ALSO as a separate user message at index 1 was injecting BEL-driven
@@ -3686,6 +3736,71 @@ export async function generateAIBotOneshot(opts: {
     reply: result.content?.trim() || null,
     modelUsed: model,
     totalTokens: result.usage.total_tokens || 0,
+  };
+}
+
+/**
+ * Post-execution customer message - the ONE path for telling a customer what
+ * a verified tool execution actually did (approval continuations, proactive
+ * completion updates). Generation goes through the same humanizeReply style
+ * layer as live bot replies, then a deterministic grounding validator; if the
+ * generated text contradicts or omits a verified fact (wrong amount, pending
+ * presented as done, success on a failure, em-dash), we send the boring
+ * template built directly from the structured result instead. This function
+ * never returns an ungrounded message.
+ */
+export async function generateExecutionMessage(opts: {
+  tenantId: string;
+  aiAgentId: string;
+  facts: ExecutionFacts;
+  /** Recent inbound customer text, oldest→newest - drives language choice. */
+  inboundSample: string;
+  customerName?: string;
+}): Promise<{ reply: string; grounded: boolean; modelUsed: string }> {
+  const { facts } = opts;
+  try {
+    const userInput =
+      `[INTERNAL CONTEXT - do not echo to the customer]\n` +
+      `A background action you triggered (${facts.tool}) finished with outcome=${facts.outcome}.\n` +
+      `VERIFIED FACTS (the ONLY facts you may state - never invent amounts, dates, statuses):\n` +
+      JSON.stringify({
+        order: facts.orderName ?? undefined,
+        amount: facts.amount ?? undefined,
+        currency: facts.currency ?? undefined,
+        status: facts.status ?? undefined,
+        failure_reason: facts.outcome === "failed" ? (facts.errorReason ?? "unknown") : undefined,
+      }) + "\n" +
+      `Customer's recent messages (oldest → newest):\n${opts.inboundSample}\n` +
+      (opts.customerName ? `Customer name: ${opts.customerName}\n` : "") +
+      `\nTASK: ONE short reply telling the customer the outcome and the next step.\n` +
+      `Rules:\n` +
+      `- Reply in the customer's language (Hebrew if any message contains Hebrew characters).\n` +
+      `- State amounts/currency/order EXACTLY as given in VERIFIED FACTS.\n` +
+      `- status "pending" means the money has NOT moved yet - say it was submitted and is pending, never that it completed.\n` +
+      `- outcome "failed" must never be presented as success; do not promise a specific fix.\n` +
+      `- No em dashes, no headings, no bullet lists, no "I'm happy to assist" filler.\n` +
+      `- Do NOT mention internal systems or approvals.\n`;
+    const r = await generateAIBotOneshot({
+      tenantId: opts.tenantId,
+      aiAgentId: opts.aiAgentId,
+      userInput,
+      feature: "post_execution_message",
+    });
+    const styled = humanizeReply(r.reply);
+    if (styled) {
+      const verdict = validateGroundedMessage(styled, facts);
+      if (verdict.ok) return { reply: styled, grounded: true, modelUsed: r.modelUsed };
+      console.warn(
+        `[ai-bot] execution message failed grounding (${verdict.problems.join(",")}) - using deterministic fallback`,
+      );
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] execution message generation failed - using deterministic fallback:", err?.message);
+  }
+  return {
+    reply: buildFallbackMessage(facts, opts.inboundSample),
+    grounded: false,
+    modelUsed: "deterministic-fallback",
   };
 }
 

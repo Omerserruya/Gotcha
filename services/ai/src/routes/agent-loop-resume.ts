@@ -12,7 +12,7 @@
  */
 
 import { Router, type Request, type Response, type NextFunction } from "express";
-import { prisma, verifyInternalServiceKey } from "@chatcenter/shared";
+import { prisma, verifyInternalServiceKey, revalidateBeforeExecution } from "@chatcenter/shared";
 import { ensureCapabilitiesRegistered, executeOperation } from "../services/capability-plane";
 
 const router = Router();
@@ -55,6 +55,21 @@ router.post("/execute-approved", internalOnly, async (req: Request, res: Respons
       ...(env.params ?? {}),
       ...((row.modifiedParams as Record<string, unknown> | null) ?? {}),
     };
+
+    // Business-policy revalidation, same discipline as the legacy path: the
+    // world may have changed while the approval sat pending, and a manager's
+    // click is not an override channel. Fails closed on engine errors.
+    const policyVerdict = await revalidateBeforeExecution({
+      tenantId,
+      tool: env.operation,
+      params,
+      conversationId: row.conversationId ?? undefined,
+      correlationId: approvalId,
+    }).catch((e: any) => ({ ok: false as const, decision: "FAIL_CLOSED" as const, reason: e?.message }));
+    if (!policyVerdict.ok) {
+      res.status(409).json({ error: policyVerdict.reason ?? "blocked by business policy at execution" });
+      return;
+    }
 
     ensureCapabilitiesRegistered();
     const { result, trace } = await executeOperation({

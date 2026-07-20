@@ -4,6 +4,8 @@ import {
   evaluatePolicies,
   createApprovalRequest,
   getRedis,
+  actionKindForTool,
+  evaluateBusinessPolicy,
   type PolicyResult,
 } from "@chatcenter/shared";
 import { CircuitBreakers, withRetry, pushToDlq } from "./runner";
@@ -158,6 +160,65 @@ export class ActionOrchestrator {
     if (gate.decision === "DENY") {
       return recordIfLedger(await this.recordDeny(action, gate.reason, "policy"));
     }
+
+    // ── Tenant BUSINESS policy (deterministic, prompt-proof) ──────────────
+    // Evaluated BEFORE an approval request exists and BEFORE auto-execution,
+    // so the model can neither promise the customer an action the tenant
+    // forbids nor open a HITL that policy would block anyway. Amounts above
+    // the configured cap come back as a denial that NAMES the permitted
+    // maximum - the model may re-propose within it, a manager never has to
+    // catch an over-limit ask. FAIL_CLOSED (engine unavailable) denies too.
+    const bizKind = actionKindForTool(action.tool);
+    if (bizKind) {
+      const args = action.args as Record<string, any>;
+      const biz = await evaluateBusinessPolicy({
+        tenantId: action.tenantId,
+        actionKind: bizKind,
+        evaluationPoint: gate.decision === "REQUIRE_APPROVAL" ? "HITL_CREATE" : "OFFER",
+        correlationId: action.id,
+        facts: {
+          tool: action.tool,
+          requestedAmount: typeof args.amount === "number" ? args.amount : undefined,
+          orderName: typeof args.order_name === "string" ? args.order_name : undefined,
+          reasonCode: typeof args.reason_code === "string" ? args.reason_code : undefined,
+          conversationId: action.conversationId || undefined,
+        },
+      });
+      if (biz.decision === "DENIED" || biz.decision === "FAIL_CLOSED") {
+        const reason =
+          `business_policy_${biz.decision.toLowerCase()}: ${biz.reasonCodes.join(",") || "not permitted"}` +
+          (biz.customerSafeExplanation ? ` | tell the customer: ${biz.customerSafeExplanation}` : "");
+        return recordIfLedger(await this.recordDeny(action, reason, "business-policy"));
+      }
+      if (biz.decision === "REQUIRES_INFORMATION" || biz.decision === "REQUIRES_EVIDENCE") {
+        const need = (biz.requiredData ?? []).join(", ") || "more information";
+        return recordIfLedger(
+          await this.recordDeny(
+            action,
+            `business_policy_${biz.decision.toLowerCase()}: collect ${need} from the customer/provider before proposing ${action.tool} again`,
+            "business-policy",
+          ),
+        );
+      }
+      if (
+        biz.decision === "ALLOWED_WITH_LIMIT" &&
+        typeof args.amount === "number" &&
+        biz.maxAmount != null &&
+        args.amount > biz.maxAmount + 0.005
+      ) {
+        return recordIfLedger(
+          await this.recordDeny(
+            action,
+            `business_policy_amount_capped: the maximum permitted is ${biz.maxAmount}. Re-propose ${action.tool} with amount <= ${biz.maxAmount}.`,
+            "business-policy",
+          ),
+        );
+      }
+      // ALLOWED / within-limit / REQUIRES_HUMAN_APPROVAL → continue; the
+      // catalog HITL gate below already routes approval-required tools to a
+      // human.
+    }
+
     if (gate.decision === "REQUIRE_APPROVAL") {
       return recordIfLedger(await this.recordPropose(action, gate));
     }

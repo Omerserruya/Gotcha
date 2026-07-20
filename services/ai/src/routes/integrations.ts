@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, encryptCredentials } from "@chatcenter/shared";
-import { executeAdapterTool, getAdapter } from "../services/connectors/integration-framework";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache } from "../services/connectors/crm-adapter-resolver";
+import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
 
 const router = Router();
 
@@ -62,6 +63,39 @@ router.get("/", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("List catalog integrations error:", err);
     res.status(500).json({ error: "Failed to list integrations" });
+  }
+});
+
+// GET /source-of-truth - the tenant's ELECTED customer system of record as
+// the AI-side resolver actually sees it, with its truthful capability set.
+// This is what the UI must render (never frontend guesses): which system
+// answers "who is this customer", whether back-office writes are available,
+// and which operations the provider genuinely supports. Registered BEFORE
+// /:slug so the literal path wins.
+router.get("/source-of-truth", async (req: Request, res: Response) => {
+  try {
+    const provider = await getSourceOfTruth(req.tenantId!);
+    if (!provider) {
+      res.json({ data: { configured: false, vendor: null, capabilities: [] } });
+      return;
+    }
+    const all: SourceOfTruthCapability[] = [
+      "identify_customer", "customer_context", "related_business_context",
+      "write_conversation_summary", "write_interaction", "update_customer_fields",
+      "create_task", "merge_contacts",
+    ];
+    res.json({
+      data: {
+        configured: true,
+        vendor: provider.vendor,
+        capabilities: provider.capabilities(),
+        unsupported: all.filter((c) => !provider.supports(c)),
+        writesEnabled: provider.supports("write_conversation_summary"),
+      },
+    });
+  } catch (err) {
+    console.error("source-of-truth status error:", err);
+    res.status(500).json({ error: "Failed to resolve source of truth" });
   }
 });
 
@@ -216,6 +250,42 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
         where: { id: tenantIntegration.id },
         data: { status: "CONNECTED" as any },
       });
+
+      // Prefer the adapter's own probe when it has one. The read-tool fallback
+      // below calls a tool with `{}`, which is meaningless for providers whose
+      // reads have required arguments (google_calendar.list_events) - those
+      // could never pass a test and sat permanently in ERROR.
+      if (typeof adapter.validate === "function") {
+        const creds = tenantIntegration.credentials
+          ? (decryptCredentials(tenantIntegration.credentials as any) as Record<string, any>)
+          : {};
+        const verdict = await adapter
+          .validate({
+            ctx: { tenantId: req.tenantId!, tenantIntegrationId: tenantIntegration.id },
+            credentials: creds,
+            config: (tenantIntegration.config as Record<string, any>) || {},
+          })
+          .catch((e: any) => ({ ok: false, error: e?.message || "validation failed" }));
+        // A fully-passing probe proves every required scope is granted - clear
+        // the persisted missing-scope state so gated tools resurface and the
+        // executeAdapterTool short-circuit lifts.
+        if (verdict.ok) {
+          await clearMissingScopes(tenantIntegration.id).catch((e: any) =>
+            console.warn("[integrations] clearMissingScopes after validate failed:", e?.message));
+        }
+        const updated = await prisma.tenantIntegration.update({
+          where: { id: tenantIntegration.id },
+          data: {
+            status: (verdict.ok ? "CONNECTED" : "ERROR") as any,
+            lastTestedAt: new Date(),
+            lastTestResult: verdict.ok,
+            lastError: verdict.ok ? null : (verdict.error ?? "validation failed"),
+          },
+        });
+        res.status(verdict.ok ? 200 : 400).json(verdict.ok ? { data: updated } : { error: verdict.error, data: updated });
+        return;
+      }
+
       const readTool = adapter.tools().find((t) => t.category === "READ");
       if (!readTool) {
         const updated = await prisma.tenantIntegration.update({

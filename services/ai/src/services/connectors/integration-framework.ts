@@ -30,6 +30,14 @@ export interface ToolDefinition {
   category: "READ" | "WRITE" | "DELETE" | "ACTION";
   /** "LOW" | "MEDIUM" | "HIGH". HIGH-risk tools default-require approval. */
   riskLevel: "LOW" | "MEDIUM" | "HIGH";
+  /**
+   * Provider OAuth scopes this tool needs (e.g. ["write_customers"]).
+   * When a connection's known-missing scopes (config.missingScopes on the
+   * TenantIntegration row) intersect these, the framework short-circuits
+   * execution locally and the bot tool surface hides the tool - so the AI
+   * never proposes an action the provider will 403 forever.
+   */
+  requiredScopes?: string[];
 }
 
 export interface AdapterContext {
@@ -61,6 +69,34 @@ export interface ProviderAdapter {
     credentials: Record<string, any>;
     config: Record<string, any>;
   }): Promise<unknown>;
+  /**
+   * (Optional) Prove the stored credential actually works, without needing a
+   * tool call. This is the connection-lifecycle probe: `/test` and the OAuth
+   * callbacks use it to decide CONNECTED vs ERROR.
+   *
+   * Why it exists: the fallback probe ("call the first READ tool with `{}`")
+   * is wrong for any provider whose read tools have required arguments -
+   * google_calendar.list_events demands from_iso/to_iso, so that provider
+   * could never pass a test and was permanently marked ERROR. Adapters with
+   * argument-hungry read tools should implement this with a cheap identity
+   * call (e.g. `me {}`) instead.
+   *
+   * Returns `{ok:true}` when the provider accepted the credential, or
+   * `{ok:false, error}` with a SAFE, user-facing reason (never a raw token or
+   * full provider payload).
+   */
+  validate?(opts: {
+    ctx: AdapterContext;
+    credentials: Record<string, any>;
+    config: Record<string, any>;
+  }): Promise<{ ok: boolean; error?: string }>;
+  /**
+   * (Optional) This adapter's refreshTokens can also EXCHANGE a legacy
+   * credential blob that has an accessToken but no refreshToken (one-way
+   * provider-side migration). Lets a forced refresh reach refreshTokens even
+   * without a refresh token.
+   */
+  readonly migratesLegacyCredentials?: boolean;
   /**
    * (Optional) Refresh OAuth tokens. Called by the framework when accessToken
    * is expired. Returns the new credentials blob - framework persists it.
@@ -178,7 +214,15 @@ export async function ensureFreshToken(opts: {
   // expiry. `force` covers the case where we have no/garbled expiry or are
   // recovering from a 401.
   const needsRefresh = opts.force || (expiresAt ? expiresAt.getTime() - Date.now() < TOKEN_REFRESH_BUFFER_MS : false);
-  if (!needsRefresh || !opts.adapter.refreshTokens || !opts.credentials.refreshToken) {
+  // Without a refresh token the adapter normally can't rotate - EXCEPT
+  // adapters that declare `migratesLegacyCredentials`: for those, a FORCED
+  // refresh (401-retry / ERROR recovery) still reaches refreshTokens, which is
+  // the seam where a legacy credential shape is exchanged in place (e.g.
+  // Shopify's non-expiring → expiring token exchange).
+  const canAttempt =
+    !!opts.credentials.refreshToken ||
+    (opts.force && !!opts.adapter.migratesLegacyCredentials && !!opts.credentials.accessToken);
+  if (!needsRefresh || !opts.adapter.refreshTokens || !canAttempt) {
     return opts.credentials;
   }
   try {
@@ -191,6 +235,13 @@ export async function ensureFreshToken(opts: {
       scope: fresh.scope || opts.credentials.scope,
     };
     await persistCredentials({ tenantIntegrationId: opts.tenantIntegrationId, credentials: next });
+    // A refresh that reports its granted scope string proves those scopes are
+    // now available - clear any of them from the known-missing capability
+    // state so gated tools resurface.
+    if (fresh.scope) {
+      await clearMissingScopes(opts.tenantIntegrationId, fresh.scope).catch((err: any) =>
+        console.warn(`[integration-framework] missing-scope clear failed for ${opts.adapter.slug}:`, err?.message));
+    }
     // Self-heal: a successful refresh proves the integration works again.
     if (opts.currentStatus === "ERROR") {
       await setConnectionStatus({ tenantIntegrationId: opts.tenantIntegrationId, status: "CONNECTED" });
@@ -207,6 +258,87 @@ export async function ensureFreshToken(opts: {
     });
     throw new Error(`Token refresh failed for ${opts.adapter.slug}: ${err?.message || "unknown"}`);
   }
+}
+
+// ─── Missing-scope capability state ─────────────────────────
+//
+// Some providers (Shopify) stay CONNECTED while the merchant never granted a
+// specific OAuth scope - every call then fails with "requires merchant
+// approval for <scope> scope" until the shop re-authorizes. Retrying is pure
+// noise (HTTP + adapter.err audit spam every turn). We persist the
+// known-missing scopes on the TenantIntegration row (config.missingScopes,
+// no schema change) so that:
+//   - executeAdapterTool short-circuits locally (no HTTP, no audit row);
+//   - the bot tool surface drops tools that can never execute (ai-bot.service);
+//   - the state self-heals when adapter.validate() passes (the /test route)
+//     or a token refresh comes back with the scope granted.
+
+const MISSING_SCOPE_RE = /requires merchant approval for (\w+) scope|missing[^"']*\bscope/i;
+
+/** Read the known-missing scopes off a TenantIntegration config blob. */
+export function missingScopesFromConfig(config: Record<string, any> | null | undefined): string[] {
+  const v = config?.missingScopes;
+  return Array.isArray(v) ? v.filter((s): s is string => typeof s === "string" && s.length > 0) : [];
+}
+
+/** True when the tool declares a scope the connection is known to be missing. */
+export function toolBlockedByMissingScopes(def: ToolDefinition, missing: string[]): boolean {
+  if (!def.requiredScopes?.length || !missing.length) return false;
+  return def.requiredScopes.some((s) => missing.includes(s));
+}
+
+/**
+ * Parse a provider error into the scope(s) it proves missing. The named
+ * capture wins; a generic "missing … scope" message falls back to the tool's
+ * declared requiredScopes (the ones the failing call needed).
+ */
+export function extractMissingScopes(message: string, tool?: ToolDefinition): string[] {
+  const m = MISSING_SCOPE_RE.exec(message || "");
+  if (!m) return [];
+  if (m[1]) return [m[1]];
+  return tool?.requiredScopes ?? [];
+}
+
+/** Read-modify-write config.missingScopes. No-op when nothing changes. */
+async function updateMissingScopes(
+  tenantIntegrationId: string,
+  mutate: (current: string[]) => string[],
+): Promise<void> {
+  const row = await (prisma as any).tenantIntegration.findUnique({
+    where: { id: tenantIntegrationId },
+    select: { config: true },
+  });
+  const cfg: Record<string, any> =
+    row?.config && typeof row.config === "object" ? { ...row.config } : {};
+  const current = missingScopesFromConfig(cfg);
+  const next = Array.from(new Set(mutate(current)));
+  if (next.length === current.length && next.every((s) => current.includes(s))) return;
+  if (next.length) cfg.missingScopes = next;
+  else delete cfg.missingScopes;
+  await (prisma as any).tenantIntegration.update({
+    where: { id: tenantIntegrationId },
+    data: { config: cfg },
+  });
+}
+
+/** Idempotent merge of newly-proven-missing scopes into config.missingScopes. */
+export async function addMissingScopes(tenantIntegrationId: string, scopes: string[]): Promise<void> {
+  if (!scopes.length) return;
+  await updateMissingScopes(tenantIntegrationId, (cur) => [...cur, ...scopes]);
+}
+
+/**
+ * Clear missing-scope state. With `grantedScope` (a provider scope string like
+ * "read_orders,write_customers") only the scopes it proves granted are
+ * removed; without it, everything clears (used after a fully-passing
+ * adapter.validate() probe).
+ */
+export async function clearMissingScopes(tenantIntegrationId: string, grantedScope?: string): Promise<void> {
+  const granted = grantedScope
+    ? new Set(grantedScope.split(/[\s,]+/).map((s) => s.trim()).filter(Boolean))
+    : null;
+  await updateMissingScopes(tenantIntegrationId, (cur) =>
+    granted ? cur.filter((s) => !granted.has(s)) : []);
 }
 
 // ─── Rate limiter ────────────────────────────────────────────
@@ -331,7 +463,8 @@ export async function executeAdapterTool(opts: {
   const toolName = opts.toolFunctionName.slice(dot + 1);
   const adapter = getAdapter(slug);
   if (!adapter) return { ok: false, reason: `unknown_provider:${slug}` };
-  if (!adapter.tools().some((t) => t.name === opts.toolFunctionName)) {
+  const toolDef = adapter.tools().find((t) => t.name === opts.toolFunctionName);
+  if (!toolDef) {
     return { ok: false, reason: `unknown_tool:${opts.toolFunctionName}` };
   }
 
@@ -356,6 +489,20 @@ export async function executeAdapterTool(opts: {
       durationMs: Date.now() - start,
     });
     return { ok: false, reason };
+  }
+
+  // Capability gate: a scope the merchant never granted fails identically on
+  // every retry - short-circuit locally with NO provider HTTP call and NO
+  // audit row (a persisted adapter.err per bot turn was pure noise). The
+  // state clears via adapter.validate() (the /test route) or a token refresh
+  // whose scope string proves the grant arrived.
+  const knownMissing = missingScopesFromConfig(conn.config);
+  const blockedScopes = (toolDef.requiredScopes ?? []).filter((s) => knownMissing.includes(s));
+  if (blockedScopes.length) {
+    return {
+      ok: false,
+      reason: `missing_scope:${blockedScopes[0]} - ${slug} connection needs re-authorization (merchant approval)`,
+    };
   }
 
   // Proactively refresh on use. Force a refresh when the integration was ERROR
@@ -397,7 +544,8 @@ export async function executeAdapterTool(opts: {
   // invalid.*token/`). NB: a bare `\b401\b` does NOT match "hubspot_401" (an
   // underscore is a word char, so there's no boundary before the digits) - match
   // 401 as a substring instead, as adapters embed it in messages like that.
-  const isAuthError = (m: string) => /401|unauthorized|invalid.*token|token.*expired|expired.*token|expired_authentication/i.test(m);
+  const isAuthError = (m: string) =>
+    /401|unauthorized|invalid.*token|token.*expired|expired.*token|expired_authentication|tokens? (?:are )?no longer accepted/i.test(m);
 
   try {
     let result: unknown;
@@ -432,6 +580,14 @@ export async function executeAdapterTool(opts: {
     return { ok: true, result };
   } catch (err: any) {
     const message = err?.message || "execution_failed";
+    // A merchant-approval / missing-scope provider error proves the scope is
+    // not granted - persist it (idempotent merge) so the NEXT call
+    // short-circuits locally instead of re-hitting the provider every turn.
+    const provedMissing = extractMissingScopes(message, toolDef);
+    if (provedMissing.length) {
+      await addMissingScopes(conn.tenantIntegrationId, provedMissing).catch((e: any) =>
+        console.warn(`[integration-framework] missing-scope persist failed for ${slug}:`, e?.message));
+    }
     if (isAuthError(message)) {
       await setConnectionStatus({
         tenantIntegrationId: conn.tenantIntegrationId,
