@@ -36,11 +36,15 @@ export function createServiceApp(config: ServiceConfig): express.Express {
   // check would always fail in production.
   app.use(express.json({ verify: (req, _res, buf) => { (req as any).rawBody = buf; } }));
 
-  // Health check
+  // Health check. `build` is the image's BUILD_SHA (git SHA injected at
+  // docker build time) - the ground truth for "which code is this container
+  // actually running". Deploy verification reads this instead of trusting
+  // that a rebuild wasn't served from a stale cache layer.
   app.get("/health", (_req, res) => {
     res.json({
       status: "ok",
       service: config.name,
+      build: process.env.BUILD_SHA || "dev",
       timestamp: new Date().toISOString(),
     });
   });
@@ -56,6 +60,6 @@ export function createServiceApp(config: ServiceConfig): express.Express {
 
 export function startService(app: express.Express, config: ServiceConfig): void {
   app.listen(config.port, () => {
-    console.log(`[${config.name}] running on port ${config.port}`);
+    console.log(`[${config.name}] running on port ${config.port} (build ${process.env.BUILD_SHA || "dev"})`);
   });
 }

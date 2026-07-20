@@ -40,6 +40,10 @@ COPY --from=builder /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=builder /app/node_modules/@prisma/client ./node_modules/@prisma/client
 
 # Drop root (M-8): run as the image's built-in unprivileged `node` user.
+# Which commit this image was built from - logged at boot and exposed on /health
+# so deploy verification never depends on guessing whether a cache layer is stale.
+ARG BUILD_SHA=dev
+ENV BUILD_SHA=$BUILD_SHA
 USER node
 
 WORKDIR /app/services/ai
