@@ -4,7 +4,7 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
-  requireRole,
+  requirePermissionOrRole,
   evaluateBusinessPolicy,
   type BusinessActionKind,
 } from "@chatcenter/shared";
@@ -25,8 +25,20 @@ import {
  * Versioning: an update never mutates the deciding row of any historical
  * PolicyDecision - it appends version+1 and the engine reads the latest.
  */
+// Authorization chain: identity (authenticate, Authentik JWT) → ACTIVE
+// membership + tenant (resolveTenant validates the X-Tenant-Id hint against
+// the caller's memberships; requireActiveTenant blocks suspended tenants) →
+// PERMISSION. Gates are permission-FIRST (settings:business-policies:*) with
+// the transitional admin-role fallback shared by all settings surfaces, so a
+// tenant can delegate policy management to a finance lead without full admin
+// while legacy-licensed tenants keep working. Every query below is scoped by
+// req.tenantId - the membership-validated tenant, never a client-supplied id.
 const router = Router();
 router.use(authenticate, resolveTenant, requireActiveTenant());
+
+const canRead = requirePermissionOrRole("settings:business-policies:read", "ADMIN", "SYSTEM_ADMIN");
+const canManage = requirePermissionOrRole("settings:business-policies:manage", "ADMIN", "SYSTEM_ADMIN");
+const canPreview = requirePermissionOrRole("settings:business-policies:preview", "ADMIN", "SYSTEM_ADMIN");
 
 const ACTION_KINDS: BusinessActionKind[] = [
   "REFUND", "CANCEL_ORDER", "COUPON", "COMPENSATION", "DISCOUNT", "CUSTOMER_WRITE",
@@ -55,7 +67,7 @@ function sanitizeConfig(input: unknown): Record<string, unknown> {
   return out;
 }
 
-router.get("/", async (req: Request, res: Response) => {
+router.get("/", canRead, async (req: Request, res: Response) => {
   try {
     const rows = await (prisma as any).businessActionPolicy.findMany({
       where: { tenantId: req.tenantId! },
@@ -71,7 +83,7 @@ router.get("/", async (req: Request, res: Response) => {
   }
 });
 
-router.put("/:actionKind", requireRole("ADMIN", "SYSTEM_ADMIN"), async (req: Request, res: Response) => {
+router.put("/:actionKind", canManage, async (req: Request, res: Response) => {
   try {
     const actionKind = String(req.params.actionKind).toUpperCase();
     if (!ACTION_KINDS.includes(actionKind as BusinessActionKind)) {
@@ -104,7 +116,7 @@ router.put("/:actionKind", requireRole("ADMIN", "SYSTEM_ADMIN"), async (req: Req
 // Dry-run a sample scenario against the ACTIVE policy - powers the settings
 // UI "test this rule" box. Records a PolicyDecision like any evaluation (the
 // evaluationPoint makes clear it was a preview via correlationId prefix).
-router.post("/:actionKind/preview", requireRole("ADMIN", "SYSTEM_ADMIN"), async (req: Request, res: Response) => {
+router.post("/:actionKind/preview", canPreview, async (req: Request, res: Response) => {
   try {
     const actionKind = String(req.params.actionKind).toUpperCase();
     if (!ACTION_KINDS.includes(actionKind as BusinessActionKind)) {

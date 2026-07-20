@@ -145,6 +145,14 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("settings:roles:manage", "settings", "configuration", false, "Manage Roles", "Create and edit roles and their permissions."),
   p("settings:billing:manage", "settings", "configuration", false, "Manage Billing", "Manage subscription, billing and plans."),
   p("settings:api-keys:manage", "settings", "configuration", false, "Manage API Keys", "Create and revoke API keys."),
+  // Business Rules (AI action policies): who may SEE the tenant's rules for
+  // refunds/coupons/compensation, who may CHANGE them (each change appends an
+  // immutable new policy version), and who may dry-run sample decisions.
+  // These are deliberately permissions, not role checks - a tenant can grant
+  // policy management to a finance lead without full admin.
+  p("settings:business-policies:read", "settings", "configuration", false, "View Business Rules", "See the tenant's AI action policies for refunds, coupons and compensation."),
+  p("settings:business-policies:manage", "settings", "configuration", false, "Manage Business Rules", "Create new versions of the AI action policies. Changes never rewrite historical decisions."),
+  p("settings:business-policies:preview", "settings", "configuration", false, "Preview Business Rules", "Dry-run sample scenarios against the active policies."),
 ] as const;
 
 export type PermissionKey = string;

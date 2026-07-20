@@ -30,6 +30,11 @@ const { redisStore, redisMock } = vi.hoisted(() => {
 });
 
 vi.mock("@chatcenter/shared", () => ({
+  // Business-policy hooks added to the orchestrator (round 3): benign stubs
+  actionKindForTool: () => null,
+  evaluateBusinessPolicy: async () => ({ decision: "ALLOWED", policyId: null, policyVersion: null, matchedRules: [], reasonCodes: [] }),
+  revalidateBeforeExecution: async () => ({ ok: true, decision: "ALLOWED" }),
+
   prisma: {
     toolExecutionRequest: { upsert: vi.fn().mockResolvedValue({}), update: vi.fn().mockResolvedValue({}) },
   },

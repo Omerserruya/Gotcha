@@ -150,13 +150,36 @@ describe("evaluateConfig - duplicates, frequency, prohibitions", () => {
 });
 
 describe("evaluateBusinessPolicy - loading, versioning, isolation, fail-closed", () => {
-  it("no configured policy → ALLOWED with no_policy_configured (HITL catalog still applies elsewhere)", async () => {
+  it("SECURE DEFAULT: no compensation/coupon/discount policy → DENIED (no proactive offers)", async () => {
     prismaMock.businessActionPolicy.findFirst.mockResolvedValue(null);
-    const r = await evaluateBusinessPolicy({
-      tenantId: "tA", actionKind: "COMPENSATION", evaluationPoint: "OFFER", facts: {},
+    for (const kind of ["COMPENSATION", "COUPON", "DISCOUNT"] as const) {
+      const r = await evaluateBusinessPolicy({
+        tenantId: "tA", actionKind: kind, evaluationPoint: "OFFER", facts: {},
+      });
+      expect(r.decision).toBe("DENIED");
+      expect(r.reasonCodes).toContain("no_compensation_policy_configured");
+      expect(r.customerSafeExplanation).toBeTruthy();
+    }
+  });
+
+  it("SECURE DEFAULT: no refund/cancel policy → customer-requested action allowed, HITL still mandatory", async () => {
+    prismaMock.businessActionPolicy.findFirst.mockResolvedValue(null);
+    for (const kind of ["REFUND", "CANCEL_ORDER"] as const) {
+      const r = await evaluateBusinessPolicy({
+        tenantId: "tA", actionKind: kind, evaluationPoint: "HITL_CREATE", facts: {},
+      });
+      expect(r.decision).toBe("ALLOWED");
+      expect(r.reasonCodes).toContain("no_policy_default_allowed_hitl_still_required");
+    }
+  });
+
+  it("SECURE DEFAULT: an unconfigured tenant cannot EXECUTE a compensation approval either", async () => {
+    prismaMock.businessActionPolicy.findFirst.mockResolvedValue(null);
+    const v = await revalidateBeforeExecution({
+      tenantId: "tA", tool: "shopify.issue_compensation_coupon", params: { code: "COMP-1", percentage: 100 },
     });
-    expect(r.decision).toBe("ALLOWED");
-    expect(r.reasonCodes).toContain("no_policy_configured");
+    expect(v.ok).toBe(false);
+    expect(v.reason).toContain("no_compensation_policy_configured");
   });
 
   it("17. queries are tenant-scoped - tenant A's evaluation never reads tenant B's policy", async () => {

@@ -151,6 +151,14 @@ export default function BusinessRulesPage() {
               </label>
             </div>
 
+            {/* The engine's documented behavior when NO policy version exists
+                for this action - never an undocumented implicit allow. */}
+            {!versions[kind] && (
+              <div className="rounded-md bg-amber-50 ring-1 ring-amber-200 text-amber-800 text-xs p-2.5">
+                {t(`businessRules.defaultNote.${kind}`)}
+              </div>
+            )}
+
             <div>
               <div className="text-sm font-medium mb-1">{t("businessRules.approvedReasons")}</div>
               <div className="flex flex-wrap gap-3">

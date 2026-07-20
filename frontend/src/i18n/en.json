@@ -3521,6 +3521,12 @@
       "REQUIRES_HUMAN_APPROVAL": "Needs manager approval",
       "ALLOWED_WITH_LIMIT": "Allowed up to the limit",
       "FAIL_CLOSED": "Blocked (safety)"
+    },
+    "defaultNote": {
+      "COMPENSATION": "No policy is configured yet. Until you save one, the AI will not offer or issue compensation coupons at all. Saving a policy is what turns this on.",
+      "COUPON": "No policy is configured yet. Until you save one, the AI will not create or manage discount coupons.",
+      "REFUND": "No policy is configured yet. Default: customers may request refunds and the AI can prepare them, but every refund still requires human approval, and amounts always come from verified store data.",
+      "CANCEL_ORDER": "No policy is configured yet. Default: customers may request cancellations and the AI can prepare them, but every cancellation still requires human approval."
     }
   }
 }

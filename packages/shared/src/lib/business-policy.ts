@@ -106,6 +106,57 @@ export interface BusinessPolicyResult {
   requiredData?: string[];
 }
 
+/**
+ * SECURE DEFAULT when a tenant has configured NO policy for an action kind.
+ *
+ * "No policy = silently allowed" was rejected in review as too permissive for
+ * money-adjacent actions. The documented defaults (also shown to the tenant
+ * admin on the Business Rules page):
+ *
+ *   COMPENSATION / COUPON / DISCOUNT → DENIED. The AI must never PROACTIVELY
+ *     offer compensation or mint discount codes on a tenant that never wrote
+ *     a compensation policy. Configuring the policy is the opt-in.
+ *
+ *   REFUND / CANCEL_ORDER → ALLOWED to be REQUESTED-and-proposed, because
+ *     these are customer-initiated service actions - but they are never
+ *     unattended: the catalog HITL policy (hitl_policy=always) forces a human
+ *     approval regardless, amounts come only from verified provider facts
+ *     (the adapter caps refunds at the gateway's refundable maximum, so a
+ *     model-invented amount cannot move extra money), and this default
+ *     confers NO manager override.
+ *
+ *   CUSTOMER_WRITE → ALLOWED (non-financial; integration permissions and
+ *     scope gating govern it).
+ *
+ * Platform safety constraints (HITL catalog, scope gating, adapter
+ * verification) are never bypassed by the absence of a policy, and engine
+ * errors continue to FAIL CLOSED.
+ */
+export function defaultDecisionWithoutPolicy(actionKind: BusinessActionKind): BusinessPolicyResult {
+  if (actionKind === "COMPENSATION" || actionKind === "COUPON" || actionKind === "DISCOUNT") {
+    return {
+      decision: "DENIED",
+      policyId: null,
+      policyVersion: null,
+      matchedRules: ["default_no_policy"],
+      reasonCodes: ["no_compensation_policy_configured"],
+      customerSafeExplanation:
+        "I can't arrange that myself, but let me see what else I can do, or I can bring in a person from the team.",
+    };
+  }
+  return {
+    decision: "ALLOWED",
+    policyId: null,
+    policyVersion: null,
+    matchedRules: ["default_no_policy"],
+    reasonCodes: [
+      actionKind === "CUSTOMER_WRITE"
+        ? "no_policy_customer_write_allowed"
+        : "no_policy_default_allowed_hitl_still_required",
+    ],
+  };
+}
+
 /** Map a tool name to the action kind it represents; null = not governed. */
 export function actionKindForTool(tool: string): BusinessActionKind | null {
   if (/\.process_refund$|(^|\.)issue_refund$/.test(tool)) return "REFUND";
@@ -177,15 +228,7 @@ export async function evaluateBusinessPolicy(opts: {
       orderBy: { version: "desc" },
     });
     if (!policy) {
-      // No tenant rule configured: backward-compatible ALLOWED. HITL catalog
-      // policies (hitl_policy=always on refunds/coupons) still apply on top.
-      result = {
-        decision: "ALLOWED",
-        policyId: null,
-        policyVersion: null,
-        matchedRules: [],
-        reasonCodes: ["no_policy_configured"],
-      };
+      result = defaultDecisionWithoutPolicy(opts.actionKind);
     } else if (!policy.enabled) {
       result = {
         decision: "DENIED",
