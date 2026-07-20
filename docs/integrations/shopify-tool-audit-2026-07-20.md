@@ -99,7 +99,13 @@ FAILED with an explanatory `execution_error`.
 
 ## 4. Capability matrix (adapter `services/ai/src/services/connectors/shopify.adapter.ts`, API 2024-04)
 
-63 declared tools. HITL "always": cancel_order, process_refund,
+**62 tools** - reconciled exactly: 62 catalog rows (`cat_shopify`), 62
+adapter-declared handlers (parity-tested), 62 tenant-enabled TenantTool rows
+for urban-supply. Of these, 2 are new this audit (process_refund,
+order_lookup), 13 are LIVE-VERIFIED, 18 BLOCKED-BY-SCOPE, 4
+DEGRADED-BY-DESIGN, 0 UNSUPPORTED, 27 NOT-YET-LIVE-VERIFIED (per-row detail
+in the matrix below).
+HITL "always": cancel_order, process_refund,
 create_discount_code, create_one_time_coupon, create_vip_coupon,
 issue_compensation_coupon. All other writes auto-execute (policy layer 2 can
 tighten per tenant).
@@ -213,6 +219,59 @@ didn't reuse a stale cache layer.
    Tests: `business-policy.test.ts` (23).
 5. **Historical honesty + deploy verification** - see §5b (LEGACY_UNVERIFIED)
    and §5c (BUILD_SHA).
+
+## 5e. Verification round 3 (review follow-up)
+
+1. **Refund idempotency granularity.** operationKey now uses PER-TOOL
+   canonical projections (`OPERATION_PROJECTIONS` in approval-requests.ts):
+   `process_refund` keys on order + amount(or "full-remaining") + sorted line
+   items×quantities + shipping flag + restock flag (+currency) - so a second
+   legitimate partial refund, a shipping-only refund and the later
+   full-remaining refund are DISTINCT operations, while an exact duplicate
+   still dedups. `cancel_order` keys on the order alone (cancels once);
+   coupons key on the code. Uncertain-retry safety comes from state
+   reconciliation in the adapter (prior refunds consume quantities, requests
+   cap at the gateway refundable maximum), not from the key.
+2. **Proactive capability discovery.** `refreshCapabilityState()` runs the
+   scope probe at the OAuth callback (a new store with missing merchant
+   approvals never exposes an unusable write tool for even one turn), on the
+   /test button, and from the bot tool surface whenever the persisted
+   snapshot (`config.capabilityState`: grantedScopes, lastCheckedAt, status)
+   is older than 6h - stale scope data is never trusted indefinitely. An
+   inconclusive probe keeps the last KNOWN enforcement state.
+3. **Business Rules authorization** is permission-first through the active
+   membership: `settings:business-policies:read|manage|preview` (catalog
+   entries), with the shared transitional admin-role fallback. Authorization
+   + cross-tenant isolation tests: business-policies-authz.test.ts (7).
+4. **Secure no-policy default** (`defaultDecisionWithoutPolicy`): with no
+   configured policy, COMPENSATION/COUPON/DISCOUNT are DENIED (configuring a
+   policy is the opt-in for proactive compensation); REFUND/CANCEL_ORDER stay
+   requestable but always HITL-gated with provider-verified amounts;
+   CUSTOMER_WRITE follows integration permissions. The Business Rules page
+   shows each default to the admin. Engine errors still FAIL CLOSED.
+5. **Outbox chokepoint sanitizer.** `sanitizeCustomerText()` runs in the
+   outgoing-worker on EVERY outbound body for every channel and producer -
+   no path can leak AI-signature punctuation even if it bypassed the
+   generation-side humanizer. Character-level only; business facts are
+   untouched (tested). Groundedness stays enforced at generation, where the
+   verified facts exist.
+
+### Customer-facing message path audit
+
+| Producer | Path | Style/humanizer | Groundedness | Outbox sanitizer |
+|---|---|---|---|---|
+| Live bot replies | ai-bot.service generateAIBotReply | humanizeReply ✔ | ledger/facts blocks | ✔ |
+| Post-execution continuations | /api/ai-bot/execution-message | humanizeReply ✔ | validateGroundedMessage + fallback ✔ | ✔ |
+| Failed-action handling | no customer send (human handoff + inbox) | n/a | n/a | n/a |
+| Follow-ups / scheduled sends | followup-generator → outgoing queue | generator-side | n/a | ✔ |
+| Broadcasts / templates | broadcast.worker → outgoing queue | operator-authored | n/a | ✔ (body) |
+| Business-hours / handoff / system texts | conversation/incoming-worker producers | static copy | n/a | ✔ |
+| Voice callback texts | voice-callback → outgoing queue | n/a | n/a | ✔ |
+
+Raw model output cannot reach a provider send without passing the worker
+chokepoint; template COMPONENT parameters (provider-side templates) are the
+one surface the body sanitizer does not rewrite - they are operator-authored,
+noted as a residual.
 
 ## 6. Remaining limitations / follow-ups
 
