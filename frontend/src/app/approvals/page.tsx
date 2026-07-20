@@ -10,6 +10,7 @@ import {
   listApprovals,
   approveApproval,
   rejectApproval,
+  retryApprovalExecution,
   type ApprovalRequestRow,
 } from "@/lib/gotcha-api";
 import {
@@ -122,6 +123,22 @@ export default function ApprovalsPage() {
     }
   }
 
+  async function onRetry(id: string) {
+    if (!token) return;
+    setActingId(id);
+    try {
+      const res = await retryApprovalExecution(token, id);
+      if (res?.data && res.data.executed === false && res.data.error) {
+        setError(res.data.error);
+      }
+      await load();
+    } catch (e: any) {
+      setError(e?.message ?? t("approvals.errApprove"));
+    } finally {
+      setActingId(null);
+    }
+  }
+
   if (!token) return null;
 
   return (
@@ -194,6 +211,7 @@ export default function ApprovalsPage() {
               onChangeReason={setRejectReason}
               onApprove={onApprove}
               onReject={onReject}
+              onRetry={onRetry}
             />
           ))}
         </ul>
@@ -214,6 +232,7 @@ function ApprovalListCard({
   onChangeReason,
   onApprove,
   onReject,
+  onRetry,
 }: {
   row: ApprovalRequestRow;
   actingId: string | null;
@@ -224,6 +243,7 @@ function ApprovalListCard({
   onChangeReason: (v: string) => void;
   onApprove: (id: string) => void;
   onReject: (id: string) => void;
+  onRetry: (id: string) => void;
 }) {
   const { t } = useI18n();
   const tool = humanizeTool(row.tool);
@@ -287,8 +307,61 @@ function ApprovalListCard({
               {row.status.toLowerCase()}
             </span>
           )}
+          {/* APPROVED is not DONE. Surface what the action actually did, so an
+              operator never reads "approved" as "it happened". */}
+          {row.status === "APPROVED" && row.executionState && row.executionState !== "SUCCEEDED" && (
+            <span
+              title={row.executionError ?? undefined}
+              className={`text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 ${
+                row.executionState === "FAILED"
+                  ? "bg-red-50 text-red-600 ring-red-200"
+                  : row.executionState === "LEGACY_UNVERIFIED"
+                    ? "bg-slate-100 text-slate-500 ring-slate-200"
+                    : "bg-amber-50 text-amber-700 ring-amber-200"
+              }`}
+            >
+              {row.executionState === "FAILED"
+                ? "action failed"
+                : row.executionState === "LEGACY_UNVERIFIED"
+                  // Approved before execution tracking existed; outcome was
+                  // never recorded and must not be presented as done or retried.
+                  ? "outcome unverified (legacy)"
+                  : "running"}
+            </span>
+          )}
+          {/* Execution failed but the decision stands - allow a safe re-run.
+              The backend claimForExecution CAS makes double-clicks harmless. */}
+          {row.status === "APPROVED" && row.executionState === "FAILED" && (
+            <button
+              onClick={() => onRetry(row.id)}
+              disabled={busy}
+              className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full ring-1 bg-white text-indigo-600 ring-indigo-200 hover:bg-indigo-50 disabled:opacity-50"
+            >
+              {busy ? t("approvals.running") : t("approvals.retryExecution")}
+            </button>
+          )}
+          {row.decisionChannel === "whatsapp" && (
+            <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-green-50 text-green-700 ring-1 ring-green-200">
+              via WhatsApp
+            </span>
+          )}
         </div>
       </div>
+
+      {/* Why the manager's phone never rang. A skipped notification is a
+          SETUP problem, so it links to the fix instead of staying silent. */}
+      {row.status === "PENDING" && row.managerNotifyState === "skipped" && row.managerNotifyReason && (
+        <div className="mx-4 md:mx-5 mt-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+          <span className="font-semibold">WhatsApp approval not sent.</span>{" "}
+          {row.managerNotifyReason}{" "}
+          <a href="/settings/approvals" className="underline font-medium">Set it up</a>
+        </div>
+      )}
+      {row.status === "PENDING" && row.managerNotifyState === "failed" && (
+        <div className="mx-4 md:mx-5 mt-3 rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-[11px] text-red-700">
+          <span className="font-semibold">WhatsApp delivery failed.</span> Decide it here instead.
+        </div>
+      )}
 
       {/* Parameter preview */}
       <div className="px-4 md:px-5 py-3.5 md:py-4">

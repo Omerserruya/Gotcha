@@ -3,6 +3,7 @@ import axios from "axios";
 import fs from "fs";
 import path from "path";
 import crypto from "crypto";
+import { handleApprovalButtonReply } from "../services/whatsapp-approval-inbound.service";
 import { prisma, createWorker, IncomingMessageJob, IncomingCommentJob, WebhookTriggerJob, analyticsQueue, outgoingMessageQueue, publishEvent, decryptCredentials } from "@chatcenter/shared";
 import { processCommentTrigger } from "../services/comment-trigger.service";
 
@@ -182,6 +183,14 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
     where: { externalMessageId },
   });
   if (existing) return;
+
+  // A manager tapping Approve/Reject on WhatsApp is NOT a customer message.
+  // Intercept before any contact/conversation is created - otherwise a staff
+  // phone number becomes a customer and gets handed to the bot.
+  if (interactiveReply?.payload) {
+    const approval = await handleApprovalButtonReply(interactiveReply.payload, senderId);
+    if (approval.handled) return;
+  }
 
   // Find or create conversation using channel-aware lookup.
   // A closed conversation stays closed - the next inbound from the same

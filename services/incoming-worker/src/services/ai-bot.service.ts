@@ -27,8 +27,13 @@ import {
   decryptCredentials,
   publishEvent,
   describeSendError,
+  getRedis,
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours,
+  describeNextOpening,
 } from "@chatcenter/shared";
-import type { ChannelCredentials, ProviderSendError } from "@chatcenter/shared";
+import type { ChannelCredentials, ProviderSendError, BusinessHoursConfig, BusinessOpenState } from "@chatcenter/shared";
 
 const AI_SERVICE_URL = process.env.AI_SERVICE_URL || "http://ai:4006";
 const INTERNAL_SERVICE_KEY = getInternalServiceKey();
@@ -110,6 +115,21 @@ export async function processAIBot(
     return false;
   }
 
+  // ── Business-hours gate (side-effect decision → worker-owned) ──
+  // Evaluated from the tenant's PERSISTED config (shared evaluator), never
+  // from frontend state. "silent" policy: while closed the AI does not answer
+  // at all - the configured closed-hours response (or a generated default
+  // with the REAL next opening time) is sent once per closed window.
+  // "active" policy (default): the AI keeps answering; the closed context is
+  // passed to the AI service so it never implies immediate human availability.
+  const bizHours = await getBusinessHoursState(tenantId);
+  if (bizHours.state.configured && !bizHours.state.open) {
+    if ((bizHours.cfg?.aiOutsideHours || "active") === "silent") {
+      await sendClosedHoursAutoReply(tenantId, conversationId, incomingMessage, sendContext, bizHours);
+      return true;
+    }
+  }
+
   // Pre-check: hard limits set on the agent row. These are enforced by the
   // worker, not the AI service, because they're side-effect decisions
   // (escalate vs. continue) tied to the conversation's channel pipeline.
@@ -146,6 +166,22 @@ export async function processAIBot(
         conversationId,
         aiAgentId: resolvedAgentId,
         incomingMessage,
+        // Closed + "active" policy: the AI answers, but must speak truthfully
+        // about human availability. Localized next-opening wording is computed
+        // HERE (the tenant config lives on this side) and injected as prompt
+        // context by the AI service.
+        ...(bizHours.state.configured && !bizHours.state.open
+          ? {
+              closedHours: {
+                nextOpeningIso: bizHours.state.nextOpening?.toISOString() ?? null,
+                timezone: bizHours.state.timezone,
+                nextOpeningText: {
+                  en: describeNextOpening(bizHours.state, "en"),
+                  he: describeNextOpening(bizHours.state, "he"),
+                },
+              },
+            }
+          : {}),
       },
       {
         headers: { "X-Internal-Key": INTERNAL_SERVICE_KEY, "Content-Type": "application/json" },
@@ -605,6 +641,92 @@ function isHumanRequest(message: string): boolean {
   return false;
 }
 
+// ─── Business hours (tenant-persisted; shared evaluator) ─────
+const HEBREW_RE = /[֐-׿]/;
+
+async function getBusinessHoursState(
+  tenantId: string,
+): Promise<{ cfg: BusinessHoursConfig | null; state: BusinessOpenState }> {
+  try {
+    const raw = await getRedis().get(BUSINESS_HOURS_KEY(tenantId));
+    const cfg = parseBusinessHours(raw);
+    return { cfg, state: evaluateBusinessHours(cfg) };
+  } catch (err: any) {
+    // Config store unreachable → behave as always-open. The bot answering
+    // during closed hours is recoverable; the bot going mute is not.
+    console.warn("[AI-Bot] business-hours read failed (treating as open):", err?.message);
+    return { cfg: null, state: { configured: false, open: true, nextOpening: null, timezone: "UTC" } };
+  }
+}
+
+/**
+ * "silent" outside-hours policy: send the configured closed-hours response
+ * (or a generated default carrying the REAL next opening time) instead of an
+ * AI reply - at most once per closed window per conversation, so a customer
+ * sending three messages overnight gets one notice, not three.
+ */
+async function sendClosedHoursAutoReply(
+  tenantId: string,
+  conversationId: string,
+  incomingMessage: string,
+  sendContext: SendContext,
+  biz: { cfg: BusinessHoursConfig | null; state: BusinessOpenState },
+): Promise<void> {
+  // Dedupe: an auto-reply already sent after the last opening? The next
+  // opening is at most a week away, so "within the last 24h" bounds one
+  // closed window for any realistic schedule without tracking window edges.
+  const recent = await prisma.message.findFirst({
+    where: {
+      tenantId,
+      conversationId,
+      direction: "OUTBOUND",
+      createdAt: { gte: new Date(Date.now() - 24 * 60 * 60 * 1000) },
+      metadata: { path: ["closedHoursAutoReply"], equals: true },
+    },
+    select: { id: true },
+  });
+  if (recent) return;
+
+  const he = HEBREW_RE.test(incomingMessage || "");
+  const when = describeNextOpening(biz.state, he ? "he" : "en");
+  const body =
+    biz.cfg?.autoResponse?.trim() ||
+    (he
+      ? `תודה שפניתם אלינו! אנחנו כרגע סגורים. נחזור לפעילות ${when} ונענה לכם אז.`
+      : `Thanks for reaching out! We're currently closed. We'll be back ${when} and will reply then.`);
+
+  const adapter = getOutboundAdapter(sendContext.channel);
+  if (!adapter) return;
+  let extId: string | null = null;
+  let sendErrorMessage: string | null = null;
+  try {
+    extId = await adapter.sendTextMessage(
+      sendContext.credentials,
+      sendContext.channelAccountExternalId,
+      sendContext.recipientId,
+      body,
+    );
+  } catch (err: any) {
+    sendErrorMessage = describeSendError(err, sendContext.channel).errorMessage;
+    console.warn("[AI-Bot] closed-hours auto-reply send failed:", sendErrorMessage);
+  }
+  await prisma.message.create({
+    data: {
+      tenantId,
+      conversationId,
+      channel: sendContext.channel,
+      direction: "OUTBOUND",
+      body,
+      senderName: "AI Bot",
+      externalMessageId: extId,
+      status: extId ? "SENT" : "FAILED",
+      errorMessage: sendErrorMessage || undefined,
+      metadata: { source: "ai_bot", closedHoursAutoReply: true },
+    },
+  });
+  await publishEvent({ event: "conversation:updated", tenantId, data: { id: conversationId } });
+}
+
 async function escalateToHuman(
   tenantId: string,
   conversationId: string,
@@ -616,17 +738,39 @@ async function escalateToHuman(
   const adapter = getOutboundAdapter(sendContext.channel);
   if (!adapter) return;
 
+  // Every handoff must know whether the business is OPEN: telling a customer
+  // "connecting you with a person" at 2am implies availability that doesn't
+  // exist. Evaluated here - the single choke point every escalation path
+  // (limits, keywords, model-decided, AI failure, paused agent) runs through.
+  const biz = await getBusinessHoursState(tenantId);
+  const closed = biz.state.configured && !biz.state.open;
+
   // Generate the customer-facing handoff message via AI so it lands in
   // the conversation's language (Hebrew/English/Arabic/…) and stays in
   // the agent's voice. Falls back to the agent's configured static
   // `escalationMessage` if the oneshot fails - never block the actual
   // escalation just because copywriting hiccupped.
-  const escalationMessage = await generateEscalationHandoff(
+  let escalationMessage = await generateEscalationHandoff(
     tenantId,
     conversationId,
     aiAgentId,
     fallbackMessage,
+    closed,
   );
+
+  if (closed) {
+    // Deterministic availability line - appended AFTER generation so the real
+    // next-opening time always reaches the customer even when the oneshot
+    // fell back to the static message. Owner-written copy wins when set.
+    const he = HEBREW_RE.test(escalationMessage);
+    const custom = biz.cfg?.outsideHoursHandoffMessage?.trim();
+    const when = describeNextOpening(biz.state, he ? "he" : "en");
+    const line = custom ||
+      (he
+        ? `הצוות שלנו כרגע מחוץ לשעות הפעילות - נציג יחזור אליכם ${when}.`
+        : `Our team is currently outside business hours - a representative will get back to you ${when}.`);
+    escalationMessage = `${escalationMessage}\n${line}`;
+  }
 
   // The adapter THROWS on provider errors (bad number, closed 24h window,
   // template required) despite the `string | null` signature. A failed SEND
@@ -722,6 +866,7 @@ async function generateEscalationHandoff(
   conversationId: string,
   aiAgentId: string | undefined,
   fallback: string,
+  outsideBusinessHours = false,
 ): Promise<string> {
   if (!aiAgentId) return fallback;
   try {
@@ -747,7 +892,10 @@ async function generateEscalationHandoff(
       `- Tone: warm, brief, like a human typing a quick handoff note.\n` +
       `- Do NOT mention the CRM, lead creation, or any internal system.\n` +
       `- Do NOT promise a specific response time unless it is implicit in the conversation.\n` +
-      `- Do NOT add greetings like "Hi" or sign-offs.\n`;
+      `- Do NOT add greetings like "Hi" or sign-offs.\n` +
+      (outsideBusinessHours
+        ? `- The human team is OUTSIDE business hours right now: say a team member will follow up, but do NOT imply anyone is available immediately (no "right away", "shortly", "connecting you now").\n`
+        : "");
 
     const res = await axios.post(
       `${AI_SERVICE_URL}/api/ai-bot/oneshot`,

@@ -73,11 +73,30 @@ export type {
 } from "./lib/tool-gate";
 export {
   createApprovalRequest,
+  computeOperationKey,
   findPendingByConversation,
   approveRequest,
   rejectRequest,
+  claimForExecution,
+  recordExecutionOutcome,
+  claimCustomerNotification,
+  linkCustomerMessage,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
+export {
+  evaluateBusinessPolicy,
+  evaluateConfig,
+  actionKindForTool,
+  revalidateBeforeExecution,
+} from "./lib/business-policy";
+export type {
+  BusinessActionKind,
+  BusinessPolicyConfig,
+  BusinessPolicyFacts,
+  BusinessPolicyResult,
+  PolicyDecisionKind,
+  PolicyEvaluationPoint,
+} from "./lib/business-policy";
 export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup } from "./lib/ai-usage";
 export type { AIUsageEvent, EmployeeUsageRollup } from "./lib/ai-usage";
 export {
@@ -89,9 +108,33 @@ export {
 } from "./lib/ai-feature-categories";
 export type { AiFeatureCategory, AiFeatureCategoryDef } from "./lib/ai-feature-categories";
 export { getRedis, closeRedis } from "./lib/redis";
+export {
+  mintApprovalRefs,
+  consumeApprovalRef,
+  revokeApprovalRefs,
+  isApprovalRef,
+  normalizeE164,
+} from "./lib/approval-refs";
+export type { ApprovalRefBinding, ApprovalDecision } from "./lib/approval-refs";
+export {
+  resolveApprovalRecipient,
+  userMayApprove,
+  recipientRejectionMessage,
+} from "./lib/approval-recipients";
+export type { EligibleRecipient, RecipientRejection } from "./lib/approval-recipients";
+export {
+  BUSINESS_HOURS_KEY,
+  parseBusinessHours,
+  evaluateBusinessHours,
+  describeNextOpening,
+  DAY_KEYS,
+} from "./lib/business-hours";
+export type { BusinessHoursConfig, BusinessOpenState, DayKey, DaySchedule } from "./lib/business-hours";
 export { verifyAccessToken } from "./lib/jwt";
 export { resolvePrincipal, AuthError } from "./lib/principal";
 export { getOAuthStateSecret } from "./lib/oauth-state";
+export { mintOAuthState, consumeOAuthState, returnPathForFlow } from "./lib/oauth-state-store";
+export type { OAuthStateClaims, MintedState, ConsumeResult } from "./lib/oauth-state-store";
 export { verifyInternalServiceKey, requireInternalKey, getInternalServiceKey } from "./lib/internal-key";
 export { safeFetch, assertPublicUrl, isBlockedIp, SsrfError } from "./lib/safe-fetch";
 export type { SafeFetchOptions, SafeFetchResult } from "./lib/safe-fetch";
@@ -263,7 +306,7 @@ export { authenticate } from "./middleware/auth";
 export { requireRole, requireSystemAdmin, requireDepartmentRole } from "./middleware/rbac";
 export { enforceMfaEnrollment } from "./middleware/mfa-guard";
 export { requireFeature, requireTenantFeature } from "./middleware/feature-gate";
-export { requirePermission } from "./middleware/permission-gate";
+export { requirePermission, requirePermissionOrRole } from "./middleware/permission-gate";
 export { resolveTenant, assertTenantId } from "./middleware/tenant";
 export { requireActiveTenant, requireOnboardingOrActiveTenant } from "./middleware/tenant-status";
 export { validate } from "./middleware/validate";

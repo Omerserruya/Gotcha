@@ -14,6 +14,7 @@ import identityRoutes from "./routes/identity";
 import approvalRoutes from "./routes/approvals";
 import audienceRoutes from "./routes/audiences";
 import tenantSettingsRoutes from "./routes/tenant-settings";
+import businessPolicyRoutes from "./routes/business-policies";
 import voiceSessionsRoutes from "./routes/voice-sessions";
 import voiceChannelsRoutes from "./routes/voice-channels";
 import autoBuyRoutes from "./routes/auto-buy";
@@ -65,6 +66,7 @@ app.use("/api/identity", identityRoutes);
 app.use("/api/approvals", approvalRoutes);
 app.use("/api/audiences", audienceRoutes);
 app.use("/api/tenant-settings", tenantSettingsRoutes);
+app.use("/api/business-policies", businessPolicyRoutes);
 app.use("/api/voice-sessions", voiceSessionsRoutes);
 app.use("/api/voice-channels", voiceChannelsRoutes);
 app.use("/api/auto-buy", autoBuyRoutes);
@@ -73,7 +75,7 @@ app.use("/api/auto-buy", autoBuyRoutes);
 // for independent scaling. This service is now API + WebSocket only.
 
 httpServer.listen(config.port, () => {
-  console.log(`[${config.name}] running on port ${config.port}`);
+  console.log(`[${config.name}] running on port ${config.port} (build ${process.env.BUILD_SHA || "dev"})`);
 });
 
 export { app, httpServer };
