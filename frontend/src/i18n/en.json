@@ -3,6 +3,21 @@
     "name": "GOTCHA",
     "loading": "Loading..."
   },
+  "tenant": {
+    "pickerTitle": "Choose a workspace",
+    "pickerSubtitle": "{name}, you're a member of several workspaces",
+    "searchPlaceholder": "Search workspaces...",
+    "noResults": "No workspace matches your search",
+    "lastUsed": "last used {when}",
+    "switchWorkspace": "Switch workspace",
+    "workspaces": "Workspaces",
+    "signOut": "Sign out",
+    "role": {
+      "ADMIN": "Admin",
+      "AGENT": "Agent",
+      "SYSTEM_ADMIN": "System admin"
+    }
+  },
   "nav": {
     "gettingStarted": "Getting started",
     "home": "Home",
@@ -818,6 +833,15 @@
     "schedule": "Schedule",
     "businessHours": "Business hours",
     "businessHoursDesc": "Set the hours your team is available.",
+    "aiOutsideHours": "AI employee outside opening hours",
+    "aiOutsideHoursDesc": "Choose what your AI employee does when the business is closed.",
+    "aiOutsideHoursActive": "Keep answering",
+    "aiOutsideHoursActiveDesc": "The AI employee keeps helping customers. If a human is needed, it explains the team is away and when it will be back - based on your real opening hours.",
+    "aiOutsideHoursSilent": "Don't answer while closed",
+    "aiOutsideHoursSilentDesc": "The AI employee stays silent outside opening hours. Customers receive your closed-hours auto-response instead.",
+    "outsideHoursHandoffMsg": "Handoff message while closed (optional)",
+    "outsideHoursHandoffMsgDesc": "Shown when a conversation needs a human while you're closed. Leave empty to auto-generate one with the actual next opening time.",
+    "outsideHoursHandoffMsgPlaceholder": "e.g. Our team is out of office - we'll get back to you as soon as we reopen.",
     "autoGreeting": "Auto-greeting",
     "autoGreetingDesc": "Greeting message sent to new conversations.",
     "autoGreetingPlaceholder": "Hi! Thanks for reaching out…",
@@ -1075,6 +1099,18 @@
       "crmTitle": "CRM Integrations",
       "crmSubtitle": "Connect your CRM (Zoho, HubSpot, Salesforce, Monday) - or use Shopify as your source of truth. The platform's audience builder, broadcasts, and AI handoffs read from the connected CRM.",
       "systemOfRecord": {
+        "currentTitle": "Active system of record",
+        "capUnsupported": "Not supported by this system",
+        "caps": {
+          "identify_customer": "Customer lookup",
+          "customer_context": "Customer & order context",
+          "related_business_context": "Timeline & history",
+          "write_conversation_summary": "Conversation summaries",
+          "write_interaction": "Interaction notes",
+          "update_customer_fields": "Update customer fields",
+          "create_task": "Create tasks",
+          "merge_contacts": "Merge duplicates"
+        },
         "title": "Customer system of record",
         "subtitle": "Which connected system answers “who is this customer?”. Your AI reads identity, history and summaries from it, and writes notes and tags back to it.",
         "active": "Active - this is your customer system of record",
@@ -2315,6 +2351,8 @@
     "score": "Score"
   },
   "marketplace": {
+    "crmMovedHint": "Looking for your CRM or customer system of record? That is a business-level choice, configured in",
+    "crmMovedLink": "Settings → Integrations",
     "title": "Integrations Marketplace",
     "search": "Search integrations...",
     "allCategories": "All",
@@ -3192,6 +3230,7 @@
     "rejecting": "Rejecting…",
     "running": "Running…",
     "approveAndRun": "Approve & run",
+    "retryExecution": "Retry action",
     "confirmReject": "Confirm reject",
     "rejectReasonPlaceholder": "Why are you rejecting? (required - used to craft the bot's fallback reply)",
     "note": "Note",
@@ -3440,6 +3479,48 @@
       "channels": "Channels",
       "knowledge": "Knowledge",
       "analytics": "Analytics"
+    }
+  },
+  "businessRules": {
+    "title": "Business Rules",
+    "subtitle": "Decide what your AI employee may offer and execute for refunds, cancellations and compensation. These rules are enforced by the system itself, before an offer is made, before an approval is requested, and again right before execution.",
+    "kind": {
+      "COMPENSATION": "Compensation coupons",
+      "COUPON": "Discount coupons",
+      "REFUND": "Refunds",
+      "CANCEL_ORDER": "Order cancellations"
+    },
+    "enabled": "Enabled",
+    "version": "Version",
+    "approvedReasons": "Approved reasons",
+    "reasonsHint": "If none are selected, any reason is acceptable. When selected, the AI may only proceed for these reasons.",
+    "reason": {
+      "late_delivery": "Delivery was materially late",
+      "damaged_or_wrong_item": "Damaged or wrong item",
+      "confirmed_business_error": "Confirmed business error",
+      "just_because": "Other (not approved)"
+    },
+    "maxAmount": "Maximum amount",
+    "maxPercent": "Max % of order value",
+    "managerAbove": "Manager approval above",
+    "preventDuplicate": "Prevent a second compensation for the same incident",
+    "save": "Save rules",
+    "saving": "Saving...",
+    "saved": "Saved. A new version is now active.",
+    "previewTitle": "Test these rules",
+    "previewAmount": "Requested amount",
+    "previewReason": "Reason",
+    "previewRun": "Check decision",
+    "previewFailed": "Could not evaluate the sample.",
+    "maxLabel": "max allowed",
+    "decision": {
+      "ALLOWED": "Allowed",
+      "DENIED": "Denied",
+      "REQUIRES_INFORMATION": "Needs more information",
+      "REQUIRES_EVIDENCE": "Needs evidence",
+      "REQUIRES_HUMAN_APPROVAL": "Needs manager approval",
+      "ALLOWED_WITH_LIMIT": "Allowed up to the limit",
+      "FAIL_CLOSED": "Blocked (safety)"
     }
   }
 }

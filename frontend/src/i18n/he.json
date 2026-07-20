@@ -3,6 +3,21 @@
     "name": "GOTCHA",
     "loading": "טוען..."
   },
+  "tenant": {
+    "pickerTitle": "בחירת סביבת עבודה",
+    "pickerSubtitle": "{name}, יש לך חברות בכמה סביבות עבודה",
+    "searchPlaceholder": "חיפוש סביבת עבודה...",
+    "noResults": "לא נמצאה סביבת עבודה מתאימה",
+    "lastUsed": "שימוש אחרון {when}",
+    "switchWorkspace": "החלפת סביבת עבודה",
+    "workspaces": "סביבות עבודה",
+    "signOut": "התנתקות",
+    "role": {
+      "ADMIN": "מנהל/ת",
+      "AGENT": "נציג/ה",
+      "SYSTEM_ADMIN": "מנהל/ת מערכת"
+    }
+  },
   "nav": {
     "gettingStarted": "צעדים ראשונים",
     "home": "בית",
@@ -818,6 +833,15 @@
     "schedule": "לוח זמנים",
     "businessHours": "שעות פעילות",
     "businessHoursDesc": "הגדר את שעות הפעילות של הצוות.",
+    "aiOutsideHours": "עובד ה-AI מחוץ לשעות הפעילות",
+    "aiOutsideHoursDesc": "בחרו מה עובד ה-AI עושה כשהעסק סגור.",
+    "aiOutsideHoursActive": "ממשיך לענות",
+    "aiOutsideHoursActiveDesc": "עובד ה-AI ממשיך לעזור ללקוחות. אם נדרש נציג אנושי, הוא מסביר שהצוות לא זמין ומתי יחזור - לפי שעות הפעילות האמיתיות שלכם.",
+    "aiOutsideHoursSilent": "לא עונה כשהעסק סגור",
+    "aiOutsideHoursSilentDesc": "עובד ה-AI שותק מחוץ לשעות הפעילות. הלקוחות מקבלים את הודעת המענה האוטומטי לשעות סגירה.",
+    "outsideHoursHandoffMsg": "הודעת העברה לנציג בשעות סגירה (אופציונלי)",
+    "outsideHoursHandoffMsgDesc": "מוצגת כששיחה דורשת נציג אנושי בזמן שאתם סגורים. השאירו ריק ליצירה אוטומטית עם מועד הפתיחה הבא.",
+    "outsideHoursHandoffMsgPlaceholder": "לדוגמה: הצוות שלנו לא זמין כעת - נחזור אליכם מיד כשנפתח.",
     "autoGreeting": "ברכת פתיחה אוטומטית",
     "autoGreetingDesc": "הודעת פתיחה שתישלח לשיחות חדשות.",
     "autoGreetingPlaceholder": "שלום! תודה שפנית אלינו…",
@@ -1075,6 +1099,18 @@
       "crmTitle": "אינטגרציות CRM",
       "crmSubtitle": "חברו את ה-CRM שלכם (Zoho, HubSpot, Salesforce, Monday) - או השתמשו ב-Shopify כמקור האמת. בונה הקהלים, השידורים והעברות ה-AI של הפלטפורמה קוראים מה-CRM המחובר.",
       "systemOfRecord": {
+        "currentTitle": "מערכת הלקוחות הפעילה",
+        "capUnsupported": "לא נתמך במערכת זו",
+        "caps": {
+          "identify_customer": "איתור לקוח",
+          "customer_context": "הקשר לקוח והזמנות",
+          "related_business_context": "היסטוריה וציר זמן",
+          "write_conversation_summary": "סיכומי שיחה",
+          "write_interaction": "תיעוד אינטראקציות",
+          "update_customer_fields": "עדכון שדות לקוח",
+          "create_task": "יצירת משימות",
+          "merge_contacts": "מיזוג כפילויות"
+        },
         "title": "מערכת האמת ללקוחות",
         "subtitle": "איזו מערכת מחוברת עונה על השאלה “מי הלקוח הזה?”. ה-AI קורא ממנה זהות, היסטוריה וסיכומים, וכותב אליה הערות ותגיות.",
         "active": "פעיל - זו מערכת האמת ללקוחות שלכם",
@@ -2316,6 +2352,8 @@
     "score": "ציון"
   },
   "marketplace": {
+    "crmMovedHint": "מחפשים את ה-CRM או מערכת הלקוחות הראשית? זו החלטה עסקית, שמוגדרת ב",
+    "crmMovedLink": "הגדרות ← אינטגרציות",
     "title": "שוק האינטגרציות",
     "search": "חפש אינטגרציות...",
     "allCategories": "הכל",
@@ -3193,6 +3231,7 @@
     "rejecting": "דוחה…",
     "running": "מריץ…",
     "approveAndRun": "אשר והרץ",
+    "retryExecution": "הרץ שוב",
     "confirmReject": "אשר דחייה",
     "rejectReasonPlaceholder": "מדוע אתה דוחה? (חובה - משמש לניסוח תשובת הגיבוי של הבוט)",
     "note": "הערה",
@@ -3441,6 +3480,48 @@
       "channels": "ערוצים",
       "knowledge": "מאגר ידע",
       "analytics": "אנליטיקות"
+    }
+  },
+  "businessRules": {
+    "title": "כללי עסק",
+    "subtitle": "כאן קובעים מה העובד הדיגיטלי רשאי להציע ולבצע בהחזרים, ביטולים ופיצויים. הכללים נאכפים על ידי המערכת עצמה: לפני שמוצעת הצעה, לפני שנפתחת בקשת אישור, ושוב רגע לפני הביצוע.",
+    "kind": {
+      "COMPENSATION": "קופוני פיצוי",
+      "COUPON": "קופוני הנחה",
+      "REFUND": "החזרים כספיים",
+      "CANCEL_ORDER": "ביטולי הזמנות"
+    },
+    "enabled": "פעיל",
+    "version": "גרסה",
+    "approvedReasons": "סיבות מאושרות",
+    "reasonsHint": "אם לא נבחרה אף סיבה, כל סיבה מתקבלת. כאשר נבחרו סיבות, ההצעה תתאפשר רק עבורן.",
+    "reason": {
+      "late_delivery": "המשלוח התעכב משמעותית",
+      "damaged_or_wrong_item": "מוצר פגום או שגוי",
+      "confirmed_business_error": "טעות מאומתת של העסק",
+      "just_because": "אחר (לא מאושר)"
+    },
+    "maxAmount": "סכום מקסימלי",
+    "maxPercent": "אחוז מקסימלי מערך ההזמנה",
+    "managerAbove": "אישור מנהל מעל",
+    "preventDuplicate": "למנוע פיצוי נוסף עבור אותה תקלה",
+    "save": "שמירת כללים",
+    "saving": "שומר...",
+    "saved": "נשמר. גרסה חדשה פעילה כעת.",
+    "previewTitle": "בדיקת הכללים",
+    "previewAmount": "סכום מבוקש",
+    "previewReason": "סיבה",
+    "previewRun": "בדיקת החלטה",
+    "previewFailed": "לא ניתן היה להעריך את הדוגמה.",
+    "maxLabel": "מקסימום מותר",
+    "decision": {
+      "ALLOWED": "מאושר",
+      "DENIED": "נדחה",
+      "REQUIRES_INFORMATION": "נדרש מידע נוסף",
+      "REQUIRES_EVIDENCE": "נדרשת אסמכתה",
+      "REQUIRES_HUMAN_APPROVAL": "נדרש אישור מנהל",
+      "ALLOWED_WITH_LIMIT": "מאושר עד התקרה",
+      "FAIL_CLOSED": "נחסם (בטיחות)"
     }
   }
 }
