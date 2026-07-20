@@ -134,6 +134,8 @@ import {
   listAdapters,
   missingScopesFromConfig,
   toolBlockedByMissingScopes,
+  capabilityStateIsFresh,
+  refreshCapabilityState,
 } from "./connectors/integration-framework";
 import {
   loadActionContracts,
@@ -1748,6 +1750,21 @@ async function generateAIBotReplyInner(
               return parts.join(" ");
             }).join("\n")
           : "";
+      // Capability freshness: the surface is built from VERIFIED capabilities.
+      // If this connection's capability snapshot is stale (or was never
+      // taken - pre-existing connections), re-probe in the background so the
+      // next turn gates on current provider truth instead of data that could
+      // have drifted since connect. Non-blocking on purpose: this turn still
+      // uses the last KNOWN state, which the OAuth-callback probe seeds at
+      // connect time for new stores.
+      if (typeof adapter.validate === "function" && !capabilityStateIsFresh(cfg)) {
+        void refreshCapabilityState({
+          tenantId: opts.tenantId,
+          slug: catalogSlug,
+          adapterSlug: adapter.slug,
+        }).catch((err: any) =>
+          console.warn(`[ai-bot] capability refresh failed for ${catalogSlug}:`, err?.message));
+      }
       for (const def of adapter.tools()) {
         // Governance gate (parity with the governed `integration_<slug>` path):
         // surface this tool ONLY if it is enabled for the tenant AND allowed for

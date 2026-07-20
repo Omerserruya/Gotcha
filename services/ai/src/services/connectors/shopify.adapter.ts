@@ -361,10 +361,11 @@ const ShopifyAdapter: ProviderAdapter = {
     }
     if (!res.ok) return { ok: false, error: `Shopify returned ${res.status} while validating` };
     const j: any = await res.json().catch(() => ({}));
-    const granted = new Set<string>(
-      (j.access_scopes || []).map((s: any) => String(s.handle || "")),
-    );
-    const missing = REQUIRED_SCOPES.filter((r) => !granted.has(r.scope));
+    const granted = (j.access_scopes || [])
+      .map((s: any) => String(s.handle || ""))
+      .filter(Boolean);
+    const grantedSet = new Set<string>(granted);
+    const missing = REQUIRED_SCOPES.filter((r) => !grantedSet.has(r.scope));
     if (missing.length) {
       return {
         ok: false,
@@ -372,9 +373,11 @@ const ShopifyAdapter: ProviderAdapter = {
           `connected, but missing scope(s): ` +
           missing.map((m) => `${m.scope} (${m.needs})`).join(", ") +
           ` - re-connect Shopify to grant them`,
+        grantedScopes: granted,
+        missingScopes: missing.map((m) => m.scope),
       };
     }
-    return { ok: true };
+    return { ok: true, grantedScopes: granted, missingScopes: [] };
   },
 
   /**

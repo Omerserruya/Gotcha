@@ -23,7 +23,6 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import jwt from "jsonwebtoken";
 import * as crypto from "crypto";
 import {
   prisma,
@@ -31,13 +30,15 @@ import {
   resolveTenant,
   requireActiveTenant,
   requireOnboardingOrActiveTenant,
+  mintOAuthState,
+  consumeOAuthState,
   requireRole,
   encryptCredentials,
   getOAuthStateSecret,
 } from "@chatcenter/shared";
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
-import { loadConnection } from "../services/connectors/integration-framework";
+import { loadConnection, refreshCapabilityState } from "../services/connectors/integration-framework";
 
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
@@ -58,17 +59,30 @@ async function upsertConnection(opts: {
   credentialsBlob?: string;
   config?: Record<string, any>;
   connectedBy?: string;
+  /** Why the connection is not usable. Persisted so the UI can show an
+   *  actionable reason instead of a bare ERROR chip. Cleared on success. */
+  lastError?: string;
 }) {
   const data: any = {
     status: opts.status,
     connectedAt: new Date(),
     lastTestedAt: new Date(),
     lastTestResult: opts.status === "CONNECTED",
-    lastError: null,
+    lastError: opts.status === "CONNECTED" ? null : (opts.lastError ?? null),
   };
   if (opts.credentialsBlob !== undefined) data.credentials = opts.credentialsBlob;
-  if (opts.config !== undefined) data.config = opts.config;
   if (opts.connectedBy !== undefined) data.connectedBy = opts.connectedBy;
+  // MERGE config on re-connect, never replace: config carries settings set
+  // OUTSIDE the OAuth flow (useAsCrm, sync toggles) - a re-connect passing
+  // only { shopDomain } used to wipe them (this is how Urban Supply lost
+  // useAsCrm and CRM writeback silently stopped resolving).
+  if (opts.config !== undefined) {
+    const existing = await (prisma as any).tenantIntegration.findUnique({
+      where: { tenantId_integrationId: { tenantId: opts.tenantId, integrationId: opts.catalogId } },
+      select: { config: true },
+    });
+    data.config = { ...(existing?.config ?? {}), ...opts.config };
+  }
 
   const create: any = {
     tenantId: opts.tenantId,
@@ -243,12 +257,14 @@ router.post(
 
 router.get(
   "/connectors/stripe/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable like every other connector: during onboarding the
+  // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.STRIPE_CLIENT_ID;
     const redirect = process.env.STRIPE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "stripe_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "stripe" }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "stripe", userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -264,8 +280,14 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "stripe") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "stripe");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[stripe oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
 
     const secret = process.env.STRIPE_SECRET_KEY;
     if (!secret) { res.status(500).send("stripe_secret_not_configured"); return; }
@@ -313,7 +335,7 @@ router.get(
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "hubspot", flow }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "hubspot", flow, userId: (req as any).user?.userId });
     // HubSpot enforces an EXACT scope contract between the install URL and the
     // app's configured scopes (HubSpot dashboard → Auth → Scopes):
     //   1. Every scope the app marks "Required" must appear in the install URL,
@@ -368,8 +390,14 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "hubspot") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "hubspot");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[hubspot oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
 
     const clientId = process.env.HUBSPOT_CLIENT_ID!;
     const clientSecret = process.env.HUBSPOT_CLIENT_SECRET!;
@@ -429,7 +457,7 @@ router.get(
       return;
     }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "shopify", shop, flow }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "shopify", shop, flow, userId: (req as any).user?.userId });
     // Discount tools talk to the REST PriceRule/DiscountCode resources
     // (/price_rules.json, /discount_codes/lookup.json), which are gated on
     // read_price_rules / write_price_rules. `write_discounts` covers the newer
@@ -459,16 +487,26 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
   try {
     const { code, state, shop } = req.query;
     if (!code || !state || !shop) { res.status(400).send("missing_code_or_state_or_shop"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "shopify" || payload.shop !== shop) { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "shopify");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[shopify oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
+    if (payload.shop !== shop) { res.status(400).send("bad_state"); return; }
 
     const clientId = process.env.SHOPIFY_API_KEY!;
     const clientSecret = process.env.SHOPIFY_API_SECRET!;
 
+    // `expiring: "1"` requests Shopify's expiring offline token (access token
+    // + refresh token). Non-expiring tokens are rejected by the Admin API now;
+    // the adapter's refreshTokens() keeps the pair rotated.
     const tokenRes = await fetch(`https://${shop}/admin/oauth/access_token`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code }),
+      body: JSON.stringify({ client_id: clientId, client_secret: clientSecret, code, expiring: "1" }),
     });
     if (!tokenRes.ok) { res.status(400).send("token_exchange_failed"); return; }
     const j: any = await tokenRes.json();
@@ -480,11 +518,22 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
       status: "CONNECTED",
       credentialsBlob: encryptCredentials({
         accessToken: j.access_token,
+        refreshToken: j.refresh_token,
+        expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() : undefined,
         scope: j.scope,
         shopDomain: shop,
       }),
       config: { shopDomain: shop },
     });
+    // Proactive capability discovery: enumerate granted scopes NOW, so a
+    // store connected with missing merchant approvals never exposes an
+    // unusable write tool for even one turn before the first failure.
+    // Fire-and-forget - the redirect must not wait on a Shopify roundtrip.
+    void refreshCapabilityState({ tenantId: payload.tenantId, slug: "shopify" }).then((r) => {
+      if (r.missingScopes.length) {
+        console.warn(`[shopify oauth] connected with missing scopes: ${r.missingScopes.join(",")}`);
+      }
+    }).catch((e: any) => console.warn("[shopify oauth] capability probe failed:", e?.message));
     res.redirect(postOAuthRedirect("shopify", payload.flow));
   } catch (err: any) {
     res.status(500).send(`shopify_callback_error:${err?.message || ""}`);
@@ -541,7 +590,7 @@ router.get(
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
     const verifier = base64url(crypto.randomBytes(48));
     const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "airtable", flow, v: verifier }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "airtable", flow, v: verifier, userId: (req as any).user?.userId });
     const scope = "data.records:read data.records:write schema.bases:read schema.bases:write";
     const params = new URLSearchParams({
       client_id: clientId,
@@ -561,8 +610,14 @@ router.get("/connectors/airtable/oauth/callback", async (req: Request, res: Resp
     const { code, state, error } = req.query;
     if (error) { res.status(400).send(`airtable_oauth_error:${String(error)}`); return; }
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "airtable") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "airtable");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[airtable oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.AIRTABLE_CLIENT_ID!;
     const clientSecret = process.env.AIRTABLE_CLIENT_SECRET || "";
     const redirect = process.env.AIRTABLE_REDIRECT_URI!;
@@ -720,12 +775,14 @@ router.post(
 
 router.get(
   "/connectors/wix/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable like every other connector: during onboarding the
+  // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const appId = process.env.WIX_CLIENT_ID;            // Wix App ID
     const redirect = process.env.WIX_REDIRECT_URI;
     if (!appId || !redirect) { res.status(500).json({ error: "wix_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "wix" }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "wix", userId: (req as any).user?.userId });
     // Wix App install flow - NOT the headless `oauth/authorize` flow.
     const params = new URLSearchParams({
       appId,
@@ -740,8 +797,14 @@ router.get("/connectors/wix/oauth/callback", async (req: Request, res: Response)
   try {
     const { code, state, instanceId } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "wix") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "wix");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[wix oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.WIX_CLIENT_ID!;
     const clientSecret = process.env.WIX_CLIENT_SECRET!;
     const tokenRes = await fetch("https://www.wixapis.com/oauth/access", {
@@ -784,13 +847,15 @@ router.get("/connectors/wix/oauth/callback", async (req: Request, res: Response)
 
 router.get(
   "/connectors/square/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable like every other connector: during onboarding the
+  // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.SQUARE_APPLICATION_ID;
     const redirect = process.env.SQUARE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "square_oauth_not_configured" }); return; }
     const env = String(req.query.environment || "production") === "sandbox" ? "sandbox" : "production";
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "square", env }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "square", env, userId: (req as any).user?.userId });
     const scopes = "PAYMENTS_WRITE PAYMENTS_READ CUSTOMERS_READ CUSTOMERS_WRITE ORDERS_READ ORDERS_WRITE INVOICES_READ INVOICES_WRITE MERCHANT_PROFILE_READ";
     const host = env === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
     const params = new URLSearchParams({
@@ -808,8 +873,14 @@ router.get("/connectors/square/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "square") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "square");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[square oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const env = payload.env === "sandbox" ? "sandbox" : "production";
     const host = env === "sandbox" ? "https://connect.squareupsandbox.com" : "https://connect.squareup.com";
     const clientId = process.env.SQUARE_APPLICATION_ID!;
@@ -862,7 +933,7 @@ router.get(
       return;
     }
     const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "salesforce", loginHost, flow }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "salesforce", loginHost, flow, userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
       client_id: clientId,
@@ -878,8 +949,14 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "salesforce") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<any>(state as string, "salesforce");
+    if (!consumed.ok) {
+      // Replay and forgery look identical to the caller; only our logs distinguish them.
+      console.warn(`[salesforce oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.SALESFORCE_CLIENT_ID!;
     const clientSecret = process.env.SALESFORCE_CLIENT_SECRET!;
     const redirect = process.env.SALESFORCE_REDIRECT_URI!;
@@ -922,12 +999,22 @@ router.get("/connectors/salesforce/oauth/callback", async (req: Request, res: Re
 
 router.get(
   "/connectors/monday/oauth/init",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  // Onboarding-reachable: during onboarding the tenant is PENDING_ONBOARDING,
+  // so requireActiveTenant() answered 403 and the connect simply died there.
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
   (req: Request, res: Response) => {
     const clientId = process.env.MONDAY_CLIENT_ID;
     const redirect = process.env.MONDAY_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "monday_oauth_not_configured" }); return; }
-    const state = jwt.sign({ tenantId: req.tenantId, provider: "monday" }, OAUTH_STATE_SECRET, { expiresIn: "10m" });
+    // SINGLE-USE state. `flow` and the initiating user ride INSIDE the signed
+    // token (never a browser-supplied return URL), and the jti is consumed on
+    // callback so a captured state cannot be replayed within its TTL.
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!,
+      provider: "monday",
+      userId: (req as any).user?.userId ?? (req as any).userId,
+      flow: typeof req.query.flow === "string" ? req.query.flow : undefined,
+    });
     const params = new URLSearchParams({
       client_id: clientId,
       redirect_uri: redirect,
@@ -942,8 +1029,15 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
   try {
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).send("missing_code_or_state"); return; }
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    if (payload.provider !== "monday") { res.status(400).send("bad_state"); return; }
+    const consumed = await consumeOAuthState<{ tenantId: string; flow?: string }>(state as string, "monday");
+    if (!consumed.ok) {
+      // Replay and forgery are reported identically to the browser; the reason
+      // is distinguishable only in our logs.
+      console.warn(`[monday oauth] state rejected: ${consumed.reason}`);
+      res.status(400).send(consumed.reason === "replayed" ? "state_already_used" : "bad_state");
+      return;
+    }
+    const payload = consumed.claims;
     const clientId = process.env.MONDAY_CLIENT_ID!;
     const clientSecret = process.env.MONDAY_CLIENT_SECRET!;
     const redirect = process.env.MONDAY_REDIRECT_URI!;
@@ -962,18 +1056,34 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
     const j: any = await tokenRes.json();
     const cat = await findCatalog("monday");
     if (!cat) { res.status(500).send("monday_catalog_missing"); return; }
+
+    // A token in hand is NOT a working connection. Prove the credential can
+    // actually read from Monday before we persist CONNECTED - otherwise the
+    // tile claims success and every tool call fails later.
+    const probe = await fetch("https://api.monday.com/v2", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: j.access_token },
+      body: JSON.stringify({ query: "query { me { id } }" }),
+    }).catch(() => null);
+    const probeJson: any = probe && probe.ok ? await probe.json().catch(() => null) : null;
+    const verified = !!probeJson?.data?.me?.id;
+
     await upsertConnection({
       tenantId: payload.tenantId,
       catalogId: cat.id,
-      status: "CONNECTED",
+      // Persist the credential either way (so a retry does not restart the
+      // whole OAuth dance), but only claim CONNECTED when the provider
+      // confirmed it. ERROR surfaces in the UI as "needs attention".
+      status: verified ? "CONNECTED" : "ERROR",
       credentialsBlob: encryptCredentials({
         accessToken: j.access_token,
         refreshToken: j.refresh_token,
         expiresAt: j.expires_in ? new Date(Date.now() + Number(j.expires_in) * 1000).toISOString() : undefined,
         scope: j.scope,
       }),
+      ...(verified ? {} : { lastError: "monday_validation_failed: token accepted but api.monday.com/v2 me{} query did not return an account" }),
     });
-    res.redirect(dashboardRedirect("monday"));
+    res.redirect(postOAuthRedirect("monday", payload.flow, verified ? {} : { error: "validation_failed" }));
   } catch (err: any) {
     res.status(500).send(`monday_callback_error:${err?.message || ""}`);
   }

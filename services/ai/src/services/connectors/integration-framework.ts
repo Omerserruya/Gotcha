@@ -83,13 +83,15 @@ export interface ProviderAdapter {
    *
    * Returns `{ok:true}` when the provider accepted the credential, or
    * `{ok:false, error}` with a SAFE, user-facing reason (never a raw token or
-   * full provider payload).
+   * full provider payload). Adapters that can enumerate their OAuth grants
+   * additionally return `grantedScopes`/`missingScopes` so the framework can
+   * persist capability state proactively (see refreshCapabilityState).
    */
   validate?(opts: {
     ctx: AdapterContext;
     credentials: Record<string, any>;
     config: Record<string, any>;
-  }): Promise<{ ok: boolean; error?: string }>;
+  }): Promise<{ ok: boolean; error?: string; grantedScopes?: string[]; missingScopes?: string[] }>;
   /**
    * (Optional) This adapter's refreshTokens can also EXCHANGE a legacy
    * credential blob that has an accessToken but no refreshToken (one-way
@@ -339,6 +341,103 @@ export async function clearMissingScopes(tenantIntegrationId: string, grantedSco
     : null;
   await updateMissingScopes(tenantIntegrationId, (cur) =>
     granted ? cur.filter((s) => !granted.has(s)) : []);
+}
+
+// ─── Proactive capability discovery ─────────────────────────
+//
+// Missing scopes must be discovered BEFORE a customer request trips over
+// them, not after. refreshCapabilityState() runs the adapter's validate()
+// probe and persists a capability snapshot on the connection config:
+//
+//   config.capabilityState = {
+//     grantedScopes: string[],   // what the provider says is granted
+//     lastCheckedAt: ISO string, // freshness anchor
+//     status: "ok" | "missing_scopes" | "error",
+//   }
+//   config.missingScopes stays the single enforcement source (surface gate +
+//   pre-flight short-circuit read it).
+//
+// Trigger points: the OAuth callback right after connect/reconnect, the
+// integration "/test" button, a token refresh whose scope string proves
+// grants, and a freshness re-check fired from the bot tool surface when the
+// snapshot is older than CAPABILITY_FRESHNESS_MS - so stale scope data is
+// never trusted indefinitely.
+
+export const CAPABILITY_FRESHNESS_MS = 6 * 60 * 60 * 1000; // 6h
+
+export function capabilityStateFromConfig(
+  config: Record<string, any> | null | undefined,
+): { grantedScopes: string[]; lastCheckedAt: string | null; status: string | null } {
+  const cs = config?.capabilityState;
+  return {
+    grantedScopes: Array.isArray(cs?.grantedScopes) ? cs.grantedScopes : [],
+    lastCheckedAt: typeof cs?.lastCheckedAt === "string" ? cs.lastCheckedAt : null,
+    status: typeof cs?.status === "string" ? cs.status : null,
+  };
+}
+
+export function capabilityStateIsFresh(config: Record<string, any> | null | undefined): boolean {
+  const { lastCheckedAt } = capabilityStateFromConfig(config);
+  if (!lastCheckedAt) return false;
+  const age = Date.now() - new Date(lastCheckedAt).getTime();
+  return Number.isFinite(age) && age >= 0 && age < CAPABILITY_FRESHNESS_MS;
+}
+
+/**
+ * Run the adapter's validate() probe and persist the capability snapshot.
+ * Safe to fire-and-forget: failures record status:"error" without touching
+ * the enforcement state (fail toward the last KNOWN state, never toward
+ * silently trusting an unverified one).
+ */
+export async function refreshCapabilityState(opts: {
+  tenantId: string;
+  /** Catalog slug (TenantIntegration.integration.slug). */
+  slug: string;
+  /** Adapter registry slug when it differs from the catalog slug (postgres vs postgresql). */
+  adapterSlug?: string;
+}): Promise<{ ok: boolean; missingScopes: string[] }> {
+  const adapter = getAdapter(opts.adapterSlug ?? opts.slug);
+  const conn = await loadConnection({ tenantId: opts.tenantId, slug: opts.slug });
+  if (!adapter?.validate || !conn) return { ok: false, missingScopes: [] };
+  let verdict: Awaited<ReturnType<NonNullable<ProviderAdapter["validate"]>>>;
+  try {
+    verdict = await adapter.validate({
+      ctx: { tenantId: opts.tenantId, tenantIntegrationId: conn.tenantIntegrationId },
+      credentials: conn.credentials,
+      config: conn.config,
+    });
+  } catch (err: any) {
+    verdict = { ok: false, error: err?.message || "validation threw" };
+  }
+  const missing = verdict.missingScopes ?? [];
+  try {
+    const row = await (prisma as any).tenantIntegration.findUnique({
+      where: { id: conn.tenantIntegrationId },
+      select: { config: true },
+    });
+    const cfg: Record<string, any> = row?.config && typeof row.config === "object" ? { ...row.config } : {};
+    cfg.capabilityState = {
+      grantedScopes: verdict.grantedScopes ?? capabilityStateFromConfig(cfg).grantedScopes,
+      lastCheckedAt: new Date().toISOString(),
+      status: verdict.ok ? "ok" : missing.length ? "missing_scopes" : "error",
+    };
+    // Enforcement state: a probe that ENUMERATED scopes is authoritative in
+    // both directions. A probe that errored without enumeration keeps the
+    // last known missingScopes untouched.
+    if (verdict.grantedScopes || missing.length) {
+      if (missing.length) cfg.missingScopes = missing;
+      else delete cfg.missingScopes;
+    } else if (verdict.ok) {
+      delete cfg.missingScopes;
+    }
+    await (prisma as any).tenantIntegration.update({
+      where: { id: conn.tenantIntegrationId },
+      data: { config: cfg },
+    });
+  } catch (err: any) {
+    console.warn(`[integration-framework] capability snapshot persist failed for ${opts.slug}:`, err?.message);
+  }
+  return { ok: !!verdict.ok, missingScopes: missing };
 }
 
 // ─── Rate limiter ────────────────────────────────────────────

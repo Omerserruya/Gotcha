@@ -32,6 +32,9 @@ import {
   toolBlockedByMissingScopes,
   extractMissingScopes,
   getAdapter,
+  refreshCapabilityState,
+  capabilityStateIsFresh,
+  CAPABILITY_FRESHNESS_MS,
 } from "../services/connectors/integration-framework";
 import "../services/connectors/shopify.adapter";
 
@@ -77,6 +80,71 @@ describe("scope metadata", () => {
     expect(missingScopesFromConfig(undefined)).toEqual([]);
     expect(missingScopesFromConfig({ missingScopes: "nope" } as any)).toEqual([]);
     expect(missingScopesFromConfig({ missingScopes: ["a", "", 3, "b"] } as any)).toEqual(["a", "b"]);
+  });
+});
+
+describe("proactive capability discovery", () => {
+  it("refreshCapabilityState persists granted scopes, missing scopes, and a freshness anchor", async () => {
+    prismaMock.tenantIntegration.findFirst.mockResolvedValue(CONN({ shopDomain: "s.myshopify.com" }));
+    prismaMock.tenantIntegration.findUnique.mockResolvedValue({ config: { shopDomain: "s.myshopify.com" } });
+    (globalThis as any).fetch = vi.fn(async (url: string) =>
+      /access_scopes\.json/.test(String(url))
+        ? { ok: true, status: 200, json: async () => ({ access_scopes: [{ handle: "read_orders" }, { handle: "read_customers" }, { handle: "read_products" }] }) }
+        : { ok: false, status: 404, json: async () => ({}), text: async () => "{}" },
+    );
+    const r = await refreshCapabilityState({ tenantId: "t1", slug: "shopify" });
+    expect(r.ok).toBe(false); // write scopes are missing
+    expect(r.missingScopes).toContain("write_orders");
+    const write = prismaMock.tenantIntegration.update.mock.calls.map((c: any[]) => c[0])
+      .find((w: any) => w?.data?.config?.capabilityState);
+    expect(write.data.config.capabilityState.grantedScopes).toContain("read_orders");
+    expect(write.data.config.capabilityState.status).toBe("missing_scopes");
+    expect(write.data.config.capabilityState.lastCheckedAt).toBeTruthy();
+    // enforcement state follows the enumerated probe
+    expect(write.data.config.missingScopes).toContain("write_price_rules");
+  });
+
+  it("a fully-granted probe clears the enforcement state", async () => {
+    prismaMock.tenantIntegration.findFirst.mockResolvedValue(
+      CONN({ shopDomain: "s.myshopify.com", missingScopes: ["write_customers"] }),
+    );
+    prismaMock.tenantIntegration.findUnique.mockResolvedValue({
+      config: { shopDomain: "s.myshopify.com", missingScopes: ["write_customers"] },
+    });
+    const all = ["read_customers", "write_customers", "read_orders", "write_orders", "read_products", "read_price_rules", "write_price_rules"];
+    (globalThis as any).fetch = vi.fn(async () => ({
+      ok: true, status: 200, json: async () => ({ access_scopes: all.map((handle) => ({ handle })) }),
+    }));
+    const r = await refreshCapabilityState({ tenantId: "t1", slug: "shopify" });
+    expect(r.ok).toBe(true);
+    const write = prismaMock.tenantIntegration.update.mock.calls.map((c: any[]) => c[0])
+      .find((w: any) => w?.data?.config?.capabilityState);
+    expect(write.data.config.capabilityState.status).toBe("ok");
+    expect(write.data.config.missingScopes).toBeUndefined();
+  });
+
+  it("freshness policy: no snapshot or an expired snapshot is stale; a recent one is fresh", () => {
+    expect(capabilityStateIsFresh(undefined)).toBe(false);
+    expect(capabilityStateIsFresh({})).toBe(false);
+    expect(capabilityStateIsFresh({ capabilityState: { lastCheckedAt: new Date(Date.now() - CAPABILITY_FRESHNESS_MS - 1000).toISOString() } })).toBe(false);
+    expect(capabilityStateIsFresh({ capabilityState: { lastCheckedAt: new Date().toISOString() } })).toBe(true);
+  });
+
+  it("a probe that errors WITHOUT enumerating scopes keeps the last known enforcement state", async () => {
+    prismaMock.tenantIntegration.findFirst.mockResolvedValue(
+      CONN({ shopDomain: "s.myshopify.com", missingScopes: ["write_customers"] }),
+    );
+    prismaMock.tenantIntegration.findUnique.mockResolvedValue({
+      config: { shopDomain: "s.myshopify.com", missingScopes: ["write_customers"] },
+    });
+    (globalThis as any).fetch = vi.fn(async () => ({ ok: false, status: 500, json: async () => ({}), text: async () => "{}" }));
+    const r = await refreshCapabilityState({ tenantId: "t1", slug: "shopify" });
+    expect(r.ok).toBe(false);
+    const write = prismaMock.tenantIntegration.update.mock.calls.map((c: any[]) => c[0])
+      .find((w: any) => w?.data?.config?.capabilityState);
+    expect(write.data.config.capabilityState.status).toBe("error");
+    // last-known missing scopes survive an inconclusive probe
+    expect(write.data.config.missingScopes).toEqual(["write_customers"]);
   });
 });
 
