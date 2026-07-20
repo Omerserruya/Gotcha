@@ -20,40 +20,85 @@ import type { ToolGateResult } from "./tool-gate";
  * rows both describing "refund order #1004" each won their own notification
  * claim and the customer was told twice. The key names the operation itself.
  *
- * Per-tool identifying args are an allowlist so cosmetic differences (reason
- * text, notes, notify flags) do not defeat the dedup; unknown tools fall back
- * to a hash of ALL params, which can only under-dedup, never over-dedup.
+ * Every governed write tool defines its own CANONICAL idempotency projection:
+ * exactly the fields that identify the business operation, nothing cosmetic.
+ * Getting this wrong in either direction is costly - too coarse and a second
+ * LEGITIMATE partial refund on the same order is swallowed; too fine and a
+ * retried duplicate mints a second approval. Notes per tool:
+ *
+ *   cancel_order       - an order can be cancelled exactly once, so the order
+ *                        alone identifies it (reason/restock are execution
+ *                        options, not identity).
+ *   process_refund     - one order takes MANY legitimate refunds over time, so
+ *                        identity = order + amount (or "full") + sorted line
+ *                        items×quantities + shipping flag + restock flag +
+ *                        currency when supplied. A shipping-only refund, an
+ *                        item refund, a partial and the later full-remaining
+ *                        refund all key differently; an exact duplicate keys
+ *                        identically. Replay safety for UNCERTAIN retries does
+ *                        not rely on this key: the adapter reconciles current
+ *                        Shopify state first (prior refunds consume remaining
+ *                        quantities, requests are capped at the gateway's
+ *                        refundable maximum, fully-refunded orders return
+ *                        already_refunded without a second mutation).
+ *   coupon tools       - the CODE is the business object (Shopify does not
+ *                        enforce cross-rule uniqueness; the adapter also
+ *                        dedups by lookup before create).
+ *
+ * Unknown tools fall back to a hash of ALL normalized params: only ever
+ * UNDER-dedups (identical requests still match), never swallows a distinct
+ * operation.
  */
-const OPERATION_IDENTITY_KEYS: Record<string, string[]> = {
-  "shopify.cancel_order": ["order_id", "order_name"],
-  "shopify.process_refund": ["order_id", "order_name", "amount"],
-  "shopify.issue_compensation_coupon": ["code"],
-  "shopify.create_discount_code": ["code"],
-  "shopify.create_one_time_coupon": ["code"],
-  "shopify.create_vip_coupon": ["code"],
-  "shopify.disable_coupon": ["code"],
-};
-
-function normalizeIdentityValue(v: unknown): string {
+function norm(v: unknown): string {
   return String(v ?? "").trim().toLowerCase().replace(/^#/, "");
 }
+
+type OperationProjection = (p: Record<string, any>) => string;
+
+const byCode: OperationProjection = (p) => `code=${norm(p.code)}`;
+const byOrder: OperationProjection = (p) => `order=${norm(p.order_id ?? p.order_name)}`;
+
+const OPERATION_PROJECTIONS: Record<string, OperationProjection> = {
+  "shopify.cancel_order": byOrder,
+  "shopify.process_refund": (p) => {
+    const items = Array.isArray(p.line_items)
+      ? p.line_items
+          .map((li: any) => `${norm(li?.line_item_id)}x${Number(li?.quantity ?? 1)}`)
+          .sort()
+          .join("+")
+      : "";
+    const amount = p.amount != null && Number.isFinite(Number(p.amount))
+      ? Number(p.amount).toFixed(2)
+      : "full-remaining";
+    return [
+      byOrder(p),
+      `amount=${amount}`,
+      `items=${items || (p.amount != null ? "amount-only" : "all-remaining")}`,
+      `shipping=${p.refund_shipping != null ? String(!!p.refund_shipping) : "default"}`,
+      `restock=${!!p.restock}`,
+      ...(p.currency ? [`cur=${norm(p.currency)}`] : []),
+    ].join("&");
+  },
+  "shopify.issue_compensation_coupon": byCode,
+  "shopify.create_discount_code": byCode,
+  "shopify.create_one_time_coupon": byCode,
+  "shopify.create_vip_coupon": byCode,
+  "shopify.disable_coupon": byCode,
+  "shopify.send_invoice": byOrder,
+};
 
 export function computeOperationKey(
   tool: string,
   params: Record<string, unknown> | null | undefined,
 ): string {
-  const p = params ?? {};
-  const identityKeys = OPERATION_IDENTITY_KEYS[tool];
-  let identity: string;
-  if (identityKeys) {
-    identity = identityKeys
-      .map((k) => `${k}=${normalizeIdentityValue((p as any)[k])}`)
-      .filter((s) => !s.endsWith("="))
-      .join("&");
-  } else {
-    const sorted = Object.keys(p).sort().map((k) => `${k}=${normalizeIdentityValue((p as any)[k])}`);
-    identity = createHash("sha256").update(sorted.join("&")).digest("hex").slice(0, 24);
-  }
+  const p = (params ?? {}) as Record<string, any>;
+  const project = OPERATION_PROJECTIONS[tool];
+  const identity = project
+    ? project(p)
+    : createHash("sha256")
+        .update(Object.keys(p).sort().map((k) => `${k}=${norm(p[k])}`).join("&"))
+        .digest("hex")
+        .slice(0, 24);
   return `${tool}:${identity}`;
 }
 

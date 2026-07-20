@@ -54,6 +54,75 @@ describe("computeOperationKey", () => {
       .not.toBe(computeOperationKey("shopify.process_refund", { order_name: "#1004" }));
   });
 
+  it("refund identity: two IDENTICAL refund requests share a key", () => {
+    const a = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", amount: 50, line_items: [{ line_item_id: "31", quantity: 1 }], restock: false,
+    });
+    const b = computeOperationKey("shopify.process_refund", {
+      order_name: "1004", amount: 50, line_items: [{ line_item_id: 31, quantity: 1 }], restock: false, reason: "late",
+    });
+    expect(a).toBe(b);
+  });
+
+  it("refund identity: a SECOND legitimate refund for different items keys differently", () => {
+    const first = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", line_items: [{ line_item_id: 31, quantity: 1 }],
+    });
+    const second = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", line_items: [{ line_item_id: 32, quantity: 2 }],
+    });
+    expect(first).not.toBe(second);
+  });
+
+  it("refund identity: a shipping-only refund is not confused with an item refund", () => {
+    const shippingOnly = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", amount: 15, refund_shipping: true,
+    });
+    const itemRefund = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", amount: 15, line_items: [{ line_item_id: 31, quantity: 1 }], refund_shipping: false,
+    });
+    expect(shippingOnly).not.toBe(itemRefund);
+  });
+
+  it("refund identity: a partial refund and a later full-remaining refund key differently", () => {
+    const partial = computeOperationKey("shopify.process_refund", { order_name: "#1004", amount: 100 });
+    const fullRemaining = computeOperationKey("shopify.process_refund", { order_name: "#1004" });
+    expect(partial).not.toBe(fullRemaining);
+  });
+
+  it("refund identity: a changed amount is a DISTINCT operation (new approval, not a dedup hit)", () => {
+    const a = computeOperationKey("shopify.process_refund", { order_name: "#1004", amount: 100 });
+    const b = computeOperationKey("shopify.process_refund", { order_name: "#1004", amount: 150 });
+    expect(a).not.toBe(b);
+  });
+
+  it("refund identity: line-item ORDER is canonicalized (sorted), quantities are identity", () => {
+    const a = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", line_items: [{ line_item_id: 31, quantity: 1 }, { line_item_id: 32, quantity: 2 }],
+    });
+    const b = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", line_items: [{ line_item_id: 32, quantity: 2 }, { line_item_id: 31, quantity: 1 }],
+    });
+    const c = computeOperationKey("shopify.process_refund", {
+      order_name: "#1004", line_items: [{ line_item_id: 31, quantity: 2 }, { line_item_id: 32, quantity: 2 }],
+    });
+    expect(a).toBe(b);
+    expect(a).not.toBe(c);
+  });
+
+  it("cancel identity: an order cancels once - reason/restock are options, not identity", () => {
+    const a = computeOperationKey("shopify.cancel_order", { order_name: "#1004", reason: "customer", restock: true });
+    const b = computeOperationKey("shopify.cancel_order", { order_id: "1004", reason: "fraud", restock: false });
+    expect(a).toBe(b);
+  });
+
+  it("coupon identity: keyed on the code (the business object)", () => {
+    expect(computeOperationKey("shopify.issue_compensation_coupon", { code: "COMP-1", percentage: 100 }))
+      .toBe(computeOperationKey("shopify.issue_compensation_coupon", { code: "comp-1", percentage: 50 }));
+    expect(computeOperationKey("shopify.issue_compensation_coupon", { code: "COMP-1" }))
+      .not.toBe(computeOperationKey("shopify.issue_compensation_coupon", { code: "COMP-2" }));
+  });
+
   it("unknown tools fall back to a deterministic full-params hash", () => {
     const a = computeOperationKey("acme.frob", { b: 2, a: 1 });
     const b = computeOperationKey("acme.frob", { a: 1, b: 2 });
