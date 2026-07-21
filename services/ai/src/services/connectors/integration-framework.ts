@@ -554,12 +554,56 @@ export async function executeAdapterTool(opts: {
   contactId?: string;
   toolFunctionName: string; // "stripe.refund_payment"
   args: Record<string, unknown>;
+  /**
+   * WHO is this call on behalf of?
+   *   "customer" - the LLM acting for the customer channel (autonomous bot).
+   *     Protected customer/order tools are then AUTHORIZED against the
+   *     conversation's authenticated channel identity - a denied lookup never
+   *     reaches the model. This is the P0 cross-customer-disclosure fix.
+   *   "internal" (default) - server-side/system/staff paths (identity link,
+   *     post-conversation CRM, copilot behind authenticated membership,
+   *     approval dispatch). Unchanged behavior.
+   * The value comes from the CALLER's code path, never from tool args - an
+   * AI-supplied "isAuthorized" can never influence it.
+   */
+  accessScope?: "internal" | "customer";
 }): Promise<{ ok: true; result: unknown } | { ok: false; reason: string }> {
   const start = Date.now();
   const dot = opts.toolFunctionName.indexOf(".");
   if (dot < 0) return { ok: false, reason: `bad_tool_name:${opts.toolFunctionName}` };
   const slug = opts.toolFunctionName.slice(0, dot);
   const toolName = opts.toolFunctionName.slice(dot + 1);
+
+  // ── Cross-customer access guard (customer channel only) ─────────────────
+  let guardIdentity: import("./customer-access-guard").RequesterIdentity | null = null;
+  if (opts.accessScope === "customer" && slug === "shopify" && opts.conversationId) {
+    const guard = await import("./customer-access-guard");
+    if (guard.PROTECTED_SHOPIFY_TOOLS.has(toolName)) {
+      guardIdentity = await guard.resolveRequesterIdentity(opts.tenantId, opts.conversationId);
+      if (!guardIdentity) {
+        return { ok: false, reason: "access_denied: requester identity could not be resolved for this conversation" };
+      }
+      const pre = guard.checkArgsAllowed(guardIdentity, toolName, opts.args as Record<string, any>);
+      if (!pre.allowed) {
+        await guard.recordSecurityDenial({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          channelSenderId: guardIdentity.channelSenderId,
+          toolName,
+          reason: pre.reason,
+          args: opts.args as Record<string, any>,
+        });
+        return {
+          ok: false,
+          reason:
+            "access_denied_cross_customer: this chat may only access the customer's own records. " +
+            "Do NOT reveal any of the requested data or confirm whether it exists. Offer to send a " +
+            "verification code to the contact details already stored on that account, or to hand over to a human agent.",
+        };
+      }
+    }
+  }
+
   const adapter = getAdapter(slug);
   if (!adapter) return { ok: false, reason: `unknown_provider:${slug}` };
   const toolDef = adapter.tools().find((t) => t.name === opts.toolFunctionName);
@@ -676,6 +720,34 @@ export async function executeAdapterTool(opts: {
       toolFunctionName: opts.toolFunctionName, args: opts.args, ok: true,
       durationMs: Date.now() - start,
     });
+
+    // ── Post-flight owner check (customer channel) ────────────────────────
+    // The RESOLVED resource must belong to the requester: an order fetched by
+    // number, a customer fetched by id, a list containing other customers.
+    // Denied/foreign data never reaches the model; lists are filtered to the
+    // requester's own entries.
+    if (guardIdentity && opts.conversationId) {
+      const guard = await import("./customer-access-guard");
+      const post = guard.checkResultAllowed(guardIdentity, toolName, result);
+      if (!post.allowed) {
+        await guard.recordSecurityDenial({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          channelSenderId: guardIdentity.channelSenderId,
+          toolName,
+          reason: post.reason,
+          args: opts.args as Record<string, any>,
+        });
+        return {
+          ok: false,
+          reason:
+            "access_denied_cross_customer: the requested record belongs to a different customer. " +
+            "Do NOT reveal any of its details or confirm what exists. Offer identity verification " +
+            "to the contact details already stored on that account, or a human agent.",
+        };
+      }
+      result = post.result;
+    }
     return { ok: true, result };
   } catch (err: any) {
     const message = err?.message || "execution_failed";

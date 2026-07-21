@@ -175,6 +175,7 @@ model Tenant {
 
   @@index([status])
   @@map("tenants")
+  approvalRecipients ApprovalRecipient[]
 }
 
 // ─── GDPR: Consent Records (Art. 6/7) ──────────────────────────
@@ -337,42 +338,83 @@ enum PermissionScope {
   WORKSPACE
 }
 
+// ─── Identity (the PERSON, cross-tenant) ─────────────────────
+// One row per human being, joined to Authentik by `authentikSubject` (the
+// OIDC `sub` claim). GOTCHA stores no credentials of any kind: authentication,
+// passwords, MFA, and sessions all live in Authentik. An Identity owns any
+// number of tenant MEMBERSHIPS (User rows) - the same person can work in
+// unlimited tenants, with a different role/department/permissions in each.
+//
+//   Identity  ──1:N──▶  User (membership in ONE tenant)
+//
+// Identity-level truth lives here (subject, canonical email/name, MFA
+// enrolment stamp); everything tenant-scoped stays on the membership row.
+model Identity {
+  id               String    @id @default(cuid())
+  // Authentik's immutable user UUID (sub_mode=user_uuid). Nullable only for
+  // the window between "invited" and "identity provisioned" - in practice
+  // ensureIdentity() binds it at invite time.
+  authentikSubject String?   @unique @map("authentik_subject")
+  // Canonical email, lowercased. Authentik pins username to this; membership
+  // rows carry a per-tenant display mirror that is synced from here.
+  email            String    @unique
+  name             String
+  // Identity-level MFA enrolment mirror (an authenticator AND recovery codes
+  // exist in Authentik). MFA is a property of the PERSON, not of any one
+  // tenant membership - stamped by the account /mfa-gate check and the
+  // tenant-security backfill.
+  mfaEnrolledAt    DateTime? @map("mfa_enrolled_at")
+  // Last tenant this identity actively used - the default the tenant picker
+  // preselects and the tenant a hint-less API call resolves to. Soft
+  // reference (no FK): a deleted tenant must not break the identity.
+  lastTenantId     String?   @map("last_tenant_id")
+  createdAt        DateTime  @default(now()) @map("created_at")
+  updatedAt        DateTime  @updatedAt @map("updated_at")
+
+  memberships User[]
+
+  @@map("identities")
+}
+
+// A User row is ONE TENANT MEMBERSHIP of an Identity: the person's role,
+// department, permissions, feature grants, and activity inside that single
+// tenant. All business authorization keys off this row; the Identity above
+// only answers "who is this person".
 model User {
-  id                       String   @id @default(cuid())
-  tenantId                 String   @map("tenant_id")
+  id                       String    @id @default(cuid())
+  tenantId                 String    @map("tenant_id")
+  // The person this membership belongs to. Everything Authentik-related is
+  // resolved through this relation - the membership row itself never talks
+  // to the IdP.
+  identityId               String    @map("identity_id")
+  // Per-tenant display mirror of Identity.email/name (kept in sync by the
+  // profile/email-change flows). Reads all over the codebase use these; the
+  // Identity row is the source of truth.
   email                    String
-  // Authentik's `sub` claim - the ONLY link between a GOTCHA user row and an
-  // identity. GOTCHA stores no credentials of any kind: authentication,
-  // passwords, MFA, and sessions all live in Authentik. Nullable because a
-  // user row exists from the moment an owner invites them, and is bound to a
-  // subject the first time that identity actually authenticates.
-  authentikSubject         String?  @unique @map("authentik_subject")
   name                     String
-  role                     Role     @default(AGENT)
-  isActive                 Boolean  @default(true) @map("is_active")
-  notificationSoundEnabled Boolean  @default(true) @map("notification_sound_enabled")
+  role                     Role      @default(AGENT)
+  isActive                 Boolean   @default(true) @map("is_active")
+  notificationSoundEnabled Boolean   @default(true) @map("notification_sound_enabled")
   // E.164 personal/mobile number. Used for FORWARD_TO_AGENT inbound mode
   // and smart-callback recognition (when the agent calls the business
   // number back from this device, we identify them by `From === phoneNumber`).
-  phoneNumber              String?  @map("phone_number")
+  phoneNumber              String?   @map("phone_number")
   // Per-agent system-language override. NULL means "inherit from
   // `Tenant.defaultLocale`". Drives both UI strings and all AI-generated
   // content the agent consumes. ISO-639-1; today: "en" | "he".
-  locale                   String?  @map("locale")
+  locale                   String?   @map("locale")
   // Per-feature first-time guidance state for the persistent onboarding
   // layer. Map of feature key -> "unseen" | "snoozed" | "done", e.g.
   // {"knowledge":"done","ai-studio":"snoozed"}. NULL = nothing seen yet.
-  onboardingGuides         Json?    @map("onboarding_guides")
-  // Cheap, local mirror of "this user has completed MFA enrolment (an
-  // authenticator AND recovery codes) in Authentik". Authentik remains the
-  // source of truth; this is stamped by the account /mfa-gate check and by the
-  // tenant-security backfill so the enforcement guard and the Workspace
-  // compliance counts can read enrolment without an IdP call per request.
-  // NULL = not known-enrolled.
-  mfaEnrolledAt            DateTime? @map("mfa_enrolled_at")
-  createdAt                DateTime @default(now()) @map("created_at")
-  updatedAt                DateTime @updatedAt @map("updated_at")
+  onboardingGuides         Json?     @map("onboarding_guides")
+  // When this MEMBERSHIP was last actively used (stamped on authenticated
+  // requests, throttled). Drives the tenant picker's "last used" ordering and
+  // the default-tenant resolution for hint-less API calls.
+  lastActiveAt             DateTime? @map("last_active_at")
+  createdAt                DateTime  @default(now()) @map("created_at")
+  updatedAt                DateTime  @updatedAt @map("updated_at")
 
+  identity                Identity             @relation(fields: [identityId], references: [id], onDelete: Cascade)
   tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations           Conversation[]       @relation("AssignedAgent")
   departmentMember        DepartmentMember?
@@ -387,8 +429,13 @@ model User {
   featureGrants           UserFeatureGrant[]
 
   @@unique([tenantId, email])
+  // One membership per identity per tenant - the same person cannot hold two
+  // accounts in one workspace, but CAN hold one in each of many workspaces.
+  @@unique([tenantId, identityId])
   @@index([tenantId])
+  @@index([identityId])
   @@map("users")
+  approvalRecipients ApprovalRecipient[]
 }
 
 // ─── Conversations ───────────────────────────────────────────
@@ -4349,4 +4396,39 @@ model PolicyDecision {
   @@index([tenantId, createdAt])
   @@index([tenantId, actionKind])
   @@map("policy_decisions")
+}
+
+/// Explicit customer identity verification for cross-identity access.
+///
+/// The ONLY way a chat participant may access another customer's records: an
+/// OTP delivered to the destination ALREADY STORED on that customer (never to
+/// a destination supplied in chat), confirmed in this conversation. Grants are
+/// tenant-, conversation- and customer-scoped, short-lived, attempt-limited
+/// and auditable. Verification of customer A never authorizes customer B: the
+/// access guard matches grants by the TARGET identifiers on the row.
+model CustomerVerification {
+  id               String    @id @default(cuid())
+  tenantId         String    @map("tenant_id")
+  conversationId   String    @map("conversation_id")
+  /// Authenticated channel sender the grant is bound to (wa phone).
+  channelSenderId  String?   @map("channel_sender_id")
+  /// Target customer's identifiers as stored in the Source of Truth.
+  targetCustomerId String?   @map("target_customer_id")
+  targetPhone      String?   @map("target_phone")
+  targetEmail      String?   @map("target_email")
+  /// "otp_whatsapp_stored_phone" | "otp_email_stored" | "human_agent"
+  method           String
+  codeHash         String    @map("code_hash")
+  /// Code expiry before verification; GRANT expiry after (short-lived).
+  expiresAt        DateTime  @map("expires_at")
+  attempts         Int       @default(0)
+  maxAttempts      Int       @default(5) @map("max_attempts")
+  verifiedAt       DateTime? @map("verified_at")
+  /// Permitted resource scope of the grant.
+  scope            String    @default("customer_read")
+  createdAt        DateTime  @default(now()) @map("created_at")
+
+  @@index([tenantId, conversationId])
+  @@index([tenantId, expiresAt])
+  @@map("customer_verifications")
 }

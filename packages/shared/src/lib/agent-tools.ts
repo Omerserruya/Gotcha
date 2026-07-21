@@ -77,6 +77,21 @@ export interface AgentToolContext {
     args: Record<string, unknown>;
   }) => Promise<{ ok: true; result: unknown } | { ok: false; reason: string }>;
   /**
+   * Cross-identity verification (set by ai-bot.service). The ONLY sanctioned
+   * path when the chat participant claims to be a DIFFERENT customer: an OTP
+   * goes to the destination already STORED on that customer (never to a
+   * chat-supplied destination), and only a confirmed code opens short-lived,
+   * customer-scoped access via the backend guard. The handler returns only a
+   * MASKED destination - the model never sees the stored phone/email.
+   */
+  requestIdentityVerification?: (opts: {
+    phone?: string;
+    email?: string;
+  }) => Promise<{ ok: boolean; sent_to?: string; reason?: string }>;
+  submitVerificationCode?: (opts: {
+    code: string;
+  }) => Promise<{ ok: boolean; verified?: boolean; remainingAttempts?: number; reason?: string }>;
+  /**
    * Custom DB query tool runner. Set by ai-bot.service from
    * connectors/custom-db.service. Routes any tool whose name starts with
    * `custom_db.` to the tenant-defined query template (parameterized SQL or
@@ -283,6 +298,45 @@ export interface AgentToolDispatchResult {
 }
 
 // ─── Tool schemas (OpenAI function-calling format) ────────────
+
+export const REQUEST_IDENTITY_VERIFICATION_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "request_identity_verification",
+    description:
+      "Start REAL identity verification when the chat participant asks about records of a customer whose " +
+      "identity does not match this chat's phone number. A one-time code is sent to the contact details " +
+      "ALREADY STORED on that customer's account - never to a phone or email typed in this chat. " +
+      "Saying 'yes that's me', repeating a phone number, or knowing an order number is NOT verification - " +
+      "when in doubt, call this tool or escalate to a human. You will receive only a masked destination " +
+      "(e.g. ***0665) to tell the customer; never reveal the full stored phone or email.",
+    parameters: {
+      type: "object",
+      properties: {
+        phone: { type: "string", description: "Phone the participant CLAIMS identifies the customer (untrusted input, used only to locate the stored account)." },
+        email: { type: "string", description: "Email the participant CLAIMS identifies the customer (untrusted input)." },
+      },
+    },
+  },
+};
+
+export const SUBMIT_VERIFICATION_CODE_TOOL = {
+  type: "function" as const,
+  function: {
+    name: "submit_verification_code",
+    description:
+      "Submit the one-time verification code the customer received after request_identity_verification. " +
+      "Only a correct, unexpired code opens access - and only to that specific customer's records, for a " +
+      "short time, in this conversation.",
+    parameters: {
+      type: "object",
+      properties: {
+        code: { type: "string", description: "The code exactly as the customer typed it." },
+      },
+      required: ["code"],
+    },
+  },
+};
 
 export const LINK_IDENTIFIER_TOOL = {
   type: "function" as const,
@@ -816,6 +870,13 @@ export interface BuildAgentToolsOptions {
 export function buildAgentTools(opts: BuildAgentToolsOptions = {}): Array<Record<string, unknown>> {
   const tools: Array<Record<string, unknown>> = [];
   if (opts.identityLinking !== false) tools.push(LINK_IDENTIFIER_TOOL as any);
+  // Cross-identity verification: always offered - the backend guard blocks
+  // cross-customer lookups outright, and these two tools are the model's ONLY
+  // legitimate way through (OTP to the STORED destination of the claimed
+  // customer, confirmed in-chat). Without them the model has no honest path
+  // and is more likely to improvise.
+  tools.push(REQUEST_IDENTITY_VERIFICATION_TOOL as any);
+  tools.push(SUBMIT_VERIFICATION_CODE_TOOL as any);
   if (opts.escalation !== false) tools.push(ESCALATE_TOOL as any);
   if (opts.closure !== false) tools.push(CLOSE_CONVERSATION_TOOL as any);
   if (opts.followup !== false) {
@@ -1201,6 +1262,25 @@ export async function dispatchToolCall(
         error: "permission gate unavailable; refusing to run tool",
       }),
     };
+  }
+
+  if (name === "request_identity_verification") {
+    if (!ctx.requestIdentityVerification) {
+      return { toolCallId: toolCall.id, content: JSON.stringify({ ok: false, error: "verification_unavailable" }) };
+    }
+    const r = await ctx.requestIdentityVerification({
+      phone: args.phone != null ? String(args.phone) : undefined,
+      email: args.email != null ? String(args.email) : undefined,
+    });
+    return { toolCallId: toolCall.id, content: JSON.stringify(r) };
+  }
+
+  if (name === "submit_verification_code") {
+    if (!ctx.submitVerificationCode) {
+      return { toolCallId: toolCall.id, content: JSON.stringify({ ok: false, error: "verification_unavailable" }) };
+    }
+    const r = await ctx.submitVerificationCode({ code: String(args.code ?? "") });
+    return { toolCallId: toolCall.id, content: JSON.stringify(r) };
   }
 
   if (name === "link_customer_identifier") {

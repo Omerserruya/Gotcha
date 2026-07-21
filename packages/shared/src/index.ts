@@ -83,7 +83,8 @@ export {
   linkCustomerMessage,
 } from "./lib/approval-requests";
 export type { CreateApprovalRequestInput } from "./lib/approval-requests";
-export { sanitizeCustomerText, hasAiSignaturePunctuation } from "./lib/customer-text";
+export { sanitizeCustomerText, hasAiSignaturePunctuation, withProtectedAtoms } from "./lib/customer-text";
+export { issueCustomerVerification, confirmCustomerVerification } from "./lib/customer-verification";
 export {
   evaluateBusinessPolicy,
   evaluateConfig,

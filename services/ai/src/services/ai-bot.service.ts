@@ -23,6 +23,7 @@ import {
   checkAiAllowed,
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
+import { withProtectedAtoms } from "@chatcenter/shared";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import {
@@ -848,18 +849,27 @@ async function lookupLastAssistantMove(
 // "Wi-Fi", date ranges like 10-15) have NO surrounding spaces and are preserved.
 function humanizeReply(text: string | null): string | null {
   if (!text) return text;
-  let out = text;
-  // Em/en dash used as a clause connector (with or without surrounding
-  // spaces). The wide em-dash "-" (U+2014) and horizontal bar "―" (U+2015)
-  // were missing from this class, so they leaked through to customers.
-  out = out.replace(/\s*[-–-―]\s*/g, ", ");
-  // ASCII hyphen used as a dash: space(s) on BOTH sides → comma. " word - word"
-  out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
-  // Don't leave a stray ", " right before sentence punctuation or newline.
-  out = out.replace(/,\s*([.!?,\n])/g, "$1");
-  // Collapse the accidental ", ," and trailing/leading artifacts.
-  out = out.replace(/,\s*,/g, ",").replace(/[ \t]{2,}/g, " ");
-  return out.trim();
+  // ROOT-CAUSE NOTE (2026-07-20 live incident): a previous version of the dash
+  // class here accidentally contained the ASCII hyphen, which rewrote EVERY
+  // hyphen - inside product URLs (urban-supply-… → "urban, supply, …"), ISO
+  // dates (2026-07-08 → "2026, 07, 08") and image UUIDs - into comma soup on
+  // real WhatsApp messages. Two defenses now: the class holds ONLY true wide
+  // dashes (U+2014 em, U+2013 en, U+2015 bar), and every transform runs with
+  // atomic values (URLs, emails, dates, ids, phones) shielded byte-for-byte
+  // via withProtectedAtoms.
+  return withProtectedAtoms(text, (prose) => {
+    let out = prose;
+    // Wide dash used as a clause connector (with or without surrounding spaces).
+    out = out.replace(/\s*[—–―]\s*/g, ", ");
+    // ASCII hyphen used as a dash: spaces on BOTH sides only. Token-internal
+    // hyphens (Wi-Fi, ranges like 10-15) are untouched.
+    out = out.replace(/(\S) +- +(\S)/g, "$1, $2");
+    // Don't leave a stray ", " right before sentence punctuation or newline.
+    out = out.replace(/,\s*([.!?,\n])/g, "$1");
+    // Collapse the accidental ", ," and trailing/leading artifacts.
+    out = out.replace(/,\s*,/g, ",").replace(/[ \t]{2,}/g, " ");
+    return out;
+  }).trim();
 }
 
 /** Worker-computed "business is closed right now" context (active policy). */
@@ -1576,6 +1586,56 @@ async function generateAIBotReplyInner(
         return { ok: false, reason: err?.message || "create_lead_failed" };
       }
     },
+    requestIdentityVerification: async ({ phone, email }) => {
+      // The typed phone/email is UNTRUSTED - it only locates the stored
+      // account. This lookup runs with INTERNAL scope on the server and its
+      // result is never handed to the model; the OTP goes exclusively to the
+      // destination stored on that account, and the model gets a masked echo.
+      try {
+        const lookup = phone
+          ? await executeAdapterTool({
+              tenantId: opts.tenantId,
+              toolFunctionName: "shopify.get_customer_by_phone",
+              args: { phone },
+            })
+          : email
+            ? await executeAdapterTool({
+                tenantId: opts.tenantId,
+                toolFunctionName: "shopify.get_customer_by_email",
+                args: { email },
+              })
+            : null;
+        const target: any = lookup && lookup.ok ? (lookup as any).result : null;
+        if (!target?.id) {
+          // Do not reveal whether the account exists.
+          return { ok: false, reason: "verification_unavailable_for_that_identity" };
+        }
+        const { issueCustomerVerification } = await import("@chatcenter/shared");
+        const issued = await issueCustomerVerification({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          target: { customerId: String(target.id), phone: target.phone, email: target.email },
+        });
+        if (!issued.ok) return { ok: false, reason: issued.reason };
+        return { ok: true, sent_to: issued.sentToMasked };
+      } catch (err: any) {
+        console.warn("[ai-bot] identity verification issue failed:", err?.message);
+        return { ok: false, reason: "verification_failed" };
+      }
+    },
+    submitVerificationCode: async ({ code }) => {
+      try {
+        const { confirmCustomerVerification } = await import("@chatcenter/shared");
+        return await confirmCustomerVerification({
+          tenantId: opts.tenantId,
+          conversationId: opts.conversationId,
+          code,
+        });
+      } catch (err: any) {
+        console.warn("[ai-bot] verification confirm failed:", err?.message);
+        return { ok: false, reason: "verification_failed" };
+      }
+    },
     runAdapterTool: async ({ toolFunctionName, args }) => {
       const result = await executeAdapterTool({
         tenantId: opts.tenantId,
@@ -1583,6 +1643,11 @@ async function generateAIBotReplyInner(
         contactId: contactRow?.id,
         toolFunctionName,
         args,
+        // The LLM is acting FOR the customer channel here - protected
+        // customer/order tools are authorized against the conversation's
+        // authenticated sender identity (P0 cross-customer guard). Typed
+        // phones/emails/order numbers in chat can never widen this.
+        accessScope: "customer",
       });
       // Fire-and-forget notification emit on success only. The classify
       // helper maps refund/discount/meeting tool names to SystemEvents;
