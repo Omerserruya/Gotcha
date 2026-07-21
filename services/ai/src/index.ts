@@ -36,6 +36,7 @@ import intelligenceReviewsRoutes from "./routes/intelligence-reviews";
 import customerSnapshotRoutes from "./routes/customer-snapshot";
 import crmAutoLinkRoutes from "./routes/crm-auto-link";
 import customerSummaryRoutes from "./routes/customer-summary";
+import commerceContextRoutes from "./routes/commerce-context";
 import copilotOutcomesRoutes from "./routes/copilot-outcomes";
 import reasonerShadowRoutes from "./routes/reasoner-shadow";
 import decisionTimelineRoutes from "./routes/decision-timeline";
@@ -120,6 +121,7 @@ app.use("/api/intelligence-reviews", intelligenceReviewsRoutes);
 app.use("/api/customer-snapshot", customerSnapshotRoutes);
 app.use("/api/crm", crmAutoLinkRoutes);
 app.use("/api/customer-summary", customerSummaryRoutes);
+app.use("/api/commerce-context", commerceContextRoutes);
 app.use("/api/reasoner-shadow", reasonerShadowRoutes);
 app.use("/api/decision-timeline", decisionTimelineRoutes);
 app.use("/api/gdpr-internal", gdprInternalRoutes);
@@ -140,10 +142,12 @@ import { startVoiceCopilotSubscriber } from "./services/voice-copilot-subscriber
 import { startVoicePostCallWorker } from "./workers/voice-postcall";
 import { startPostChatSubscriber } from "./workers/post-chat/subscriber";
 import { startIntelligenceLiveSubscriber } from "./workers/intelligence-live/subscriber";
+import { startCommerceCacheSubscriber } from "./services/commerce-cache-subscriber";
 startVoiceCopilotSubscriber();
 startVoicePostCallWorker();
 startPostChatSubscriber();
 startIntelligenceLiveSubscriber();
+startCommerceCacheSubscriber();
 startLiveRunnerSupervisor();
 
 // Voice-flow runner - bridges live-call events into ChatbotFlow rows with

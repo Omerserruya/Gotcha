@@ -99,6 +99,16 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("customer:profile:update", "customer", "runtime", true, "Update Customer Profiles", "Edit customer profile data."),
   p("customer:profile:export", "customer", "configuration", true, "Export Customer Data", "Export customer profile data."),
 
+  // ── Customer commerce context (Shopify orders in the conversation panel) ──
+  // Verified commerce context + safe order actions. Deliberately permissions,
+  // not Role==ADMIN: a tenant can let front-line agents SEE order context while
+  // reserving cancel/refund for managers. Actions still route through business
+  // policy + HITL regardless of who holds the permission.
+  p("customer:commerce:read", "customer", "runtime", true, "View Commerce Context", "View the customer's connected-store orders, spend and status in the conversation."),
+  p("customer:commerce:open", "customer", "runtime", true, "Open Orders in Store", "Open the customer's order in the connected store admin."),
+  p("customer:commerce:cancel", "customer", "runtime", true, "Cancel Orders", "Cancel a customer's store order (subject to business policy and approval)."),
+  p("customer:commerce:refund", "customer", "runtime", true, "Refund Orders", "Refund a customer's store order (subject to business policy and approval)."),
+
   // ── CRM ─────────────────────────────────────────────────────
   p("crm:contacts:read", "crm", "runtime", true, "Read CRM Contacts", "View CRM contacts."),
   p("crm:contacts:update", "crm", "runtime", true, "Update CRM Contacts", "Create and edit CRM contacts."),
@@ -287,6 +297,7 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
       "conversation:messages:*",
       "customer:profile:read",
       "customer:profile:update",
+      "customer:commerce:*",
       "crm:contacts:read",
       "crm:deals:read",
       "crm:activities:create",
@@ -311,6 +322,10 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
       "conversation:messages:takeover",
       "conversation:messages:close",
       "customer:profile:read",
+      // Front-line agents can SEE commerce context and open orders in the store,
+      // but cancel/refund stay with department managers and up.
+      "customer:commerce:read",
+      "customer:commerce:open",
       "crm:contacts:read",
     ],
   },

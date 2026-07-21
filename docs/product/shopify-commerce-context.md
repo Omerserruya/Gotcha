@@ -1,0 +1,86 @@
+# Shopify Customer-Commerce Context (human panel + AI snapshot)
+
+Status: in progress (feat/customer-intelligence-phase1). Gives a human agent immediate,
+*verified* commerce context about the conversation's customer, plus the same verified
+snapshot to the AI employee when Shopify is the elected Source of Truth. Wired into the
+EXISTING integration / authorization / HITL / business-policy / customer-access / audit
+architecture — not a standalone visual widget.
+
+## 1. Trust & visibility (spec §1)
+The section renders only when ALL hold, each checked server-side:
+- Tenant has a Shopify `TenantIntegration`, status connected/usable.
+- The conversation's contact is **securely linked** to a Shopify customer for the SAME tenant.
+  Source of truth for the link: `resolveRequesterIdentity(tenantId, conversationId).customerIds`
+  (`services/ai/src/services/connectors/customer-access-guard.ts`) — derived from
+  `Contact.metadata.crmContactId` + unexpired `CustomerVerification` grants. NEVER from a
+  phone/email/order number typed in chat, and never from an AI assertion.
+- The human agent holds `customer:commerce:read` (active-membership permission, not Role==ADMIN).
+If the linkage is unresolved → `customer_not_linked` / `verification_required`; protected Shopify
+data is not loaded.
+
+## 2. Backend read endpoint (spec §2-4, §8-10)
+`GET /api/conversations/:conversationId/commerce-context`
+Middleware: `authenticate → resolveTenant → requireActiveTenant() → requirePermission("customer:commerce:read")`.
+Tenant is ALWAYS the JWT tenant (never body). Discriminated response `state`:
+`not_connected | connection_unhealthy | customer_not_linked | verification_required |
+missing_scopes | no_orders | unavailable | ok`. Shape = `CommerceContext` (see
+`commerce-context.types.ts`). Totals are **grouped by currency** — never summed across
+currencies (spec §2). Order status → business-friendly localized labels (spec §3), never raw
+enums. Timeline is GOTCHA-rendered from verified Shopify fields only (spec §4).
+
+Projection service: `services/ai/src/services/commerce-context.service.ts`
+- Resolves the verified customer id(s), fetches customer+orders via the Shopify adapter
+  (`executeAdapterTool`, accessScope internal — the endpoint already enforced permission +
+  verified linkage), normalizes to `CommerceContext`.
+- Capabilities (`canOpen/canCancel/canRefund`) gate on granted Shopify scopes
+  (`read_orders`/`write_orders`) + per-order eligibility + the agent's action permissions.
+- adminUrl comes from the adapter/tenant `shopDomain` — never model-reconstructed.
+
+## 3. Quick actions (spec §5-6) — reuse the hardened path, no second Shopify path
+`POST /api/conversations/:conversationId/commerce-context/actions`
+body `{ orderId, action: "cancel"|"refund", params, idempotencyKey }`.
+Pipeline (identical to AI/HITL actions):
+1. `requirePermission("customer:commerce:cancel" | "customer:commerce:refund")`.
+2. Re-resolve tenant/customer/order ownership server-side (order.customer.id ∈ verified linkage).
+3. Reconcile the order from Shopify immediately before the sensitive action (spec §9).
+4. `actionKindForTool` + `evaluateBusinessPolicy` (`packages/shared/src/lib/business-policy.ts`):
+   DENY → 403; HITL → `createApprovalRequest` (idempotent via `computeOperationKey`) →
+   `{state:"pending_approval"}`; ALLOW → continue. No tenant policy → `defaultDecisionWithoutPolicy`
+   (secure default: no proactive compensation).
+5. `revalidateBeforeExecution` → `executeAdapterTool("shopify.cancel_order"|"shopify.process_refund")`
+   with the operationKey as idempotency (duplicate clicks can't double-refund/cancel).
+6. Provider-result validation (adapter checks `cancel_not_applied`, refundable maximum, userErrors).
+7. Post-action re-fetch + verify order state; audit (`auditLog`, tenant/membership/conversation/
+   customer/order/action/correlationId/result); return the VERIFIED new order card.
+Frontend updates order state ONLY from this verified result — a click never mutates FE state.
+Refund can never exceed Shopify's reported refundable maximum.
+
+## 4. AI commerce snapshot (spec §7)
+When Shopify is the elected SoT (`getSourceOfTruth(tenantId).vendor === "shopify"`) AND the
+conversation's customer is verified-linked, a typed `AICommerceSnapshot` (verified customer +
+recentOrders, STRIPPED of adminUrl/refundableMax/internal LTV labels) is injected through the
+customer-brief / prompt context layer — not raw Shopify JSON. Behavior effects (returning-customer
+greeting, high-value manager review, faster escalation) are governed by structured tenant policy,
+not prompt text alone. The AI must never expose internal segmentation/LTV, invent loyalty, or treat
+typed identifiers as verified identity.
+
+## 5. Permissions (spec §5)
+New catalog keys (`packages/shared/src/lib/permission-catalog.ts`, `customer` domain, runtime, scoped):
+`customer:commerce:read`, `customer:commerce:open`, `customer:commerce:cancel`,
+`customer:commerce:refund`. Granted: read/open → agent+; cancel/refund → department_manager + admin/owner
+(and always still routed through business policy + HITL). owner=`*`, admin=all-minus-owner-only inherit.
+
+## 6. Freshness & cache (spec §9)
+Short tenant+customer-scoped cache with a last-updated indicator + refresh button; auto-refresh after
+a successful order action; invalidate on Shopify order webhooks. Sensitive actions always reconcile
+live first — stale state is never trusted before cancel/refund.
+
+## 7. Files
+- `packages/shared/src/lib/commerce-context.types.ts` — shared typed contract.
+- `packages/shared/src/lib/permission-catalog.ts` — new permission keys.
+- `services/ai/src/services/commerce-context.service.ts` — projection + normalization + status maps.
+- `services/ai/src/services/commerce-actions.service.ts` — quick-action execution pipeline.
+- `services/ai/src/routes/commerce-context.ts` — GET + POST endpoints.
+- `services/ai/src/services/commerce-ai-snapshot.service.ts` — typed AI snapshot builder.
+- `frontend/src/components/CommerceContextPanel.tsx` — the panel section + order cards + actions.
+- i18n keys in `frontend/src/i18n/{en,he}.json`.

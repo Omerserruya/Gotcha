@@ -26,6 +26,7 @@ import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
 import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool } from "./discovery-integration.service";
 import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, type ProductSearchEnvelope } from "./product-search.service";
+import { buildAICommerceSnapshot, formatCommerceSnapshotForPrompt } from "./commerce-ai-snapshot.service";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import {
@@ -1435,6 +1436,27 @@ async function generateAIBotReplyInner(
     templatesBlock: followupFacts.templatesBlock,
     sessionFactsBlock,
   };
+
+  // Verified commerce context for the AI employee (spec §7): only when Shopify
+  // is the elected Source of Truth AND the conversation's customer is
+  // verified-linked. Cached (60s), stripped of admin URLs / refundable-max /
+  // internal LTV, and carries hard usage guardrails. Never blocks the turn.
+  if (process.env.COMMERCE_AI_SNAPSHOT !== "off") {
+    try {
+      const commerceSnap = await buildAICommerceSnapshot({
+        tenantId: opts.tenantId,
+        conversationId: conversation.id,
+      });
+      if (commerceSnap) {
+        const snapLocale: "he" | "en" =
+          String((conversation as any).detectedLocale || "").toLowerCase().startsWith("he") ? "he" : "en";
+        const commerceBlock = formatCommerceSnapshotForPrompt(commerceSnap, snapLocale);
+        ctxSlot.crmBlock = ctxSlot.crmBlock ? `${ctxSlot.crmBlock}\n\n${commerceBlock}` : commerceBlock;
+      }
+    } catch {
+      /* commerce snapshot is best-effort context; never fail the reply on it */
+    }
+  }
 
   // ── Tool surface - single source of truth: state.allowedActions ──
   // Build it BEFORE the prompt so we can pass the actual function names

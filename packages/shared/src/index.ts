@@ -122,6 +122,23 @@ export type {
   PolicyDecisionKind,
   PolicyEvaluationPoint,
 } from "./lib/business-policy";
+export type {
+  Money,
+  ChipTone,
+  StatusChip,
+  OrderItem,
+  TimelineMilestone,
+  OrderCard,
+  CommerceSummary,
+  CommerceCapabilities,
+  CommerceContext,
+  CommerceContextResponse,
+  AICommerceOrder,
+  AICommerceSnapshot,
+  CommerceActionKind,
+  CommerceActionRequest,
+  CommerceActionResponse,
+} from "./lib/commerce-context.types";
 export { trackAIUsage, estimateAICost, computeAICostUsd, resolveModelPricing, AI_MODEL_PRICING, getEmployeeUsageRollup } from "./lib/ai-usage";
 export type { AIUsageEvent, EmployeeUsageRollup } from "./lib/ai-usage";
 export {
