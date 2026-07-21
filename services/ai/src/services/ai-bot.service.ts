@@ -2144,7 +2144,10 @@ async function generateAIBotReplyInner(
         chatMessages.push({
           role: "system",
           content:
-            `Enough information exists to search. Call ${disc.decision.tool} NOW with the known criteria. ` +
+            `Enough information exists to search. Call ${disc.decision.tool} NOW. ` +
+            `IMPORTANT: the store's product catalog is searched by product TITLE, which is in ENGLISH. ` +
+            `Set the query to the ENGLISH product-category noun ONLY (e.g. "snowboard") - do NOT put length, flex, riding style, price or Hebrew words in the query; the store cannot filter by those and a specific query returns nothing. ` +
+            `Apply budget/length/flex yourself when choosing which returned products to present. ` +
             `Do NOT ask more questions and do NOT describe products from general knowledge - only real results from the tool may be shown.`,
         });
       } else if (disc.decision?.kind === "blocked_no_tool") {
