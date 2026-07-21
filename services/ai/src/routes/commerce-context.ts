@@ -137,9 +137,10 @@ router.post(
         correlationId,
       });
 
-      const httpStatus =
-        result.state === "denied" ? 403 : result.state === "unavailable" ? 409 : 200;
-      res.status(httpStatus).json(result);
+      // Always 200: the discriminated `state` carries the domain outcome
+      // (executed / pending_approval / denied / unavailable). Hard auth failures
+      // are already handled by requirePermission (403) and validation (400).
+      res.json(result);
     } catch (err: any) {
       console.error("[commerce-context] POST action error:", err?.message);
       res.status(500).json({ error: "internal_error" });

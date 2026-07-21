@@ -25,6 +25,7 @@ import {
   type CrmContextEnvelope,
   type CustomerSummary,
 } from "@/lib/api-crm";
+import { CommerceContextPanel } from "./CommerceContextPanel";
 
 interface CRMPanelProps {
   conversation: any;
@@ -148,6 +149,9 @@ export function CRMPanel({ conversation, onClose }: CRMPanelProps) {
 
       {/* Content */}
       <div className="flex-1 overflow-y-auto p-3 space-y-3">
+        {/* Shopify commerce context - self-hides when not connected / not linked. */}
+        <CommerceContextPanel conversationId={conversationId} token={token} />
+
         {loading && (
           <div className="text-xs text-gray-400 px-1">Loading…</div>
         )}
