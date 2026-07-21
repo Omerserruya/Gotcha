@@ -82,5 +82,34 @@ live first — stale state is never trusted before cancel/refund.
 - `services/ai/src/services/commerce-actions.service.ts` — quick-action execution pipeline.
 - `services/ai/src/routes/commerce-context.ts` — GET + POST endpoints.
 - `services/ai/src/services/commerce-ai-snapshot.service.ts` — typed AI snapshot builder.
-- `frontend/src/components/CommerceContextPanel.tsx` — the panel section + order cards + actions.
+- `frontend/src/components/conversations/CommerceContextPanel.tsx` — the panel section + order cards + actions.
+- `frontend/src/lib/api-commerce.ts` — typed client.
 - i18n keys in `frontend/src/i18n/{en,he}.json`.
+
+## 8. Remaining Shopify API limitations (deliverable #11)
+- **Product image on order cards**: Shopify REST order line items do NOT carry a
+  product image URL. The card shows the product title + a placeholder; a true
+  thumbnail would need an extra product/variant image fetch per line item
+  (N+1) - deliberately deferred. `OrderItem.imageUrl` is therefore `null` today.
+- **Multi-currency total**: the summary uses Shopify's `customer.total_spent`
+  shop-currency aggregate (a single provider-supported figure). Per-order cards
+  render each order in its own currency. No cross-currency conversion is ever
+  performed; a per-presentment-currency breakdown across ALL orders is not shown
+  (only the fetched recent orders reveal their own currencies).
+- **Scope gating**: `canCancel/canRefund` gate on `config.grantedScopes` when the
+  connection persists them. When `grantedScopes` is empty (older connections),
+  the capability defaults to permissive and real enforcement falls back to the
+  adapter's own scope error, which surfaces as `missing_scopes` at fetch/execute
+  time (fails closed on a genuine missing scope).
+- **Protected Customer Data (PCD)**: reading a customer's orders requires the
+  store's Shopify app to have PCD approval + `read_customers`/`read_orders`. A
+  store lacking these returns an adapter error → the panel shows `missing_scopes`
+  / `unavailable`, never fabricated data.
+- **Webhook invalidation**: the cache-invalidation subscriber is wired to
+  `shopify.order.*` events; ingesting those Shopify order webhooks in
+  `services/webhook` is a separate task. Until then, invalidation is driven by
+  the post-action path + the 60s TTL + the manual refresh button.
+- **Order-webhook → conversation mapping**: a `shopify.order.changed` event
+  invalidates the whole tenant's cached context (60s TTL, small map) rather than
+  a single conversation, since mapping a Shopify order back to a GOTCHA
+  conversation isn't 1:1.
