@@ -18,6 +18,7 @@ import {
   computeReadiness,
   buildDiscoverySnapshot,
   getDiscoveryProfile,
+  recordActionAttempt,
   type ProposedFact,
   type DiscoveryProfile,
 } from "@chatcenter/shared";
@@ -130,5 +131,53 @@ export async function runProductDiscoveryTurn(opts: {
   } catch (err: any) {
     console.warn("[discovery] turn failed (non-fatal):", err?.message);
     return { active: false };
+  }
+}
+
+/** Extract Shopify product ids from a tool result (typed or JSON-stringified). */
+function productIdsFrom(result: unknown): string[] {
+  let arr: any = result;
+  if (typeof arr === "string") { try { arr = JSON.parse(arr); } catch { return []; } }
+  if (arr && typeof arr === "object" && "result" in arr) arr = (arr as any).result;
+  if (!Array.isArray(arr)) return [];
+  return arr.map((p) => (p && p.id != null ? String(p.id) : null)).filter((x): x is string => !!x);
+}
+
+/**
+ * Record the outcome of a product search this turn (spec item 9: search
+ * attempts + displayed results). Scans the turn's toolCallLog for a
+ * search_products call and writes a DiscoveryActionAttempt so re-shows can be
+ * deduped and the discovery history is auditable. Non-fatal.
+ */
+export async function recordDiscoverySearchOutcome(opts: {
+  tenantId: string;
+  conversationId: string;
+  aiAgentId: string;
+  toolCallLog: Array<{ tool?: string; args?: unknown; result?: unknown; decision?: string }>;
+}): Promise<void> {
+  try {
+    const call = opts.toolCallLog.find(
+      (t) => typeof t.tool === "string" && /(^|\.)search_products$/.test(t.tool),
+    );
+    if (!call) return;
+    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const session = await getOrCreateActiveSession({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      goalKey: profile.goalKey,
+      aiAgentId: opts.aiAgentId,
+    });
+    const ids = productIdsFrom(call.result);
+    await recordActionAttempt({
+      session,
+      actionKey: "product_search",
+      criteria: call.args ?? {},
+      toolName: call.tool,
+      resultStatus: call.decision === "denied" ? "blocked" : ids.length ? "succeeded" : "no_results",
+      resultRefs: ids.length ? { productIds: ids } : null,
+      shownResourceIds: ids,
+    });
+  } catch (err: any) {
+    console.warn("[discovery] action-attempt record failed (non-fatal):", err?.message);
   }
 }

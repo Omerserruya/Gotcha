@@ -24,7 +24,7 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
-import { runProductDiscoveryTurn } from "./discovery-integration.service";
+import { runProductDiscoveryTurn, recordDiscoverySearchOutcome } from "./discovery-integration.service";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import {
@@ -3836,6 +3836,16 @@ async function generateAIBotReplyInner(
   // Don't emit an interim ack that is identical to the final reply (avoids a
   // duplicate bubble if the model didn't actually produce a distinct result).
   const finalInterim = interimMessages.filter((m) => m && m !== safeReply);
+
+  // Record any product search this turn into Discovery State (attempt +
+  // shown product ids) for reshow-dedup and an auditable discovery history.
+  // Fire-and-forget - never delays or breaks the reply.
+  void recordDiscoverySearchOutcome({
+    tenantId: opts.tenantId,
+    conversationId: opts.conversationId,
+    aiAgentId: opts.aiAgentId,
+    toolCallLog,
+  });
 
   return {
     reply: safeReply,
