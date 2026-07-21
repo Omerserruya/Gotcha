@@ -31,6 +31,7 @@ import {
   buildFallbackMessage,
   type ExecutionFacts,
 } from "./grounded-message.service";
+import { validateActionHonesty } from "./action-honesty.service";
 import { getActionOrchestrator, type ExecutionResult } from "./orchestrator";
 import type { AgentToolContext } from "@chatcenter/shared";
 import { generateResponse, getDefaultModel, getMicroModel } from "./ai.service";
@@ -3613,6 +3614,41 @@ async function generateAIBotReplyInner(
   // escalating ("I'll transfer you to the team"), which is far worse than a
   // mildly repetitive but on-track reply. Repetition is handled softly by the
   // QUALITY_CONTRACT instead; do not reintroduce a hard regen for it.
+
+  // ── Action-honesty signal ───────────────────────────────────────
+  // Flag replies that CLAIM work is in progress / done / coming when no tool
+  // executed this turn (the 2026-07-21 incident: "אני בודקת עכשיו... הנה 3
+  // אופציות" across 14 turns, ZERO tool calls). Detection + audit only for now
+  // - a hard reply-rewrite here risks the over-correction the self-repetition
+  // gate above was removed for; the deterministic block is a reviewed follow-up.
+  try {
+    const honesty = validateActionHonesty(replyText, toolCallLog);
+    if (!honesty.ok) {
+      console.warn(
+        `[ai-bot] ACTION-HONESTY: reply claims ${honesty.unsupported.map((c) => c.kind).join(",")} ` +
+          `with no execution evidence conv=${opts.conversationId}`,
+      );
+      prisma.auditLog
+        .create({
+          data: {
+            tenantId: opts.tenantId,
+            actorType: "ai",
+            action: "ai.unsupported_action_claim",
+            targetType: "conversation",
+            targetId: opts.conversationId,
+            metadata: {
+              claims: honesty.unsupported.map((c) => c.kind),
+              matched: honesty.unsupported.map((c) => c.match).slice(0, 4),
+              toolsThisTurn: toolCallLog.map((t) => t.tool).filter(Boolean),
+              source: "ai_bot",
+            } as any,
+          },
+        })
+        .catch((err: any) => console.error("[ai-bot] honesty audit failed:", err?.message));
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] action-honesty check failed:", err?.message);
+  }
 
   // ── Conversation decision trace ─────────────────────────────────
   // One structured line per generation so live tests can validate exactly
