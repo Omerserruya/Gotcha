@@ -113,3 +113,24 @@ live first — stale state is never trusted before cancel/refund.
   invalidates the whole tenant's cached context (60s TTL, small map) rather than
   a single conversation, since mapping a Shopify order back to a GOTCHA
   conversation isn't 1:1.
+- **Idempotency**: duplicate cancel/refund is prevented by (a) the frontend
+  disabling the button during a request, (b) a stable `computeOperationKey`
+  (canonical order+amount projection) checked against a prior-success audit
+  row, and (c) the adapter's own `already_cancelled`/`already_refunded`
+  reconcile + refundable-max recompute. The prior-success audit check is not
+  atomic, so a sub-second cross-client race on a PARTIAL refund is the one
+  residual window; the HITL path (`createApprovalRequest`) dedups atomically by
+  operationKey. A dedicated atomic idempotency claim would close the direct-
+  execute partial-refund race fully - deferred as low-risk given the mitigations.
+
+## Security review (self-review, 2026-07-21)
+Two real defects were found and fixed before sign-off:
+1. **Ownership failed open** (`commerce-actions.service.ts`): the client-supplied
+   `orderId`'s owner check skipped the deny when an order had no resolvable
+   customer id (guest checkout), allowing an agent to act on an arbitrary order.
+   Now requires a POSITIVE match to the conversation's verified customer.
+2. **Cache not keyed by viewer** (`commerce-context.service.ts`): cached
+   capabilities/eligibility (derived from the viewer's permissions) could be
+   served to a different-permission viewer. Cache key now includes a permission
+   signature. (Actions always re-check server-side, so this was a wrong-UI bug,
+   not a privilege escalation.)
