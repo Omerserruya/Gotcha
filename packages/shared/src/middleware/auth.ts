@@ -100,7 +100,13 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
   }
 
   try {
-    const principal = await resolvePrincipal(token);
+    // The ACTIVE-tenant hint. Client-supplied, therefore never trusted as-is:
+    // resolvePrincipal validates it against the identity's memberships and
+    // rejects a tenant the caller does not belong to. Absent header = the
+    // identity's default tenant (single-membership users need no header).
+    const rawHint = req.headers["x-tenant-id"];
+    const tenantHint = typeof rawHint === "string" && rawHint.length > 0 ? rawHint : null;
+    const principal = await resolvePrincipal(token, tenantHint);
     req.user = principal as any;
     req.tenantId = principal.tenantId;
     next();
@@ -109,8 +115,9 @@ export async function authenticate(req: Request, res: Response, next: NextFuncti
       // A valid token whose subject has no GOTCHA user means the identity is
       // real but was never invited here (or was removed). Authentication
       // succeeded; access does not follow from it - hence 403, not 401.
-      const status = err.code === "no_account" ? 403 : 401;
-      res.status(status).json({ error: err.message });
+      // Same for a hint naming a tenant the identity has no membership in.
+      const status = err.code === "no_account" || err.code === "tenant_denied" ? 403 : 401;
+      res.status(status).json({ error: err.message, code: err.code });
       return;
     }
     // SECURITY: fail CLOSED. The previous implementation called next() when

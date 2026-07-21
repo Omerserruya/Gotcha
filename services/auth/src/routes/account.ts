@@ -16,6 +16,7 @@ import { Router, Request, Response } from "express";
 import {
   authenticate,
   prisma,
+  withCrossTenantAccess,
   writeAudit,
   AuditAction,
   findIdentityBySubject,
@@ -38,14 +39,15 @@ import { sendEmailChangeVerification } from "../services/notification.service";
 const router = Router();
 router.use(authenticate);
 
-/** Resolve the caller's Authentik pk (or null) from their stored subject. */
+/** Resolve the caller's Authentik pk (or null) from their identity's subject. */
 async function callerIdentity(req: Request): Promise<{ pk: number; username: string } | null> {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
-    select: { authentikSubject: true },
+    select: { identity: { select: { authentikSubject: true } } },
   });
-  if (!user?.authentikSubject) return null;
-  const identity = await findIdentityBySubject(user.authentikSubject);
+  const subject = user?.identity?.authentikSubject;
+  if (!subject) return null;
+  const identity = await findIdentityBySubject(subject);
   return identity ? { pk: identity.pk, username: identity.username } : null;
 }
 
@@ -88,7 +90,8 @@ router.patch("/", async (req: Request, res: Response): Promise<void> => {
     if (Object.keys(data).length === 0) { res.status(400).json({ error: "no_editable_fields" }); return; }
 
     const before = await prisma.user.findUnique({
-      where: { id: req.user!.userId }, select: { name: true, authentikSubject: true },
+      where: { id: req.user!.userId },
+      select: { name: true, identityId: true, identity: { select: { authentikSubject: true } } },
     });
     const updated = await prisma.user.update({
       where: { id: req.user!.userId },
@@ -96,11 +99,20 @@ router.patch("/", async (req: Request, res: Response): Promise<void> => {
       select: { id: true, name: true, email: true, phoneNumber: true, locale: true, role: true },
     });
 
-    // Keep the IdP display name in sync when the user renames themselves.
-    if (typeof data.name === "string" && before?.authentikSubject && data.name !== before.name) {
+    // A rename is identity-level: update the Identity master, every other
+    // membership's display mirror, and the IdP - so the person is one name
+    // everywhere, not a different one per workspace.
+    if (typeof data.name === "string" && before && data.name !== before.name) {
       try {
-        const identity = await findIdentityBySubject(before.authentikSubject);
-        if (identity) await updateIdentity(identity.pk, { name: updated.name });
+        await prisma.identity.update({ where: { id: before.identityId }, data: { name: updated.name } });
+        // Cross-tenant on purpose: every membership mirror of THIS person.
+        await withCrossTenantAccess(() =>
+          prisma.user.updateMany({ where: { identityId: before.identityId }, data: { name: updated.name } }),
+        );
+        if (before.identity?.authentikSubject) {
+          const identity = await findIdentityBySubject(before.identity.authentikSubject);
+          if (identity) await updateIdentity(identity.pk, { name: updated.name });
+        }
       } catch (e: any) { console.warn("[account] name sync failed:", e?.message); }
     }
 
@@ -162,11 +174,13 @@ router.get("/mfa-gate", async (req: Request, res: Response): Promise<void> => {
   const user = await prisma.user.findUnique({
     where: { id: req.user!.userId },
     select: {
-      role: true, authentikSubject: true, mfaEnrolledAt: true,
+      role: true, identityId: true,
+      identity: { select: { authentikSubject: true, mfaEnrolledAt: true } },
       tenant: { select: { mfaRequiredForAdmins: true, mfaRequiredForAllUsers: true } },
     },
   });
   if (!user) { res.status(404).json({ error: "not_found" }); return; }
+  const mfaStamp = user.identity.mfaEnrolledAt;
 
   const requirement = mfaRequirementFor(user.role, {
     mfaRequiredForAdmins: user.tenant.mfaRequiredForAdmins,
@@ -200,19 +214,20 @@ router.get("/mfa-gate", async (req: Request, res: Response): Promise<void> => {
     } else {
       // Identity genuinely not found (empty result, not an error) - fall back
       // to the stamp; a never-enrolled user stays gated (stamp is null).
-      enrolled = user.mfaEnrolledAt != null;
+      enrolled = mfaStamp != null;
     }
   } catch {
     // IdP error: fail CLOSED for enforcement - trust only the stored stamp.
-    enrolled = user.mfaEnrolledAt != null;
+    enrolled = mfaStamp != null;
   }
 
-  // Keep the local mirror honest whenever we have a live read.
+  // Keep the local mirror honest whenever we have a live read. The stamp is
+  // identity-level: enrolling once satisfies every tenant membership.
   if (live) {
-    if (enrolled && !user.mfaEnrolledAt) {
-      await prisma.user.update({ where: { id: req.user!.userId }, data: { mfaEnrolledAt: new Date() } });
-    } else if (!enrolled && user.mfaEnrolledAt) {
-      await prisma.user.update({ where: { id: req.user!.userId }, data: { mfaEnrolledAt: null } });
+    if (enrolled && !mfaStamp) {
+      await prisma.identity.update({ where: { id: user.identityId }, data: { mfaEnrolledAt: new Date() } });
+    } else if (!enrolled && mfaStamp) {
+      await prisma.identity.update({ where: { id: user.identityId }, data: { mfaEnrolledAt: null } });
     }
   }
 
@@ -252,7 +267,8 @@ router.delete("/security/device/:type/:id", async (req: Request, res: Response):
     await deleteUserDevice(type, deviceId);
     // Removing a factor can drop the user below "enrolled" - clear the mirror so
     // the gate re-evaluates on next check (and re-challenges if policy requires).
-    await prisma.user.update({ where: { id: req.user!.userId }, data: { mfaEnrolledAt: null } });
+    const me = await prisma.user.findUnique({ where: { id: req.user!.userId }, select: { identityId: true } });
+    if (me) await prisma.identity.update({ where: { id: me.identityId }, data: { mfaEnrolledAt: null } });
     void writeAudit({
       tenantId: req.user!.tenantId, actorType: "user", actorId: req.user!.userId,
       action: AuditAction.MFA_DEVICE_REMOVED, targetType: "user", targetId: req.user!.userId,
@@ -304,7 +320,19 @@ router.delete("/sessions", async (req: Request, res: Response): Promise<void> =>
   const identity = await callerIdentity(req);
   if (!identity) { res.status(409).json({ error: "no_identity" }); return; }
   try {
-    const n = await terminateAllUserSessions(identity.pk);
+    // "Sign out everywhere ELSE": identify the caller's own session (same
+    // IP+UA heuristic the list uses) and keep it, unless the caller explicitly
+    // asks to include it (?includeCurrent=1 - a true global sign-out).
+    let keep: string | undefined;
+    if (req.query.includeCurrent !== "1") {
+      const fwd = (req.headers["x-forwarded-for"] as string | undefined)?.split(",")[0]?.trim();
+      const sessions = await listUserSessions(identity.pk, {
+        ip: fwd || req.ip || null,
+        userAgent: (req.headers["user-agent"] as string | undefined) ?? null,
+      });
+      keep = sessions.find((s) => s.current)?.id;
+    }
+    const n = await terminateAllUserSessions(identity.pk, keep);
     void writeAudit({
       tenantId: req.user!.tenantId, actorType: "user", actorId: req.user!.userId,
       action: AuditAction.ALL_SESSIONS_TERMINATED, targetType: "user", targetId: req.user!.userId,
@@ -362,13 +390,27 @@ router.post("/email-change", async (req: Request, res: Response): Promise<void> 
     const raw = (req.body?.newEmail ?? "").toString().trim().toLowerCase();
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(raw)) { res.status(400).json({ error: "invalid_email" }); return; }
     const me = await prisma.user.findUnique({
-      where: { id: req.user!.userId }, select: { email: true, name: true, tenantId: true },
+      where: { id: req.user!.userId }, select: { email: true, name: true, tenantId: true, identityId: true },
     });
     if (!me) { res.status(404).json({ error: "not_found" }); return; }
     if (raw === me.email.toLowerCase()) { res.status(400).json({ error: "same_email" }); return; }
-    // Email is unique per tenant - block a change that would collide.
+    // An email change is IDENTITY-level (it renames the person everywhere).
+    // Block when another identity already owns the address, or when any tenant
+    // this person belongs to already has a different member using it.
+    const identityClash = await prisma.identity.findFirst({
+      where: { email: raw, id: { not: me.identityId } }, select: { id: true },
+    });
+    if (identityClash) { res.status(409).json({ error: "email_taken" }); return; }
+    const myTenants = await withCrossTenantAccess(() => prisma.user.findMany({
+      where: { identityId: me.identityId }, select: { tenantId: true },
+    }));
     const clash = await prisma.user.findFirst({
-      where: { tenantId: me.tenantId, email: raw, id: { not: req.user!.userId } }, select: { id: true },
+      where: {
+        tenantId: { in: myTenants.map((t) => t.tenantId) },
+        email: raw,
+        identityId: { not: me.identityId },
+      },
+      select: { id: true },
     });
     if (clash) { res.status(409).json({ error: "email_taken" }); return; }
 
@@ -398,27 +440,51 @@ router.post("/email-change/verify", async (req: Request, res: Response): Promise
   if (payload.userId !== req.user!.userId) { res.status(403).json({ error: "wrong_account" }); return; }
 
   const me = await prisma.user.findUnique({
-    where: { id: payload.userId }, select: { email: true, authentikSubject: true, tenantId: true },
+    where: { id: payload.userId },
+    select: {
+      email: true, tenantId: true, identityId: true,
+      identity: { select: { email: true, authentikSubject: true } },
+    },
   });
   if (!me) { res.status(404).json({ error: "not_found" }); return; }
-  // Re-check uniqueness at confirm time (someone may have taken it meanwhile).
+  // Re-check uniqueness at confirm time (someone may have taken it meanwhile):
+  // identity-level plus every tenant this person is a member of.
+  const identityClash = await prisma.identity.findFirst({
+    where: { email: payload.newEmail, id: { not: me.identityId } }, select: { id: true },
+  });
+  if (identityClash) { res.status(409).json({ error: "email_taken" }); return; }
+  const myTenants = await withCrossTenantAccess(() => prisma.user.findMany({
+    where: { identityId: me.identityId }, select: { tenantId: true },
+  }));
   const clash = await prisma.user.findFirst({
-    where: { tenantId: me.tenantId, email: payload.newEmail, id: { not: payload.userId } }, select: { id: true },
+    where: {
+      tenantId: { in: myTenants.map((t) => t.tenantId) },
+      email: payload.newEmail,
+      identityId: { not: me.identityId },
+    },
+    select: { id: true },
   });
   if (clash) { res.status(409).json({ error: "email_taken" }); return; }
 
-  const previous = me.email;
-  await prisma.user.update({ where: { id: payload.userId }, data: { email: payload.newEmail } });
+  const previousIdentityEmail = me.identity.email;
+  // Identity master + every membership display mirror move together.
+  await withCrossTenantAccess(() => prisma.$transaction([
+    prisma.identity.update({ where: { id: me.identityId }, data: { email: payload.newEmail } }),
+    prisma.user.updateMany({ where: { identityId: me.identityId }, data: { email: payload.newEmail } }),
+  ]));
 
   // Sync Authentik email + username; roll GOTCHA back if the IdP write fails so
   // the two systems never diverge.
   try {
-    if (me.authentikSubject) {
-      const identity = await findIdentityBySubject(me.authentikSubject);
+    if (me.identity.authentikSubject) {
+      const identity = await findIdentityBySubject(me.identity.authentikSubject);
       if (identity) await updateIdentity(identity.pk, { email: payload.newEmail, username: payload.newEmail });
     }
   } catch (err: any) {
-    await prisma.user.update({ where: { id: payload.userId }, data: { email: previous } });
+    await withCrossTenantAccess(() => prisma.$transaction([
+      prisma.identity.update({ where: { id: me.identityId }, data: { email: previousIdentityEmail } }),
+      prisma.user.updateMany({ where: { identityId: me.identityId }, data: { email: me.email } }),
+    ]));
     console.error("[account] email-change IdP sync failed, rolled back:", err?.message);
     res.status(502).json({ error: "idp_sync_failed" });
     return;
@@ -427,7 +493,7 @@ router.post("/email-change/verify", async (req: Request, res: Response): Promise
   void writeAudit({
     tenantId: me.tenantId, actorType: "user", actorId: payload.userId,
     action: AuditAction.EMAIL_CHANGE_CONFIRMED, targetType: "user", targetId: payload.userId,
-    metadata: { self: true, from: previous, to: payload.newEmail },
+    metadata: { self: true, from: me.email, to: payload.newEmail },
   });
   res.json({ ok: true, email: payload.newEmail });
 });

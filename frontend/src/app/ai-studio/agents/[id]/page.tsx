@@ -18,7 +18,10 @@ import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
 // FunnelSection import removed - funnels are now managed at /settings/funnels.
 // The agent is funnel-guided at runtime via resolveActiveStage; there is no
 // per-agent funnel override config to edit on this page.
-import AgentBuilder from "./AgentBuilder";
+// Shared AI-employee creation experience. Lives in components/aiEmployee
+// so onboarding renders the SAME wizard instead of maintaining a second,
+// divergent one (see components/aiEmployee/AgentBuilder.tsx header).
+import AgentBuilder from "@/components/aiEmployee/AgentBuilder";
 
 // ─── Types ────────────────────────────────────────────────────
 // (Tone type removed - personality is governed by the platform skill now.)

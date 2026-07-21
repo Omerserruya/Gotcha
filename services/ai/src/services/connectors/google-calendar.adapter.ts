@@ -369,6 +369,31 @@ export const GoogleCalendarProviderAdapter: ProviderAdapter = {
     }
     throw new Error(`unsupported google_calendar tool: ${tool}`);
   },
+
+  /**
+   * Connection probe. The generic fallback ("call the first READ tool with no
+   * args") can never pass here: `list_events` requires from_iso/to_iso, so
+   * every test marked this integration ERROR even when the credential was
+   * perfectly good. We instead ask Google for the calendar list - the cheapest
+   * call that proves the token carries the calendar scope.
+   */
+  async validate({ credentials }) {
+    const accessToken = credentials?.accessToken;
+    if (!accessToken) return { ok: false, error: "No stored Google credential - reconnect the integration." };
+    try {
+      const r = await fetch("https://www.googleapis.com/calendar/v3/users/me/calendarList?maxResults=1", {
+        headers: { Authorization: `Bearer ${accessToken}` },
+      });
+      if (r.ok) return { ok: true };
+      if (r.status === 401 || r.status === 403) {
+        return { ok: false, error: "Google rejected the stored credential. Reconnect Google Calendar to grant access again." };
+      }
+      return { ok: false, error: `Google Calendar returned ${r.status} while verifying access.` };
+    } catch (e: any) {
+      // Never leak the token or the raw provider payload into user-facing text.
+      return { ok: false, error: `Couldn't reach Google Calendar: ${e?.code || "network error"}` };
+    }
+  },
 };
 
 registerAdapter(GoogleCalendarProviderAdapter);

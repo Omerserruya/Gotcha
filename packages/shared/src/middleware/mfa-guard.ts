@@ -13,7 +13,7 @@ import { mfaRequirementFor } from "../lib/mfa";
  * Design constraints:
  *   - It does NOT touch `authenticate()` (the sacred, fail-closed auth gate) and
  *     makes NO IdP call on the hot path. It reads only the local mirror
- *     (`User.mfaEnrolledAt`) + the tenant policy in one indexed query, then
+ *     (`Identity.mfaEnrolledAt`) + the tenant policy in one indexed query, then
  *     defers to the pure `mfaRequirementFor` policy.
  *   - Internal service principals (`isInternal`) and unauthenticated requests
  *     pass through untouched - the former have no human to enrol, the latter are
@@ -46,7 +46,9 @@ async function guard(req: Request, res: Response, next: NextFunction): Promise<v
       where: { id: user.userId },
       select: {
         role: true,
-        mfaEnrolledAt: true,
+        // MFA enrolment is a property of the PERSON (identity), not of any one
+        // tenant membership - enrolling once satisfies every workspace.
+        identity: { select: { mfaEnrolledAt: true } },
         tenant: { select: { mfaRequiredForAdmins: true, mfaRequiredForAllUsers: true } },
       },
     });
@@ -55,7 +57,7 @@ async function guard(req: Request, res: Response, next: NextFunction): Promise<v
       mfaRequiredForAdmins: row.tenant.mfaRequiredForAdmins,
       mfaRequiredForAllUsers: row.tenant.mfaRequiredForAllUsers,
     });
-    if (requirement.required && row.mfaEnrolledAt == null) {
+    if (requirement.required && row.identity.mfaEnrolledAt == null) {
       res.status(403).json({ error: "mfa_enrollment_required", reason: requirement.reason });
       return;
     }

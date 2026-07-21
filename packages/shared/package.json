@@ -10,7 +10,8 @@
     "db:seed-packs": "tsx prisma/seed-packs.ts",
     "db:seed-billing": "tsx prisma/seed-billing.ts",
     "db:reset": "prisma migrate reset --force",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   },
   "dependencies": {
     "@prisma/client": "^5.20.0",

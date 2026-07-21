@@ -16,7 +16,7 @@
  */
 
 import { Router, type Request, type Response } from "express";
-import { authenticate, resolveTenant, requireActiveTenant, requireRole, prisma } from "@chatcenter/shared";
+import { authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, prisma } from "@chatcenter/shared";
 import {
   runBuilder,
   loadDraftSnapshot,
@@ -31,7 +31,12 @@ import { generateSalesContext } from "../services/sales-context-generator.servic
 
 const router = Router();
 
-router.use(authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"));
+// Onboarding renders this SAME wizard (setup Movement 8 mounts the shared
+// components/aiEmployee/AgentBuilder), and during onboarding the tenant is
+// PENDING_ONBOARDING - requireActiveTenant() answered 403 for every builder
+// call, so the embedded wizard could not even start. Building the first
+// employee is precisely an onboarding activity.
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
 
 // Localized opening line. The builder agent itself replies in the admin's
 // language (system prompt), but the very first message is static so we map it.

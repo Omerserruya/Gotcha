@@ -99,6 +99,13 @@ async function bindStage(flowPk, stagePk, order) {
  *   prompt (choose a password) -> user_write (save it) -> login (session)
  * There is no identification stage: entry is via the one-time link we mint, so
  * the user is already known and asking again would only invite enumeration.
+ *
+ * authentication MUST be "none", not "require_unauthenticated": the one-time
+ * flow token is the real gate, and an invitee who opens the link in a browser
+ * that already holds ANY Authentik session (an admin testing their own invite,
+ * a user invited to a second workspace) would otherwise get "Request has been
+ * denied." - and the denied attempt still CONSUMES the token, burning the link
+ * permanently.
  */
 async function ensureRecoveryFlow() {
   const slug = "gotcha-recovery";
@@ -113,12 +120,19 @@ async function ensureRecoveryFlow() {
         slug,
         title: "Set your password",
         designation: "recovery",
-        authentication: "require_unauthenticated",
+        authentication: "none",
       }),
     });
     console.log("[bootstrap] recovery flow created");
   } else {
-    console.log("[bootstrap] recovery flow exists");
+    // Converge existing installs (older bootstraps created it as
+    // require_unauthenticated, which denies + burns invite links opened in a
+    // browser with a live session).
+    await api(`/flows/instances/${slug}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ authentication: "none" }),
+    });
+    console.log("[bootstrap] recovery flow exists (authentication converged to none)");
   }
 
   await bindStage(flow.pk, await findStage("default-password-change-prompt"), 20);
@@ -200,10 +214,18 @@ async function ensureSelfServiceRecoveryFlow() {
         slug,
         title: "Reset your password",
         designation: "recovery",
-        authentication: "require_unauthenticated",
+        // "none", not "require_unauthenticated": the reset EMAIL link must
+        // keep working in a browser that already holds a session (same trap as
+        // the invite flow above - denial would burn the one-time token).
+        authentication: "none",
       }),
     });
     console.log("[bootstrap] self-service recovery flow created");
+  } else {
+    await api(`/flows/instances/${slug}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ authentication: "none" }),
+    });
   }
 
   await bindStage(flow.pk, ident.pk, 10);
@@ -287,14 +309,20 @@ async function ensureMfaEnforcement() {
 /**
  * PASSWORD STRENGTH POLICY (security master plan F-3).
  *
- * Bind a strength policy to the password-setting prompt so weak passwords are
- * rejected at recovery / invitation time. A Password Policy in Authentik does
- * not run on its own: it must be attached, via a policy binding, to the
- * *flow-stage binding* of the prompt where the new password is typed (its
- * `password_field` defaults to "password", the field key the stock
- * default-password-change-prompt writes). We therefore target the recovery
- * flow's binding for default-password-change-prompt, the same binding
- * ensureRecoveryFlow creates at order 20.
+ * Attach a strength policy to the password-setting prompt so weak passwords
+ * are rejected at recovery / invitation time. The ONLY correct attachment
+ * point is the prompt STAGE's `validation_policies` - the prompt stage runs
+ * those against the submitted fields (with the typed password in context) on
+ * every submit.
+ *
+ * Do NOT bind the policy to the prompt's *flow-stage binding*: those policies
+ * gate whether the stage is INCLUDED, and `/core/users/{pk}/recovery/` plans
+ * the flow at link-creation time where no password exists in context - the
+ * policy fails ("Password not set in context"), the prompt stage is silently
+ * dropped from the plan, and every invite/recovery link dies on user_write
+ * with "Request has been denied. No Pending data." (burning the one-time
+ * token). That mis-binding shipped in an earlier bootstrap; the cleanup below
+ * removes it from existing installs.
  *
  * Requirements: >= 12 chars, at least one upper/lower/digit/symbol
  * (check_static_rules), reject known-breached passwords via HaveIBeenPwned
@@ -345,19 +373,31 @@ async function ensurePasswordPolicy(recoveryFlowPk) {
   }
 
   const promptStagePk = await findStage("default-password-change-prompt");
-  const flowBindings = await api(`/flows/bindings/?target=${recoveryFlowPk}`);
-  const promptBinding = flowBindings.results.find((b) => b.stage === promptStagePk);
-  if (!promptBinding) throw new Error("password-change-prompt binding missing on recovery flow");
 
-  const policyBindings = await api(`/policies/bindings/?target=${promptBinding.pk}&policy=${policyPk}`);
-  const alreadyBound = policyBindings.results.find((b) => b.policy === policyPk);
-  if (!alreadyBound) {
-    await api(`/policies/bindings/`, {
-      method: "POST",
-      body: JSON.stringify({ policy: policyPk, target: promptBinding.pk, order: 0, enabled: true }),
+  // Remove the legacy mis-binding (policy on the flow-stage binding) so
+  // recovery-link plans include the prompt stage again.
+  try {
+    const policyBindings = await api(`/policies/bindings/?policy=${policyPk}&page_size=100`);
+    for (const b of policyBindings.results ?? []) {
+      await api(`/policies/bindings/${b.pk}/`, { method: "DELETE" });
+      console.log("[bootstrap] removed legacy password-policy flow binding");
+    }
+  } catch {
+    /* no legacy binding to clean */
+  }
+
+  // Attach as a prompt-stage validation policy (merged with whatever the stock
+  // stage already validates with, e.g. default-password-change-password-policy).
+  const promptStage = await api(`/stages/prompt/stages/${promptStagePk}/`);
+  const validation = new Set(promptStage.validation_policies ?? []);
+  if (!validation.has(policyPk)) {
+    validation.add(policyPk);
+    await api(`/stages/prompt/stages/${promptStagePk}/`, {
+      method: "PATCH",
+      body: JSON.stringify({ validation_policies: [...validation] }),
     });
   }
-  console.log("[bootstrap] password policy bound");
+  console.log("[bootstrap] password policy attached to prompt stage validation");
 }
 
 /**
@@ -401,6 +441,55 @@ async function ensureSingleScreenLogin(selfRecoveryFlowPk) {
     await api(`/flows/bindings/${pwBinding.pk}/`, { method: "DELETE" });
   }
   console.log("[bootstrap] single-screen login (password embedded in identification)");
+}
+
+/**
+ * SESSION LIFETIME + "REMEMBER ME".
+ *
+ * The IdP session (the SSO cookie minted by the user-login stage) is what
+ * "stay signed in" really means - tokens are short-lived and refresh against
+ * it. Both knobs are deployment policy, injected via env, never hardcoded:
+ *
+ *   AUTHENTIK_SESSION_DURATION   base session length. "seconds=0" = a browser
+ *                                session (ends when the browser closes) - the
+ *                                conservative default.
+ *   AUTHENTIK_REMEMBER_ME_OFFSET extra lifetime granted when the user ticks
+ *                                "Stay signed in" on the login screen. A
+ *                                non-zero value is ALSO what makes Authentik
+ *                                render the checkbox. "seconds=0" disables
+ *                                the feature entirely.
+ *
+ * Values use Authentik's timedelta syntax ("days=30", "hours=12").
+ * Older Authentik versions have no remember_me_offset field; DRF silently
+ * ignores unknown fields, so we read the stage back and warn instead of
+ * pretending the checkbox exists.
+ */
+async function ensureSessionPolicy() {
+  const stages = await api(`/stages/user_login/`);
+  const login = stages.results.find((s) => s.name === "default-authentication-login");
+  if (!login) throw new Error("default-authentication-login stage not found");
+
+  const sessionDuration = process.env.AUTHENTIK_SESSION_DURATION || "seconds=0";
+  const rememberOffset = process.env.AUTHENTIK_REMEMBER_ME_OFFSET || "days=30";
+
+  await api(`/stages/user_login/${login.pk}/`, {
+    method: "PATCH",
+    body: JSON.stringify({
+      session_duration: sessionDuration,
+      remember_me_offset: rememberOffset,
+    }),
+  });
+
+  const updated = await api(`/stages/user_login/${login.pk}/`);
+  if (typeof updated.remember_me_offset === "undefined") {
+    console.warn(
+      "[bootstrap] this Authentik version has no remember_me_offset - 'Stay signed in' checkbox unavailable; session_duration still applied",
+    );
+  } else {
+    console.log(
+      `[bootstrap] session policy: duration=${sessionDuration}, remember-me offset=${updated.remember_me_offset}`,
+    );
+  }
 }
 
 /**
@@ -536,8 +625,10 @@ async function main() {
     include_claims_in_id_token: true,
     issuer_mode: "per_provider",
     access_code_validity: "minutes=1",
-    access_token_validity: "minutes=30",
-    refresh_token_validity: "days=30",
+    // Token lifetimes are deployment policy, not code - override via env.
+    // Values use Authentik's timedelta syntax ("minutes=30", "hours=8", "days=30").
+    access_token_validity: process.env.AUTHENTIK_ACCESS_TOKEN_VALIDITY || "minutes=30",
+    refresh_token_validity: process.env.AUTHENTIK_REFRESH_TOKEN_VALIDITY || "days=30",
   };
 
   const existingProviders = await api("/providers/oauth2/");
@@ -592,6 +683,7 @@ async function main() {
   // self-service flow (identification + email verification), NOT the bare
   // link-only recovery flow.
   await ensureSingleScreenLogin(selfRecoveryFlowPk);
+  await ensureSessionPolicy();
   // The brand-level recovery flow (used by createRecoveryLink / invitations)
   // stays the link-only flow - those links are already proof of identity.
   await ensureBranding(recoveryFlowPk, app?.pk);

@@ -1,13 +1,10 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, getOAuthStateSecret } from "@chatcenter/shared";
-import jwt from "jsonwebtoken";
+import { prisma, authenticate, resolveTenant, requireActiveTenant, requireOnboardingOrActiveTenant, requireRole, mintOAuthState, consumeOAuthState } from "@chatcenter/shared";
 import * as confluenceService from "../services/confluence.service";
 import * as googleDriveService from "../services/google-drive.service";
 
 const router = Router();
 
-// OAuth `state` signing only - not user auth. See getOAuthStateSecret().
-const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // ─── Confluence OAuth ───────────────────────────────────────
 
@@ -22,11 +19,9 @@ router.get("/oauth/confluence/init", authenticate, resolveTenant, requireActiveT
   const kbId = req.query.kbId as string;
   if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
 
-  const state = jwt.sign(
-    { tenantId: req.tenantId, kbId, userId: (req as any).userId },
-    OAUTH_STATE_SECRET,
-    { expiresIn: "10m" }
-  );
+  // Single-use state (shared store): the jti is burned on callback so a
+  // captured state cannot be replayed within its TTL.
+  const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "confluence", kbId, userId: (req as any).userId });
 
   const scopes = "read:confluence-content.all read:confluence-space.summary offline_access";
   const authUrl = `https://auth.atlassian.com/authorize?audience=api.atlassian.com&client_id=${clientId}&scope=${encodeURIComponent(scopes)}&redirect_uri=${encodeURIComponent(redirectUri)}&state=${state}&response_type=code&prompt=consent`;
@@ -39,8 +34,13 @@ router.get("/oauth/confluence/callback", async (req: Request, res: Response) => 
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
-    const { tenantId, kbId } = payload;
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string }>(state as string, "confluence");
+    if (!consumed.ok) {
+      console.warn(`[confluence oauth] state rejected: ${consumed.reason}`);
+      res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
+      return;
+    }
+    const { tenantId, kbId } = consumed.claims;
 
     const clientId = process.env.CONFLUENCE_CLIENT_ID!;
     const clientSecret = process.env.CONFLUENCE_CLIENT_SECRET!;
@@ -120,11 +120,10 @@ router.get("/oauth/google-drive/init", authenticate, resolveTenant, requireOnboa
   const kbId = req.query.kbId as string;
   if (!kbId) { res.status(400).json({ error: "kbId is required" }); return; }
 
-  const state = jwt.sign(
-    { tenantId: req.tenantId, kbId, userId: (req as any).userId, flow: req.query.flow === "onboarding" ? "onboarding" : undefined },
-    OAUTH_STATE_SECRET,
-    { expiresIn: "10m" }
-  );
+  const { state } = mintOAuthState({
+    tenantId: req.tenantId!, provider: "google_drive", kbId, userId: (req as any).userId,
+    flow: req.query.flow === "onboarding" ? "onboarding" : undefined,
+  });
 
   const scopes = "https://www.googleapis.com/auth/drive.readonly";
   const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(redirectUri)}&response_type=code&scope=${encodeURIComponent(scopes)}&state=${state}&access_type=offline&prompt=consent`;
@@ -137,7 +136,13 @@ router.get("/oauth/google-drive/callback", async (req: Request, res: Response) =
     const { code, state } = req.query;
     if (!code || !state) { res.status(400).json({ error: "Missing code or state" }); return; }
 
-    const payload = jwt.verify(state as string, OAUTH_STATE_SECRET) as any;
+    const consumed = await consumeOAuthState<{ tenantId: string; kbId: string; flow?: string }>(state as string, "google_drive");
+    if (!consumed.ok) {
+      console.warn(`[google_drive oauth] state rejected: ${consumed.reason}`);
+      res.status(400).json({ error: consumed.reason === "replayed" ? "state already used" : "invalid state" });
+      return;
+    }
+    const payload = consumed.claims;
     const { tenantId, kbId } = payload;
 
     const clientId = process.env.GOOGLE_CLIENT_ID!;

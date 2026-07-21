@@ -94,12 +94,12 @@ async function sendHtmlEmail(to: string, subject: string, html: string, text: st
 export async function createSetupLink(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { authentikSubject: true, email: true, name: true },
+    select: { email: true, name: true, identity: { select: { authentikSubject: true } } },
   });
   if (!user) throw new Error("User not found");
 
-  const identity = user.authentikSubject
-    ? await findIdentityBySubject(user.authentikSubject)
+  const identity = user.identity?.authentikSubject
+    ? await findIdentityBySubject(user.identity.authentikSubject)
     : await ensureIdentity(user.email, user.name);
   if (!identity) throw new Error("No Authentik identity for user");
 

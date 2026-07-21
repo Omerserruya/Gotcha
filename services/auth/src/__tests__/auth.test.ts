@@ -14,6 +14,16 @@ vi.mock("@chatcenter/shared", () => {
       findMany: vi.fn(),
       create: vi.fn(),
       update: vi.fn(),
+      updateMany: vi.fn(),
+      count: vi.fn().mockResolvedValue(0),
+      delete: vi.fn(),
+    },
+    identity: {
+      findUnique: vi.fn(),
+      findFirst: vi.fn(),
+      create: vi.fn(),
+      update: vi.fn(),
+      upsert: vi.fn(),
     },
     departmentMember: {
       findUnique: vi.fn(),
@@ -28,6 +38,8 @@ vi.mock("@chatcenter/shared", () => {
 
   return {
     prisma: mockPrisma,
+    // Pass-through: the guard escape hatch just runs its thunk in tests.
+    withCrossTenantAccess: (fn: any) => fn(),
     authenticate: (req: any, _res: any, next: any) => {
       req.user = { userId: "user-1", tenantId: "tenant-1", role: "ADMIN", email: "admin@test.com" };
       req.tenantId = "tenant-1";
@@ -38,6 +50,8 @@ vi.mock("@chatcenter/shared", () => {
       next();
     },
     requireRole: (..._roles: string[]) => (_req: any, _res: any, next: any) => next(),
+    requirePermission: (..._keys: string[]) => (_req: any, _res: any, next: any) => next(),
+    requirePermissionOrRole: (..._args: string[]) => (_req: any, _res: any, next: any) => next(),
     enforceMfaEnrollment: () => (_req: any, _res: any, next: any) => next(),
     validate: (_schema: any) => (_req: any, _res: any, next: any) => next(),
     resolveEffectiveLocale: vi.fn().mockReturnValue("en"),
@@ -51,6 +65,10 @@ vi.mock("@chatcenter/shared", () => {
     deleteIdentity: vi.fn(),
     updateIdentity: vi.fn().mockResolvedValue(undefined),
     findIdentityBySubject: vi.fn(),
+    setIdentityActive: vi.fn().mockResolvedValue(undefined),
+    getUserLastLogin: vi.fn().mockResolvedValue(null),
+    getLastLoginBySubject: vi.fn().mockResolvedValue(null),
+    terminateAllUserSessions: vi.fn().mockResolvedValue(0),
     // Shared audit primitive (fire-safe): no-op in tests.
     writeAudit: vi.fn().mockResolvedValue(undefined),
     auditUser: vi.fn().mockResolvedValue(undefined),
@@ -68,7 +86,7 @@ vi.mock("@chatcenter/shared", () => {
 
 import authRoutes from "../routes/auth";
 import agentRoutes from "../routes/agents";
-import { prisma, ensureIdentity, createRecoveryLink } from "@chatcenter/shared";
+import { prisma, ensureIdentity, createRecoveryLink, getUserLastLogin } from "@chatcenter/shared";
 
 function createTestApp() {
   const app = express();
@@ -111,17 +129,27 @@ describe("Auth Service", () => {
         name: "Admin",
         role: "ADMIN",
         tenantId: "tenant-1",
+        identityId: "idn-1",
         isActive: true,
         createdAt: new Date(),
       });
       (prisma.departmentMember.findUnique as any).mockResolvedValue(null);
-      (prisma.tenant.findUnique as any).mockResolvedValue({ status: "ACTIVE" });
+      (prisma.tenant.findUnique as any).mockResolvedValue({ status: "ACTIVE", name: "Acme" });
+      // Memberships list: this identity belongs to one tenant.
+      (prisma.user.findMany as any).mockResolvedValue([
+        {
+          id: "user-1", role: "ADMIN", lastActiveAt: null, createdAt: new Date(),
+          tenant: { id: "tenant-1", name: "Acme", slug: "acme", status: "ACTIVE", isActive: true },
+        },
+      ]);
 
       const res = await request(createTestApp()).get("/api/auth/me");
 
       expect(res.status).toBe(200);
       expect(res.body.user.email).toBe("admin@test.com");
       expect(res.body.tenantStatus).toBe("ACTIVE");
+      expect(res.body.memberships).toHaveLength(1);
+      expect(res.body.memberships[0].tenant.id).toBe("tenant-1");
       // Nothing credential- or identity-shaped may leave this endpoint.
       expect(res.body.user.password).toBeUndefined();
       expect(res.body.user.authentikSubject).toBeUndefined();
@@ -141,6 +169,9 @@ describe("Auth Service", () => {
       (ensureIdentity as any).mockResolvedValue({
         subject: "uuid-123", pk: 7, email: "new@test.com", username: "new@test.com",
       });
+      // No local Identity exists yet - a fresh one is created.
+      (prisma.identity.findUnique as any).mockResolvedValue(null);
+      (prisma.identity.create as any).mockResolvedValue({ id: "idn-2", authentikSubject: "uuid-123" });
       (prisma.user.create as any).mockResolvedValue({
         id: "user-2", email: "new@test.com", name: "New", role: "AGENT", tenantId: "tenant-1",
       });
@@ -153,9 +184,11 @@ describe("Auth Service", () => {
       expect(res.status).toBe(201);
       expect(res.body.setupLink).toBe("https://auth.example/flow/abc");
 
-      // The local row carries the subject and no password.
+      // The membership row links the identity and carries no password and no
+      // subject of its own (the subject lives on the Identity row).
       const created = (prisma.user.create as any).mock.calls[0][0].data;
-      expect(created.authentikSubject).toBe("uuid-123");
+      expect(created.identityId).toBe("idn-2");
+      expect(created.authentikSubject).toBeUndefined();
       expect(created.password).toBeUndefined();
     });
 
@@ -171,19 +204,46 @@ describe("Auth Service", () => {
       expect(ensureIdentity).not.toHaveBeenCalled();
     });
 
-    it("refuses to link an identity already bound to another account", async () => {
+    it("adds a MEMBERSHIP when the identity already exists in another tenant", async () => {
       (prisma.user.findFirst as any).mockResolvedValue(null);
       (ensureIdentity as any).mockResolvedValue({
         subject: "uuid-taken", pk: 9, email: "shared@test.com", username: "shared@test.com",
       });
-      // That subject already belongs to a different GOTCHA user.
-      (prisma.user.findUnique as any).mockResolvedValue({ id: "other-user", tenantId: "tenant-9" });
+      // The identity exists locally (belongs to tenant-9)...
+      (prisma.identity.findUnique as any).mockResolvedValue({ id: "idn-9", authentikSubject: "uuid-taken" });
+      // ...but has NO membership in tenant-1 yet.
+      (prisma.user.findUnique as any).mockResolvedValue(null);
+      (prisma.user.create as any).mockResolvedValue({
+        id: "user-3", email: "shared@test.com", name: "Shared", role: "AGENT", tenantId: "tenant-1",
+      });
+      // The person has signed in before - no password-setup link is minted.
+      (getUserLastLogin as any).mockResolvedValue("2026-07-01T00:00:00Z");
 
       const res = await request(createTestApp())
         .post("/api/agents")
         .send({ email: "shared@test.com", name: "Shared" });
 
-      expect(res.status).toBe(409);
+      expect(res.status).toBe(201);
+      expect(res.body.setupLink).toBeNull();
+      expect(res.body.existingIdentity).toBe(true);
+      const created = (prisma.user.create as any).mock.calls[0][0].data;
+      expect(created.identityId).toBe("idn-9");
+    });
+
+    it("refuses a second membership for the same identity in the SAME tenant", async () => {
+      (prisma.user.findFirst as any).mockResolvedValue(null);
+      (ensureIdentity as any).mockResolvedValue({
+        subject: "uuid-taken", pk: 9, email: "shared@test.com", username: "shared@test.com",
+      });
+      (prisma.identity.findUnique as any).mockResolvedValue({ id: "idn-9", authentikSubject: "uuid-taken" });
+      // Already a member of tenant-1.
+      (prisma.user.findUnique as any).mockResolvedValue({ id: "existing-member" });
+
+      const res = await request(createTestApp())
+        .post("/api/agents")
+        .send({ email: "shared@test.com", name: "Shared" });
+
+      expect(res.status).toBe(409); // duplicate membership is a CONFLICT, not a server error
       expect(prisma.user.create).not.toHaveBeenCalled();
     });
   });

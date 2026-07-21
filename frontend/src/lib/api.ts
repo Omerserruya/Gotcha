@@ -59,7 +59,29 @@ export function submitWaitlistEntry(data: {
 // accepts a credential.
 
 export function getMe(token: string) {
-  return apiFetch<{ user: any; tenantStatus?: string }>("/api/auth/me", { token });
+  return apiFetch<{
+    user: any;
+    tenantStatus?: string;
+    tenantName?: string | null;
+    memberships?: any[];
+  }>("/api/auth/me", { token });
+}
+
+/** Every workspace this identity belongs to (for the tenant picker). */
+export function getMemberships(token: string) {
+  return apiFetch<{ memberships: any[]; lastTenantId: string | null; activeTenantId: string | null }>(
+    "/api/auth/me/memberships",
+    { token },
+  );
+}
+
+/** Validate + stamp a workspace switch; the caller then reloads with the new X-Tenant-Id. */
+export function postSwitchTenant(token: string, tenantId: string) {
+  return apiFetch<{ userId: string; role: string; tenant: any }>("/api/auth/me/switch-tenant", {
+    token,
+    method: "POST",
+    body: JSON.stringify({ tenantId }),
+  });
 }
 
 // ─── Conversations ──────────────────────────────────────────
@@ -1441,6 +1463,19 @@ export function setIntegrationCrmSource(token: string, slug: string, useAsCrm: b
   return apiFetch<{ data: { id: string; useAsCrm: boolean } }>(`/api/integrations/${slug}/crm-source`, {
     token, method: "PUT", body: JSON.stringify({ useAsCrm }),
   });
+}
+
+/** The tenant's elected customer system of record, as the AI-side resolver
+ *  sees it, with the provider's truthful capability set. */
+export interface SourceOfTruthStatus {
+  configured: boolean;
+  vendor: string | null;
+  capabilities: string[];
+  unsupported?: string[];
+  writesEnabled?: boolean;
+}
+export function getSourceOfTruthStatus(token: string) {
+  return apiFetch<{ data: SourceOfTruthStatus }>(`/api/integrations/source-of-truth`, { token });
 }
 
 /**

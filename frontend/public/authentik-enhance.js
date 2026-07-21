@@ -129,6 +129,16 @@
   // before. Idempotent + re-applied by the poll/observer if a re-render wipes it.
   function enhanceOtp(input) {
     if (!input || input.name !== "code") return;
+    // Only enhance a code input the user can actually SEE. Two phantom cases
+    // painted six orphaned OTP boxes onto pages with no code prompt (e.g. the
+    // self-service password-reset): a display:none stage input (no client
+    // rects), and an off-screen 8x6 probe form parked at -2000,-1332 directly
+    // under <html>. Require real layout, plausible input size, and an
+    // on-viewport position. The 500ms poll re-runs this, so a genuine TOTP
+    // challenge still gets enhanced the moment it becomes visible.
+    if (input.getClientRects().length === 0) return;
+    var vr = input.getBoundingClientRect();
+    if (vr.width < 16 || vr.height < 16 || vr.right <= 0 || vr.bottom <= 0) return;
     var numeric =
       input.getAttribute("inputmode") === "numeric" ||
       /\[0-9\]/.test(input.getAttribute("pattern") || "") ||
@@ -225,6 +235,12 @@
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll("input[type=password]").forEach(enhance);
     root.querySelectorAll("input[name=code]").forEach(enhanceOtp);
+    // Drop OTP boxes whose real input's stage has been hidden (flow moved on) -
+    // without this, stage transitions can leave the six cells painted orphaned.
+    root.querySelectorAll("[data-gotcha-otp]").forEach(function (box) {
+      var real = box.parentElement && box.parentElement.querySelector("[data-gotcha-otp-real]");
+      if (!real || real.getClientRects().length === 0) box.remove();
+    });
     revealRecovery(root);
     clarifyMfa(root);
     // Recurse into open shadow roots.

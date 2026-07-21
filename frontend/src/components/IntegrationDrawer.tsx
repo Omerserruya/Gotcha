@@ -6,6 +6,7 @@ import { useI18n } from "@/context/I18nContext";
 import {
   getMarketplaceIntegrations,
   connectIntegration,
+  initIntegrationOAuth,
   testIntegration,
   getIntegrationTools,
   toggleIntegrationTool,
@@ -127,6 +128,23 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
       getMarketplaceIntegrations(token)
         .then((res) => setIntegrations(res.data || []))
         .catch(() => {});
+    }
+  }
+
+  // OAuth providers: the backend mints the authorize URL (binding tenant +
+  // provider + return context into signed state) and we navigate to it. We
+  // deliberately do NOT mark anything connected here - the callback validates
+  // with the provider and persists the status the UI later reads back.
+  async function handleOAuthConnect() {
+    if (!token || !selected) return;
+    setCredError(null);
+    setConnecting(true);
+    try {
+      const { url } = await initIntegrationOAuth(token, selected.slug);
+      window.location.href = url;
+    } catch (e: any) {
+      setCredError(e?.message || `Couldn't start the ${selected.name || selected.slug} authorization. Please try again.`);
+      setConnecting(false);
     }
   }
 
@@ -374,6 +392,7 @@ export default function IntegrationDrawer({ isOpen, onClose, onIntegrationConnec
               testResult={testResult}
               tools={tools}
               onConnect={handleConnect}
+              onOAuthConnect={handleOAuthConnect}
               onTest={handleTest}
               onToggleTool={handleToggleTool}
               onToggleAllTools={handleToggleAllTools}
@@ -483,11 +502,11 @@ function ListView({
 // ─── Detail View ───────────────────────────────────────────
 function DetailView({
   integration, credentials, setCredentials, credError, connecting, testing, testResult, tools,
-  onConnect, onTest, onToggleTool, onToggleAllTools, bulkBusy, onDone, t, aiAgentId,
+  onConnect, onOAuthConnect, onTest, onToggleTool, onToggleAllTools, bulkBusy, onDone, t, aiAgentId,
 }: {
   integration: any; credentials: Record<string, string>; setCredentials: (c: Record<string, string>) => void;
   credError: string | null; connecting: boolean; testing: boolean; testResult: { ok: boolean; msg: string } | null;
-  tools: any[]; onConnect: () => void; onTest: () => void; onToggleTool: (slug: string, enabled: boolean) => void;
+  tools: any[]; onConnect: () => void; onOAuthConnect: () => void; onTest: () => void; onToggleTool: (slug: string, enabled: boolean) => void;
   onToggleAllTools: (target: boolean) => void; bulkBusy: boolean;
   onDone: () => void; t: (key: string) => string; aiAgentId?: string;
 }) {
@@ -539,9 +558,14 @@ function DetailView({
           {integration.authType === "OAUTH2" ? (
             <div className="p-4 bg-blue-50 rounded-xl">
               <p className="text-sm text-blue-700">This integration uses OAuth 2.0. Click below to authorize.</p>
-              <button className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition">
-                Connect with OAuth
+              <button
+                onClick={onOAuthConnect}
+                disabled={connecting}
+                aria-busy={connecting}
+                className="mt-3 px-4 py-2 bg-blue-600 text-white rounded-xl text-sm font-medium hover:bg-blue-700 transition disabled:opacity-50">
+                {connecting ? "Redirecting…" : "Connect with OAuth"}
               </button>
+              {credError && <p className="mt-2 text-xs text-red-600" role="alert">{credError}</p>}
             </div>
           ) : (
             <>

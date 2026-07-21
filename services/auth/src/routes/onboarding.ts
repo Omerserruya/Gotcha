@@ -93,7 +93,29 @@ const RECOMMENDATION_ROLE: Record<string, string> = {
  * (the onboarding case), so it never touches a tenant that already had agents.
  */
 async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec: any): Promise<void> {
-  await callAIGenerateConfigs(tenantId, authHeader);
+  // ADOPT-OR-GENERATE.
+  //
+  // Onboarding now renders the SAME creation wizard as AI Studio (see
+  // components/aiEmployee/AgentBuilder). That wizard creates the employee on
+  // its `/start` call as a DRAFT carrying `builderStep`. If the owner went
+  // through it, the employee already exists and generating another here would
+  // leave the tenant with a duplicate - one configured by the owner and one
+  // machine-generated. So: adopt the draft when there is one, and only fall
+  // back to generation for owners who skipped the wizard entirely.
+  const existingDraft = await prisma.aIAgent.findFirst({
+    where: { tenantId, status: "DRAFT", builderStep: { not: null } },
+    orderBy: { updatedAt: "desc" },
+    select: { id: true },
+  });
+  if (existingDraft) {
+    // Finish what the wizard started: clear the resume pointer and activate.
+    await prisma.aIAgent.update({
+      where: { id: existingDraft.id },
+      data: { builderStep: null, status: "ACTIVE" },
+    });
+  } else {
+    await callAIGenerateConfigs(tenantId, authHeader);
+  }
 
   const agents = await prisma.aIAgent.findMany({ where: { tenantId }, select: { id: true, role: true, persona: true, customGuardrails: true }, orderBy: { createdAt: "desc" } });
   if (agents.length === 0) return;
@@ -110,6 +132,12 @@ async function hireRecommendedEmployee(tenantId: string, authHeader: string, rec
   // and left the generator's "<Dept> AI Employee" default - the name-bug).
   const target = (role ? agents.find((a) => a.role === role) : null) || agents[0]!;
   const agentId = target.id;
+
+  // An employee the owner configured in the wizard is authoritative: the
+  // recommendation's name/role/persona are DEFAULTS for the generated path,
+  // not corrections to a deliberate choice.
+  const adoptedFromWizard = !!existingDraft && existingDraft.id === agentId;
+  if (adoptedFromWizard) return;
 
   const data: Record<string, unknown> = {};
   if (displayName) data.name = displayName;
@@ -1972,7 +2000,9 @@ router.post("/discover", requireRole("ADMIN"), validate(discoverSchema), async (
     // results overwrite atomically on success below.
     await prisma.businessDiscovery.upsert({
       where: { tenantId: req.tenantId! },
-      update: { status: "SCANNING", websiteDomain: origin, scanPhase: "homepage" },
+      // A fresh scan restarts the journey - clear the resume checkpoint so the
+      // monotonic guard on PATCH /discovery starts from zero for the new run.
+      update: { status: "SCANNING", websiteDomain: origin, scanPhase: "homepage", progress: null },
       create: { tenantId: req.tenantId!, status: "SCANNING", websiteDomain: origin, scanPhase: "homepage" },
     });
 
@@ -2314,7 +2344,16 @@ router.patch("/discovery", requireRole("ADMIN"), validate(discoveryPatchSchema),
     if (patch.communication?.channels) {
       data.communication = { ...((existing.communication as Record<string, unknown>) || {}), channels: patch.communication.channels };
     }
-    if (patch.progress) data.progress = patch.progress;
+    // MONOTONIC checkpoint guard (authoritative): the resume checkpoint may
+    // only ADVANCE along MOVEMENT_KEYS. The wizard routes users back through
+    // earlier movements to edit (e.g. Movement-5 "Connect" re-enters `connect`),
+    // and a regressed checkpoint would reopen a completed step as the current
+    // one on the next reload/OAuth return. A rescan resets it (see /discover).
+    if (patch.progress) {
+      const cur = MOVEMENT_KEYS.indexOf(((existing.progress as string) || "") as typeof MOVEMENT_KEYS[number]);
+      const next = MOVEMENT_KEYS.indexOf(patch.progress as typeof MOVEMENT_KEYS[number]);
+      if (next > cur) data.progress = patch.progress;
+    }
     if (patch.employeeName?.trim()) {
       data.recommendation = { ...((existing.recommendation as Record<string, unknown>) || {}), employeeName: patch.employeeName.trim() };
     }
@@ -2761,7 +2800,10 @@ router.post("/invite-team", requireRole("ADMIN"), validate(inviteTeamSchema), as
           tenantName: tenant.name,
           tenantSlug: tenant.slug,
           inviterName: inviter?.name || inviter?.email || "Your team",
-          setupUrl: invited.setupLink,
+          // An identity that already signed in elsewhere has no password to
+          // set - the invite just points them at the app to pick the tenant.
+          setupUrl: invited.setupLink
+            ?? (process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "") + "/",
         });
 
         results.push({ email, status: "sent" });
@@ -2870,7 +2912,9 @@ publicRouter.post("/invite/accept", validate(acceptInviteSchema), async (req: Re
     }
 
     let user: { id: string; tenantId: string };
-    let setupLink: string;
+    // Null when the invitee's identity already has a password (existing user
+    // of another tenant) - the client just sends them to sign in.
+    let setupLink: string | null;
 
     if (invite.userId) {
       // Targeted invite - the row already exists from invite-team, and its

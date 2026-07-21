@@ -45,7 +45,8 @@ export function startNotificationWsServer(httpServer: HttpServer): void {
       const url = new URL(req.url, `http://${req.headers.host || "localhost"}`);
       const token = url.searchParams.get("token");
       if (!token) throw new Error("missing token");
-      const payload = await resolvePrincipal(token);
+      // Active-tenant hint (validated against memberships, never trusted raw).
+      const payload = await resolvePrincipal(token, url.searchParams.get("tenant"));
       userId = payload.userId;
       tenantId = payload.tenantId;
     } catch (err: any) {

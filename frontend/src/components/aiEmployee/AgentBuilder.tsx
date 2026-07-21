@@ -85,6 +85,8 @@ export default function AgentBuilder({
   onCancel,
   resumeAgentId,
   resumeStep,
+  onDone,
+  embedded = false,
 }: {
   token: string;
   departmentId?: string | null;
@@ -92,6 +94,19 @@ export default function AgentBuilder({
   /** When set, resume an existing incomplete DRAFT instead of starting fresh. */
   resumeAgentId?: string;
   resumeStep?: "chat" | "kb" | "refine" | "tools";
+  /**
+   * Called instead of navigating to the editor when the wizard finishes.
+   * Onboarding passes this so it can advance its own movement - the same
+   * wizard, a different surrounding shell.
+   */
+  onDone?: () => void;
+  /**
+   * Hosted inside another flow (onboarding). Suppresses the wizard's own
+   * full-screen chrome and its post-finish redirect, since the host owns
+   * navigation. The creation LOGIC is identical either way - that is the
+   * point of sharing this component rather than forking it.
+   */
+  embedded?: boolean;
 }) {
   const router = useRouter();
   const { locale } = useI18n();
@@ -342,10 +357,35 @@ export default function AgentBuilder({
   // Hand the finished wizard off to the editor. Finalize first (clear the
   // resume pointer + promote DRAFT → ACTIVE) so the editor page renders the
   // real editor instead of re-entering the builder at the last saved step.
+  //
+  // NAVIGATION IS GATED ON THE SERVER'S ANSWER. This used to swallow the error
+  // (`catch {}`) and push regardless: /complete answers 422 `draft_not_ready`
+  // when the gate fails, so the employee stayed DRAFT with `builderStep` set,
+  // the editor bounced straight back into the wizard, and the click read as
+  // "nothing happened". A failed finalize now keeps the user on the report
+  // with an actionable message naming what is missing.
+  const [finishing, setFinishing] = useState(false);
   async function goReview() {
-    if (!agentId) return;
-    try { await builderComplete(token, agentId); } catch { /* editor save is a backstop */ }
-    router.push(`/ai-studio/agents/${agentId}`);
+    if (!agentId || finishing) return; // in-flight guard: double-click cannot double-complete
+    setFinishing(true);
+    setError(null);
+    try {
+      await builderComplete(token, agentId);
+      // Embedded (onboarding): the host advances its own flow and activation
+      // happens at /onboarding/complete, which ADOPTS this draft.
+      if (onDone) { onDone(); return; }
+      router.push(`/ai-studio/agents/${agentId}`);
+    } catch (e: any) {
+      // `missing` is the server's list of unmet requirements (422 draft_not_ready).
+      const missing: string[] = Array.isArray(e?.body?.missing) ? e.body.missing : [];
+      setError(
+        missing.length
+          ? L(`Not ready to go live yet - still missing: ${missing.join(", ")}`,
+              `עדיין לא מוכן להפעלה - חסר: ${missing.join(", ")}`)
+          : (e?.message || L("Couldn't finish setup. Please try again.", "לא הצלחנו לסיים את ההגדרה. נסו שוב.")),
+      );
+      setFinishing(false); // stay on the report so the gaps can be resolved
+    }
   }
 
   // After the KB modal attaches/creates a KB: re-read the draft (so the
@@ -632,7 +672,7 @@ export default function AgentBuilder({
       </div>
 
       {testing && !showReport && (
-        <div className="fixed inset-0 z-40 flex items-center justify-center bg-gray-50/95">
+        <div className={embedded ? "flex items-center justify-center py-20 bg-gray-50/95 rounded-2xl" : "fixed inset-0 z-40 flex items-center justify-center bg-gray-50/95"}>
           <div className="text-center">
             <div className="animate-spin w-12 h-12 border-4 border-violet-500 border-t-transparent rounded-full mx-auto mb-4" />
             <h2 className="text-lg font-semibold text-gray-900">{L("Generating readiness report…", "מייצר דוח מוכנות…")}</h2>
@@ -642,7 +682,7 @@ export default function AgentBuilder({
       )}
 
       {showReport && report && agentId && (
-        <div className="fixed inset-0 z-40 bg-gray-50 overflow-y-auto">
+        <div className={embedded ? "bg-gray-50 rounded-2xl" : "fixed inset-0 z-40 bg-gray-50 overflow-y-auto"}>
           <div className="max-w-3xl mx-auto px-4 py-8">
             <div className="flex items-center justify-end mb-2">
               <button onClick={() => setShowReport(false)} className="text-sm text-gray-500 hover:text-gray-800">
@@ -660,10 +700,23 @@ export default function AgentBuilder({
               onRerun={runReadiness}
               onAddKnowledge={() => setKbModalOpen(true)}
             />
-            <div className="flex justify-end -mt-10">
-              <button onClick={goReview}
-                className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl shadow-sm">
-                {L("Save & go live", "שמירה והפעלה")} →
+            {/* A finalize that the SERVER refused must be visible here, next to
+                the button that triggered it - not swallowed. */}
+            {error && (
+              <div role="alert" className="mt-6 rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+                {error}
+              </div>
+            )}
+            {/* No negative margin: `-mt-10` pulled this row up over the report
+                body, putting the report's own content on top of the button's
+                click target. */}
+            <div className="mt-6 flex justify-end">
+              <button
+                onClick={goReview}
+                disabled={finishing}
+                aria-busy={finishing}
+                className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl shadow-sm transition disabled:opacity-50 disabled:cursor-not-allowed">
+                {finishing ? L("Saving…", "שומר…") : `${L("Save & go live", "שמירה והפעלה")} →`}
               </button>
             </div>
           </div>

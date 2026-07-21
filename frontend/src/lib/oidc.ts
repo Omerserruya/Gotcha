@@ -231,12 +231,17 @@ export function flowDoneUrl(): string {
  * user's Authentik session cookie is same-site, so the flow runs authenticated
  * inside GOTCHA - MFA / passkey / recovery-code setup without leaving the app.
  *
- * We always pass `?next=<flow-done page>` so a completed flow redirects to our
- * tiny signalling page instead of Authentik's dashboard.
+ * `nextPath` MUST be a path RELATIVE to the Authentik host (e.g. another
+ * /if/flow/... to chain into). Authentik refuses absolute/cross-host `next`
+ * values and ends the flow on a "Request has been denied. Invalid next URL"
+ * card - which is exactly what users saw when we passed our app's flow-done
+ * URL here. With no next, a completed flow bounces to Authentik's root (and
+ * from there to the brand default app); callers poll and mask, so that page
+ * is never left sitting in the iframe.
  */
-export function authentikFlowUrl(slug: string): string {
-  const next = encodeURIComponent(flowDoneUrl());
-  return `${authentikOrigin()}/if/flow/${slug}/?next=${next}`;
+export function authentikFlowUrl(slug: string, nextPath?: string): string {
+  const base = `${authentikOrigin()}/if/flow/${slug}/`;
+  return nextPath ? `${base}?next=${encodeURIComponent(nextPath)}` : base;
 }
 
 /** Message type posted by /auth/flow-done to the window that opened the flow. */

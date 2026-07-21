@@ -11,6 +11,7 @@
 
 import { prisma } from "@chatcenter/shared";
 import { getDefaultModel } from "./ai.service";
+import { aiAgentCreationDefaults } from "./ai-agent-defaults";
 
 interface PersonaTraits {
   warmth?: string;
@@ -406,10 +407,13 @@ export async function generateAgentConfig(
     persona: mergedPersona ? JSON.parse(JSON.stringify(mergedPersona)) : undefined,
     ...(enrichment?.guardrails.length ? { customGuardrails: enrichment.guardrails } : {}),
     status: "ACTIVE" as const,
-    model: getDefaultModel(),
-    provider: "openai",
-    temperature: 0.7,
-    maxTokens: 1024,
+    // Shared creation defaults - the SAME block POST /api/ai-agents applies.
+    // Previously this path set only model/provider/temperature/maxTokens, so an
+    // employee hired during onboarding differed from an identical one created
+    // in AI Studio on avatarColor, tone, languages, escalationMessage,
+    // confidenceThreshold and both autonomy caps (i.e. on when it escalates and
+    // how long it may run unattended).
+    ...aiAgentCreationDefaults(),
   };
 
   let agent;

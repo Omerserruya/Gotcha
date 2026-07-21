@@ -10,12 +10,12 @@
 //   • jump to connect a knowledge integration (Drive / Confluence)
 // Nothing here requires leaving the flow; after resolving, re-run the test.
 
-import { useRef, useState } from "react";
+import { useState } from "react";
 import clsx from "clsx";
 import { useI18n } from "@/context/I18nContext";
 import type { ReadinessReport, ReadinessQuestion, ReadinessRecommendation } from "@/lib/gotcha-api";
 import { uploadKnowledgeDocument, processKnowledgeDocument } from "@/lib/api";
-import { useScrollLock } from "@/lib/useScrollLock";
+import { Modal } from "@/components/ui/Modal";
 
 export function readinessScoreColor(score: number): string {
   return score >= 80 ? "text-emerald-600" : score >= 50 ? "text-amber-600" : "text-red-600";
@@ -266,41 +266,33 @@ export function ReadinessReportModal({ open, onClose, report, token, kbId, busy,
 }) {
   const { locale } = useI18n();
   const he = locale === "he";
-  const overlayRef = useRef<HTMLDivElement>(null);
 
-  // Freeze the page behind the modal. The report is tall enough to scroll, and
-  // without this the wheel drives BOTH layers: the backdrop scrolls away under
-  // the dialog and is left at a random offset once it closes. The lock has to
-  // target the app's real scroll container (a div), not <body> - see the hook.
-  // `overscroll-contain` below stops chaining at the top/bottom of the report.
-  useScrollLock(overlayRef, open);
-
-  // Hooks must run on every render, so this guard sits below them.
-  if (!open) return null;
+  // Scroll lock, focus trap, focus restore, Escape/backdrop and the portal all
+  // come from the shared Modal - this component previously hand-rolled the
+  // overlay, which is how the page behind it ended up scrolling with the
+  // report. Do NOT re-add a local scroll lock here: nesting two locks is what
+  // the shared ref-counted implementation exists to prevent.
   return (
-    <div ref={overlayRef} className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto overscroll-contain">
-      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative w-full max-w-3xl mx-4 my-8 bg-gray-50 rounded-2xl shadow-2xl p-6">
-        <div className="flex items-center justify-between mb-2" dir={he ? "rtl" : "ltr"}>
-          {agentName && <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">{agentName}</span>}
-          <button onClick={onClose} className="ms-auto w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition" aria-label="Close">
-            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-            </svg>
+    <Modal
+      open={open}
+      onClose={onClose}
+      maxWidth="max-w-3xl"
+      dir={he ? "rtl" : "ltr"}
+      title={he ? "דוח מוכנות" : "Readiness report"}
+      subtitle={agentName}
+      data-testid="readiness-report-modal"
+    >
+      {report ? (
+        <ReadinessReportView report={report} token={token} kbId={kbId} busy={busy} onRerun={onRerun} />
+      ) : (
+        <div className="py-16 text-center">
+          <p className="text-sm text-gray-500 mb-4">{he ? "עוד לא נוצר דוח מוכנות לעובד/ת הזה." : "No readiness report yet for this employee."}</p>
+          <button onClick={onRerun} disabled={busy}
+            className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl shadow-sm disabled:opacity-50">
+            {busy ? (he ? "מריץ…" : "Running…") : (he ? "הריצו בדיקת מוכנות" : "Run readiness test")}
           </button>
         </div>
-        {report ? (
-          <ReadinessReportView report={report} token={token} kbId={kbId} busy={busy} onRerun={onRerun} />
-        ) : (
-          <div className="py-16 text-center" dir={he ? "rtl" : "ltr"}>
-            <p className="text-sm text-gray-500 mb-4">{he ? "עוד לא נוצר דוח מוכנות לעובד/ת הזה." : "No readiness report yet for this employee."}</p>
-            <button onClick={onRerun} disabled={busy}
-              className="px-5 py-2.5 bg-violet-600 hover:bg-violet-700 text-white text-sm font-medium rounded-xl shadow-sm disabled:opacity-50">
-              {busy ? (he ? "מריץ…" : "Running…") : (he ? "הריצו בדיקת מוכנות" : "Run readiness test")}
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
+      )}
+    </Modal>
   );
 }

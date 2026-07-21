@@ -114,16 +114,25 @@ async function resolveFromDb(tenantId: string): Promise<CrmVendor | null> {
     });
     if (!t) return null;
 
-    // 1.5. Shopify-as-CRM opt-in. Shopify is an ECOMMERCE integration, but a
-    //      tenant may elect it as their CRM source of truth by setting
-    //      `config.useAsCrm = true` on the connected Shopify integration
-    //      (Settings → toggle). When set, it WINS over any CRM-category
-    //      integration - the tenant explicitly chose Shopify as the truth.
-    //      When NOT set, behavior is unchanged for everyone else.
+    // 1.5. Shopify-as-CRM. Shopify is an ECOMMERCE integration, but for a
+    //      store it IS the customer source of truth. Semantics:
+    //        - `config.useAsCrm === true`  → Shopify WINS over any dedicated
+    //          CRM integration (the tenant explicitly chose it).
+    //        - `config.useAsCrm === false` → never used as CRM (explicit opt-out).
+    //        - flag ABSENT → Shopify is the DEFAULT CRM whenever no dedicated
+    //          CRM-category integration is connected (step 3 below). This is
+    //          deliberate: the opt-in-only model meant losing the flag (or
+    //          never setting it) silently killed identity-link + timeline
+    //          writeback while Shopify sat there connected as the obvious
+    //          source of truth.
+    //      ERROR status included for the same recoverable-expired-token
+    //      reason as step 2.
     const shop = await (prisma as any).tenantIntegration.findFirst({
-      where: { tenantId, status: "CONNECTED", integration: { slug: "shopify" } },
+      where: { tenantId, status: { in: ["CONNECTED", "ERROR"] }, integration: { slug: "shopify" } },
+      orderBy: { status: "asc" },
       select: { config: true },
     });
+    const shopifyOptOut = (shop?.config as any)?.useAsCrm === false;
     if (shop && (shop.config as any)?.useAsCrm === true) {
       return "shopify";
     }
@@ -145,9 +154,17 @@ async function resolveFromDb(tenantId: string): Promise<CrmVendor | null> {
       orderBy: [{ status: "asc" }, { createdAt: "asc" }],
       include: { integration: true },
     });
-    if (!ti) return null;
-    const slug = String(ti.integration?.slug ?? "").toLowerCase();
-    return SLUG_TO_VENDOR[slug] ?? null;
+    if (ti) {
+      const slug = String(ti.integration?.slug ?? "").toLowerCase();
+      const vendor = SLUG_TO_VENDOR[slug] ?? null;
+      if (vendor) return vendor;
+    }
+
+    // 3. No dedicated CRM connected: a connected Shopify is the CRM source of
+    //    truth by default (unless explicitly opted out with useAsCrm=false).
+    if (shop && !shopifyOptOut) return "shopify";
+
+    return null;
   } catch (err: any) {
     console.warn("[crm-adapter-resolver] resolveFromDb failed:", err?.message);
     return null;

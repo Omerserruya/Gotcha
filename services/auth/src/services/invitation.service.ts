@@ -1,12 +1,14 @@
 import {
   prisma,
+  withCrossTenantAccess,
   ensureIdentity,
   createRecoveryLink,
-  deactivateIdentity,
   setIdentityActive,
   deleteIdentity,
   updateIdentity,
   findIdentityBySubject,
+  getUserLastLogin,
+  terminateAllUserSessions,
 } from "@chatcenter/shared";
 import { sendTeamInviteEmail } from "./notification.service";
 
@@ -19,15 +21,57 @@ import { sendTeamInviteEmail } from "./notification.service";
  *
  * The split matters:
  *   - Authentik gets the IDENTITY (who this person is, how they prove it).
- *   - GOTCHA gets the ACCOUNT (which tenant, which role, which department).
- * The two are joined by `authentikSubject`, and no credential ever touches
- * GOTCHA - the invitee sets their password inside Authentik's recovery flow.
+ *   - GOTCHA gets the MEMBERSHIP (which tenant, which role, which department).
+ * The two are joined through the local `Identity` row (keyed by the OIDC
+ * subject), and no credential ever touches GOTCHA - the invitee sets their
+ * password inside Authentik's recovery flow.
+ *
+ * One person, many tenants: inviting an email that already has an identity
+ * (because another tenant invited them first) does NOT fail - it creates a new
+ * MEMBERSHIP for the same identity. The person signs in once and picks the
+ * workspace.
  */
 
 export interface InviteResult {
   user: { id: string; email: string; name: string; role: string; tenantId: string };
-  /** One-time Authentik link where the invitee sets their password. */
-  setupLink: string;
+  /**
+   * One-time Authentik link where the invitee sets their password. Null when
+   * the identity has already completed setup (an existing user of another
+   * tenant) - there is no credential left to set, they just sign in.
+   */
+  setupLink: string | null;
+  /** True when this invite attached an EXISTING identity to a new tenant. */
+  existingIdentity: boolean;
+}
+
+/**
+ * Resolve-or-create the local Identity row for an Authentik identity.
+ * Keyed by subject first (the immutable anchor), then by email (an invited-
+ * but-never-provisioned row), creating fresh when neither exists.
+ */
+async function ensureLocalIdentity(authentik: { subject: string; email: string }, name: string) {
+  const email = authentik.email.toLowerCase();
+  const bySubject = await prisma.identity.findUnique({ where: { authentikSubject: authentik.subject } });
+  if (bySubject) return bySubject;
+  const byEmail = await prisma.identity.findUnique({ where: { email } });
+  if (byEmail) {
+    // Row existed without a subject (pre-provisioning) - bind it now.
+    if (!byEmail.authentikSubject) {
+      return prisma.identity.update({
+        where: { id: byEmail.id },
+        data: { authentikSubject: authentik.subject },
+      });
+    }
+    // Same email, different subject: the email was re-provisioned in Authentik.
+    // Trust the live subject - it is what tokens will carry.
+    return prisma.identity.update({
+      where: { id: byEmail.id },
+      data: { authentikSubject: authentik.subject },
+    });
+  }
+  return prisma.identity.create({
+    data: { authentikSubject: authentik.subject, email, name },
+  });
 }
 
 export async function inviteUser(
@@ -42,80 +86,121 @@ export async function inviteUser(
   // Create the identity FIRST. If this fails we must not leave a GOTCHA user
   // row with no way to authenticate - better to surface the error and have the
   // owner retry than to create an account nobody can ever log into.
-  const identity = await ensureIdentity(email, name);
+  const authentik = await ensureIdentity(email, name);
+  const identity = await ensureLocalIdentity(authentik, name);
 
-  // An identity can legitimately be shared across tenants (the same person
-  // working for two customers), but a subject may map to only one user row per
-  // our unique constraint. Guard explicitly so the failure is legible rather
-  // than a raw Prisma unique-violation.
-  const claimed = await prisma.user.findUnique({
-    where: { authentikSubject: identity.subject },
-    select: { id: true, tenantId: true },
+  // One membership per identity per tenant. (The email check above already
+  // covers the common case; this covers an email-changed identity.)
+  const already = await prisma.user.findUnique({
+    where: { tenantId_identityId: { tenantId, identityId: identity.id } },
+    select: { id: true },
   });
-  if (claimed) {
-    throw new Error("This identity is already linked to another GOTCHA account");
-  }
+  if (already) throw new Error("This person is already a member of this tenant");
 
   const user = await prisma.user.create({
     data: {
       tenantId,
+      identityId: identity.id,
       email,
       name,
       role: role as any,
-      authentikSubject: identity.subject,
     },
     select: { id: true, email: true, name: true, role: true, tenantId: true },
   });
 
-  const setupLink = await createRecoveryLink(identity.pk);
+  // An identity that has signed in before needs NO setup link - their password
+  // already exists. Minting one anyway would email an existing user a "set
+  // your password" link, which reads like a phish and can lock them out.
+  const hasLoggedIn = await getUserLastLogin(authentik.pk).then((v) => v != null).catch(() => false);
+  const setupLink = hasLoggedIn ? null : await createRecoveryLink(authentik.pk);
 
-  // Email the invitee their setup link. Fire-and-forget: the invite must not
-  // fail on an SMTP blip - the admin still gets the link back in the UI and
-  // can share it by hand.
+  // Email the invitee. Fire-and-forget: the invite must not fail on an SMTP
+  // blip - the admin still gets the link back in the UI and can share it by
+  // hand.
   void (async () => {
     const tenant = await prisma.tenant.findUnique({ where: { id: tenantId }, select: { name: true } });
-    await sendTeamInviteEmail(email, name, tenant?.name || "your team", setupLink);
+    const target = tenant?.name || "your team";
+    const link = setupLink ?? `${(process.env.FRONTEND_URL || "http://localhost:3000").replace(/\/$/, "")}/`;
+    await sendTeamInviteEmail(email, name, target, link);
   })().catch((err) => console.warn("[invitation] invite email failed:", err?.message ?? err));
 
-  return { user, setupLink };
+  return { user, setupLink, existingIdentity: hasLoggedIn };
 }
 
 /**
- * Remove a user's ability to authenticate.
- *
- * Deactivating locally alone is not enough: without disabling the identity the
- * person keeps a valid Authentik session and a working token until it expires.
- * Local deactivation stops authorization; Authentik deactivation stops
- * authentication. Both are needed.
+ * The identity behind a membership, or null when it was never provisioned.
  */
-export async function revokeUserAccess(userId: string): Promise<void> {
+async function identityOfUser(userId: string) {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { authentikSubject: true },
+    select: { identityId: true, identity: { select: { id: true, authentikSubject: true } } },
   });
+  return user?.identity ?? null;
+}
+
+/** Does this identity still have an ACTIVE membership besides `exceptUserId`?
+ *  Cross-tenant by definition (the person's own rows, keyed by identityId). */
+async function hasOtherActiveMembership(identityId: string, exceptUserId?: string): Promise<boolean> {
+  const n = await withCrossTenantAccess(() => prisma.user.count({
+    where: { identityId, isActive: true, ...(exceptUserId ? { id: { not: exceptUserId } } : {}) },
+  }));
+  return n > 0;
+}
+
+/**
+ * Remove a user's ability to act - IMMEDIATELY.
+ *
+ * Disables the MEMBERSHIP locally (authorization stops on the next request),
+ * and when the person has no other active tenant left, also disables the
+ * Authentik identity AND terminates every live IdP session - so an open
+ * browser tab dies now, not when its token happens to expire.
+ *
+ * An identity that still works in ANOTHER tenant keeps authenticating: the
+ * disabled tenant is unreachable for them regardless, because principal
+ * resolution refuses inactive memberships.
+ */
+export async function revokeUserAccess(userId: string): Promise<void> {
+  const identity = await identityOfUser(userId);
 
   await prisma.user.update({ where: { id: userId }, data: { isActive: false } });
 
-  if (user?.authentikSubject) {
-    const identity = await findIdentityBySubject(user.authentikSubject);
-    if (identity) await deactivateIdentity(identity.pk);
+  if (identity?.authentikSubject) {
+    const stillActive = await hasOtherActiveMembership(identity.id, userId);
+    if (!stillActive) {
+      const authentik = await findIdentityBySubject(identity.authentikSubject);
+      if (authentik) {
+        await setIdentityActive(authentik.pk, false);
+        // Deactivation alone leaves live sessions cookie-valid until expiry.
+        await terminateAllUserSessions(authentik.pk).catch(() => 0);
+      }
+    }
   }
 }
 
 /**
- * Enable/disable a user in BOTH systems from a single call.
+ * Enable/disable a MEMBERSHIP in both systems from a single call.
  *
- * Fixes the lifecycle inconsistency where a GOTCHA-only `isActive=false` left
- * the Authentik identity active - so a disabled user kept a valid IdP session
- * and token until expiry. Local flag stops authorization; the IdP flag stops
- * authentication. The GOTCHA row is the caller's responsibility to write; this
- * mirrors the change into Authentik (best-effort, never throws).
+ * The GOTCHA row is the caller's responsibility to write; this mirrors the
+ * consequence into Authentik (best-effort, never throws):
+ *   - disable: if this was the identity's LAST active membership, disable the
+ *     IdP identity and kill its sessions (immediate lockout).
+ *   - enable: re-enable the IdP identity (idempotent when already active).
  */
-export async function syncIdentityActive(authentikSubject: string | null, active: boolean): Promise<void> {
-  if (!authentikSubject) return;
+export async function syncMembershipAccess(userId: string, active: boolean): Promise<void> {
   try {
-    const identity = await findIdentityBySubject(authentikSubject);
-    if (identity) await setIdentityActive(identity.pk, active);
+    const identity = await identityOfUser(userId);
+    if (!identity?.authentikSubject) return;
+    const authentik = await findIdentityBySubject(identity.authentikSubject);
+    if (!authentik) return;
+
+    if (active) {
+      await setIdentityActive(authentik.pk, true);
+      return;
+    }
+    if (!(await hasOtherActiveMembership(identity.id, userId))) {
+      await setIdentityActive(authentik.pk, false);
+      await terminateAllUserSessions(authentik.pk).catch(() => 0);
+    }
   } catch (err: any) {
     console.warn("[invitation] Authentik active-state sync failed:", err?.message ?? err);
   }
@@ -123,15 +208,20 @@ export async function syncIdentityActive(authentikSubject: string | null, active
 
 /**
  * Keep the Authentik display name in sync after a GOTCHA-side rename.
- * Best-effort: resolves the identity by the stored subject and PATCHes its
- * `name`. Never throws - a rename must not fail because the IdP is briefly
- * unreachable; the sync can be retried on the next edit.
+ * Updates the Identity master + the IdP; per-tenant membership mirrors are the
+ * caller's write. Never throws - a rename must not fail because the IdP is
+ * briefly unreachable; the sync can be retried on the next edit.
  */
-export async function syncIdentityName(authentikSubject: string | null, name: string): Promise<void> {
-  if (!authentikSubject || !name?.trim()) return;
+export async function syncIdentityNameByUser(userId: string, name: string): Promise<void> {
+  if (!name?.trim()) return;
   try {
-    const identity = await findIdentityBySubject(authentikSubject);
-    if (identity) await updateIdentity(identity.pk, { name });
+    const identity = await identityOfUser(userId);
+    if (!identity) return;
+    await prisma.identity.update({ where: { id: identity.id }, data: { name: name.trim() } });
+    if (identity.authentikSubject) {
+      const authentik = await findIdentityBySubject(identity.authentikSubject);
+      if (authentik) await updateIdentity(authentik.pk, { name });
+    }
   } catch (err: any) {
     console.warn("[invitation] Authentik name sync failed:", err?.message ?? err);
   }
@@ -140,12 +230,11 @@ export async function syncIdentityName(authentikSubject: string | null, name: st
 /**
  * GDPR erasure of the IdP-side identity (Art. 17).
  *
- * revokeUserAccess only DEACTIVATES the Authentik identity (login blocked, data
- * retained). Erasure must remove the personal data held in the IdP too, so a
- * data-subject erasure is complete across both GOTCHA and Authentik. Safe when
- * an identity is shared across tenants is the caller's concern - this deletes
- * the identity unconditionally, so callers must confirm no other tenant's user
- * row references the same subject before calling.
+ * revokeUserAccess only DEACTIVATES the Authentik identity (login blocked,
+ * data retained). Erasure must remove the personal data held in the IdP too,
+ * so a data-subject erasure is complete across both GOTCHA and Authentik.
+ * Callers must confirm no other tenant's membership references the same
+ * identity before calling - this deletes the IdP identity unconditionally.
  */
 export async function eraseUserIdentity(authentikSubject: string | null): Promise<boolean> {
   if (!authentikSubject) return false;
@@ -163,12 +252,16 @@ export async function eraseUserIdentity(authentikSubject: string | null): Promis
 export async function resendSetupLink(userId: string): Promise<string> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { authentikSubject: true, email: true, name: true },
+    select: {
+      email: true,
+      name: true,
+      identity: { select: { authentikSubject: true } },
+    },
   });
   if (!user) throw new Error("User not found");
 
-  const identity = user.authentikSubject
-    ? await findIdentityBySubject(user.authentikSubject)
+  const identity = user.identity?.authentikSubject
+    ? await findIdentityBySubject(user.identity.authentikSubject)
     : await ensureIdentity(user.email, user.name);
   if (!identity) throw new Error("No Authentik identity for this user");
 

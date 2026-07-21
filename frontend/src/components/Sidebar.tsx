@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import Image from "next/image";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { usePathname } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
@@ -184,6 +184,9 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         </div>
       )}
 
+      {/* Workspace switcher - only for identities with several tenants */}
+      <WorkspaceSwitcher collapsed={collapsed} />
+
       {/* User & Logout */}
       <div className="p-3 bg-gray-50/30">
         <div className={clsx("flex items-center", collapsed ? "justify-center" : "gap-3")}>
@@ -218,6 +221,101 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
         </div>
       </div>
     </aside>
+  );
+}
+
+// ─── Workspace switcher ─────────────────────────────────────
+// Fast tenant switching for identities that belong to several workspaces.
+// The switch itself is a validated server call + full reload (AuthContext.
+// switchTenant), which rebuilds permissions, entitlements, departments,
+// branding, and AI config against the new tenant.
+
+function WorkspaceSwitcher({ collapsed }: { collapsed: boolean }) {
+  const { user, memberships, tenantName, switchTenant } = useAuth();
+  const { t } = useI18n();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<string | null>(null);
+  const ref = useRef<HTMLDivElement | null>(null);
+
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onDown);
+    return () => document.removeEventListener("mousedown", onDown);
+  }, [open]);
+
+  if (memberships.length < 2) return null;
+  const activeName = tenantName || memberships.find((m) => m.tenant.id === user?.tenantId)?.tenant.name || "";
+
+  const pick = async (tenantId: string) => {
+    if (busy || tenantId === user?.tenantId) { setOpen(false); return; }
+    setBusy(tenantId);
+    try { await switchTenant(tenantId); } catch { setBusy(null); }
+  };
+
+  return (
+    <div ref={ref} className="relative px-2 pb-1">
+      <button
+        onClick={() => setOpen((v) => !v)}
+        title={t("tenant.switchWorkspace") || "Switch workspace"}
+        className={clsx(
+          "w-full flex items-center rounded-xl border border-gray-100 bg-white hover:border-primary-200 hover:bg-primary-50/40 transition",
+          collapsed ? "justify-center p-2" : "gap-2.5 px-3 py-2"
+        )}
+        data-tour="workspace-switcher"
+      >
+        <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+          {activeName.charAt(0).toUpperCase() || "?"}
+        </div>
+        {!collapsed && (
+          <>
+            <span className="flex-1 min-w-0 text-start text-sm font-medium text-gray-800 truncate">{activeName}</span>
+            <svg className="w-4 h-4 text-gray-400 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 15L12 18.75 15.75 15m-7.5-6L12 5.25 15.75 9" />
+            </svg>
+          </>
+        )}
+      </button>
+
+      {open && (
+        <div className="absolute bottom-full mb-2 inset-x-2 z-50 bg-white rounded-xl shadow-float border border-gray-100 p-1.5 max-h-72 overflow-y-auto min-w-[220px]">
+          <p className="px-2.5 pt-1.5 pb-1 text-[11px] font-medium uppercase tracking-wide text-gray-400">
+            {t("tenant.workspaces") || "Workspaces"}
+          </p>
+          {memberships.map((m) => {
+            const isActive = m.tenant.id === user?.tenantId;
+            return (
+              <button
+                key={m.tenant.id}
+                onClick={() => void pick(m.tenant.id)}
+                disabled={!!busy}
+                className={clsx(
+                  "w-full flex items-center gap-2.5 px-2.5 py-2 rounded-lg transition text-start",
+                  isActive ? "bg-primary-50/70" : "hover:bg-gray-50"
+                )}
+              >
+                <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-primary-400 to-primary-600 flex items-center justify-center text-[11px] font-bold text-white shrink-0">
+                  {m.tenant.name.charAt(0).toUpperCase()}
+                </div>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm text-gray-800 truncate">{m.tenant.name}</p>
+                  <p className="text-[11px] text-gray-400">{t(`tenant.role.${m.role}`) || m.role}</p>
+                </div>
+                {busy === m.tenant.id ? (
+                  <div className="w-4 h-4 border-2 border-gray-200 border-t-primary-500 rounded-full animate-spin shrink-0" />
+                ) : isActive ? (
+                  <svg className="w-4 h-4 text-primary-500 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2.5}>
+                    <path strokeLinecap="round" strokeLinejoin="round" d="M4.5 12.75l6 6 9-13.5" />
+                  </svg>
+                ) : null}
+              </button>
+            );
+          })}
+        </div>
+      )}
+    </div>
   );
 }
 

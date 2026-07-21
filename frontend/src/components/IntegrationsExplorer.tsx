@@ -16,10 +16,14 @@ import clsx from "clsx";
  * place shows up immediately in the other.
  */
 
+// Category chips for the GENERIC marketplace. CRM is deliberately absent:
+// the CRM / customer system-of-record is a business-architecture choice, not
+// an ordinary tool, and lives in Settings → Integrations (restrictToCategory
+// ="CRM" + CustomerSystemOfRecordCard). Presenting it here duplicated the
+// concept across two surfaces and let it read as a casually toggleable skill.
 const CATEGORIES = [
   { label: "All", value: "All" },
   { label: "E-Commerce", value: "ECOMMERCE" },
-  { label: "CRM", value: "CRM" },
   { label: "Payments", value: "PAYMENTS" },
   { label: "Project Management", value: "PROJECT_MANAGEMENT" },
   { label: "Database", value: "DATABASE" },
@@ -106,6 +110,12 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
   }, [token]);
 
   const filtered = integrations.filter((intg) => {
+    // CRM-category systems never appear in the GENERIC marketplace - they are
+    // the tenant's business system / source of truth, configured in Settings →
+    // Integrations. Only a page explicitly restricted to CRM sees them.
+    // (Shopify stays here as ECOMMERCE - it is a real store tool - but its
+    // source-of-truth ELECTION also lives only in the settings surface.)
+    if (restrictToCategory !== "CRM" && intg.category?.toUpperCase() === "CRM") return false;
     const matchSearch =
       !search ||
       intg.name?.toLowerCase().includes(search.toLowerCase()) ||
@@ -137,6 +147,14 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
         <p className="text-sm text-gray-400 mt-1">
           {subtitle ?? t("marketplace.subtitle")}
         </p>
+        {/* CRM/system-of-record lives in Settings, not here - leave a trail so
+            nobody hunts the marketplace for it. */}
+        {!restrictToCategory && (
+          <p className="text-xs text-gray-400 mt-2">
+            {t("marketplace.crmMovedHint")}{" "}
+            <a href="/settings/integrations" className="text-primary-600 hover:underline font-medium">{t("marketplace.crmMovedLink")}</a>
+          </p>
+        )}
       </div>
 
       {beforeContent}

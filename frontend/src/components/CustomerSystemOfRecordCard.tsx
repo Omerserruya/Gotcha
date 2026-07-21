@@ -20,7 +20,7 @@ import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import { getMarketplaceIntegrations, setIntegrationCrmSource } from "@/lib/api";
+import { getMarketplaceIntegrations, setIntegrationCrmSource, getSourceOfTruthStatus, type SourceOfTruthStatus } from "@/lib/api";
 import { logoForIntegration } from "@/lib/integration-logos";
 
 // Integrations that can be elected the customer system of record while not
@@ -36,10 +36,14 @@ export default function CustomerSystemOfRecordCard() {
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
+  // Backend-resolved election + truthful capability set - what the AI-side
+  // resolver ACTUALLY uses, never inferred from local toggle state.
+  const [sot, setSot] = useState<SourceOfTruthStatus | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
     try {
+      getSourceOfTruthStatus(token).then((r) => setSot(r.data)).catch(() => setSot(null));
       const res = await getMarketplaceIntegrations(token);
       const list = ((res as any)?.data || []) as any[];
       setRows(
@@ -78,14 +82,50 @@ export default function CustomerSystemOfRecordCard() {
     }
   }
 
-  // Nothing electable is connected - the CRM the admin connects below is the
-  // system of record by default, so there is no decision to surface yet.
-  if (loading || rows.length === 0 || !rows.some((r) => r.connected)) return null;
+  // Nothing electable is connected AND no system of record resolved - the CRM
+  // the admin connects below becomes the record by default; nothing to show.
+  const hasElectable = rows.some((r) => r.connected);
+  if (loading || (!hasElectable && !sot?.configured)) return null;
+
+  const CAP_ORDER = [
+    "identify_customer", "customer_context", "related_business_context",
+    "write_conversation_summary", "write_interaction", "update_customer_fields",
+    "create_task", "merge_contacts",
+  ];
 
   return (
     <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 mb-6">
       <h2 className="font-semibold text-gray-900">{t("settings.integrations.systemOfRecord.title")}</h2>
       <p className="text-sm text-gray-500 mt-1">{t("settings.integrations.systemOfRecord.subtitle")}</p>
+
+      {/* The resolved system of record + what it can genuinely do. Rendered
+          from the backend resolver's answer so a toggle that didn't take (or
+          an ERROR connection) can never show phantom capabilities. */}
+      {sot?.configured && (
+        <div className="mt-4 rounded-xl border border-violet-100 bg-violet-50/40 p-3">
+          <p className="text-sm text-gray-800">
+            <span className="font-medium">{t("settings.integrations.systemOfRecord.currentTitle")}:</span>{" "}
+            <span className="font-semibold capitalize">{sot.vendor}</span>
+          </p>
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {CAP_ORDER.map((cap) => {
+              const ok = sot.capabilities.includes(cap);
+              return (
+                <span
+                  key={cap}
+                  title={ok ? undefined : t("settings.integrations.systemOfRecord.capUnsupported")}
+                  className={clsx(
+                    "px-2 py-0.5 rounded-full text-[11px] font-medium border",
+                    ok ? "bg-green-50 text-green-700 border-green-200" : "bg-gray-50 text-gray-400 border-gray-200 line-through",
+                  )}
+                >
+                  {t(`settings.integrations.systemOfRecord.caps.${cap}`)}
+                </span>
+              );
+            })}
+          </div>
+        </div>
+      )}
 
       <div className="mt-4 space-y-2">
         {rows.filter((r) => r.connected).map((row) => {

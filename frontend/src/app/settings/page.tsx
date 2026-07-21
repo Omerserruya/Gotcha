@@ -43,6 +43,11 @@ interface BusinessHoursConfig {
   enabled: boolean;
   timezone: string;
   autoResponse: string;
+  /** "active" = AI keeps answering while closed; "silent" = closed-hours
+   *  auto-response only. Enforced backend-side (incoming-worker gate). */
+  aiOutsideHours: "active" | "silent";
+  /** Optional owner copy appended to human handoffs while closed. */
+  outsideHoursHandoffMessage: string;
   schedule: Record<string, DaySchedule>;
 }
 
@@ -65,6 +70,8 @@ const DEFAULT_CONFIG: BusinessHoursConfig = {
   enabled: false,
   timezone: "Asia/Jerusalem",
   autoResponse: "",
+  aiOutsideHours: "active",
+  outsideHoursHandoffMessage: "",
   schedule: {
     sunday:    { enabled: true,  open: "09:00", close: "18:00" },
     monday:    { enabled: true,  open: "09:00", close: "18:00" },
@@ -125,7 +132,9 @@ export default function SettingsPage() {
         getDepartments(token).catch(() => []),
         getTenantSettings(token).catch(() => ({ data: { defaultCountryCode: "IL", supportedCountries: [] } })),
       ]);
-      setConfig(data);
+      // Merge over defaults: blobs saved before the outside-hours AI policy
+      // existed lack those fields, and the toggles need concrete values.
+      setConfig({ ...DEFAULT_CONFIG, ...data });
       setGreetingTemplate(greetingData.template || "");
       setSlaConfig(slaData);
       setIdleConfig(idleData);
@@ -695,6 +704,49 @@ export default function SettingsPage() {
                       );
                     })}
                   </div>
+                </div>
+
+                {/* AI employee behavior outside opening hours */}
+                <div>
+                  <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.aiOutsideHours")}</label>
+                  <p className="text-xs text-gray-400 mb-3">{t("settings.aiOutsideHoursDesc")}</p>
+                  <div className="space-y-2">
+                    {(["active", "silent"] as const).map((mode) => (
+                      <label key={mode} className={clsx(
+                        "flex items-start gap-3 p-3 rounded-xl border cursor-pointer transition",
+                        config.aiOutsideHours === mode ? "border-primary-300 bg-primary-50/40" : "border-gray-200 bg-white hover:border-gray-300"
+                      )}>
+                        <input
+                          type="radio"
+                          name="aiOutsideHours"
+                          checked={config.aiOutsideHours === mode}
+                          onChange={() => setConfig((prev) => ({ ...prev, aiOutsideHours: mode }))}
+                          className="mt-0.5"
+                        />
+                        <span>
+                          <span className="block text-sm font-medium text-gray-900">
+                            {t(mode === "active" ? "settings.aiOutsideHoursActive" : "settings.aiOutsideHoursSilent")}
+                          </span>
+                          <span className="block text-xs text-gray-500 mt-0.5">
+                            {t(mode === "active" ? "settings.aiOutsideHoursActiveDesc" : "settings.aiOutsideHoursSilentDesc")}
+                          </span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {config.aiOutsideHours === "active" && (
+                    <div className="mt-3">
+                      <label className="text-xs font-medium text-gray-600 block mb-1">{t("settings.outsideHoursHandoffMsg")}</label>
+                      <p className="text-xs text-gray-400 mb-2">{t("settings.outsideHoursHandoffMsgDesc")}</p>
+                      <textarea
+                        value={config.outsideHoursHandoffMessage}
+                        onChange={(e) => setConfig((prev) => ({ ...prev, outsideHoursHandoffMessage: e.target.value }))}
+                        placeholder={t("settings.outsideHoursHandoffMsgPlaceholder")}
+                        rows={2}
+                        className="w-full text-sm border border-gray-200 rounded-xl px-4 py-3 resize-none focus:outline-none focus:ring-2 focus:ring-primary-200 focus:border-primary-300"
+                      />
+                    </div>
+                  )}
                 </div>
               </div>
             )}

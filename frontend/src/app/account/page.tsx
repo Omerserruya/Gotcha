@@ -605,11 +605,17 @@ function SessionsSection({ token, L }: { token: string; L: (en: string, heb: str
     <Card>
       <div className="flex items-start justify-between">
         <SectionTitle title={L("Active sessions", "סשנים פעילים")} subtitle={L("Devices signed in to your account.", "מכשירים שמחוברים לחשבון.")} />
-        {sessions && sessions.length > 1 && (
-          <button onClick={terminateAll} disabled={busy === "all"} className="shrink-0 rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
-            {L("Sign out all", "יציאה מכולם")}
+        <div className="flex shrink-0 items-center gap-2">
+          <button onClick={load} className="rounded-lg border border-gray-200 px-3 py-1.5 text-xs font-medium text-gray-600 hover:border-primary-300 hover:text-primary-600" title={L("Refresh", "רענון")}>
+            {L("Refresh", "רענון")}
           </button>
-        )}
+          {sessions && sessions.length > 1 && (
+            <button onClick={terminateAll} disabled={busy === "all"} className="rounded-lg border border-red-200 px-3 py-1.5 text-xs font-medium text-red-600 hover:bg-red-50">
+              {/* The server keeps the CURRENT session alive - this signs out every other device. */}
+              {L("Sign out other sessions", "יציאה מכל שאר המכשירים")}
+            </button>
+          )}
+        </div>
       </div>
       {!sessions ? <div className="mt-4"><Skeleton /></div> : !available ? (
         <EmptyNote text={L("Session details are temporarily unavailable.", "פרטי הסשנים אינם זמינים כרגע.")} />

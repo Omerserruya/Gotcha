@@ -9,9 +9,11 @@
  * until enrolment completes; their only other move is to sign out.
  *
  * The steps embed Authentik's own setup flows in an iframe (same-site, framed
- * by the gateway CSP) so enrolment happens inside GOTCHA. Each flow redirects
- * to /auth/flow-done on completion, which posts FLOW_DONE_MESSAGE back here; we
- * re-check the gate and advance (authenticator -> recovery codes) or release.
+ * by the gateway CSP) so enrolment happens inside GOTCHA. Step 1 chains into
+ * step 2 via a relative `?next` (Authentik rejects absolute/cross-host next
+ * URLs with a "Request has been denied" card, so our app pages can never be
+ * the redirect target); a background poll re-checks the gate to advance the
+ * stepper and release when both factors exist.
  *
  * Mounted once under AuthProvider so it covers every authenticated area,
  * including the SYSTEM_ADMIN /system console (for whom MFA is always mandatory).
@@ -36,7 +38,6 @@ export function MfaEnrollmentGate() {
   const L = (en: string, heb: string) => (he ? heb : en);
 
   const [gate, setGate] = useState<MfaGate | null>(null);
-  const [busy, setBusy] = useState(false);
   const [verifying, setVerifying] = useState(false);
   const flowRef = useRef<HTMLIFrameElement | null>(null);
   const loadCountRef = useRef(0);
@@ -45,9 +46,13 @@ export function MfaEnrollmentGate() {
   const exempt = EXEMPT_PREFIXES.some((p) => pathname === p || pathname.startsWith(p + "/"));
   const active = !!user && !!token && !exempt;
 
+  // SILENT by design: this runs on a 3s interval while the gate is open, and
+  // any loading state tied to it would flash a mask over the embedded flow on
+  // every tick (users read that as "the QR code keeps refreshing"). Callers
+  // that want visible feedback (the footer button, the frame-load handler)
+  // drive `verifying` themselves around the await.
   const check = useCallback(async () => {
     if (!token) return;
-    setBusy(true);
     try {
       const g = await getMfaGate(token);
       setGate(g);
@@ -57,8 +62,6 @@ export function MfaEnrollmentGate() {
       // not silently release it (that was a fail-open). If we never had a gate,
       // we stay out of the way - the server is the real authority and the poll
       // will re-resolve on the next tick.
-    } finally {
-      setBusy(false);
     }
   }, [token]);
 
@@ -119,7 +122,13 @@ export function MfaEnrollmentGate() {
   // required to be considered enrolled.
   const step: "authenticator" | "recovery" = !gate.hasAuthenticator ? "authenticator" : "recovery";
   const flowSlug = step === "authenticator" ? AUTHENTIK_FLOWS.totp : AUTHENTIK_FLOWS.recoveryCodes;
-  const flowUrl = `${authentikFlowUrl(flowSlug)}&_n=${flowNonce}`;
+  // Chain step 1 straight into step 2 via a RELATIVE next (Authentik rejects
+  // absolute URLs with a "denied" card): finishing the authenticator lands on
+  // the recovery-codes flow inside the same iframe, and the poll re-syncs the
+  // stepper. The final step gets no next - completion is masked and released
+  // by the poll.
+  const nextPath = step === "authenticator" ? `/if/flow/${AUTHENTIK_FLOWS.recoveryCodes}/` : undefined;
+  const flowUrl = `${authentikFlowUrl(flowSlug, nextPath)}${nextPath ? "&" : "?"}_n=${flowNonce}`;
 
   const reasonCopy =
     gate.reason === "system_admin"
@@ -167,11 +176,12 @@ export function MfaEnrollmentGate() {
             className="h-[540px] w-full border-0"
             allow="publickey-credentials-get *; publickey-credentials-create *; clipboard-write"
           />
-          {/* Mask the iframe whenever we're re-checking. Authentik's setup flows
-              ignore our `next` and, on completion, bounce to their own "My
-              applications" library - this overlay hides that page while we
-              verify and advance/release, so the user never lands on it. */}
-          {(busy || verifying) && (
+          {/* Mask the iframe during explicit verification (frame navigated, or
+              the user clicked "I've finished"). On completion of the FINAL step
+              Authentik bounces to its root (no `next` there) - this overlay
+              hides that while we verify and release, so the user never sees it.
+              Background polls deliberately do NOT raise this mask. */}
+          {verifying && (
             <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-3 bg-white">
               <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-primary-500" />
               <span className="text-sm font-medium text-gray-500">{L("Finishing setup…", "מסיים הגדרה…")}</span>
@@ -195,7 +205,10 @@ export function MfaEnrollmentGate() {
               {L("Restart step", "התחלה מחדש")}
             </button>
             <button
-              onClick={() => void check()}
+              onClick={() => {
+                setVerifying(true);
+                void check().finally(() => setVerifying(false));
+              }}
               className="rounded-lg bg-primary-600 px-4 py-1.5 text-xs font-semibold text-white transition hover:bg-primary-700"
             >
               {L("I've finished this step", "סיימתי שלב זה")}

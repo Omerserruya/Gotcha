@@ -24,7 +24,7 @@ import { eraseTenant } from "../services/gdpr.service";
 import { sendOnboardingEmail } from "../services/notification.service";
 import { scheduleOnboardingNudge, triggerNudgeNow } from "../services/nudge-engine.service";
 import { listOnboardingSnapshots, getOnboardingSnapshot } from "../services/onboarding-state.service";
-import { inviteUser, syncIdentityName, syncIdentityActive } from "../services/invitation.service";
+import { inviteUser, syncIdentityNameByUser, syncMembershipAccess } from "../services/invitation.service";
 
 const router = Router();
 
@@ -209,7 +209,19 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
     // leaving a tenant whose admin can never log in.
     const identity = await ensureIdentity(adminEmail, adminName);
 
-    // Create tenant + admin user + onboarding tracker in transaction
+    // Create tenant + admin membership + onboarding tracker in transaction.
+    // The Identity row is upserted first (outside the tx is fine - it is
+    // keyed by the immutable subject and safe to leave behind on rollback).
+    const localIdentity = await prisma.identity.upsert({
+      where: { authentikSubject: identity.subject },
+      update: {},
+      create: {
+        authentikSubject: identity.subject,
+        email: adminEmail.toLowerCase(),
+        name: adminName,
+      },
+    });
+
     const result = await prisma.$transaction(async (tx) => {
       const tenant = await tx.tenant.create({
         data: { name, slug, status: "PENDING_ADMIN_SETUP" },
@@ -218,10 +230,10 @@ router.post("/tenants", authenticate, requireSystemAdmin(), validate(createTenan
       const admin = await tx.user.create({
         data: {
           tenantId: tenant.id,
+          identityId: localIdentity.id,
           email: adminEmail,
           name: adminName,
           role: "ADMIN",
-          authentikSubject: identity.subject,
         },
       });
 
@@ -597,11 +609,11 @@ router.patch("/tenants/:id/users/:userId", authenticate, requireSystemAdmin(), v
     // is intentionally NOT propagated to Authentik here - that is a
     // verification-gated identity change; see the identity operations guide.)
     if (typeof data.name === "string" && data.name !== user.name) {
-      void syncIdentityName(user.authentikSubject, updated.name);
+      void syncIdentityNameByUser(user.id, updated.name);
     }
     // Enable/disable must be consistent across both systems (see agents.ts).
     if (typeof data.isActive === "boolean" && data.isActive !== user.isActive) {
-      void syncIdentityActive(user.authentikSubject, data.isActive);
+      void syncMembershipAccess(user.id, data.isActive);
     }
 
     void writeAudit({
@@ -761,13 +773,18 @@ router.post("/seed", validate(seedSchema), async (req: Request, res: Response): 
     }
 
     const identity = await ensureIdentity(email, name);
+    const localIdentity = await prisma.identity.upsert({
+      where: { authentikSubject: identity.subject },
+      update: {},
+      create: { authentikSubject: identity.subject, email: email.toLowerCase(), name },
+    });
     const admin = await prisma.user.create({
       data: {
         tenantId: systemTenant.id,
+        identityId: localIdentity.id,
         email,
         name,
         role: "SYSTEM_ADMIN",
-        authentikSubject: identity.subject,
       },
     });
 

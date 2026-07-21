@@ -14,6 +14,7 @@
 
 import {
   prisma,
+  withCrossTenantAccess,
   getInternalServiceKey,
   writeAudit,
   AuditAction,
@@ -40,15 +41,17 @@ async function purgeTenantVectors(tenantId: string): Promise<boolean> {
 
 /** Export one user's personal data (Art. 15/20). Tenant-scoped. */
 export async function exportUser(tenantId: string, userId: string, requestedBy?: string) {
-  const user = await prisma.user.findFirst({
+  const row = await prisma.user.findFirst({
     where: { id: userId, tenantId },
     select: {
       id: true, email: true, name: true, role: true, isActive: true,
-      phoneNumber: true, locale: true, authentikSubject: true,
-      createdAt: true, updatedAt: true,
+      phoneNumber: true, locale: true, createdAt: true, updatedAt: true,
+      identity: { select: { authentikSubject: true, email: true } },
     },
   });
-  if (!user) return null;
+  if (!row) return null;
+  const { identity, ...user } = row;
+  const subject = { ...user, authentikSubject: identity.authentikSubject };
 
   const [assignedConversations, consents] = await Promise.all([
     prisma.conversation.count({ where: { tenantId, assignedAgentId: userId } }),
@@ -61,7 +64,7 @@ export async function exportUser(tenantId: string, userId: string, requestedBy?:
   const result = {
     exportedAt: new Date().toISOString(),
     subjectType: "user" as const,
-    user,
+    user: subject,
     stats: { assignedConversations },
     consents,
   };
@@ -90,28 +93,33 @@ export async function exportUser(tenantId: string, userId: string, requestedBy?:
 export async function eraseUser(tenantId: string, userId: string, requestedBy?: string) {
   const user = await prisma.user.findFirst({
     where: { id: userId, tenantId },
-    select: { id: true, name: true, authentikSubject: true, role: true },
+    select: {
+      id: true, name: true, role: true, identityId: true,
+      identity: { select: { authentikSubject: true } },
+    },
   });
   if (!user) return null;
   if (user.role === "SYSTEM_ADMIN") {
     throw new Error("cannot_erase_system_admin");
   }
 
-  // Is the identity shared with another account (any tenant)?
+  // Is the identity shared with a membership in another tenant? Only when this
+  // is the LAST membership do we erase the person - in the IdP AND locally.
+  const others = await withCrossTenantAccess(() => prisma.user.count({
+    where: { identityId: user.identityId, id: { not: userId } },
+  }));
   let identityDeleted = false;
-  if (user.authentikSubject) {
-    const others = await prisma.user.count({
-      where: { authentikSubject: user.authentikSubject, id: { not: userId } },
-    });
-    if (others === 0) {
-      identityDeleted = await eraseUserIdentity(user.authentikSubject);
-    }
+  if (others === 0) {
+    identityDeleted = await eraseUserIdentity(user.identity.authentikSubject);
   }
 
-  // Remove the app row + this user's consent records.
+  // Remove the membership row + this user's consent records; when it was the
+  // last membership, the local Identity row (name/email/subject) goes too -
+  // an Art. 17 erasure must not leave the person's identity data behind.
   await prisma.$transaction([
     prisma.consentRecord.deleteMany({ where: { tenantId, subjectType: "user", subjectId: userId } }),
     prisma.user.delete({ where: { id: userId } }),
+    ...(others === 0 ? [prisma.identity.delete({ where: { id: user.identityId } })] : []),
   ]);
 
   await prisma.dataSubjectRequest.create({
@@ -190,21 +198,23 @@ export async function eraseTenant(tenantId: string, requestedBy?: string) {
   });
   if (!tenant) return null;
 
-  // 1. Authentik identities. Only delete an identity not shared with a user in
-  //    another tenant.
+  // 1. Authentik + local identities. Only erase a person whose ONLY
+  //    membership lives in this tenant - an identity that also works in
+  //    another tenant survives (just loses this membership via the cascade).
   const users = await prisma.user.findMany({
     where: { tenantId },
-    select: { id: true, authentikSubject: true },
+    select: { id: true, identityId: true, identity: { select: { authentikSubject: true } } },
   });
   let identitiesDeleted = 0;
+  const orphanIdentityIds: string[] = [];
   for (const u of users) {
-    if (!u.authentikSubject) continue;
     const others = await prisma.user.count({
-      where: { authentikSubject: u.authentikSubject, tenantId: { not: tenantId } },
+      where: { identityId: u.identityId, tenantId: { not: tenantId } },
     });
     if (others === 0) {
+      orphanIdentityIds.push(u.identityId);
       try {
-        if (await eraseUserIdentity(u.authentikSubject)) identitiesDeleted++;
+        if (await eraseUserIdentity(u.identity.authentikSubject)) identitiesDeleted++;
       } catch (err: any) {
         console.error(`[gdpr] Authentik erase failed for user ${u.id}:`, err?.message ?? err);
       }
@@ -240,6 +250,12 @@ export async function eraseTenant(tenantId: string, requestedBy?: string) {
     prisma.dataRetentionPolicy.deleteMany({ where: { tenantId } }),
     prisma.dataSubjectRequest.deleteMany({ where: { tenantId } }),
     prisma.tenant.delete({ where: { id: tenantId } }),
+    // Local identity rows whose last membership just cascade-deleted with the
+    // tenant. Deleting the Identity would cascade to users, so it must come
+    // AFTER the tenant delete inside the same transaction.
+    ...(orphanIdentityIds.length
+      ? [prisma.identity.deleteMany({ where: { id: { in: orphanIdentityIds } } })]
+      : []),
   ]);
 
   return { deleted: true, identitiesDeleted, vectorsPurged, userCount: users.length };

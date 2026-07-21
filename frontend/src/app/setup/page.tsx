@@ -65,6 +65,9 @@ import {
   type DiscoveryGap,
   type DiscoveryChannel,
 } from "@/lib/api";
+import { SYSTEMS, ConnectScreen } from "./connect-screen";
+import { useRevealOnOpen } from "@/lib/useRevealOnOpen";
+import AgentBuilder from "@/components/aiEmployee/AgentBuilder";
 
 // After setup completes, land in the inbox - onboarding continues via the
 // sidebar mission panel, not a dedicated home page.
@@ -86,21 +89,6 @@ type Phase =
   | "airtable_mapping"
   | "ready"         // Movement 9 - ready · connect channels
   | "activating";
-
-const SYSTEMS: Array<{
-  slug: CoreSystemSlug;
-  name: string;
-  group: "CRM" | "Store" | "Database";
-  value: [string, string];
-  logo: string;
-}> = [
-  { slug: "hubspot", name: "HubSpot", group: "CRM", value: ["so I know who your customers are", "כדי שאדע מי הלקוחות שלכם"], logo: "https://cdn.worldvectorlogo.com/logos/hubspot.svg" },
-  { slug: "salesforce", name: "Salesforce", group: "CRM", value: ["so I know your accounts & pipeline", "כדי שאכיר את החשבונות והפייפליין שלכם"], logo: "https://cdn.worldvectorlogo.com/logos/salesforce-2.svg" },
-  { slug: "zoho_crm", name: "Zoho", group: "CRM", value: ["so I know your contacts & leads", "כדי שאכיר את אנשי הקשר והלידים"], logo: "https://cdn.worldvectorlogo.com/logos/zoho-1.svg" },
-  { slug: "fireberry", name: "Fireberry", group: "CRM", value: ["so I know your accounts & contacts", "כדי שאכיר את החשבונות ואנשי הקשר"], logo: "https://www.google.com/s2/favicons?domain=fireberry.com&sz=64" },
-  { slug: "airtable", name: "Airtable", group: "Database", value: ["so I know your contacts base", "כדי שאכיר את בסיס אנשי הקשר"], logo: "https://cdn.simpleicons.org/airtable/FCB400" },
-  { slug: "shopify", name: "Shopify", group: "Store", value: ["so I can answer 'where's my order' myself", "כדי שאענה על 'איפה ההזמנה שלי' בעצמי"], logo: "https://cdn.worldvectorlogo.com/logos/shopify.svg" },
-];
 
 const AIRTABLE_FIELDS: Array<{ key: "email" | "phone" | "display_name" | "stage" | "notes"; required: boolean; label: [string, string]; match: RegExp }> = [
   { key: "email", required: false, label: ["Email", "אימייל"], match: /e-?mail|מייל|דוא/i },
@@ -157,6 +145,11 @@ function useMovementTransition(phase: Phase): { shown: Phase; leaving: boolean; 
 // Movements where a bare Enter advances (requirement already met). Connect,
 // tune, and ready are deliberately excluded - those are decisions.
 const ENTER_PHASES = new Set<Phase>(["review", "goal", "integrations", "knowledge", "recommendation"]);
+
+// The resumable movement order. Single source of truth for BOTH the monotonic
+// progress checkpoint and resume-on-boot: a phase later in this list is
+// "further along", and the persisted checkpoint may only ever move forward.
+const PROGRESS_ORDER: Phase[] = ["connect", "goal", "integrations", "knowledge", "recommendation", "tune", "ready"];
 
 function LoadingScreen() {
   return (
@@ -265,6 +258,9 @@ function SetupContent() {
   const [disc, setDisc] = useState<BusinessDiscoveryRecord | null>(null);
   const [savingProfile, setSavingProfile] = useState(false);
   const scannedOnce = useRef(false);
+  // Furthest PROGRESS_ORDER index ever reached (seeded from the persisted
+  // checkpoint at boot) - the guard that keeps the checkpoint monotonic.
+  const maxProgressRef = useRef(-1);
 
   // Health / recommendation
   const [health, setHealth] = useState<HealthReport | null>(null);
@@ -396,13 +392,22 @@ function SetupContent() {
     if (phase === "review" && token) loadHealth();
   }, [phase, token, loadHealth]);
 
-  // Persist a resume checkpoint on each movement transition (fire-and-forget),
+  // Persist a resume checkpoint on movement transitions (fire-and-forget),
   // so a reload during movements 6-9 returns to that movement instead of
   // falling back to integrations (P0). Only the review→ready band is resumable.
+  //
+  // MONOTONIC by design: the checkpoint only ever advances. Navigating BACK to
+  // edit a completed movement (or being routed through `connect` by a Movement-5
+  // "Connect" button) must not regress the persisted progress - otherwise a
+  // refresh/OAuth return reopens an already-completed step as the current one.
+  // `maxProgressRef` holds the furthest index reached (seeded from the persisted
+  // checkpoint at boot); the backend applies the same guard authoritatively.
   useEffect(() => {
     if (!token) return;
-    const RESUMABLE = ["connect", "goal", "integrations", "knowledge", "recommendation", "tune", "ready"];
-    if (RESUMABLE.includes(phase)) patchBusinessDiscovery(token, { progress: phase }).catch(() => {});
+    const idx = PROGRESS_ORDER.indexOf(phase);
+    if (idx < 0 || idx <= maxProgressRef.current) return;
+    maxProgressRef.current = idx;
+    patchBusinessDiscovery(token, { progress: phase }).catch(() => {});
   }, [phase, token]);
 
   // Enter advances any movement whose requirement is already met (the real
@@ -460,6 +465,9 @@ function SetupContent() {
         const d = discRes?.data.discovery || null;
         if (d) { setDisc(d); if (d.recommendation) setRec(d.recommendation); if (d.primaryGoal) setGoals([d.primaryGoal]); }
         if (d?.websiteDomain) setDomain(d.websiteDomain);
+        // Seed the monotonic-checkpoint guard from the persisted progress so a
+        // post-boot visit to an EARLIER movement can't rewind the checkpoint.
+        maxProgressRef.current = Math.max(maxProgressRef.current, PROGRESS_ORDER.indexOf((d?.progress || "") as Phase));
 
         // Resume-within-band (P0): a persisted `progress` checkpoint lets a reload
         // during movements 6-9 return to that movement instead of falling back to
@@ -472,13 +480,19 @@ function SetupContent() {
         };
 
         // Returned from OAuth having connected the source of truth (Movement 3).
-        // A FRESH return carries ?connected=<slug> - land on the connect screen's
-        // "✓ connected" success beat first so the customer SEES it worked, then
-        // they continue. A plain reload (no param) proceeds straight through.
+        // A FRESH return carries ?connected=<slug>. WHERE we land is owned by the
+        // persisted progress checkpoint, never by the return itself:
+        //  - wizard still at/before the connect movement → the Movement-3
+        //    "✓ connected" success beat (first-time core-system connect);
+        //  - wizard already past it (the connect was launched from Movement 5+)
+        //    → resume at the checkpointed movement; IntegrationsScreen shows its
+        //    own ?connected success beat there. Forcing `connect` here was the
+        //    bug that "reset" the wizard after every later-step OAuth return.
         if (connectedSlug) {
           try { localStorage.setItem("onboarding.coreSystem", connectedSlug); } catch { /* */ }
           await loadHealth();
-          if (search.get("connected")) {
+          const pastConnect = maxProgressRef.current > PROGRESS_ORDER.indexOf("connect");
+          if (search.get("connected") && !pastConnect) {
             setJustConnected(connectedSlug);
             setPhase("connect");
             return;
@@ -737,11 +751,14 @@ function SetupContent() {
     setPhase("goal");
   }
 
-  // Continue past the post-connect "✓ connected" success beat → the goal
-  // question (or straight to integrations if the goal is already answered).
+  // Continue past the post-connect "✓ connected" success beat. Resume at the
+  // FURTHEST movement reached (never rewind someone who connected while editing
+  // from a later movement); first-time flow proceeds goal → integrations.
   function continueAfterConnect() {
     setJustConnected(null);
     setError("");
+    const furthest = PROGRESS_ORDER[maxProgressRef.current] as Phase | undefined;
+    if (furthest && PROGRESS_ORDER.indexOf(furthest) > PROGRESS_ORDER.indexOf("integrations")) { setPhase(furthest); return; }
     setPhase(disc?.primaryGoal ? "integrations" : "goal");
   }
 
@@ -827,7 +844,13 @@ function SetupContent() {
         {shown === "integrations" && token && (
           <IntegrationsScreen
             he={he} token={token} disc={disc}
-            onConnectSystem={(slug) => { setError(""); setPicked(slug); setPhase("connect"); }}
+            onConnectSystem={(slug) => {
+              // Deliberate edit of the connect step from Movement 5. Arrive with
+              // a CLEAN slate: stale catalog-search text from an earlier visit
+              // must not pre-populate the search box (it read as the wizard
+              // "typing by itself"), and the target tile is preselected.
+              setError(""); setSystemQuery(""); setJustConnected(null); setPicked(slug); setPhase("connect");
+            }}
             onContinue={() => setPhase("knowledge")} onBack={() => setPhase("goal")}
           />
         )}
@@ -848,13 +871,31 @@ function SetupContent() {
         )}
 
         {/* Movement 8 - Create & tune the employee (chat before deploy) */}
+        {/* Movement 8 - build & tune the employee.
+            This renders the SAME wizard as AI Studio (components/aiEmployee/
+            AgentBuilder) rather than a second, divergent one: the employee it
+            creates is a normal DRAFT AIAgent, so it shows up correctly in AI
+            Studio and `/onboarding/complete` adopts it instead of generating a
+            duplicate. Onboarding only supplies the surrounding navigation. */}
         {shown === "tune" && token && (
-          <TuneScreen
-            he={he} token={token} rec={disc?.recommendation || rec} disc={disc} health={health} goal={primaryGoal} goals={goals}
-            onConnect={() => { setError(""); setPhase("connect"); }}
-            onTeach={() => { setError(""); setPhase("knowledge"); }}
-            onContinue={() => setPhase("ready")} onBack={() => setPhase("recommendation")}
-          />
+          <div className="animate-riseIn">
+            <AgentBuilder
+              token={token}
+              onCancel={() => { setError(""); setPhase("recommendation"); }}
+              onDone={() => setPhase("ready")}
+              embedded
+            />
+            <div className="flex items-center justify-between mt-6">
+              <button type="button" onClick={() => setPhase("recommendation")}
+                className="text-sm font-medium text-gray-500 hover:text-gray-700">
+                {he ? "→ חזרה" : "← Back"}
+              </button>
+              <button type="button" onClick={() => setPhase("ready")}
+                className="text-sm font-medium text-gray-500 hover:text-gray-700">
+                {he ? "אמשיך אחר כך" : "I'll finish this later"}
+              </button>
+            </div>
+          </div>
         )}
 
         {shown === "airtable_mapping" && (
@@ -1710,6 +1751,10 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
   const [asked, setAsked] = useState<Set<string>>(new Set());
   const [connectingSlug, setConnectingSlug] = useState<string | null>(null);
   const [keyEntry, setKeyEntry] = useState<{ slug: string; name: string } | null>(null);
+  // Bring the credential panel into view + focus its first empty field the
+  // moment it opens (see useRevealOnOpen: mount-driven, once per panel, so
+  // typing never re-triggers a scroll).
+  const { ref: keyPanelRef, focusInvalid: focusKeyPanel } = useRevealOnOpen<HTMLDivElement>(keyEntry?.slug ?? null);
   const [apiKey, setApiKey] = useState("");
   const [keyError, setKeyError] = useState("");
   const [channelIntents, setChannelIntents] = useState<Set<string>>(() => {
@@ -1767,7 +1812,11 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
   // Split detected tools by real marketplace support.
   const detectedSupported = detectedTools
     .map((t) => ({ tool: t, intg: marketBySlug.get(normSlug(t.slug)) || marketBySlug.get(normSlug(t.name)) }))
-    .filter((x) => !!x.intg);
+    // CRM-category systems are business systems, not Movement-5 "tools" - the
+    // source-of-truth choice already happened in Movement 3 (and lives in
+    // Settings → Integrations after onboarding). Core SYSTEMS slugs are
+    // filtered above; this drops the remaining CRM catalog entries too.
+    .filter((x) => !!x.intg && String(x.intg.category || "").toUpperCase() !== "CRM");
   const detectedUnsupported = detectedTools.filter((t) => !marketBySlug.get(normSlug(t.slug)) && !marketBySlug.get(normSlug(t.name)));
 
   // Connect ANY supported integration from right here: core systems drop into
@@ -1803,6 +1852,9 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
       setApiKey("");
     } catch (err: any) {
       setKeyError(/invalid/i.test(err?.message || "") ? (he ? "המפתח לא התקבל - בדקו והדביקו שוב." : "The key was rejected - check it and paste again.") : (err?.message || (he ? "החיבור נכשל. נסו שוב." : "Connection failed. Try again.")));
+      // Failure keeps the panel open and puts the caret back on the field that
+      // needs fixing, rather than leaving the user hunting for the message.
+      focusKeyPanel();
     } finally {
       setConnectingSlug(null);
     }
@@ -1898,10 +1950,17 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
 
       {/* Inline API-key connect for non-OAuth marketplace tools. */}
       {keyEntry && (
-        <div className="mt-3 p-4 rounded-2xl border border-primary-200 bg-primary-50/40">
+        <div
+          ref={keyPanelRef}
+          role="region"
+          aria-live="polite"
+          aria-label={he ? `חיבור ${keyEntry.name}` : `Connect ${keyEntry.name}`}
+          className="mt-3 p-4 rounded-2xl border-2 border-primary-300 bg-primary-50/60 ring-2 ring-primary-100 scroll-mt-24">
           <p className="text-sm font-semibold text-gray-900 mb-2">{he ? `חיבור ${keyEntry.name} - הדביקו מפתח API` : `Connect ${keyEntry.name} - paste your API key`}</p>
           <div className="flex gap-2">
             <input value={apiKey} onChange={(e) => setApiKey(e.target.value)} dir="ltr" placeholder="API key"
+              aria-invalid={!!keyError}
+              aria-label={he ? "מפתח API" : "API key"}
               className="flex-1 px-3.5 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-200" />
             <button type="button" onClick={submitApiKey} disabled={!apiKey.trim() || connectingSlug === keyEntry.slug}
               className="px-4 py-2 bg-primary-500 hover:bg-primary-600 text-white text-sm font-semibold rounded-xl transition disabled:opacity-50">
@@ -1909,7 +1968,7 @@ function IntegrationsScreen({ he, token, disc, onConnectSystem, onContinue, onBa
             </button>
             <button type="button" onClick={() => { setKeyEntry(null); setKeyError(""); }} className="px-3 py-2 text-sm text-gray-500 hover:text-gray-700">{he ? "ביטול" : "Cancel"}</button>
           </div>
-          {keyError && <p className="text-xs text-red-600 mt-2">{keyError}</p>}
+          {keyError && <p className="text-xs text-red-600 mt-2" role="alert">{keyError}</p>}
         </div>
       )}
       {!keyEntry && keyError && <p className="text-xs text-red-600 mt-2">{keyError}</p>}
@@ -2698,169 +2757,7 @@ function GoalScreen({ he, goals, setGoals, goalDetail, setGoalDetail, onContinue
   );
 }
 
-// ─── Movement 3: Connect your source of truth ───────────────
-// Lead with the strongest DETECTED system as one large primary card; a quiet
-// "I use another platform" link reveals the full catalog only on intent.
-type SystemDef = (typeof SYSTEMS)[number];
-
-function SystemTile({ he, s, large, picked, setPicked, shopDomain, setShopDomain, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, onConnect, recommended }: {
-  he: boolean; s: SystemDef; large?: boolean; picked: CoreSystemSlug | null; setPicked: (v: CoreSystemSlug | null) => void;
-  shopDomain: string; setShopDomain: (v: string) => void; fireberryToken: string; setFireberryToken: (v: string) => void;
-  airtableToken: string; setAirtableToken: (v: string) => void;
-  connecting: boolean; onConnect: (slug: CoreSystemSlug) => void; recommended?: boolean;
-}) {
-  const active = picked === s.slug;
-  return (
-    <div>
-      <button type="button" onClick={() => setPicked(s.slug)}
-        className={"w-full text-start rounded-2xl border transition relative " + (large ? "p-7 " : "p-5 ") + (active ? "border-primary-400 ring-2 ring-primary-200 bg-primary-50/40" : "border-gray-150 bg-white shadow-subtle hover:border-primary-300 hover:shadow-card")}>
-        {recommended && <span className={"absolute top-3 text-[9px] uppercase tracking-wide font-bold text-primary-600 bg-primary-100 px-1.5 py-0.5 rounded-full " + (he ? "left-3" : "right-3")}>{he ? "זוהה אצלכם" : "Detected"}</span>}
-        <div className={"flex items-center gap-3 " + (large ? "mb-3" : "mb-2")}>
-          <div className={"rounded-xl bg-white border border-gray-100 p-1.5 flex items-center justify-center relative " + (large ? "w-14 h-14" : "w-10 h-10")}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={s.logo} alt={s.name} className="w-full h-full object-contain" onError={(e) => { const img = e.currentTarget; img.style.display = "none"; const fb = img.nextElementSibling as HTMLElement | null; if (fb) fb.style.display = "flex"; }} />
-            <span className="absolute inset-0 hidden items-center justify-center text-sm font-bold text-gray-500">{s.name.charAt(0)}</span>
-          </div>
-          <div><div className={"font-semibold text-gray-900 " + (large ? "text-xl" : "")}>{s.name}</div><div className="text-[10px] uppercase tracking-wide text-gray-400">{s.group}</div></div>
-        </div>
-        <p className={"text-gray-600 " + (large ? "text-[15px]" : "text-sm")}>{he ? "חברו " : "Connect "}{s.name} {s.value[he ? 1 : 0]}</p>
-      </button>
-      {active && s.slug === "shopify" && (
-        <input value={shopDomain} onChange={(e) => setShopDomain(e.target.value)} placeholder="my-store.myshopify.com" className="mt-2 w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 outline-none" />
-      )}
-      {active && s.slug === "fireberry" && (
-        <div className="mt-2">
-          <input value={fireberryToken} onChange={(e) => setFireberryToken(e.target.value)} type="password" placeholder={he ? "טוקן API (tokenid)" : "API token (tokenid)"} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 outline-none" />
-          <p className="text-[11px] text-gray-400 mt-1">{he ? "Fireberry ← הגדרות ← אינטגרציה ← API ← הטוקן שלי" : "Fireberry → Settings → Integration → API Forms → My Token"}</p>
-        </div>
-      )}
-      {active && s.slug === "airtable" && (
-        <div className="mt-2">
-          <input value={airtableToken} onChange={(e) => setAirtableToken(e.target.value)} type="password" placeholder={he ? "Personal Access Token" : "Personal Access Token"} dir="ltr" className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 outline-none" />
-          <p className="text-[11px] text-gray-400 mt-1">{he ? "Airtable ← Developer hub ← Personal access tokens (הרשאות: data.records + schema.bases)" : "Airtable → Developer hub → Personal access tokens (scopes: data.records + schema.bases)"}</p>
-        </div>
-      )}
-      {active && (
-        <button type="button" onClick={() => onConnect(s.slug)} disabled={connecting || (s.slug === "shopify" && !shopDomain.trim()) || (s.slug === "fireberry" && !fireberryToken.trim()) || (s.slug === "airtable" && !airtableToken.trim())} className="mt-2 w-full py-2.5 bg-primary-500 hover:bg-primary-600 text-white text-sm font-medium rounded-xl transition disabled:opacity-50">
-          {connecting ? (he ? "מתחבר…" : "Connecting…") : `${he ? "התחבר ל" : "Connect "}${s.name} →`}
-        </button>
-      )}
-    </div>
-  );
-}
-
-function ConnectScreen(props: {
-  he: boolean; systemQuery: string; setSystemQuery: (v: string) => void;
-  picked: CoreSystemSlug | null; setPicked: (v: CoreSystemSlug | null) => void;
-  shopDomain: string; setShopDomain: (v: string) => void; fireberryToken: string; setFireberryToken: (v: string) => void;
-  airtableToken: string; setAirtableToken: (v: string) => void;
-  connecting: boolean; skipping: boolean; onConnect: (slug: CoreSystemSlug) => void; onBack: () => void; onSkip: () => void;
-  onRequestCrm: (name: string) => Promise<void>; justConnected: string | null; onContinueConnected: () => void;
-  rec: DiscoveryRecommendation | null; disc: BusinessDiscoveryRecord | null;
-}) {
-  const { he, systemQuery, setSystemQuery, picked, setPicked, shopDomain, setShopDomain, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, skipping, onConnect, onBack, onSkip, onRequestCrm, justConnected, onContinueConnected, rec, disc } = props;
-  const recommendedSlugs = new Set((rec?.systems || []).map((s) => s.slug));
-
-  // CRM-request ("couldn't find yours") mini-form state.
-  const [crmReq, setCrmReq] = useState("");
-  const [crmReqState, setCrmReqState] = useState<"idle" | "sending" | "done">("idle");
-  const requestCrm = async () => {
-    if (!crmReq.trim() || crmReqState === "sending") return;
-    setCrmReqState("sending");
-    try { await onRequestCrm(crmReq.trim()); setCrmReqState("done"); } catch { setCrmReqState("idle"); }
-  };
-
-  // ✓ Connected - the success beat shown right after an OAuth round-trip so the
-  // customer SEES the connection worked before moving on.
-  if (justConnected) {
-    const sys = SYSTEMS.find((s) => s.slug === justConnected);
-    const nm = sys?.name || justConnected;
-    return (
-      <div dir={he ? "rtl" : "ltr"} className="animate-riseIn">
-        <div className="flex items-center gap-3">
-          <span className="w-12 h-12 rounded-2xl bg-emerald-50 border border-emerald-100 flex items-center justify-center text-emerald-500 text-2xl shrink-0">✓</span>
-          {sys && (
-            /* eslint-disable-next-line @next/next/no-img-element */
-            <img src={sys.logo} alt={nm} className="w-9 h-9 object-contain" onError={(e) => { e.currentTarget.style.display = "none"; }} />
-          )}
-        </div>
-        <h1 className="mt-5 text-4xl md:text-[44px] font-bold text-gray-900 tracking-tight leading-[1.08]">{he ? `${nm} מחובר!` : `${nm} is connected!`}</h1>
-        <p className="text-lg text-gray-500 mt-3 leading-relaxed max-w-2xl">{he ? "מעולה - עכשיו אני יכול לראות את הלקוחות שלכם ולתעד כל שיחה. בואו נמשיך." : "Great - I can now see your customers and log every conversation. Let's keep going."}</p>
-        <button type="button" onClick={onContinueConnected} className="mt-10 inline-flex items-center justify-center px-8 py-4 bg-primary-500 hover:bg-primary-600 text-white text-base font-semibold rounded-2xl transition shadow-lg shadow-primary-500/25">
-          {he ? "המשך ←" : "Continue →"}
-        </button>
-      </div>
-    );
-  }
-
-  // The detected source of truth: an already-detected recommended system, or the
-  // discovered store platform - whichever maps to a connectable system.
-  const detectedFromRec = (rec?.systems || []).find((s) => s.alreadyDetected)?.slug?.toLowerCase();
-  const platformSlug = disc?.technology?.platform?.slug?.toLowerCase();
-  const detectedSlug = [detectedFromRec, platformSlug].find((sl) => SYSTEMS.some((x) => x.slug === sl)) as CoreSystemSlug | undefined;
-  const primary = detectedSlug ? SYSTEMS.find((s) => s.slug === detectedSlug)! : null;
-
-  // Show the full catalog when there's no detected primary OR when the caller
-  // arrived with a specific system preselected (e.g. "Connect" on a Movement-5
-  // recommendation) that isn't the primary card - its tile must be visible.
-  const [showAll, setShowAll] = useState(!primary || (!!picked && picked !== primary.slug));
-  const filtered = SYSTEMS.filter((s) => {
-    const q = systemQuery.trim().toLowerCase();
-    if (!q) return true;
-    return s.name.toLowerCase().includes(q) || s.group.toLowerCase().includes(q) || s.slug.toLowerCase().includes(q);
-  }).sort((a, b) => Number(recommendedSlugs.has(b.slug)) - Number(recommendedSlugs.has(a.slug)));
-
-  const tileProps = { he, picked, setPicked, shopDomain, setShopDomain, fireberryToken, setFireberryToken, airtableToken, setAirtableToken, connecting, onConnect };
-
-  return (
-    <div dir={he ? "rtl" : "ltr"}>
-      <h1 className="text-4xl md:text-[44px] font-bold text-gray-900 tracking-tight leading-[1.08]">{he ? "איפה אתם מנהלים את הלקוחות שלכם?" : "Where do you manage your customers?"}</h1>
-      <p className="text-lg text-gray-500 mt-3 leading-relaxed max-w-2xl">{he ? "המערכת שמכילה את הלקוחות או ההזמנות שלכם - זה כל מה שצריך כדי שאתחיל לעבוד." : "The system that holds your customers or orders - that's all I need to get to work."}</p>
-
-      {primary && !showAll ? (
-        <div className="mt-6 space-y-4">
-          <SystemTile {...tileProps} s={primary} large recommended />
-          <button type="button" onClick={() => setShowAll(true)} className="text-sm font-medium text-primary-600 hover:text-primary-700">
-            {he ? "אני משתמש/ת בפלטפורמה / CRM אחר →" : "I use another platform / CRM →"}
-          </button>
-        </div>
-      ) : (
-        <div className="mt-6 space-y-4">
-          <input value={systemQuery} onChange={(e) => setSystemQuery(e.target.value)} placeholder={he ? "חיפוש מערכת…" : "Search systems…"} className="w-full px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 outline-none" />
-          <div className="grid sm:grid-cols-2 gap-3">
-            {filtered.map((s) => <SystemTile key={s.slug} {...tileProps} s={s} recommended={recommendedSlugs.has(s.slug)} />)}
-          </div>
-        </div>
-      )}
-
-      {/* Couldn't find yours? Request a CRM we don't support yet - one click
-          emails the team so we know to build it. */}
-      <div className="mt-8 p-4 rounded-2xl border border-dashed border-gray-200 bg-white/60">
-        {crmReqState === "done" ? (
-          <p className="text-sm text-emerald-600 font-medium">{he ? "✓ תודה! רשמנו את הבקשה ונעדכן אתכם כשהחיבור יהיה מוכן." : "✓ Thanks! We've logged your request and will let you know when it's ready."}</p>
-        ) : (
-          <>
-            <p className="text-sm font-semibold text-gray-800">{he ? "לא מצאתם את המערכת שלכם?" : "Can't find your system?"}</p>
-            <p className="text-[13px] text-gray-500 mt-0.5">{he ? "כתבו לנו איזו מערכת/CRM אתם משתמשים ונוסיף לה תמיכה." : "Tell us which system/CRM you use and we'll add support for it."}</p>
-            <div className="flex gap-1.5 mt-2.5">
-              <input value={crmReq} onChange={(e) => setCrmReq(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") requestCrm(); }}
-                placeholder={he ? "שם המערכת (למשל Priority, Monday)…" : "System name (e.g. Priority, Monday)…"}
-                className="flex-1 px-3 py-2 bg-white border border-gray-200 rounded-xl text-sm outline-none focus:ring-2 focus:ring-primary-200" />
-              <button type="button" onClick={requestCrm} disabled={crmReqState === "sending" || !crmReq.trim()} className="text-xs font-semibold px-3.5 py-2 rounded-xl bg-gray-900 text-white hover:bg-gray-800 disabled:opacity-40">
-                {crmReqState === "sending" ? "…" : (he ? "ספרו לנו" : "Tell us")}
-              </button>
-            </div>
-          </>
-        )}
-      </div>
-
-      <div className="flex items-center justify-between mt-8">
-        <button type="button" onClick={onBack} disabled={connecting || skipping} className="text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50">{he ? "→ חזרה" : "← Back"}</button>
-        <button type="button" onClick={onSkip} disabled={connecting || skipping} className="text-sm font-medium text-gray-500 hover:text-gray-700 disabled:opacity-50">{he ? "לא עכשיו - נשמר להמשך" : "Not now - saved for later"}</button>
-      </div>
-    </div>
-  );
-}
+// ConnectScreen / SystemTile / SYSTEMS moved to ./connect-screen (Movement 3).
 
 // ─── Airtable mapping (post-OAuth) ──────────────────────────
 function AirtableScreen(props: {

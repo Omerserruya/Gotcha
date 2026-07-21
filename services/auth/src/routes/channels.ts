@@ -12,7 +12,8 @@ import {
   getRedis,
   encryptCredentials,
   decryptCredentials,
-  getOAuthStateSecret,
+  mintOAuthState,
+  consumeOAuthState,
   resolvePrincipal,
 } from "@chatcenter/shared";
 
@@ -25,7 +26,6 @@ const OAUTH_REDIRECT_URI = process.env.OAUTH_REDIRECT_URI || "";
 const FRONTEND_URL = process.env.FRONTEND_URL || "http://localhost:3000";
 const FB_API_URL = process.env.FACEBOOK_API_URL || "https://graph.facebook.com/v21.0";
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
-const OAUTH_STATE_SECRET = getOAuthStateSecret();
 
 // Instagram API with Instagram Login (direct IG Business connect - no Facebook Page).
 // These are the *Instagram* app credentials from the Meta App Dashboard
@@ -605,18 +605,19 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
     const phoneNumberId = req.query.phoneNumberId as string || "";
 
     // Generate signed state JWT (anti-CSRF + tenant context + session info)
-    const state = jwt.sign(
-      {
-        tenantId: req.tenantId!,
-        userId: principal.userId,
-        platform,
-        wabaId,        // From Embedded Signup popup session info
-        phoneNumberId, // From Embedded Signup popup session info
-        nonce: Math.random().toString(36).substring(2),
-      },
-      OAUTH_STATE_SECRET,
-      { expiresIn: "10m" }
-    );
+    // Single-use state (shared store). `provider` is the constant
+    // "meta_channels" because this ONE callback serves whatsapp / instagram /
+    // messenger; the specific `platform` stays its own claim and is read from
+    // the verified payload, never from the query string. The jti replaces the
+    // old hand-rolled `nonce`, which was never checked against anything.
+    const { state } = mintOAuthState({
+      tenantId: req.tenantId!,
+      provider: "meta_channels",
+      userId: principal.userId,
+      platform,
+      wabaId,        // From Embedded Signup popup session info
+      phoneNumberId, // From Embedded Signup popup session info
+    });
 
     let oauthUrl: string;
 
@@ -703,16 +704,20 @@ router.get("/oauth/callback", async (req: Request, res: Response) => {
       return;
     }
 
-    // Verify state JWT
-    let statePayload: any;
-    try {
-      console.log("[OAUTH-CALLBACK] state param:", state);
-      statePayload = jwt.verify(state as string, OAUTH_STATE_SECRET);
-    } catch (stateErr: any) {
-      console.error("[OAUTH-CALLBACK] State JWT verify failed:", stateErr.message, "| state value:", state);
-      res.redirect(`${frontendUrl}/channels?error=invalid_state`);
+    // Verify AND consume the state - single use, so a captured callback URL
+    // cannot be replayed to re-link a channel.
+    // NOTE: the state value itself is never logged. It is a bearer token for
+    // this flow; echoing it into logs is exactly how a replay gets handed to
+    // whoever can read them.
+    const consumedState = await consumeOAuthState<{ tenantId: string; userId: string; platform: string; wabaId?: string; phoneNumberId?: string }>(
+      state as string, "meta_channels",
+    );
+    if (!consumedState.ok) {
+      console.error(`[OAUTH-CALLBACK] state rejected: ${consumedState.reason}`);
+      res.redirect(`${frontendUrl}/channels?error=${consumedState.reason === "replayed" ? "state_already_used" : "invalid_state"}`);
       return;
     }
+    const statePayload: any = consumedState.claims;
 
     const { tenantId, userId, platform } = statePayload;
 

@@ -1290,7 +1290,7 @@ http {
             proxy_set_header Accept-Encoding "";
             sub_filter_once on;
             sub_filter_types text/html;
-            sub_filter '</head>' '<script src="/static/dist/assets/custom/authentik-enhance.js?v=7" defer></script></head>';
+            sub_filter '</head>' '<script src="/static/dist/assets/custom/authentik-enhance.js?v=10" defer></script></head>';
 
             proxy_set_header Upgrade    $http_upgrade;
             proxy_set_header Connection $connection_upgrade;

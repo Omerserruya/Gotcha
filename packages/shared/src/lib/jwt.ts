@@ -63,7 +63,10 @@ export interface VerifiedIdentity {
  * subject against the local database.
  */
 export interface JwtPayload {
+  /** Membership (User row) id in the ACTIVE tenant. */
   userId: string;
+  /** The person behind the membership (Identity row id). */
+  identityId?: string;
   tenantId: string;
   role: string;
   email: string;

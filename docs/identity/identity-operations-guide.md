@@ -368,14 +368,25 @@ GOTCHA default sender (`noreply@gotcha.app`) differs from Authentik's
 - **GOTCHA -> Authentik name sync** on rename (`updateIdentity`/`syncIdentityName`).
 - **Authentik favicon + logo** set to GOTCHA assets (were stock).
 
+> **2026-07-19 - Multi-tenant identity is LIVE.** One Authentik identity can
+> now hold memberships in many tenants (Identity ⟶ User-as-membership model,
+> tenant picker, workspace switcher, X-Tenant-Id resolution). The
+> authoritative description now lives in
+> [multi-tenant-identity.md](./multi-tenant-identity.md); where this guide
+> says "the user row carries `authentikSubject`", read "the user row links an
+> `Identity` row that carries it". G-2 below is CLOSED by that work
+> (disable now deactivates the IdP identity when it is the person's last
+> active membership AND terminates its live sessions).
+
 ### Deferred (documented, not yet implemented)
 - **G-1 Orphan Authentik identity** if the DB write fails after `ensureIdentity`
   (tenant create / invite). Idempotent on retry, but a never-retried creation leaves a
   dangling IdP identity. Fix: a compensating `deleteIdentity` in the catch, guarded
   against shared identities.
-- **G-2** `PATCH {isActive:false}` deactivates only GOTCHA, not the Authentik identity
-  (a disabled user keeps a valid token until expiry). Consider routing disable through
-  `revokeUserAccess`.
+- **G-2 CLOSED (2026-07-19)** - disable routes through `syncMembershipAccess`:
+  the membership is deactivated locally, and when it is the identity's last
+  active membership the Authentik identity is deactivated and its sessions
+  terminated immediately.
 - **G-3 Invite lifecycle** - no "Pending / Invited / Never-signed-in" status in the
   Users UI, no expiry sweep, no explicit "Resend invite" button (reset achieves it).
 - **G-4 Email-change sync** - a GOTCHA email change is not propagated to Authentik
@@ -932,3 +943,51 @@ GOTCHA now solely owns per-tenant enforcement (a user WITH a device is still cha
 The eye/banner/recovery changes ship in `authentik-enhance.js` (bumped to `?v=6` for the
 CDN); recreate `authentik-server` + `gateway` after editing it. Typecheck clean
 shared/auth/frontend; auth 34/34. Demo tenant restored to baseline.
+
+## 17. "Request has been denied" x2: MFA-gate completion + invite links (2026-07-19)
+
+Two user-reported denials, both reproduced headlessly (Playwright against the live dev
+Authentik 5.0.9) and fixed at the root. The denial card is Authentik's
+`AccessDeniedStage`; the small grey line under it names the real cause.
+
+### A. MFA enrolment gate: "Invalid next URL" + a flashing iframe
+
+- **Denial at completion:** `authentikFlowUrl` passed `?next=<app>/auth/flow-done` - an
+  ABSOLUTE, cross-host URL. Authentik only follows a RELATIVE `next` (open-redirect
+  protection) and ends the flow on "Request has been denied. Invalid next URL". The
+  TOTP device was already created by then, so the gate's poll still (correctly) marked
+  MFA enabled - denial card + real success, exactly as reported. Fix:
+  `authentikFlowUrl(slug, nextPath?)` only accepts a relative path, and the gate now
+  CHAINS step 1 -> step 2 with `next=/if/flow/default-authenticator-static-setup/`
+  (finish the QR, land straight on recovery codes, same iframe). The final step has no
+  `next`; the poll masks + releases. The `/auth/flow-done` postMessage page never
+  actually ran (its URL was always refused) and is now vestigial.
+- **"Refreshing every 5 sec":** the gate's 3s server poll raised the same `busy` flag
+  as explicit verification, flashing the white "Finishing setup..." mask over the QR on
+  every tick. Background polls are now silent; only the frame-load handler and the
+  "I've finished this step" button raise the mask.
+
+### B. Invite / recovery links: "No Pending data." (and the token burns)
+
+`/core/users/{pk}/recovery/` PLANS the recovery flow at link-CREATION time and pickles
+the plan into the FlowToken. Two config errors broke every minted link:
+
+1. **Password policy bound to the prompt's flow-stage binding** (old
+   `ensurePasswordPolicy`). Binding policies gate stage INCLUSION and run at plan time,
+   where no password exists in context -> "Password not set in context" -> the "Set
+   your password" prompt stage was silently dropped from the pickled plan ->
+   `user_write` ran first and died with "Request has been denied. No Pending data.".
+   Worse, the failed visit still consumes the one-time token, so the link is burned.
+   The ONLY correct attachment point is the prompt STAGE's `validation_policies`
+   (Authentik evaluates those against the submitted fields on every submit - verified:
+   weak password rejected with our message, strong accepted). `bootstrap.mjs` now
+   attaches there and deletes the legacy mis-binding on existing installs.
+2. **`authentication: require_unauthenticated` on `gotcha-recovery`(+`-self`)** denies
+   the link in any browser that already holds an Authentik session (admin testing an
+   invite, a user invited to a second workspace) - and burns the token the same way.
+   Both flows are now `authentication: "none"`; the one-time flow token is the real
+   gate. Verified: a second user's invite link opened from an already-signed-in browser
+   renders the password prompt normally.
+
+Both fixes were applied to the LIVE dev Authentik via API and made reproducible in
+`scripts/authentik/bootstrap.mjs` (idempotent converge-on-rerun for existing installs).

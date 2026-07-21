@@ -14,7 +14,7 @@ import {
   prisma,
   authenticate,
   resolveTenant,
-  requireRole,
+  requirePermissionOrRole,
   writeAudit,
   AuditAction,
   mfaRequirementFor,
@@ -27,11 +27,21 @@ router.use(authenticate, resolveTenant);
 
 /** Members of the tenant that matter for MFA (real people who can sign in). */
 async function tenantMembers(tenantId: string) {
-  return prisma.user.findMany({
+  const rows = await prisma.user.findMany({
     where: { tenantId },
-    select: { id: true, name: true, email: true, role: true, authentikSubject: true, mfaEnrolledAt: true, isActive: true },
+    select: {
+      id: true, name: true, email: true, role: true, isActive: true,
+      identity: { select: { id: true, authentikSubject: true, mfaEnrolledAt: true } },
+    },
     orderBy: [{ role: "asc" }, { name: "asc" }],
   });
+  // Flatten the identity-level fields the rest of this module keys on.
+  return rows.map((r) => ({
+    id: r.id, name: r.name, email: r.email, role: r.role, isActive: r.isActive,
+    identityId: r.identity.id,
+    authentikSubject: r.identity.authentikSubject,
+    mfaEnrolledAt: r.identity.mfaEnrolledAt,
+  }));
 }
 
 const isAdminRole = (role: string) => role === "ADMIN" || role === "SYSTEM_ADMIN";
@@ -81,9 +91,9 @@ async function buildCompliance(tenantId: string) {
       const live = m.authentikSubject ? enrollMap.get(m.authentikSubject) : undefined;
       if (!live?.resolved) continue;
       if (live.enrolled && !m.mfaEnrolledAt) {
-        void prisma.user.update({ where: { id: m.id }, data: { mfaEnrolledAt: new Date() } }).catch(() => {});
+        void prisma.identity.update({ where: { id: m.identityId }, data: { mfaEnrolledAt: new Date() } }).catch(() => {});
       } else if (!live.enrolled && m.mfaEnrolledAt) {
-        void prisma.user.update({ where: { id: m.id }, data: { mfaEnrolledAt: null } }).catch(() => {});
+        void prisma.identity.update({ where: { id: m.identityId }, data: { mfaEnrolledAt: null } }).catch(() => {});
       }
     }
   }
@@ -101,7 +111,7 @@ async function buildCompliance(tenantId: string) {
 }
 
 // GET current policy + compliance. Any workspace admin may view.
-router.get("/", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.get("/", requirePermissionOrRole("settings:workspace:update", "ADMIN"), async (req: Request, res: Response): Promise<void> => {
   const tenantId = req.tenantId || req.user!.tenantId;
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },
@@ -122,7 +132,7 @@ router.get("/", requireRole("ADMIN"), async (req: Request, res: Response): Promi
 
 // PATCH policy flags. Enabling never locks out already-enrolled members; the
 // backfill stamps them compliant, and only the un-enrolled get gated.
-router.patch("/", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.patch("/", requirePermissionOrRole("settings:workspace:update", "ADMIN"), async (req: Request, res: Response): Promise<void> => {
   const tenantId = req.tenantId || req.user!.tenantId;
   const body = (req.body ?? {}) as Record<string, unknown>;
   const data: { mfaRequiredForAdmins?: boolean; mfaRequiredForAllUsers?: boolean } = {};
@@ -156,7 +166,7 @@ router.patch("/", requireRole("ADMIN"), async (req: Request, res: Response): Pro
 });
 
 // GET the per-member roster ("Review users" - who still needs MFA).
-router.get("/review", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
+router.get("/review", requirePermissionOrRole("settings:workspace:update", "ADMIN"), async (req: Request, res: Response): Promise<void> => {
   const tenantId = req.tenantId || req.user!.tenantId;
   const tenant = await prisma.tenant.findUnique({
     where: { id: tenantId },

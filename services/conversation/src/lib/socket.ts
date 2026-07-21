@@ -18,8 +18,10 @@ export function initSocket(httpServer: HttpServer): Server {
     try {
       // Same resolver the HTTP gate uses: verify against Authentik's JWKS,
       // then resolve the subject to a live GOTCHA user. A socket must not be
-      // an easier way in than a request.
-      (socket as any).user = await resolvePrincipal(token);
+      // an easier way in than a request. The active-tenant hint is validated
+      // against the identity's memberships, exactly like the HTTP header.
+      const tenantHint = (socket.handshake.auth.tenantId as string | undefined) || null;
+      (socket as any).user = await resolvePrincipal(token, tenantHint);
       next();
     } catch {
       next(new Error("Invalid token"));

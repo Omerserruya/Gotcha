@@ -171,5 +171,11 @@ startPostCallAnalyzeWorker();
 import { startKnowledgeSyncScheduler } from "./services/knowledge-sync.service";
 startKnowledgeSyncScheduler();
 
+// Data-retention purge: repeatable BullMQ job (RETENTION_PURGE_CRON, default
+// daily 03:30) executing tenant policies + platform env defaults. Without this
+// the retention machinery existed but nothing ever invoked it.
+import { startRetentionScheduler } from "./services/retention-purge.service";
+startRetentionScheduler();
+
 startService(app, config);
 export { app };

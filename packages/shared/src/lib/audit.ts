@@ -44,6 +44,8 @@ export const AuditAction = {
   USER_DELETED: "user.deleted",
   USER_ACTIVATED: "user.activated",
   USER_DEACTIVATED: "user.deactivated",
+  // A multi-tenant identity switched its ACTIVE workspace.
+  TENANT_SWITCHED: "user.tenant_switched",
   // ── Tenant lifecycle ──
   TENANT_CREATED: "tenant.created",
   TENANT_UPDATED: "tenant.updated",
