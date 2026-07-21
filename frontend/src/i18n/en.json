@@ -317,6 +317,8 @@
     "showMore": "Show all",
     "showLess": "Show less",
     "noOrders": "No Shopify orders found for this customer.",
+    "connectionUnhealthy": "Shopify connection needs attention.",
+    "customerNotLinked": "No linked Shopify customer for this contact yet.",
     "temporarilyUnavailable": "Order info is temporarily unavailable.",
     "missingScopes": "Some actions need additional store permissions.",
     "order": "Order",

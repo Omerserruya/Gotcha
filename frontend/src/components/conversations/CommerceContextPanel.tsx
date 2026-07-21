@@ -48,9 +48,12 @@ function Chip({ chip }: { chip: StatusChip | null }) {
 interface Props {
   conversationId: string | undefined;
   token: string | null;
+  /** Reports the fetched state so the parent can decide whether Shopify is the
+   * connected system (and hide the generic CRM sections). `null` = not loaded. */
+  onState?: (state: string | null) => void;
 }
 
-export function CommerceContextPanel({ conversationId, token }: Props) {
+export function CommerceContextPanel({ conversationId, token, onState }: Props) {
   const { t, locale } = useI18n();
   const [resp, setResp] = useState<CommerceContextResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,6 +81,12 @@ export function CommerceContextPanel({ conversationId, token }: Props) {
   useEffect(() => {
     load();
   }, [load]);
+
+  // Report the connection state so the parent can hide the generic CRM
+  // sections when Shopify is the connected system.
+  useEffect(() => {
+    onState?.(resp?.state ?? null);
+  }, [resp?.state, onState]);
 
   // Replace one order card in place after a verified action (spec §6).
   function applyExecuted(order: OrderCard) {
@@ -134,15 +143,30 @@ export function CommerceContextPanel({ conversationId, token }: Props) {
   }
   if (!resp) return null;
 
-  // Hidden states (spec §10): the ordinary agent panel shows nothing when
-  // Shopify isn't connected or the customer isn't securely linked.
+  // Only fully hide when Shopify is NOT the connected system (the parent then
+  // shows the generic CRM sections). When Shopify IS connected but there's no
+  // customer data yet, render a compact Shopify card so the section isn't blank.
+  if (resp.state === "not_connected") {
+    return null;
+  }
   if (
-    resp.state === "not_connected" ||
     resp.state === "connection_unhealthy" ||
     resp.state === "customer_not_linked" ||
     resp.state === "verification_required"
   ) {
-    return null;
+    const note =
+      resp.state === "connection_unhealthy"
+        ? t("commerce.connectionUnhealthy") || "Shopify connection needs attention."
+        : t("commerce.customerNotLinked") || "No linked Shopify customer for this contact yet.";
+    return (
+      <section className="rounded-xl border border-gray-100 bg-white overflow-hidden">
+        <div className="px-3 py-2.5 flex items-center gap-2 border-b border-gray-50">
+          <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-lime-500 to-emerald-600 flex items-center justify-center text-white text-[11px] font-bold">S</div>
+          <p className="text-xs font-semibold text-gray-900">{t("commerce.title") || "Shopify"}</p>
+        </div>
+        <div className="px-3 py-3 text-[11px] text-gray-500">{note}</div>
+      </section>
+    );
   }
 
   const summary = resp.state === "ok" ? resp.data.summary : resp.state === "no_orders" ? resp.summary : null;

@@ -317,6 +317,8 @@
     "showMore": "הצג הכל",
     "showLess": "הצג פחות",
     "noOrders": "לא נמצאו הזמנות Shopify עבור לקוח זה.",
+    "connectionUnhealthy": "חיבור ה-Shopify דורש טיפול.",
+    "customerNotLinked": "אין לקוח Shopify מקושר לאיש קשר זה עדיין.",
     "temporarilyUnavailable": "מידע ההזמנות אינו זמין כרגע.",
     "missingScopes": "חלק מהפעולות דורשות הרשאות חנות נוספות.",
     "order": "הזמנה",

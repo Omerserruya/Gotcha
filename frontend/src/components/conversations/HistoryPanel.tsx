@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { CustomerIntelligenceCard } from "./CustomerIntelligenceCard";
+import { CommerceContextPanel } from "./CommerceContextPanel";
 import { useI18n } from "@/context/I18nContext";
 import { getConversationHistory } from "@/lib/api";
 import { fetchCustomerSummary, postCrmNote, type CrmContextEnvelope, type CustomerSummary } from "@/lib/api-crm";
@@ -45,6 +46,10 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
   const [summary, setSummary] = useState<CustomerSummary | null>(null);
   const [summaryLoading, setSummaryLoading] = useState(false);
   const [summaryError, setSummaryError] = useState<string | null>(null);
+  // When Shopify is the connected system, the commerce panel reports a state
+  // other than "not_connected" and we hide the generic CRM sections below.
+  const [commerceState, setCommerceState] = useState<string | null>(null);
+  const shopifyActive = commerceState != null && commerceState !== "not_connected";
 
   const isLinked = crmContext?.status === "linked";
   const crmActivities = crmContext?.recent_activities ?? [];
@@ -161,6 +166,10 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         {/* Customer Intelligence snapshot (V2) - structured WHO/WHAT/MISSING/NEXT
             from the three-domain model. Renders nothing until intelligence exists. */}
         <CustomerIntelligenceCard conversationId={conversationId} />
+        {/* Shopify commerce context - shown when Shopify is the connected
+            system; it self-reports state so the generic CRM sections below are
+            hidden while it's active. */}
+        <CommerceContextPanel conversationId={conversationId} token={token} onState={setCommerceState} />
         {/* AI customer brief - highlighted card at the top, gradient border so
             it visually anchors above the structured CRM blocks. Same payload
             will plug into Co-Pilot in a follow-up. */}
@@ -327,7 +336,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         </CollapsibleSection>
 
         {/* Open CRM tasks (collapsible) */}
-        {isLinked && (
+        {!shopifyActive && isLinked && (
           <CollapsibleSection title={t("conversations.historyPanel.openTasks")} badge={openIssues.length} defaultOpen>
             {openIssues.length === 0 ? (
               <div className="text-[11px] text-gray-400 italic">{t("conversations.historyPanel.noOpenTasks")}</div>
@@ -359,7 +368,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         )}
 
         {/* CRM activity timeline (collapsible) */}
-        {isLinked && (
+        {!shopifyActive && isLinked && (
           <CollapsibleSection title={t("conversations.historyPanel.crmActivity")} badge={crmActivities.length}>
             {crmActivities.length === 0 ? (
               <div className="text-[11px] text-gray-400 italic">{t("conversations.historyPanel.noCrmActivity")}</div>
@@ -380,7 +389,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         )}
 
         {/* CRM notes (read-only, fetched fresh up to 10 from the vendor side) */}
-        {isLinked && (
+        {!shopifyActive && isLinked && (
           <CollapsibleSection title={t("conversations.historyPanel.crmNotes")} badge={crmNotes.length}>
             {crmNotes.length === 0 ? (
               <div className="text-[11px] text-gray-400 italic">{t("conversations.historyPanel.noCrmNotes")}</div>
@@ -403,7 +412,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         {/* Manual CRM note composer - kept, since this is a deliberate
             agent action (lands on the vendor's contact timeline). Only
             the local "demo" notes block was removed. */}
-        {isLinked && (
+        {!shopifyActive && isLinked && (
           <CollapsibleSection title={t("crmPanel.addNote")}>
             <textarea
               value={crmNoteText}
@@ -435,7 +444,7 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         )}
 
         {/* CRM status hints (when not linked) */}
-        {crmContext?.status === "no_crm_configured" && !crmLoading && (
+        {!shopifyActive && crmContext?.status === "no_crm_configured" && !crmLoading && (
           <div className="text-[11px] px-3 py-2 rounded-lg bg-amber-50 text-amber-700 border border-amber-100">
             {t("crmPanel.noCrm") || "No CRM connected. Connect one under Settings → Integrations."}
           </div>

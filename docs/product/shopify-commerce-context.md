@@ -86,6 +86,8 @@ live first — stale state is never trusted before cancel/refund.
 - `frontend/src/lib/api-commerce.ts` — typed client.
 - i18n keys in `frontend/src/i18n/{en,he}.json`.
 
+Mount point: the conversation **Context Panel** (`frontend/src/components/conversations/HistoryPanel.tsx`, opened via the History/Context button on a conversation). NOTE: the older `CRMPanel.tsx` is dead code (no render site) - do not mount here. When Shopify is the connected system the commerce panel reports a non-`not_connected` state via `onState`, and HistoryPanel hides its generic CRM sections (open tasks / CRM activity / CRM notes / add-note); when a non-Shopify CRM is connected those CRM sections show as before. Shopify takes precedence when both are connected.
+
 ## 8. Remaining Shopify API limitations (deliverable #11)
 - **Product image on order cards**: Shopify REST order line items do NOT carry a
   product image URL. The card shows the product title + a placeholder; a true
