@@ -24,7 +24,8 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
-import { runProductDiscoveryTurn, recordDiscoverySearchOutcome } from "./discovery-integration.service";
+import { runProductDiscoveryTurn, recordDiscoverySearchOutcome, groundProductSearchResult, isProductSearchTool } from "./discovery-integration.service";
+import { buildKeyedModelSummary, renderGroundedProductReply, renderCandidatesForWhatsApp, type ProductSearchEnvelope } from "./product-search.service";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import {
@@ -2128,6 +2129,10 @@ async function generateAIBotReplyInner(
   // real product tool is offered, force the search this turn; when ready but
   // the tool is absent, steer to an honest handoff instead of a fake search.
   let discoveryForceTool: string | null = null;
+  // Canonical typed product envelope for this turn (set when a Shopify product
+  // search runs); drives deterministic grounded rendering of the final reply.
+  let productEnvelope: ProductSearchEnvelope | null = null;
+  const replyLocale: "he" | "en" = detectLocale(messages.map((m) => m.body || ""));
   try {
     const disc = await runProductDiscoveryTurn({
       tenantId: opts.tenantId,
@@ -2509,10 +2514,34 @@ async function generateAIBotReplyInner(
           console.warn("[ai-bot] contract progress write failed:", err?.message);
         }
 
+        // ── Typed product-result path (ISOLATED to Shopify product search) ──
+        // Normalize the raw result into the canonical envelope, stash it for
+        // deterministic rendering, and give the MODEL only a safe keyed summary
+        // (PRODUCT_1..N, no URLs/prices to copy). Generic tools are untouched.
+        let toolContent = result.content;
+        if (
+          process.env.DISCOVERY_TYPED_PRODUCT_RENDER !== "off" &&
+          isProductSearchTool(toolName)
+        ) {
+          try {
+            const envlp = await groundProductSearchResult({
+              tenantId: opts.tenantId,
+              conversationId: opts.conversationId,
+              toolName,
+              rawContent: result.content,
+            });
+            if (envlp) {
+              productEnvelope = envlp;
+              toolContent = buildKeyedModelSummary(envlp, replyLocale);
+            }
+          } catch (err: any) {
+            console.warn("[ai-bot] typed product path failed (using raw result):", err?.message);
+          }
+        }
         chatMessages.push({
           role: "tool",
           tool_call_id: result.toolCallId,
-          content: result.content,
+          content: toolContent,
         });
       }
 
@@ -3813,6 +3842,29 @@ async function generateAIBotReplyInner(
     replyText = he
       ? "העברתי את זה לצוות שלנו, מישהו מאיתנו יחזור אליך בהקדם 🙏"
       : "I've passed this on to our team, someone will get back to you shortly 🙏";
+  }
+
+  // ── Deterministic grounded product rendering (ISOLATED) ─────────────────
+  // A Shopify product search ran this turn: the exact product identity (title,
+  // price, currency, availability, URL) comes from the canonical envelope, not
+  // the model's prose. The model referenced candidates by PRODUCT_n; the
+  // renderer resolves them, blocks invented refs, and strips any URL/price the
+  // model tried to emit. On any failure it still renders from the canonical
+  // envelope (never generic model inventory) and logs loudly.
+  if (productEnvelope) {
+    try {
+      const rendered = renderGroundedProductReply(replyText, productEnvelope, replyLocale);
+      if (rendered.blocked.length) {
+        console.warn(`[ai-bot] grounded render blocked invented product refs: ${rendered.blocked.join(",")} conv=${opts.conversationId}`);
+      }
+      if (rendered.usedFallback) {
+        console.warn(`[ai-bot] grounded render used deterministic fallback (canonical envelope) conv=${opts.conversationId}`);
+      }
+      replyText = rendered.message;
+    } catch (err: any) {
+      console.error(`[ai-bot] grounded render FAILED, falling back to canonical list conv=${opts.conversationId}:`, err?.message);
+      try { replyText = renderCandidatesForWhatsApp(productEnvelope, replyLocale); } catch { /* keep model reply */ }
+    }
   }
 
   // Final humanizing pass on the outgoing reply (strip machine-style dashes).

@@ -23,6 +23,76 @@ import {
   type DiscoveryProfile,
 } from "@chatcenter/shared";
 import { extractFieldsLive } from "./intelligence-live-extract.service";
+import { prisma } from "@chatcenter/shared";
+import { normalizeShopifyProducts, type ProductSearchEnvelope } from "./product-search.service";
+
+/** Product-search tool names this typed path covers (scoped - NOT generic). */
+export function isProductSearchTool(toolName: string | undefined): boolean {
+  return !!toolName && /(^|\.)(search_products|get_product)$/.test(toolName);
+}
+
+/** Parse a budget fact (`"700 USD"`, `700`, or `{target,currency}`) → typed budget. */
+function parseBudget(v: unknown): { target: number; currency: string } | undefined {
+  if (v && typeof v === "object" && "target" in (v as any)) {
+    const t = Number((v as any).target);
+    if (Number.isFinite(t)) return { target: t, currency: String((v as any).currency ?? "USD") };
+  }
+  const s = String(v ?? "");
+  const num = s.match(/\d[\d.,]*/);
+  if (!num) return undefined;
+  const cur = /ILS|₪|שקל/i.test(s) ? "ILS" : /EUR|€/i.test(s) ? "EUR" : "USD";
+  const t = Number(num[0].replace(/,/g, ""));
+  return Number.isFinite(t) ? { target: t, currency: cur } : undefined;
+}
+
+/**
+ * Build the canonical typed ProductSearchEnvelope from a raw Shopify search
+ * result. Isolated to the product-recommendation flow. Reads shopDomain from
+ * the tenant's Shopify connection (never model-supplied) and budget from the
+ * active discovery session. Returns null if not a product tool / no data.
+ */
+export async function groundProductSearchResult(opts: {
+  tenantId: string;
+  conversationId: string;
+  toolName: string;
+  rawContent: string;
+  provider?: boolean;
+}): Promise<ProductSearchEnvelope | null> {
+  try {
+    if (!isProductSearchTool(opts.toolName)) return null;
+    let parsed: any = opts.rawContent;
+    if (typeof parsed === "string") { try { parsed = JSON.parse(parsed); } catch { return null; } }
+    // Provider failure/denied → an ERROR envelope (never no-results).
+    if (parsed && parsed.ok === false) {
+      return { provider: "shopify", tool: "shopify_product_search", status: "error", candidates: [], appliedFilters: [], unavailableFilters: [], safeModelSummary: "" };
+    }
+    let products: any = parsed;
+    if (products && typeof products === "object" && "result" in products) products = products.result;
+    if (products && !Array.isArray(products)) products = [products]; // get_product → single
+    if (!Array.isArray(products)) products = [];
+
+    const conn = await (prisma as any).tenantIntegration.findFirst({
+      where: { tenantId: opts.tenantId, integration: { slug: "shopify" } },
+      select: { config: true },
+    });
+    const shopDomain = (conn?.config as any)?.shopDomain;
+    if (!shopDomain) return null;
+
+    const profile = getDiscoveryProfile("product_recommendation") as DiscoveryProfile;
+    const session = await getOrCreateActiveSession({ tenantId: opts.tenantId, conversationId: opts.conversationId, goalKey: profile.goalKey });
+    const facts = await (await import("@chatcenter/shared")).activeFacts(session.id);
+    const budget = parseBudget(facts.get("budget")?.valueJson);
+    const requestedFilters = ["query", ...(budget ? ["budget"] : []),
+      ...(facts.has("preferred_length_cm") ? ["length"] : []),
+      ...(facts.has("flex") ? ["flex"] : []),
+      ...(facts.has("riding_style") ? ["riding_style"] : []),
+    ];
+    return normalizeShopifyProducts(products, { shopDomain, budget, requestedFilters });
+  } catch (err: any) {
+    console.warn("[discovery] product envelope build failed (non-fatal):", err?.message);
+    return null;
+  }
+}
 
 export type DiscoveryDecision =
   | { kind: "collect" }                    // still missing required info - ask ONE

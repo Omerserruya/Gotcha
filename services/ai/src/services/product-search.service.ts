@@ -235,6 +235,114 @@ export function normalizeShopifyProducts(
 }
 
 /**
+ * The MODEL-VISIBLE representation. The model never sees raw URLs/ids/prices to
+ * copy; it sees stable keys (PRODUCT_1..N) plus safe descriptive facts, and is
+ * told to REFERENCE products by key. The deterministic renderer later resolves
+ * those keys against the canonical envelope. This is the "safe structured
+ * summary" stage - the model reasons, it does not reproduce identity.
+ */
+export function buildKeyedModelSummary(
+  env: ProductSearchEnvelope,
+  locale: "he" | "en",
+): string {
+  if (env.status === "error") {
+    return "PRODUCT_SEARCH_FAILED: the live catalog could not be read. Do NOT claim a search ran or that there are no products; tell the customer you can't check the catalog right now and offer a human handoff.";
+  }
+  if (env.status === "no_results" || env.candidates.length === 0) {
+    return "PRODUCT_SEARCH_RESULTS: 0 products matched. State honestly that no exact matches were found and offer ONE controlled refinement (widen length, raise budget, or preorder). Do NOT invent products.";
+  }
+  const lines = env.candidates.map((c, i) => {
+    const key = `PRODUCT_${i + 1}`;
+    const price = c.price !== undefined ? `${c.currency ?? ""} ${c.price}`.trim() : "unknown price";
+    const avail =
+      c.inventoryState === "in_stock" ? "in stock" :
+      c.inventoryState === "out_of_stock" ? "out of stock" : "availability unknown";
+    const match = c.matchQuality === "approximate" ? "approximate/over-budget" : "within budget";
+    const unknown = c.unknownAttributes.length ? ` | unknown: ${c.unknownAttributes.join(", ")}` : "";
+    return `${key}: "${c.title}" | ${price} | ${avail} | ${match}${unknown}`;
+  });
+  return [
+    "PRODUCT_SEARCH_RESULTS (reference products ONLY by their key, e.g. PRODUCT_1):",
+    ...lines,
+    "",
+    "Rules: reference candidates by key. Do NOT write product URLs, prices, or availability yourself - the system attaches the exact values. Do NOT mention any product not listed above. State unknown attributes (flex/riding style/length) as unknown; never invent them.",
+  ].join("\n");
+}
+
+const URL_RE = /\bhttps?:\/\/[^\s<>"')\]]+/gi;
+const MONEY_RE = /(?:[$₪€£]|USD|ILS|EUR|GBP)\s?\d[\d.,]*|\d[\d.,]*\s?(?:USD|ILS|EUR|GBP|\$|₪)/gi;
+
+/**
+ * Deterministic grounded renderer: resolve the model's PRODUCT_n references
+ * against the canonical envelope and attach EXACT product fields. The model's
+ * prose is reasoning only - any URL or price it emitted is stripped, so it can
+ * never substitute a URL, alter a price/currency, flip availability, or invent
+ * a product. References to products that don't exist are blocked. A malformed /
+ * reference-less reply falls back to the full deterministic list. Pure.
+ */
+export function renderGroundedProductReply(
+  modelText: string | null | undefined,
+  env: ProductSearchEnvelope,
+  locale: "he" | "en",
+): { message: string; blocked: string[]; grounded: boolean; usedFallback: boolean } {
+  // Provider failure must never read as no-results.
+  if (env.status === "error") {
+    return {
+      message: locale === "he"
+        ? "לא הצלחתי לגשת לקטלוג החי כרגע. אני יכולה לחבר אותך לנציג מהצוות שיבדוק עבורך."
+        : "I couldn't reach the live catalog just now. I can connect you with a person from the team to check for you.",
+      blocked: [], grounded: true, usedFallback: true,
+    };
+  }
+  if (env.status === "no_results" || env.candidates.length === 0) {
+    return { message: renderCandidatesForWhatsApp(env, locale), blocked: [], grounded: true, usedFallback: false };
+  }
+
+  const text = (modelText ?? "").trim();
+  const refTokens = Array.from(text.matchAll(/PRODUCT_(\d+)/gi)).map((m) => Number(m[1]));
+  const validRefs = Array.from(new Set(refTokens.filter((n) => n >= 1 && n <= env.candidates.length)));
+  const blocked = Array.from(new Set(refTokens.filter((n) => n < 1 || n > env.candidates.length))).map((n) => `PRODUCT_${n}`);
+
+  // Which candidates to present: the referenced ones, else all (fallback).
+  const chosen = validRefs.length ? validRefs.map((n) => env.candidates[n - 1]) : env.candidates;
+  const usedFallback = validRefs.length === 0;
+
+  // Model prose becomes reasoning ONLY: strip any URL/price it emitted (exact
+  // values come from the canonical block below), replace PRODUCT_n tokens with
+  // the real title so the prose reads naturally, and drop invalid refs.
+  let prose = text
+    .replace(/PRODUCT_(\d+)/gi, (_, d) => {
+      const n = Number(d);
+      return n >= 1 && n <= env.candidates.length ? env.candidates[n - 1].title : "";
+    })
+    .replace(URL_RE, "")
+    .replace(MONEY_RE, "")
+    .replace(/[ \t]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+  // If nothing usable remains, no prose (the deterministic list stands alone).
+  if (usedFallback || prose.length < 3) prose = "";
+
+  // Canonical block: EXACT fields from the envelope only.
+  const inStockLabel = locale === "he" ? "במלאי" : "in stock";
+  const outLabel = locale === "he" ? "אזל מהמלאי" : "out of stock";
+  const overBudget = locale === "he" ? "מעט מעל התקציב" : "slightly over budget";
+  const blocks = chosen.map((c, i) => {
+    const parts = [`${i + 1}. ${c.title}`];
+    if (c.price !== undefined) parts.push([c.currency, c.price].filter(Boolean).join(" "));
+    if (c.matchQuality === "approximate") parts[parts.length - 1] += ` (${overBudget})`;
+    if (c.inventoryState === "in_stock") parts.push(inStockLabel);
+    else if (c.inventoryState === "out_of_stock") parts.push(outLabel);
+    parts.push(c.url);
+    return parts.join("\n");
+  });
+
+  const header = locale === "he" ? "הנה מה שמצאתי:" : "Here's what I found:";
+  const message = [prose, prose ? "" : header, ...blocks].filter((x) => x !== undefined && x !== null).join("\n\n").replace(/\n{3,}/g, "\n\n").trim();
+  return { message, blocked, grounded: true, usedFallback };
+}
+
+/**
  * Render candidates as a clean, readable WhatsApp list using EXACT url/price.
  * No em dashes, no invented attributes. Honest no-results line when empty.
  */
