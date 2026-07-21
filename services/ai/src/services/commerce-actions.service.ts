@@ -97,14 +97,19 @@ export async function executeCommerceAction(opts: {
   // 2. Reconcile the order live immediately before the sensitive action (spec §9).
   const order = await fetchOrder(tenantId, conversationId, request.orderId);
   if (!order) return { state: "unavailable", reason: "order_not_found" };
+  // Ownership FAILS CLOSED: the orderId is client-supplied, so the order must
+  // POSITIVELY match the conversation's verified customer. An order whose owner
+  // we cannot confirm (missing customer id, e.g. a guest checkout) is never
+  // actionable from this conversation - otherwise an agent could cancel/refund
+  // an arbitrary order by id.
   const orderCustomerId = String(order?.customer?.id ?? order?.customer_id ?? "");
-  if (orderCustomerId && orderCustomerId !== verifiedCustomerId) {
-    // The order is not this customer's - never act, never leak.
+  if (!orderCustomerId || orderCustomerId !== verifiedCustomerId) {
+    // The order is not (provably) this customer's - never act, never leak.
     await writeAudit({
       tenantId, actorType: "user", actorId: opts.actorUserId,
       action: "security.commerce_action_cross_customer_denied",
       targetType: "order", targetId: request.orderId,
-      metadata: { conversationId, correlationId: opts.correlationId, action: request.action },
+      metadata: { conversationId, correlationId: opts.correlationId, action: request.action, orderCustomerResolved: !!orderCustomerId },
     });
     return { state: "denied", reason: "order_not_owned" };
   }

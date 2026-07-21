@@ -88,6 +88,16 @@ describe("ownership + eligibility", () => {
     expect((r as any).reason).toBe("order_not_owned");
   });
 
+  it("3b. an order with NO resolvable customer (guest checkout) fails closed", async () => {
+    // orderId is client-supplied; an order we can't prove belongs to the
+    // verified customer must never be actionable.
+    wireAdapter({ ...PAID_ORDER, customer: undefined, customer_id: undefined }, { ok: true, result: {} }, {});
+    const r = await executeCommerceAction(baseOpts());
+    expect(r.state).toBe("denied");
+    expect((r as any).reason).toBe("order_not_owned");
+    expect(execMock.mock.calls.some((c) => c[0].toolFunctionName === "shopify.process_refund")).toBe(false);
+  });
+
   it("cancel on an already-cancelled order → unavailable", async () => {
     wireAdapter({ ...PAID_ORDER, cancelled_at: "2026-07-19T00:00:00Z" }, { ok: true, result: {} }, {});
     const r = await executeCommerceAction(baseOpts({ request: { orderId: "5001", action: "cancel", idempotencyKey: "i", params: {} } }));
