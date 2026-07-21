@@ -182,7 +182,7 @@ function adminUrl(shopDomain: string, orderId: string | number): string {
   return `https://${host}/admin/orders/${orderId}`;
 }
 
-function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale: Locale): OrderCard {
+function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale: Locale, imageByProduct: Record<string, string> = {}): OrderCard {
   const currency = order?.currency ?? order?.presentment_currency ?? "USD";
   const total = Number(order?.total_price) || 0;
   const refunded = refundedAmount(order);
@@ -192,8 +192,9 @@ function mapOrderCard(order: any, shopDomain: string, canWrite: boolean, locale:
   const items: OrderItem[] = lineItems.slice(0, MAX_ITEMS_SHOWN).map((li: any) => ({
     title: String(li?.title ?? li?.name ?? "Item"),
     quantity: Number(li?.quantity) || 1,
-    // Shopify order line items don't carry a product image URL (known limitation).
-    imageUrl: null,
+    // Shopify order line items don't carry an image URL - enriched from the
+    // product's featured image (batched get_product_images), null if unknown.
+    imageUrl: (li?.product_id != null && imageByProduct[String(li.product_id)]) || null,
   }));
   const extraItemCount = Math.max(0, lineItems.reduce((n: number, li: any) => n + (Number(li?.quantity) || 1), 0) - (items[0]?.quantity ?? 0));
 
@@ -252,6 +253,35 @@ function buildCapabilities(
 }
 
 // ── Public: build the response for the human panel ──────────────────────────
+
+/** Batch-fetch the featured image for each order's first product (one call). */
+async function fetchProductImages(
+  tenantId: string,
+  conversationId: string | undefined,
+  orders: any[],
+): Promise<Record<string, string>> {
+  try {
+    const ids = Array.from(
+      new Set(
+        orders
+          .map((o) => (Array.isArray(o?.line_items) ? o.line_items[0]?.product_id : null))
+          .filter((x) => x != null)
+          .map(String),
+      ),
+    );
+    if (!ids.length) return {};
+    const res = await executeAdapterTool({
+      tenantId,
+      conversationId,
+      toolFunctionName: "shopify.get_product_images",
+      args: { product_ids: ids },
+      accessScope: "internal",
+    });
+    return res.ok && res.result && typeof res.result === "object" ? (res.result as Record<string, string>) : {};
+  } catch {
+    return {};
+  }
+}
 
 export interface CommerceAgentPermissions {
   canRead: boolean;
@@ -359,7 +389,9 @@ async function buildCommerceContextFresh(opts: {
   // Most-recent first (defensive - do not rely on provider ordering).
   rawOrders.sort((a, b) => new Date(b?.created_at ?? 0).getTime() - new Date(a?.created_at ?? 0).getTime());
 
-  const recentOrders = rawOrders.map((o) => mapOrderCard(o, shopDomain, canWrite, locale));
+  // Enrich the first product image per order (order line items lack images).
+  const imageByProduct = await fetchProductImages(opts.tenantId, opts.conversationId, rawOrders);
+  const recentOrders = rawOrders.map((o) => mapOrderCard(o, shopDomain, canWrite, locale, imageByProduct));
 
   // 6. Summary (shop-currency provider aggregate; never cross-currency summed).
   const orderCount = Number(customer?.orders_count ?? rawOrders.length) || 0;
@@ -413,7 +445,8 @@ export async function orderToCard(
   const l: Locale = String(locale || "en").toLowerCase().startsWith("he") ? "he" : "en";
   const conn = await loadConnection({ tenantId, slug: "shopify" });
   const shopDomain = String(conn?.config?.shopDomain || "").trim() || "unknown.myshopify.com";
-  return mapOrderCard(order, shopDomain, canWrite, l);
+  const imageByProduct = await fetchProductImages(tenantId, undefined, [order]);
+  return mapOrderCard(order, shopDomain, canWrite, l, imageByProduct);
 }
 
 // Exposed for unit tests (pure mappers).

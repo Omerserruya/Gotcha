@@ -166,10 +166,6 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
         {/* Customer Intelligence snapshot (V2) - structured WHO/WHAT/MISSING/NEXT
             from the three-domain model. Renders nothing until intelligence exists. */}
         <CustomerIntelligenceCard conversationId={conversationId} />
-        {/* Shopify commerce context - shown when Shopify is the connected
-            system; it self-reports state so the generic CRM sections below are
-            hidden while it's active. */}
-        <CommerceContextPanel conversationId={conversationId} token={token} onState={setCommerceState} />
         {/* AI customer brief - highlighted card at the top, gradient border so
             it visually anchors above the structured CRM blocks. Same payload
             will plug into Co-Pilot in a follow-up. */}
@@ -180,6 +176,10 @@ export function HistoryPanel({ conversation, crmContext, crmLoading, onCrmNotePo
           onRefresh={() => loadSummary({ refresh: true })}
           t={t}
         />
+        {/* Shopify commerce context - directly UNDER the customer brief. Shown
+            when Shopify is the connected system; it self-reports state so the
+            generic CRM sections below are hidden while it's active. */}
+        <CommerceContextPanel conversationId={conversationId} token={token} onState={setCommerceState} />
 
         {/* Conversation history (collapsible) */}
         <CollapsibleSection title={t("conversations.historyPanel.pastConversations") || "Past conversations"} badge={history.length} defaultOpen>

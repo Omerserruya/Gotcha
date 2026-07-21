@@ -203,6 +203,8 @@ const TOOLS: ToolDefinition[] = [
     "Customer asks 'is X in stock?'.", { product_id: { type: "string" }, variant_id: { type: "string" } }),
   t("variant_information", "READ", "LOW", "Get variant details (price, SKU, options, inventory).",
     "Customer asks about sizes/colors/price of a variant.", { variant_id: { type: "string" }, product_id: { type: "string" } }),
+  t("get_product_images", "READ", "LOW", "Batch-fetch featured image URLs for a set of product ids (store-scoped).",
+    "Internal: enrich order line items with product images for the agent panel.", { product_ids: { type: "array", items: { type: "string" } } }, ["product_ids"]),
 
   // ── Returns (refund status is REST; Returns/RMA object is GraphQL) ──
   t("get_refund_status", "READ", "LOW", "Get refunds recorded against an order (Shopify's native refund record).",
@@ -304,6 +306,7 @@ const TOOL_SCOPES: Record<string, string[]> = {
   // products
   get_product: ["read_products"], search_products: ["read_products"],
   inventory_status: ["read_products"], variant_information: ["read_products"],
+  get_product_images: ["read_products"],
   // discounts
   list_discounts: ["read_price_rules"], validate_discount: ["read_price_rules"],
   get_customer_discounts: ["read_customers", "read_price_rules"],
@@ -779,6 +782,19 @@ const ShopifyAdapter: ProviderAdapter = {
           return r.products?.[0] ?? null;
         }
         throw new Error("product_id_or_handle_required");
+      }
+      case "get_product_images": {
+        // Batch featured-image lookup: order line items carry product_id but no
+        // image, so the agent panel enriches images here in ONE REST call.
+        const ids = Array.isArray(args.product_ids) ? args.product_ids.map(String).filter(Boolean) : [];
+        if (!ids.length) return {};
+        const r: any = await sreq(ctx, "GET", `/products.json?ids=${encodeURIComponent(ids.slice(0, 50).join(","))}&fields=id,image,images`);
+        const map: Record<string, string> = {};
+        for (const p of r.products || []) {
+          const src = p.image?.src || (Array.isArray(p.images) && p.images[0]?.src) || null;
+          if (src) map[String(p.id)] = src;
+        }
+        return map;
       }
       case "search_products": {
         const limit = clampLimit(args.limit, 20, 250);
