@@ -73,6 +73,16 @@ describe("25. webhook-driven invalidation", () => {
     expect(execMock.mock.calls.length).toBeGreaterThan(callsAfterFirst); // re-fetched
   });
 
+  it("different viewer permissions do NOT share a cache entry (capabilities are per-viewer)", async () => {
+    const reader = { canRead: true, canOpen: true, canCancel: false, canRefund: false };
+    const manager = { canRead: true, canOpen: true, canCancel: true, canRefund: true };
+    const a = await buildCommerceContextResponse({ tenantId: "tCACHE", conversationId: "conv1", perms: reader });
+    const b = await buildCommerceContextResponse({ tenantId: "tCACHE", conversationId: "conv1", perms: manager });
+    if (a.state !== "ok" || b.state !== "ok") throw new Error(`${a.state}/${b.state}`);
+    expect(a.data.capabilities.canCancel).toBe(false); // reader sees no cancel
+    expect(b.data.capabilities.canCancel).toBe(true); // manager does - not the reader's cached value
+  });
+
   it("an unrelated event does NOT invalidate", () => {
     const dropped = handleCommerceCacheEvent({ event: "message:new", tenantId: "tCACHE", data: {} });
     expect(dropped).toBe(0);

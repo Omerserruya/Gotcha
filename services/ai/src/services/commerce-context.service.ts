@@ -285,7 +285,14 @@ export async function buildCommerceContextResponse(opts: {
   forceRefresh?: boolean;
 }): Promise<CommerceContextResponse> {
   const localeKey: Locale = String(opts.locale || "en").toLowerCase().startsWith("he") ? "he" : "en";
-  const key = cacheKey(opts.tenantId, opts.conversationId, `${localeKey}:${opts.recentLimit ?? 5}`);
+  // The cached CommerceContext bakes in capabilities + per-order eligibility,
+  // both derived from the VIEWER's permissions - so the key must include a
+  // permission signature. Otherwise two agents with different commerce grants
+  // (or the AI snapshot, which passes all-false perms) viewing the same
+  // conversation would share one entry and see the wrong capabilities.
+  const p = opts.perms;
+  const permSig = `${p.canRead ? 1 : 0}${p.canOpen ? 1 : 0}${p.canCancel ? 1 : 0}${p.canRefund ? 1 : 0}`;
+  const key = cacheKey(opts.tenantId, opts.conversationId, `${localeKey}:${opts.recentLimit ?? 5}:${permSig}`);
   if (!opts.forceRefresh) {
     const hit = responseCache.get(key);
     if (hit && Date.now() - hit.at < COMMERCE_CACHE_TTL_SECONDS * 1000) return hit.value;
