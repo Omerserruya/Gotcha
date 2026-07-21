@@ -44,6 +44,13 @@ function decodeIdx(s: string): number {
   return Number(s.split("").map((c) => String(IDX_ALPHABET.indexOf(c))).join(""));
 }
 
+// Numeric range like "156-162", "156–162", "156 - 162", "2–3", "5 — 7".
+// A live incident (snowboard sizing) had "156–162 ס״מ" corrupted to
+// "156, 162 ס״מ" by the wide-dash sanitizer. Ranges are protected AND
+// normalized to a plain ASCII hyphen so they survive hasAiSignaturePunctuation
+// (which flags only wide dashes) and read naturally in every language.
+const NUMERIC_RANGE_RE = /(\d+)\s*[-–—―]\s*(\d+)/g;
+
 /** Run a text transform with all atomic values shielded from it. */
 export function withProtectedAtoms(text: string, transform: (prose: string) => string): string {
   const atoms: string[] = [];
@@ -54,6 +61,12 @@ export function withProtectedAtoms(text: string, transform: (prose: string) => s
       return `${SENTINEL}${encodeIdx(atoms.length - 1)}${SENTINEL}`;
     });
   }
+  // Numeric ranges run AFTER the identifier atoms (phones/dates/order-refs are
+  // already masked), and are normalized to a hyphen on capture.
+  masked = masked.replace(NUMERIC_RANGE_RE, (_, a, b) => {
+    atoms.push(`${a}-${b}`);
+    return `${SENTINEL}${encodeIdx(atoms.length - 1)}${SENTINEL}`;
+  });
   let out = transform(masked);
   out = out.replace(new RegExp(`${SENTINEL}([a-j]+)${SENTINEL}`, "g"), (_, i) => atoms[decodeIdx(i)] ?? "");
   return out;

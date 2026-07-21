@@ -62,12 +62,17 @@ describe("source-level bypass visibility", () => {
     expect(fn.slice(0, 1500)).toContain("withProtectedAtoms");
   });
 
-  it("the shared sanitizer's dash class contains only wide dashes", () => {
+  it("the shared sanitizer's CLAUSE-scrub class (replaced with a comma) contains only wide dashes", () => {
     const src = readFileSync(
       join(__dirname, "../../../../packages/shared/src/lib/customer-text.ts"),
       "utf8",
     );
-    expect(src).toContain("[—–―]");
-    expect(src).not.toMatch(/\[\s*-[–—―]/);
+    // The dangerous pattern is a dash class REPLACED WITH A COMMA - an ASCII
+    // hyphen there corrupts URLs/dates/ranges. That scrub must be wide-dash
+    // only. The NUMERIC_RANGE detector legitimately contains a hyphen because
+    // it NORMALIZES ranges to a hyphen; it never scrubs to a comma.
+    const clauseScrub = src.match(/replace\(\/\\s\*\[([^\]]+)\]\\s\*\/g,\s*", "\)/);
+    expect(clauseScrub).toBeTruthy();
+    expect(clauseScrub![1]).not.toContain("-");
   });
 });

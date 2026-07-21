@@ -43,4 +43,23 @@ describe("sanitizeCustomerText", () => {
     expect(hasAiSignaturePunctuation("raw model text — unsanitized")).toBe(true);
     expect(hasAiSignaturePunctuation("clean text, sanitized")).toBe(false);
   });
+
+  // Numeric-range corruption (2026-07-21 snowboard-sizing incident): the
+  // wide-dash sanitizer turned "156–162 ס״מ" into "156, 162 ס״מ".
+  it("preserves numeric ranges instead of turning them into commas (19/20/21)", () => {
+    expect(sanitizeCustomerText('חפש לוח בטווח 156–162 ס"מ')).toBe('חפש לוח בטווח 156-162 ס"מ');
+    expect(sanitizeCustomerText("2–3 אופציות")).toBe("2-3 אופציות");
+    expect(sanitizeCustomerText("דירוג 5 — 7 מתוך 10")).toBe("דירוג 5-7 מתוך 10");
+    expect(sanitizeCustomerText("English 160-165 range")).toBe("English 160-165 range");
+  });
+
+  it("normalizes range dashes to a plain hyphen so they pass the AI-signature check", () => {
+    const out = sanitizeCustomerText("156–162");
+    expect(out).toBe("156-162");
+    expect(hasAiSignaturePunctuation(out)).toBe(false);
+  });
+
+  it("still converts an em-dash used as a clause connector (not a range) to a comma", () => {
+    expect(sanitizeCustomerText("אשמח לעזור — מתי נוח לך")).toBe("אשמח לעזור, מתי נוח לך");
+  });
 });
