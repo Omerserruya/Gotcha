@@ -256,13 +256,15 @@ export const OBJECTIVES: Record<ObjectiveName, ObjectiveModule> = {
 /** Ordered objective chain per skill. The active objective is the first
  * incomplete one. */
 export const OBJECTIVE_CHAINS: Record<SkillName, ObjectiveName[]> = {
-  // PRODUCT_RECOMMENDATION leads: a store-shopping request must reach a real
-  // catalog search before lead-qualification/booking. It self-completes once a
-  // search runs (requiresActionSuccess); if the conversation is not a product
-  // request, its minimum criteria never fill and the engine flows to the next
-  // objective. The Discovery State + tool-availability gate ensure it only
-  // forces a search when a product tool actually exists.
-  SALES: ["PRODUCT_RECOMMENDATION", "GENERATE_LEAD", "QUALIFY_LEAD", "BOOK_MEETING", "CREATE_DEAL"],
+  // NOTE: product discovery/search is NOT driven by the objective chain - it is
+  // driven independently by the Discovery State integration in the AI turn
+  // (readiness → forced product-search tool). PRODUCT_RECOMMENDATION stays a
+  // registered objective (OBJECTIVES/OBJECTIVE_PRIORITY) but is deliberately
+  // NOT placed at the head of SALES: doing so hijacked EVERY sales conversation
+  // (incl. non-ecommerce) into product mode. The SALES chain keeps its
+  // lead→qualify→book→deal shape; the discovery layer forces a real catalog
+  // search when a store is connected and criteria are met.
+  SALES: ["GENERATE_LEAD", "QUALIFY_LEAD", "BOOK_MEETING", "CREATE_DEAL"],
   SDR: ["GENERATE_LEAD", "QUALIFY_LEAD", "BOOK_MEETING"],
   SUPPORT: ["RESOLVE_ISSUE"],
   RECEPTIONIST: ["COLLECT_CONTACT"],
