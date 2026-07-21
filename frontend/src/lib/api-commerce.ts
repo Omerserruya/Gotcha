@@ -112,11 +112,12 @@ async function authedFetch<T>(path: string, token: string, init: RequestInit = {
 export async function fetchCommerceContext(
   token: string,
   conversationId: string,
-  opts: { refresh?: boolean; locale?: string } = {},
+  opts: { refresh?: boolean; locale?: string; limit?: number } = {},
 ): Promise<CommerceContextResponse> {
   const q = new URLSearchParams();
   if (opts.refresh) q.set("refresh", "1");
   if (opts.locale) q.set("locale", opts.locale);
+  if (opts.limit) q.set("limit", String(opts.limit));
   const qs = q.toString();
   return authedFetch<CommerceContextResponse>(
     `/api/commerce-context/${encodeURIComponent(conversationId)}${qs ? `?${qs}` : ""}`,

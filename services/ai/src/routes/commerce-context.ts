@@ -64,11 +64,13 @@ router.get(
       const p = principalOf(req);
       const perms = await commercePerms(p);
 
+      const limitRaw = Number(req.query.limit);
       const result = await buildCommerceContextResponse({
         tenantId,
         conversationId,
         locale: localeOf(req),
         perms,
+        recentLimit: Number.isFinite(limitRaw) ? limitRaw : undefined,
         forceRefresh: req.query.refresh === "1" || req.query.refresh === "true",
       });
       res.json(result);

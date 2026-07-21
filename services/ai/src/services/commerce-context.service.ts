@@ -315,7 +315,7 @@ async function buildCommerceContextFresh(opts: {
   recentLimit?: number;
 }): Promise<CommerceContextResponse> {
   const locale: Locale = String(opts.locale || "en").toLowerCase().startsWith("he") ? "he" : "en";
-  const recentLimit = Math.min(Math.max(opts.recentLimit ?? 5, 1), 10);
+  const recentLimit = Math.min(Math.max(opts.recentLimit ?? 5, 1), 25);
 
   // 1. Connection state.
   const conn = await loadConnection({ tenantId: opts.tenantId, slug: "shopify" });
