@@ -124,6 +124,20 @@ describe("summary accuracy (tests 5, 6)", () => {
   });
 });
 
+describe("recent orders sorted most-recent first (test 8)", () => {
+  it("8. orders returned out of order by the provider are sorted newest-first", async () => {
+    connectedShopify(); linkedTo("999");
+    // Provider returns oldest first; projection must sort newest first.
+    adapterReturns(
+      { customer: { orders_count: 2, total_spent: "200.00", currency: "USD" } },
+      [ORDERS[1], ORDERS[0]], // #1245 (older) then #1246 (newer)
+    );
+    const r = await buildCommerceContextResponse({ tenantId: "t1", conversationId: "c1", perms: PERMS });
+    if (r.state !== "ok") throw new Error(r.state);
+    expect(r.data.recentOrders.map((o) => o.orderNumber)).toEqual(["#1246", "#1245"]);
+  });
+});
+
 describe("no orders honest state (test 13)", () => {
   it("13. connected + linked but zero orders → no_orders (not an infinite loader)", async () => {
     connectedShopify(); linkedTo("999");
