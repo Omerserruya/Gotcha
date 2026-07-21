@@ -4432,3 +4432,129 @@ model CustomerVerification {
   @@index([tenantId, expiresAt])
   @@map("customer_verifications")
 }
+
+// ─── Discovery State (structured conversational memory) ─────────────────────
+//
+// Authoritative, tenant- + conversation-scoped memory of what a customer has
+// told the AI during a goal-driven conversation (e.g. a product search):
+// facts collected, questions asked/answered, readiness for a provider action,
+// and the actions attempted. The model PROPOSES fact updates via extraction;
+// the backend (packages/shared/lib/discovery-state.ts) validates, normalizes,
+// authorizes and persists them. Keys are derived from trusted server context
+// only - never from model tool arguments. Fixes the "transcript-only memory"
+// gap that caused repeated questions and fabricated searches.
+
+enum DiscoveryStatus {
+  active
+  ready_for_action
+  awaiting_customer
+  action_in_progress
+  fulfilled
+  abandoned
+  superseded
+}
+
+model DiscoverySession {
+  id             String          @id @default(cuid())
+  tenantId       String          @map("tenant_id")
+  conversationId String          @map("conversation_id")
+  aiAgentId      String?         @map("ai_agent_id")
+  goalKey        String          @map("goal_key")
+  status         DiscoveryStatus @default(active)
+  /// Optimistic-concurrency guard: a write must CAS on the version it read so
+  /// two concurrent inbound messages cannot clobber the newer state.
+  version        Int             @default(0)
+  schemaVersion  Int             @default(1) @map("schema_version")
+  startedAt      DateTime        @default(now()) @map("started_at")
+  updatedAt      DateTime        @updatedAt @map("updated_at")
+  completedAt    DateTime?       @map("completed_at")
+  expiresAt      DateTime?       @map("expires_at")
+
+  facts     DiscoveryFact[]
+  questions DiscoveryQuestion[]
+  actions   DiscoveryActionAttempt[]
+
+  // One ACTIVE session per (tenant, conversation, goal). A topic change opens
+  // a new session and supersedes the old (status=superseded).
+  @@index([tenantId, conversationId, status])
+  @@index([tenantId, expiresAt])
+  @@map("discovery_sessions")
+}
+
+model DiscoveryFact {
+  id                 String   @id @default(cuid())
+  sessionId          String   @map("session_id")
+  tenantId           String   @map("tenant_id")
+  key                String
+  /// Canonical semantic key (deduped across languages/synonyms).
+  normalizedKey      String   @map("normalized_key")
+  valueType          String   @map("value_type") // string|number|boolean|enum|range
+  valueJson          Json     @map("value_json")
+  normalizedValueJson Json?   @map("normalized_value_json")
+  /// customer_explicit | customer_correction | provider | tenant_configuration | knowledge_base | model_inference
+  source             String
+  confidence         Float    @default(0.9)
+  /// active | superseded | rejected
+  status             String   @default("active")
+  sourceMessageId    String?  @map("source_message_id")
+  explicitlyConfirmed Boolean @default(false) @map("explicitly_confirmed")
+  requiresConfirmation Boolean @default(false) @map("requires_confirmation")
+  /// Sensitivity class for retention/promotion decisions: normal|sensitive.
+  sensitivity        String   @default("normal")
+  supersedesFactId   String?  @map("supersedes_fact_id")
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, status])
+  @@index([sessionId, normalizedKey, status])
+  @@map("discovery_facts")
+}
+
+model DiscoveryQuestion {
+  id                  String    @id @default(cuid())
+  sessionId           String    @map("session_id")
+  tenantId            String    @map("tenant_id")
+  /// The fact/requirement this question is trying to fill.
+  requirementKey      String    @map("requirement_key")
+  normalizedQuestionKey String  @map("normalized_question_key")
+  /// planned | asked | answered | skipped | no_longer_required
+  status              String    @default("planned")
+  askedMessageId      String?   @map("asked_message_id")
+  answeredMessageId   String?   @map("answered_message_id")
+  askedAt             DateTime? @map("asked_at")
+  answeredAt          DateTime? @map("answered_at")
+  attemptCount        Int       @default(0) @map("attempt_count")
+  createdAt           DateTime  @default(now()) @map("created_at")
+  updatedAt           DateTime  @updatedAt @map("updated_at")
+
+  session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, status])
+  @@index([sessionId, normalizedQuestionKey])
+  @@map("discovery_questions")
+}
+
+model DiscoveryActionAttempt {
+  id             String   @id @default(cuid())
+  sessionId      String   @map("session_id")
+  tenantId       String   @map("tenant_id")
+  actionKey      String   @map("action_key")
+  /// Snapshot of the criteria/facts the action ran with (for reproducibility).
+  criteriaJson   Json     @map("criteria_json")
+  toolName       String?  @map("tool_name")
+  executionId    String?  @map("execution_id")
+  /// pending | succeeded | failed | no_results | blocked
+  resultStatus   String   @map("result_status")
+  /// Provider result references (order/product ids, refund id, …) - atoms only.
+  resultRefs     Json?    @map("result_refs")
+  /// Product/resource ids actually SHOWN to the customer (dedupe re-shows).
+  shownResourceIds Json?  @map("shown_resource_ids")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  session DiscoverySession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId, createdAt])
+  @@map("discovery_action_attempts")
+}

@@ -27,7 +27,8 @@ export type ObjectiveName =
   | "BOOK_MEETING"
   | "CREATE_DEAL"
   | "RESOLVE_ISSUE"
-  | "COLLECT_CONTACT";
+  | "COLLECT_CONTACT"
+  | "PRODUCT_RECOMMENDATION";
 
 /**
  * A measurable BUSINESS OUTCOME - the thing the Goal Evaluator checks for. This
@@ -214,6 +215,34 @@ const COLLECT_CONTACT: ObjectiveModule = {
   outcome: "crm_contact",
 };
 
+// Product discovery/recommendation: the store-connected sales goal. Its
+// ACTION is the outcome - it is not complete until a REAL catalog search has
+// run and real candidates were shown this conversation (actionCompletes), so
+// the engine keeps steering "search the catalog now" instead of clarifying
+// forever. Required info mirrors the PRODUCT_RECOMMENDATION discovery profile's
+// required facts; the Discovery State snapshot in BLOCK 5 drives the specifics.
+const PRODUCT_RECOMMENDATION: ObjectiveModule = {
+  id: "PRODUCT_RECOMMENDATION",
+  mission: "Understand what the customer wants, then search the connected store and show REAL products with exact links.",
+  requiredInformation: [
+    { key: "product_category", label: "what kind of product", importance: "required", priority: 1, sourceHints: ["category", "product", "item"] },
+    { key: "budget", label: "approximate budget", importance: "required", priority: 2, sourceHints: ["budget", "price"] },
+    { key: "riding_style", label: "general use / style", importance: "required", priority: 3, sourceHints: ["use", "style", "terrain"] },
+  ],
+  completionCriteria: [
+    "The minimum criteria (category, budget, use) are known",
+    "A real catalog search executed and real candidates were shown with exact links",
+  ],
+  nextStepLogic:
+    "Collect only the minimum, then run the real product-search tool. Never narrate a search or invent products; refine only after showing real results.",
+  failureCriteria: ["Presented generic/imaginary products as store inventory", "Kept asking questions when enough info existed to search"],
+  blockPassiveClose: true,
+  completionTool: "shopify.search_products",
+  // The search IS the outcome: stay active until a real catalog search runs, so
+  // the resolver keeps demanding "search now" rather than clarifying forever.
+  requiresActionSuccess: true,
+};
+
 export const OBJECTIVES: Record<ObjectiveName, ObjectiveModule> = {
   GENERATE_LEAD,
   QUALIFY_LEAD,
@@ -221,12 +250,19 @@ export const OBJECTIVES: Record<ObjectiveName, ObjectiveModule> = {
   CREATE_DEAL,
   RESOLVE_ISSUE,
   COLLECT_CONTACT,
+  PRODUCT_RECOMMENDATION,
 };
 
 /** Ordered objective chain per skill. The active objective is the first
  * incomplete one. */
 export const OBJECTIVE_CHAINS: Record<SkillName, ObjectiveName[]> = {
-  SALES: ["GENERATE_LEAD", "QUALIFY_LEAD", "BOOK_MEETING", "CREATE_DEAL"],
+  // PRODUCT_RECOMMENDATION leads: a store-shopping request must reach a real
+  // catalog search before lead-qualification/booking. It self-completes once a
+  // search runs (requiresActionSuccess); if the conversation is not a product
+  // request, its minimum criteria never fill and the engine flows to the next
+  // objective. The Discovery State + tool-availability gate ensure it only
+  // forces a search when a product tool actually exists.
+  SALES: ["PRODUCT_RECOMMENDATION", "GENERATE_LEAD", "QUALIFY_LEAD", "BOOK_MEETING", "CREATE_DEAL"],
   SDR: ["GENERATE_LEAD", "QUALIFY_LEAD", "BOOK_MEETING"],
   SUPPORT: ["RESOLVE_ISSUE"],
   RECEPTIONIST: ["COLLECT_CONTACT"],
@@ -743,6 +779,7 @@ export function guaranteedBackgroundActions(input: {
 export const OBJECTIVE_PRIORITY: Record<ObjectiveName, number> = {
   BOOK_MEETING: 100,   // booking - highest-value forward motion
   CREATE_DEAL: 95,     // conversion
+  PRODUCT_RECOMMENDATION: 90, // real catalog search + real products (store sales)
   RESOLVE_ISSUE: 80,   // retention / resolution
   QUALIFY_LEAD: 60,    // progression toward conversion
   GENERATE_LEAD: 50,   // completion (capture)

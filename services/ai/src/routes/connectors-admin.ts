@@ -39,6 +39,7 @@ import {
 import { airtableListBases, airtableListTables, airtableListFields, airtableCreateField } from "../services/connectors/airtable.adapter";
 import { mondayListBoards } from "../services/connectors/monday.adapter";
 import { loadConnection, refreshCapabilityState } from "../services/connectors/integration-framework";
+import { reconcileAgentToolPermissions } from "../services/tool-permission-reconcile.service";
 
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
@@ -534,6 +535,17 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
         console.warn(`[shopify oauth] connected with missing scopes: ${r.missingScopes.join(",")}`);
       }
     }).catch((e: any) => console.warn("[shopify oauth] capability probe failed:", e?.message));
+    // Reconcile existing AI employees' desired tool permissions: employees
+    // hired BEFORE Shopify was connected were frozen with a partial tool set
+    // and never re-granted this integration's READ tools. Additive/idempotent,
+    // READ-only. Fire-and-forget - must not block the redirect.
+    void reconcileAgentToolPermissions({ tenantId: payload.tenantId, integrationSlug: "shopify" })
+      .then((r) => {
+        if (r.added.length) {
+          console.log(`[shopify oauth] reconciled ${r.added.length} agent tool grant(s)`);
+        }
+      })
+      .catch((e: any) => console.warn("[shopify oauth] tool-permission reconcile failed:", e?.message));
     res.redirect(postOAuthRedirect("shopify", payload.flow));
   } catch (err: any) {
     res.status(500).send(`shopify_callback_error:${err?.message || ""}`);

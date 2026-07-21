@@ -86,6 +86,29 @@ export type { CreateApprovalRequestInput } from "./lib/approval-requests";
 export { sanitizeCustomerText, hasAiSignaturePunctuation, withProtectedAtoms } from "./lib/customer-text";
 export { issueCustomerVerification, confirmCustomerVerification } from "./lib/customer-verification";
 export {
+  getOrCreateActiveSession,
+  activeFacts,
+  applyExtractedFacts,
+  recordQuestionAsked,
+  markAnswered,
+  computeReadiness,
+  shouldBlockQuestion,
+  recordActionAttempt,
+  buildDiscoverySnapshot,
+  type FactSource,
+  type ProposedFact,
+  type ReadinessResult,
+} from "./lib/discovery-state";
+export {
+  getDiscoveryProfile,
+  normalizeFactKey,
+  aliasMap,
+  PRODUCT_RECOMMENDATION_PROFILE,
+  type DiscoveryProfile,
+  type FactSpec,
+  type FactValueType,
+} from "./lib/discovery-profiles";
+export {
   evaluateBusinessPolicy,
   evaluateConfig,
   actionKindForTool,

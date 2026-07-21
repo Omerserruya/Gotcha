@@ -24,6 +24,7 @@ import {
 } from "@chatcenter/shared";
 import type { AgentToolDispatchResult } from "@chatcenter/shared";
 import { withProtectedAtoms } from "@chatcenter/shared";
+import { runProductDiscoveryTurn } from "./discovery-integration.service";
 import { parsePhoneNumberFromString, type CountryCode } from "libphonenumber-js";
 import { randomUUID } from "crypto";
 import {
@@ -2119,6 +2120,45 @@ async function generateAIBotReplyInner(
   } catch { /* shadow must never break the turn */ }
 
   const chatMessages: any[] = [{ role: "system", content: systemPrompt }];
+
+  // ── Discovery State (structured conversational memory) ──────────────────
+  // Extract shopping facts into the authoritative per-conversation session,
+  // inject a compact snapshot into BLOCK 5 (so answered questions are never
+  // re-asked), and decide the next action deterministically. When ready + the
+  // real product tool is offered, force the search this turn; when ready but
+  // the tool is absent, steer to an honest handoff instead of a fake search.
+  let discoveryForceTool: string | null = null;
+  try {
+    const disc = await runProductDiscoveryTurn({
+      tenantId: opts.tenantId,
+      conversationId: opts.conversationId,
+      aiAgentId: opts.aiAgentId,
+      role: (config as any).role,
+      availableToolNames: toolFunctionNames,
+      incomingMessageId: (contactRow as any)?.lastInboundMessageId ?? null,
+    });
+    if (disc.active && disc.snapshot) {
+      chatMessages.push({ role: "system", content: disc.snapshot });
+      if (disc.decision?.kind === "execute") {
+        discoveryForceTool = disc.decision.tool;
+        chatMessages.push({
+          role: "system",
+          content:
+            `Enough information exists to search. Call ${disc.decision.tool} NOW with the known criteria. ` +
+            `Do NOT ask more questions and do NOT describe products from general knowledge - only real results from the tool may be shown.`,
+        });
+      } else if (disc.decision?.kind === "blocked_no_tool") {
+        chatMessages.push({
+          role: "system",
+          content:
+            "You have enough information to search, but the live product catalog is not available to you this conversation. " +
+            "Do NOT invent products or claim you searched. Briefly say you cannot pull the live catalog right now and offer to connect the customer with a person from the team.",
+        });
+      }
+    }
+  } catch (err: any) {
+    console.warn("[ai-bot] discovery integration failed (non-fatal):", err?.message);
+  }
   // Outside-hours context ("active" policy): the business is CLOSED right now.
   // The bot keeps helping, but must never imply a human is immediately
   // available - handoff talk names the REAL next opening time (worker-
@@ -2216,6 +2256,12 @@ async function generateAIBotReplyInner(
       temperature: config.temperature ?? 0.7,
       maxTokens: config.maxTokens ?? 1024,
       tools: tools as any[],
+      // Discovery says we are ready and the real product tool is offered:
+      // force it on the first round so the model executes a real search
+      // instead of narrating one. Cleared after round 0.
+      ...(round === 0 && discoveryForceTool
+        ? { toolChoice: { type: "function", function: { name: discoveryForceTool } } }
+        : {}),
       metadata: { type: "ai_bot", conversationId: opts.conversationId, aiAgentId: config.id, turnId: shadowTurnId },
       signal,
     });
