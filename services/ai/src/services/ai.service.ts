@@ -195,6 +195,15 @@ const ILLEGAL_TOOL_NAME_CHARS = /[^a-zA-Z0-9_-]/g;
 function sanitizeToolName(name: string): string {
   return name.replace(/\./g, "__").replace(ILLEGAL_TOOL_NAME_CHARS, "_");
 }
+// A forced tool_choice must name the SANITIZED tool (OpenAI rejects the dotted
+// adapter name `shopify.search_products`). Applied wherever tool_choice is set
+// so a dotted forced tool (e.g. the Discovery-ready product search) works.
+function sanitizeToolChoice(choice: any): any {
+  if (choice && typeof choice === "object" && choice.type === "function" && choice.function?.name) {
+    return { ...choice, function: { ...choice.function, name: sanitizeToolName(String(choice.function.name)) } };
+  }
+  return choice;
+}
 function sanitizeToolsForOpenAI(
   tools: any[],
 ): { tools: any[]; nameMap: Map<string, string> } {
@@ -362,7 +371,7 @@ export async function generateResponse(params: AIRequestParams): Promise<AIRespo
     const s = sanitizeToolsForOpenAI(params.tools);
     (requestParams as any).tools = s.tools;
     toolNameMap = s.nameMap.size > 0 ? s.nameMap : null;
-    if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
+    if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
   // Compute + compare the per-session system-prompt-prefix hash BEFORE the
@@ -570,7 +579,7 @@ export async function* streamResponse(params: AIRequestParams): AsyncGenerator<A
     const s = sanitizeToolsForOpenAI(params.tools);
     (requestParams as any).tools = s.tools;
     toolNameMap = s.nameMap.size > 0 ? s.nameMap : null;
-    if (params.toolChoice) (requestParams as any).tool_choice = params.toolChoice;
+    if (params.toolChoice) (requestParams as any).tool_choice = sanitizeToolChoice(params.toolChoice);
   }
 
   const stream = await client.chat.completions.create(requestParams);
