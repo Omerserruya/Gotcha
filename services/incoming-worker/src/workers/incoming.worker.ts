@@ -428,6 +428,28 @@ async function processIncomingMessage(job: Job<IncomingMessageJob>): Promise<voi
   // Process bot if no agent assigned
   if (!conversation.assignedAgentId && !conversation.isHandedOver) {
     try {
+      // Department / role picker override (deterministic safety net).
+      // When the customer taps a department-picker button ("מכירה" / "שירות"),
+      // route by ROLE to an ACTIVE matching employee + set the department,
+      // regardless of how the flow canvas wired the button edges. This prevents
+      // a mis-wired quick-reply node (e.g. both buttons pointing at the same
+      // route_target) from handing a sales lead to the support employee. Only
+      // fires on recognized picker payloads; ordinary quick-replies / text fall
+      // through to the normal routing path below unchanged.
+      if (interactiveReply?.payload) {
+        const { applyDepartmentPickerReply } = await import("../services/department-routing.service");
+        const picked = await applyDepartmentPickerReply({
+          tenantId,
+          conversationId: conversation.id,
+          payload: interactiveReply.payload,
+        });
+        if (picked.handled && picked.assignedAiAgentId) {
+          const { processAIBot } = await import("../services/ai-bot.service");
+          await processAIBot(tenantId, conversation.id, body, picked.assignedAiAgentId);
+          return;
+        }
+      }
+
       // Check if this is a new conversation needing routing
       const messageCount = await prisma.message.count({ where: { conversationId: conversation.id } });
 
