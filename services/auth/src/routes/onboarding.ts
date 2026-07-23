@@ -6,6 +6,7 @@ import { promises as dns } from "dns";
 import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction } from "@chatcenter/shared";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
+import { ingestTaughtDocument } from "../services/teach-ingest";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
 import { syncDiscoveryRecommendations, listRecommendations, setRecommendationStatus, addStoreInspectionRecs, reconcileConnectSystemRecs } from "../services/recommendations.service";
 import OpenAI from "openai";
@@ -2528,16 +2529,29 @@ router.post("/teach", requireRole("ADMIN"), validate(teachSchema), async (req: R
     if (!kb) {
       kb = await prisma.knowledgeBase.create({ data: { tenantId: req.tenantId!, name: "Company Knowledge", description: "Taught during onboarding" }, select: { id: true } });
     }
-    const doc = await prisma.knowledgeDocument.create({
-      data: { knowledgeBaseId: kb.id, tenantId: req.tenantId!, title: label, content, sourceType, sourceUrl, metadata: { taughtDuringOnboarding: true } },
-      select: { id: true },
-    });
+
+    // Create the document THROUGH services/ai so it is actually embedded
+    // (chunked into Qdrant). A bare prisma.create here left it `pending` with no
+    // vectors - never retrievable - so "Learned" was a false success.
+    const documentId = await ingestTaughtDocument(
+      kb.id,
+      req.headers.authorization!,
+      { title: label, content, sourceType, sourceUrl },
+      fetchWithTimeout,
+    );
+
+    if (!documentId) {
+      // Ingestion failed: do NOT complete the gap. Reporting "Learned" for
+      // knowledge that never got embedded would be a false success.
+      res.json({ data: { ok: false, reason: "ingest_failed" } });
+      return;
+    }
 
     // Complete the matching recommendation(s) and clear the gap on the report.
     await completeTaughtGap(req.tenantId!, label);
 
     scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
-    res.json({ data: { ok: true, knowledgeDocumentId: doc.id, label } });
+    res.json({ data: { ok: true, knowledgeDocumentId: documentId, label } });
   } catch (err) {
     console.error("Teach error:", err);
     res.status(500).json({ error: "Failed to learn that" });
