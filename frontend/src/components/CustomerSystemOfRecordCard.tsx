@@ -20,6 +20,7 @@ import { useCallback, useEffect, useState } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { getMarketplaceIntegrations, setIntegrationCrmSource, getSourceOfTruthStatus, type SourceOfTruthStatus } from "@/lib/api";
 import { logoForIntegration } from "@/lib/integration-logos";
 
@@ -33,6 +34,10 @@ type Row = { slug: string; name: string; category: string; connected: boolean; i
 export default function CustomerSystemOfRecordCard() {
   const { token } = useAuth();
   const { t } = useI18n();
+  // Electing the Source of Truth is its own permission (backend enforces the
+  // same key on PUT /:slug/crm-source) - never a role check.
+  const { can } = usePermissions();
+  const canSelectSot = can("business-systems:sot:select");
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState<string | null>(null);
@@ -67,7 +72,7 @@ export default function CustomerSystemOfRecordCard() {
   useEffect(() => { load(); }, [load]);
 
   async function toggle(row: Row) {
-    if (!token || saving) return;
+    if (!token || saving || !canSelectSot) return;
     const next = !row.isRecord;
     setSaving(row.slug);
     // Optimistic: the server is authoritative, so reload after either outcome.
@@ -155,7 +160,7 @@ export default function CustomerSystemOfRecordCard() {
                 role="switch"
                 aria-checked={row.isRecord}
                 aria-label={t("settings.integrations.systemOfRecord.title")}
-                disabled={saving === row.slug}
+                disabled={saving === row.slug || !canSelectSot}
                 onClick={() => toggle(row)}
                 className={clsx(
                   "relative w-12 h-7 rounded-full transition-colors shrink-0 disabled:opacity-50",

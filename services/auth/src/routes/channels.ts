@@ -7,8 +7,7 @@ import {
   prisma,
   authenticate,
   resolveTenant,
-  requireRole,
-  requirePermissionOrRole,
+  requirePermission,
   validate,
   getRedis,
   encryptCredentials,
@@ -121,7 +120,7 @@ async function ensureEmailRouterRule(tenantId: string, channel: "GMAIL" | "OUTLO
 
 // ─── List Connected Channels ─────────────────────────────────
 
-router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const accounts = await prisma.channelAccount.findMany({
       where: { tenantId: req.tenantId! },
@@ -181,7 +180,7 @@ router.get("/summary", authenticate, resolveTenant, async (req: Request, res: Re
 // post-URL paste field that the runtime later matches via the page webhook.
 //
 // Supports MESSENGER (Facebook page) and INSTAGRAM (IG Business account).
-router.get("/:id/posts", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id/posts", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const channelId = String(req.params.id);
     const account = await prisma.channelAccount.findFirst({
@@ -258,7 +257,7 @@ const whatsappConnectSchema = z.object({
   phoneNumberId: z.string().optional(), // From Embedded Signup session info
 });
 
-router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN"), validate(whatsappConnectSchema), async (req: Request, res: Response) => {
+router.post("/connect/whatsapp", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(whatsappConnectSchema), async (req: Request, res: Response) => {
   try {
     const { code, wabaId: sessionWabaId, phoneNumberId: sessionPhoneNumberId } = req.body;
     console.log("[WA-CONNECT] Starting. Session WABA:", sessionWabaId, "Session Phone:", sessionPhoneNumberId);
@@ -481,7 +480,7 @@ const whatsappSessionSchema = z.object({
   phoneNumberId: z.string().optional(),
 });
 
-router.post("/connect/whatsapp-session", authenticate, resolveTenant, requireRole("ADMIN"), validate(whatsappSessionSchema), async (req: Request, res: Response) => {
+router.post("/connect/whatsapp-session", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(whatsappSessionSchema), async (req: Request, res: Response) => {
   try {
     const { wabaId, phoneNumberId } = req.body;
     const redis = getRedis();
@@ -1558,7 +1557,7 @@ const responseModeSchema = z.object({
   responseMode: z.enum(["HUMAN_WITH_COPILOT", "AI_AUTO_REPLY"]),
 });
 
-router.patch("/:id/response-mode", authenticate, resolveTenant, requireRole("ADMIN"), validate(responseModeSchema), async (req: Request, res: Response) => {
+router.patch("/:id/response-mode", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(responseModeSchema), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1589,7 +1588,7 @@ router.patch("/:id/response-mode", authenticate, resolveTenant, requireRole("ADM
 
 // ─── Disconnect Channel ──────────────────────────────────────
 
-router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.post("/:id/disconnect", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1679,7 +1678,7 @@ router.post("/:id/disconnect", authenticate, resolveTenant, requireRole("ADMIN")
 
 // ─── Delete Channel Account (with cascade) ───────────────────
 
-router.delete("/:id", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1722,7 +1721,7 @@ router.delete("/:id", authenticate, resolveTenant, requireRole("ADMIN"), async (
 
 // ─── Channel Health Check ────────────────────────────────────
 
-router.get("/:id/status", authenticate, resolveTenant, requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.get("/:id/status", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (req: Request, res: Response) => {
   try {
     const account = await prisma.channelAccount.findFirst({
       where: { id: req.params.id as string, tenantId: req.tenantId! },
@@ -1835,7 +1834,7 @@ const connectEmailSchema = z.object({
   imapPass: z.string().optional(),
 });
 
-router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"), validate(connectEmailSchema), async (req: Request, res: Response) => {
+router.post("/connect/email", authenticate, resolveTenant, requirePermission("channels:manage:update"), validate(connectEmailSchema), async (req: Request, res: Response) => {
   try {
     const { emailAddress, displayName, smtpHost, smtpPort, smtpUser, smtpPass, imapHost, imapPort, imapUser, imapPass } = req.body;
 
@@ -1876,7 +1875,7 @@ router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"),
 
 // ─── Create Embedded Chat Widget ─────────────────────────────
 
-router.post("/webchat/create", authenticate, resolveTenant, requirePermissionOrRole("channels:manage:update", "ADMIN"), async (req: Request, res: Response) => {
+router.post("/webchat/create", authenticate, resolveTenant, requirePermission("channels:manage:update"), async (req: Request, res: Response) => {
   try {
     const widgetId = `widget_${crypto.randomBytes(12).toString("hex")}`;
 
@@ -1953,7 +1952,7 @@ router.get("/webchat/:id/settings", authenticate, resolveTenant, async (req: Req
 
 // ─── Get OAuth Config (for frontend) ─────────────────────────
 
-router.get("/config", authenticate, resolveTenant, requireRole("ADMIN"), async (_req: Request, res: Response) => {
+router.get("/config", authenticate, resolveTenant, requirePermission("channels:manage:read"), async (_req: Request, res: Response) => {
   res.json({
     data: {
       metaAppId: META_APP_ID,

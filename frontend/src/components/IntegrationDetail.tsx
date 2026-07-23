@@ -6,6 +6,7 @@ import Link from "next/link";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import {
   getMarketplaceIntegration,
   connectIntegration,
@@ -95,15 +96,25 @@ export function IntegrationDetail({
   backHref = "/integrations",
   oauthFlow,
   withLayout = true,
+  connectPerm = "integrations:connections:connect",
+  disconnectPerm = "integrations:connections:disconnect",
 }: {
   slug: string;
   backHref?: string;
   oauthFlow?: string;
   withLayout?: boolean;
+  /** Permission gating the connect/re-auth/credential actions. The host picks
+   *  its domain: marketplace = integrations:*, Settings = business-systems:*.
+   *  The backend routes enforce the same keys regardless of the UI. */
+  connectPerm?: string;
+  disconnectPerm?: string;
 }) {
   const router = useRouter();
   const { token } = useAuth();
   const { t } = useI18n();
+  const { can } = usePermissions();
+  const canConnect = can(connectPerm);
+  const canDisconnect = can(disconnectPerm);
   // Host-controlled chrome: the marketplace route wants AppLayout; a Settings
   // nested route already has the Settings shell, so it opts out.
   const Wrap: any = withLayout ? AppLayout : ({ children }: any) => <>{children}</>;
@@ -440,6 +451,7 @@ export function IntegrationDetail({
                   )}
                   {testing ? t("marketplace.testing") : t("marketplace.testConnection")}
                 </button>
+                {canConnect && (
                 <button
                   onClick={() => setEditingCreds(!editingCreds)}
                   className="flex items-center gap-2 px-4 py-2 rounded-xl border border-gray-200 text-sm font-medium text-gray-700 hover:bg-gray-50 transition"
@@ -449,6 +461,8 @@ export function IntegrationDetail({
                   </svg>
                   {t("common.edit")} {t("marketplace.credentials")}
                 </button>
+                )}
+                {canDisconnect && (
                 <button
                   onClick={handleDisconnect}
                   disabled={disconnecting}
@@ -463,6 +477,7 @@ export function IntegrationDetail({
                   )}
                   {t("marketplace.disconnect")}
                 </button>
+                )}
                 {testResult && (
                   <p className={clsx("text-xs font-medium", testResult.ok ? "text-green-600" : "text-red-500")}>
                     {testResult.msg}
@@ -475,7 +490,7 @@ export function IntegrationDetail({
           {/* Connect / Edit Credentials - skipped for custom_api since each
               tenant-defined Custom API tool carries its own credentials,
               there is no central token to authorize against. */}
-          {slug !== "custom_api" && (!isConnected || editingCreds) && (
+          {canConnect && slug !== "custom_api" && (!isConnected || editingCreds) && (
             <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
               <h2 className="font-semibold text-gray-900 mb-4">
                 {editingCreds ? `${t("common.edit")} ${t("marketplace.credentials")}` : t("marketplace.connect")}

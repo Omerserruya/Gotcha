@@ -10,6 +10,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import IntegrationsExplorer from "@/components/IntegrationsExplorer";
+import { RequirePermission } from "@/components/RequirePermission";
 import CustomerSystemOfRecordCard from "@/components/CustomerSystemOfRecordCard";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
@@ -99,6 +100,9 @@ function SourceOfTruthStatusPanel() {
 export default function BusinessSystemsPage() {
   const { t } = useI18n();
   return (
+    // Permission-based page access (Active Membership) - business-systems is
+    // its own permission domain, never a Role==ADMIN check.
+    <RequirePermission perm="business-systems:connections:read">
     <IntegrationsExplorer
       title={t("settings.businessSystems.title")}
       subtitle={t("settings.businessSystems.subtitle")}
@@ -116,5 +120,6 @@ export default function BusinessSystemsPage() {
         </>
       }
     />
+    </RequirePermission>
   );
 }

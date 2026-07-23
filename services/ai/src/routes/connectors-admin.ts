@@ -32,7 +32,7 @@ import {
   requireOnboardingOrActiveTenant,
   mintOAuthState,
   consumeOAuthState,
-  requireRole,
+  requirePermission,
   encryptCredentials,
   getOAuthStateSecret,
 } from "@chatcenter/shared";
@@ -44,6 +44,16 @@ import { reconcileAgentToolPermissions } from "../services/tool-permission-recon
 const router = Router();
 // OAuth `state` signing only - not user auth. See getOAuthStateSecret().
 const OAUTH_STATE_SECRET = getOAuthStateSecret();
+
+// ─── Authorization ──────────────────────────────────────────
+// Permission-based (Active Membership), never Role==ADMIN. These routes serve
+// BOTH the AI Studio marketplace (integrations:*) and Settings → Business
+// Systems (business-systems:*), so each gate accepts either domain's key
+// (requirePermission = OR semantics). Admin/Owner built-in roles hold all of
+// these; tenants can delegate narrower slices per membership.
+const canReadSystems = requirePermission("integrations:connections:read", "business-systems:connections:read");
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
+const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");
 
 // ─── Helpers ────────────────────────────────────────────────
 
@@ -149,7 +159,7 @@ function base64url(buf: Buffer): string {
 
 router.get(
   "/connectors/:slug/status",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canReadSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -163,7 +173,7 @@ router.get(
 
 router.post(
   "/connectors/:slug/disconnect",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canManageSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -177,7 +187,7 @@ router.post(
 
 router.post(
   "/connectors/:slug/config",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canManageSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -245,7 +255,7 @@ router.post(
   // Onboarding connects the CRM (Fireberry / Airtable-PAT) BEFORE the tenant is
   // ACTIVE - connecting is what flips it. requireActiveTenant() 403'd here, which
   // is exactly why "connect Fireberry" looked broken. Match the OAuth routes.
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog(req.params.slug);
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -278,7 +288,7 @@ router.get(
   "/connectors/stripe/oauth/init",
   // Onboarding-reachable like every other connector: during onboarding the
   // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.STRIPE_CLIENT_ID;
     const redirect = process.env.STRIPE_REDIRECT_URI;
@@ -348,7 +358,7 @@ router.get("/connectors/stripe/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/hubspot/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
@@ -457,7 +467,7 @@ router.get("/connectors/hubspot/oauth/callback", async (req: Request, res: Respo
 
 router.get(
   "/connectors/shopify/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.SHOPIFY_API_KEY;
     const redirect = process.env.SHOPIFY_REDIRECT_URI;
@@ -574,7 +584,7 @@ router.get("/connectors/shopify/oauth/callback", async (req: Request, res: Respo
 
 router.get(
   "/connectors/airtable/meta/bases",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const pat = String(req.query.pat || "");
     if (!pat) { res.status(400).json({ error: "pat_required" }); return; }
@@ -589,7 +599,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/meta/tables/:baseId",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const pat = String(req.query.pat || "");
     if (!pat) { res.status(400).json({ error: "pat_required" }); return; }
@@ -612,7 +622,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.AIRTABLE_CLIENT_ID;
     const redirect = process.env.AIRTABLE_REDIRECT_URI;
@@ -702,7 +712,7 @@ async function airtableToken(tenantId: string): Promise<string | null> {
 
 router.get(
   "/connectors/airtable/oauth/bases",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const token = await airtableToken(req.tenantId!);
     if (!token) { res.status(400).json({ error: "not_connected" }); return; }
@@ -713,7 +723,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/oauth/tables",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const token = await airtableToken(req.tenantId!);
     const baseId = String(req.query.baseId || "");
@@ -726,7 +736,7 @@ router.get(
 
 router.get(
   "/connectors/airtable/oauth/fields",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const token = await airtableToken(req.tenantId!);
     const baseId = String(req.query.baseId || "");
@@ -743,7 +753,7 @@ router.get(
 // create_missing=true and the token carries schema.bases:write.
 router.post(
   "/connectors/airtable/mapping",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const cat = await findCatalog("airtable");
     if (!cat) { res.status(404).json({ error: "unknown_provider" }); return; }
@@ -807,7 +817,7 @@ router.get(
   "/connectors/wix/oauth/init",
   // Onboarding-reachable like every other connector: during onboarding the
   // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const appId = process.env.WIX_CLIENT_ID;            // Wix App ID
     const redirect = process.env.WIX_REDIRECT_URI;
@@ -879,7 +889,7 @@ router.get(
   "/connectors/square/oauth/init",
   // Onboarding-reachable like every other connector: during onboarding the
   // tenant is PENDING_ONBOARDING, and requireActiveTenant() 403s there.
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.SQUARE_APPLICATION_ID;
     const redirect = process.env.SQUARE_REDIRECT_URI;
@@ -952,7 +962,7 @@ router.get("/connectors/square/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/salesforce/oauth/init",
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.SALESFORCE_CLIENT_ID;
     const redirect = process.env.SALESFORCE_REDIRECT_URI;
@@ -1031,7 +1041,7 @@ router.get(
   "/connectors/monday/oauth/init",
   // Onboarding-reachable: during onboarding the tenant is PENDING_ONBOARDING,
   // so requireActiveTenant() answered 403 and the connect simply died there.
-  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canConnectSystems,
   (req: Request, res: Response) => {
     const clientId = process.env.MONDAY_CLIENT_ID;
     const redirect = process.env.MONDAY_REDIRECT_URI;
@@ -1121,7 +1131,7 @@ router.get("/connectors/monday/oauth/callback", async (req: Request, res: Respon
 
 router.get(
   "/connectors/monday/meta/boards",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     try {
       const cat = await findCatalog("monday");
@@ -1168,7 +1178,7 @@ async function resolveConnectionString(opts: {
 
 router.post(
   "/connectors/postgres/meta/tables",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,
@@ -1210,7 +1220,7 @@ router.post(
 
 router.post(
   "/connectors/mongodb/meta/collections",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,
@@ -1240,7 +1250,7 @@ router.post(
 
 router.post(
   "/connectors/mongodb/meta/databases",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,
@@ -1271,7 +1281,7 @@ router.post(
 
 router.post(
   "/connectors/aws_rds/meta/tables",
-  authenticate, resolveTenant, requireActiveTenant(), requireRole("ADMIN"),
+  authenticate, resolveTenant, requireActiveTenant(), canConnectSystems,
   async (req: Request, res: Response) => {
     const connStr = await resolveConnectionString({
       tenantId: req.tenantId!,

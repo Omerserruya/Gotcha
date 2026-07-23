@@ -1,5 +1,5 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requirePermission, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
 import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/connectors/integration-framework";
 import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
 import { maskPhone, maskEmail } from "../lib/mask";
@@ -12,7 +12,16 @@ const router = Router();
 // catalog and offers real connects. requireActiveTenant() 403'd during
 // onboarding, which made EVERY detected tool (ReturnGO included) render as
 // "not supported yet" because the catalog fetch came back empty.
-router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), requireRole("ADMIN"));
+// Authorization is permission-based (Active Membership), never Role==ADMIN.
+// This router serves BOTH the AI Studio marketplace (integrations:*) and
+// Settings → Business Systems (business-systems:*), so gates accept either
+// domain's key. The router-level gate is the READ floor; mutating routes add
+// stronger per-route gates below.
+const canReadSystems = requirePermission("integrations:connections:read", "business-systems:connections:read");
+const canConnectSystems = requirePermission("integrations:connections:connect", "business-systems:connections:connect");
+const canManageSystems = requirePermission("integrations:connections:disconnect", "business-systems:connections:manage");
+const canSelectSot = requirePermission("business-systems:sot:select");
+router.use(authenticate, resolveTenant, requireOnboardingOrActiveTenant(), canReadSystems);
 
 // GET / - List all published catalog integrations with tenant connection status
 router.get("/", async (req: Request, res: Response) => {
@@ -319,7 +328,7 @@ router.get("/:slug", async (req: Request, res: Response) => {
 // persistence (the adapter framework decrypts on load). Existing connections
 // are updated in-place rather than rejected, so the marketplace can re-bind
 // credentials without forcing a disconnect first.
-router.post("/:slug/connect", async (req: Request, res: Response) => {
+router.post("/:slug/connect", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const { credentials, config } = req.body;
@@ -397,7 +406,7 @@ router.post("/:slug/connect", async (req: Request, res: Response) => {
 //
 // Marks the integration CONNECTED on success and ERROR (with lastError) on
 // failure, so the marketplace UI reflects reality.
-router.post("/:slug/test", async (req: Request, res: Response) => {
+router.post("/:slug/test", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
 
@@ -535,7 +544,7 @@ router.post("/:slug/test", async (req: Request, res: Response) => {
 });
 
 // POST /:slug/disconnect - Disconnect and delete tenant tools (cascade handles child rows)
-router.post("/:slug/disconnect", async (req: Request, res: Response) => {
+router.post("/:slug/disconnect", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
 
@@ -573,7 +582,7 @@ router.post("/:slug/disconnect", async (req: Request, res: Response) => {
 });
 
 // PUT /:slug/credentials - Update credentials (encrypted, in place)
-router.put("/:slug/credentials", async (req: Request, res: Response) => {
+router.put("/:slug/credentials", canConnectSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const { credentials, config } = req.body;
@@ -693,7 +702,7 @@ async function enableReadToolsForIntegration(
 // turn reads customer context from Shopify instead of any CRM-category
 // integration. Toggling OFF restores the default resolution order - it never
 // disturbs tenants who don't opt in.
-router.put("/:slug/crm-source", async (req: Request, res: Response) => {
+router.put("/:slug/crm-source", canSelectSot, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     if (slug !== "shopify") {
@@ -818,7 +827,7 @@ router.get("/:slug/tools", async (req: Request, res: Response) => {
 });
 
 // PUT /:slug/tools/:toolSlug - Toggle tool enabled/disabled for tenant
-router.put("/:slug/tools/:toolSlug", async (req: Request, res: Response) => {
+router.put("/:slug/tools/:toolSlug", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const toolSlug = req.params.toolSlug as string;
@@ -923,7 +932,7 @@ router.get("/:slug/monday-boards", async (req: Request, res: Response) => {
 // the audience builder uses onto concrete boards. The shared CRM client
 // reads these from `tenant_integrations.config` when it dispatches
 // describe/search calls.
-router.put("/:slug/audience-config", async (req: Request, res: Response) => {
+router.put("/:slug/audience-config", canManageSystems, async (req: Request, res: Response) => {
   try {
     const slug = req.params.slug as string;
     const { leadsBoardId, contactsBoardId } = req.body || {};

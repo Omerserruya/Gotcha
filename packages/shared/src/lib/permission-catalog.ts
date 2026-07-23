@@ -44,6 +44,7 @@ export type PermissionDomain =
   | "ai"
   | "approvals"
   | "integrations"
+  | "business-systems"
   | "channels"
   | "analytics"
   | "settings";
@@ -140,6 +141,17 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("integrations:connections:read", "integrations", "configuration", false, "View Integrations", "View connected integrations."),
   p("integrations:connections:connect", "integrations", "configuration", false, "Connect Integrations", "Connect/configure third-party integrations."),
   p("integrations:connections:disconnect", "integrations", "configuration", false, "Disconnect Integrations", "Disconnect third-party integrations."),
+
+  // ── Business Systems (configuration) ────────────────────────
+  // The tenant's Source-of-Truth home (Settings → Business Systems). Distinct
+  // from the generic `integrations` domain (AI Studio marketplace) because the
+  // authority is different: business-systems governs which system answers "who
+  // is this customer?" and how data syncs back. Routes that serve BOTH
+  // surfaces accept either domain's key (OR semantics in requirePermission).
+  p("business-systems:connections:read", "business-systems", "configuration", false, "View Business Systems", "View connected business systems, their health and Source-of-Truth status."),
+  p("business-systems:connections:connect", "business-systems", "configuration", false, "Connect Business Systems", "Connect or reconnect a business system (OAuth or API key)."),
+  p("business-systems:connections:manage", "business-systems", "configuration", false, "Manage Business Systems", "Configure sync/writeback, change settings, or disconnect a business system."),
+  p("business-systems:sot:select", "business-systems", "configuration", false, "Select Source of Truth", "Elect which connected system is the customer Source of Truth."),
 
   // ── Channels (configuration) ────────────────────────────────
   p("channels:manage:read", "channels", "configuration", false, "View Channels", "View connected messaging/voice channels."),

@@ -115,7 +115,10 @@ export function ChannelsContent() {
 
 function ChannelsPageContent() {
   const { token, user } = useAuth();
-  const { atLeastRole } = usePermissions();
+  // Permission-based access (Active Membership), never a role check: read
+  // gates the page, update gates connect/configure/destructive actions.
+  const { can } = usePermissions();
+  const canManageChannels = can("channels:manage:update");
   const { t } = useI18n();
   const searchParams = useSearchParams();
   const router = useRouter();
@@ -401,7 +404,7 @@ function ChannelsPageContent() {
     }
   }
 
-  if (!atLeastRole("admin")) {
+  if (!can("channels:manage:read")) {
     return (
         <div className="flex items-center justify-center h-full">
           <p className="text-gray-400">{t("settings.adminRequired")}</p>
@@ -511,7 +514,9 @@ function ChannelsPageContent() {
       )}
 
       {/* Connect cards, grouped by what the channel IS for the business:
-          messaging, email, team, website chat, voice. */}
+          messaging, email, team, website chat, voice. Connecting is a manage
+          action - read-only members see connected state but no connect grid. */}
+      {canManageChannels && (
       <div className="space-y-6" data-tour="channels-connect">
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catMessaging")}</h3>
@@ -625,12 +630,13 @@ function ChannelsPageContent() {
           </div>
         </div>
       </div>
+      )}
 
       {/* Voice / phone (Twilio) - a first-class channel CARD in the same grid
           as every other way a customer reaches the business, not a plain row.
           Config lives at the Settings-owned /settings/channels/twilio; the
           Outbound page CONSUMES this configuration and never duplicates it. */}
-      {(voiceChannels.length > 0 || atLeastRole("admin")) && (
+      {(voiceChannels.length > 0 || canManageChannels) && (
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catVoice")}</h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -733,7 +739,7 @@ function ChannelsPageContent() {
 
                   {/* Reconnect - a broken or degraded channel gets a direct
                       path back through its own connect flow. */}
-                  {(["ERROR", "DISCONNECTED"].includes(account.connectionStatus) || (account.connectionStatus === "CONNECTED" && account.lastError)) && (
+                  {canManageChannels && (["ERROR", "DISCONNECTED"].includes(account.connectionStatus) || (account.connectionStatus === "CONNECTED" && account.lastError)) && (
                     <button
                       onClick={() => {
                         const p = String(account.channel || "").toLowerCase();
@@ -761,7 +767,7 @@ function ChannelsPageContent() {
                   )}
 
                   {/* Disconnect button */}
-                  {(account.connectionStatus === "CONNECTED" || account.connectionStatus === "ERROR") && (
+                  {canManageChannels && (account.connectionStatus === "CONNECTED" || account.connectionStatus === "ERROR") && (
                     <button
                       onClick={() => openDisconnectConfirm(account.id)}
                       className="text-xs text-red-500 hover:text-red-700 transition p-1"
@@ -774,7 +780,7 @@ function ChannelsPageContent() {
                   )}
 
                   {/* Delete button (only for disconnected channels) */}
-                  {account.connectionStatus === "DISCONNECTED" && (
+                  {canManageChannels && account.connectionStatus === "DISCONNECTED" && (
                     <button
                       onClick={() => setDeleteConfirm({ open: true, id: account.id, name: account.displayName || account.externalId })}
                       className="text-xs text-red-400 hover:text-red-600 transition p-1"
@@ -990,7 +996,7 @@ function ChannelsPageContent() {
           })()}
           <div className="flex items-center justify-between pt-2 border-t border-gray-100">
             <p className="text-xs text-gray-400">Widget ID: <code className="bg-gray-100 px-1.5 py-0.5 rounded">{embedModal.widgetId}</code></p>
-            {embedModal.accountId && (
+            {embedModal.accountId && canManageChannels && (
               <button
                 disabled={savingWidget}
                 onClick={async () => {
