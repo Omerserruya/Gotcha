@@ -74,9 +74,14 @@ export interface IntegrationsExplorerProps {
    *  account-level controls (e.g. the customer system-of-record picker) without
    *  the explorer knowing anything about them. */
   beforeContent?: React.ReactNode;
+  /** Where a card/connect click navigates for a given provider slug. Defaults
+   *  to the AI Studio marketplace detail route. Settings → Business Systems
+   *  overrides this to a Settings-owned route so the whole connect flow stays
+   *  inside Settings (no bounce to the marketplace). */
+  detailHref?: (slug: string) => string;
 }
 
-export default function IntegrationsExplorer({ subtitle, title, initialCategory, restrictToCategory, beforeContent }: IntegrationsExplorerProps) {
+export default function IntegrationsExplorer({ subtitle, title, initialCategory, restrictToCategory, beforeContent, detailHref = (slug: string) => `/integrations/${slug}` }: IntegrationsExplorerProps) {
   const { token } = useAuth();
   const { t } = useI18n();
   const router = useRouter();
@@ -216,7 +221,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
               <div
                 key={intg.id || intg.slug}
                 className="bg-white rounded-2xl shadow-card border border-gray-100 p-5 flex flex-col gap-3 hover:shadow-md hover:border-violet-200 transition cursor-pointer"
-                onClick={() => router.push(`/integrations/${intg.slug}`)}
+                onClick={() => router.push(detailHref(intg.slug))}
               >
                 <div className="flex items-start justify-between">
                   <div className={clsx("w-12 h-12 rounded-xl flex items-center justify-center shrink-0", logoSrc ? "bg-white border border-gray-100 p-1.5" : `${logoColor} text-white font-bold text-lg`)}>
@@ -267,7 +272,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
                       ? "bg-violet-50 text-violet-700 hover:bg-violet-100"
                       : "bg-violet-600 text-white hover:bg-violet-700 shadow-sm"
                   )}
-                  onClick={(e) => { e.stopPropagation(); router.push(`/integrations/${intg.slug}`); }}
+                  onClick={(e) => { e.stopPropagation(); router.push(detailHref(intg.slug)); }}
                 >
                   {isConnected ? t("marketplace.manage") : t("marketplace.connect")}
                 </button>

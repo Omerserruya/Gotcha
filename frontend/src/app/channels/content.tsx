@@ -626,47 +626,48 @@ function ChannelsPageContent() {
         </div>
       </div>
 
-      {/* Voice / phone channels - same Channels home as every other way a
-          customer talks to the business. Detail + wizard pages stay under
-          /settings/voice-channels; the Outbound page CONSUMES this
-          configuration and never duplicates it. */}
-      {voiceChannels.length > 0 || atLeastRole("admin") ? (
+      {/* Voice / phone (Twilio) - a first-class channel CARD in the same grid
+          as every other way a customer reaches the business, not a plain row.
+          Config lives at the Settings-owned /settings/channels/twilio; the
+          Outbound page CONSUMES this configuration and never duplicates it. */}
+      {(voiceChannels.length > 0 || atLeastRole("admin")) && (
         <div>
           <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catVoice")}</h3>
-          <div className="bg-white rounded-2xl border border-gray-200 p-4">
-            {voiceChannels.length === 0 ? (
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-sm text-gray-500">{t("channels.voiceNone")}</p>
-                <a href="/settings/voice-channels/new" className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition font-medium">
-                  {t("channels.voiceConnect")}
-                </a>
-              </div>
-            ) : (
-              <div className="divide-y divide-gray-100">
-                {voiceChannels.map((vc: any) => (
-                  <div key={vc.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm font-medium text-gray-900">{vc.friendlyName}</p>
-                      <p className="text-xs text-gray-400" dir="ltr">
-                        {(vc.numbers || []).filter((n: any) => n.isActive).map((n: any) => n.e164).join(", ") || t("channels.voiceNoNumbers")}
-                      </p>
-                    </div>
-                    <StatusBadge status={vc.status === "ACTIVE" ? "CONNECTED" : vc.status === "PENDING" ? "PENDING" : vc.status === "ERROR" ? "ERROR" : "DISCONNECTED"} />
-                    <a href={`/settings/voice-channels/${vc.id}`} className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium">
-                      {t("channels.voiceManage")}
-                    </a>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            {(() => {
+              // Truthful aggregate state: a draft (PENDING) is NOT "connected".
+              // Only an ACTIVE channel carrying a usable number counts as
+              // connected; a health error surfaces as "requires action".
+              const active = voiceChannels.find((v: any) => v.status === "ACTIVE" && (v.numbers || []).some((n: any) => n.isActive));
+              const errored = voiceChannels.find((v: any) => v.status === "ERROR" || (v.status === "ACTIVE" && v.healthStatus === "ERROR"));
+              const pending = voiceChannels.find((v: any) => v.status === "PENDING");
+              const primary = active || errored || pending || voiceChannels[0] || null;
+              const state = active ? (active.healthStatus === "ERROR" ? "REQUIRES_ACTION" : "CONNECTED") : errored ? "ERROR" : pending ? "PENDING" : voiceChannels.length ? "DISCONNECTED" : "NONE";
+              const number = primary ? ((primary.numbers || []).filter((n: any) => n.isActive).map((n: any) => n.e164)[0] || (primary.numbers || [])[0]?.e164 || null) : null;
+              const cta = state === "NONE" ? t("channels.voiceConnect") : state === "ERROR" || state === "REQUIRES_ACTION" ? t("channels.fix") : t("channels.open");
+              return (
+                <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col items-center text-center gap-3">
+                  <div className="w-12 h-12 rounded-xl bg-gray-50 flex items-center justify-center">
+                    <svg className="w-6 h-6 text-[#F22F46]" viewBox="0 0 24 24" fill="currentColor" aria-hidden>
+                      <path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.6 0 12 0zm0 20.4c-4.6 0-8.4-3.8-8.4-8.4S7.4 3.6 12 3.6s8.4 3.8 8.4 8.4-3.8 8.4-8.4 8.4zm4.9-11.2a2.05 2.05 0 11-4.1 0 2.05 2.05 0 014.1 0zm0 5.6a2.05 2.05 0 11-4.1 0 2.05 2.05 0 014.1 0zm-5.6 0a2.05 2.05 0 11-4.1 0 2.05 2.05 0 014.1 0zm0-5.6a2.05 2.05 0 11-4.1 0 2.05 2.05 0 014.1 0z" />
+                    </svg>
                   </div>
-                ))}
-                <div className="pt-2.5">
-                  <a href="/settings/voice-channels/new" className="text-xs font-medium text-primary-600 hover:text-primary-700">
-                    + {t("channels.voiceConnect")}
+                  <div>
+                    <h3 className="font-semibold text-sm text-gray-900">{t("channels.twilio")}</h3>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                      {number ? <span dir="ltr">{number}</span> : t("channels.twilioDesc")}
+                    </p>
+                  </div>
+                  {state !== "NONE" && <StatusBadge status={state} />}
+                  <a href="/settings/channels/twilio" className="text-xs px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition font-medium w-full">
+                    {cta}
                   </a>
                 </div>
-              </div>
-            )}
+              );
+            })()}
           </div>
         </div>
-      ) : null}
+      )}
 
       {/* Connected Channels List */}
       <div className="bg-white rounded-2xl border border-gray-200 p-6">

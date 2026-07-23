@@ -12,6 +12,7 @@ import {
   builtinRoleForLegacy,
   maxScope,
   isPermissionKey,
+  getPermission,
 } from "../permission-catalog";
 
 describe("permission-catalog: key integrity", () => {
@@ -97,8 +98,23 @@ describe("permission-catalog: built-in roles", () => {
     const admin = expandPermissionPatterns(BUILTIN_ROLES.admin.permissions);
     expect(admin.has("settings:members:manage")).toBe(true);
     expect(admin.has("settings:billing:manage")).toBe(false);
+    expect(admin.has("settings:billing:cancel")).toBe(false);
     expect(admin.has("settings:roles:manage")).toBe(false);
     expect(admin.has("settings:api-keys:manage")).toBe(false);
+  });
+
+  it("cancellation is a distinct owner-only permission (not merely billing:manage)", () => {
+    // The permission exists in the catalog...
+    expect(isPermissionKey("settings:billing:cancel")).toBe(true);
+    // ...and is a 3-part settings/configuration key like its siblings.
+    expect(getPermission("settings:billing:cancel")?.domain).toBe("settings");
+    // Owners hold it (via the "*" wildcard); admins do NOT (owner-only).
+    const owner = expandPermissionPatterns(BUILTIN_ROLES.owner.permissions);
+    const admin = expandPermissionPatterns(BUILTIN_ROLES.admin.permissions);
+    expect(owner.has("settings:billing:cancel")).toBe(true);
+    expect(admin.has("settings:billing:cancel")).toBe(false);
+    // It is a SEPARATE key from manage, so a tenant can delegate one without the other.
+    expect("settings:billing:cancel").not.toBe("settings:billing:manage");
   });
 
   it("agent is a strict subset of department_manager", () => {

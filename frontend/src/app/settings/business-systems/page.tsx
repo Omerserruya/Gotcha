@@ -79,7 +79,7 @@ function SourceOfTruthStatusPanel() {
               {t("settings.businessSystems.toolsEnabled").replace("{enabled}", String(toolInfo.enabled)).replace("{total}", String(toolInfo.total))}
             </span>
             <Link
-              href={`/integrations/${toolInfo.slug}`}
+              href={`/ai-studio/marketplace/${toolInfo.slug}`}
               className="ms-2 text-xs font-medium text-primary-600 hover:text-primary-700"
             >
               {t("settings.businessSystems.manageTools")}
@@ -103,6 +103,9 @@ export default function BusinessSystemsPage() {
       title={t("settings.businessSystems.title")}
       subtitle={t("settings.businessSystems.subtitle")}
       restrictToCategory="CRM"
+      // Keep the whole connect flow inside Settings - cards open the
+      // Settings-owned provider route, never the AI Studio marketplace.
+      detailHref={(slug) => `/settings/business-systems/${slug}`}
       // Which connected system answers "who is this customer?" is an
       // account-level decision, so it lives here - never duplicated in the
       // AI Studio marketplace (which only exposes operational tools).

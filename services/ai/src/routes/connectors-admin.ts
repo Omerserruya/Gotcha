@@ -109,15 +109,33 @@ function dashboardRedirect(slug: string, query: Record<string, string> = {}) {
   return process.env.DASHBOARD_URL ? `${process.env.DASHBOARD_URL}${path}` : path;
 }
 
-// Where to land after an OAuth round-trip. When the connect was kicked off
-// from onboarding (state carries flow:"onboarding"), return to /setup so the
-// boot logic detects the connected core system and finishes activation.
-// Otherwise fall through to the marketplace page for the provider.
+// Allow-list of recognised OAuth `flow` values. The flow is what the SERVER
+// uses to decide where to land after the round-trip - it is NEVER a
+// browser-supplied return URL, so an attacker cannot redirect the callback to
+// an arbitrary destination. Unknown values collapse to `undefined` (the
+// default marketplace landing).
+const KNOWN_FLOWS = new Set(["onboarding", "settings_business_systems"]);
+function parseFlow(raw: unknown): string | undefined {
+  return typeof raw === "string" && KNOWN_FLOWS.has(raw) ? raw : undefined;
+}
+
+// Where to land after an OAuth round-trip. The destination is chosen from the
+// SIGNED state's `flow`, mapped to a FIXED internal path here (never a URL from
+// the browser):
+//   • onboarding                → /setup (boot logic finishes activation)
+//   • settings_business_systems → /settings/business-systems (Source-of-Truth
+//     home - so a connect started in Settings returns to Settings, not the
+//     AI Studio marketplace)
+//   • otherwise                 → the provider's marketplace page
 function postOAuthRedirect(slug: string, flow: string | undefined, query: Record<string, string> = {}) {
+  const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
   if (flow === "onboarding") {
-    const base = process.env.FRONTEND_URL || process.env.DASHBOARD_URL || "";
     const params = new URLSearchParams({ connected: slug, ...query });
     return `${base}/setup?${params.toString()}`;
+  }
+  if (flow === "settings_business_systems") {
+    const params = new URLSearchParams({ connected: slug, ...query });
+    return `${base}/settings/business-systems?${params.toString()}`;
   }
   return dashboardRedirect(slug, query);
 }
@@ -335,7 +353,7 @@ router.get(
     const clientId = process.env.HUBSPOT_CLIENT_ID;
     const redirect = process.env.HUBSPOT_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "hubspot_oauth_not_configured" }); return; }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseFlow(req.query.flow);
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "hubspot", flow, userId: (req as any).user?.userId });
     // HubSpot enforces an EXACT scope contract between the install URL and the
     // app's configured scopes (HubSpot dashboard → Auth → Scopes):
@@ -457,7 +475,7 @@ router.get(
       res.status(400).json({ error: "shop_required (e.g. my-store or my-store.myshopify.com)" });
       return;
     }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseFlow(req.query.flow);
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "shopify", shop, flow, userId: (req as any).user?.userId });
     // Discount tools talk to the REST PriceRule/DiscountCode resources
     // (/price_rules.json, /discount_codes/lookup.json), which are gated on
@@ -599,7 +617,7 @@ router.get(
     const clientId = process.env.AIRTABLE_CLIENT_ID;
     const redirect = process.env.AIRTABLE_REDIRECT_URI;
     if (!clientId || !redirect) { res.status(500).json({ error: "airtable_oauth_not_configured" }); return; }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseFlow(req.query.flow);
     const verifier = base64url(crypto.randomBytes(48));
     const challenge = base64url(crypto.createHash("sha256").update(verifier).digest());
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "airtable", flow, v: verifier, userId: (req as any).user?.userId });
@@ -944,7 +962,7 @@ router.get(
       res.status(400).json({ error: "bad_login_host (use login.salesforce.com or test.salesforce.com)" });
       return;
     }
-    const flow = req.query.flow === "onboarding" ? "onboarding" : undefined;
+    const flow = parseFlow(req.query.flow);
     const { state } = mintOAuthState({ tenantId: req.tenantId!, provider: "salesforce", loginHost, flow, userId: (req as any).user?.userId });
     const params = new URLSearchParams({
       response_type: "code",
@@ -1025,7 +1043,7 @@ router.get(
       tenantId: req.tenantId!,
       provider: "monday",
       userId: (req as any).user?.userId ?? (req as any).userId,
-      flow: typeof req.query.flow === "string" ? req.query.flow : undefined,
+      flow: parseFlow(req.query.flow),
     });
     const params = new URLSearchParams({
       client_id: clientId,
