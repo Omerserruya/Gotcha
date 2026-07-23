@@ -1,19 +1,9 @@
 "use client";
 
-import { useAuth } from "@/context/AuthContext";
-import { useI18n } from "@/context/I18nContext";
-import PolicyAdmin from "@/components/PolicyAdmin";
+// Moved - see lib/settings-routes.ts for the canonical home. Redirect kept so
+// old links/bookmarks still work; persisted configuration is untouched.
+import { LegacyRedirect } from "@/components/LegacyRedirect";
 
-export default function PolicyAdminPage() {
-  const { token } = useAuth();
-  const { t } = useI18n();
-  if (!token) return null;
-  return (
-    <div className="p-6">
-      <h1 className="text-xl font-semibold text-gray-900 mb-4">
-        {t("settings.policy.title")}
-      </h1>
-      <PolicyAdmin token={token} />
-    </div>
-  );
+export default function LegacyPage() {
+  return <LegacyRedirect from="/settings/policy" />;
 }

@@ -8,7 +8,7 @@ import { useRouter } from "next/navigation";
 export default function SettingsAgentsPage() {
   const router = useRouter();
   useEffect(() => {
-    router.replace("/settings/users");
+    router.replace("/settings/people?tab=users");
   }, [router]);
   return null;
 }

@@ -297,59 +297,9 @@ export default function SettingsPage() {
 
       {languageCard}
 
-      {/* Billing & Subscription - plans, AI Units, payment method, invoices. */}
-      <a
-        href="/settings/billing"
-        className="group bg-white border border-gray-200 hover:border-emerald-300 hover:shadow-subtle rounded-2xl p-4 transition block"
-      >
-        <div className="flex items-center gap-3">
-          <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center shrink-0">
-            <svg className="w-5 h-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 8.25h19.5M2.25 9h19.5m-16.5 5.25h6m-6 2.25h3M3.75 6h16.5a1.5 1.5 0 011.5 1.5v9a1.5 1.5 0 01-1.5 1.5H3.75a1.5 1.5 0 01-1.5-1.5v-9a1.5 1.5 0 011.5-1.5z" />
-            </svg>
-          </div>
-          <div className="flex-1 min-w-0">
-            <div className="text-sm font-semibold text-gray-900 group-hover:text-emerald-700">Billing &amp; Subscription</div>
-            <div className="text-xs text-gray-500">Plan, AI Units, payment method, auto-purchase, invoices.</div>
-          </div>
-        </div>
-      </a>
-
-      {/* AI Guardrails - quick links to the F8 policy + F4 tool gate admin surfaces. */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <a
-          href="/settings/policy"
-          className="group bg-white border border-gray-200 hover:border-violet-300 hover:shadow-subtle rounded-2xl p-4 transition block"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12c0 1.268-.63 2.39-1.593 3.068a3.745 3.745 0 01-1.043 3.296 3.745 3.745 0 01-3.296 1.043A3.745 3.745 0 0112 21c-1.268 0-2.39-.63-3.068-1.593a3.746 3.746 0 01-3.296-1.043 3.745 3.745 0 01-1.043-3.296A3.745 3.745 0 013 12c0-1.268.63-2.39 1.593-3.068a3.745 3.745 0 011.043-3.296 3.746 3.746 0 013.296-1.043A3.746 3.746 0 0112 3c1.268 0 2.39.63 3.068 1.593a3.746 3.746 0 013.296 1.043 3.746 3.746 0 011.043 3.296A3.745 3.745 0 0121 12z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{t("settings.policy.title")}</div>
-              <div className="text-xs text-gray-500">{t("settings.policy.cardHint")}</div>
-            </div>
-          </div>
-        </a>
-        <a
-          href="/settings/tools"
-          className="group bg-white border border-gray-200 hover:border-violet-300 hover:shadow-subtle rounded-2xl p-4 transition block"
-        >
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-violet-50 flex items-center justify-center shrink-0">
-              <svg className="w-5 h-5 text-violet-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                <path strokeLinecap="round" strokeLinejoin="round" d="M11.42 15.17L17.25 21A2.652 2.652 0 0021 17.25l-5.877-5.877M11.42 15.17l2.496-3.03c.317-.384.74-.626 1.208-.766M11.42 15.17l-4.655 5.653a2.548 2.548 0 11-3.586-3.586l6.837-5.63m5.108-.233c.55-.164 1.163-.188 1.743-.14a4.5 4.5 0 004.486-6.336l-3.276 3.277a3.004 3.004 0 01-2.25-2.25l3.276-3.276a4.5 4.5 0 00-6.336 4.486c.091 1.076-.071 2.264-.904 2.95l-.102.085m-1.745 1.437L5.909 7.5H4.5L2.25 3.75l1.5-1.5L7.5 4.5v1.409l4.26 4.26m-1.745 1.437l1.745-1.437m6.615 8.206L15.75 15.75M4.867 19.125h.008v.008h-.008v-.008z" />
-              </svg>
-            </div>
-            <div className="flex-1 min-w-0">
-              <div className="text-sm font-semibold text-gray-900 group-hover:text-violet-700">{t("settings.tools.title")}</div>
-              <div className="text-xs text-gray-500">{t("settings.tools.cardHint")}</div>
-            </div>
-          </div>
-        </a>
-      </div>
+      {/* Billing, tool permissions and action policies have canonical
+          homes now (Settings → Billing; AI Studio → Skills). General keeps
+          only genuine workspace defaults. */}
 
       {/* Toast message */}
       {message && (

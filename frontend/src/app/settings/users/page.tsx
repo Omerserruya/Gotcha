@@ -1,12 +1,9 @@
 "use client";
 
-import { RequirePermission } from "@/components/RequirePermission";
-import { UsersContent } from "./content";
+// Moved - see lib/settings-routes.ts for the canonical home. Redirect kept so
+// old links/bookmarks still work; persisted configuration is untouched.
+import { LegacyRedirect } from "@/components/LegacyRedirect";
 
-export default function UsersPage() {
-  return (
-    <RequirePermission perm="settings:members:manage">
-      <UsersContent />
-    </RequirePermission>
-  );
+export default function LegacyPage() {
+  return <LegacyRedirect from="/settings/users" />;
 }
