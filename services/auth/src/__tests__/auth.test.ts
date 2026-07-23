@@ -27,6 +27,7 @@ vi.mock("@chatcenter/shared", () => {
     },
     departmentMember: {
       findUnique: vi.fn(),
+      findFirst: vi.fn(),
     },
     conversation: {
       updateMany: vi.fn(),
@@ -133,7 +134,7 @@ describe("Auth Service", () => {
         isActive: true,
         createdAt: new Date(),
       });
-      (prisma.departmentMember.findUnique as any).mockResolvedValue(null);
+      (prisma.departmentMember.findFirst as any).mockResolvedValue(null);
       (prisma.tenant.findUnique as any).mockResolvedValue({ status: "ACTIVE", name: "Acme" });
       // Memberships list: this identity belongs to one tenant.
       (prisma.user.findMany as any).mockResolvedValue([
@@ -251,7 +252,7 @@ describe("Auth Service", () => {
   describe("GET /api/agents", () => {
     it("should list agents", async () => {
       (prisma.user.findMany as any).mockResolvedValue([
-        { id: "a1", name: "Agent 1", email: "a1@test.com", isActive: true, createdAt: new Date(), _count: { conversations: 2 } },
+        { id: "a1", name: "Agent 1", email: "a1@test.com", isActive: true, createdAt: new Date(), _count: { conversations: 2 }, departmentMembers: [] },
       ]);
 
       const app = createTestApp();

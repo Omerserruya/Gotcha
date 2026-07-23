@@ -120,8 +120,10 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       isActive: true,
       phoneNumber: true,
       role: true, // legacy enum (fallback)
-      departmentMember: {
+      departmentMembers: {
         select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
+        orderBy: { createdAt: "asc" as const },
+        take: 1,
       },
       roleAssignments: {
         select: { scope: true, role: { select: { id: true, name: true, builtinKey: true, defaultScope: true } } },
@@ -137,9 +139,9 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       isActive: u.isActive,
       phoneNumber: u.phoneNumber,
       legacyRole: u.role,
-      departmentId: u.departmentMember?.departmentId ?? null,
-      departmentRole: u.departmentMember?.departmentRole ?? null,
-      departmentName: u.departmentMember?.department?.name ?? null,
+      departmentId: u.departmentMembers?.[0]?.departmentId ?? null,
+      departmentRole: u.departmentMembers?.[0]?.departmentRole ?? null,
+      departmentName: u.departmentMembers?.[0]?.department?.name ?? null,
       roleId: assignment?.role.id ?? null,
       roleName: assignment?.role.name ?? null,
       roleBuiltinKey: assignment?.role.builtinKey ?? null,

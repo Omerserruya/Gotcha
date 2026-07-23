@@ -44,7 +44,14 @@ const membershipSelect = {
   role: true,
   isActive: true,
   lastActiveAt: true,
-  departmentMember: { select: { departmentId: true, departmentRole: true } },
+  // Multi-department membership: the principal carries the PRIMARY
+  // (earliest) department for scope decisions; full membership lists are
+  // served by the departments/agents APIs.
+  departmentMembers: {
+    select: { departmentId: true, departmentRole: true },
+    orderBy: { createdAt: "asc" as const },
+    take: 1,
+  },
 } as const;
 
 export async function resolvePrincipal(token: string, tenantHint?: string | null): Promise<JwtPayload> {
@@ -111,7 +118,7 @@ export async function resolvePrincipal(token: string, tenantHint?: string | null
     tenantId: membership.tenantId,
     role: membership.role,
     email: membership.email,
-    departmentId: membership.departmentMember?.departmentId,
-    departmentRole: membership.departmentMember?.departmentRole,
+    departmentId: membership.departmentMembers?.[0]?.departmentId,
+    departmentRole: membership.departmentMembers?.[0]?.departmentRole,
   };
 }

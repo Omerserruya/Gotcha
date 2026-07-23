@@ -34,19 +34,27 @@ router.get("/", async (req: Request, res: Response) => {
         id: true, name: true, email: true, isActive: true, createdAt: true,
         phoneNumber: true,
         _count: { select: { conversations: { where: { status: { not: "CLOSED" } } } } },
-        departmentMember: {
+        departmentMembers: {
           select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
+          orderBy: { createdAt: "asc" as const },
         },
       },
     });
-    // Flatten department info
+    // Multi-department membership: `departments` carries the full list; the
+    // singular fields stay (first membership) for legacy consumers.
     const data = agents.map((a) => {
-      const { departmentMember, ...rest } = a;
+      const { departmentMembers, ...rest } = a;
+      const first = departmentMembers[0];
       return {
         ...rest,
-        departmentId: departmentMember?.departmentId || null,
-        departmentRole: departmentMember?.departmentRole || null,
-        departmentName: departmentMember?.department?.name || null,
+        departments: departmentMembers.map((m) => ({
+          departmentId: m.departmentId,
+          departmentRole: m.departmentRole,
+          departmentName: m.department?.name || null,
+        })),
+        departmentId: first?.departmentId || null,
+        departmentRole: first?.departmentRole || null,
+        departmentName: first?.department?.name || null,
       };
     });
     res.json(data);
@@ -91,16 +99,42 @@ router.get("/login-status", requirePermissionOrRole("settings:members:manage", "
 const inviteAgentSchema = z.object({
   email: z.string().email(),
   name: z.string().min(1),
+  // Zero, one or many departments. Every id is validated against the ACTIVE
+  // tenant below - ids arriving from frontend state are never trusted as-is.
+  departmentIds: z.array(z.string().min(1)).max(20).optional(),
 });
 
 router.post("/", requirePermissionOrRole("settings:members:manage", "ADMIN"), validate(inviteAgentSchema), async (req: Request, res: Response) => {
   try {
-    const { email, name } = req.body;
+    const { email, name, departmentIds } = req.body as { email: string; name: string; departmentIds?: string[] };
+    // Validate EVERY requested department against the active tenant first -
+    // a foreign/unknown id fails the whole invite (no partial memberships).
+    const wantedDepts = Array.from(new Set(departmentIds ?? []));
+    if (wantedDepts.length > 0) {
+      const found = await prisma.department.findMany({
+        where: { id: { in: wantedDepts }, tenantId: req.tenantId! },
+        select: { id: true },
+      });
+      if (found.length !== wantedDepts.length) {
+        res.status(400).json({ error: "One or more departments do not belong to this workspace" });
+        return;
+      }
+    }
     const result = await invitations.inviteUser(req.tenantId!, email, name, "AGENT");
+    if (wantedDepts.length > 0) {
+      await prisma.departmentMember.createMany({
+        data: wantedDepts.map((departmentId) => ({
+          tenantId: req.tenantId!,
+          userId: result.user.id,
+          departmentId,
+        })),
+        skipDuplicates: true,
+      });
+    }
     void writeAudit({
       tenantId: req.tenantId!, actorType: "user", actorId: (req as any).user?.userId,
       action: AuditAction.INVITE_CREATED, targetType: "user", targetId: result.user.id,
-      metadata: { email, role: "AGENT" },
+      metadata: { email, role: "AGENT", departmentIds: wantedDepts },
     });
     res.status(201).json(result);
   } catch (err: any) {

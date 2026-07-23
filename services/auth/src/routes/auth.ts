@@ -68,8 +68,9 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       return;
     }
 
-    const member = await prisma.departmentMember.findUnique({
+    const member = await prisma.departmentMember.findFirst({
       where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
       include: { department: { select: { id: true, name: true } } },
     });
     const deptInfo = member

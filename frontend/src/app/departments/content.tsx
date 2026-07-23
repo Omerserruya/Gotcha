@@ -463,9 +463,13 @@ export function DepartmentsContent() {
                   />
                 </div>
 
-                {/* Queue Mode */}
+                {/* Assignment on transfer (formerly the opaque "Queue mode").
+                    Only these two modes are actually implemented, and they
+                    apply exactly where the backend applies them: when a
+                    conversation is transferred into this department. */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("departments.queueMode")}</label>
+                  <p className="mb-1.5 text-xs text-gray-400">{t("departments.queueModeHint")}</p>
                   <select
                     value={formQueueMode}
                     onChange={(e) => setFormQueueMode(e.target.value)}
@@ -474,6 +478,10 @@ export function DepartmentsContent() {
                     <option value="CLAIM">{t("departments.claim")}</option>
                     <option value="ROUND_ROBIN">{t("departments.roundRobin")}</option>
                   </select>
+                  <p className="mt-1.5 text-xs text-gray-500">
+                    {formQueueMode === "ROUND_ROBIN" ? t("departments.roundRobinDesc") : t("departments.claimDesc")}
+                  </p>
+                  <p className="mt-1 text-[11px] text-gray-400">{t("departments.transferOnlyNote")}</p>
                 </div>
 
                 {/* Parent Department */}

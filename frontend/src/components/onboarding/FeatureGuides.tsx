@@ -72,7 +72,7 @@ const FEATURES: Feature[] = [
     key: "settings",
     // The invite button lives on the Users page specifically - matching all
     // of /settings meant firing where the anchor doesn't exist.
-    match: (p) => p.startsWith("/settings/users"),
+    match: (p) => p.startsWith("/settings/users") || p.startsWith("/settings/people"),
     steps: [
       {
         selector: '[data-tour="invite-teammate"]',

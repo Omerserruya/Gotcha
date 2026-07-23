@@ -102,7 +102,7 @@ export async function backfillTenantAssignments(tenantId: string): Promise<numbe
       id: true,
       role: true,
       createdAt: true,
-      departmentMember: { select: { departmentRole: true } },
+      departmentMembers: { select: { departmentRole: true }, orderBy: { createdAt: "asc" as const }, take: 1 },
       roleAssignments: { select: { roleId: true }, take: 1 },
     },
   });
@@ -120,7 +120,7 @@ export async function backfillTenantAssignments(tenantId: string): Promise<numbe
 
     let target: BuiltinRoleKey | null = builtinRoleForLegacy(
       u.role,
-      u.departmentMember?.departmentRole ?? null,
+      u.departmentMembers?.[0]?.departmentRole ?? null,
     );
     if (!target) continue;
 

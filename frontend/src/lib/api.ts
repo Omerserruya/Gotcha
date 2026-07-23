@@ -256,7 +256,7 @@ export function getAgents(token: string) {
 
 // Inviting an agent takes no password: the invitee sets their own inside
 // Authentik via the returned setupLink.
-export function createAgent(token: string, data: { name: string; email: string }) {
+export function createAgent(token: string, data: { name: string; email: string; departmentIds?: string[] }) {
   return apiFetch<any>("/api/agents", {
     token,
     method: "POST",

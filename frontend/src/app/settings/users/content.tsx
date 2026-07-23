@@ -4,6 +4,7 @@ import { useState, useEffect, useCallback, useMemo, FormEvent } from "react";
 import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
+import { useI18n } from "@/context/I18nContext";
 import {
   getAgents,
   getTenantMembers,
@@ -77,46 +78,48 @@ function expandPatterns(patterns: string[], allKeys: string[]): Set<string> {
   return result;
 }
 
-const SCOPE_LABELS: Record<ScopeValue, string> = {
-  OWN: "Own",
-  TEAM: "Team",
-  DEPARTMENT: "Department",
-  WORKSPACE: "Workspace",
+const SCOPE_LABEL_KEYS: Record<ScopeValue, string> = {
+  OWN: "own",
+  TEAM: "team",
+  DEPARTMENT: "department",
+  WORKSPACE: "workspace",
 };
 const SCOPE_ORDER: ScopeValue[] = ["OWN", "TEAM", "DEPARTMENT", "WORKSPACE"];
 
 type PermSource = "inherited" | "additional" | "revoked" | "none";
 
 function SourceBadge({ source }: { source: PermSource }) {
+  const { t } = useI18n();
   if (source === "inherited")
     return (
       <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-blue-50 text-blue-600 ring-1 ring-blue-200 whitespace-nowrap">
-        Inherited from Role
+        {t("users.badge.inheritedFromRole")}
       </span>
     );
   if (source === "additional")
     return (
       <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-green-50 text-green-600 ring-1 ring-green-200 whitespace-nowrap">
-        Additional
+        {t("users.badge.additional")}
       </span>
     );
   if (source === "revoked")
     return (
       <span className="text-[10px] px-2 py-0.5 rounded-full font-medium bg-red-50 text-red-600 ring-1 ring-red-200 whitespace-nowrap">
-        Revoked
+        {t("users.badge.revoked")}
       </span>
     );
   return null;
 }
 
 function KindBadge({ kind }: { kind: "runtime" | "configuration" }) {
+  const { t } = useI18n();
   return kind === "configuration" ? (
     <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-slate-100 text-slate-500">
-      Config
+      {t("users.badge.config")}
     </span>
   ) : (
     <span className="text-[10px] px-1.5 py-0.5 rounded font-medium bg-orange-50 text-orange-500">
-      Runtime
+      {t("users.badge.runtime")}
     </span>
   );
 }
@@ -155,6 +158,7 @@ function Spinner({ size = 6 }: { size?: number }) {
 export function UsersContent() {
   const { token, user: currentUser } = useAuth();
   const { refresh: refreshPermissions } = usePermissions();
+  const { t } = useI18n();
 
   // ── Shared data ─────────────────────────────────────────────────────────────
   const [agents, setAgents] = useState<AgentRow[]>([]);
@@ -192,7 +196,7 @@ export function UsersContent() {
       setCatalog(catalogRes.data);
     } catch (err) {
       console.error("Failed to load data:", err);
-      notify("Failed to load data", "error");
+      notify(t("users.loadFailed"), "error");
     } finally {
       setLoading(false);
     }
@@ -221,10 +225,10 @@ export function UsersContent() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-5">
         <div>
           <h1 className="text-xl md:text-2xl font-bold text-gray-900">
-            Users &amp; Roles
+            {t("users.pageTitle")}
           </h1>
           <p className="text-xs text-gray-400 mt-0.5">
-            Manage workspace members, roles, and permission overrides.
+            {t("users.pageSubtitle")}
           </p>
         </div>
         <div className="flex bg-gray-100 rounded-xl p-1 text-xs font-medium self-start sm:self-auto">
@@ -237,7 +241,7 @@ export function UsersContent() {
                 : "text-gray-500 hover:text-gray-700",
             )}
           >
-            Members
+            {t("users.tabs.members")}
             {!loading && (
               <span className="ms-1.5 text-[10px] text-gray-400 font-normal">
                 {agents.length}
@@ -253,7 +257,7 @@ export function UsersContent() {
                 : "text-gray-500 hover:text-gray-700",
             )}
           >
-            Roles
+            {t("users.tabs.roles")}
             {!loading && (
               <span className="ms-1.5 text-[10px] text-gray-400 font-normal">
                 {tenantRoles.length}
@@ -314,14 +318,15 @@ interface MembersTabProps {
  *  last-login hint sourced from Authentik. Falls back to the plain active flag
  *  until the lazy login-status load resolves. */
 function MemberStatusBadge({ agent, status }: { agent: AgentRow; status?: MemberLoginStatus }) {
+  const { t } = useI18n();
   if (!agent.isActive || status?.status === "disabled") {
-    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">Inactive</span>;
+    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-500">{t("users.status.inactive")}</span>;
   }
   if (status?.status === "invited") {
-    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600 ring-1 ring-amber-200" title="Invite sent - hasn't signed in yet">Invited</span>;
+    return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-600 ring-1 ring-amber-200" title={t("users.status.invitedTooltip")}>{t("users.status.invited")}</span>;
   }
-  const title = status?.lastLogin ? `Last sign-in: ${new Date(status.lastLogin).toLocaleString()}` : undefined;
-  return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600 ring-1 ring-green-200" title={title}>Active</span>;
+  const title = status?.lastLogin ? t("users.status.lastSignIn").replace("{date}", new Date(status.lastLogin).toLocaleString()) : undefined;
+  return <span className="px-2.5 py-1 rounded-full text-xs font-medium bg-green-50 text-green-600 ring-1 ring-green-200" title={title}>{t("users.status.active")}</span>;
 }
 
 function MembersTab({
@@ -335,6 +340,7 @@ function MembersTab({
   onRefreshPermissions,
   notify,
 }: MembersTabProps) {
+  const { t } = useI18n();
   const [search, setSearch] = useState("");
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMode, setPanelMode] = useState<PanelMode>("create");
@@ -380,12 +386,12 @@ function MembersTab({
     setDeleteLoading(true);
     try {
       await deleteAgent(token, deleteTarget.id);
-      notify(`${deleteTarget.name} removed`);
+      notify(t("users.members.removedToast").replace("{name}", deleteTarget.name));
       setDeleteTarget(null);
       closePanel();
       await onRefresh();
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to delete user", "error");
+      notify(err instanceof Error ? err.message : t("users.members.deleteFailedToast"), "error");
     } finally {
       setDeleteLoading(false);
     }
@@ -406,7 +412,7 @@ function MembersTab({
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or email…"
+            placeholder={t("users.members.searchPlaceholder")}
             className="w-full ps-9 pe-4 py-2 bg-white border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 outline-none transition"
           />
         </div>
@@ -418,7 +424,7 @@ function MembersTab({
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
             <path strokeLinecap="round" strokeLinejoin="round" d="M19 7.5v3m0 0v3m0-3h3m-3 0h-3m-2.25-4.125a3.375 3.375 0 11-6.75 0 3.375 3.375 0 016.75 0zM4 19.235v-.11a6.375 6.375 0 0112.75 0v.109A12.318 12.318 0 0110.374 21c-2.331 0-4.512-.645-6.374-1.766z" />
           </svg>
-          <span className="hidden sm:inline">Add user</span>
+          <span className="hidden sm:inline">{t("users.members.addUser")}</span>
         </button>
       </div>
 
@@ -427,11 +433,11 @@ function MembersTab({
         <table className="w-full text-sm">
           <thead className="bg-gray-50/80">
             <tr>
-              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">Name</th>
-              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">Email</th>
-              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">Department</th>
-              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">Status</th>
-              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">Role</th>
+              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("users.members.table.name")}</th>
+              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("users.members.table.email")}</th>
+              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("users.members.table.department")}</th>
+              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("users.members.table.status")}</th>
+              <th className="text-start py-3.5 px-5 font-medium text-gray-500 text-xs uppercase tracking-wide">{t("users.members.table.role")}</th>
               <th className="py-3.5 px-5" />
             </tr>
           </thead>
@@ -439,7 +445,7 @@ function MembersTab({
             {filtered.length === 0 ? (
               <tr>
                 <td colSpan={6} className="py-12 text-center text-gray-400 text-sm">
-                  {search ? "No users match your search." : "No users found."}
+                  {search ? t("users.members.noMatch") : t("users.members.noUsers")}
                 </td>
               </tr>
             ) : (
@@ -489,7 +495,7 @@ function MembersTab({
       <div className="md:hidden space-y-3">
         {filtered.length === 0 ? (
           <div className="py-12 text-center text-gray-400 text-sm">
-            {search ? "No users match your search." : "No users found."}
+            {search ? t("users.members.noMatch") : t("users.members.noUsers")}
           </div>
         ) : (
           filtered.map((agent) => (
@@ -508,7 +514,7 @@ function MembersTab({
                 </div>
                 <div className="flex flex-col items-end gap-1 shrink-0">
                   <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-medium", agent.isActive ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500")}>
-                    {agent.isActive ? "Active" : "Inactive"}
+                    {agent.isActive ? t("users.status.active") : t("users.status.inactive")}
                   </span>
                   <span className={clsx("px-2 py-0.5 rounded-full text-[10px] font-medium ring-1", roleBadgeColor(agent.roleBuiltinKey ?? agent.legacyRole))}>
                     {agent.roleName ?? roleDisplayName(agent.legacyRole)}
@@ -541,9 +547,9 @@ function MembersTab({
       {/* Delete confirm */}
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title="Remove user"
-        message={`Remove ${deleteTarget?.name ?? "this user"} from the workspace? This cannot be undone.`}
-        confirmText="Remove"
+        title={t("users.members.removeModal.title")}
+        message={t("users.members.removeModal.message").replace("{name}", deleteTarget?.name ?? t("users.members.removeModalDefaultName"))}
+        confirmText={t("users.members.removeModal.confirmText")}
         danger
         loading={deleteLoading}
         onConfirm={handleDelete}
@@ -586,11 +592,16 @@ function MemberPanel({
   onDeleteRequest,
   notify,
 }: MemberPanelProps) {
+  const { t } = useI18n();
   // ── Profile form fields ──────────────────────────────────────────────────────
   const [formName, setFormName] = useState(agent?.name ?? "");
   const [formEmail, setFormEmail] = useState(agent?.email ?? "");
   const [formPhone, setFormPhone] = useState(agent?.phoneNumber ?? "");
   const [formDeptId, setFormDeptId] = useState(agent?.departmentId ?? "");
+  // Create mode: MULTI department membership (none / one / several). Every id
+  // is re-validated server-side against the active tenant.
+  const [formDeptIds, setFormDeptIds] = useState<string[]>([]);
+  const [deptSearch, setDeptSearch] = useState("");
   const [formRoleId, setFormRoleId] = useState<string>("");
   const [formScope, setFormScope] = useState<ScopeValue | null>(null);
   const [formLoading, setFormLoading] = useState(false);
@@ -620,7 +631,7 @@ function MemberPanel({
       setFormRoleId(access.roles?.[0]?.roleId ?? "");
       setFormScope(access.roles?.[0]?.scope ?? null);
     } catch {
-      notify("Failed to load user access", "error");
+      notify(t("users.panel.loadAccessFailedToast"), "error");
     } finally {
       setAccessLoading(false);
     }
@@ -667,16 +678,19 @@ function MemberPanel({
     setFormError("");
     try {
       if (mode === "create") {
-        if (!formEmail.trim()) { setFormError("Name and email are required."); return; }
-        const res = await createAgent(token, { name: formName.trim(), email: formEmail.trim() });
+        if (!formEmail.trim()) { setFormError(t("users.panel.nameEmailRequired")); return; }
+        const res = await createAgent(token, {
+          name: formName.trim(),
+          email: formEmail.trim(),
+          // Memberships are created server-side inside the invite (validated
+          // against the active tenant) - no per-department follow-up calls.
+          departmentIds: formDeptIds,
+        });
         const newId = (res as any)?.user?.id ?? (res as any)?.id;
-        if (formDeptId && newId) {
-          await assignAgentToDepartment(token, formDeptId, newId).catch(() => {});
-        }
         if (formRoleId && newId) {
           await setUserPrimaryRole(token, newId, { roleId: formRoleId, scope: formScope }).catch(() => {});
         }
-        notify(`${formName.trim()} added`);
+        notify(t("users.panel.addedToast").replace("{name}", formName.trim()));
       } else {
         if (!agent) return;
         await updateAgent(token, agent.id, {
@@ -688,12 +702,12 @@ function MemberPanel({
           if (prevDeptId) await removeAgentFromDepartment(token, prevDeptId, agent.id).catch(() => {});
           if (formDeptId) await assignAgentToDepartment(token, formDeptId, agent.id).catch(() => {});
         }
-        notify("Profile updated");
+        notify(t("users.panel.profileUpdatedToast"));
       }
       await onRefresh();
       onClose();
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "An error occurred";
+      const msg = err instanceof Error ? err.message : t("users.panel.genericError");
       setFormError(msg);
     } finally {
       setFormLoading(false);
@@ -705,9 +719,9 @@ function MemberPanel({
     try {
       await updateAgent(token, agent.id, { isActive: !agent.isActive });
       await onRefresh();
-      notify(agent.isActive ? "User deactivated" : "User activated");
+      notify(agent.isActive ? t("users.panel.deactivatedToast") : t("users.panel.activatedToast"));
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to update status", "error");
+      notify(err instanceof Error ? err.message : t("users.panel.statusUpdateFailedToast"), "error");
     }
   }
 
@@ -719,7 +733,7 @@ function MemberPanel({
       setSetupLink(res.setupLink);
       setResetSuccess(true);
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to reset password", "error");
+      notify(err instanceof Error ? err.message : t("users.panel.resetPasswordFailedToast"), "error");
     } finally {
       setResetLoading(false);
     }
@@ -733,9 +747,9 @@ function MemberPanel({
       await setUserPrimaryRole(token, agent.id, { roleId, scope: currentScopeOverride ?? null });
       await fetchAccess(agent.id);
       if (currentUserId === agent.id) onRefreshPermissions();
-      notify("Role updated");
+      notify(t("users.panel.roleUpdatedToast"));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update role";
+      const msg = err instanceof Error ? err.message : t("users.panel.roleUpdateFailedToast");
       setRoleError(msg);
     } finally {
       setRoleSaving(false);
@@ -750,9 +764,9 @@ function MemberPanel({
       await setUserPrimaryRole(token, agent.id, { roleId: currentRoleId, scope });
       await fetchAccess(agent.id);
       if (currentUserId === agent.id) onRefreshPermissions();
-      notify("Scope updated");
+      notify(t("users.panel.scopeUpdatedToast"));
     } catch (err: unknown) {
-      const msg = err instanceof Error ? err.message : "Failed to update scope";
+      const msg = err instanceof Error ? err.message : t("users.panel.scopeUpdateFailedToast");
       setRoleError(msg);
     } finally {
       setRoleSaving(false);
@@ -774,7 +788,7 @@ function MemberPanel({
       await fetchAccess(agent.id);
       if (currentUserId === agent.id) onRefreshPermissions();
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to update permission", "error");
+      notify(err instanceof Error ? err.message : t("users.panel.permissionUpdateFailedToast"), "error");
     } finally {
       setPermSaving((s) => ({ ...s, [key]: false }));
     }
@@ -799,14 +813,14 @@ function MemberPanel({
           )}
           <div className="flex-1 min-w-0">
             <h3 className="text-base font-bold text-gray-900 truncate">
-              {isCreate ? "Add user" : agent?.name}
+              {isCreate ? t("users.members.addUser") : agent?.name}
             </h3>
-            {!isCreate && <p className="text-xs text-gray-400 truncate">{agent?.email}</p>}
+            {!isCreate && <p className="text-xs text-gray-400 truncate" dir="ltr">{agent?.email}</p>}
           </div>
           <button
             onClick={onClose}
             className="w-8 h-8 rounded-lg flex items-center justify-center text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition shrink-0"
-            aria-label="Close panel"
+            aria-label={t("users.panel.closeAria")}
           >
             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
               <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -820,7 +834,7 @@ function MemberPanel({
           {/* ── Profile form ─────────────────────────────────────────────────── */}
           <section>
             <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
-              {isCreate ? "User details" : "Profile"}
+              {isCreate ? t("users.panel.userDetails") : t("users.panel.profile")}
             </h4>
             <form id="member-form" onSubmit={handleSubmit} className="space-y-3.5">
               {formError && (
@@ -829,7 +843,7 @@ function MemberPanel({
 
               {/* Name */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Name</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("users.panel.nameLabel")}</label>
                 <input
                   type="text"
                   value={formName}
@@ -842,13 +856,14 @@ function MemberPanel({
 
               {/* Email */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Email</label>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("users.panel.emailLabel")}</label>
                 <input
                   type="email"
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
                   required={isCreate}
                   disabled={!isCreate}
+                  dir="ltr"
                   className={clsx(
                     "w-full px-4 py-2.5 border border-gray-200 rounded-xl text-sm outline-none transition",
                     !isCreate ? "bg-gray-100 text-gray-400 cursor-not-allowed" : "bg-gray-50 focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white",
@@ -859,50 +874,86 @@ function MemberPanel({
               {/* Phone (edit only) */}
               {!isCreate && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Phone number</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("users.panel.phoneLabel")}</label>
                   <input
                     type="tel"
                     value={formPhone}
                     onChange={(e) => setFormPhone(e.target.value)}
-                    placeholder="+972501234567"
+                    placeholder={t("users.panel.phonePlaceholder")}
+                    dir="ltr"
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition font-mono"
                   />
-                  <p className="mt-1 text-[11px] text-gray-400">Used for voice channel routing and smart callbacks.</p>
+                  <p className="mt-1 text-[11px] text-gray-400">{t("users.panel.phoneHelper")}</p>
                 </div>
               )}
 
               {isCreate && (
                 <p className="text-xs text-gray-500">
-                  They will set their own password on our secure sign-in service.
-                  You will get a one-time setup link to share with them.
+                  {t("users.panel.createHelper")}
+                  {formEmail.trim() ? " " + t("users.inviteSummary").replace("{email}", formEmail.trim()) : ""}
                 </p>
               )}
 
-              {/* Department */}
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1.5">Department</label>
-                <select
-                  value={formDeptId}
-                  onChange={(e) => setFormDeptId(e.target.value)}
-                  className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
-                >
-                  <option value="">No department</option>
-                  {departments.map((d: any) => (
-                    <option key={d.id} value={d.id}>{d.name}</option>
-                  ))}
-                </select>
-              </div>
+              {/* Departments: multi-select on create (a member can belong to
+                  none, one or several); edit keeps the single-swap control. */}
+              {isCreate ? (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("users.inviteDepartments")}</label>
+                  <p className="mb-1.5 text-xs text-gray-400">{t("users.inviteDepartmentsHint")}</p>
+                  {departments.length > 6 && (
+                    <input
+                      value={deptSearch}
+                      onChange={(e) => setDeptSearch(e.target.value)}
+                      placeholder={t("users.inviteDepartmentsSearch")}
+                      className="mb-2 w-full rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-sm outline-none focus:border-primary-300 focus:ring-2 focus:ring-primary-200"
+                    />
+                  )}
+                  <div className="max-h-44 space-y-1 overflow-y-auto rounded-xl border border-gray-200 bg-gray-50 p-2">
+                    {departments
+                      .filter((d: any) => !deptSearch.trim() || String(d.name).toLowerCase().includes(deptSearch.trim().toLowerCase()))
+                      .map((d: any) => (
+                        <label key={d.id} className="flex cursor-pointer items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-gray-700 hover:bg-white">
+                          <input
+                            type="checkbox"
+                            checked={formDeptIds.includes(d.id)}
+                            onChange={(e) =>
+                              setFormDeptIds((prev) => (e.target.checked ? [...prev, d.id] : prev.filter((x) => x !== d.id)))
+                            }
+                          />
+                          <span className="truncate">{d.name}</span>
+                        </label>
+                      ))}
+                    {departments.length === 0 && (
+                      <p className="px-2 py-1.5 text-xs text-gray-400">{t("users.panel.noDepartment")}</p>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("users.panel.departmentLabel")}</label>
+                  <select
+                    value={formDeptId}
+                    onChange={(e) => setFormDeptId(e.target.value)}
+                    className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
+                  >
+                    <option value="">{t("users.panel.noDepartment")}</option>
+                    {departments.map((d: any) => (
+                      <option key={d.id} value={d.id}>{d.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               {/* Role select (create only - edit uses the rich role section below) */}
               {isCreate && (
                 <div>
-                  <label className="block text-sm font-medium text-gray-700 mb-1.5">Role</label>
+                  <label className="block text-sm font-medium text-gray-700 mb-1.5">{t("users.panel.roleLabel")}</label>
                   <select
                     value={formRoleId}
                     onChange={(e) => setFormRoleId(e.target.value)}
                     className="w-full px-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:ring-2 focus:ring-primary-200 focus:border-primary-300 focus:bg-white outline-none transition"
                   >
-                    <option value="">Select a role…</option>
+                    <option value="">{t("users.panel.selectRolePlaceholder")}</option>
                     {tenantRoles.map((r) => (
                       <option key={r.id} value={r.id}>{r.name}</option>
                     ))}
@@ -917,18 +968,18 @@ function MemberPanel({
             <>
               {/* Status toggle */}
               <section>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Status</h4>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t("users.panel.statusSection")}</h4>
                 <div className="flex items-center justify-between p-4 bg-gray-50 rounded-xl">
                   <div>
-                    <p className="text-sm font-medium text-gray-700">{agent.isActive ? "Active" : "Inactive"}</p>
+                    <p className="text-sm font-medium text-gray-700">{agent.isActive ? t("users.status.active") : t("users.status.inactive")}</p>
                     <p className="text-xs text-gray-400 mt-0.5">
-                      {agent.isActive ? "User can sign in and receive conversations." : "User is suspended and cannot sign in."}
+                      {agent.isActive ? t("users.panel.activeHelper") : t("users.panel.inactiveHelper")}
                     </p>
                   </div>
                   <button
                     onClick={handleToggleActive}
                     className={clsx("relative w-11 h-6 rounded-full transition-colors", agent.isActive ? "bg-green-500" : "bg-gray-300")}
-                    aria-label="Toggle active"
+                    aria-label={t("users.panel.toggleActiveAria")}
                   >
                     <span
                       className="absolute top-0.5 w-5 h-5 bg-white rounded-full shadow transition-transform"
@@ -940,7 +991,7 @@ function MemberPanel({
 
               {/* Reset password */}
               <section>
-                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Security</h4>
+                <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t("users.panel.securitySection")}</h4>
                 <div className="border border-gray-200 rounded-xl overflow-hidden">
                   <button
                     onClick={() => setShowReset(!showReset)}
@@ -950,7 +1001,7 @@ function MemberPanel({
                       <svg className="w-4 h-4 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" />
                       </svg>
-                      <span className="text-sm font-medium text-gray-700">Reset password</span>
+                      <span className="text-sm font-medium text-gray-700">{t("users.panel.resetPassword")}</span>
                     </div>
                     <svg className={clsx("w-4 h-4 text-gray-400 transition-transform", showReset && "rotate-180")} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
@@ -959,22 +1010,22 @@ function MemberPanel({
                   {showReset && (
                     <div className="px-4 pb-4 space-y-3">
                       <p className="text-xs text-gray-500">
-                        Generate a one-time link this person can use to set a new
-                        password. You never see or choose their password.
+                        {t("users.panel.resetPasswordHelper")}
                       </p>
                       <button
                         onClick={handleResetPassword}
                         disabled={resetLoading}
                         className="w-full py-2 bg-amber-500 hover:bg-amber-600 text-white text-sm font-medium rounded-xl transition disabled:opacity-50"
                       >
-                        {resetLoading ? "Creating link…" : "Generate password setup link"}
+                        {resetLoading ? t("users.panel.creatingLink") : t("users.panel.generateSetupLink")}
                       </button>
                       {resetSuccess && setupLink && (
                         <div className="space-y-1.5">
-                          <p className="text-xs text-green-600">Link created. It can be used once.</p>
+                          <p className="text-xs text-green-600">{t("users.panel.linkCreated")}</p>
                           <input
                             readOnly
                             value={setupLink}
+                            dir="ltr"
                             onFocus={(e) => e.currentTarget.select()}
                             className="w-full px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-xs font-mono"
                           />
@@ -991,7 +1042,7 @@ function MemberPanel({
               ) : (
                 <>
                   <section>
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">Role</h4>
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">{t("users.panel.roleSection")}</h4>
                     {roleError && <div className="mb-2 p-3 rounded-xl bg-red-50 text-red-600 text-sm">{roleError}</div>}
                     <div className="space-y-2">
                       {catalog?.builtinRoles.map((br) => {
@@ -1044,7 +1095,7 @@ function MemberPanel({
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2">
                                   <p className="text-sm font-semibold text-gray-900">{tr.name}</p>
-                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">Custom</span>
+                                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-gray-100 text-gray-500 font-medium">{t("users.badge.custom")}</span>
                                 </div>
                                 {tr.description && <p className="text-xs text-gray-500 mt-0.5">{tr.description}</p>}
                               </div>
@@ -1058,21 +1109,21 @@ function MemberPanel({
 
                   {/* Scope */}
                   <section>
-                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Scope Override</h4>
-                    <p className="text-xs text-gray-400 mb-3">"Inherit" uses the role's default scope.</p>
+                    <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{t("users.panel.scopeOverrideSection")}</h4>
+                    <p className="text-xs text-gray-400 mb-3">{t("users.panel.scopeOverrideHelper")}</p>
                     <div className="flex bg-gray-100 rounded-xl p-1 text-xs font-medium gap-0.5">
                       <button
                         onClick={() => handleSetScope(null)}
                         disabled={roleSaving || !currentRoleId}
                         className={clsx("flex-1 py-1.5 px-1 rounded-lg transition text-center truncate", currentScopeOverride === null ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700", "disabled:opacity-40")}
-                      >Inherit</button>
+                      >{t("users.panel.inherit")}</button>
                       {SCOPE_ORDER.map((s) => (
                         <button
                           key={s}
                           onClick={() => handleSetScope(s)}
                           disabled={roleSaving || !currentRoleId}
                           className={clsx("flex-1 py-1.5 px-1 rounded-lg transition text-center truncate", currentScopeOverride === s ? "bg-white text-gray-900 shadow-sm" : "text-gray-500 hover:text-gray-700", "disabled:opacity-40")}
-                        >{SCOPE_LABELS[s]}</button>
+                        >{t(`users.scope.${SCOPE_LABEL_KEYS[s]}`)}</button>
                       ))}
                     </div>
                   </section>
@@ -1080,11 +1131,11 @@ function MemberPanel({
                   {/* Additional Permissions */}
                   <section>
                     <div className="flex items-baseline justify-between mb-1">
-                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">Additional Permissions</h4>
-                      {userAccess && <span className="text-xs text-gray-400">Effective: {userAccess.permissions.length}</span>}
+                      <h4 className="text-xs font-semibold text-gray-500 uppercase tracking-wide">{t("users.panel.additionalPermissions")}</h4>
+                      {userAccess && <span className="text-xs text-gray-400">{t("users.panel.effectiveCount").replace("{n}", String(userAccess.permissions.length))}</span>}
                     </div>
                     <p className="text-xs text-gray-400 mb-4">
-                      Click to cycle state. Inherited → Revoked → (clear) or None → Granted → (clear).
+                      {t("users.panel.permissionsHelper")}
                     </p>
                     {catalog ? (
                       <div className="space-y-5">
@@ -1138,7 +1189,7 @@ function MemberPanel({
                   {/* Danger zone */}
                   <section>
                     <div className="border border-red-200 rounded-xl p-4">
-                      <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-2">Danger zone</p>
+                      <p className="text-xs font-semibold text-red-500 uppercase tracking-wider mb-2">{t("users.panel.dangerZone")}</p>
                       <button
                         onClick={() => onDeleteRequest(agent)}
                         className="w-full py-2.5 bg-red-50 text-red-600 text-sm font-medium rounded-xl hover:bg-red-100 transition flex items-center justify-center gap-2"
@@ -1146,7 +1197,7 @@ function MemberPanel({
                         <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
                         </svg>
-                        Remove user
+                        {t("users.panel.removeUser")}
                       </button>
                     </div>
                   </section>
@@ -1165,8 +1216,8 @@ function MemberPanel({
             className="w-full py-3 bg-primary-500 text-white text-sm font-semibold rounded-xl hover:bg-primary-600 disabled:opacity-50 transition flex items-center justify-center gap-2 shadow-sm"
           >
             {formLoading ? (
-              <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> Saving…</>
-            ) : isCreate ? "Add user" : "Save profile"}
+              <><div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" /> {t("users.common.saving")}</>
+            ) : isCreate ? t("users.members.addUser") : t("users.panel.saveProfile")}
           </button>
         </div>
       </div>
@@ -1189,6 +1240,7 @@ interface RolesTabProps {
 }
 
 function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabProps) {
+  const { t } = useI18n();
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState("");
@@ -1207,13 +1259,13 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
     setCreateLoading(true);
     try {
       await createTenantRole(token, { name: newName.trim(), description: newDesc.trim() || undefined });
-      notify(`Role "${newName}" created`);
+      notify(t("users.roles.createdToast").replace("{name}", newName));
       setNewName("");
       setNewDesc("");
       setCreating(false);
       await onRefresh();
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to create role", "error");
+      notify(err instanceof Error ? err.message : t("users.roles.createFailedToast"), "error");
     } finally {
       setCreateLoading(false);
     }
@@ -1224,12 +1276,12 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
     setDeleteLoading(true);
     try {
       await deleteTenantRole(token, deleteTarget.id);
-      notify(`Role "${deleteTarget.name}" deleted`);
+      notify(t("users.roles.deletedToast").replace("{name}", deleteTarget.name));
       setDeleteTarget(null);
       if (expandedId === deleteTarget.id) setExpandedId(null);
       await onRefresh();
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to delete role", "error");
+      notify(err instanceof Error ? err.message : t("users.roles.deleteFailedToast"), "error");
     } finally {
       setDeleteLoading(false);
     }
@@ -1242,7 +1294,7 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
       <div className="space-y-3">
         {/* Built-in roles */}
         <div>
-          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 ps-1">System roles</p>
+          <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider mb-2 ps-1">{t("users.roles.systemRoles")}</p>
           <div className="space-y-2">
             {builtinRoles.map((role) => (
               <RoleRow
@@ -1263,12 +1315,12 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
         {/* Custom roles */}
         <div>
           <div className="flex items-center justify-between mb-2 ps-1">
-            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">Custom roles</p>
+            <p className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">{t("users.roles.customRoles")}</p>
             <button
               onClick={() => setCreating(!creating)}
               className="text-xs px-3 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition font-medium"
             >
-              {creating ? "Cancel" : "+ New role"}
+              {creating ? t("users.common.cancel") : t("users.roles.newRole")}
             </button>
           </div>
 
@@ -1278,7 +1330,7 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
                 value={newName}
                 onChange={(e) => setNewName(e.target.value)}
                 required maxLength={80}
-                placeholder="Role name (e.g. Sales Manager)"
+                placeholder={t("users.roles.namePlaceholder")}
                 className="w-full text-sm border border-gray-200 rounded-xl px-4 py-2.5 bg-gray-50 focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
                 autoFocus
               />
@@ -1286,7 +1338,7 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
                 value={newDesc}
                 onChange={(e) => setNewDesc(e.target.value)}
                 maxLength={500}
-                placeholder="Description (optional)"
+                placeholder={t("users.roles.descriptionPlaceholder")}
                 className="w-full text-sm border border-gray-200 rounded-xl px-4 py-2.5 bg-gray-50 focus:ring-2 focus:ring-primary-200 focus:bg-white outline-none transition"
               />
               <div className="flex justify-end">
@@ -1295,7 +1347,7 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
                   disabled={createLoading || !newName.trim()}
                   className="text-sm px-4 py-2 bg-primary-500 text-white rounded-xl hover:bg-primary-600 transition font-medium disabled:opacity-50"
                 >
-                  {createLoading ? "Creating…" : "Create role"}
+                  {createLoading ? t("users.common.creating") : t("users.roles.createRole")}
                 </button>
               </div>
             </form>
@@ -1303,7 +1355,7 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
 
           {customRoles.length === 0 && !creating ? (
             <div className="bg-white rounded-2xl border border-gray-100 p-8 text-center text-sm text-gray-400">
-              No custom roles yet. Built-in roles cover most use cases; create a custom role for unique permission sets.
+              {t("users.roles.emptyCustom")}
             </div>
           ) : (
             <div className="space-y-2">
@@ -1327,9 +1379,9 @@ function RolesTab({ token, tenantRoles, catalog, onRefresh, notify }: RolesTabPr
 
       <ConfirmModal
         isOpen={!!deleteTarget}
-        title="Delete role"
-        message={`Delete "${deleteTarget?.name}"? Users assigned to it will lose its permissions.`}
-        confirmText="Delete"
+        title={t("users.roles.deleteModal.title")}
+        message={t("users.roles.deleteModal.message").replace("{name}", deleteTarget?.name ?? "")}
+        confirmText={t("users.roles.deleteModal.confirmText")}
         danger
         loading={deleteLoading}
         onConfirm={handleDelete}
@@ -1355,6 +1407,7 @@ interface RoleRowProps {
 }
 
 function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, onSaved, notify }: RoleRowProps) {
+  const { t } = useI18n();
   const isSystem = !!role.builtinKey;
 
   // Selected permissions (keys)
@@ -1394,10 +1447,10 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
     setSaving(true);
     try {
       await setTenantRoleFeatures(token, role.id, Array.from(selected));
-      notify(`"${role.name}" permissions saved`);
+      notify(t("users.roleRow.permissionsSavedToast").replace("{name}", role.name));
       await onSaved();
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to save permissions", "error");
+      notify(err instanceof Error ? err.message : t("users.roleRow.permissionsSaveFailedToast"), "error");
     } finally {
       setSaving(false);
     }
@@ -1408,11 +1461,11 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
     setSaving(true);
     try {
       await updateTenantRole(token, role.id, { name: metaName.trim(), description: metaDesc.trim() || null });
-      notify("Role updated");
+      notify(t("users.roleRow.roleUpdatedToast"));
       setEditingMeta(false);
       await onSaved();
     } catch (err: unknown) {
-      notify(err instanceof Error ? err.message : "Failed to update role", "error");
+      notify(err instanceof Error ? err.message : t("users.roleRow.roleUpdateFailedToast"), "error");
     } finally {
       setSaving(false);
     }
@@ -1439,7 +1492,7 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
               <p className="text-sm font-semibold text-gray-900">{role.name}</p>
               {isSystem && (
                 <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-gray-100 text-gray-500 ring-1 ring-gray-200">
-                  System
+                  {t("users.badge.system")}
                 </span>
               )}
               <span className="text-[10px] px-1.5 py-0.5 rounded-full font-medium bg-blue-50 text-blue-500 ring-1 ring-blue-200">
@@ -1447,8 +1500,8 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
               </span>
             </div>
             <p className="text-xs text-gray-400 mt-0.5">
-              {role.features.length} permission{role.features.length !== 1 ? "s" : ""} ·{" "}
-              {role._count?.assignments ?? 0} member{(role._count?.assignments ?? 0) !== 1 ? "s" : ""}
+              {t("users.roleRow.permissionsCount").replace("{n}", String(role.features.length))} ·{" "}
+              {t("users.roleRow.membersCount").replace("{n}", String(role._count?.assignments ?? 0))}
             </p>
           </div>
         </div>
@@ -1472,24 +1525,24 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
                     maxLength={80}
                     required
                     className="w-full text-sm border border-gray-200 rounded-xl px-4 py-2 bg-white focus:ring-2 focus:ring-primary-200 outline-none"
-                    placeholder="Role name"
+                    placeholder={t("users.roleRow.namePlaceholder")}
                   />
                   <input
                     value={metaDesc}
                     onChange={(e) => setMetaDesc(e.target.value)}
                     maxLength={500}
                     className="w-full text-sm border border-gray-200 rounded-xl px-4 py-2 bg-white focus:ring-2 focus:ring-primary-200 outline-none"
-                    placeholder="Description (optional)"
+                    placeholder={t("users.roleRow.descriptionPlaceholder")}
                   />
                   <div className="flex justify-end gap-2">
-                    <button type="button" onClick={() => { setEditingMeta(false); setMetaName(role.name); setMetaDesc(role.description ?? ""); }} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5">Cancel</button>
-                    <button type="submit" disabled={saving} className="text-xs px-4 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-40 transition font-medium">Save</button>
+                    <button type="button" onClick={() => { setEditingMeta(false); setMetaName(role.name); setMetaDesc(role.description ?? ""); }} className="text-xs text-gray-500 hover:text-gray-700 px-3 py-1.5">{t("users.common.cancel")}</button>
+                    <button type="submit" disabled={saving} className="text-xs px-4 py-1.5 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-40 transition font-medium">{t("users.common.save")}</button>
                   </div>
                 </form>
               ) : (
                 <div className="flex items-start justify-between gap-2">
-                  <p className="text-xs text-gray-500">{role.description || "No description"}</p>
-                  <button onClick={() => setEditingMeta(true)} className="text-xs text-gray-400 hover:text-primary-500 transition shrink-0">Edit name</button>
+                  <p className="text-xs text-gray-500">{role.description || t("users.roleRow.noDescription")}</p>
+                  <button onClick={() => setEditingMeta(true)} className="text-xs text-gray-400 hover:text-primary-500 transition shrink-0">{t("users.roleRow.editName")}</button>
                 </div>
               )}
             </div>
@@ -1501,16 +1554,16 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
           {/* Permissions grid */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <p className="text-xs font-semibold text-gray-700">Permissions</p>
+              <p className="text-xs font-semibold text-gray-700">{t("users.roleRow.permissionsSection")}</p>
               {dirty && (
                 <div className="flex gap-2">
-                  <button onClick={() => setSelected(new Set(initial))} className="text-xs text-gray-400 hover:text-gray-600">Reset</button>
+                  <button onClick={() => setSelected(new Set(initial))} className="text-xs text-gray-400 hover:text-gray-600">{t("users.roleRow.reset")}</button>
                   <button
                     onClick={handleSaveFeatures}
                     disabled={saving}
                     className="text-xs px-3 py-1 bg-primary-500 text-white rounded-lg hover:bg-primary-600 disabled:opacity-40 transition font-medium"
                   >
-                    {saving ? "Saving…" : "Save changes"}
+                    {saving ? t("users.common.saving") : t("users.roleRow.saveChanges")}
                   </button>
                 </div>
               )}
@@ -1554,7 +1607,7 @@ function RoleRow({ token, role, catalog, expanded, onToggle, onDeleteRequest, on
                 onClick={onDeleteRequest}
                 className="text-xs text-red-500 hover:text-red-700 transition font-medium"
               >
-                Delete role
+                {t("users.roleRow.deleteRole")}
               </button>
             </div>
           )}

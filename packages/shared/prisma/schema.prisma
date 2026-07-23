@@ -417,7 +417,7 @@ model User {
   identity                Identity             @relation(fields: [identityId], references: [id], onDelete: Cascade)
   tenant                  Tenant               @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   conversations           Conversation[]       @relation("AssignedAgent")
-  departmentMember        DepartmentMember?
+  departmentMembers       DepartmentMember[]
   inAppNotifications      InAppNotification[]
   // Voice channels where this user is the default-ring target for inbound calls.
   defaultVoiceChannels    VoiceChannel[]       @relation("VoiceChannelDefaultAgent")
@@ -853,7 +853,9 @@ model Department {
 model DepartmentMember {
   id             String         @id @default(cuid())
   tenantId       String         @map("tenant_id")
-  userId         String         @unique @map("user_id")
+  // NOT unique: a user can belong to SEVERAL departments (People & Teams
+  // multi-department membership). Pair-uniqueness below prevents duplicates.
+  userId         String         @map("user_id")
   departmentId   String         @map("department_id")
   departmentRole DepartmentRole @default(AGENT) @map("department_role")
   createdAt      DateTime       @default(now()) @map("created_at")

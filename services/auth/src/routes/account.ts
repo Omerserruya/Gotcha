@@ -62,8 +62,9 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
     },
   });
   if (!user) { res.status(404).json({ error: "not_found" }); return; }
-  const member = await prisma.departmentMember.findUnique({
+  const member = await prisma.departmentMember.findFirst({
     where: { userId: user.id },
+    orderBy: { createdAt: "asc" },
     include: { department: { select: { name: true } } },
   });
   const tenant = await prisma.tenant.findUnique({

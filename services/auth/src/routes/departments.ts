@@ -187,9 +187,12 @@ router.post("/:id/members", requireRole("ADMIN"), validate(addMemberSchema), asy
     const user = await prisma.user.findFirst({ where: { id: req.body.userId, tenantId: req.tenantId! } });
     if (!user) { res.status(404).json({ error: "User not found" }); return; }
 
-    // Check if user already belongs to a department
-    const existing = await prisma.departmentMember.findUnique({ where: { userId: req.body.userId } });
-    if (existing) { res.status(409).json({ error: "User already belongs to a department" }); return; }
+    // Multi-department membership: a user may belong to several departments;
+    // only a duplicate membership in THIS department is refused.
+    const existing = await prisma.departmentMember.findFirst({
+      where: { userId: req.body.userId, departmentId: String(req.params.id) },
+    });
+    if (existing) { res.status(409).json({ error: "User is already a member of this department" }); return; }
 
     const member = await prisma.departmentMember.create({
       data: {
