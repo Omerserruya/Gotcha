@@ -31,8 +31,29 @@ import type {
 } from "./provider";
 
 const API_BASE = process.env.ICOUNT_API_BASE || "https://api.icount.co.il/api/v3.php";
-const MODE = (process.env.ICOUNT_MODE || "mock").toLowerCase();
-const isMock = MODE !== "live";
+// Mode is resolved at CALL time (not module load) so the env guard is
+// testable and honors runtime configuration changes.
+function isMock(): boolean {
+  return (process.env.ICOUNT_MODE || "mock").toLowerCase() !== "live";
+}
+
+/**
+ * Hard environment guard: development/test can NEVER reach the live iCount
+ * API, even if someone flips ICOUNT_MODE=live in a dev .env. Live requires
+ * BOTH a production NODE_ENV and the explicit ICOUNT_ALLOW_LIVE=true
+ * acknowledgement - anything else throws before any network call, so a real
+ * card can never be charged (or tokenized) from a non-production stack.
+ */
+function assertLiveAllowed(operation: string): void {
+  if (isMock()) return; // mock mode is always safe - no network, no charges
+  const isProd = process.env.NODE_ENV === "production";
+  const acknowledged = process.env.ICOUNT_ALLOW_LIVE === "true";
+  if (!isProd || !acknowledged) {
+    throw new Error(
+      `[icount] refusing live ${operation}: ICOUNT_MODE=live requires NODE_ENV=production AND ICOUNT_ALLOW_LIVE=true (env guard - dev/test must never charge a real card)`,
+    );
+  }
+}
 
 function creds() {
   return {
@@ -56,10 +77,11 @@ export const icountProvider: PaymentProvider = {
   name: "ICOUNT",
 
   async tokenizeAndVerify(input): Promise<TokenizeResult> {
-    if (isMock) {
+    if (isMock()) {
       // Deterministic mock - no network. Mirrors a successful tokenize + J5.
       return { token: `icmock_${input.pageToken}`, brand: "visa", last4: "4242", expMonth: 12, expYear: 2030 };
     }
+    assertLiveAllowed("tokenize");
     // Confirm the PayPage token; iCount returns stored-card metadata.
     const data = await call("paypage/get_token_info", { page_token: input.pageToken });
     return {
@@ -73,7 +95,8 @@ export const icountProvider: PaymentProvider = {
   },
 
   async charge(input: ChargeInput): Promise<ChargeResult> {
-    if (isMock) {
+    if (!isMock()) assertLiveAllowed("charge");
+    if (isMock()) {
       return {
         success: true,
         providerChargeRef: `chg_${input.idempotencyKey}`,
@@ -102,7 +125,8 @@ export const icountProvider: PaymentProvider = {
   },
 
   async refund(input: RefundInput): Promise<ChargeResult> {
-    if (isMock) return { success: true, providerChargeRef: `rfnd_${input.idempotencyKey}` };
+    if (!isMock()) assertLiveAllowed("refund");
+    if (isMock()) return { success: true, providerChargeRef: `rfnd_${input.idempotencyKey}` };
     try {
       const data = await call("cc/refund", {
         confirmation_code: input.providerChargeRef,
@@ -119,7 +143,7 @@ export const icountProvider: PaymentProvider = {
 
   verifyWebhook(input: WebhookVerifyInput): boolean {
     const secret = process.env.ICOUNT_WEBHOOK_SECRET;
-    if (!secret) return isMock; // dev: accept in mock mode, reject in live without a secret
+    if (!secret) return isMock(); // dev: accept in mock mode, reject in live without a secret
     const sig = (input.headers["x-icount-signature"] as string) || "";
     const expected = createHmac("sha256", secret).update(input.rawBody).digest("hex");
     try {

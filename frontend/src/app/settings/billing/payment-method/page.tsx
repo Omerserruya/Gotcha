@@ -10,6 +10,7 @@ import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { RequirePermission } from "@/components/RequirePermission";
+import { openPayPage } from "@/lib/icount-paypage";
 import {
   getPaymentMethods,
   addPaymentMethod,
@@ -55,13 +56,29 @@ function PaymentMethodInner() {
     }
   };
 
-  // Production: open the iCount hosted PayPage; a real integration listens for
-  // the page's postMessage with the provider token and posts it back. Dev/mock:
-  // accept a token directly so the flow is testable end-to-end.
+  // Card capture happens ONLY on the provider-hosted PayPage. The popup posts
+  // back a short-lived page token (origin- and shape-validated in
+  // lib/icount-paypage); the backend then confirms that token with iCount
+  // server-side and binds it to the authenticated tenant BEFORE anything is
+  // stored - so the card row shown here only refreshes after real provider
+  // confirmation. Dev/mock (no PayPage URL configured): accept a token
+  // directly so the flow stays testable end-to-end; the backend runs in
+  // ICOUNT_MODE=mock and can never charge a real card.
   const addCard = async () => {
     const paypageUrl = process.env.NEXT_PUBLIC_ICOUNT_PAYPAGE_URL;
     if (paypageUrl) {
-      window.open(paypageUrl, "icount-paypage", "width=480,height=640");
+      setBusy("add-card");
+      setMsg(null);
+      const outcome = await openPayPage(paypageUrl);
+      if (outcome.status === "success") {
+        // Server-side confirmation is the only success signal.
+        await run("add-card", () => addPaymentMethod(token!, outcome.pageToken), t("settings.billing.cardSaved"));
+      } else {
+        setBusy(null);
+        if (outcome.status === "cancelled") setMsg({ kind: "ok", text: t("settings.billing.payPageCancelled") });
+        else if (outcome.status === "timeout") setMsg({ kind: "err", text: t("settings.billing.payPageTimeout") });
+        else setMsg({ kind: "err", text: t("settings.billing.payPageBlocked") });
+      }
       return;
     }
     const pageToken = window.prompt(t("settings.billing.devTokenPrompt"), "pt_dev");
