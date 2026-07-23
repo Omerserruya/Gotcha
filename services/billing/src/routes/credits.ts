@@ -73,7 +73,9 @@ router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, r
       enabled: Boolean(policy?.enabled),
       spentAmount: spentAmount.toFixed(2),
       currency: policy?.currency ?? "ILS",
-      monthlySpendLimit: policy?.maxMonthlySpend ?? null,
+      // Normalized money string ("500.00"): a raw Prisma Decimal JSON-encodes
+      // as "500", which is not a stable money format for clients.
+      monthlySpendLimit: policy?.maxMonthlySpend != null ? Number(policy.maxMonthlySpend).toFixed(2) : null,
       thresholdPct: policy?.thresholdPct ?? null,
       resetsAt: periodEnd,
     },
