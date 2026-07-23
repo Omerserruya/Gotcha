@@ -3016,6 +3016,8 @@ export interface TenantMember {
   departmentId: string | null;
   departmentRole: string | null;
   departmentName: string | null;
+  // Full multi-department membership; singular fields above = primary (earliest).
+  departments?: { departmentId: string; departmentRole: string | null; departmentName: string | null }[];
   roleId: string | null;
   roleName: string | null;
   roleBuiltinKey: string | null;

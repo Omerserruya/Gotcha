@@ -5,6 +5,7 @@ import clsx from "clsx";
 import { useAuth } from "@/context/AuthContext";
 import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
+import { memberDepartmentNames } from "@/lib/member-departments";
 import {
   getAgents,
   getTenantMembers,
@@ -47,6 +48,8 @@ interface AgentRow {
   departmentId?: string | null;
   departmentRole?: string | null;
   departmentName?: string | null;
+  /** Full multi-department membership (a member can belong to several). */
+  departments?: { departmentId: string; departmentRole?: string | null; departmentName?: string | null }[];
   /** Assigned built-in/custom role (new model). */
   roleId?: string | null;
   roleName?: string | null;
@@ -465,11 +468,20 @@ function MembersTab({
                   </td>
                   <td className="py-3.5 px-5 text-gray-500">{agent.email}</td>
                   <td className="py-3.5 px-5">
-                    {agent.departmentName ? (
-                      <span className="text-xs px-2.5 py-1 rounded-full font-medium bg-violet-50 text-violet-600 ring-1 ring-violet-200">{agent.departmentName}</span>
-                    ) : (
-                      <span className="text-xs text-gray-300">-</span>
-                    )}
+                    {(() => {
+                      // Show EVERY department a member belongs to (multi-membership),
+                      // falling back to the singular field for older payloads.
+                      const depts = memberDepartmentNames(agent);
+                      return depts.length ? (
+                        <div className="flex flex-wrap gap-1">
+                          {depts.map((name, i) => (
+                            <span key={i} className="text-xs px-2.5 py-1 rounded-full font-medium bg-violet-50 text-violet-600 ring-1 ring-violet-200">{name}</span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span className="text-xs text-gray-300">-</span>
+                      );
+                    })()}
                   </td>
                   <td className="py-3.5 px-5">
                     <MemberStatusBadge agent={agent} status={loginStatus[agent.id]} />

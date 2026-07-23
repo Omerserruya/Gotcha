@@ -123,7 +123,6 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       departmentMembers: {
         select: { departmentId: true, departmentRole: true, department: { select: { name: true } } },
         orderBy: { createdAt: "asc" as const },
-        take: 1,
       },
       roleAssignments: {
         select: { scope: true, role: { select: { id: true, name: true, builtinKey: true, defaultScope: true } } },
@@ -139,9 +138,17 @@ router.get("/users", ...ADMIN_ONLY, async (req: Request, res: Response): Promise
       isActive: u.isActive,
       phoneNumber: u.phoneNumber,
       legacyRole: u.role,
+      // Singular fields = the primary (earliest) membership, kept for legacy
+      // consumers; `departments` carries the FULL list so multi-department
+      // members render every department, not just the first.
       departmentId: u.departmentMembers?.[0]?.departmentId ?? null,
       departmentRole: u.departmentMembers?.[0]?.departmentRole ?? null,
       departmentName: u.departmentMembers?.[0]?.department?.name ?? null,
+      departments: u.departmentMembers.map((m) => ({
+        departmentId: m.departmentId,
+        departmentRole: m.departmentRole,
+        departmentName: m.department?.name ?? null,
+      })),
       roleId: assignment?.role.id ?? null,
       roleName: assignment?.role.name ?? null,
       roleBuiltinKey: assignment?.role.builtinKey ?? null,
