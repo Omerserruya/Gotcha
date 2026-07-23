@@ -190,7 +190,7 @@ router.post("/:id/members", requireRole("ADMIN"), validate(addMemberSchema), asy
     // Multi-department membership: a user may belong to several departments;
     // only a duplicate membership in THIS department is refused.
     const existing = await prisma.departmentMember.findFirst({
-      where: { userId: req.body.userId, departmentId: String(req.params.id) },
+      where: { tenantId: req.tenantId!, userId: req.body.userId, departmentId: String(req.params.id) },
     });
     if (existing) { res.status(409).json({ error: "User is already a member of this department" }); return; }
 
@@ -218,7 +218,7 @@ const updateMemberSchema = z.object({
 router.patch("/:id/members/:userId", requireRole("ADMIN"), validate(updateMemberSchema), async (req: Request, res: Response) => {
   try {
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: String(req.params.userId), departmentId: String(req.params.id) },
+      where: { tenantId: req.tenantId!, userId: String(req.params.userId), departmentId: String(req.params.id) },
     });
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 
@@ -238,7 +238,7 @@ router.patch("/:id/members/:userId", requireRole("ADMIN"), validate(updateMember
 router.delete("/:id/members/:userId", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: String(req.params.userId), departmentId: String(req.params.id) },
+      where: { tenantId: req.tenantId!, userId: String(req.params.userId), departmentId: String(req.params.id) },
     });
     if (!member) { res.status(404).json({ error: "Member not found" }); return; }
 

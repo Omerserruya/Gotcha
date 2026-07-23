@@ -69,7 +69,9 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
     }
 
     const member = await prisma.departmentMember.findFirst({
-      where: { userId: user.id },
+      // tenantId is REQUIRED: DepartmentMember is tenant-guarded and findFirst
+      // is a bulk op, so it throws without it (unlike the old findUnique).
+      where: { userId: user.id, tenantId: user.tenantId },
       orderBy: { createdAt: "asc" },
       include: { department: { select: { id: true, name: true } } },
     });
@@ -97,7 +99,10 @@ router.get("/me", authenticate, async (req: Request, res: Response): Promise<voi
       // tenant switcher / picker.
       memberships,
     });
-  } catch {
+  } catch (err) {
+    // Never swallow silently - this 500 was invisible in the logs. Surface the
+    // real cause (stack) so auth failures are diagnosable.
+    console.error("[/api/auth/me] failed:", err);
     res.status(500).json({ error: "Internal server error" });
   }
 });

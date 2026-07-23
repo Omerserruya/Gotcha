@@ -63,7 +63,8 @@ router.get("/", async (req: Request, res: Response): Promise<void> => {
   });
   if (!user) { res.status(404).json({ error: "not_found" }); return; }
   const member = await prisma.departmentMember.findFirst({
-    where: { userId: user.id },
+    // tenantId REQUIRED (tenant-guarded model + bulk op) - findUnique was exempt.
+    where: { userId: user.id, tenantId: user.tenantId },
     orderBy: { createdAt: "asc" },
     include: { department: { select: { name: true } } },
   });
