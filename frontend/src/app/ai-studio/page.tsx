@@ -12,6 +12,8 @@ import clsx from "clsx";
 import TestChatModal from "@/components/TestChatModal";
 import { ReadinessReportModal, readinessBadgeTone } from "@/components/ReadinessReport";
 import { builderReadinessTest, type ReadinessReport } from "@/lib/gotcha-api";
+import ToolPermissionsPanel from "@/components/ai-studio/ToolPermissionsPanel";
+import ActionPoliciesPanel from "@/components/ai-studio/ActionPoliciesPanel";
 
 // ─── Tab types ────────────────────────────────────────────────
 type Tab = "team" | "playbooks" | "knowledge" | "skills";
@@ -739,7 +741,13 @@ const AUTH_TYPE_STYLES: Record<string, string> = {
   BASIC_AUTH: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
-type SkillsSubView = "connected" | "marketplace";
+type SkillsSubView = "connected" | "marketplace" | "permissions" | "policies";
+
+const SKILLS_SUB_VIEWS: SkillsSubView[] = ["connected", "marketplace", "permissions", "policies"];
+
+function isSkillsSubView(value: string | null): value is SkillsSubView {
+  return value !== null && (SKILLS_SUB_VIEWS as string[]).includes(value);
+}
 
 // Integration logo with graceful fallback to a first-letter badge when there's
 // no known logo (or the image fails to load). Resolves by slug or display name.
@@ -761,7 +769,30 @@ function IntegrationLogo({ name, slug, className }: { name: string; slug?: strin
 function SkillsTab({ t }: { t: (key: string) => string }) {
   const { token } = useAuth();
   const router = useRouter();
-  const [subView, setSubView] = useState<SkillsSubView>("connected");
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  // Persist the sub-view selection in the URL (?view=…) so the redirects from
+  // the old /settings/tools and /settings/policy|business-rules pages
+  // (?tab=skills&view=permissions|policies) land on the right sub-view, and so
+  // refresh/back/forward/share-link keep working the same way ?tab= does above.
+  const viewFromUrl = searchParams.get("view");
+  const [subView, setSubViewState] = useState<SkillsSubView>(
+    isSkillsSubView(viewFromUrl) ? viewFromUrl : "connected",
+  );
+  useEffect(() => {
+    if (isSkillsSubView(viewFromUrl) && viewFromUrl !== subView) setSubViewState(viewFromUrl);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [viewFromUrl]);
+  const setSubView = useCallback(
+    (next: SkillsSubView) => {
+      setSubViewState(next);
+      const params = new URLSearchParams(Array.from(searchParams.entries()));
+      params.set("tab", "skills");
+      params.set("view", next);
+      router.replace(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [router, pathname, searchParams],
+  );
   const [integrations, setIntegrations] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
@@ -836,9 +867,31 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
         >
           {t("marketplace.title")}
         </button>
+        <button
+          onClick={() => setSubView("permissions")}
+          className={clsx(
+            "px-4 py-2 rounded-lg text-sm font-medium transition",
+            subView === "permissions" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          {t("settings.tools.title")}
+        </button>
+        <button
+          onClick={() => setSubView("policies")}
+          className={clsx(
+            "px-4 py-2 rounded-lg text-sm font-medium transition",
+            subView === "policies" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
+          )}
+        >
+          {t("settings.policy.title")}
+        </button>
       </div>
 
-      {subView === "connected" ? (
+      {subView === "permissions" ? (
+        <ToolPermissionsPanel />
+      ) : subView === "policies" ? (
+        <ActionPoliciesPanel />
+      ) : subView === "connected" ? (
         <>
           {/* Connected tools - derived from real marketplace data */}
           {(() => {
