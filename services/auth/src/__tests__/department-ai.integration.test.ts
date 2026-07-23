@@ -31,6 +31,7 @@ vi.mock("@chatcenter/shared", async (importOriginal) => {
       next();
     },
     requireRole: () => (_req: any, _res: any, next: any) => next(),
+    requirePermission: () => (_req: any, _res: any, next: any) => next(),
     requireDepartmentRole: () => (_req: any, _res: any, next: any) => next(),
     enforceMfaEnrollment: () => (_req: any, _res: any, next: any) => next(),
   };

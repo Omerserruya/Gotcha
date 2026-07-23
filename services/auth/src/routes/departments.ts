@@ -1,6 +1,6 @@
 import { Router, Request, Response } from "express";
 import { z } from "zod";
-import { prisma, authenticate, resolveTenant, requireRole, requireDepartmentRole, enforceMfaEnrollment, validate } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, requirePermission, requireDepartmentRole, enforceMfaEnrollment, validate } from "@chatcenter/shared";
 
 const router = Router();
 router.use(authenticate, resolveTenant, enforceMfaEnrollment());
@@ -521,7 +521,7 @@ router.get("/:id/ai-employees", requireDepartmentRole("MANAGER"), async (req: Re
 
 // POST /:id/ai-employees - attach one more AI employee (idempotent per agent)
 const attachAIEmployeeSchema = z.object({ aiAgentId: z.string().min(1) });
-router.post("/:id/ai-employees", requireRole("ADMIN"), validate(attachAIEmployeeSchema), async (req: Request, res: Response) => {
+router.post("/:id/ai-employees", requirePermission("settings:members:manage"), validate(attachAIEmployeeSchema), async (req: Request, res: Response) => {
   try {
     const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
@@ -566,7 +566,7 @@ router.post("/:id/ai-employees", requireRole("ADMIN"), validate(attachAIEmployee
 });
 
 // DELETE /:id/ai-employees/:aiAgentId - detach ONE AI employee, leaving the rest
-router.delete("/:id/ai-employees/:aiAgentId", requireRole("ADMIN"), async (req: Request, res: Response) => {
+router.delete("/:id/ai-employees/:aiAgentId", requirePermission("settings:members:manage"), async (req: Request, res: Response) => {
   try {
     const dept = await prisma.department.findFirst({ where: { id: String(req.params.id), tenantId: req.tenantId! } });
     if (!dept) { res.status(404).json({ error: "Department not found" }); return; }
