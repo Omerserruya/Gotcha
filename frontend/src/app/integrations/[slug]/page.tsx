@@ -820,7 +820,7 @@ export default function IntegrationDetailPage() {
                 <span className="px-2 py-0.5 rounded-full text-xs font-medium bg-green-50 text-green-700 border border-green-200 shrink-0">
                   {t("marketplace.systemOfRecordActive")}
                 </span>
-                <Link href="/settings/integrations" className="text-sm font-medium text-violet-600 hover:text-violet-700 ms-auto shrink-0">
+                <Link href="/settings/business-systems" className="text-sm font-medium text-violet-600 hover:text-violet-700 ms-auto shrink-0">
                   {t("marketplace.manageInSettings")}
                 </Link>
               </div>

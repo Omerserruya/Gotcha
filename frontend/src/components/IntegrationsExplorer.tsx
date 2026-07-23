@@ -152,7 +152,7 @@ export default function IntegrationsExplorer({ subtitle, title, initialCategory,
         {!restrictToCategory && (
           <p className="text-xs text-gray-400 mt-2">
             {t("marketplace.crmMovedHint")}{" "}
-            <a href="/settings/integrations" className="text-primary-600 hover:underline font-medium">{t("marketplace.crmMovedLink")}</a>
+            <a href="/settings/business-systems" className="text-primary-600 hover:underline font-medium">{t("marketplace.crmMovedLink")}</a>
           </p>
         )}
       </div>
