@@ -2,14 +2,12 @@
 
 // Getting Started - the premium post-onboarding "first steps" journey.
 //
-// Replaces the old spotlight tour as the landing surface for a fresh tenant:
-// instead of a tour of empty rooms, the owner lands on a page that (a) shows
-// what their AI employee already knows, (b) lets them TALK to it immediately
-// (the hero action - value in under a minute, zero setup), and (c) walks the
-// five milestones from "meet your employee" to "first real customer answered".
-// All milestone state is live-derived server-side (GET /onboarding/journey);
-// only `first_chat` is marked here, via the existing guides mechanism, because
-// test-chat is deliberately stateless.
+// The page has two jobs: (a) let the owner TALK to their AI employee
+// immediately (the hero action - value in under a minute, zero setup), and
+// (b) walk the five canonical setup actions to go live. The checklist is the
+// SAME canonical journey the sidebar panel and nav badge read
+// (lib/journey-cache.ts → GET /onboarding/journey): same items, same labels,
+// same counts, same completion definitions - never computed locally.
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
@@ -19,25 +17,19 @@ import clsx from "clsx";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
-import {
-  getOnboardingJourney,
-  patchOnboardingGuide,
-  testAgentChat,
-  type JourneyData,
-  type JourneyMilestone,
-} from "@/lib/api";
-import { setJourneyIncompleteCache } from "@/lib/journey-cache";
+import { testAgentChat, type JourneyData, type JourneyMilestone } from "@/lib/api";
+import { getCachedJourney, refreshJourney, subscribeJourney } from "@/lib/journey-cache";
+import { track } from "@/lib/analytics";
 
 type ChatMsg = { role: "user" | "assistant"; content: string };
 
 const MILESTONE_ICONS: Record<string, string> = {
-  meet_employee: "👋",
-  first_chat: "💬",
-  go_live_channel: "📡",
-  first_customer: "🎉",
-  teach_knowledge: "📚",
+  connect_source_of_truth: "🔗",
+  connect_channel: "📡",
+  connect_knowledge: "📚",
+  create_ai_employee: "👋",
+  create_process: "⚙️",
 };
-
 
 export default function GettingStartedPage() {
   return (
@@ -52,37 +44,62 @@ function GettingStartedInner() {
   const { t } = useI18n();
   const router = useRouter();
 
-  const [journey, setJourney] = useState<JourneyData | null>(null);
-  const [loading, setLoading] = useState(true);
+  const [journey, setJourney] = useState<JourneyData | null>(getCachedJourney());
+  const [loading, setLoading] = useState(!getCachedJourney());
+  const [loadError, setLoadError] = useState(false);
 
   // chat state
   const [messages, setMessages] = useState<ChatMsg[]>([]);
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [chatError, setChatError] = useState("");
-  const firstChatMarked = useRef(false);
   const chatEndRef = useRef<HTMLDivElement | null>(null);
+  // For setup_item_completed analytics: which items were incomplete last time.
+  const prevIncompleteRef = useRef<Set<string> | null>(null);
 
   const load = useCallback(async () => {
     if (!token) return;
-    try {
-      const r = await getOnboardingJourney(token);
-      setJourney(r.data);
-      setJourneyIncompleteCache(!r.data.complete); // keep Sidebar/root redirect in sync
-    } catch {
-      /* page degrades gracefully */
-    } finally {
-      setLoading(false);
-    }
+    setLoadError(false);
+    const j = await refreshJourney(token, true);
+    if (!j) setLoadError(true);
+    setLoading(false);
   }, [token]);
+
+  // Live store subscription: any refresh (this page, the sidebar panel, a
+  // window-focus after OAuth) updates this page without a manual reload.
+  useEffect(() =>
+    subscribeJourney((j) => {
+      if (!j) return;
+      setJourney(j);
+      setLoading(false);
+      setLoadError(false);
+      const incomplete = new Set(j.milestones.filter((m) => !m.done).map((m) => m.id as string));
+      const prev = prevIncompleteRef.current;
+      if (prev) {
+        prev.forEach((id) => {
+          if (!incomplete.has(id)) track("setup_item_completed", { item: id });
+        });
+      }
+      prevIncompleteRef.current = incomplete;
+    }),
+  []);
 
   useEffect(() => {
     if (user && user.role !== "ADMIN") {
       router.replace("/conversations");
       return;
     }
-    load();
+    void load();
   }, [user, router, load]);
+
+  // Returning to the tab (OAuth flows, channel connects in a second tab)
+  // re-derives readiness immediately.
+  useEffect(() => {
+    if (!token) return;
+    const onFocus = () => void refreshJourney(token, true);
+    window.addEventListener("focus", onFocus);
+    return () => window.removeEventListener("focus", onFocus);
+  }, [token]);
 
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -98,12 +115,6 @@ function GettingStartedInner() {
     setSending(true);
     const history = messages;
     setMessages((m) => [...m, { role: "user", content: msg }]);
-    // The milestone completes on the first ATTEMPT to talk - the point is the
-    // owner engaging, and the guide write must not depend on LLM success.
-    if (!firstChatMarked.current) {
-      firstChatMarked.current = true;
-      patchOnboardingGuide(token, "first_chat", "done").then(() => load()).catch(() => {});
-    }
     try {
       const r = await testAgentChat(token, employee.id, msg, history);
       setMessages((m) => [...m, { role: "assistant", content: r.data.reply }]);
@@ -114,22 +125,53 @@ function GettingStartedInner() {
     }
   }
 
-  if (loading) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-indigo-500 border-t-transparent" />
-      </div>
-    );
-  }
-
   const milestones = journey?.milestones || [];
-  const doneCount = milestones.filter((m) => m.status === "done").length;
+  const doneCount = journey?.summary?.done ?? milestones.filter((m) => m.done).length;
+  const totalCount = journey?.summary?.total ?? milestones.length;
   const bizName = journey?.business?.name;
   const suggestions = [
     t("gettingStarted.chat.s1"),
     t("gettingStarted.chat.s2"),
     t("gettingStarted.chat.s3"),
   ];
+
+  // Stable skeleton while readiness resolves - never a flash of "everything
+  // incomplete" from local guesses.
+  if (loading) {
+    return (
+      <div className="mx-auto h-full max-w-5xl overflow-y-auto px-6 py-10">
+        <div className="mb-10 space-y-3">
+          <div className="h-9 w-2/3 animate-pulse rounded-xl bg-slate-100" />
+          <div className="h-4 w-1/2 animate-pulse rounded-lg bg-slate-100" />
+        </div>
+        <div className="grid gap-8 lg:grid-cols-5">
+          <div className="lg:col-span-3">
+            <div className="h-96 animate-pulse rounded-2xl border border-slate-100 bg-slate-50" />
+          </div>
+          <div className="space-y-2 lg:col-span-2">
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div key={i} className="h-20 animate-pulse rounded-xl border border-slate-100 bg-slate-50" />
+            ))}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Recoverable error instead of contradictory local guesses.
+  if (loadError && !journey) {
+    return (
+      <div className="flex h-full flex-col items-center justify-center gap-4 px-6 text-center">
+        <p className="text-sm text-slate-500">{t("setupChecklist.error")}</p>
+        <button
+          onClick={() => { setLoading(true); void load(); }}
+          className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
+        >
+          {t("setupChecklist.retry")}
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto h-full max-w-5xl overflow-y-auto px-6 py-10">
@@ -173,7 +215,7 @@ function GettingStartedInner() {
             )}
           </div>
         </div>
-        {/* progress ring */}
+        {/* progress ring - same numbers as the sidebar panel and nav badge */}
         <div className="hidden shrink-0 flex-col items-center sm:flex">
           <div className="relative h-20 w-20">
             <svg viewBox="0 0 36 36" className="h-20 w-20 -rotate-90">
@@ -181,11 +223,11 @@ function GettingStartedInner() {
               <circle
                 cx="18" cy="18" r="15.9" fill="none" stroke="#6366f1" strokeWidth="3"
                 strokeLinecap="round"
-                strokeDasharray={`${(doneCount / Math.max(milestones.length, 1)) * 100} 100`}
+                strokeDasharray={`${(doneCount / Math.max(totalCount, 1)) * 100} 100`}
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center text-sm font-bold text-slate-700">
-              {doneCount}/{milestones.length}
+              {doneCount}/{totalCount}
             </div>
           </div>
           <span className="mt-1 text-xs text-slate-400">{t("gettingStarted.progress")}</span>
@@ -283,7 +325,8 @@ function GettingStartedInner() {
               <div className="flex flex-col items-center gap-4 px-5 py-12 text-center">
                 <p className="max-w-sm text-sm text-slate-500">{t("gettingStarted.chat.noEmployeeBody")}</p>
                 <Link
-                  href="/ai-studio"
+                  href="/ai-studio?tab=team"
+                  onClick={() => track("setup_cta_clicked", { item: "create_ai_employee", surface: "chat_card" })}
                   className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
                 >
                   {t("gettingStarted.chat.createCta")}
@@ -293,64 +336,110 @@ function GettingStartedInner() {
           </div>
         </section>
 
-        {/* ── Milestones ── */}
+        {/* ── Setup checklist: the five canonical actions ── */}
         <section className="lg:col-span-2">
           <h2 className="mb-3 text-sm font-semibold uppercase tracking-wide text-slate-400">
-            {t("gettingStarted.milestones.title")}
+            {t("setupChecklist.title")}
           </h2>
           <ol className="space-y-2">
             {milestones.map((m) => (
-              <MilestoneRow key={m.id} m={m} />
+              <ActionRow key={m.id} m={m} />
             ))}
           </ol>
         </section>
       </div>
-
-      {/* ── Core features ── */}
     </div>
   );
 }
 
-function MilestoneRow({ m }: { m: JourneyMilestone }) {
+// One setup action: what's left, why it matters, its live status, and a
+// primary CTA that opens the exact flow. Completed items switch to a quiet
+// "done" look with a small Manage link - never the setup CTA again.
+function ActionRow({ m }: { m: JourneyMilestone }) {
   const { t } = useI18n();
-  const done = m.status === "done";
-  const active = m.status === "active";
+  const done = m.done;
+  const attention = m.state === "attention";
+  const inProgress = m.state === "in_progress";
+  const active = m.status === "active" && !attention;
+
+  const why = attention
+    ? t(`setupChecklist.items.${m.id}.attention`) || t(`setupChecklist.items.${m.id}.why`)
+    : inProgress
+      ? t(`setupChecklist.items.${m.id}.inProgress`) || t(`setupChecklist.items.${m.id}.why`)
+      : t(`setupChecklist.items.${m.id}.why`);
+  const ctaLabel = attention ? t("setupChecklist.fix") : t(`setupChecklist.items.${m.id}.cta`);
+  const statusLabel = done
+    ? t("setupChecklist.status.done")
+    : attention
+      ? t("setupChecklist.status.attention")
+      : inProgress
+        ? t("setupChecklist.status.inProgress")
+        : t("setupChecklist.status.notStarted");
+
   return (
-    <li>
-      <Link
-        href={m.deepLink}
-        className={clsx(
-          "flex items-center gap-3 rounded-xl border px-4 py-3 transition",
-          done && "border-emerald-100 bg-emerald-50/50",
-          active && "border-indigo-200 bg-indigo-50/60 shadow-sm hover:bg-indigo-50",
-          !done && !active && "border-slate-200 bg-white opacity-70 hover:opacity-100",
-        )}
-      >
+    <li
+      className={clsx(
+        "rounded-xl border px-4 py-3 transition",
+        done && "border-emerald-100 bg-emerald-50/50",
+        attention && !done && "border-amber-200 bg-amber-50/50",
+        active && !attention && "border-indigo-200 bg-indigo-50/60 shadow-sm",
+        !done && !active && !attention && "border-slate-200 bg-white",
+      )}
+    >
+      <div className="flex items-start gap-3">
         <span
           className={clsx(
-            "flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm",
-            done ? "bg-emerald-500 text-white" : active ? "bg-indigo-100" : "bg-slate-100",
+            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-sm",
+            done ? "bg-emerald-500 text-white" : attention ? "bg-amber-100" : active ? "bg-indigo-100" : "bg-slate-100",
           )}
         >
-          {done ? "✓" : MILESTONE_ICONS[m.id] || "•"}
+          {done ? "✓" : attention ? "!" : MILESTONE_ICONS[m.id] || "•"}
         </span>
-        <span className="min-w-0 flex-1">
-          <span className={clsx("block text-sm font-medium", done ? "text-emerald-700" : "text-slate-800")}>
-            {t(`gettingStarted.milestones.${m.id}.title`)}
-          </span>
-          {!done && (
-            <span className="block truncate text-xs text-slate-400">
-              {m.hint || t(`gettingStarted.milestones.${m.id}.desc`)}
+        <div className="min-w-0 flex-1">
+          <div className="flex items-center gap-2">
+            <span className={clsx("text-sm font-medium", done ? "text-emerald-700" : "text-slate-800")}>
+              {t(`setupChecklist.items.${m.id}.title`)}
             </span>
+            <span
+              className={clsx(
+                "ms-auto shrink-0 rounded-full px-2 py-0.5 text-[10px] font-semibold",
+                done && "bg-emerald-100 text-emerald-700",
+                attention && !done && "bg-amber-100 text-amber-700",
+                inProgress && !done && !attention && "bg-indigo-100 text-indigo-700",
+                !done && !attention && !inProgress && "bg-slate-100 text-slate-500",
+              )}
+            >
+              {statusLabel}
+            </span>
+          </div>
+          {!done && <p className="mt-0.5 text-xs leading-snug text-slate-500">{why}</p>}
+          {!done && m.hint && (
+            <p className="mt-0.5 truncate text-[11px] text-slate-400" dir="ltr">{m.hint}</p>
           )}
-        </span>
-        {active && (
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
-            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-indigo-400 opacity-60" />
-            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-indigo-500" />
-          </span>
-        )}
-      </Link>
+          <div className="mt-2 flex items-center gap-3">
+            {!done ? (
+              <Link
+                href={m.deepLink}
+                onClick={() => track("setup_cta_clicked", { item: m.id, state: m.state, surface: "getting_started" })}
+                className={clsx(
+                  "inline-flex items-center rounded-lg px-3 py-1.5 text-xs font-semibold text-white transition",
+                  attention ? "bg-amber-500 hover:bg-amber-600" : "bg-indigo-600 hover:bg-indigo-700",
+                )}
+              >
+                {ctaLabel}
+              </Link>
+            ) : (
+              <Link
+                href={m.manageLink || m.deepLink}
+                onClick={() => track("setup_cta_clicked", { item: m.id, state: "done", surface: "getting_started" })}
+                className="text-xs font-medium text-emerald-700 underline-offset-2 hover:underline"
+              >
+                {t("setupChecklist.manage")}
+              </Link>
+            )}
+          </div>
+        </div>
+      </div>
     </li>
   );
 }

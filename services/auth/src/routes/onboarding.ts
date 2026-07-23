@@ -1117,7 +1117,7 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
       {
         id: "connect_source_of_truth",
         done: !!coreSlug,
-        deepLink: "/settings/integrations",
+        deepLink: "/settings/business-systems",
       },
       {
         id: "connect_channel",
@@ -1159,38 +1159,60 @@ router.get("/missions", requireRole("ADMIN"), async (req: Request, res: Response
   }
 });
 
-// GET /journey - the post-onboarding "first steps" arc for the Getting Started
-// page. Like /missions, every milestone is DERIVED from real product state -
-// the one exception is `first_chat` (the owner's first test conversation with
-// their employee), which is stateless by design (test-chat persists nothing),
-// so it's marked via the existing /guides mechanism (feature "first_chat").
+// GET /journey - THE canonical setup-readiness state. The Getting Started
+// page, the sidebar "Complete setup" panel, and the nav badge all derive from
+// this one endpoint, so they can never contradict each other.
+//
+// Five canonical actions, every one DERIVED from persisted product state
+// (never a visited-page flag, an opened modal, or a started OAuth):
+//   1. connect_source_of_truth  - a USABLE core system (CONNECTED and, for
+//      Airtable, field-mapped; see connectedCoreSystem).
+//   2. connect_channel          - at least one ChannelAccount CONNECTED + active.
+//      A tenant whose only channel turned ERROR/DISCONNECTED is NOT complete.
+//   3. connect_knowledge        - at least one ACTIVE knowledge base that has
+//      real content (a document or an active synced integration). An empty
+//      KB shell does not count.
+//   4. create_ai_employee       - an AIAgent in ACTIVE/PAUSED. A mid-wizard
+//      DRAFT counts as in_progress, never as done.
+//   5. create_process           - at least one persisted ChatbotFlow.
+//
+// Each item carries `state`: done | in_progress | attention | not_started.
+// `attention` = a resource exists but is unhealthy (ERROR/DISCONNECTED) and
+// nothing usable remains - the UI shows a fix/reconnect CTA for it.
 router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
     const tenantId = req.tenantId!;
-    const [agent, coreSlug, connectedChannel, discovery, openRecs, firstChatUsers, inboundCount, kbCount, profile] = await Promise.all([
+    const [agent, draftAgent, coreSlug, coreRows, channelRows, discovery, usableKbCount, flowCount, profile] = await Promise.all([
       prisma.aIAgent.findFirst({
         where: { tenantId, status: { in: ["ACTIVE", "PAUSED"] } },
         orderBy: { createdAt: "desc" },
         select: { id: true, name: true, role: true, status: true },
       }).catch(() => null),
-      connectedCoreSystem(tenantId).catch(() => null),
-      prisma.channelAccount.findFirst({
-        where: { tenantId, connectionStatus: "CONNECTED" },
-        select: { id: true, channel: true },
+      prisma.aIAgent.findFirst({
+        where: { tenantId, status: "DRAFT" },
+        select: { id: true },
       }).catch(() => null),
+      connectedCoreSystem(tenantId).catch(() => null),
+      prisma.tenantIntegration.findMany({
+        where: { tenantId, integration: { slug: { in: CORE_SYSTEM_SLUGS as unknown as string[] } } },
+        select: { status: true },
+      }).catch(() => [] as Array<{ status: string }>),
+      prisma.channelAccount.findMany({
+        where: { tenantId },
+        select: { connectionStatus: true, isActive: true },
+      }).catch(() => [] as Array<{ connectionStatus: string; isActive: boolean }>),
       prisma.businessDiscovery.findUnique({
         where: { tenantId },
         select: { communication: true, business: true },
       }).catch(() => null),
-      prisma.recommendation.findMany({
-        where: { tenantId, status: "OPEN" },
-        select: { kind: true, dedupeKey: true },
-      }).catch(() => [] as Array<{ kind: string; dedupeKey: string }>),
-      prisma.user.count({
-        where: { tenantId, onboardingGuides: { path: ["first_chat"], equals: "done" } },
+      prisma.knowledgeBase.count({
+        where: {
+          tenantId,
+          isActive: true,
+          OR: [{ documents: { some: {} } }, { integrations: { some: { isActive: true } } }],
+        },
       }).catch(() => 0),
-      prisma.message.count({ where: { tenantId, direction: "INBOUND" } }).catch(() => 0),
-      prisma.knowledgeBase.count({ where: { tenantId } }).catch(() => 0),
+      prisma.chatbotFlow.count({ where: { tenantId } }).catch(() => 0),
       prisma.businessProfile.findUnique({
         where: { tenantId },
         select: { organizationName: true, industry: true },
@@ -1203,33 +1225,77 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
     const channelHint = detectedChannels.slice(0, 3)
       .map((c) => `${String(c.type)}${c.identifier ? ` · ${c.identifier}` : ""}`)
       .join("  ·  ");
-    void openRecs; // still fetched for parity with /missions; journey no longer surfaces a teach item
 
-    type Milestone = { id: string; done: boolean; deepLink: string; hint?: string };
-    // The standalone "teach knowledge" journey item was REMOVED (it deep-linked
-    // to /settings/business, disconnected from the employee). Teaching now
-    // lives where the employee lives: the workspace's readiness/attention loop
-    // and its Knowledge tab. The journey keeps only the go-live milestones.
+    // Health classification (see the endpoint doc block above).
+    const usableChannel = channelRows.some((c) => c.connectionStatus === "CONNECTED" && c.isActive);
+    const pendingChannel = channelRows.some((c) => c.connectionStatus === "PENDING");
+    const brokenChannel = channelRows.some((c) => c.connectionStatus === "ERROR" || c.connectionStatus === "DISCONNECTED");
+    const corePending = coreRows.some((r) => r.status === "PENDING" || r.status === "TESTING");
+    // CONNECTED core row while connectedCoreSystem() says none usable =
+    // mid-setup (e.g. Airtable awaiting its field mapping).
+    const coreConnectedRaw = coreRows.some((r) => r.status === "CONNECTED");
+    const coreBroken = coreRows.some((r) => r.status === "ERROR" || r.status === "DISCONNECTED");
+
+    type State = "done" | "in_progress" | "attention" | "not_started";
+    const stateOf = (done: boolean, attention: boolean, inProgress: boolean): State =>
+      done ? "done" : attention ? "attention" : inProgress ? "in_progress" : "not_started";
+
+    type Milestone = { id: string; done: boolean; state: State; deepLink: string; manageLink?: string; hint?: string };
     const milestones: Milestone[] = [
-      { id: "meet_employee", done: !!agent, deepLink: agent ? `/ai-studio/agents/${agent.id}` : "/ai-studio" },
-      { id: "first_chat", done: firstChatUsers > 0, deepLink: "/getting-started#chat" },
-      { id: "go_live_channel", done: !!connectedChannel, deepLink: "/channels", hint: channelHint || undefined },
-      { id: "first_customer", done: inboundCount > 0, deepLink: "/conversations" },
+      {
+        id: "connect_source_of_truth",
+        done: !!coreSlug,
+        state: stateOf(!!coreSlug, coreBroken, corePending || coreConnectedRaw),
+        deepLink: "/settings/business-systems",
+        manageLink: "/settings/business-systems",
+      },
+      {
+        id: "connect_channel",
+        done: usableChannel,
+        state: stateOf(usableChannel, brokenChannel, pendingChannel),
+        deepLink: "/settings/channels",
+        manageLink: "/settings/channels",
+        hint: channelHint || undefined,
+      },
+      {
+        id: "connect_knowledge",
+        done: usableKbCount > 0,
+        state: stateOf(usableKbCount > 0, false, false),
+        deepLink: "/ai-studio?tab=knowledge",
+        manageLink: "/ai-studio?tab=knowledge",
+      },
+      {
+        id: "create_ai_employee",
+        done: !!agent,
+        state: stateOf(!!agent, false, !!draftAgent),
+        deepLink: agent ? `/ai-studio/agents/${agent.id}` : "/ai-studio?tab=team",
+        manageLink: agent ? `/ai-studio/agents/${agent.id}` : "/ai-studio?tab=team",
+      },
+      {
+        id: "create_process",
+        done: flowCount > 0,
+        state: stateOf(flowCount > 0, false, false),
+        deepLink: "/ai-studio?tab=playbooks",
+        manageLink: "/ai-studio?tab=playbooks",
+      },
     ];
 
     let activeAssigned = false;
     const out = milestones.map((m) => {
+      // Legacy tri-state kept alongside `state` for existing consumers.
       let status: "done" | "active" | "pending";
       if (m.done) { status = "done"; }
       else if (!activeAssigned) { status = "active"; activeAssigned = true; }
       else { status = "pending"; }
-      return { id: m.id, status, deepLink: m.deepLink, hint: m.hint };
+      return { id: m.id, done: m.done, state: m.state, status, deepLink: m.deepLink, manageLink: m.manageLink, hint: m.hint };
     });
 
+    const doneCount = milestones.filter((m) => m.done).length;
     const biz = (discovery?.business || {}) as any;
     res.json({
       data: {
         complete: milestones.every((m) => m.done),
+        summary: { done: doneCount, total: milestones.length },
         employee: agent,
         business: {
           name: profile?.organizationName || biz.name || null,
@@ -1237,7 +1303,7 @@ router.get("/journey", requireRole("ADMIN"), async (req: Request, res: Response)
         },
         context: {
           coreSystem: coreSlug,
-          kbCount,
+          kbCount: usableKbCount,
           channelHint: channelHint || null,
           detectedChannelCount: detectedChannels.length,
         },

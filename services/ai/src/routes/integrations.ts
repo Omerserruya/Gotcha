@@ -1,7 +1,8 @@
 import { Router, Request, Response } from "express";
-import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, encryptCredentials, decryptCredentials } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireOnboardingOrActiveTenant, requireRole, requirePermissionOrRole, encryptCredentials, decryptCredentials, searchLeads as crmSearchLeads, searchContacts as crmSearchContacts } from "@chatcenter/shared";
 import { executeAdapterTool, getAdapter, clearMissingScopes } from "../services/connectors/integration-framework";
-import { invalidateCrmAdapterCache } from "../services/connectors/crm-adapter-resolver";
+import { invalidateCrmAdapterCache, getCrmAdapter, resolveCrmVendor } from "../services/connectors/crm-adapter-resolver";
+import { maskPhone, maskEmail } from "../lib/mask";
 import { getSourceOfTruth, type SourceOfTruthCapability } from "../services/connectors/source-of-truth";
 
 const router = Router();
@@ -96,6 +97,179 @@ router.get("/source-of-truth", async (req: Request, res: Response) => {
   } catch (err) {
     console.error("source-of-truth status error:", err);
     res.status(500).json({ error: "Failed to resolve source of truth" });
+  }
+});
+
+// GET /source-of-truth/customers?q= - unified, tenant-scoped customer search
+// for outbound calling. Searches THE resolved source of truth (Shopify-as-CRM
+// included), so the dialer offers the same identities that answer "who is
+// this customer" everywhere else - never another tenant's data, never a
+// free-text number promoted to an identity.
+//
+// Query detection: phone-shaped and email-shaped inputs go through the
+// vendor-neutral adapter's identifier lookup; everything else is a NAME
+// search - adapter-native when the adapter implements searchByName (Shopify:
+// default text search + first_name/last_name filters, `read_customers`
+// enforced by the tool plane), shared CRM lead/contact search otherwise.
+//
+// The list is a PICKER: identifiers come back MASKED. Full contact data is
+// served by /source-of-truth/customers/detail only after the human selects a
+// candidate - a search never auto-resolves to "the first match".
+// Registered BEFORE /:slug so the literal path wins.
+router.get("/source-of-truth/customers", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const q = String(req.query.q ?? "").trim();
+    const limit = Math.min(parseInt(String(req.query.limit ?? "8"), 10) || 8, 20);
+    const vendor = await resolveCrmVendor(tenantId);
+    if (!vendor) {
+      res.json({ data: [], meta: { configured: false, vendor: null } });
+      return;
+    }
+    if (!q) {
+      res.json({ data: [], meta: { configured: true, vendor } });
+      return;
+    }
+
+    type Row = {
+      id: string;
+      kind: string;
+      name: string | null;
+      phoneMasked: string | null;
+      emailMasked: string | null;
+      company: string | null;
+      stage: string | null;
+      vendor: string;
+      callable: boolean;
+      ordersCount: number | null;
+      totalSpent: string | null;
+      currency: string | null;
+    };
+    const rows: Row[] = [];
+    let searchFailed: string | null = null;
+
+    const looksLikeEmail = /@/.test(q);
+    const phoneish = q.replace(/[\s\-().]/g, "");
+    const looksLikePhone = /^\+?\d{5,15}$/.test(phoneish);
+
+    if (looksLikeEmail || looksLikePhone) {
+      const adapter = await getCrmAdapter(tenantId);
+      const r = await adapter.findCustomer(looksLikeEmail ? { email: q } : { phone: phoneish });
+      if (!r.ok && r.reason) searchFailed = r.reason;
+      for (const c of r.ok ? r.contacts : []) {
+        rows.push({
+          id: c.id,
+          kind: c.kind,
+          name: c.display_name,
+          phoneMasked: maskPhone(c.phone),
+          emailMasked: maskEmail(c.email),
+          company: null,
+          stage: c.stage,
+          vendor,
+          callable: !!c.phone,
+          ordersCount: null,
+          totalSpent: null,
+          currency: null,
+        });
+      }
+    } else {
+      const adapter = await getCrmAdapter(tenantId);
+      if (typeof adapter.searchByName === "function") {
+        const r = await adapter.searchByName(q, limit);
+        if (!r.ok && r.reason) searchFailed = r.reason;
+        for (const c of r.ok ? r.candidates : []) {
+          rows.push({
+            id: c.id,
+            kind: c.kind,
+            name: c.display_name,
+            phoneMasked: maskPhone(c.phone),
+            emailMasked: maskEmail(c.email),
+            company: null,
+            stage: null,
+            vendor,
+            callable: !!c.phone,
+            ordersCount: c.orders_count,
+            totalSpent: c.total_spent,
+            currency: c.currency,
+          });
+        }
+      } else {
+        // Shared vendor-native free-text search (dedicated CRMs). Best-effort.
+        const [leads, contacts] = await Promise.all([
+          crmSearchLeads(tenantId, { name: q }).catch(() => []),
+          crmSearchContacts(tenantId, { name: q }).catch(() => []),
+        ]);
+        const seen = new Set<string>();
+        for (const r of [...contacts, ...leads]) {
+          const key = (r.email || r.phone || r.id || "").toLowerCase();
+          if (key && seen.has(key)) continue;
+          if (key) seen.add(key);
+          rows.push({
+            id: r.id,
+            kind: "contact",
+            name: r.name ?? null,
+            phoneMasked: maskPhone(r.phone ?? null),
+            emailMasked: maskEmail(r.email ?? null),
+            company: (r as { company?: string }).company ?? null,
+            stage: null,
+            vendor,
+            callable: !!r.phone,
+            ordersCount: null,
+            totalSpent: null,
+            currency: null,
+          });
+        }
+      }
+    }
+
+    // A missing vendor scope is an actionable state, not an empty result -
+    // the UI tells the admin to re-connect with customer-read access.
+    const missingScope = !!searchFailed && /scope|read_customers|access/i.test(searchFailed);
+    res.json({ data: rows.slice(0, limit), meta: { configured: true, vendor, missingScope } });
+  } catch (err) {
+    console.error("source-of-truth customer search error:", err);
+    res.status(500).json({ error: "Failed to search customers" });
+  }
+});
+
+// GET /source-of-truth/customers/detail?id=&kind= - full contact data for ONE
+// explicitly selected candidate (the list above is masked). Same permission
+// gate; the adapter resolves within the active tenant's own connection, so a
+// foreign id can never cross tenants - it simply doesn't exist there.
+router.get("/source-of-truth/customers/detail", requirePermissionOrRole("crm:contacts:read", "ADMIN"), async (req: Request, res: Response) => {
+  try {
+    const tenantId = req.tenantId!;
+    const id = String(req.query.id ?? "").trim();
+    if (!id) {
+      res.status(400).json({ error: "id is required" });
+      return;
+    }
+    const vendor = await resolveCrmVendor(tenantId);
+    if (!vendor) {
+      res.status(404).json({ error: "No source of truth connected" });
+      return;
+    }
+    const adapter = await getCrmAdapter(tenantId);
+    const r = await adapter.findCustomer({ external_id: id });
+    const c = r.ok ? r.contacts[0] : undefined;
+    if (!c) {
+      res.status(404).json({ error: "Customer not found" });
+      return;
+    }
+    res.json({
+      data: {
+        id: c.id,
+        kind: c.kind,
+        name: c.display_name,
+        phone: c.phone,
+        email: c.email,
+        stage: c.stage,
+        vendor,
+      },
+    });
+  } catch (err) {
+    console.error("source-of-truth customer detail error:", err);
+    res.status(500).json({ error: "Failed to load customer" });
   }
 });
 

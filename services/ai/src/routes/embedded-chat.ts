@@ -92,13 +92,26 @@ router.post("/init", initLimiter, async (req: Request, res: Response) => {
     const channelAccount = await withCrossTenantAccess(
       async () =>
         await prisma.channelAccount.findFirst({
-          where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
+          // PENDING = created in Settings but never seen on a real site yet.
+          // The first successful widget init IS the installation verification:
+          // we accept it and flip the account to CONNECTED below. ERROR /
+          // DISCONNECTED widgets stay rejected.
+          where: { externalId: widgetId, channel: "WEBCHAT", connectionStatus: { in: ["CONNECTED", "PENDING"] } },
         }),
     );
 
     if (!channelAccount) {
       res.status(404).json({ error: "Widget not found or not active" });
       return;
+    }
+
+    if (channelAccount.connectionStatus === "PENDING") {
+      await withCrossTenantAccess(async () =>
+        prisma.channelAccount.update({
+          where: { id: channelAccount.id },
+          data: { connectionStatus: "CONNECTED", connectedAt: new Date(), lastError: null },
+        }),
+      ).catch(() => { /* verification flip is best-effort; chat still works */ });
     }
 
     const finalVisitorId = visitorId || `visitor_${crypto.randomBytes(8).toString("hex")}`;

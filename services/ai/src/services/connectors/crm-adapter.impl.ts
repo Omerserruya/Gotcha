@@ -40,6 +40,8 @@ import {
   type CrmFindByCustomFieldArgs,
   type CrmMergeArgs,
   type CrmMergeResult,
+  type CrmNameSearchCandidate,
+  type CrmNameSearchResult,
   type CrmObjectKind,
   type CrmTask,
   type CrmTicket,
@@ -1249,10 +1251,109 @@ export class ZohoCRMAdapter implements CRMAdapter {
 // Shopify customer tools in shopify.adapter.ts: a Shopify "customer" is our
 // canonical "contact", order history projects onto `deals`, and notes/
 // interactions are appended to the customer's free-text `note` field.
+// ─── Shopify name-search query building (exported for tests) ───────
+//
+// Shopify's customer search (REST /customers/search.json and the GraphQL
+// `customers` query share the same query syntax) treats `:`, quotes,
+// parentheses, wildcards, boolean keywords and a leading `-` as OPERATORS.
+// A customer-typed name must never be able to smuggle one in, so field
+// values are always double-quoted with backslash/quote escaping, and the
+// free-text form strips the structural characters instead.
+
+/** Escape a value for use inside a quoted Shopify query string. */
+export function escapeShopifyQueryValue(value: string): string {
+  return value.replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+}
+
+/**
+ * Build the Shopify search queries for a free-text name input.
+ * Always includes the safe default text search; when the input splits
+ * reliably into exactly two tokens (typical "First Last"), also includes an
+ * explicit `first_name:"..." last_name:"..."` filter - the default search
+ * can rank exact name matches below fuzzy ones, the filter pins them.
+ */
+export function buildShopifyNameQueries(name: string): string[] {
+  const trimmed = String(name || "").trim().replace(/\s+/g, " ");
+  if (!trimmed) return [];
+  // Free-text form: neutralize structural syntax, keep letters (any script),
+  // digits, apostrophes, dots and hyphens inside words.
+  const freeText = trimmed.replace(/[:"()*\\]/g, " ").replace(/(^|\s)-+/g, "$1").replace(/\s+/g, " ").trim();
+  const queries: string[] = [];
+  // Unquoted on purpose: a quoted phrase is exact-match and breaks PARTIAL
+  // name search (Shopify prefix-matches unquoted terms). The sanitization
+  // above already removed every structural character.
+  if (freeText) queries.push(freeText);
+  const tokens = trimmed.split(" ");
+  if (tokens.length === 2 && tokens.every((t) => t.length >= 2)) {
+    queries.push(`first_name:"${escapeShopifyQueryValue(tokens[0])}" last_name:"${escapeShopifyQueryValue(tokens[1])}"`);
+  }
+  return queries;
+}
+
+function mapShopifyNameCandidate(raw: unknown): CrmNameSearchCandidate | null {
+  if (!raw || typeof raw !== "object") return null;
+  const c: any = raw;
+  if (c.id == null) return null;
+  const name = [c.first_name, c.last_name].filter(Boolean).join(" ").trim()
+    || c.default_address?.name || null;
+  return {
+    id: String(c.id),
+    kind: "contact",
+    display_name: name,
+    email: c.email ?? null,
+    phone: c.phone ?? c.default_address?.phone ?? null,
+    orders_count: typeof c.orders_count === "number" ? c.orders_count : c.orders_count != null ? Number(c.orders_count) : null,
+    total_spent: c.total_spent != null ? String(c.total_spent) : null,
+    currency: c.currency ?? null,
+  };
+}
+
 export class ShopifyCRMAdapter implements CRMAdapter {
   readonly vendor: CrmVendor = "shopify";
   readonly capabilities: CrmAdapterCapabilities = DEFAULT_CAPABILITIES.shopify;
   constructor(public readonly tenantId: string) {}
+
+  /**
+   * Free-text name search over the tenant's OWN Shopify connection.
+   * Routed through executeAdapterTool → `shopify.search_customers`, which
+   * gives tenant scoping, the `read_customers` scope gate, OAuth refresh,
+   * rate limiting and audit for free. Returns ALL candidates (deduped,
+   * capped) - the caller shows a picker and never auto-selects.
+   */
+  async searchByName(name: string, limit = 8): Promise<CrmNameSearchResult> {
+    const queries = buildShopifyNameQueries(name);
+    if (queries.length === 0) return { ok: false, candidates: [], reason: "no_query" };
+    const cap = Math.min(Math.max(1, limit), 25);
+
+    const results = await Promise.all(
+      queries.map((query) =>
+        executeAdapterTool({
+          tenantId: this.tenantId,
+          toolFunctionName: "shopify.search_customers",
+          args: { query, limit: cap },
+        }),
+      ),
+    );
+
+    // A failed default search fails the call (scope missing, vendor down);
+    // a failed SECONDARY filter query degrades silently to the primary.
+    if (!results[0].ok) return { ok: false, candidates: [], reason: results[0].reason };
+
+    const seen = new Set<string>();
+    const candidates: CrmNameSearchCandidate[] = [];
+    for (const r of results) {
+      if (!r.ok || !Array.isArray(r.result)) continue;
+      for (const raw of r.result as unknown[]) {
+        const c = mapShopifyNameCandidate(raw);
+        if (!c || seen.has(c.id)) continue;
+        seen.add(c.id);
+        candidates.push(c);
+        if (candidates.length >= cap) break;
+      }
+      if (candidates.length >= cap) break;
+    }
+    return { ok: true, candidates };
+  }
 
   async findCustomer(query: { phone?: string; email?: string; external_id?: string }): Promise<CrmAdapterFindResult> {
     const email = normalizeEmail(query.email);

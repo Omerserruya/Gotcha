@@ -122,8 +122,8 @@
   "hotPaths": [
     {
       "path": "prisma/schema.prisma",
-      "accessCount": 14,
-      "lastAccessed": 1780558307911,
+      "accessCount": 16,
+      "lastAccessed": 1784644459126,
       "type": "file"
     },
     {

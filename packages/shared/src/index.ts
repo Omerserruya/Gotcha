@@ -278,6 +278,10 @@ export type {
   BuiltinRoleDef,
 } from "./lib/permission-catalog";
 
+// Outbound-call destination validation (server-side E.164 gate).
+export { validateE164 } from "./lib/phone-validation";
+export type { E164Validation } from "./lib/phone-validation";
+
 // RBAC seed + backfill.
 export {
   seedTenantRoles,

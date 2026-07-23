@@ -657,7 +657,15 @@ async function main() {
     // Explicit launch URL: without it Authentik derives one from the first
     // redirect URI (localhost) and every "open the app" affordance on the IdP
     // side points at the wrong host.
-    meta_launch_url: APP_LAUNCH_URL,
+    //
+    // /login, NOT the bare root: everyone Authentik sends here holds a live
+    // IdP session (finished invite/recovery flow, login done on the IdP, app
+    // tile) but NO app session yet - the root would show them the marketing
+    // landing page as if they were logged out. /login silently completes the
+    // OIDC round-trip (session + permanent consent = no prompts) and drops
+    // them in the app / onboarding. Logged-out visitors never reach this URL:
+    // Authentik shows them its own login first.
+    meta_launch_url: `${APP_LAUNCH_URL}/login`,
   };
 
   const apps = await api("/core/applications/");

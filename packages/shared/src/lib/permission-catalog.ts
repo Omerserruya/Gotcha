@@ -145,6 +145,15 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("channels:manage:read", "channels", "configuration", false, "View Channels", "View connected messaging/voice channels."),
   p("channels:manage:update", "channels", "configuration", false, "Manage Channels", "Connect and configure messaging/voice channels."),
 
+  // ── Outbound calling (runtime, scoped) ──────────────────────
+  // Deliberately permissions, not Role==ADMIN: a tenant can let front-line
+  // agents place calls without granting workspace administration. Routes
+  // still validate the tenant's phone channel and the destination number
+  // regardless of who holds the permission. Domain "channels" so licensing
+  // follows the tenant's channel entitlement (same as the Outbound nav).
+  p("outbound:calls:create", "channels", "runtime", true, "Place Outbound Calls", "Start outbound phone calls to customers."),
+  p("outbound:calls:view", "channels", "runtime", true, "View Outbound Calls", "View outbound call activity and live call sessions."),
+
   // ── Analytics ───────────────────────────────────────────────
   p("analytics:dashboard:read", "analytics", "runtime", true, "View Analytics Dashboard", "View analytics dashboards and metrics."),
   p("analytics:reports:export", "analytics", "runtime", true, "Export Reports", "Export analytics reports."),
@@ -304,6 +313,8 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
       "approvals:requests:view",
       "approvals:requests:approve",
       "approvals:requests:reject",
+      "outbound:calls:create",
+      "outbound:calls:view",
       "analytics:dashboard:read",
       "analytics:reports:export",
     ],
@@ -327,6 +338,10 @@ export const BUILTIN_ROLES: Record<BuiltinRoleKey, BuiltinRoleDef> = {
       "customer:commerce:read",
       "customer:commerce:open",
       "crm:contacts:read",
+      // Agents can place/see outbound calls (e.g. missed-call callbacks) -
+      // matches the pre-permission behavior of the voice routes.
+      "outbound:calls:create",
+      "outbound:calls:view",
     ],
   },
 };

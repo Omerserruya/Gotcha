@@ -22,6 +22,8 @@ import {
   authenticate,
   resolveTenant,
   requireActiveTenant,
+  requirePermissionOrRole,
+  validateE164,
   claimIncomingCall,
   transitionVoiceCallSessionState,
   fromLegacyStatus,
@@ -739,13 +741,27 @@ router.post("/:id/agent-leave", async (req: Request, res: Response) => {
 // Returns 409 with hint codes when AGENT_FIRST is configured but
 // can't run (agent missing phone, etc.) so the UI can show a real
 // error instead of silently falling back.
-router.post("/start-outbound", async (req: Request, res: Response) => {
+// Permission, not Role==ADMIN: `outbound:calls:create` is held by the
+// built-in admin/department-manager/agent roles (catalog), and custom roles
+// can grant or withhold it. The ADMIN role fallback covers tenants whose
+// role rows predate the key. The identity → Active Membership → tenant chain
+// is enforced by authenticate + resolveTenant + requireActiveTenant above.
+router.post("/start-outbound", requirePermissionOrRole("outbound:calls:create", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const body = (req.body || {}) as Record<string, unknown>;
     const to = typeof body.to === "string" ? body.to.trim() : "";
     const conversationId = typeof body.conversationId === "string" ? body.conversationId.trim() : "";
     const notes = typeof body.notes === "string" ? body.notes : "";
     if (!to) { res.status(400).json({ error: "to_required" }); return; }
+    // Destination validation is a SERVER responsibility - the frontend
+    // normalizes for UX, but a raw API caller must not be able to hand the
+    // provider an arbitrary string.
+    const e164 = validateE164(to);
+    if (!e164.ok || !e164.normalized) {
+      res.status(400).json({ error: "invalid_destination", hint: "expected E.164, e.g. +14155551234" });
+      return;
+    }
+    const normalizedTo = e164.normalized;
 
     // Resolve the active voice channel for the tenant. If none, no
     // outbound is possible regardless of mode.
@@ -797,7 +813,7 @@ router.post("/start-outbound", async (req: Request, res: Response) => {
         headers: { "Content-Type": "application/json", "X-Internal-Key": key },
         body: JSON.stringify({
           channelId: channel.id,
-          customerNumber: to,
+          customerNumber: normalizedTo,
           // No agentId override: ring the channel's defaultAgent (the
           // routing-page selection). To ring "me" instead, the UI would
           // need a separate explicit toggle - not the default behavior.

@@ -26,11 +26,12 @@
 //     "press Next" fallback - re-pushing on mismatch once looped navigation
 //     forever and DDoSed our own API.
 
-import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useI18n } from "@/context/I18nContext";
-import { useVoiceFlags } from "@/lib/use-voice-flags";
 import { setTourMock, tourMockActive } from "@/lib/tour-mock";
+import { computeTourGeometry, type Rect } from "@/lib/tour-geometry";
+import { track } from "@/lib/analytics";
 
 const STORAGE_KEY = "onboarding.launchTour";
 const PROGRESS_KEY = "onboarding.tourStep"; // stores the step ID
@@ -78,7 +79,8 @@ interface TourStep {
 
 // Copy rule: lead with what it DOES for the business, never with the feature
 // name. Short. One idea per step. [en, he].
-const ALL_STEPS: TourStep[] = [
+// Exported for tests (step invariants live in __tests__/tour-definition.test.ts).
+export const ALL_STEPS: TourStep[] = [
   {
     id: "welcome",
     selector: null,
@@ -195,76 +197,6 @@ const ALL_STEPS: TourStep[] = [
     ],
   },
   {
-    id: "channels-nav",
-    selector: '[data-tour="nav-settings"]',
-    advanceOnClick: true,
-    placement: "right",
-    title: ["Channels live inside Settings", "הערוצים גרים בתוך ההגדרות"],
-    body: [
-      "Connecting WhatsApp, Instagram, email and the rest happens under Settings. Click Settings in the menu and I'll walk you the rest of the way.",
-      "חיבור וואטסאפ, אינסטגרם, מייל והשאר נעשה תחת הגדרות. לחצו על הגדרות בתפריט ואוביל אתכם בהמשך הדרך.",
-    ],
-  },
-  {
-    id: "channels-menu",
-    selector: '[data-tour="settings-nav-channels"]',
-    navigateTo: "/settings",
-    advanceOnClick: true,
-    placement: "right",
-    location: ["Settings", "הגדרות"],
-    title: ["Settings has its own menu", "להגדרות יש תפריט משלהן"],
-    body: [
-      "Inside Settings, everything is arranged in this menu of sections. Here's Channels - click it.",
-      "בתוך ההגדרות הכול מסודר בתפריט האזורים הזה. הנה ערוצים - לחצו עליו.",
-    ],
-  },
-  {
-    id: "channels",
-    selector: '[data-tour="channels-connect"]',
-    navigateTo: "/settings/channels",
-    placement: "top",
-    location: ["Settings · Channels", "הגדרות · ערוצים"],
-    title: ["Be everywhere your customers already are", "להיות בכל מקום שהלקוחות שלכם כבר נמצאים"],
-    body: [
-      "WhatsApp, Instagram, Messenger, email, webchat, even a phone line with a voice answerer. No need to connect anything now, it all waits for you in your next tasks right after the tour.",
-      "וואטסאפ, אינסטגרם, מסנג'ר, מייל, צ'אט לאתר, ואפילו קו טלפוני עם מענה קולי. לא צריך לחבר כלום עכשיו, הכול מחכה לכם במשימות הבאות מיד אחרי הסיור.",
-    ],
-  },
-  {
-    id: "voice-nav",
-    selector: '[data-tour="settings-nav-voice-channels"]',
-    advanceOnClick: true,
-    placement: "right",
-    location: ["Settings · Channels", "הגדרות · ערוצים"],
-    title: ["Same menu, one section down", "אותו תפריט, אזור אחד למטה"],
-    body: [
-      "Notice you never left Settings: you just switch sections in this menu. Click Voice channels.",
-      "שימו לב שלא יצאתם מההגדרות: פשוט מחליפים אזור בתפריט הזה. לחצו על ערוצי קול.",
-    ],
-  },
-  {
-    id: "voice",
-    selector: null,
-    navigateTo: "/settings/voice-channels",
-    location: ["Settings · Voice channels", "הגדרות · ערוצי קול"],
-    title: ["It answers the phone too", "הוא עונה גם לטלפון"],
-    body: [
-      "Connect a phone line and your AI employee picks up real calls - talks, books, transcribes, and briefs you afterwards. Your business stops missing calls.",
-      "חברו קו טלפון ועובד ה-AI עונה לשיחות אמיתיות - מדבר, קובע, מתמלל ומעדכן אתכם אחר כך. העסק שלכם מפסיק לפספס שיחות.",
-    ],
-  },
-  {
-    id: "ai-nav",
-    selector: '[data-tour="nav-ai-studio"]',
-    advanceOnClick: true,
-    placement: "right",
-    title: ["And this is the AI Studio", "וכאן גר ה-AI Studio"],
-    body: [
-      "Everything about your AI employees lives in one place, and it has its own home in the main menu. Click AI Studio and I'll show you around.",
-      "כל מה שקשור לעובדי ה-AI שלכם גר במקום אחד, ויש לו בית משלו בתפריט הראשי. לחצו על סטודיו AI ואעשה לכם סיבוב.",
-    ],
-  },
-  {
     id: "ai-overview",
     selector: '[data-tour="ai-studio-tabs"]',
     navigateTo: "/ai-studio",
@@ -272,8 +204,8 @@ const ALL_STEPS: TourStep[] = [
     location: ["AI Studio", "סטודיו AI"],
     title: ["Welcome to AI Studio", "ברוכים הבאים לסטודיו ה-AI"],
     body: [
-      "This is where you manage and improve your whole AI system, in four rooms: Team Members (your AI employees), Playbooks (your business processes), Knowledge (what they learn from) and Skills & Integrations (what they can do). These tabs move you between the rooms - we'll visit each one.",
-      "כאן מנהלים ומשפרים את כל מערכת ה-AI, בארבעה חדרים: חברי צוות (עובדי ה-AI שלכם), תהליכים (התהליכים העסקיים), ידע (ממה הם לומדים) וכישורים ואינטגרציות (מה הם מסוגלים לעשות). הטאבים האלה מעבירים בין החדרים - נבקר בכל אחד.",
+      "Next stop, straight from the main menu: AI Studio. This is where you manage and improve your whole AI system, in four rooms: Team Members (your AI employees), Playbooks (your business processes), Knowledge (what they learn from) and Skills & Integrations (what they can do). These tabs move you between the rooms - we'll visit each one.",
+      "התחנה הבאה, ישר מהתפריט הראשי: סטודיו ה-AI. כאן מנהלים ומשפרים את כל מערכת ה-AI, בארבעה חדרים: חברי צוות (עובדי ה-AI שלכם), תהליכים (התהליכים העסקיים), ידע (ממה הם לומדים) וכישורים ואינטגרציות (מה הם מסוגלים לעשות). הטאבים האלה מעבירים בין החדרים - נבקר בכל אחד.",
     ],
   },
   {
@@ -324,26 +256,15 @@ const ALL_STEPS: TourStep[] = [
     ],
   },
   {
-    id: "outbound-nav",
-    selector: '[data-tour="nav-outbound"]',
-    advanceOnClick: true,
-    placement: "right",
-    title: ["Don't just answer - reach out", "אל תחכו שיפנו - תפנו"],
-    body: [
-      "So far customers reached YOU. Outbound is where you start the conversation - and it has its own place in the main menu. Click it.",
-      "עד עכשיו הלקוחות הגיעו אליכם. 'יוצא' הוא המקום שבו אתם פותחים את השיחה - ויש לו מקום משלו בתפריט הראשי. לחצו עליו.",
-    ],
-  },
-  {
     id: "outbound",
     selector: '[data-tour="outbound-dialer"]',
     navigateTo: "/outbound/call",
-    placement: "right",
+    placement: "auto",
     location: ["Outbound", "יוצא"],
-    title: ["Revenue you start", "הכנסה שאתם יוזמים"],
+    title: ["Don't just answer - reach out", "אל תחכו שיפנו - תפנו"],
     body: [
-      "Call customers, send campaigns and broadcasts to exactly the right people, on the channel they actually read. The tabs above switch between calls, templates and broadcasts.",
-      "התקשרו ללקוחות, שלחו קמפיינים ותפוצות בדיוק לאנשים הנכונים, בערוץ שהם באמת קוראים. הטאבים למעלה עוברים בין שיחות, תבניות ותפוצות.",
+      "So far customers reached YOU. Outbound, right here in the main menu, is where you start the conversation: call customers, send campaigns and broadcasts to exactly the right people, on the channel they actually read. The tabs above switch between calls, templates and broadcasts.",
+      "עד עכשיו הלקוחות הגיעו אליכם. 'יוצא', כאן בתפריט הראשי, הוא המקום שבו אתם פותחים את השיחה: מתקשרים ללקוחות, שולחים קמפיינים ותפוצות בדיוק לאנשים הנכונים, בערוץ שהם באמת קוראים. הטאבים למעלה עוברים בין שיחות, תבניות ותפוצות.",
     ],
   },
   {
@@ -353,8 +274,8 @@ const ALL_STEPS: TourStep[] = [
     placement: "right",
     title: ["One last stop", "תחנה אחרונה"],
     body: [
-      "Remember Settings from earlier, when we connected channels? Click it once more - there's one part of it worth knowing by heart.",
-      "זוכרים את ההגדרות מקודם, כשחיברנו ערוצים? לחצו עליהן שוב - יש שם חלק אחד ששווה להכיר בעל פה.",
+      "Everything you configure lives under Settings, and it has its own place in the main menu. Click Settings and I'll show you around.",
+      "כל מה שמגדירים בעסק גר תחת הגדרות, ויש להן מקום משלהן בתפריט הראשי. לחצו על הגדרות ואעשה לכם סיבוב.",
     ],
   },
   {
@@ -365,8 +286,8 @@ const ALL_STEPS: TourStep[] = [
     location: ["Settings", "הגדרות"],
     title: ["Everything is set up here", "כאן מגדירים הכול"],
     body: [
-      "One last stop, back in Settings - you already know the way. This menu of sections is the part to remember: users and roles, business hours, language, notifications, usage. When you want to change how things work, it happens in one of these sections.",
-      "תחנה אחרונה, שוב בהגדרות - את הדרך אתם כבר מכירים. תפריט האזורים הזה הוא מה ששווה לזכור: משתמשים והרשאות, שעות פעילות, שפה, התראות, צריכה. כשתרצו לשנות איך דברים עובדים, זה קורה באחד האזורים כאן.",
+      "This menu of sections is the part to remember: connect channels like WhatsApp, Instagram and email, manage users and roles, business hours, language, notifications, usage. When you want to change how things work, it happens in one of these sections.",
+      "תפריט האזורים הזה הוא מה ששווה לזכור: חיבור ערוצים כמו וואטסאפ, אינסטגרם ומייל, ניהול משתמשים והרשאות, שעות פעילות, שפה, התראות וצריכה. כשתרצו לשנות איך דברים עובדים, זה קורה באחד האזורים כאן.",
     ],
   },
   {
@@ -382,10 +303,30 @@ const ALL_STEPS: TourStep[] = [
   },
 ];
 
-// Steps that only exist for voice-licensed tenants (see the `steps` filter).
-const VOICE_STEP_IDS = new Set(["voice-nav", "voice"]);
+// Steps that shipped in earlier tour versions and were removed or merged.
+// A browser that persisted one of these ids must NEVER resume into a ghost
+// step: it lands on the step that now covers that narrative beat instead.
+// Unknown ids (from even older builds) reset to the start.
+// Exported for tests.
+export const REMOVED_STEP_REDIRECTS: Record<string, string> = {
+  // The early Settings/channels walkthrough was removed as redundant - the
+  // closing Settings walkthrough now introduces Settings (channels included).
+  "channels-nav": "ai-overview",
+  "channels-menu": "ai-overview",
+  channels: "ai-overview",
+  "voice-nav": "ai-overview",
+  voice: "ai-overview",
+  // Pure transition beats folded into their destination steps.
+  "ai-nav": "ai-overview",
+  "outbound-nav": "outbound",
+};
 
-interface Rect { top: number; left: number; width: number; height: number; }
+/** Resolve a persisted step id against the current tour definition. */
+export function resumeStepId(savedId: string | null): string {
+  if (savedId && ALL_STEPS.some((s) => s.id === savedId)) return savedId;
+  if (savedId && REMOVED_STEP_REDIRECTS[savedId]) return REMOVED_STEP_REDIRECTS[savedId];
+  return ALL_STEPS[0].id;
+}
 
 // A tour selector may match several nodes (desktop sidebar + mobile tab bar
 // render the same anchors) - spotlight the one that's actually visible.
@@ -414,21 +355,23 @@ function GuidedTourInner() {
   const pathname = usePathname();
   const search = useSearchParams();
   const { locale } = useI18n();
-  const { voiceCopilotEnabled } = useVoiceFlags();
   const lang = locale === "he" ? 1 : 0;
+  const rtl = locale === "he";
 
-  // Voice act only exists for voice-licensed tenants - both the "click Voice
-  // channels" nav beat and the payoff, or the tour would point at a menu item
-  // that isn't rendered. Progress is persisted by step ID so this filter can
-  // flip while flags load without desyncing.
-  const steps = useMemo(
-    () => ALL_STEPS.filter((s) => !VOICE_STEP_IDS.has(s.id) || voiceCopilotEnabled),
-    [voiceCopilotEnabled],
-  );
+  // One canonical definition for every start path (first-time after
+  // onboarding AND manual restarts). No per-tenant step filtering any more:
+  // the voice-only steps were removed with the early Settings walkthrough.
+  const steps = ALL_STEPS;
 
   const [active, setActive] = useState(false);
   const [stepIdx, setStepIdx] = useState(0);
   const [rect, setRect] = useState<Rect | null>(null);
+  // The rect after it stopped moving for a beat - tooltip geometry keys on
+  // THIS, so a target mid-animation never yields a half-computed position.
+  const [stableRect, setStableRect] = useState<Rect | null>(null);
+  // Real rendered tooltip size (ResizeObserver) - geometry clamps with actual
+  // dimensions, so long copy can never push the footer buttons off-screen.
+  const [popupSize, setPopupSize] = useState<{ w: number; h: number }>({ w: 300, h: 200 });
   const [missingTarget, setMissingTarget] = useState(false);
   const [settled, setSettled] = useState(false);
   // Between-steps interaction lock: for ~700ms after every advance the whole
@@ -460,9 +403,17 @@ function GuidedTourInner() {
     }
     if (fromUrl || flag) {
       let savedIdx = 0;
+      let hadSaved = false;
       try {
         const savedId = localStorage.getItem(PROGRESS_KEY);
-        const found = steps.findIndex((s) => s.id === savedId);
+        hadSaved = !!savedId;
+        // A persisted id from a removed/merged step (or an older tour build)
+        // is migrated to its surviving step - never resumed into a ghost.
+        const resumedId = resumeStepId(savedId);
+        if (savedId !== resumedId) {
+          try { localStorage.setItem(PROGRESS_KEY, resumedId); } catch { /* */ }
+        }
+        const found = steps.findIndex((s) => s.id === resumedId);
         if (found >= 0) savedIdx = found;
         // The tour navigates between pages and this component remounts with
         // each page's AppLayout - the flag carries it across. A ?tour=1 start
@@ -471,37 +422,38 @@ function GuidedTourInner() {
       } catch { /* */ }
       setStepIdx(savedIdx);
       setActive(true);
+      // A remount mid-tour (every navigation) is not a new tour - only the
+      // true beginning counts as a start.
+      if (!hadSaved || savedIdx === 0) track("tour_started", { source: "auto" });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Re-derive the index if the steps array changes mid-tour (voice license
-  // flag resolving) - the persisted ID is the source of truth.
-  useEffect(() => {
-    if (!active) return;
-    try {
-      const savedId = localStorage.getItem(PROGRESS_KEY);
-      if (!savedId) return;
-      const found = steps.findIndex((s) => s.id === savedId);
-      if (found >= 0 && found !== stepIdx) setStepIdx(found);
-    } catch { /* */ }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [steps]);
-
   // Manual start from anywhere (the Getting Started "Take the tour" button).
+  // Same canonical ALL_STEPS definition as the first-time path, from a clean
+  // step-0 state.
   useEffect(() => {
     const onStart = () => {
       try {
         localStorage.setItem(STORAGE_KEY, "1");
         localStorage.setItem(PROGRESS_KEY, ALL_STEPS[0].id);
         sessionStorage.removeItem(NAV_ATTEMPT_KEY);
+        sessionStorage.removeItem(GUIDE_POS_KEY);
       } catch { /* */ }
       setStepIdx(0);
       setActive(true);
+      track("tour_started", { source: "manual" });
     };
     window.addEventListener("gotcha:start-tour", onStart);
     return () => window.removeEventListener("gotcha:start-tour", onStart);
   }, []);
+
+  // ── Analytics: one view event per step actually shown ──
+  useEffect(() => {
+    if (!active || !step) return;
+    track("tour_step_viewed", { step_id: step.id, index: stepIdx + 1, total: steps.length });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [active, stepIdx]);
 
   // ── Persist step progress (by ID) ──
   useEffect(() => {
@@ -568,6 +520,7 @@ function GuidedTourInner() {
     if (!active || !arrived) return;
     if (!step?.selector) {
       setRect(null);
+      setStableRect(null);
       setMissingTarget(false);
       return;
     }
@@ -580,6 +533,8 @@ function GuidedTourInner() {
     let raf = 0;
     let scrolled = false;
     let last: Rect | null = null;
+    let lastMoveAt = performance.now();
+    let stablePublished = false;
     const startedAt = performance.now();
     const tick = () => {
       const el = findVisibleTarget(step.selector!);
@@ -600,15 +555,27 @@ function GuidedTourInner() {
           Math.abs(r.height - last.height) > 0.5;
         if (moved) {
           last = { top: r.top, left: r.left, width: r.width, height: r.height };
+          lastMoveAt = performance.now();
+          stablePublished = false;
           setRect(last);
           setMissingTarget(false);
+        } else if (!stablePublished && last && performance.now() - lastMoveAt > 150) {
+          // The tooltip position is computed from the SETTLED rect only: a
+          // target that is still animating (the Co-Pilot panel sliding open,
+          // a layout shift) keeps the spotlight glued but does not move the
+          // tooltip until it stops. This is what keeps the tooltip and the
+          // spotlight aligned through open/close/resize animations.
+          stablePublished = true;
+          setStableRect(last);
         }
       } else {
         const elapsed = performance.now() - startedAt;
         if (elapsed > 700) {
           // Same-value setState bails out, so this is cheap while null.
           last = null;
+          stablePublished = false;
           setRect(null);
+          setStableRect(null);
         }
         if (elapsed > 4000) setMissingTarget(true);
       }
@@ -673,7 +640,7 @@ function GuidedTourInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [active, arrived, stepIdx]);
 
-  const finish = useCallback(() => {
+  const finish = useCallback((reason: "completed" | "abandoned" = "completed") => {
     setActive(false);
     setTourMock(false);
     try {
@@ -682,13 +649,22 @@ function GuidedTourInner() {
       sessionStorage.removeItem(NAV_ATTEMPT_KEY);
       sessionStorage.removeItem(GUIDE_POS_KEY);
     } catch { /* */ }
+    const at = stepsRef.current?.[stepIdxRef.current];
+    if (reason === "completed") track("tour_completed", { steps: ALL_STEPS.length });
+    else track("tour_abandoned", { step_id: at?.id, index: stepIdxRef.current + 1, total: ALL_STEPS.length });
   }, []);
+  // Refs so finish() can report WHERE the user abandoned without re-creating
+  // the callback (and every downstream listener) on each step.
+  const stepIdxRef = useRef(stepIdx);
+  useEffect(() => { stepIdxRef.current = stepIdx; }, [stepIdx]);
+  const stepsRef = useRef(steps);
+  useEffect(() => { stepsRef.current = steps; }, [steps]);
 
-  const skip = finish;
+  const skip = useCallback(() => finish("abandoned"), [finish]);
   const next = useCallback(() => {
     setStepIdx((i) => {
       if (i >= steps.length - 1) {
-        finish();
+        finish("completed");
         return i;
       }
       return i + 1;
@@ -736,13 +712,14 @@ function GuidedTourInner() {
   }, [step, next, transitionLock, canClickTarget]);
 
   // ── Popup + spotlight geometry ──
-  const { popupStyle, holeStyle } = useMemo(() => {
-    const POPUP_W = 300;
-    const POPUP_H = 200;
+  // The spotlight hole tracks the LIVE rect (it glides with animations); the
+  // tooltip position comes from the SETTLED rect and the tooltip's measured
+  // size, via the pure placement engine in lib/tour-geometry.ts, which
+  // guarantees: never covering the target, never off-screen (RTL included).
+  const { popupStyle, popupMaxHeight, holeStyle } = useMemo(() => {
+    if (!rect) return { popupStyle: null as any, popupMaxHeight: null as number | null, holeStyle: null as any };
     const vw = typeof window === "undefined" ? 1024 : window.innerWidth;
     const vh = typeof window === "undefined" ? 768 : window.innerHeight;
-
-    if (!rect) return { popupStyle: null as any, holeStyle: null as any };
     const PADDING = 8;
     const hole = {
       top: rect.top - PADDING,
@@ -750,47 +727,41 @@ function GuidedTourInner() {
       width: rect.width + PADDING * 2,
       height: rect.height + PADDING * 2,
     };
-
-    const requested = step?.placement && step.placement !== "auto" ? step.placement : null;
-    const spaceBottom = vh - (hole.top + hole.height);
-    const spaceTop = hole.top;
-    const spaceRight = vw - (hole.left + hole.width);
-    const spaceLeft = hole.left;
-    let place: "bottom" | "top" | "right" | "left" = requested as any;
-    if (!place) {
-      const candidates: Array<{ p: "bottom" | "top" | "right" | "left"; s: number }> = [
-        { p: "bottom", s: spaceBottom },
-        { p: "top", s: spaceTop },
-        { p: "right", s: spaceRight },
-        { p: "left", s: spaceLeft },
-      ];
-      candidates.sort((a, b) => b.s - a.s);
-      place = candidates[0]!.p;
-    }
-
-    let top = 0, left = 0;
-    if (place === "bottom") {
-      top = hole.top + hole.height + 16;
-      left = Math.max(12, hole.left + hole.width / 2 - POPUP_W / 2);
-    } else if (place === "top") {
-      top = hole.top - POPUP_H - 16;
-      left = Math.max(12, hole.left + hole.width / 2 - POPUP_W / 2);
-    } else if (place === "right") {
-      top = Math.max(12, hole.top + hole.height / 2 - POPUP_H / 2);
-      left = hole.left + hole.width + 16;
-    } else {
-      top = Math.max(12, hole.top + hole.height / 2 - POPUP_H / 2);
-      left = Math.max(12, hole.left - POPUP_W - 16);
-    }
-    if (left + POPUP_W > vw - 12) left = Math.max(12, vw - POPUP_W - 12);
-    if (top + POPUP_H > vh - 12) top = Math.max(12, vh - POPUP_H - 12);
-    if (top < 12) top = 12;
-    if (left < 12) left = 12;
+    const anchor = stableRect || rect;
+    const geo = computeTourGeometry({
+      rect: anchor,
+      viewport: { w: vw, h: vh },
+      popup: popupSize,
+      preferred: step?.placement ?? "auto",
+      rtl,
+      padding: PADDING,
+    });
     return {
-      popupStyle: { top, left, width: POPUP_W },
+      popupStyle: { top: geo.popup.top, left: geo.popup.left, width: popupSize.w },
+      popupMaxHeight: geo.popup.maxHeight,
       holeStyle: hole,
     };
-  }, [rect, step?.placement]);
+  }, [rect, stableRect, popupSize, step?.placement, rtl]);
+
+  // Measure the tooltip whenever its content changes size (copy length varies
+  // per step and language) - the placement above re-runs with real numbers.
+  const popupRef = useRef<HTMLDivElement | null>(null);
+  useLayoutEffect(() => {
+    const el = popupRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(() => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) {
+        setPopupSize((prev) =>
+          Math.abs(prev.w - r.width) > 1 || Math.abs(prev.h - r.height) > 1
+            ? { w: Math.round(r.width), h: Math.round(r.height) }
+            : prev,
+        );
+      }
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [active, step?.center]);
 
   // ── Guide character position ──
   // The character exists the whole time the tour is active. Between pages it
@@ -954,14 +925,19 @@ function GuidedTourInner() {
         // next anchor; only the inner content re-keys (quick fade-up). This is
         // what makes consecutive beats read as one continuous motion.
         <div
-          className="absolute z-10 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 pointer-events-auto"
+          ref={popupRef}
+          className="absolute z-10 bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 pointer-events-auto flex flex-col"
           style={{
             ...(popupStyle || { bottom: 20, right: 20, width: 300 }),
+            // When no side fits the full tooltip (tiny viewports, huge
+            // targets), the body scrolls and the controls stay pinned - the
+            // Next button is ALWAYS on screen.
+            ...(popupMaxHeight ? { maxHeight: popupMaxHeight } : {}),
             animation: "gotchaTourPop 0.3s ease-out",
             transition: "top 500ms cubic-bezier(0.22,1,0.36,1), left 500ms cubic-bezier(0.22,1,0.36,1)",
           }}
         >
-        <div key={step.id} style={{ animation: "gotchaContentSwap 350ms ease-out" }}>
+        <div key={step.id} className="flex min-h-0 flex-col" style={{ animation: "gotchaContentSwap 350ms ease-out" }}>
           <div className="flex items-center justify-between mb-1.5">
             <span className="text-[10px] font-semibold tracking-wide text-primary-500 uppercase">
               {lang === 1 ? "סיור" : "Tour"} {stepIdx + 1}/{total}
@@ -970,6 +946,7 @@ function GuidedTourInner() {
               {lang === 1 ? "דלג" : "Skip"}
             </button>
           </div>
+          <div className="min-h-0 overflow-y-auto">
           {/* "You are here" - anchors every explanation to a place in the
               app, so the tour builds a navigation mental model, not just a
               feature reel. */}
@@ -997,8 +974,9 @@ function GuidedTourInner() {
               {lang === 1 ? "האזור עוד לא טעון. לחצו הבא או פעלו ידנית." : "Target isn't visible yet. Press Next or do it manually."}
             </p>
           )}
+          </div>
 
-          <div className="mt-3 flex items-center justify-between gap-2">
+          <div className="mt-3 flex items-center justify-between gap-2 shrink-0">
             <div className="flex gap-1">
               {steps.map((_, i) => (
                 <span

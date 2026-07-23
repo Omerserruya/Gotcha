@@ -8,6 +8,7 @@ import {
   authenticate,
   resolveTenant,
   requireRole,
+  requirePermissionOrRole,
   validate,
   getRedis,
   encryptCredentials,
@@ -147,6 +148,27 @@ router.get("/", authenticate, resolveTenant, requireRole("ADMIN"), async (req: R
   } catch (err) {
     console.error("List channels error:", err);
     res.status(500).json({ error: "Failed to list channels" });
+  }
+});
+
+// ─── Channel-connectivity summary (all roles) ─────────────────────────────
+// The Inbox/History empty states need to know WHY a list is empty ("no
+// channel connected" vs "channel broken" vs "no conversations yet"), and
+// agents see those pages too - the full listing above is ADMIN-only. This
+// returns health COUNTS only: no tokens, external ids, or error details.
+router.get("/summary", authenticate, resolveTenant, async (req: Request, res: Response) => {
+  try {
+    const rows = await prisma.channelAccount.findMany({
+      where: { tenantId: req.tenantId! },
+      select: { connectionStatus: true, isActive: true },
+    });
+    const connected = rows.filter((r) => r.connectionStatus === "CONNECTED" && r.isActive).length;
+    const unhealthy = rows.filter((r) => r.connectionStatus === "ERROR" || r.connectionStatus === "DISCONNECTED").length;
+    const pending = rows.filter((r) => r.connectionStatus === "PENDING").length;
+    res.json({ data: { total: rows.length, connected, unhealthy, pending } });
+  } catch (err) {
+    console.error("Channel summary error:", err);
+    res.status(500).json({ error: "Failed to get channel summary" });
   }
 });
 
@@ -314,16 +336,22 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
       return;
     }
 
-    // Step 2: Subscribe app to webhooks on customer's WABA
+    // Step 2: Subscribe app to webhooks on customer's WABA. This is what
+    // makes inbound messages actually arrive - if it fails, the channel is
+    // NOT usable and must not be presented as CONNECTED.
     console.log("[WA-CONNECT] Subscribing app to WABA webhooks:", wabaId);
+    let webhookSubscribed = false;
+    let webhookError: string | null = null;
     try {
       await axios.post(
         `${FB_API_URL}/${wabaId}/subscribed_apps`,
         {},
         { headers: { Authorization: `Bearer ${accessToken}` } }
       );
+      webhookSubscribed = true;
     } catch (subErr: any) {
-      console.warn(`[WA-CONNECT] Webhook subscription warning for WABA ${wabaId}:`, subErr.response?.data?.error?.message);
+      webhookError = subErr.response?.data?.error?.message || subErr.message || "webhook subscription failed";
+      console.warn(`[WA-CONNECT] Webhook subscription FAILED for WABA ${wabaId}:`, webhookError);
     }
 
     // If we don't have phone number IDs from session info, fetch them from the WABA
@@ -386,18 +414,20 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
 
       const credentials = encryptCredentials({ accessToken, wabaId, phoneNumber: displayPhone });
       const tokenExpiresAt = new Date(Date.now() + 365 * 24 * 60 * 60 * 1000); // Business tokens don't expire
+      const honestStatus = webhookSubscribed ? ("CONNECTED" as const) : ("PENDING" as const);
+      const honestError = webhookSubscribed ? null : `Webhook subscription failed - messages cannot arrive yet: ${webhookError}`;
 
       if (existing) {
         const updated = await prisma.channelAccount.update({
           where: { id: existing.id },
           data: {
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: honestStatus,
             connectedAt: new Date(),
             connectedBy: req.user?.userId,
             tokenExpiresAt,
             isActive: true,
-            lastError: null,
+            lastError: honestError,
             displayName: phoneDetails.verified_name || displayPhone,
             platformMeta: { wabaId, qualityRating: phoneDetails.quality_rating },
           },
@@ -411,7 +441,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
             externalId: phoneNumberId,
             displayName: phoneDetails.verified_name || displayPhone,
             credentials,
-            connectionStatus: "CONNECTED",
+            connectionStatus: honestStatus,
+            lastError: honestError,
             connectedAt: new Date(),
             connectedBy: req.user?.userId,
             tokenExpiresAt,
@@ -430,8 +461,8 @@ router.post("/connect/whatsapp", authenticate, resolveTenant, requireRole("ADMIN
       return;
     }
 
-    console.log(`[WA-CONNECT] Successfully connected ${connectedAccounts.length} account(s)`);
-    res.status(201).json({ data: connectedAccounts });
+    console.log(`[WA-CONNECT] Persisted ${connectedAccounts.length} account(s), webhookSubscribed=${webhookSubscribed}`);
+    res.status(201).json({ data: connectedAccounts, webhookSubscribed });
   } catch (err: any) {
     console.error("[WA-CONNECT] Error:", err.response?.data || err.message);
     const metaError = err.response?.data?.error;
@@ -580,23 +611,23 @@ router.get("/oauth/init", async (req: Request, res: Response) => {
 
     // Validate platform-specific config
     if (["messenger", "whatsapp"].includes(platform) && (!META_APP_ID || !OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "OAuth not configured. META_APP_ID and OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=messenger`);
       return;
     }
     if (platform === "instagram" && (!INSTAGRAM_APP_ID || !INSTAGRAM_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Instagram OAuth not configured. INSTAGRAM_APP_ID and INSTAGRAM_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=instagram`);
       return;
     }
     if (platform === "gmail" && (!GOOGLE_CLIENT_ID || !GOOGLE_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Gmail OAuth not configured. GOOGLE_CLIENT_ID and GOOGLE_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=gmail`);
       return;
     }
     if (platform === "outlook" && (!MICROSOFT_CLIENT_ID || !MICROSOFT_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Outlook OAuth not configured. MICROSOFT_CLIENT_ID and MICROSOFT_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=outlook`);
       return;
     }
     if (platform === "slack" && (!SLACK_CLIENT_ID || !SLACK_OAUTH_REDIRECT_URI)) {
-      res.status(500).json({ error: "Slack OAuth not configured. SLACK_CLIENT_ID and SLACK_OAUTH_REDIRECT_URI are required." });
+      res.redirect(`${FRONTEND_URL}/settings/channels?error=not_configured&platform=slack`);
       return;
     }
 
@@ -1845,12 +1876,14 @@ router.post("/connect/email", authenticate, resolveTenant, requireRole("ADMIN"),
 
 // ─── Create Embedded Chat Widget ─────────────────────────────
 
-router.post("/webchat/create", authenticate, resolveTenant, async (req: Request, res: Response) => {
+router.post("/webchat/create", authenticate, resolveTenant, requirePermissionOrRole("channels:manage:update", "ADMIN"), async (req: Request, res: Response) => {
   try {
     const widgetId = `widget_${crypto.randomBytes(12).toString("hex")}`;
 
+    // Idempotent regardless of state: one widget per tenant. (Previously only
+    // CONNECTED rows counted, which could mint duplicates of PENDING drafts.)
     const existing = await prisma.channelAccount.findFirst({
-      where: { tenantId: req.tenantId!, channel: "WEBCHAT", connectionStatus: "CONNECTED" },
+      where: { tenantId: req.tenantId!, channel: "WEBCHAT" },
     });
 
     if (existing) {
@@ -1858,13 +1891,18 @@ router.post("/webchat/create", authenticate, resolveTenant, async (req: Request,
       return;
     }
 
+    // A freshly created widget is a DRAFT (PENDING), not a connected channel:
+    // there is nothing on the customer's website yet. The embedded-chat
+    // runtime flips it to CONNECTED on the first real widget load - that is
+    // the installation verification, and only then does it count as a
+    // connected channel anywhere in the product.
     const account = await prisma.channelAccount.create({
       data: {
         tenantId: req.tenantId!,
         channel: "WEBCHAT",
         externalId: widgetId,
         displayName: req.body.name || "Website Chat Widget",
-        connectionStatus: "CONNECTED",
+        connectionStatus: "PENDING",
         credentials: {},
       },
     });
@@ -1922,6 +1960,17 @@ router.get("/config", authenticate, resolveTenant, requireRole("ADMIN"), async (
       embeddedSignupConfigId: EMBEDDED_SIGNUP_CONFIG_ID,
       oauthConfigured: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
       whatsappConfigured: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
+      // Per-provider readiness: a provider whose app credentials are absent
+      // can never complete OAuth - the UI shows "Requires setup" instead of
+      // a Connect button that dead-ends.
+      providers: {
+        messenger: !!(META_APP_ID && META_APP_SECRET && OAUTH_REDIRECT_URI),
+        instagram: !!(INSTAGRAM_APP_ID && INSTAGRAM_OAUTH_REDIRECT_URI),
+        gmail: !!(GOOGLE_CLIENT_ID && GOOGLE_OAUTH_REDIRECT_URI),
+        outlook: !!(process.env.MICROSOFT_CLIENT_ID && process.env.MICROSOFT_OAUTH_REDIRECT_URI),
+        slack: !!(process.env.SLACK_CLIENT_ID && process.env.SLACK_OAUTH_REDIRECT_URI),
+        whatsapp: !!(META_APP_ID && META_APP_SECRET && EMBEDDED_SIGNUP_CONFIG_ID),
+      },
     },
   });
 });

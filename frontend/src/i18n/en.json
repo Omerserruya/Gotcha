@@ -200,7 +200,20 @@
     "aiBadgeTitle": "Sent automatically by your AI employee",
     "systemReturnedToAi": "Conversation returned to the AI employee",
     "returnToAi": "Return to AI",
-    "returnToAiTitle": "Hand this conversation back to the AI employee"
+    "returnToAiTitle": "Hand this conversation back to the AI employee",
+    "emptyFilteredTitle": "No conversations match the current filters",
+    "emptyFilteredDesc": "Try widening the search or clearing the filters.",
+    "clearFilters": "Clear filters",
+    "emptyNoChannelTitle": "The workspace can't receive conversations yet",
+    "emptyNoChannelDesc": "Messages and conversation history will appear here as soon as a communication channel is connected.",
+    "emptyNoChannelAgent": "Ask your workspace admin to connect a communication channel.",
+    "emptyChannelBrokenTitle": "A channel connection needs fixing",
+    "emptyChannelBrokenDesc": "A connected channel stopped working, so new messages can't arrive. Reconnect it to keep receiving conversations.",
+    "connectChannelCta": "Connect a channel",
+    "fixChannelCta": "Fix connection",
+    "emptyReadyTitle": "The channel is ready, no conversations have arrived yet",
+    "emptyReadyDesc": "As soon as a customer writes to you, the conversation will appear here.",
+    "viewChannels": "View connected channels"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -649,7 +662,26 @@
     "embeddedChat": "Embedded Chat",
     "embeddedChatDesc": "Add a chat widget to your website",
     "createWidget": "Create Widget",
-    "embedTitle": "Embed Chat Widget"
+    "embedTitle": "Embed Chat Widget",
+    "backToInbox": "Back to Inbox",
+    "backToHistory": "Back to History",
+    "requiresSetupHint": "Requires setup: this provider's app credentials are not configured for this environment yet. Contact support to enable it.",
+    "notConfigured": "This provider ({platform}) is not configured for this environment yet, so it cannot be connected.",
+    "statusRequiresAction": "Requires action",
+    "statusWidgetPending": "Waiting for installation",
+    "catMessaging": "Messaging",
+    "catEmail": "Email",
+    "catTeam": "Team channels",
+    "catWebsite": "Website chat",
+    "catVoice": "Voice & phone",
+    "voiceNone": "No phone channel connected. Connect a phone provider to receive and place calls.",
+    "voiceConnect": "Connect phone channel",
+    "voiceManage": "Manage",
+    "voiceNoNumbers": "No active numbers",
+    "waPendingTitle": "One more step to finish WhatsApp",
+    "waPendingDesc": "We saved the authorization but could not detect your WhatsApp Business Account automatically. Paste its ID from Meta Business Manager to finish the connection.",
+    "waPendingPlaceholder": "WhatsApp Business Account ID",
+    "waPendingFinish": "Finish connection"
   },
   "departments": {
     "title": "Departments",
@@ -720,7 +752,10 @@
     "next": "Next",
     "noMessages": "No messages",
     "aiReplay": "AI Replay",
-    "hideReplay": "Hide Replay"
+    "hideReplay": "Hide Replay",
+    "emptyNoChannelDesc": "Conversation history will appear here after a channel is connected and conversations start arriving.",
+    "emptyReadyTitle": "No closed conversations yet",
+    "emptyReadyDesc": "Once conversations are closed, their full history is kept here."
   },
   "knowledge": {
     "title": "Knowledge Base",
@@ -1620,7 +1655,7 @@
       "title": "New outbound call",
       "subtitle": "Dial a number directly or pick an existing contact.",
       "searchLabel": "Search contacts (optional)",
-      "searchPlaceholder": "Name, phone, or email",
+      "searchPlaceholder": "Search by name, phone, or email",
       "phone": "Phone number",
       "notes": "Notes (optional)",
       "notesPlaceholder": "Why you're calling - visible to the AI co-pilot during the call.",
@@ -1649,7 +1684,32 @@
       "muteMic": "Mute microphone",
       "unmuteMic": "Unmute microphone",
       "hangup": "Hang up",
-      "micMuted": "Microphone muted"
+      "micMuted": "Microphone muted",
+      "mode": {
+        "number": "Enter number",
+        "search": "Search customers",
+        "recent": "Recent"
+      },
+      "startCall": "Start call",
+      "validating": "Validating",
+      "connected": "Connected",
+      "clear": "Clear",
+      "sourceManual": "Manual",
+      "unknownCustomer": "New number",
+      "searching": "Searching...",
+      "noRecent": "No recent conversations with a verified phone number yet.",
+      "noCallableNumber": "No callable number",
+      "noSourceConfigured": "No customer source is connected yet. Connect a CRM or Shopify to search customers.",
+      "noChannelTitle": "Connect a phone channel to start calling",
+      "noChannelDesc": "Outbound calls need a connected phone provider. Connect one and this page becomes your dialer.",
+      "noChannelAgent": "Ask your workspace admin to connect a phone channel.",
+      "channelBrokenTitle": "The phone channel needs reconnecting",
+      "channelBrokenDesc": "Your phone provider connection stopped working, so calls can't be placed right now.",
+      "connectChannelCta": "Connect phone channel",
+      "reconnectChannelCta": "Reconnect phone channel",
+      "missingCustomerScope": "The connected store does not allow customer reads yet. Reconnect it with customer access to search.",
+      "noSearchResults": "No customers found. Try a different name, phone, or email.",
+      "ordersCount": "{n} orders"
     }
   },
   "newConversation": {
@@ -3712,6 +3772,61 @@
       "COUPON": "No policy is configured yet. Until you save one, the AI will not create or manage discount coupons.",
       "REFUND": "No policy is configured yet. Default: customers may request refunds and the AI can prepare them, but every refund still requires human approval, and amounts always come from verified store data.",
       "CANCEL_ORDER": "No policy is configured yet. Default: customers may request cancellations and the AI can prepare them, but every cancellation still requires human approval."
+    }
+  },
+  "setupChecklist": {
+    "title": "Complete setup",
+    "subtitle": "Five steps and you're live",
+    "show": "Complete setup",
+    "dismiss": "Hide checklist",
+    "next": "Next",
+    "openPage": "Open the full checklist",
+    "manage": "Manage",
+    "fix": "Fix connection",
+    "error": "We couldn't load your setup status.",
+    "retry": "Try again",
+    "status": {
+      "notStarted": "Not started",
+      "inProgress": "In progress",
+      "attention": "Needs attention",
+      "done": "Done"
+    },
+    "items": {
+      "connect_source_of_truth": {
+        "title": "Connect a source of truth",
+        "why": "Orders and customer data flow in, so every answer is grounded in your real business.",
+        "cta": "Connect source of truth",
+        "attention": "The connection stopped working. Reconnect it to keep customer data flowing.",
+        "inProgress": "Connection started. Finish the remaining setup to put it to work."
+      },
+      "connect_channel": {
+        "title": "Connect communication channels",
+        "why": "WhatsApp, Instagram or email: the places your customers already write to.",
+        "cta": "Connect a channel",
+        "attention": "A channel lost its connection. Reconnect it so messages can arrive.",
+        "inProgress": "A channel connection is pending. Complete it to start receiving messages."
+      },
+      "connect_knowledge": {
+        "title": "Connect knowledge",
+        "why": "Price lists, policies and your website teach the AI to answer from your truth.",
+        "cta": "Add knowledge",
+        "attention": "Your knowledge source needs attention.",
+        "inProgress": "Knowledge setup started. Add at least one source to finish."
+      },
+      "create_ai_employee": {
+        "title": "Create an AI employee",
+        "why": "Your first digital team member answers customers around the clock.",
+        "cta": "Create AI employee",
+        "attention": "Your AI employee needs attention.",
+        "inProgress": "A draft is waiting. Finish hiring to put it to work."
+      },
+      "create_process": {
+        "title": "Create a process",
+        "why": "Route conversations, collect details and hand off to a human automatically.",
+        "cta": "Create a process",
+        "attention": "Your process needs attention.",
+        "inProgress": "A process is in the works. Finish building it to switch it on."
+      }
     }
   },
   "users": {

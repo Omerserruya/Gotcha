@@ -231,10 +231,105 @@
     setTimeout(function () { try { cells[0].focus(); } catch (e) {} }, 60);
   }
 
+  // Live password-policy checklist on any SET-password stage (invite, reset,
+  // change). Discriminator: the stage renders BOTH `password` and
+  // `password_repeat` fields - the login screen has only one, so it never gets
+  // a checklist. Rules mirror the server policy (gotcha-password-strength in
+  // scripts/authentik/bootstrap.mjs): 12+ chars, upper, lower, digit, symbol -
+  // plus a "passwords match" row. The server additionally rejects breached /
+  // guessable passwords; those can only be judged on submit, so the checklist
+  // going all-green is necessary, not sufficient, and the server error still
+  // renders as before. Idempotent via presence guard; the poll/observer
+  // re-adds it (with fresh listeners) whenever a Lit re-render wipes the stage.
+  function enhancePwPolicy(root) {
+    if (!root.querySelector) return;
+    var pw = root.querySelector("input[name=password]");
+    var rep = root.querySelector("input[name=password_repeat]");
+    if (!pw || !rep) return;
+    var anchor = rep.parentElement;
+    if (!anchor) return;
+    if (anchor.querySelector && anchor.querySelector("[data-gotcha-pwrules]")) return;
+
+    var RULES = [
+      { label: "At least 12 characters", test: function (v) { return v.length >= 12; } },
+      { label: "An uppercase letter (A-Z)", test: function (v) { return /[A-Z]/.test(v); } },
+      { label: "A lowercase letter (a-z)", test: function (v) { return /[a-z]/.test(v); } },
+      { label: "A number (0-9)", test: function (v) { return /[0-9]/.test(v); } },
+      { label: "A symbol (!@#...)", test: function (v) { return /[^A-Za-z0-9]/.test(v); } },
+      { label: "Passwords match", test: function (v) { return v.length > 0 && v === rep.value; } },
+    ];
+
+    var panel = document.createElement("div");
+    panel.setAttribute("data-gotcha-pwrules", "1");
+    panel.style.cssText =
+      "margin:10px 0 2px;padding:12px 14px;background:#f8f7fd;border:1px solid #e8e5f5;" +
+      "border-radius:12px;display:grid;grid-template-columns:1fr 1fr;gap:6px 14px;";
+    var rows = RULES.map(function (rule) {
+      var row = document.createElement("div");
+      row.style.cssText = "display:flex;align-items:center;gap:7px;font-size:12.5px;line-height:1.3;";
+      var dot = document.createElement("span");
+      dot.style.cssText =
+        "flex:none;width:15px;height:15px;border-radius:50%;display:inline-flex;align-items:center;" +
+        "justify-content:center;font-size:10px;font-weight:700;transition:background .15s,color .15s;";
+      var txt = document.createElement("span");
+      txt.textContent = rule.label;
+      row.appendChild(dot);
+      row.appendChild(txt);
+      panel.appendChild(row);
+      return { rule: rule, dot: dot, txt: txt };
+    });
+
+    function update() {
+      var v = pw.value || "";
+      rows.forEach(function (r) {
+        var ok = r.rule.test(v);
+        r.dot.style.background = ok ? "#16a34a" : "#e4e1f0";
+        r.dot.style.color = ok ? "#fff" : "#a09bb3";
+        r.dot.textContent = ok ? "✓" : "";
+        r.txt.style.color = ok ? "#15803d" : "#6b7280";
+      });
+    }
+    pw.addEventListener("input", update);
+    rep.addEventListener("input", update);
+    update();
+
+    // After the repeat field, before the actions row - reads as help for the
+    // pair of fields above it.
+    anchor.appendChild(panel);
+  }
+
+  // ── Preboot curtain reveal (see the gateway sub_filter injection) ──
+  // Flow pages are hidden behind an inline white curtain + spinner until the
+  // GOTCHA theme actually paints, so the stock Authentik UI never flashes.
+  // The theme is applied by Authentik injecting custom.css into each shadow
+  // root - detectable as the themed background color on .pf-c-background-image.
+  // The inline snippet also self-lifts after 6s, so a failed CSS load degrades
+  // to the stock look instead of a blank page.
+  function liftCurtainIfThemed() {
+    var html = document.documentElement;
+    if (!html.classList.contains("gotcha-preboot")) return true;
+    var bg = null;
+    (function find(root) {
+      if (bg || !root.querySelectorAll) return;
+      bg = root.querySelector(".pf-c-background-image");
+      if (bg) return;
+      root.querySelectorAll("*").forEach(function (el) {
+        if (!bg && el.shadowRoot) find(el.shadowRoot);
+      });
+    })(document);
+    // custom.css: .pf-c-background-image { background-color: #3b2880 !important }
+    if (bg && getComputedStyle(bg).backgroundColor === "rgb(59, 40, 128)") {
+      html.classList.remove("gotcha-preboot");
+      return true;
+    }
+    return false;
+  }
+
   function scan(root) {
     if (!root || !root.querySelectorAll) return;
     root.querySelectorAll("input[type=password]").forEach(enhance);
     root.querySelectorAll("input[name=code]").forEach(enhanceOtp);
+    enhancePwPolicy(root);
     // Drop OTP boxes whose real input's stage has been hidden (flow moved on) -
     // without this, stage transitions can leave the six cells painted orphaned.
     root.querySelectorAll("[data-gotcha-otp]").forEach(function (box) {
@@ -265,4 +360,19 @@
     run();
     if (++ticks > 120) clearInterval(iv); // ~60s is plenty for any flow
   }, 500);
+
+  // Curtain lift runs on its own FAST interval: the 500ms sweep above would
+  // add up to half a second of white screen after the theme is already
+  // painted. Stops itself the moment the curtain is up (or was never down -
+  // non-flow pages, inline 6s failsafe).
+  try {
+    if (!liftCurtainIfThemed()) {
+      var lifts = 0;
+      var liftIv = setInterval(function () {
+        var done = true;
+        try { done = liftCurtainIfThemed(); } catch (e) {}
+        if (done || ++lifts > 80) clearInterval(liftIv); // 80×75ms ≈ the 6s failsafe
+      }, 75);
+    }
+  } catch (e) {}
 })();

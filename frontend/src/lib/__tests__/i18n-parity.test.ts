@@ -7,6 +7,7 @@ import he from "../../i18n/he.json";
 const BLOCKS = [
   "users",
   "businessPage",
+  "setupChecklist",
   "channels",
   "departments",
   "usage",

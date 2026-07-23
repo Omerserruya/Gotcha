@@ -24,6 +24,9 @@ function shortTimeAgo(date: Date): string {
 import clsx from "clsx";
 import { ChannelBadge } from "./ChannelBadge";
 import { CustomerAvatar } from "./CustomerAvatar";
+import { EmptyState } from "@/components/EmptyState";
+import { useChannelsSummary } from "@/lib/use-channels-summary";
+import { track } from "@/lib/analytics";
 import { NewConversationPanel } from "./NewConversationPanel";
 import ConfirmModal from "@/components/ConfirmModal";
 import { LiveCallsSection } from "@/components/voice/LiveCallsSection";
@@ -61,6 +64,8 @@ export function ConversationList({ selectedId, onSelect }: Props) {
   const [search, setSearch] = useState("");
   const [channelFilter, setChannelFilter] = useState<string>("");
   const [departmentFilter, setDepartmentFilter] = useState<string>("");
+  // Why-aware empty states need to know whether ANY channel is connected.
+  const channelsSummary = useChannelsSummary(token);
   const [departments, setDepartments] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   // Initial state MUST match the static build (empty/defaults) or React
@@ -481,12 +486,64 @@ export function ConversationList({ selectedId, onSelect }: Props) {
             <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
           </div>
         ) : conversations.length === 0 ? (
-          <div className="p-8 text-center">
-            <svg className="w-12 h-12 mx-auto mb-3 text-gray-200" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1}>
-              <path strokeLinecap="round" strokeLinejoin="round" d="M20.25 8.511c.884.284 1.5 1.128 1.5 2.097v4.286c0 1.136-.847 2.1-1.98 2.193-.34.027-.68.052-1.02.072v3.091l-3-3c-1.354 0-2.694-.055-4.02-.163a2.115 2.115 0 01-.825-.242m9.345-8.334a2.126 2.126 0 00-.476-.095 48.64 48.64 0 00-8.048 0c-1.131.094-1.976 1.057-1.976 2.192v4.286c0 .837.46 1.58 1.155 1.951m9.345-8.334V6.637c0-1.621-1.152-3.026-2.76-3.235A48.455 48.455 0 0011.25 3c-2.115 0-4.198.137-6.24.402-1.608.209-2.76 1.614-2.76 3.235v6.226c0 1.621 1.152 3.026 2.76 3.235.577.075 1.157.14 1.74.194V21l4.155-4.155" />
-            </svg>
-            <p className="text-sm text-gray-400">{t("conversations.noConversations")}</p>
-          </div>
+          // Why-aware empty states: a filtered miss, a workspace with no
+          // channel, a broken channel, and "ready but quiet" are different
+          // situations and get different explanations + next actions.
+          (() => {
+            const hasFilters = !!(search || channelFilter || departmentFilter);
+            const isAdmin = user?.role === "ADMIN";
+            if (hasFilters) {
+              return (
+                <EmptyState
+                  title={t("conversations.emptyFilteredTitle")}
+                  description={t("conversations.emptyFilteredDesc")}
+                  action={{
+                    label: t("conversations.clearFilters"),
+                    onClick: () => { setSearch(""); setChannelFilter(""); setDepartmentFilter(""); },
+                  }}
+                />
+              );
+            }
+            if (!channelsSummary) {
+              // Channel state unknown (still loading / request failed):
+              // stay neutral rather than guessing wrong.
+              return <EmptyState title={t("conversations.noConversations")} />;
+            }
+            if (channelsSummary.connected === 0 && channelsSummary.unhealthy > 0) {
+              return (
+                <EmptyState
+                  tone="attention"
+                  title={t("conversations.emptyChannelBrokenTitle")}
+                  description={isAdmin ? t("conversations.emptyChannelBrokenDesc") : t("conversations.emptyNoChannelAgent")}
+                  action={isAdmin ? {
+                    label: t("conversations.fixChannelCta"),
+                    href: "/settings/channels?return=/conversations",
+                    onClick: () => track("connect_channel_empty_cta_clicked", { surface: "inbox", kind: "reconnect" }),
+                  } : undefined}
+                />
+              );
+            }
+            if (channelsSummary.connected === 0) {
+              return (
+                <EmptyState
+                  title={t("conversations.emptyNoChannelTitle")}
+                  description={isAdmin ? t("conversations.emptyNoChannelDesc") : t("conversations.emptyNoChannelAgent")}
+                  action={isAdmin ? {
+                    label: t("conversations.connectChannelCta"),
+                    href: "/settings/channels?return=/conversations",
+                    onClick: () => track("connect_channel_empty_cta_clicked", { surface: "inbox", kind: "connect" }),
+                  } : undefined}
+                />
+              );
+            }
+            return (
+              <EmptyState
+                title={t("conversations.emptyReadyTitle")}
+                description={t("conversations.emptyReadyDesc")}
+                secondaryAction={isAdmin ? { label: t("conversations.viewChannels"), href: "/settings/channels" } : undefined}
+              />
+            );
+          })()
         ) : historyMode ? (
           <div className="bg-white rounded-2xl ring-1 ring-gray-100 shadow-sm overflow-hidden">
             <div className="px-3.5 py-2.5 flex items-center gap-2">

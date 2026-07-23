@@ -326,6 +326,38 @@ export function getChannels(token: string) {
   return apiFetch<{ data: any[] }>("/api/channels", { token });
 }
 
+// Health counts only (no tokens/ids), readable by EVERY tenant member - the
+// Inbox/History empty states use it to explain WHY a list is empty.
+export interface ChannelsSummary {
+  total: number;
+  connected: number;
+  unhealthy: number;
+  pending: number;
+}
+
+export function getChannelsSummary(token: string) {
+  return apiFetch<{ data: ChannelsSummary }>("/api/channels/summary", { token });
+}
+
+// Provider OAuth/app configuration state (which providers CAN be connected
+// in this environment) - drives honest "Requires setup" cards.
+export function getChannelsOauthConfig(token: string) {
+  return apiFetch<{ data: { metaAppId?: string; oauthConfigured: boolean; whatsappConfigured: boolean; providers?: Record<string, boolean> } }>(
+    "/api/channels/config",
+    { token },
+  );
+}
+
+// Completes a WhatsApp connection whose OAuth callback could not auto-detect
+// the WABA (redirected back with ?connected=whatsapp&pending=true).
+export function connectWhatsappSession(token: string, data: { wabaId: string; phoneNumberId?: string }) {
+  return apiFetch<{ data: any[] }>("/api/channels/connect/whatsapp-session", {
+    token,
+    method: "POST",
+    body: JSON.stringify(data),
+  });
+}
+
 // Recent posts for a Facebook/Instagram channel - used by the Comment
 // Trigger inspector to let users pick a post by clicking instead of
 // pasting an ID. Group posts are not supported (Meta Groups API was
@@ -1113,24 +1145,32 @@ export function getOnboardingMissions(token: string) {
   return apiFetch<{ data: { missions: OnboardingMission[] } }>("/api/onboarding/missions", { token });
 }
 
-// Getting Started journey - the post-onboarding first-steps arc. Milestones are
-// live-derived server-side; `first_chat` completes via patchOnboardingGuide.
+// Setup readiness (GET /onboarding/journey) - THE canonical five-action
+// checklist. Every milestone is live-derived server-side from persisted
+// state; the page, the sidebar panel, and the nav badge all read this.
 export type JourneyMilestoneId =
-  | "meet_employee"
-  | "first_chat"
-  | "go_live_channel"
-  | "first_customer"
-  | "teach_knowledge";
+  | "connect_source_of_truth"
+  | "connect_channel"
+  | "connect_knowledge"
+  | "create_ai_employee"
+  | "create_process";
+
+export type JourneyMilestoneState = "done" | "in_progress" | "attention" | "not_started";
 
 export interface JourneyMilestone {
   id: JourneyMilestoneId;
+  done: boolean;
+  state: JourneyMilestoneState;
+  /** Legacy tri-state: done / first-incomplete / rest. */
   status: "done" | "active" | "pending";
   deepLink: string;
+  manageLink?: string;
   hint?: string;
 }
 
 export interface JourneyData {
   complete: boolean;
+  summary: { done: number; total: number };
   employee: { id: string; name: string; role: string | null; status: string } | null;
   business: { name: string | null; industry: string | null };
   context: {
@@ -2331,6 +2371,49 @@ export interface CreateVoiceChannelInput {
 
 export function listVoiceChannels(token: string) {
   return apiFetch<{ data: VoiceChannel[] }>("/api/voice-channels", { token });
+}
+
+// Unified customer search across the tenant's resolved source of truth
+// (dedicated CRM or Shopify-as-CRM) - the outbound dialer's search mode.
+// List rows carry MASKED identifiers only; full data comes from
+// getSotCustomerDetail after the agent explicitly selects a candidate.
+export interface SotCustomer {
+  id: string;
+  kind: string;
+  name: string | null;
+  phoneMasked: string | null;
+  emailMasked: string | null;
+  company: string | null;
+  stage: string | null;
+  vendor: string;
+  callable: boolean;
+  ordersCount: number | null;
+  totalSpent: string | null;
+  currency: string | null;
+}
+
+export function searchSotCustomers(token: string, q: string, limit = 8) {
+  return apiFetch<{ data: SotCustomer[]; meta: { configured: boolean; vendor: string | null; missingScope?: boolean } }>(
+    `/api/integrations/source-of-truth/customers?q=${encodeURIComponent(q)}&limit=${limit}`,
+    { token },
+  );
+}
+
+export interface SotCustomerDetail {
+  id: string;
+  kind: string;
+  name: string | null;
+  phone: string | null;
+  email: string | null;
+  stage: string | null;
+  vendor: string;
+}
+
+export function getSotCustomerDetail(token: string, id: string, kind: string) {
+  return apiFetch<{ data: SotCustomerDetail }>(
+    `/api/integrations/source-of-truth/customers/detail?id=${encodeURIComponent(id)}&kind=${encodeURIComponent(kind)}`,
+    { token },
+  );
 }
 
 export function getVoiceChannel(token: string, id: string) {

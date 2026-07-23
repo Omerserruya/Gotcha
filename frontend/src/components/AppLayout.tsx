@@ -12,9 +12,14 @@ import { FeatureGuides } from "./onboarding/FeatureGuides";
 import { GuidedTour } from "./onboarding/GuidedTour";
 import { CreditAlertBanner } from "./CreditAlertBanner";
 import { getOnboardingStatus } from "@/lib/api";
+import { setAnalyticsToken } from "@/lib/analytics";
 
 export function AppLayout({ children }: { children: React.ReactNode }) {
   const { user, token, isLoading } = useAuth();
+
+  // Product analytics need the session token; wiring it here covers every
+  // page without threading it through each track() call site.
+  useEffect(() => { setAnalyticsToken(token || null); }, [token]);
   const { t } = useI18n();
   const router = useRouter();
   const pathname = usePathname();

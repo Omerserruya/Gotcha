@@ -7,6 +7,9 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import {
   getChannels,
+  getChannelsOauthConfig,
+  connectWhatsappSession,
+  listVoiceChannels,
   connectWhatsApp,
   disconnectChannel,
   deleteChannelAccount,
@@ -32,6 +35,10 @@ function StatusBadge({ status }: { status: string }) {
     ERROR: { bg: "bg-red-50", text: "text-red-600", ring: "ring-red-200", label: t("channels.statusError") },
     DISCONNECTED: { bg: "bg-gray-100", text: "text-gray-500", ring: "ring-gray-200", label: t("channels.statusDisconnected") },
     PENDING: { bg: "bg-yellow-50", text: "text-yellow-600", ring: "ring-yellow-200", label: t("channels.statusPending") },
+    // Derived states (see displayStatus): connected-but-unhealthy, and a
+    // website widget waiting for its first real page load.
+    REQUIRES_ACTION: { bg: "bg-amber-50", text: "text-amber-700", ring: "ring-amber-200", label: t("channels.statusRequiresAction") },
+    WIDGET_PENDING: { bg: "bg-yellow-50", text: "text-yellow-700", ring: "ring-yellow-200", label: t("channels.statusWidgetPending") },
   };
   const c = config[status] || config.DISCONNECTED;
   return (
@@ -39,6 +46,16 @@ function StatusBadge({ status }: { status: string }) {
       {c.label}
     </span>
   );
+}
+
+// The honest lifecycle state for a channel row. Persisted status is the base;
+// a CONNECTED account carrying a health error is "requires action", and a
+// PENDING website widget is specifically "waiting for installation".
+function displayStatus(account: { channel?: string; connectionStatus?: string; lastError?: string | null }): string {
+  const s = account.connectionStatus || "CONNECTED";
+  if (s === "PENDING" && account.channel === "WEBCHAT") return "WIDGET_PENDING";
+  if (s === "CONNECTED" && account.lastError) return "REQUIRES_ACTION";
+  return s;
 }
 
 // ─── Platform Connect Card ───────────────────────────────────
@@ -50,6 +67,7 @@ function ConnectCard({
   buttonLabel,
   onClick,
   disabled,
+  requiresSetup,
 }: {
   icon: React.ReactNode;
   title: string;
@@ -57,6 +75,9 @@ function ConnectCard({
   buttonLabel: string;
   onClick: () => void;
   disabled?: boolean;
+  /** When set, the provider's app credentials are absent - render an honest
+      "requires setup" note instead of a Connect button that dead-ends. */
+  requiresSetup?: string;
 }) {
   return (
     <div className="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col items-center text-center gap-3">
@@ -67,13 +88,17 @@ function ConnectCard({
         <h3 className="font-semibold text-sm text-gray-900">{title}</h3>
         <p className="text-xs text-gray-500 mt-0.5">{description}</p>
       </div>
-      <button
-        onClick={onClick}
-        disabled={disabled}
-        className="text-xs px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition font-medium disabled:opacity-40 w-full"
-      >
-        {buttonLabel}
-      </button>
+      {requiresSetup ? (
+        <p className="w-full rounded-lg bg-amber-50 px-3 py-2 text-[11px] leading-snug text-amber-700">{requiresSetup}</p>
+      ) : (
+        <button
+          onClick={onClick}
+          disabled={disabled}
+          className="text-xs px-4 py-2 bg-primary-500 text-white rounded-lg hover:bg-primary-600 transition font-medium disabled:opacity-40 w-full"
+        >
+          {buttonLabel}
+        </button>
+      )}
     </div>
   );
 }
@@ -99,6 +124,13 @@ function ChannelsPageContent() {
   const [routingCta, setRoutingCta] = useState<string | null>(null);
 
   const [accounts, setAccounts] = useState<any[]>([]);
+  // Which providers have app credentials configured server-side. null while
+  // loading - cards render normally until we KNOW a provider is unavailable.
+  const [providerCfg, setProviderCfg] = useState<Record<string, boolean> | null>(null);
+  const [voiceChannels, setVoiceChannels] = useState<any[]>([]);
+  // WhatsApp callback couldn't auto-detect the WABA: finish inline.
+  const [waPending, setWaPending] = useState(false);
+  const [waPendingWaba, setWaPendingWaba] = useState("");
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [message, setMessage] = useState("");
@@ -128,6 +160,12 @@ function ChannelsPageContent() {
     try {
       const channelsRes = await getChannels(token);
       setAccounts(channelsRes.data || []);
+      getChannelsOauthConfig(token)
+        .then((r) => setProviderCfg(r.data?.providers || null))
+        .catch(() => {});
+      listVoiceChannels(token)
+        .then((r) => setVoiceChannels(r.data || []))
+        .catch(() => setVoiceChannels([]));
     } catch (err) {
       console.error("Failed to load channel data:", err);
     } finally {
@@ -187,7 +225,13 @@ function ChannelsPageContent() {
     const connected = searchParams.get("connected");
     const error = searchParams.get("error");
 
-    if (connected) {
+    if (connected === "whatsapp" && (searchParams.get("pending") === "true" || searchParams.get("pending") === "1")) {
+      // The OAuth callback stored the token but could not detect the WABA -
+      // the connection is NOT complete yet. Keep the user here with the
+      // finishing step instead of a false success.
+      setWaPending(true);
+      window.history.replaceState({}, "", "/channels");
+    } else if (connected) {
       showMessage(t("channels.connected"), "success");
       setRoutingCta(connected);
       fetchData();
@@ -200,6 +244,7 @@ function ChannelsPageContent() {
         invalid_state: t("channels.invalidState"),
         missing_params: t("channels.connectionFailed"),
         connection_failed: t("channels.connectionFailed"),
+        not_configured: t("channels.notConfigured").replace("{platform}", searchParams.get("platform") || ""),
       };
       showMessage(errorMessages[error] || t("channels.connectionFailed"), "error");
       window.history.replaceState({}, "", "/channels");
@@ -367,6 +412,23 @@ function ChannelsPageContent() {
   return (
     <>
     <div className="max-w-4xl mx-auto p-3 md:p-6 space-y-8">
+      {/* Arrived from an empty Inbox/History via "Connect a channel": keep
+          the way back one click away. Only same-app paths are honored. */}
+      {(() => {
+        const ret = searchParams.get("return");
+        if (!ret || !ret.startsWith("/")) return null;
+        return (
+          <button
+            onClick={() => router.push(ret)}
+            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary-600 hover:text-primary-700 transition"
+          >
+            <svg className="w-4 h-4 rtl:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <path strokeLinecap="round" strokeLinejoin="round" d="M10.5 19.5L3 12m0 0l7.5-7.5M3 12h18" />
+            </svg>
+            {ret.startsWith("/history") ? t("channels.backToHistory") : t("channels.backToInbox")}
+          </button>
+        );
+      })()}
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold text-gray-900">{t("channels.title")}</h1>
@@ -409,7 +471,51 @@ function ChannelsPageContent() {
       )}
 
       {/* Connect Channel Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-tour="channels-connect">
+      {/* WhatsApp callback stored a token but could not detect the WABA -
+          finish the connection here instead of pretending it succeeded. */}
+      {waPending && (
+        <div className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3">
+          <p className="text-sm font-medium text-amber-800">{t("channels.waPendingTitle")}</p>
+          <p className="mt-0.5 text-xs text-amber-700">{t("channels.waPendingDesc")}</p>
+          <div className="mt-2 flex items-center gap-2">
+            <input
+              value={waPendingWaba}
+              onChange={(e) => setWaPendingWaba(e.target.value)}
+              placeholder={t("channels.waPendingPlaceholder")}
+              dir="ltr"
+              className="w-64 rounded-lg border border-amber-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-amber-300"
+            />
+            <button
+              disabled={!waPendingWaba.trim() || connecting}
+              onClick={async () => {
+                if (!token) return;
+                setConnecting(true);
+                try {
+                  await connectWhatsappSession(token, { wabaId: waPendingWaba.trim() });
+                  setWaPending(false);
+                  setWaPendingWaba("");
+                  showMessage(t("channels.connected"), "success");
+                  fetchData();
+                } catch (e: any) {
+                  showMessage(e?.message || t("channels.connectionFailed"), "error");
+                } finally {
+                  setConnecting(false);
+                }
+              }}
+              className="rounded-lg bg-amber-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
+            >
+              {t("channels.waPendingFinish")}
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Connect cards, grouped by what the channel IS for the business:
+          messaging, email, team, website chat, voice. */}
+      <div className="space-y-6" data-tour="channels-connect">
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catMessaging")}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <ConnectCard
           icon={
             <svg className="w-6 h-6 text-green-500" viewBox="0 0 24 24" fill="currentColor">
@@ -417,6 +523,7 @@ function ChannelsPageContent() {
             </svg>
           }
           title={t("channels.whatsapp")}
+          requiresSetup={providerCfg && providerCfg.whatsapp === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.whatsappDesc")}
           buttonLabel={t("channels.connectWhatsapp")}
           onClick={handleConnectWhatsApp}
@@ -430,6 +537,7 @@ function ChannelsPageContent() {
             </svg>
           }
           title={t("channels.messenger")}
+          requiresSetup={providerCfg && providerCfg.messenger === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.messengerDesc")}
           buttonLabel={t("channels.connectMessenger")}
           onClick={() => handleOAuthConnect("messenger")}
@@ -442,11 +550,17 @@ function ChannelsPageContent() {
             </svg>
           }
           title={t("channels.instagram")}
+          requiresSetup={providerCfg && providerCfg.instagram === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.instagramDesc")}
           buttonLabel={t("channels.connectInstagram")}
           onClick={() => handleOAuthConnect("instagram")}
         />
 
+          </div>
+        </div>
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catEmail")}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <ConnectCard
           icon={
             <svg className="w-6 h-6 text-red-500" viewBox="0 0 24 24" fill="currentColor">
@@ -454,6 +568,7 @@ function ChannelsPageContent() {
             </svg>
           }
           title={t("channels.gmail")}
+          requiresSetup={providerCfg && providerCfg.gmail === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.gmailDesc")}
           buttonLabel={t("channels.connectGmail")}
           onClick={() => handleOAuthConnect("gmail")}
@@ -466,11 +581,17 @@ function ChannelsPageContent() {
             </svg>
           }
           title={t("channels.outlook")}
+          requiresSetup={providerCfg && providerCfg.outlook === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.outlookDesc")}
           buttonLabel={t("channels.connectOutlook")}
           onClick={() => handleOAuthConnect("outlook")}
         />
 
+          </div>
+        </div>
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catTeam")}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <ConnectCard
           icon={
             <svg className="w-6 h-6" viewBox="0 0 24 24" fill="currentColor">
@@ -478,11 +599,17 @@ function ChannelsPageContent() {
             </svg>
           }
           title={t("channels.slack")}
+          requiresSetup={providerCfg && providerCfg.slack === false ? t("channels.requiresSetupHint") : undefined}
           description={t("channels.slackDesc")}
           buttonLabel={t("channels.connectSlack")}
           onClick={() => handleOAuthConnect("slack")}
         />
 
+          </div>
+        </div>
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catWebsite")}</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
         <ConnectCard
           icon={
             <svg className="w-6 h-6 text-violet-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -495,8 +622,51 @@ function ChannelsPageContent() {
           onClick={handleCreateWebchat}
           disabled={connecting}
         />
-
+          </div>
+        </div>
       </div>
+
+      {/* Voice / phone channels - same Channels home as every other way a
+          customer talks to the business. Detail + wizard pages stay under
+          /settings/voice-channels; the Outbound page CONSUMES this
+          configuration and never duplicates it. */}
+      {voiceChannels.length > 0 || atLeastRole("admin") ? (
+        <div>
+          <h3 className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-400">{t("channels.catVoice")}</h3>
+          <div className="bg-white rounded-2xl border border-gray-200 p-4">
+            {voiceChannels.length === 0 ? (
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-sm text-gray-500">{t("channels.voiceNone")}</p>
+                <a href="/settings/voice-channels/new" className="shrink-0 text-xs px-3 py-1.5 rounded-lg bg-primary-500 text-white hover:bg-primary-600 transition font-medium">
+                  {t("channels.voiceConnect")}
+                </a>
+              </div>
+            ) : (
+              <div className="divide-y divide-gray-100">
+                {voiceChannels.map((vc: any) => (
+                  <div key={vc.id} className="flex items-center gap-3 py-2.5 first:pt-0 last:pb-0">
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-medium text-gray-900">{vc.friendlyName}</p>
+                      <p className="text-xs text-gray-400" dir="ltr">
+                        {(vc.numbers || []).filter((n: any) => n.isActive).map((n: any) => n.e164).join(", ") || t("channels.voiceNoNumbers")}
+                      </p>
+                    </div>
+                    <StatusBadge status={vc.status === "ACTIVE" ? "CONNECTED" : vc.status === "PENDING" ? "PENDING" : vc.status === "ERROR" ? "ERROR" : "DISCONNECTED"} />
+                    <a href={`/settings/voice-channels/${vc.id}`} className="shrink-0 text-xs px-2.5 py-1 rounded-lg border border-gray-200 text-gray-600 hover:bg-gray-50 transition font-medium">
+                      {t("channels.voiceManage")}
+                    </a>
+                  </div>
+                ))}
+                <div className="pt-2.5">
+                  <a href="/settings/voice-channels/new" className="text-xs font-medium text-primary-600 hover:text-primary-700">
+                    + {t("channels.voiceConnect")}
+                  </a>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : null}
 
       {/* Connected Channels List */}
       <div className="bg-white rounded-2xl border border-gray-200 p-6">
@@ -531,10 +701,10 @@ function ChannelsPageContent() {
                       {account._count.conversations} {t("channels.activeConversations").toLowerCase()}
                     </span>
                   )}
-                  <StatusBadge status={account.connectionStatus || "CONNECTED"} />
+                  <StatusBadge status={displayStatus(account)} />
 
                   {/* Widget Settings button (WEBCHAT only) */}
-                  {account.channel === "WEBCHAT" && account.connectionStatus === "CONNECTED" && (
+                  {account.channel === "WEBCHAT" && ["CONNECTED", "PENDING"].includes(account.connectionStatus) && (
                     <button
                       onClick={async () => {
                         const apiUrl = process.env.NEXT_PUBLIC_API_URL || window.location.origin;
@@ -557,6 +727,22 @@ function ChannelsPageContent() {
                       <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
                       </svg>
+                    </button>
+                  )}
+
+                  {/* Reconnect - a broken or degraded channel gets a direct
+                      path back through its own connect flow. */}
+                  {(["ERROR", "DISCONNECTED"].includes(account.connectionStatus) || (account.connectionStatus === "CONNECTED" && account.lastError)) && (
+                    <button
+                      onClick={() => {
+                        const p = String(account.channel || "").toLowerCase();
+                        if (p === "whatsapp") handleConnectWhatsApp();
+                        else if (p === "webchat") handleCreateWebchat();
+                        else handleOAuthConnect(p as "messenger" | "instagram" | "gmail" | "outlook" | "slack");
+                      }}
+                      className="text-[11px] px-2.5 py-1 rounded-lg bg-amber-500 text-white hover:bg-amber-600 transition font-medium"
+                    >
+                      {t("channels.reconnect")}
                     </button>
                   )}
 

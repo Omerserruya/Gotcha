@@ -2,8 +2,15 @@
 
 import { useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
-import { completeLogin } from "@/lib/oidc";
+import { beginLogin, completeLogin } from "@/lib/oidc";
 import { useAuth } from "@/context/AuthContext";
+
+/**
+ * One-shot guard for the stale-state auto-restart below. sessionStorage, not a
+ * ref: the restart round-trips through Authentik, so a ref would reset and a
+ * broken IdP could bounce the browser forever.
+ */
+const RETRY_KEY = "oidc:callback_retry";
 
 /**
  * OIDC redirect target.
@@ -28,11 +35,31 @@ export default function AuthCallbackPage() {
 
     completeLogin(window.location.search)
       .then(async ({ tokens, returnTo }) => {
+        sessionStorage.removeItem(RETRY_KEY);
         await adoptSession(tokens);
         // replace() so the code never lands in history.
         router.replace(returnTo && returnTo.startsWith("/") ? returnTo : "/");
       })
-      .catch((e) => setError(friendlyAuthError(String(e?.message || ""))));
+      .catch((e) => {
+        const msg = String(e?.message || "");
+        const m = msg.toLowerCase();
+        // Stale-flow callback: the state/verifier for THIS ?code= lives in
+        // another tab's sessionStorage (or is long gone). The canonical case is
+        // a password-reset email link - Authentik finishes the recovery flow in
+        // a fresh tab, then replays the ORIGINAL tab's pending authorize URL,
+        // whose state this tab has never seen. The user is NOT in an error
+        // state: they hold a brand-new IdP session. So instead of dead-ending
+        // on "Sign-in expired", restart a clean login once - it completes
+        // silently against that session and lands them in the app.
+        const stale = m.includes("state mismatch") || m.includes("verifier");
+        if (stale && !sessionStorage.getItem(RETRY_KEY)) {
+          sessionStorage.setItem(RETRY_KEY, "1");
+          void beginLogin("/");
+          return;
+        }
+        sessionStorage.removeItem(RETRY_KEY);
+        setError(friendlyAuthError(msg));
+      });
   }, [adoptSession, router]);
 
   if (error) {

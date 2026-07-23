@@ -9,7 +9,7 @@ import { usePermissions } from "@/context/PermissionsContext";
 import { useI18n } from "@/context/I18nContext";
 import clsx from "clsx";
 import { NotificationBell } from "./NotificationBell";
-import { cachedJourneyIncomplete, refreshJourneyIncomplete } from "@/lib/journey-cache";
+import { cachedJourneyIncomplete, cachedJourneySummary, refreshJourneyIncomplete, subscribeJourney } from "@/lib/journey-cache";
 import { IncomingCallBannerSidebar } from "./voice/IncomingCallBanner";
 import { MissionPanel } from "./onboarding/MissionPanel";
 
@@ -64,12 +64,25 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
   // feel laggy and the item pop in late, shifting the menu). The cache
   // refreshes from the server at most once per page load, in the background.
   const [journeyIncomplete, setJourneyIncomplete] = useState<boolean>(() => cachedJourneyIncomplete() === true);
+  // Remaining-steps badge on the Getting Started item - same canonical store
+  // as the page and the setup panel, so the counts always match.
+  const [journeyRemaining, setJourneyRemaining] = useState<number | null>(() => {
+    const s = cachedJourneySummary();
+    return s ? Math.max(0, s.total - s.done) : null;
+  });
   useEffect(() => {
     if (!token || user?.role !== "ADMIN") return;
     refreshJourneyIncomplete(token).then((v) => {
       if (v !== null) setJourneyIncomplete(v);
     });
   }, [token, user?.role]);
+  useEffect(() =>
+    subscribeJourney((j) => {
+      if (!j) return;
+      setJourneyIncomplete(!j.complete);
+      setJourneyRemaining(Math.max(0, (j.summary?.total ?? 0) - (j.summary?.done ?? 0)));
+    }),
+  []);
 
   return (
     <aside
@@ -154,6 +167,11 @@ export function Sidebar({ collapsed, onToggle, onMobileClose }: SidebarProps) {
               >
                 <item.icon className="w-5 h-5 shrink-0" />
                 {!collapsed && <span className="text-sm">{t(item.labelKey)}</span>}
+                {!collapsed && item.href === "/getting-started" && (journeyRemaining ?? 0) > 0 && (
+                  <span className="ms-auto shrink-0 min-w-[20px] h-5 px-1.5 rounded-full bg-primary-100 text-primary-700 text-[11px] font-bold flex items-center justify-center tabular-nums">
+                    {journeyRemaining}
+                  </span>
+                )}
               </Link>
             );
           })}

@@ -5,6 +5,38 @@ import * as analyticsService from "../services/analytics.service";
 const router = Router();
 router.use(authenticate, resolveTenant);
 
+// ─── Product events (guided tour, setup checklist, empty-state CTAs,
+// outbound calling) ─────────────────────────────────────────────────
+// Open to every authenticated tenant member (agents run the tour and place
+// calls too). Attribution is server-side only: tenant comes from the resolved
+// membership, user from the verified token - a client-sent tenant id is
+// ignored by construction. Events are emitted as structured logs (one line
+// per event, greppable/shippable); there is deliberately no DB table yet.
+const EVENT_NAME = /^[a-z][a-z0-9_.:-]{0,63}$/i;
+router.post("/events", async (req: Request, res: Response) => {
+  const { event, props } = (req.body || {}) as { event?: unknown; props?: unknown };
+  if (typeof event !== "string" || !EVENT_NAME.test(event)) {
+    res.status(400).json({ error: "Invalid event name" });
+    return;
+  }
+  let safeProps: Record<string, unknown> = {};
+  if (props && typeof props === "object" && !Array.isArray(props)) {
+    const raw = JSON.stringify(props);
+    if (raw.length <= 2048) safeProps = props as Record<string, unknown>;
+  }
+  console.log(
+    JSON.stringify({
+      type: "product_event",
+      event,
+      props: safeProps,
+      tenantId: req.tenantId,
+      userId: (req as any).user?.id ?? null,
+      at: new Date().toISOString(),
+    }),
+  );
+  res.json({ data: { ok: true } });
+});
+
 router.get("/dashboard", requireRole("ADMIN"), async (req: Request, res: Response) => {
   try {
     const stats = await analyticsService.getDashboardStats(req.tenantId!);
