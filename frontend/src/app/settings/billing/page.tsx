@@ -1,29 +1,28 @@
 "use client";
 
-// Billing - the subscription center: current plan, plan changes, payment
-// method, invoices, cancellation. Credits (balance, packages, auto-purchase)
-// live on Settings → Usage - one canonical home per concept, no duplicates.
+// Billing - the subscription center: current plan, payment method, invoices,
+// cancellation. It shows the CURRENT state compactly; the full plan catalog is
+// NOT here - "Adjust plan" opens a dedicated flow (/settings/billing/plan), and
+// card capture opens the secure provider flow (/settings/billing/payment-method).
+// Credits (balance, packages, auto-purchase) live on Settings → Usage - one
+// canonical home per concept.
 //
-// Everything here is backed by the real billing service (iCount provider):
-// upgrades charge immediately (prorated) and only apply on payment success;
-// downgrades and cancellation take effect at period end (shown as a
-// scheduled change). No action is offered that the provider cannot execute.
+// Everything is backed by the real billing service (iCount provider): upgrades
+// charge immediately (prorated) and only apply on payment success; downgrades
+// and cancellation take effect at period end (shown as a scheduled change).
 
 import { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
+import { usePermissions } from "@/context/PermissionsContext";
 import { track } from "@/lib/analytics";
 import {
   getSubscription,
   getPlans,
-  changePlan,
   cancelSubscription,
   resumeSubscription,
-  migratePlan,
   getPaymentMethods,
-  addPaymentMethod,
-  removePaymentMethod,
   getInvoices,
   type Subscription,
   type Plan,
@@ -42,15 +41,37 @@ const STATUS_STYLES: Record<string, string> = {
   PAUSED: "bg-gray-100 text-gray-600",
 };
 
-function Section({ title, children, action }: { title: string; children: React.ReactNode; action?: React.ReactNode }) {
+const INVOICE_STATUS_STYLES: Record<string, string> = {
+  PAID: "text-green-700",
+  OPEN: "text-blue-700",
+  PENDING: "text-amber-700",
+  FAILED: "text-red-700",
+  REFUNDED: "text-purple-700",
+  VOIDED: "text-gray-500",
+};
+
+// Section = a labelled band with an optional single action, separated by a hair
+// line rather than wrapped in a heavy bordered card. This is the compact,
+// low-chrome hierarchy the Billing redesign calls for.
+function Section({
+  title,
+  action,
+  children,
+  first,
+}: {
+  title: string;
+  action?: React.ReactNode;
+  children: React.ReactNode;
+  first?: boolean;
+}) {
   return (
-    <div className="rounded-2xl border border-gray-200 bg-white p-5 shadow-sm">
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-semibold text-gray-900">{title}</h2>
+    <section className={first ? "" : "border-t border-gray-100 pt-6 mt-6"}>
+      <div className="mb-3 flex items-center justify-between gap-4">
+        <h2 className="text-xs font-semibold uppercase tracking-wider text-gray-400">{title}</h2>
         {action}
       </div>
       {children}
-    </div>
+    </section>
   );
 }
 
@@ -65,6 +86,7 @@ interface ConfirmState {
 export default function BillingSettingsPage() {
   const { token } = useAuth();
   const { t, locale } = useI18n();
+  const { can } = usePermissions();
   const [sub, setSub] = useState<Subscription | null>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [methods, setMethods] = useState<PaymentMethod[]>([]);
@@ -74,8 +96,20 @@ export default function BillingSettingsPage() {
   const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
   const [confirm, setConfirm] = useState<ConfirmState | null>(null);
 
+  const canCancel = can("settings:billing:cancel");
+  const canManage = can("settings:billing:manage");
+
   const dateFmt = (iso: string | null | undefined) =>
-    iso ? new Date(iso).toLocaleDateString(locale === "he" ? "he-IL" : undefined) : "";
+    iso ? new Date(iso).toLocaleDateString(locale === "he" ? "he-IL" : undefined, { year: "numeric", month: "short", day: "numeric" }) : "";
+  const money = (amount: string | number | null | undefined, currency = "ILS") => {
+    if (amount == null) return "";
+    const n = typeof amount === "string" ? Number(amount) : amount;
+    try {
+      return new Intl.NumberFormat(locale === "he" ? "he-IL" : "en-US", { style: "currency", currency, maximumFractionDigits: 2 }).format(n);
+    } catch {
+      return `${currency} ${n}`;
+    }
+  };
 
   const reload = useCallback(async () => {
     if (!token) return;
@@ -117,26 +151,12 @@ export default function BillingSettingsPage() {
     }
   };
 
-  // iCount PayPage: in production this opens the hosted page and returns a token.
-  // Dev/mock accepts a token directly so the flow is testable end-to-end.
-  const addCard = async () => {
-    const paypageUrl = process.env.NEXT_PUBLIC_ICOUNT_PAYPAGE_URL;
-    if (paypageUrl) {
-      window.open(paypageUrl, "icount-paypage", "width=480,height=640");
-      // A production integration listens for the page's postMessage with the token.
-      return;
-    }
-    const pageToken = window.prompt(t("settings.billing.devTokenPrompt"), "pt_dev");
-    if (!pageToken) return;
-    await run("add-card", () => addPaymentMethod(token!, pageToken), t("settings.billing.cardSaved"));
-  };
-
   if (loading) {
     return (
-      <div className="mx-auto max-w-4xl space-y-6 p-6">
+      <div className="mx-auto max-w-3xl space-y-8 p-6">
         <div className="h-8 w-64 animate-pulse rounded-xl bg-gray-100" />
         {[0, 1, 2].map((i) => (
-          <div key={i} className="h-44 animate-pulse rounded-2xl border border-gray-100 bg-gray-50" />
+          <div key={i} className="h-24 animate-pulse rounded-xl bg-gray-50" />
         ))}
       </div>
     );
@@ -146,192 +166,138 @@ export default function BillingSettingsPage() {
   const currentPlan = plans.find((p) => p.key === sub?.planKey);
   const statusLabel = (s: string, cancelScheduled: boolean) =>
     cancelScheduled ? t("settings.billing.status.scheduledCancel") : t(`settings.billing.status.${s}`) || s;
+  const planDesc = (() => {
+    if (!sub) return "";
+    const key = `settings.billing.planDesc.${sub.planKey}`;
+    const v = t(key);
+    return v && v !== key ? v : "";
+  })();
+  const renewsAt = sub?.currentPeriodEnd;
 
   return (
-    <div className="mx-auto max-w-4xl space-y-6 p-6">
-      <div>
+    <div className="mx-auto max-w-3xl p-6">
+      <div className="mb-6">
         <h1 className="text-2xl font-bold text-gray-900">{t("settings.billing.title")}</h1>
         <p className="mt-1 text-sm text-gray-500">{t("settings.billing.subtitle")}</p>
       </div>
 
       {msg && (
-        <div className={`rounded-xl px-4 py-2.5 text-sm border ${msg.kind === "ok" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
+        <div className={`mb-6 rounded-xl px-4 py-2.5 text-sm border ${msg.kind === "ok" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200"}`}>
           {msg.text}
         </div>
       )}
 
-      {/* ── Subscription summary ── */}
+      {/* ── Current plan ── */}
       <Section
+        first
         title={t("settings.billing.current")}
-        action={sub && (
-          <span className={`rounded-full px-3 py-1 text-xs font-medium ${STATUS_STYLES[sub.status] ?? "bg-gray-100"}`}>
-            {statusLabel(sub.status, sub.cancelAtPeriodEnd)}
-          </span>
-        )}
+        action={
+          canManage && !isGrandfathered ? (
+            <Link
+              href="/settings/billing/plan"
+              onClick={() => track("adjust_plan_opened", {})}
+              className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            >
+              {t("settings.billing.adjustPlan")}
+            </Link>
+          ) : isGrandfathered && canManage ? (
+            <Link href="/settings/billing/plan" className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              {t("settings.billing.choosePlan")}
+            </Link>
+          ) : undefined
+        }
       >
         {!sub ? (
-          <p className="text-gray-500">{t("settings.billing.noSubscription")}</p>
+          <p className="text-sm text-gray-500">{t("settings.billing.noSubscription")}</p>
         ) : (
-          <div className="space-y-2 text-sm text-gray-700">
-            <div>
-              {t("settings.billing.plan")}: <span className="font-medium">{currentPlan?.name ?? sub.planKey}</span>
-              {currentPlan && !currentPlan.salesOnly && (
-                <span className="text-gray-500"> · <span dir="ltr">₪{currentPlan.basePrice}</span> {t("settings.billing.perMonth")}</span>
-              )}
-              {currentPlan && (
-                <span className="text-gray-500"> · {t("settings.billing.includedCredits").replace("{n}", Math.round(currentPlan.includedAiUnits).toLocaleString())}</span>
-              )}
+          <div className="flex items-start gap-4">
+            <div className="mt-0.5 flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-primary-50 text-primary-600">
+              <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.6}>
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6A2.25 2.25 0 016 3.75h12A2.25 2.25 0 0120.25 6v12A2.25 2.25 0 0118 20.25H6A2.25 2.25 0 013.75 18V6z" />
+              </svg>
             </div>
-            {sub.currentPeriodStart && sub.currentPeriodEnd && (
-              <div>
-                {t("settings.billing.period")}: <span dir="ltr">{dateFmt(sub.currentPeriodStart)} - {dateFmt(sub.currentPeriodEnd)}</span>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="text-lg font-semibold text-gray-900">{currentPlan?.name ?? sub.planKey}</span>
+                <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${STATUS_STYLES[sub.status] ?? "bg-gray-100"}`}>
+                  {statusLabel(sub.status, sub.cancelAtPeriodEnd)}
+                </span>
               </div>
-            )}
-            {sub.trialEndsAt && <div>{t("settings.billing.trialEnds")}: {dateFmt(sub.trialEndsAt)}</div>}
-            {sub.currentPeriodEnd && !sub.cancelAtPeriodEnd && (
-              <div>{t("settings.billing.renews")}: {dateFmt(sub.currentPeriodEnd)}</div>
-            )}
-            {sub.status === "PAST_DUE" && (
-              <div className="rounded-lg bg-amber-50 px-3 py-2 text-amber-800">{t("settings.billing.pastDueHint")}</div>
-            )}
-            {sub.pendingChange && !sub.pendingChange.targetPlanKey && (
-              <div className="text-amber-700">{t("settings.billing.cancelScheduled").replace("{date}", dateFmt(sub.pendingChange.effectiveAt))}</div>
-            )}
-            {sub.pendingChange?.targetPlanKey && (
-              <div className="text-amber-700">
-                {t("settings.billing.downgradeScheduled")
-                  .replace("{plan}", plans.find((p) => p.key === sub.pendingChange!.targetPlanKey)?.name ?? sub.pendingChange.targetPlanKey)
-                  .replace("{date}", dateFmt(sub.pendingChange.effectiveAt))}
+              {planDesc && <p className="mt-0.5 text-sm text-gray-500">{planDesc}</p>}
+              <div className="mt-2 space-y-0.5 text-sm text-gray-600">
+                {currentPlan && (
+                  <div>
+                    {currentPlan.includedAiUnits > 0 && (
+                      <span>{t("settings.billing.includedCredits").replace("{n}", Math.round(currentPlan.includedAiUnits).toLocaleString())}</span>
+                    )}
+                    {!currentPlan.salesOnly && currentPlan.basePrice != null && (
+                      <span className="text-gray-400">
+                        {currentPlan.includedAiUnits > 0 ? " · " : ""}
+                        <span dir="ltr">{money(currentPlan.basePrice, currentPlan.currency)}</span>
+                        {" / "}
+                        {t(`settings.billing.interval.${(currentPlan as any).billingInterval ?? "MONTHLY"}`)}
+                      </span>
+                    )}
+                  </div>
+                )}
+                {renewsAt && !sub.cancelAtPeriodEnd && (
+                  <div>{t("settings.billing.renewsOn").replace("{date}", dateFmt(renewsAt))}</div>
+                )}
+                {sub.trialEndsAt && <div className="text-gray-500">{t("settings.billing.trialEnds")}: {dateFmt(sub.trialEndsAt)}</div>}
+                {sub.pendingChange?.targetPlanKey && (
+                  <div className="text-amber-700">
+                    {t("settings.billing.downgradeScheduled")
+                      .replace("{plan}", plans.find((p) => p.key === sub.pendingChange!.targetPlanKey)?.name ?? sub.pendingChange.targetPlanKey)
+                      .replace("{date}", dateFmt(sub.pendingChange.effectiveAt))}
+                  </div>
+                )}
+                {(sub.cancelAtPeriodEnd || (sub.pendingChange && !sub.pendingChange.targetPlanKey)) && (
+                  <div className="text-amber-700">
+                    {t("settings.billing.cancelScheduled").replace("{date}", dateFmt(sub.pendingChange?.effectiveAt ?? sub.currentPeriodEnd))}
+                  </div>
+                )}
+                {sub.status === "PAST_DUE" && (
+                  <div className="mt-1 rounded-lg bg-amber-50 px-3 py-2 text-amber-800">{t("settings.billing.pastDueHint")}</div>
+                )}
+                {isGrandfathered && <div className="text-purple-700">{t("settings.billing.legacyHint")}</div>}
               </div>
-            )}
-            {sub.cancelAtPeriodEnd && !sub.pendingChange && (
-              <div className="text-amber-700">{t("settings.billing.cancelScheduled").replace("{date}", dateFmt(sub.currentPeriodEnd))}</div>
-            )}
-            {isGrandfathered && <div className="text-purple-700">{t("settings.billing.legacyHint")}</div>}
-            <div className="pt-2">
-              {sub.cancelAtPeriodEnd ? (
-                <button
-                  disabled={busy !== null}
-                  onClick={() => run("resume", () => resumeSubscription(token!), t("settings.billing.resumed"))}
-                  className="rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
-                >
-                  {t("settings.billing.resumeCta")}
-                </button>
-              ) : (
-                !isGrandfathered && sub.status !== "CANCELED" && (
-                  <button
-                    disabled={busy !== null}
-                    onClick={() =>
-                      setConfirm({
-                        title: t("settings.billing.cancelTitle"),
-                        body: t("settings.billing.cancelBody").replace("{date}", dateFmt(sub.currentPeriodEnd)),
-                        cta: t("settings.billing.cancelCta"),
-                        tone: "danger",
-                        onConfirm: () => {
-                          track("subscription_cancel_confirmed", {});
-                          void run("cancel", () => cancelSubscription(token!), t("settings.billing.cancelDone"));
-                        },
-                      })
-                    }
-                    className="rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
-                  >
-                    {t("settings.billing.cancelCta")}
-                  </button>
-                )
-              )}
             </div>
           </div>
         )}
       </Section>
 
-      {/* ── Plans ── */}
-      <Section title={t("settings.billing.plans")}>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          {plans.filter((p) => p.key !== "grandfathered").map((p) => {
-            const current = sub?.planKey === p.key;
-            const isUpgrade = (currentPlan?.includedAiUnits ?? 0) < p.includedAiUnits;
-            return (
-              <div key={p.id} className={`rounded-xl border p-4 ${current ? "border-primary-500 ring-1 ring-primary-500" : "border-gray-200"}`}>
-                <div className="font-semibold text-gray-900">{p.name}</div>
-                <div className="mt-1 text-2xl font-bold text-gray-900" dir="ltr">{p.salesOnly ? t("settings.billing.custom") : `₪${p.basePrice ?? "-"}`}</div>
-                <div className="text-xs text-gray-500">{p.salesOnly ? t("settings.billing.contactSales") : t("settings.billing.perMonth")}</div>
-                <div className="mt-2 text-sm text-gray-600">{t("settings.billing.creditsPerMonth").replace("{n}", Math.round(p.includedAiUnits).toLocaleString())}</div>
-                <div className="mt-3">
-                  {current ? (
-                    <span className="text-xs font-medium text-primary-600">{t("settings.billing.currentPlan")}</span>
-                  ) : p.salesOnly ? (
-                    <a href="mailto:sales@gotcha.co.il" className="text-xs font-medium text-primary-600 hover:underline">{t("settings.billing.contactSales")}</a>
-                  ) : (
-                    <button
-                      disabled={busy !== null}
-                      onClick={() =>
-                        setConfirm({
-                          title: t("settings.billing.changeTitle").replace("{plan}", p.name),
-                          body: isGrandfathered
-                            ? t("settings.billing.migrateBody").replace("{plan}", p.name)
-                            : isUpgrade
-                              ? t("settings.billing.upgradeBody").replace("{plan}", p.name)
-                              : t("settings.billing.downgradeBody").replace("{plan}", p.name).replace("{date}", dateFmt(sub?.currentPeriodEnd)),
-                          cta: t("settings.billing.confirmChange"),
-                          onConfirm: () => {
-                            track("plan_change_confirmed", { plan: p.key, upgrade: isUpgrade });
-                            void run(
-                              `plan-${p.key}`,
-                              () => (isGrandfathered ? migratePlan(token!, p.key) : changePlan(token!, p.key)),
-                              t("settings.billing.changeDone").replace("{plan}", p.name),
-                            );
-                          },
-                        })
-                      }
-                      className="rounded-lg bg-primary-500 px-3 py-1.5 text-xs font-medium text-white hover:bg-primary-600 disabled:opacity-50"
-                    >
-                      {isGrandfathered ? t("settings.billing.choosePlan") : isUpgrade ? t("settings.billing.upgrade") : t("settings.billing.downgrade")}
-                    </button>
-                  )}
-                </div>
-              </div>
-            );
-          })}
-        </div>
-        <p className="mt-3 text-xs text-gray-400">{t("settings.billing.prorationNote")}</p>
-        <p className="mt-1 text-xs text-gray-400">
-          {t("settings.billing.creditsMoved")} <Link href="/settings/usage" className="text-primary-600 hover:underline">{t("settings.billing.creditsMovedLink")}</Link>
-        </p>
-      </Section>
-
-      {/* ── Payment methods ── */}
+      {/* ── Payment ── */}
       <Section
         title={t("settings.billing.payment")}
         action={
-          <button
-            disabled={busy !== null}
-            onClick={addCard}
-            className="rounded-lg bg-gray-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-gray-800 disabled:opacity-50"
-          >
-            {methods.length ? t("settings.billing.replaceCard") : t("settings.billing.addCard")}
-          </button>
+          canManage ? (
+            <Link href="/settings/billing/payment-method" className="shrink-0 rounded-lg border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50">
+              {methods.length ? t("settings.billing.update") : t("settings.billing.addCard")}
+            </Link>
+          ) : undefined
         }
       >
         {methods.length === 0 ? (
           <p className="text-sm text-gray-500">{t("settings.billing.noCard")}</p>
         ) : (
-          <ul className="space-y-2">
+          <div className="space-y-1">
             {methods.map((m) => (
-              <li key={m.id} className="flex items-center justify-between rounded-lg border border-gray-200 px-3 py-2 text-sm">
-                <span dir="ltr">
-                  {(m.brand ?? "card").toUpperCase()} •••• {m.last4} {m.expMonth && `(${m.expMonth}/${m.expYear})`}{" "}
-                  {m.isDefault && <span className="ms-2 text-xs text-primary-600">{t("settings.billing.defaultCard")}</span>}
+              <div key={m.id} className="flex items-center gap-3 text-sm text-gray-700">
+                <span className="flex h-6 w-9 items-center justify-center rounded border border-gray-200 bg-gray-50 text-[10px] font-semibold uppercase text-gray-500" dir="ltr">
+                  {(m.brand ?? "card").slice(0, 4)}
                 </span>
-                <button
-                  disabled={busy !== null}
-                  onClick={() => run(`rm-${m.id}`, () => removePaymentMethod(token!, m.id), t("settings.billing.cardRemoved"))}
-                  className="text-xs text-red-600 hover:underline"
-                >
-                  {t("settings.billing.removeCard")}
-                </button>
-              </li>
+                <span dir="ltr">
+                  {t("settings.billing.cardEndingIn").replace("{brand}", (m.brand ?? "Card")).replace("{last4}", m.last4 ?? "----")}
+                </span>
+                {m.expMonth && (
+                  <span className="text-gray-400" dir="ltr">
+                    {t("settings.billing.expires")} {String(m.expMonth).padStart(2, "0")}/{String(m.expYear).slice(-2)}
+                  </span>
+                )}
+                {m.isDefault && <span className="text-xs text-primary-600">{t("settings.billing.defaultCard")}</span>}
+              </div>
             ))}
-          </ul>
+          </div>
         )}
       </Section>
 
@@ -342,24 +308,28 @@ export default function BillingSettingsPage() {
         ) : (
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-start text-xs uppercase text-gray-500">
-                <th className="py-2 text-start">{t("settings.billing.invDate")}</th>
-                <th className="text-start">{t("settings.billing.invType")}</th>
-                <th className="text-start">{t("settings.billing.invAmount")}</th>
-                <th className="text-start">{t("settings.billing.invStatus")}</th>
-                <th></th>
+              <tr className="text-start text-xs uppercase tracking-wider text-gray-400">
+                <th className="pb-2 text-start font-medium">{t("settings.billing.invDate")}</th>
+                <th className="pb-2 text-start font-medium">{t("settings.billing.invAmount")}</th>
+                <th className="pb-2 text-start font-medium">{t("settings.billing.invStatus")}</th>
+                <th className="pb-2 text-end font-medium">{t("settings.billing.invAction")}</th>
               </tr>
             </thead>
             <tbody>
               {invoices.map((inv) => (
-                <tr key={inv.id} className="border-t border-gray-100">
-                  <td className="py-2">{dateFmt(inv.createdAt)}</td>
-                  <td>{t(`settings.billing.invTypes.${inv.type}`) || inv.type.replace(/_/g, " ").toLowerCase()}</td>
-                  <td dir="ltr">₪{inv.amount}</td>
-                  <td>{t(`settings.billing.invStatuses.${inv.status}`) || inv.status}</td>
-                  <td className="text-end">
-                    {inv.providerPdfUrl && (
-                      <a href={inv.providerPdfUrl} target="_blank" rel="noreferrer" className="text-primary-600 hover:underline">PDF</a>
+                <tr key={inv.id} className="border-t border-gray-50">
+                  <td className="py-2.5 text-gray-700">{dateFmt(inv.createdAt)}</td>
+                  <td className="py-2.5 text-gray-700" dir="ltr">{money(inv.amount, inv.currency)}</td>
+                  <td className={`py-2.5 font-medium ${INVOICE_STATUS_STYLES[inv.status] ?? "text-gray-600"}`}>
+                    {t(`settings.billing.invStatuses.${inv.status}`) || inv.status}
+                  </td>
+                  <td className="py-2.5 text-end">
+                    {inv.providerPdfUrl ? (
+                      <a href={inv.providerPdfUrl} target="_blank" rel="noreferrer" className="font-medium text-primary-600 hover:underline">
+                        {t("settings.billing.view")}
+                      </a>
+                    ) : (
+                      <span className="text-gray-300">—</span>
                     )}
                   </td>
                 </tr>
@@ -369,7 +339,57 @@ export default function BillingSettingsPage() {
         )}
       </Section>
 
-      {/* Confirmation modal - no plan change or cancellation from one stray click. */}
+      {/* ── Cancellation ── */}
+      {sub && !isGrandfathered && sub.status !== "CANCELED" && (
+        <Section title={t("settings.billing.cancellation")}>
+          {sub.cancelAtPeriodEnd ? (
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <p className="text-sm text-amber-700">
+                {t("settings.billing.cancelScheduled").replace("{date}", dateFmt(sub.pendingChange?.effectiveAt ?? sub.currentPeriodEnd))}
+              </p>
+              {canCancel && (
+                <button
+                  disabled={busy !== null}
+                  onClick={() => run("resume", () => resumeSubscription(token!), t("settings.billing.resumed"))}
+                  className="shrink-0 rounded-lg bg-green-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-green-700 disabled:opacity-50"
+                >
+                  {t("settings.billing.resumeCta")}
+                </button>
+              )}
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <p className="max-w-xl text-sm text-gray-500">
+                {t("settings.billing.cancelExplain").replace("{date}", dateFmt(sub.currentPeriodEnd))}
+              </p>
+              {canCancel ? (
+                <button
+                  disabled={busy !== null}
+                  onClick={() =>
+                    setConfirm({
+                      title: t("settings.billing.cancelTitle"),
+                      body: t("settings.billing.cancelBody").replace("{date}", dateFmt(sub.currentPeriodEnd)),
+                      cta: t("settings.billing.cancelCta"),
+                      tone: "danger",
+                      onConfirm: () => {
+                        track("subscription_cancel_confirmed", {});
+                        void run("cancel", () => cancelSubscription(token!), t("settings.billing.cancelDone"));
+                      },
+                    })
+                  }
+                  className="shrink-0 rounded-lg border border-red-300 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                >
+                  {t("settings.billing.cancelCta")}
+                </button>
+              ) : (
+                <span className="shrink-0 text-xs text-gray-400">{t("settings.billing.cancelNoPermission")}</span>
+              )}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* Confirmation modal - cancellation is never one stray click. */}
       {confirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
           <div className="w-full max-w-md rounded-2xl bg-white p-6 shadow-2xl">

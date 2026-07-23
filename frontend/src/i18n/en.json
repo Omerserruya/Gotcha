@@ -720,9 +720,16 @@
     "noAgents": "No agents assigned",
     "aiAgent": "AI Agent",
     "aiEmployee": "AI Employee",
-    "aiEmployeeDesc": "Assign an AI Employee to handle conversations in this department",
+    "aiEmployees": "AI employees",
+    "aiEmployeeDesc": "Attach one or more AI Employees to handle conversations in this department",
     "currentAIEmployee": "Currently assigned",
+    "attachedAIEmployees": "Attached AI employees",
+    "noAttachedAIEmployees": "No AI employees attached yet.",
     "assignAIEmployee": "Select an AI Employee to assign",
+    "addAIEmployee": "Add an AI employee",
+    "add": "Add",
+    "remove": "Remove",
+    "allAIEmployeesAttached": "All AI employees are already attached.",
     "changeAIEmployee": "Change AI Employee",
     "unassign": "Unassign",
     "noAIEmployees": "No AI Employees created yet",
@@ -1286,8 +1293,38 @@
         "DRAFT": "Draft",
         "ISSUED": "Issued",
         "PAID": "Paid",
+        "OPEN": "Open",
+        "PENDING": "Pending",
         "FAILED": "Failed",
-        "VOID": "Voided"
+        "REFUNDED": "Refunded",
+        "VOID": "Voided",
+        "VOIDED": "Voided"
+      },
+      "invAction": "Action",
+      "view": "View",
+      "adjustPlan": "Adjust plan",
+      "adjustPlanSubtitle": "Compare plans and switch. Upgrades apply immediately (prorated); downgrades take effect at the next renewal.",
+      "backToBilling": "Back to Billing",
+      "renewsOn": "Renews on {date}",
+      "update": "Update",
+      "cardEndingIn": "{brand} ending in {last4}",
+      "expires": "Expires",
+      "paymentSubtitle": "The card used for your subscription and automatic top-ups.",
+      "pciNote": "Card details are captured and stored by our PCI-compliant payment provider. GOTCHA never sees or stores your full card number.",
+      "cancellation": "Cancellation",
+      "cancelExplain": "Your subscription renews on {date}. Cancelling keeps full access until then; remaining monthly credits expire at period end, purchased credits stay on the account, and your data is not deleted. You can resume any time before that date.",
+      "cancelNoPermission": "Only an owner can cancel the subscription.",
+      "interval": {
+        "MONTHLY": "month",
+        "QUARTERLY": "quarter",
+        "ANNUAL": "year",
+        "YEARLY": "year"
+      },
+      "planDesc": {
+        "light": "For small teams getting started",
+        "pro": "For growing support and sales teams",
+        "business": "For busy teams that need more headroom",
+        "enterprise": "For large operations with custom needs"
       },
       "back": "Back",
       "status": {
@@ -2654,7 +2691,58 @@
       "confirmCta": "Confirm purchase",
       "cancel": "Back",
       "failed": "Purchase failed",
-      "done": "{n} credits added"
+      "done": "{n} credits added",
+      "pageTitle": "Buy usage credits",
+      "pageSubtitle": "Extra credits never expire and are used after your monthly plan credits.",
+      "back": "Back to Usage",
+      "processing": "Processing...",
+      "noPackages": "No credit packages are available right now.",
+      "receiptNote": "Payment is processed by our provider. Your balance updates only after the payment is confirmed, and a receipt becomes available on the Billing page."
+    },
+    "planCredits": {
+      "title": "Plan credits",
+      "unit": "credits",
+      "resets": "Resets {date}",
+      "pctUsed": "{n}% used",
+      "remaining": "{n} credits remaining"
+    },
+    "breakdown": {
+      "title": "Available credits",
+      "planAllowance": "Plan allowance",
+      "purchased": "Purchased package balance",
+      "total": "Total available",
+      "order": "Credits are consumed in order: monthly plan credits first, then your purchased balance."
+    },
+    "usageCredits": {
+      "title": "Usage credits",
+      "onDesc": "Automatic top-ups keep your AI running after plan credits are used up, within your monthly spending limit.",
+      "offDesc": "Turn on usage credits to keep operating after your included plan credits are exhausted.",
+      "offHint": "When plan credits run out, AI employees pause replying until credits renew or you buy more.",
+      "enable": "Enable",
+      "adjustLimit": "Adjust limit",
+      "spent": "spent",
+      "limitLabel": "Monthly spend limit"
+    },
+    "balance": {
+      "title": "Current balance",
+      "buy": "Buy credits"
+    },
+    "manageSubscription": "Manage or cancel subscription",
+    "limit": {
+      "back": "Back to Usage",
+      "title": "Usage-credit spending limit",
+      "subtitle": "Automatic top-ups keep the AI operating after plan credits run out, up to a monthly money limit you set.",
+      "enableTitle": "Usage credits",
+      "enableDesc": "Automatically buy more credits when plan credits run low.",
+      "maxSpend": "Maximum additional monthly spend",
+      "maxSpendHint": "The billing service will not auto-purchase beyond this amount in a month.",
+      "threshold": "Trigger threshold",
+      "thresholdHint": "Top up when remaining plan credits drop to this percentage.",
+      "package": "Top-up package",
+      "packageHint": "Which credit package to buy each time the threshold is reached.",
+      "atLimitNote": "When the monthly limit is reached, automatic purchases stop for the rest of the month and you are notified. You can still buy credits manually at any time.",
+      "cancel": "Cancel",
+      "save": "Save limit"
     },
     "auto": {
       "title": "Automatic credit top-up",

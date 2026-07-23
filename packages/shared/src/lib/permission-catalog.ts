@@ -163,6 +163,10 @@ export const PERMISSIONS: readonly PermissionDef[] = [
   p("settings:members:manage", "settings", "configuration", false, "Manage Members", "Invite, edit, deactivate users and assign roles."),
   p("settings:roles:manage", "settings", "configuration", false, "Manage Roles", "Create and edit roles and their permissions."),
   p("settings:billing:manage", "settings", "configuration", false, "Manage Billing", "Manage subscription, billing and plans."),
+  // Cancellation is a distinct permission (not merely "manage") so a tenant can
+  // let a billing manager change plans/cards while reserving the ability to end
+  // the subscription. Owner-held by default (see OWNER_ONLY); delegable.
+  p("settings:billing:cancel", "settings", "configuration", false, "Cancel Subscription", "Cancel the workspace subscription or schedule its cancellation."),
   p("settings:api-keys:manage", "settings", "configuration", false, "Manage API Keys", "Create and revoke API keys."),
   // Business Rules (AI action policies): who may SEE the tenant's rules for
   // refunds/coupons/compensation, who may CHANGE them (each change appends an
@@ -276,6 +280,7 @@ export interface BuiltinRoleDef {
  */
 const OWNER_ONLY = [
   "settings:billing:manage",
+  "settings:billing:cancel",
   "settings:roles:manage",
   "settings:api-keys:manage",
 ];

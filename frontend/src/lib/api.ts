@@ -2093,6 +2093,24 @@ export function assignDepartmentAIEmployee(token: string, departmentId: string, 
   });
 }
 
+// A department can have MANY AI employees. These operate on the full roster and
+// leave the other attachments untouched.
+export function getDepartmentAIEmployees(token: string, departmentId: string) {
+  return apiFetch<{ data: any[] }>(`/api/departments/${departmentId}/ai-employees`, { token });
+}
+
+export function addDepartmentAIEmployee(token: string, departmentId: string, aiAgentId: string) {
+  return apiFetch<{ data: any; ruleId?: string }>(`/api/departments/${departmentId}/ai-employees`, {
+    token, method: "POST", body: JSON.stringify({ aiAgentId }),
+  });
+}
+
+export function removeDepartmentAIEmployee(token: string, departmentId: string, aiAgentId: string) {
+  return apiFetch<{ data: any[] }>(`/api/departments/${departmentId}/ai-employees/${aiAgentId}`, {
+    token, method: "DELETE",
+  });
+}
+
 // ─── AI Employee Creation Wizard ────────────────────────────
 
 export function generateAIEmployeeConfig(token: string, data: { answers: Record<string, string>; departmentId?: string }) {

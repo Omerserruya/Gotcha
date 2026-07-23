@@ -31,7 +31,7 @@ router.post("/billing/subscription/change-plan", authenticate, resolveTenant, re
   }
 });
 
-router.post("/billing/subscription/cancel", authenticate, resolveTenant, requirePermission("settings:billing:manage"), async (req, res) => {
+router.post("/billing/subscription/cancel", authenticate, resolveTenant, requirePermission("settings:billing:cancel"), async (req, res) => {
   try {
     await cancelSubscription({ tenantId: req.tenantId!, actor: req.user?.userId });
     return res.json({ ok: true });

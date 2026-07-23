@@ -63,6 +63,27 @@ export interface Balance {
   periodKey: string | null;
 }
 
+/**
+ * Canonical customer-facing credit contract (GET /api/billing/credit-summary).
+ * ONE source for every credit number the UI shows. `usage` is plan-CREDIT
+ * consumption; `usageCredits` is MONEY spent on auto top-ups - never conflated.
+ */
+export interface CreditSummary {
+  period: { startsAt: string | null; endsAt: string | null; resetsAt: string | null };
+  plan: { planId: string | null; name: string | null; includedCredits: number };
+  usage: { consumedCredits: number; remainingPlanCredits: number; consumedPct: number };
+  purchasedCredits: { balance: number };
+  totalAvailableCredits: number;
+  usageCredits: {
+    enabled: boolean;
+    spentAmount: string;
+    currency: string;
+    monthlySpendLimit: string | null;
+    thresholdPct: number | null;
+    resetsAt: string | null;
+  };
+}
+
 export interface CreditPackage {
   id: string;
   key: string;
@@ -130,6 +151,10 @@ export const migratePlan = (token: string, planKey: string) =>
 
 export const getBalance = (token: string) =>
   apiFetch<Balance>("/api/billing/credits/balance", { token });
+
+/** Canonical credit contract - prefer this over stitching balance+sub+policy. */
+export const getCreditSummary = (token: string) =>
+  apiFetch<CreditSummary>("/api/billing/credit-summary", { token });
 
 export const getPackages = (token: string) =>
   apiFetch<{ packages: CreditPackage[] }>("/api/billing/credits/packages", { token });

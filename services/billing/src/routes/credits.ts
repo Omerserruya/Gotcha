@@ -5,10 +5,80 @@
  */
 import { Router } from "express";
 import { authenticate, resolveTenant, requirePermission, prisma, getBalance } from "@chatcenter/shared";
-import { ensureBillableEntity, getEntityIdForTenant } from "../services/billable-entity.service";
+import { ensureBillableEntity, getEntityIdForTenant, getSubscriptionForTenant } from "../services/billable-entity.service";
+import { listActivePlans } from "../services/plan.service";
 import { buyCredits } from "../services/purchase.service";
+import { periodKeyFor } from "../lib/period";
 
 const router = Router();
+
+/**
+ * Canonical customer-facing credit contract - ONE source for every number the
+ * Usage/Billing UI shows. Credits (not model tokens) are the unit throughout.
+ * Composes: the subscription's included allowance, the real ledger balance
+ * (getBalance), and the auto-purchase money-spend window. The two are kept
+ * strictly separate: `usage` is plan-CREDIT consumption; `usageCredits` is
+ * MONEY spent on automatic top-ups. Read-only for any tenant member.
+ */
+router.get("/billing/credit-summary", authenticate, resolveTenant, async (req, res) => {
+  const tenantId = req.tenantId!;
+  const [balance, sub, plans, entityId] = await Promise.all([
+    getBalance(tenantId),
+    getSubscriptionForTenant(tenantId),
+    listActivePlans(),
+    getEntityIdForTenant(tenantId),
+  ]);
+  const plan = plans.find((p) => p.key === (sub as any)?.planKey) ?? null;
+  const policy = entityId
+    ? await prisma.autoPurchasePolicy.findUnique({ where: { billableEntityId: entityId } })
+    : null;
+
+  // Auto-purchase spend is written keyed on the WALL-CLOCK month
+  // (triggerAutoPurchase uses periodKeyFor(new Date())); read it back the same
+  // way so a rolled-over month shows 0 spent, not a stale carry-over.
+  const currentMonthKey = periodKeyFor(new Date());
+  const spentAmount =
+    policy && policy.monthSpendKey === currentMonthKey ? Number(policy.monthSpentAmount) : 0;
+
+  const includedCredits = plan
+    ? Math.round((plan as any).includedAiUnits ?? 0)
+    : Math.round(balance.includedAllowance);
+  const consumedCredits = Math.max(0, balance.includedAllowance - balance.includedRemaining);
+  const periodEnd = (sub as any)?.currentPeriodEnd ?? null;
+
+  res.json({
+    period: {
+      startsAt: (sub as any)?.currentPeriodStart ?? null,
+      endsAt: periodEnd,
+      resetsAt: periodEnd,
+    },
+    plan: {
+      planId: (sub as any)?.planKey ?? null,
+      name: (plan as any)?.name ?? (sub as any)?.planKey ?? null,
+      includedCredits,
+    },
+    usage: {
+      consumedCredits: Math.round(consumedCredits),
+      remainingPlanCredits: Math.round(balance.includedRemaining),
+      consumedPct:
+        balance.includedAllowance > 0
+          ? Math.min(100, Math.max(0, Math.round((consumedCredits / balance.includedAllowance) * 100)))
+          : 0,
+    },
+    purchasedCredits: {
+      balance: Math.round(balance.purchasedRemaining),
+    },
+    totalAvailableCredits: Math.round(balance.total),
+    usageCredits: {
+      enabled: Boolean(policy?.enabled),
+      spentAmount: spentAmount.toFixed(2),
+      currency: policy?.currency ?? "ILS",
+      monthlySpendLimit: policy?.maxMonthlySpend ?? null,
+      thresholdPct: policy?.thresholdPct ?? null,
+      resetsAt: periodEnd,
+    },
+  });
+});
 
 /** Separate INCLUDED (resets) vs PURCHASED (permanent) balances for the UI. */
 router.get("/billing/credits/balance", authenticate, resolveTenant, async (req, res) => {

@@ -6,7 +6,7 @@ import { useI18n } from "@/context/I18nContext";
 import {
   getDepartmentTree, createDepartment, updateDepartment, deleteDepartment,
   getDepartmentMembers, addDepartmentMember, removeDepartmentMember, updateDepartmentMember,
-  getAgents, getAIAgents, getDepartmentAIEmployee, assignDepartmentAIEmployee,
+  getAgents, getAIAgents, getDepartmentAIEmployees, addDepartmentAIEmployee, removeDepartmentAIEmployee,
 } from "@/lib/api";
 import Link from "next/link";
 import clsx from "clsx";
@@ -21,6 +21,7 @@ interface DeptNode {
   parentId?: string | null;
   _count?: { members: number; conversations: number };
   members?: any[];
+  aiEmployees?: any[];
   children?: DeptNode[];
 }
 
@@ -52,6 +53,7 @@ function DepartmentNode({
   const [agentsExpanded, setAgentsExpanded] = useState(false);
   const hasChildren = node.children && node.children.length > 0;
   const humanAgents = node.members || [];
+  const aiEmployees = node.aiEmployees || [];
 
   return (
     <div className={clsx(depth > 0 && "ms-6 border-l-2 border-gray-200 ps-4")}>
@@ -135,6 +137,20 @@ function DepartmentNode({
                   )}
                 </div>
               )}
+              {/* AI employees attached to this department (many allowed) */}
+              {aiEmployees.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <span className="text-xs font-medium text-gray-500 me-0.5">{t("departments.aiEmployees")}:</span>
+                  {aiEmployees.map((a: any) => (
+                    <span key={a.id} className="inline-flex items-center gap-1.5 rounded-full bg-violet-50 px-2 py-0.5 text-[11px] font-medium text-violet-700">
+                      <span className="flex h-4 w-4 items-center justify-center rounded-full bg-gradient-to-br from-violet-400 to-violet-600 text-[9px] font-bold text-white">
+                        {a.name?.charAt(0).toUpperCase()}
+                      </span>
+                      {a.name}
+                    </span>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
 
@@ -200,11 +216,12 @@ export function DepartmentsContent() {
   const [showAddMember, setShowAddMember] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; id: string; name: string }>({ open: false, id: "", name: "" });
   const [deleting, setDeleting] = useState(false);
-  // AI Employee assignment
+  // AI Employee assignment - a department may have MANY AI employees.
   const [assignDept, setAssignDept] = useState<DeptNode | null>(null);
   const [aiEmployeeList, setAIEmployeeList] = useState<any[]>([]);
-  const [currentAIEmployee, setCurrentAIEmployee] = useState<any>(null);
+  const [currentAIEmployees, setCurrentAIEmployees] = useState<any[]>([]);
   const [assignLoading, setAssignLoading] = useState(false);
+  const [assignBusy, setAssignBusy] = useState<string | null>(null);
 
   // Form state
   const [formName, setFormName] = useState("");
@@ -333,26 +350,36 @@ export function DepartmentsContent() {
     try {
       const [aiRes, currentRes] = await Promise.all([
         getAIAgents(token),
-        getDepartmentAIEmployee(token, dept.id),
+        getDepartmentAIEmployees(token, dept.id),
       ]);
       setAIEmployeeList((aiRes as any).data || []);
-      setCurrentAIEmployee(currentRes?.data || null);
+      setCurrentAIEmployees(currentRes?.data || []);
     } catch (err) { console.error(err); }
     finally { setAssignLoading(false); }
   }
 
-  async function handleAssignAIEmployee(aiAgentId: string | null) {
+  async function handleAddAIEmployee(aiAgentId: string) {
     if (!token || !assignDept) return;
+    setAssignBusy(aiAgentId);
     try {
-      await assignDepartmentAIEmployee(token, assignDept.id, aiAgentId);
-      if (aiAgentId) {
-        const agent = aiEmployeeList.find((a: any) => a.id === aiAgentId);
-        setCurrentAIEmployee(agent || null);
-      } else {
-        setCurrentAIEmployee(null);
-      }
+      await addDepartmentAIEmployee(token, assignDept.id, aiAgentId);
+      const refreshed = await getDepartmentAIEmployees(token, assignDept.id);
+      setCurrentAIEmployees(refreshed?.data || []);
       fetchTree();
     } catch (err: any) { alert(err.message); }
+    finally { setAssignBusy(null); }
+  }
+
+  async function handleRemoveAIEmployee(aiAgentId: string) {
+    if (!token || !assignDept) return;
+    setAssignBusy(aiAgentId);
+    try {
+      // Server returns the surviving roster - removing one leaves the rest.
+      const res = await removeDepartmentAIEmployee(token, assignDept.id, aiAgentId);
+      setCurrentAIEmployees(res?.data || []);
+      fetchTree();
+    } catch (err: any) { alert(err.message); }
+    finally { setAssignBusy(null); }
   }
 
   function openEdit(dept: DeptNode) {
@@ -689,42 +716,50 @@ export function DepartmentsContent() {
               </div>
             ) : (
               <>
-                {/* Current assignment */}
-                {currentAIEmployee && (
-                  <div className="mb-4 p-3 rounded-xl border border-violet-200 bg-violet-50/50">
-                    <div className="flex items-center gap-3">
-                      <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
-                        {currentAIEmployee.name?.charAt(0).toUpperCase()}
+                {/* Currently attached AI employees (many allowed) */}
+                {currentAIEmployees.length > 0 ? (
+                  <div className="mb-4 space-y-2">
+                    <p className="text-sm font-medium text-gray-700">
+                      {t("departments.attachedAIEmployees")}
+                      <span className="ms-2 rounded-full bg-violet-50 px-1.5 py-0.5 text-[10px] font-medium text-violet-600">{currentAIEmployees.length}</span>
+                    </p>
+                    {currentAIEmployees.map((agent: any) => (
+                      <div key={agent.id} className="flex items-center gap-3 p-3 rounded-xl border border-violet-200 bg-violet-50/50">
+                        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-sm shrink-0">
+                          {agent.name?.charAt(0).toUpperCase()}
+                        </div>
+                        <div className="flex-1 min-w-0">
+                          <p className="font-medium text-sm text-gray-900 truncate">{agent.name}</p>
+                          <p className="text-xs text-gray-500">{agent.role}</p>
+                        </div>
+                        <Link href={`/ai-studio/agents/${agent.id}`} className="text-xs px-2.5 py-1 bg-violet-100 text-violet-600 rounded-lg hover:bg-violet-200 font-medium transition">
+                          {t("common.edit")}
+                        </Link>
+                        <button
+                          disabled={assignBusy === agent.id}
+                          onClick={() => handleRemoveAIEmployee(agent.id)}
+                          className="text-xs px-2.5 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium transition disabled:opacity-50"
+                        >
+                          {t("departments.remove")}
+                        </button>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm text-gray-900">{currentAIEmployee.name}</p>
-                        <p className="text-xs text-gray-500">{t("departments.currentAIEmployee")}</p>
-                      </div>
-                      <Link href={`/ai-studio/agents/${currentAIEmployee.id}`} className="text-xs px-2.5 py-1 bg-violet-100 text-violet-600 rounded-lg hover:bg-violet-200 font-medium transition">
-                        {t("common.edit")}
-                      </Link>
-                      <button
-                        onClick={() => handleAssignAIEmployee(null)}
-                        className="text-xs px-2.5 py-1 bg-red-50 text-red-500 rounded-lg hover:bg-red-100 font-medium transition"
-                      >
-                        {t("departments.unassign")}
-                      </button>
-                    </div>
+                    ))}
                   </div>
+                ) : (
+                  <p className="mb-4 text-sm text-gray-400">{t("departments.noAttachedAIEmployees")}</p>
                 )}
 
-                {/* Available AI Employees */}
-                <p className="text-sm font-medium text-gray-700 mb-2">
-                  {currentAIEmployee ? t("departments.changeAIEmployee") : t("departments.assignAIEmployee")}
-                </p>
+                {/* Add more - every tenant AI employee not already attached */}
+                <p className="text-sm font-medium text-gray-700 mb-2">{t("departments.addAIEmployee")}</p>
                 <div className="space-y-2 max-h-60 overflow-y-auto">
                   {aiEmployeeList
-                    .filter((a: any) => a.id !== currentAIEmployee?.id)
+                    .filter((a: any) => !currentAIEmployees.some((c: any) => c.id === a.id))
                     .map((agent: any) => (
                     <button
                       key={agent.id}
-                      onClick={() => handleAssignAIEmployee(agent.id)}
-                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-violet-50 hover:border-violet-200 transition"
+                      disabled={assignBusy === agent.id}
+                      onClick={() => handleAddAIEmployee(agent.id)}
+                      className="w-full text-start p-3 rounded-xl border border-gray-100 hover:bg-violet-50 hover:border-violet-200 transition disabled:opacity-50"
                     >
                       <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-400 to-violet-600 flex items-center justify-center text-white font-bold text-xs shrink-0">
@@ -734,18 +769,13 @@ export function DepartmentsContent() {
                           <p className="font-medium text-sm text-gray-900">{agent.name}</p>
                           <p className="text-xs text-gray-400">{agent.role} &middot; {agent.mode?.toLowerCase()}</p>
                         </div>
-                        <span className={clsx(
-                          "text-[10px] px-2 py-0.5 rounded-full font-medium",
-                          agent.status === "ACTIVE" ? "bg-green-50 text-green-600" : "bg-gray-100 text-gray-500"
-                        )}>
-                          {agent.status?.toLowerCase()}
-                        </span>
+                        <span className="text-[11px] font-medium text-violet-600">+ {t("departments.add")}</span>
                       </div>
                     </button>
                   ))}
-                  {aiEmployeeList.filter((a: any) => a.id !== currentAIEmployee?.id).length === 0 && (
+                  {aiEmployeeList.filter((a: any) => !currentAIEmployees.some((c: any) => c.id === a.id)).length === 0 && (
                     <div className="text-center py-4">
-                      <p className="text-sm text-gray-400 mb-2">{t("departments.noAIEmployees")}</p>
+                      <p className="text-sm text-gray-400 mb-2">{currentAIEmployees.length > 0 ? t("departments.allAIEmployeesAttached") : t("departments.noAIEmployees")}</p>
                       <Link href="/ai-studio/agents/new" className="text-sm text-violet-600 hover:text-violet-700 font-medium">
                         {t("departments.createAIEmployee")}
                       </Link>
@@ -756,7 +786,7 @@ export function DepartmentsContent() {
             )}
 
             <button
-              onClick={() => { setAssignDept(null); setCurrentAIEmployee(null); setAIEmployeeList([]); }}
+              onClick={() => { setAssignDept(null); setCurrentAIEmployees([]); setAIEmployeeList([]); }}
               className="w-full mt-4 py-2.5 text-sm text-gray-500 hover:text-gray-700 bg-gray-50 hover:bg-gray-100 rounded-xl transition"
             >
               {t("common.back")}
