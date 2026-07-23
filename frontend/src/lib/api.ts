@@ -1,6 +1,6 @@
 import { resolveTourMock } from "./tour-mock";
 
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
+export const API_URL = process.env.NEXT_PUBLIC_API_URL || "";
 
 interface FetchOptions extends RequestInit {
   token?: string;
@@ -914,16 +914,16 @@ export interface HealthReport { knowledge: HealthItem[]; communication: HealthIt
 export interface RecommendationRow {
   id: string; kind: string; title: string; reason?: string | null; action?: string | null;
   targetSlug?: string | null; confidence: string; priority: number; status: string;
-  payload?: Record<string, any> | null;
+  payload?: Record<string, any> | null; completedAt?: string | null;
 }
 export function getRecommendations(token: string, status = "OPEN") {
   return apiFetch<{ data: { recommendations: RecommendationRow[] } }>(`/api/onboarding/recommendations?status=${encodeURIComponent(status)}`, { token });
 }
-export function resolveRecommendation(token: string, id: string, decision: "complete" | "dismiss") {
+export function resolveRecommendation(token: string, id: string, decision: "complete" | "dismiss" | "reopen") {
   return apiFetch<{ data: { id: string; status: string } }>(`/api/onboarding/recommendations/${id}/${decision}`, { token, method: "POST" });
 }
-export function teachGap(token: string, label: string, method: "text" | "url", value: string) {
-  return apiFetch<{ data: { ok: boolean; reason?: string; knowledgeDocumentId?: string } }>("/api/onboarding/teach", {
+export function teachGap(token: string, label: string, method: "text" | "url" | "file", value: string) {
+  return apiFetch<{ data: { ok: boolean; reason?: string; knowledgeDocumentId?: string; documentId?: string } }>("/api/onboarding/teach", {
     token, method: "POST", body: JSON.stringify({ label, method, value }),
   });
 }

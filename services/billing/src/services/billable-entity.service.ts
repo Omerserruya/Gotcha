@@ -29,5 +29,10 @@ export async function tenantsForEntity(entityId: string): Promise<string[]> {
 export async function getSubscriptionForTenant(tenantId: string) {
   const entityId = await getEntityIdForTenant(tenantId);
   if (!entityId) return null;
-  return prisma.subscription.findUnique({ where: { billableEntityId: entityId } });
+  // Include the scheduled (not yet applied) plan change so the Billing page
+  // can show "changes to X at renewal" honestly.
+  return prisma.subscription.findUnique({
+    where: { billableEntityId: entityId },
+    include: { pendingChange: true },
+  });
 }

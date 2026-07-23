@@ -86,6 +86,10 @@ export const AuditAction = {
   ALL_SESSIONS_TERMINATED: "auth.all_sessions_terminated",
   EMAIL_CHANGE_REQUESTED: "auth.email_change_requested",
   EMAIL_CHANGE_CONFIRMED: "auth.email_change_confirmed",
+  // ── Business recommendations (Your Business page lifecycle) ──
+  RECOMMENDATION_COMPLETED: "recommendation.completed",
+  RECOMMENDATION_DISMISSED: "recommendation.dismissed",
+  RECOMMENDATION_REOPENED: "recommendation.reopened",
   // ── GDPR data-subject actions ──
   DSR_EXPORT_REQUESTED: "gdpr.export_requested",
   DSR_EXPORT_COMPLETED: "gdpr.export_completed",

@@ -33,8 +33,15 @@ export interface Subscription {
   status: SubscriptionStatus;
   enforcementEnabled: boolean;
   trialEndsAt: string | null;
+  currentPeriodStart: string | null;
   currentPeriodEnd: string | null;
   cancelAtPeriodEnd: boolean;
+  /** Scheduled (not yet applied) downgrade/cancel, if any. */
+  pendingChange?: {
+    changeType: "DOWNGRADE" | "CANCEL";
+    targetPlanKey: string | null;
+    effectiveAt: string;
+  } | null;
 }
 
 export interface Plan {

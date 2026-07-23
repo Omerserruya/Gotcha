@@ -11,6 +11,8 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { BusinessTwin, RecommendationsHub } from "@/components/business/BusinessTwin";
+import ConfirmModal from "@/components/ConfirmModal";
+import { track } from "@/lib/analytics";
 import {
   getBusinessDiscovery,
   getBusinessHealth,
@@ -19,6 +21,7 @@ import {
   teachGap,
   resolveRecommendation,
   discoverBusiness,
+  patchBusinessDiscovery,
   type BusinessDiscoveryRecord,
   type HealthReport,
   type DiscoveryGap,
@@ -27,7 +30,7 @@ import {
 
 export default function SettingsBusinessPage() {
   const { token } = useAuth();
-  const { locale } = useI18n();
+  const { locale, t } = useI18n();
   const he = locale === "he";
 
   const [loading, setLoading] = useState(true);
@@ -37,6 +40,7 @@ export default function SettingsBusinessPage() {
   const [recs, setRecs] = useState<RecommendationRow[]>([]);
   const [rescanning, setRescanning] = useState(false);
   const [rescanError, setRescanError] = useState("");
+  const [confirmRescan, setConfirmRescan] = useState(false);
   const pollRef = useRef<number | null>(null);
 
   const loadHealth = useCallback(async () => {
@@ -48,11 +52,19 @@ export default function SettingsBusinessPage() {
     } catch { /* non-blocking */ }
   }, [token]);
 
+  // "all" (not just OPEN) so the completed section can render from real
+  // backend state - never an optimistic local list.
+  const loadRecs = useCallback(async () => {
+    if (!token) return;
+    const r = await getRecommendations(token, "all").catch(() => null);
+    setRecs(r?.data.recommendations || []);
+  }, [token]);
+
   const loadAll = useCallback(async () => {
     if (!token) return;
     const [d, r] = await Promise.all([
       getBusinessDiscovery(token).catch(() => null),
-      getRecommendations(token, "OPEN").catch(() => null),
+      getRecommendations(token, "all").catch(() => null),
     ]);
     const discovery = d?.data.discovery || null;
     setDisc(discovery);
@@ -120,22 +132,40 @@ export default function SettingsBusinessPage() {
     await correctDiscovery(token, target, action, key).catch(() => {});
   }, [token]);
 
-  const onTeach = useCallback(async (label: string, method: "text" | "url", value: string): Promise<boolean> => {
+  const onTeach = useCallback(async (label: string, method: "text" | "url" | "file", value: string): Promise<boolean> => {
     if (!token) return false;
+    track("teach_method_used", { method });
     try {
       const res = await teachGap(token, label, method, value);
       if (!res.data.ok) return false;
       setDisc((prev) => (prev ? { ...prev, gaps: (prev.gaps || []).filter((g) => g.label !== label) } : prev));
       setGaps((prev) => prev.filter((g) => g.label !== label));
       await loadHealth();
+      await loadRecs();
       return true;
     } catch { return false; }
-  }, [token, loadHealth]);
+  }, [token, loadHealth, loadRecs]);
 
-  const resolveRec = useCallback(async (id: string, decision: "complete" | "dismiss") => {
+  // Never mutate `recs` optimistically here - completion/reopen state is
+  // shown only from the backend, so every action re-fetches the real list.
+  const resolveRec = useCallback(async (id: string, decision: "complete" | "dismiss" | "reopen") => {
     if (!token) return;
-    setRecs((prev) => prev.filter((r) => r.id !== id));
     await resolveRecommendation(token, id, decision).catch(() => {});
+    if (decision === "reopen") track("recommendation_reopened", { id });
+    await loadRecs();
+  }, [token, loadRecs]);
+
+  const onSaveProfile = useCallback(async (patch: {
+    business?: { summary?: string };
+    brand?: { voice?: string; tone?: string; languages?: string[] };
+  }): Promise<boolean> => {
+    if (!token) return false;
+    try {
+      const res = await patchBusinessDiscovery(token, patch);
+      setDisc(res.data.discovery);
+      track("business_profile_saved");
+      return true;
+    } catch { return false; }
   }, [token]);
 
   if (loading) {
@@ -167,7 +197,7 @@ export default function SettingsBusinessPage() {
         </div>
         {disc.websiteDomain && (
           <button
-            onClick={rescan}
+            onClick={() => setConfirmRescan(true)}
             disabled={rescanning}
             className="flex items-center gap-2 rounded-xl border border-primary-200 bg-white px-4 py-2 text-sm font-medium text-primary-600 transition hover:bg-primary-50 disabled:opacity-50"
           >
@@ -189,8 +219,22 @@ export default function SettingsBusinessPage() {
       )}
       {rescanError && <p className="text-xs text-rose-600 bg-rose-50 rounded-xl px-3 py-2">{rescanError}</p>}
 
-      <BusinessTwin he={he} disc={disc} health={health} gaps={gaps} onCorrect={onCorrect} onTeach={onTeach} />
-      <RecommendationsHub he={he} recs={recs} onResolve={(id) => resolveRec(id, "complete")} onDismiss={(id) => resolveRec(id, "dismiss")} />
+      <ConfirmModal
+        isOpen={confirmRescan}
+        title={t("businessPage.rescanTitle")}
+        message={t("businessPage.rescanBody")}
+        confirmText={t("businessPage.rescanConfirm")}
+        cancelText={t("businessPage.rescanCancel")}
+        onConfirm={() => {
+          setConfirmRescan(false);
+          track("business_rescan_confirmed");
+          rescan();
+        }}
+        onCancel={() => setConfirmRescan(false)}
+      />
+
+      <BusinessTwin he={he} disc={disc} health={health} gaps={gaps} token={token || ""} onCorrect={onCorrect} onTeach={onTeach} onSaveProfile={onSaveProfile} />
+      <RecommendationsHub he={he} recs={recs} onResolve={(id) => resolveRec(id, "complete")} onDismiss={(id) => resolveRec(id, "dismiss")} onReopen={(id) => resolveRec(id, "reopen")} />
     </div>
   );
 }

@@ -9,13 +9,18 @@
 // flow back out through the same endpoints onboarding uses, so the twin stays a
 // living object, never a one-time parlor trick (audit finding P-1).
 
-import { useState, type ReactNode } from "react";
-import type {
-  BusinessDiscoveryRecord,
-  HealthReport,
-  DiscoveryGap,
-  RecommendationRow,
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useI18n } from "@/context/I18nContext";
+import {
+  getKnowledgeBases,
+  createKnowledgeBase,
+  uploadKnowledgeFile,
+  type BusinessDiscoveryRecord,
+  type HealthReport,
+  type DiscoveryGap,
+  type RecommendationRow,
 } from "@/lib/api";
+import ConfirmModal from "@/components/ConfirmModal";
 
 // ─── Confidence + channel visual language (shared with onboarding) ──────────
 export function confLabel(he: boolean, c?: string): string {
@@ -58,7 +63,7 @@ const CHANNEL_META: Record<string, { icon: string; label: [string, string] }> = 
 const PRIMARY_CHANNELS = new Set(["whatsapp", "instagram", "facebook", "messenger", "telegram", "email", "phone"]);
 
 export type TwinCorrectFn = (target: "channel" | "tool" | "platform" | "gap", action: "remove" | "incorrect" | "ignore", key: string) => void;
-export type TwinTeachFn = (label: string, method: "text" | "url", value: string) => Promise<boolean>;
+export type TwinTeachFn = (label: string, method: "text" | "url" | "file", value: string) => Promise<boolean>;
 
 // ─── Section scaffolding ────────────────────────────────────────────────────
 function Section({ he, title, confidence, defaultOpen = false, right, children }: {
@@ -98,19 +103,55 @@ function ChipRow({ he, label, items, tone }: { he: boolean; label: [string, stri
   );
 }
 
-function TeachCard({ he, gap, onTeach, onDismiss }: { he: boolean; gap: DiscoveryGap; onTeach: TwinTeachFn; onDismiss?: () => void }) {
-  const [mode, setMode] = useState<null | "url" | "text">(null);
+function TeachCard({ he, gap, token, onTeach, onDismiss }: { he: boolean; gap: DiscoveryGap; token: string; onTeach: TwinTeachFn; onDismiss?: () => void }) {
+  const { t } = useI18n();
+  const [mode, setMode] = useState<null | "url" | "text" | "file">(null);
   const [value, setValue] = useState("");
   const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
   const [dismissed, setDismissed] = useState(false);
+  const [fileState, setFileState] = useState<null | "uploading" | "failed">(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
   async function submit() {
     if (!value.trim()) return;
     setBusy(true);
-    const ok = await onTeach(gap.label, mode!, value.trim());
+    const ok = await onTeach(gap.label, mode as "url" | "text", value.trim());
     setBusy(false);
     if (ok) setDone(true);
   }
+
+  // Third teach path: upload a file into the tenant's knowledge base, then
+  // close the gap with method:"file" + the created document id (backend
+  // just verifies ownership - the upload endpoint already parsed + stored it).
+  async function submitFile(file: File) {
+    setFileState("uploading");
+    setBusy(true);
+    try {
+      const kbList = await getKnowledgeBases(token);
+      let kbId = kbList.data?.[0]?.id as string | undefined;
+      if (!kbId) {
+        const created = await createKnowledgeBase(token, { name: "Company Knowledge" });
+        kbId = created.data.id;
+      }
+      const uploaded = await uploadKnowledgeFile(token, kbId!, file, file.name.replace(/\.[^.]+$/, ""));
+      const documentId = uploaded?.data?.id;
+      if (!documentId) throw new Error("no document id");
+      const ok = await onTeach(gap.label, "file", documentId);
+      setBusy(false);
+      if (ok) { setDone(true); } else { setFileState("failed"); }
+    } catch {
+      setBusy(false);
+      setFileState("failed");
+    }
+  }
+
+  function onFilePicked(e: React.ChangeEvent<HTMLInputElement>) {
+    const file = e.target.files?.[0];
+    e.target.value = "";
+    if (file) submitFile(file);
+  }
+
   if (dismissed) return null;
   if (done) return (
     <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-100 text-sm text-emerald-700 flex items-center gap-2"><span>✓</span>{he ? `למדתי את «${gap.label}». תודה!` : `Learned "${gap.label}". Thanks!`}</div>
@@ -126,9 +167,33 @@ function TeachCard({ he, gap, onTeach, onDismiss }: { he: boolean; gap: Discover
       </div>
       {gap.ask && <p className="text-xs text-gray-500 mt-1">{gap.ask}</p>}
       {!mode ? (
-        <div className="flex gap-1.5 mt-2.5">
+        <div className="flex flex-wrap gap-1.5 mt-2.5">
           <button type="button" onClick={() => setMode("url")} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-primary-300">{he ? "נתינת קישור" : "Provide URL"}</button>
           <button type="button" onClick={() => setMode("text")} className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-primary-300">{he ? "הדבקת טקסט" : "Paste text"}</button>
+          <button
+            type="button"
+            onClick={() => { setMode("file"); fileInputRef.current?.click(); }}
+            className="text-xs font-medium px-3 py-1.5 rounded-lg bg-white border border-gray-200 hover:border-primary-300"
+          >
+            {t("businessPage.uploadFile")}
+          </button>
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.md,.txt"
+            className="hidden"
+            onChange={onFilePicked}
+          />
+        </div>
+      ) : mode === "file" ? (
+        <div className="mt-2.5 space-y-2">
+          <p className="text-[11px] text-gray-400">{t("businessPage.uploadHint")}</p>
+          {fileState === "uploading" && <p className="text-xs text-primary-600">{t("businessPage.uploading")}</p>}
+          {fileState === "failed" && <p className="text-xs text-rose-600">{t("businessPage.uploadFailed")}</p>}
+          <div className="flex gap-2">
+            <button type="button" onClick={() => fileInputRef.current?.click()} disabled={busy} className="text-xs font-semibold px-3 py-1.5 rounded-lg bg-primary-500 text-white hover:bg-primary-600 disabled:opacity-50">{t("businessPage.uploadFile")}</button>
+            <button type="button" onClick={() => { setMode(null); setFileState(null); }} disabled={busy} className="text-xs font-medium px-3 py-1.5 rounded-lg text-gray-500 hover:text-gray-700">{he ? "ביטול" : "Cancel"}</button>
+          </div>
         </div>
       ) : (
         <div className="mt-2.5 space-y-2">
@@ -145,15 +210,108 @@ function TeachCard({ he, gap, onTeach, onDismiss }: { he: boolean; gap: Discover
   );
 }
 
+export type TwinSaveProfileFn = (patch: {
+  business?: { summary?: string };
+  brand?: { voice?: string; tone?: string; languages?: string[] };
+}) => Promise<boolean>;
+
+// Editable profile - description, brand voice/tone/languages. Reuses the same
+// BusinessDiscovery model onboarding writes (PATCH /api/onboarding/discovery),
+// so there is no settings-only copy of the twin's data.
+function EditProfileModal({ he, open, initial, onSave, onClose }: {
+  he: boolean;
+  open: boolean;
+  initial: { description: string; voice: string; tone: string; languages: string };
+  onSave: TwinSaveProfileFn;
+  onClose: () => void;
+}) {
+  const { t } = useI18n();
+  const [description, setDescription] = useState(initial.description);
+  const [voice, setVoice] = useState(initial.voice);
+  const [tone, setTone] = useState(initial.tone);
+  const [languages, setLanguages] = useState(initial.languages);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const [failed, setFailed] = useState(false);
+
+  // Re-seed whenever the panel (re)opens - the parent may have refetched
+  // discovery since the last time it was closed.
+  useEffect(() => {
+    if (open) {
+      setDescription(initial.description);
+      setVoice(initial.voice);
+      setTone(initial.tone);
+      setLanguages(initial.languages);
+      setSaved(false);
+      setFailed(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, initial.description, initial.voice, initial.tone, initial.languages]);
+
+  if (!open) return null;
+
+  async function submit() {
+    setSaving(true);
+    setFailed(false);
+    const ok = await onSave({
+      business: { summary: description.trim() },
+      brand: {
+        voice: voice.trim(),
+        tone: tone.trim(),
+        languages: languages.split(",").map((l) => l.trim()).filter(Boolean),
+      },
+    });
+    setSaving(false);
+    if (ok) { setSaved(true); window.setTimeout(onClose, 900); } else { setFailed(true); }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-black/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="relative bg-white rounded-2xl shadow-xl w-full max-w-lg p-6 space-y-4" dir={he ? "rtl" : "ltr"}>
+        <h3 className="text-lg font-semibold text-gray-900">{t("businessPage.editProfileTitle")}</h3>
+        <div className="space-y-3">
+          <div>
+            <label className="text-xs font-medium text-gray-500">{t("businessPage.editDescription")}</label>
+            <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={4} className="w-full mt-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-200 resize-none" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">{t("businessPage.editVoice")}</label>
+            <input value={voice} onChange={(e) => setVoice(e.target.value)} className="w-full mt-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-200" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">{t("businessPage.editTone")}</label>
+            <input value={tone} onChange={(e) => setTone(e.target.value)} className="w-full mt-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-200" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-gray-500">{t("businessPage.editLanguages")}</label>
+            <input value={languages} onChange={(e) => setLanguages(e.target.value)} className="w-full mt-1 px-3 py-2 bg-gray-50 border border-gray-200 rounded-lg text-sm outline-none focus:ring-2 focus:ring-primary-200" />
+          </div>
+        </div>
+        {saved && <p className="text-sm text-emerald-600">{t("businessPage.profileSaved")}</p>}
+        {failed && <p className="text-sm text-rose-600">{t("businessPage.profileSaveFailed")}</p>}
+        <div className="flex gap-3">
+          <button type="button" onClick={onClose} disabled={saving} className="flex-1 py-2.5 px-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-medium rounded-xl transition text-sm disabled:opacity-50">{t("businessPage.cancel")}</button>
+          <button type="button" onClick={submit} disabled={saving} className="flex-1 py-2.5 px-4 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-xl transition text-sm disabled:opacity-50">{t("businessPage.save")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ─── The Twin ───────────────────────────────────────────────────────────────
-export function BusinessTwin({ he, disc, health, gaps, onCorrect, onTeach }: {
+export function BusinessTwin({ he, disc, health, gaps, token, onCorrect, onTeach, onSaveProfile }: {
   he: boolean;
   disc: BusinessDiscoveryRecord;
   health: HealthReport | null;
   gaps: DiscoveryGap[];
+  token: string;
   onCorrect: TwinCorrectFn;
   onTeach: TwinTeachFn;
+  onSaveProfile: TwinSaveProfileFn;
 }) {
+  const { t } = useI18n();
+  const [editOpen, setEditOpen] = useState(false);
   const b = disc.business || {};
   const brand = disc.brand || {};
   const allChannels = disc.communication?.channels || [];
@@ -167,9 +325,33 @@ export function BusinessTwin({ he, disc, health, gaps, onCorrect, onTeach }: {
 
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 sm:px-8 py-8" dir={he ? "rtl" : "ltr"}>
-      <p className="text-xs font-semibold text-primary-500 uppercase tracking-wide mb-1.5">{he ? "העסק שלכם, כפי שאני מבין אותו" : "Your business, as I understand it"}</p>
-      <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{b.name || (he ? "העסק שלכם" : "Your business")}</h1>
-      {b.industry && <p className="text-sm text-gray-500 mt-1">{b.industry}{b.country ? ` · ${b.country}` : ""}{disc.websiteDomain ? ` · ${disc.websiteDomain}` : ""}</p>}
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-primary-500 uppercase tracking-wide mb-1.5">{he ? "העסק שלכם, כפי שאני מבין אותו" : "Your business, as I understand it"}</p>
+          <h1 className="text-3xl font-bold text-gray-900 tracking-tight">{b.name || (he ? "העסק שלכם" : "Your business")}</h1>
+          {b.industry && <p className="text-sm text-gray-500 mt-1">{b.industry}{b.country ? ` · ${b.country}` : ""}{disc.websiteDomain ? ` · ${disc.websiteDomain}` : ""}</p>}
+        </div>
+        <button
+          type="button"
+          onClick={() => setEditOpen(true)}
+          className="shrink-0 text-xs font-medium text-primary-600 hover:text-primary-700 border border-primary-200 rounded-lg px-3 py-1.5 hover:bg-primary-50"
+        >
+          {t("businessPage.editProfile")}
+        </button>
+      </div>
+
+      <EditProfileModal
+        he={he}
+        open={editOpen}
+        initial={{
+          description: b.summary || "",
+          voice: brand.voice || "",
+          tone: brand.tone || "",
+          languages: (brand.languages || []).join(", "),
+        }}
+        onSave={onSaveProfile}
+        onClose={() => setEditOpen(false)}
+      />
 
       {disc.report && <div className="mt-5 text-[15px] text-gray-700 leading-relaxed whitespace-pre-line">{disc.report}</div>}
 
@@ -286,7 +468,7 @@ export function BusinessTwin({ he, disc, health, gaps, onCorrect, onTeach }: {
         {gaps.length > 0 && (
           <Section he={he} title={he ? "מה שאשמח שתלמדו אותי" : "What I'd love you to teach me"} defaultOpen right={<span className="text-[11px] text-gray-400">{gaps.length}</span>}>
             <div className="space-y-2.5">
-              {gaps.slice(0, 8).map((g) => <TeachCard key={g.id} he={he} gap={g} onTeach={onTeach} onDismiss={() => onCorrect("gap", "ignore", g.label)} />)}
+              {gaps.slice(0, 8).map((g) => <TeachCard key={g.id} he={he} gap={g} token={token} onTeach={onTeach} onDismiss={() => onCorrect("gap", "ignore", g.label)} />)}
             </div>
           </Section>
         )}
@@ -304,13 +486,24 @@ const KIND_LABEL: Record<string, [string, string]> = {
   setup_workflow: ["Automate", "אוטומציה"],
 };
 
-export function RecommendationsHub({ he, recs, onResolve, onDismiss }: {
+export function RecommendationsHub({ he, recs, onResolve, onDismiss, onReopen }: {
   he: boolean;
   recs: RecommendationRow[];
   onResolve: (id: string) => void;
   onDismiss: (id: string) => void;
+  onReopen: (id: string) => void;
 }) {
-  const sorted = recs.slice().sort((a, b) => b.priority - a.priority);
+  const { t } = useI18n();
+  const [reopenId, setReopenId] = useState<string | null>(null);
+  // The list is fetched with status=all: open recs render as the working
+  // backlog; COMPLETED ones move to the green section below - and an item is
+  // only ever there because the BACKEND says so (status field), never
+  // optimistically.
+  const sorted = recs.filter((r) => r.status === "OPEN").slice().sort((a, b) => b.priority - a.priority);
+  const completed = recs
+    .filter((r) => r.status === "COMPLETED")
+    .slice()
+    .sort((a, b) => new Date(b.completedAt || 0).getTime() - new Date(a.completedAt || 0).getTime());
   return (
     <div className="bg-white rounded-2xl shadow-sm border border-gray-100 px-6 sm:px-8 py-8" dir={he ? "rtl" : "ltr"}>
       <h2 className="text-xl font-bold text-gray-900 tracking-tight">{he ? "מה שאני ממליץ" : "What I recommend"}</h2>
@@ -338,6 +531,43 @@ export function RecommendationsHub({ he, recs, onResolve, onDismiss }: {
           ))}
         </div>
       )}
+
+      {completed.length > 0 && (
+        <div className="mt-6">
+          <h3 className="text-sm font-semibold text-emerald-700">{t("businessPage.completedTitle")}</h3>
+          <div className="mt-2 space-y-2">
+            {completed.slice(0, 10).map((r) => (
+              <div key={r.id} className="flex items-start gap-3 rounded-2xl border border-emerald-100 bg-emerald-50/50 p-3.5">
+                <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-emerald-500 text-[11px] text-white">✓</span>
+                <div className="min-w-0 flex-1">
+                  <span className="text-sm font-medium text-emerald-800">{r.title}</span>
+                  {r.completedAt && (
+                    <p className="mt-0.5 text-[11px] text-emerald-600">
+                      {t("businessPage.completedAt").replace("{date}", new Date(r.completedAt).toLocaleDateString(he ? "he-IL" : undefined))}
+                    </p>
+                  )}
+                </div>
+                <button type="button" onClick={() => setReopenId(r.id)} className="shrink-0 text-[11px] font-medium text-emerald-700 underline-offset-2 hover:underline">
+                  {t("businessPage.reopen")}
+                </button>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      <ConfirmModal
+        isOpen={reopenId !== null}
+        title={t("businessPage.reopenTitle")}
+        message={t("businessPage.reopenBody")}
+        confirmText={t("businessPage.reopenConfirm")}
+        onConfirm={() => {
+          const id = reopenId;
+          setReopenId(null);
+          if (id) onReopen(id);
+        }}
+        onCancel={() => setReopenId(null)}
+      />
     </div>
   );
 }

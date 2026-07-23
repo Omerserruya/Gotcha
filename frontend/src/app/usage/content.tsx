@@ -1,9 +1,29 @@
 "use client";
 
+// Usage - the credits center. Customer-facing usage is expressed in GOTCHA
+// credits (the wallet the plan grants), never raw model tokens; tokens stay
+// an internal accounting detail. This page is also the canonical home for
+// credit purchases and the auto-purchase spending cap (ownership map:
+// "Credits and auto-purchase → Settings → Usage"), while Billing keeps the
+// subscription, payment methods and invoices.
+
 import { useState, useEffect, useCallback } from "react";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
 import { getUsageStats, getUsageDaily, getUsageLogs } from "@/lib/api";
+import {
+  getBalance,
+  getSubscription,
+  getPackages,
+  buyCredits,
+  getAutoPurchase,
+  setAutoPurchase,
+  type Balance,
+  type Subscription,
+  type CreditPackage,
+  type AutoPurchasePolicy,
+} from "@/lib/api-billing";
+import { track } from "@/lib/analytics";
 import clsx from "clsx";
 
 type Period = 7 | 30 | 90 | 365;
@@ -22,6 +42,8 @@ const TYPE_BG: Record<string, string> = {
   automation_run: "bg-amber-50 text-amber-700 border-amber-200",
 };
 
+const fmt = (n: number) => Math.round(n).toLocaleString();
+
 export function UsageContent() {
   const { token } = useAuth();
   const { t } = useI18n();
@@ -29,20 +51,35 @@ export function UsageContent() {
   const [stats, setStats] = useState<Record<string, { total: number; count: number }>>({});
   const [daily, setDaily] = useState<Array<{ date: string; type: string; total: number }>>([]);
   const [logs, setLogs] = useState<any[]>([]);
+  const [balance, setBalance] = useState<Balance | null>(null);
+  const [sub, setSub] = useState<Subscription | null>(null);
+  const [packages, setPackages] = useState<CreditPackage[]>([]);
+  const [policy, setPolicy] = useState<AutoPurchasePolicy | null>(null);
   const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ kind: "ok" | "err"; text: string } | null>(null);
+  const [confirmPackage, setConfirmPackage] = useState<CreditPackage | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!token) return;
     setLoading(true);
     try {
-      const [statsRes, dailyRes, logsRes] = await Promise.all([
+      const [statsRes, dailyRes, logsRes, balRes, subRes, pkRes, apRes] = await Promise.all([
         getUsageStats(token, period),
         getUsageDaily(token, period),
         getUsageLogs(token, { limit: 20 }),
+        getBalance(token).catch(() => null),
+        getSubscription(token).catch(() => null),
+        getPackages(token).catch(() => ({ packages: [] as CreditPackage[] })),
+        getAutoPurchase(token).catch(() => ({ policy: null })),
       ]);
       setStats(statsRes.data?.stats || {});
       setDaily(dailyRes.data || []);
       setLogs(logsRes.data || []);
+      setBalance(balRes);
+      setSub(subRes?.subscription ?? null);
+      setPackages(pkRes.packages || []);
+      setPolicy(apRes.policy);
     } catch (err) {
       console.error("Usage fetch error:", err);
     } finally {
@@ -51,6 +88,21 @@ export function UsageContent() {
   }, [token, period]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const runBilling = async (key: string, fn: () => Promise<unknown>, okText: string) => {
+    if (!token) return;
+    setBusy(key);
+    setMsg(null);
+    try {
+      await fn();
+      setMsg({ kind: "ok", text: okText });
+      await fetchData();
+    } catch (e: any) {
+      setMsg({ kind: "err", text: e?.message ?? t("usage.actionFailed") });
+    } finally {
+      setBusy(null);
+    }
+  };
 
   const statCards = [
     { key: "ai_tokens", icon: "M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" },
@@ -67,6 +119,21 @@ export function UsageContent() {
   }, {});
   const dates = Object.keys(dailyByDate).sort();
   const maxDaily = Math.max(1, ...dates.map((d) => Object.values(dailyByDate[d]).reduce((a, b) => a + b, 0)));
+
+  // ── Credits math (from the real wallet, never guessed client-side) ──
+  const allowance = balance?.includedAllowance ?? 0;
+  const usedIncluded = Math.max(0, allowance - (balance?.includedRemaining ?? 0));
+  const pctUsed = allowance > 0 ? Math.min(100, Math.round((usedIncluded / allowance) * 100)) : 0;
+  const periodStart = sub?.currentPeriodStart ? new Date(sub.currentPeriodStart) : null;
+  const periodEnd = sub?.currentPeriodEnd ? new Date(sub.currentPeriodEnd) : null;
+  const daysElapsed = periodStart ? Math.max(0, (Date.now() - periodStart.getTime()) / 86_400_000) : 0;
+  const dailyRate = daysElapsed >= 3 ? usedIncluded / daysElapsed : 0;
+  const totalRemaining = (balance?.includedRemaining ?? 0) + (balance?.purchasedRemaining ?? 0);
+  // Only show an exhaustion date when the estimate is meaningful: real spend
+  // history, real budget, and it runs out before the period renews.
+  const exhaustionDate =
+    dailyRate > 0 && totalRemaining > 0 ? new Date(Date.now() + (totalRemaining / dailyRate) * 86_400_000) : null;
+  const showExhaustion = !!exhaustionDate && (!periodEnd || exhaustionDate < periodEnd);
 
   return (
       <div className="p-3 md:p-6 overflow-y-auto h-full">
@@ -89,12 +156,73 @@ export function UsageContent() {
         </div>
 
         {loading ? (
-          <div className="flex items-center justify-center py-12">
-            <div className="w-6 h-6 border-2 border-primary-200 border-t-primary-500 rounded-full animate-spin" />
+          // Stable skeleton: never a flash of "0 credits used" while loading.
+          <div className="max-w-5xl space-y-6">
+            <div className="h-40 animate-pulse rounded-2xl border border-gray-100 bg-gray-50" />
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              {[0, 1, 2, 3].map((i) => (
+                <div key={i} className="h-32 animate-pulse rounded-2xl border border-gray-100 bg-gray-50" />
+              ))}
+            </div>
+            <div className="h-64 animate-pulse rounded-2xl border border-gray-100 bg-gray-50" />
           </div>
         ) : (
           <div className="max-w-5xl space-y-6">
-            {/* Stat Cards */}
+            {msg && (
+              <div className={clsx("rounded-xl px-4 py-2.5 text-sm border", msg.kind === "ok" ? "bg-green-50 text-green-700 border-green-200" : "bg-red-50 text-red-700 border-red-200")}>
+                {msg.text}
+              </div>
+            )}
+
+            {/* ── Monthly credits (the wallet) ── */}
+            {balance && allowance > 0 && (
+              <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+                <div className="flex flex-wrap items-baseline justify-between gap-2">
+                  <h3 className="font-semibold text-gray-900">{t("usage.credits.title")}</h3>
+                  {periodStart && periodEnd && (
+                    <span className="text-xs text-gray-400">
+                      {t("usage.credits.period")}: <span dir="ltr">{periodStart.toLocaleDateString()} - {periodEnd.toLocaleDateString()}</span>
+                    </span>
+                  )}
+                </div>
+                <div className="mt-3 flex items-baseline gap-2">
+                  <span className="text-3xl font-bold text-gray-900 tabular-nums" dir="ltr">
+                    {fmt(usedIncluded)} / {fmt(allowance)}
+                  </span>
+                  <span className="text-sm text-gray-500">{t("usage.credits.monthly")}</span>
+                  <span className={clsx("ms-auto rounded-full px-2.5 py-0.5 text-xs font-semibold", pctUsed >= 90 ? "bg-red-50 text-red-600" : pctUsed >= 80 ? "bg-amber-50 text-amber-700" : "bg-emerald-50 text-emerald-700")}>
+                    {pctUsed}%
+                  </span>
+                </div>
+                <div className="mt-2 h-3 w-full overflow-hidden rounded-full bg-gray-100">
+                  <div
+                    className={clsx("h-full rounded-full transition-all", pctUsed >= 90 ? "bg-red-500" : pctUsed >= 80 ? "bg-amber-500" : "bg-primary-500")}
+                    style={{ width: `${pctUsed}%` }}
+                  />
+                </div>
+                <div className="mt-3 flex flex-wrap items-center gap-x-6 gap-y-1 text-xs text-gray-500">
+                  <span>{t("usage.credits.remaining")}: <span className="font-semibold text-gray-800">{fmt(balance.includedRemaining)}</span></span>
+                  {balance.purchasedRemaining > 0 && (
+                    <span>{t("usage.credits.purchased")}: <span className="font-semibold text-emerald-700">{fmt(balance.purchasedRemaining)}</span></span>
+                  )}
+                  {dailyRate > 0 && (
+                    <span>{t("usage.credits.pace").replace("{n}", fmt(dailyRate))}</span>
+                  )}
+                  {showExhaustion && exhaustionDate && (
+                    <span className="text-amber-700">
+                      {t("usage.credits.runsOut").replace("{date}", exhaustionDate.toLocaleDateString())}
+                    </span>
+                  )}
+                </div>
+                {totalRemaining <= 0 && (
+                  <p className="mt-3 rounded-xl bg-red-50 px-3 py-2 text-xs text-red-700">
+                    {policy?.enabled ? t("usage.credits.exhaustedAuto") : t("usage.credits.exhausted")}
+                  </p>
+                )}
+              </div>
+            )}
+
+            {/* Stat Cards - activity by category (counts, never model tokens) */}
             <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
               {statCards.map(({ key, icon }) => (
                 <div key={key} className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
@@ -106,10 +234,12 @@ export function UsageContent() {
                     </div>
                   </div>
                   <p className="text-2xl font-bold text-gray-900">
-                    {(stats[key]?.total || 0).toLocaleString()}
+                    {(key === "ai_tokens" ? stats[key]?.count || 0 : stats[key]?.total || 0).toLocaleString()}
                   </p>
                   <p className="text-xs text-gray-400 mt-1">{t(`usage.${key}`)}</p>
-                  <p className="text-[10px] text-gray-300 mt-0.5">{stats[key]?.count || 0} events</p>
+                  {key !== "ai_tokens" && (
+                    <p className="text-[10px] text-gray-300 mt-0.5">{t("usage.eventsCount").replace("{n}", String(stats[key]?.count || 0))}</p>
+                  )}
                 </div>
               ))}
             </div>
@@ -123,7 +253,6 @@ export function UsageContent() {
                 <div className="space-y-1.5">
                   {dates.slice(-14).map((date) => {
                     const dayTotal = Object.values(dailyByDate[date]).reduce((a, b) => a + b, 0);
-                    const pct = (dayTotal / maxDaily) * 100;
                     return (
                       <div key={date} className="flex items-center gap-3">
                         <span className="text-xs text-gray-400 w-20 shrink-0">{new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
@@ -152,6 +281,75 @@ export function UsageContent() {
                   </div>
                 ))}
               </div>
+            </div>
+
+            {/* ── Buy additional credits ── */}
+            {packages.length > 0 && (
+              <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+                <h3 className="font-semibold text-gray-900 mb-1">{t("usage.buy.title")}</h3>
+                <p className="text-xs text-gray-400 mb-4">{t("usage.buy.subtitle")}</p>
+                <div className="grid gap-3 sm:grid-cols-3">
+                  {packages.map((pk) => (
+                    <div key={pk.id} className="rounded-xl border border-gray-200 p-4">
+                      <div className="font-semibold text-gray-900">{t("usage.buy.credits").replace("{n}", fmt(pk.units))}</div>
+                      <div className="text-lg font-bold text-gray-900" dir="ltr">₪{pk.price}</div>
+                      <button
+                        disabled={busy !== null}
+                        onClick={() => setConfirmPackage(pk)}
+                        className="mt-2 w-full rounded-lg bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50"
+                      >
+                        {t("usage.buy.cta")}
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Price review before any charge - a purchase is never one accidental click. */}
+            {confirmPackage && (
+              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/40 p-4">
+                <div className="w-full max-w-sm rounded-2xl bg-white p-6 shadow-2xl">
+                  <h4 className="text-base font-semibold text-gray-900">{t("usage.buy.confirmTitle")}</h4>
+                  <p className="mt-2 text-sm text-gray-600">
+                    {t("usage.buy.confirmBody")
+                      .replace("{n}", fmt(confirmPackage.units))
+                      .replace("{price}", `₪${confirmPackage.price}`)}
+                  </p>
+                  <div className="mt-5 flex justify-end gap-2">
+                    <button onClick={() => setConfirmPackage(null)} className="rounded-lg px-3 py-1.5 text-sm text-gray-500 hover:text-gray-700">
+                      {t("usage.buy.cancel")}
+                    </button>
+                    <button
+                      onClick={() => {
+                        const pk = confirmPackage;
+                        setConfirmPackage(null);
+                        track("credits_purchase_confirmed", { package: pk.key });
+                        void runBilling(`buy-${pk.key}`, async () => {
+                          const r = await buyCredits(token!, pk.key);
+                          if (!r.success) throw new Error(r.failureCode || t("usage.buy.failed"));
+                        }, t("usage.buy.done").replace("{n}", fmt(pk.units)));
+                      }}
+                      className="rounded-lg bg-emerald-600 px-4 py-1.5 text-sm font-semibold text-white hover:bg-emerald-700"
+                    >
+                      {t("usage.buy.confirmCta")}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* ── Auto-purchase + monthly spending cap (backend-enforced) ── */}
+            <div className="bg-white rounded-2xl shadow-card border border-gray-100 p-5">
+              <h3 className="font-semibold text-gray-900 mb-1">{t("usage.auto.title")}</h3>
+              <p className="text-xs text-gray-400 mb-4">{t("usage.auto.subtitle")}</p>
+              <AutoPurchaseForm
+                t={t}
+                policy={policy}
+                packages={packages}
+                busy={busy !== null}
+                onSave={(p) => runBilling("autopurchase", () => setAutoPurchase(token!, p), t("usage.auto.saved"))}
+              />
             </div>
 
             {/* Recent Activity */}
@@ -189,5 +387,65 @@ export function UsageContent() {
           </div>
         )}
       </div>
+  );
+}
+
+// Auto-purchase controls. The ceiling is enforced server-side
+// (AutoPurchasePolicy.maxMonthlySpend, checked by the billing service before
+// every automatic charge) - this form only edits the policy; it is not the
+// enforcement.
+function AutoPurchaseForm({
+  t, policy, packages, busy, onSave,
+}: {
+  t: (k: string) => string;
+  policy: AutoPurchasePolicy | null;
+  packages: CreditPackage[];
+  busy: boolean;
+  onSave: (p: Partial<AutoPurchasePolicy>) => void;
+}) {
+  const [enabled, setEnabled] = useState(policy?.enabled ?? false);
+  const [thresholdPct, setThresholdPct] = useState(policy?.thresholdPct ?? 10);
+  const [packageKey, setPackageKey] = useState(policy?.packageKey ?? (packages[0]?.key ?? ""));
+  const [maxMonthlySpend, setMaxMonthlySpend] = useState(policy?.maxMonthlySpend ?? "1000");
+
+  useEffect(() => {
+    if (policy) {
+      setEnabled(policy.enabled);
+      setThresholdPct(policy.thresholdPct);
+      setPackageKey(policy.packageKey ?? packages[0]?.key ?? "");
+      setMaxMonthlySpend(policy.maxMonthlySpend ?? "1000");
+    }
+  }, [policy, packages]);
+
+  return (
+    <div className="space-y-3 text-sm">
+      <label className="flex items-center gap-2">
+        <input type="checkbox" checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />
+        <span>{t("usage.auto.enable")}</span>
+      </label>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <label className="block">
+          <span className="text-xs text-gray-500">{t("usage.auto.threshold")}</span>
+          <input type="number" min={1} max={50} value={thresholdPct} onChange={(e) => setThresholdPct(Number(e.target.value))}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1" dir="ltr" />
+        </label>
+        <label className="block">
+          <span className="text-xs text-gray-500">{t("usage.auto.package")}</span>
+          <select value={packageKey} onChange={(e) => setPackageKey(e.target.value)} className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1">
+            {packages.map((p) => <option key={p.key} value={p.key}>{p.name}</option>)}
+          </select>
+        </label>
+        <label className="block">
+          <span className="text-xs text-gray-500">{t("usage.auto.maxSpend")}</span>
+          <input type="number" min={0} value={maxMonthlySpend} onChange={(e) => setMaxMonthlySpend(e.target.value)}
+            className="mt-1 w-full rounded-lg border border-gray-300 px-2 py-1" dir="ltr" />
+        </label>
+      </div>
+      <p className="text-[11px] text-gray-400">{t("usage.auto.capNote")}</p>
+      <button disabled={busy} onClick={() => onSave({ enabled, thresholdPct, packageKey, maxMonthlySpend })}
+        className="rounded-lg bg-primary-500 px-4 py-1.5 text-sm font-medium text-white hover:bg-primary-600 disabled:opacity-50">
+        {t("usage.auto.save")}
+      </button>
+    </div>
   );
 }

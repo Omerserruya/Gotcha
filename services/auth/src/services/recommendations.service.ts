@@ -308,14 +308,24 @@ export async function listRecommendations(tenantId: string, status: string = "OP
   });
 }
 
-export async function setRecommendationStatus(tenantId: string, id: string, status: "COMPLETED" | "DISMISSED"): Promise<boolean> {
-  const r = await prisma.recommendation.findFirst({ where: { id, tenantId }, select: { id: true } });
-  if (!r) return false;
+export async function setRecommendationStatus(
+  tenantId: string,
+  id: string,
+  status: "COMPLETED" | "DISMISSED" | "OPEN",
+): Promise<{ ok: boolean; previous?: string }> {
+  const r = await prisma.recommendation.findFirst({ where: { id, tenantId }, select: { id: true, status: true } });
+  if (!r) return { ok: false };
   await prisma.recommendation.update({
     where: { id },
-    data: { status, ...(status === "COMPLETED" ? { completedAt: new Date() } : { dismissedAt: new Date() }) },
+    data:
+      status === "OPEN"
+        // Reopen: clears the resolution stamps so the rec behaves exactly
+        // like before it was resolved (sync will not resurrect/duplicate it
+        // - it is upserted by dedupeKey).
+        ? { status, completedAt: null, dismissedAt: null }
+        : { status, ...(status === "COMPLETED" ? { completedAt: new Date() } : { dismissedAt: new Date() }) },
   });
-  return true;
+  return { ok: true, previous: r.status };
 }
 
 // ─── Second-wave recommendations (source: store_inspection) ──────────────────

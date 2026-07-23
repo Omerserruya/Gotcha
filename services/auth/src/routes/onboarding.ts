@@ -3,7 +3,7 @@ import { Router, Request, Response } from "express";
 import { z } from "zod";
 import * as crypto from "crypto";
 import { promises as dns } from "dns";
-import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits } from "@chatcenter/shared";
+import { prisma, authenticate, resolveTenant, requireRole, validate, trackAIUsage, meterAiUnits, writeAudit, AuditAction } from "@chatcenter/shared";
 import { sendActivationConfirmation, sendOnboardingInvite, sendTeammateInvite, sendIntegrationRequestEmail } from "../services/notification.service";
 import { inviteUser, resendSetupLink } from "../services/invitation.service";
 import { scheduleOnboardingNudge } from "../services/nudge-engine.service";
@@ -2461,7 +2461,10 @@ router.get("/recommendation", requireRole("ADMIN"), async (req: Request, res: Re
 // completes the matching recommendation. "Teaching a colleague, not a form."
 const teachSchema = z.object({
   label: z.string().min(1).max(200),
-  method: z.enum(["text", "url"]),
+  // "file": the document was ALREADY ingested via the knowledge-base upload
+  // endpoint (multipart, parsing, processing) - `value` is the created
+  // KnowledgeDocument id; this route only closes the gap/recommendation.
+  method: z.enum(["text", "url", "file"]),
   value: z.string().min(1).max(20000),
 });
 
@@ -2469,9 +2472,40 @@ function slugifyGap(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40) || "item";
 }
 
+/** Shared teach epilogue: complete matching recs + strip the gap from the report. */
+async function completeTaughtGap(tenantId: string, label: string): Promise<void> {
+  const slug = slugifyGap(label);
+  await prisma.recommendation.updateMany({
+    where: { tenantId, dedupeKey: { in: [`gap:${slug}`, `teach:${slug}`] }, status: "OPEN" },
+    data: { status: "COMPLETED", completedAt: new Date() },
+  }).catch(() => {});
+  const disc = await prisma.businessDiscovery.findUnique({ where: { tenantId }, select: { gaps: true } }).catch(() => null);
+  if (disc && Array.isArray(disc.gaps)) {
+    const remaining = disc.gaps.filter((g: any) => slugifyGap(String(g?.label || "")) !== slug);
+    await prisma.businessDiscovery.update({ where: { tenantId }, data: { gaps: remaining } }).catch(() => {});
+  }
+}
+
 router.post("/teach", requireRole("ADMIN"), validate(teachSchema), async (req: Request, res: Response): Promise<void> => {
   try {
-    const { label, method, value } = req.body as { label: string; method: "text" | "url"; value: string };
+    const { label, method, value } = req.body as { label: string; method: "text" | "url" | "file"; value: string };
+
+    if (method === "file") {
+      // The upload already created + processed the document; verify it really
+      // belongs to this tenant, then close the gap below.
+      const uploaded = await prisma.knowledgeDocument.findFirst({
+        where: { id: value.trim(), tenantId: req.tenantId! },
+        select: { id: true },
+      });
+      if (!uploaded) {
+        res.json({ data: { ok: false, reason: "document_not_found" } });
+        return;
+      }
+      await completeTaughtGap(req.tenantId!, label);
+      scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
+      res.json({ data: { ok: true, documentId: uploaded.id } });
+      return;
+    }
 
     // Resolve the content to learn.
     let content = value.trim();
@@ -2500,16 +2534,7 @@ router.post("/teach", requireRole("ADMIN"), validate(teachSchema), async (req: R
     });
 
     // Complete the matching recommendation(s) and clear the gap on the report.
-    const slug = slugifyGap(label);
-    await prisma.recommendation.updateMany({
-      where: { tenantId: req.tenantId!, dedupeKey: { in: [`gap:${slug}`, `teach:${slug}`] }, status: "OPEN" },
-      data: { status: "COMPLETED", completedAt: new Date() },
-    }).catch(() => {});
-    const disc = await prisma.businessDiscovery.findUnique({ where: { tenantId: req.tenantId! }, select: { gaps: true } }).catch(() => null);
-    if (disc && Array.isArray(disc.gaps)) {
-      const remaining = disc.gaps.filter((g: any) => slugifyGap(String(g?.label || "")) !== slug);
-      await prisma.businessDiscovery.update({ where: { tenantId: req.tenantId! }, data: { gaps: remaining } }).catch(() => {});
-    }
+    await completeTaughtGap(req.tenantId!, label);
 
     scheduleOnboardingNudge(req.tenantId!, "1d").catch(() => {});
     res.json({ data: { ok: true, knowledgeDocumentId: doc.id, label } });
@@ -2534,14 +2559,32 @@ router.get("/recommendations", requireRole("ADMIN"), async (req: Request, res: R
   }
 });
 
-// POST /recommendations/:id/complete | /dismiss - resolve a recommendation.
-// A resolved rec is never resurrected by a future re-scan.
+// POST /recommendations/:id/complete | /dismiss | /reopen.
+// A resolved rec is never resurrected by a future re-scan; `reopen` is the
+// explicit human undo (with confirmation in the UI) and restores OPEN.
+// Every transition writes an audit event with the acting user.
 router.post("/recommendations/:id/:decision", requireRole("ADMIN"), async (req: Request, res: Response): Promise<void> => {
   try {
-    const decision = req.params.decision === "dismiss" ? "DISMISSED" : req.params.decision === "complete" ? "COMPLETED" : null;
-    if (!decision) { res.status(400).json({ error: "decision must be complete or dismiss" }); return; }
-    const ok = await setRecommendationStatus(req.tenantId!, req.params.id as string, decision);
-    if (!ok) { res.status(404).json({ error: "Recommendation not found" }); return; }
+    const decision =
+      req.params.decision === "dismiss" ? "DISMISSED"
+      : req.params.decision === "complete" ? "COMPLETED"
+      : req.params.decision === "reopen" ? "OPEN"
+      : null;
+    if (!decision) { res.status(400).json({ error: "decision must be complete, dismiss or reopen" }); return; }
+    const result = await setRecommendationStatus(req.tenantId!, req.params.id as string, decision);
+    if (!result.ok) { res.status(404).json({ error: "Recommendation not found" }); return; }
+    void writeAudit({
+      tenantId: req.tenantId!,
+      actorType: "user",
+      actorId: (req as any).user?.userId,
+      action:
+        decision === "COMPLETED" ? AuditAction.RECOMMENDATION_COMPLETED
+        : decision === "DISMISSED" ? AuditAction.RECOMMENDATION_DISMISSED
+        : AuditAction.RECOMMENDATION_REOPENED,
+      targetType: "recommendation",
+      targetId: String(req.params.id),
+      metadata: { previous: result.previous, next: decision },
+    });
     res.json({ data: { id: req.params.id, status: decision } });
   } catch (err) {
     console.error("Resolve recommendation error:", err);
