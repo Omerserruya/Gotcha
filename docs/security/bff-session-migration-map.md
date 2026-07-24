@@ -613,9 +613,14 @@ Sequence (each stage reversible, see A16):
 - **Sequencing** = review this addendum, then implement commit 1 (A18).
 
 **Still open (resolve before/within implementation):**
-1. **Exact prod app hostname** — confirm the single public host string
-   (`app.gotcha.co.il`?) against `NEXT_PUBLIC_OIDC_REDIRECT_URI` /
-   `AUTHENTIK_REDIRECT_URIS` so `__Host-` + the Origin allow-list are exact.
+1. **Exact prod app hostname** — deployment config answers this: the production
+   app origin is **`https://app.gotcha.co.il`** (`scripts/authentik/bootstrap.mjs`
+   registers `https://app.gotcha.co.il/auth/callback` + `https://app.gotcha.co.il/`;
+   Authentik is `auth.gotcha.co.il`). These are env-OVERRIDABLE defaults
+   (`AUTHENTIK_REDIRECT_URIS` / `NEXT_PUBLIC_OIDC_REDIRECT_URI`), so the LIVE
+   deploy env value must still be confirmed before `APP_ORIGIN` is set and the
+   prod cookie is enabled. → `APP_ORIGIN=https://app.gotcha.co.il` (pending live
+   confirmation).
 2. **`sessionVersion` bump triggers** — which events force global re-auth
    (password change, MFA change, role/permission change?).
 3. **auth_request performance** — accept +1 internal hop/request, or add a short
