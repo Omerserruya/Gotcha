@@ -2810,10 +2810,10 @@
     "edit": "Edit",
     "test": "Test",
     "tabs": {
-      "team": "Team Members",
-      "playbooks": "Playbooks",
+      "overview": "Overview",
       "knowledge": "Knowledge",
-      "skills": "Skills & Integrations"
+      "processes": "Processes",
+      "tools": "Tools & Integrations"
     },
     "stats": {
       "teamMembers": "Team Members",

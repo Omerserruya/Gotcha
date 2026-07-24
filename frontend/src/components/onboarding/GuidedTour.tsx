@@ -42,7 +42,7 @@ interface TourStep {
   id: string;
   /** CSS selector to spotlight; null = center-stage screen. */
   selector: string | null;
-  /** Route to go to first (may carry a query, e.g. /ai-studio?tab=skills). */
+  /** Route to go to first (may carry a query, e.g. /ai-studio?tab=tools). */
   navigateTo?: string;
   /** Keep the inbox demo-data mode on during this step. */
   mockInbox?: boolean;
@@ -211,7 +211,7 @@ export const ALL_STEPS: TourStep[] = [
   {
     id: "ai-tools",
     selector: '[data-tour="ai-tools"]',
-    navigateTo: "/ai-studio?tab=skills",
+    navigateTo: "/ai-studio?tab=tools",
     placement: "bottom",
     location: ["AI Studio · Skills & Integrations", "סטודיו AI · כישורים ואינטגרציות"],
     title: ["Give it hands, not just a mouth", "תנו לו ידיים, לא רק פה"],
@@ -234,7 +234,7 @@ export const ALL_STEPS: TourStep[] = [
   {
     id: "hire",
     selector: '[data-tour="create-ai-employee"]',
-    navigateTo: "/ai-studio?tab=team",
+    navigateTo: "/ai-studio?tab=overview",
     placement: "bottom",
     location: ["AI Studio · Team Members", "סטודיו AI · חברי צוות"],
     title: ["You don't need to grow to hire more", "כבר לא צריך לגדול כדי לגייס עוד"],
@@ -246,7 +246,7 @@ export const ALL_STEPS: TourStep[] = [
   {
     id: "workflows",
     selector: '[data-tour="new-workflow"]',
-    navigateTo: "/ai-studio?tab=playbooks",
+    navigateTo: "/ai-studio?tab=processes",
     placement: "bottom",
     location: ["AI Studio · Playbooks", "סטודיו AI · תהליכים"],
     title: ["Put the busywork on rails", "שימו את העבודה השחורה על פסים"],

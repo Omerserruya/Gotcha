@@ -17,9 +17,9 @@ export const LEGACY_SETTINGS_REDIRECTS: Record<string, string> = {
   // Truth / business-systems home, not a marketplace.
   "/settings/integrations": "/settings/business-systems",
   // Tool + policy configuration lives with the AI employees that use it.
-  "/settings/tools": "/ai-studio?tab=skills&view=permissions",
-  "/settings/policy": "/ai-studio?tab=skills&view=policies",
-  "/settings/business-rules": "/ai-studio?tab=skills&view=policies",
+  "/settings/tools": "/ai-studio?tab=tools&view=permissions",
+  "/settings/policy": "/ai-studio?tab=tools&view=policies",
+  "/settings/business-rules": "/ai-studio?tab=tools&view=policies",
   // Voice/phone is a communication channel: the list view now lives in
   // Channels (Voice section). Detail/new wizard routes are still real pages.
   "/settings/voice-channels": "/settings/channels",

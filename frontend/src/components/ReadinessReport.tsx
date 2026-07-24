@@ -150,10 +150,10 @@ export function ReadinessReportView({ report, token, kbId, busy, onRerun, onAddK
       );
     }
     if (r.type === "connect_tool") {
-      return <a href="/ai-studio?tab=skills" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Connect", "חברו")}</a>;
+      return <a href="/ai-studio?tab=tools" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Connect", "חברו")}</a>;
     }
     if (r.type === "create_workflow") {
-      return <a href="/ai-studio?tab=playbooks" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Open", "פתחו")}</a>;
+      return <a href="/ai-studio?tab=processes" target="_blank" rel="noreferrer" className="text-xs font-medium text-violet-600 hover:text-violet-700 shrink-0">{L("Open", "פתחו")}</a>;
     }
     return null;
   }

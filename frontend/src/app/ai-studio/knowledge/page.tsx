@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
+import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
 import { AppLayout } from "@/components/AppLayout";
 import { useAuth } from "@/context/AuthContext";
 import { useI18n } from "@/context/I18nContext";
@@ -98,6 +99,9 @@ function KnowledgePageInner() {
   const { t } = useI18n();
   const router = useRouter();
   const searchParams = useSearchParams();
+  // A knowledge source belongs to the Knowledge tab; Back must return there.
+  const rt = searchParams.get("returnTab");
+  const returnTab = rt ? normalizeAiStudioTab(rt) : "knowledge";
 
   const [knowledgeBases, setKnowledgeBases] = useState<KnowledgeBase[]>([]);
   const [loading, setLoading] = useState(true);
@@ -603,7 +607,7 @@ function KnowledgePageInner() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         {/* Back */}
         <button
-          onClick={() => router.push("/ai-studio")}
+          onClick={() => router.push(aiStudioHref(returnTab))}
           className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>

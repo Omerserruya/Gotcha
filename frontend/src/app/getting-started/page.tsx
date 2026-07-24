@@ -325,7 +325,7 @@ function GettingStartedInner() {
               <div className="flex flex-col items-center gap-4 px-5 py-12 text-center">
                 <p className="max-w-sm text-sm text-slate-500">{t("gettingStarted.chat.noEmployeeBody")}</p>
                 <Link
-                  href="/ai-studio?tab=team"
+                  href="/ai-studio?tab=overview"
                   onClick={() => track("setup_cta_clicked", { item: "create_ai_employee", surface: "chat_card" })}
                   className="rounded-xl bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white transition hover:bg-indigo-700"
                 >

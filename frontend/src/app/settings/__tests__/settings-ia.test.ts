@@ -46,9 +46,9 @@ describe("Settings IA", () => {
     }
     // Tool + policy config redirects into AI Studio (canonical owner), never
     // to another Settings page.
-    expect(LEGACY_SETTINGS_REDIRECTS["/settings/tools"]).toMatch(/^\/ai-studio\?tab=skills/);
-    expect(LEGACY_SETTINGS_REDIRECTS["/settings/policy"]).toMatch(/^\/ai-studio\?tab=skills/);
-    expect(LEGACY_SETTINGS_REDIRECTS["/settings/business-rules"]).toMatch(/^\/ai-studio\?tab=skills/);
+    expect(LEGACY_SETTINGS_REDIRECTS["/settings/tools"]).toMatch(/^\/ai-studio\?tab=tools/);
+    expect(LEGACY_SETTINGS_REDIRECTS["/settings/policy"]).toMatch(/^\/ai-studio\?tab=tools/);
+    expect(LEGACY_SETTINGS_REDIRECTS["/settings/business-rules"]).toMatch(/^\/ai-studio\?tab=tools/);
     // People consolidation keeps deep tabs.
     expect(LEGACY_SETTINGS_REDIRECTS["/settings/users"]).toBe("/settings/people?tab=users");
     expect(LEGACY_SETTINGS_REDIRECTS["/settings/departments"]).toBe("/settings/people?tab=departments");

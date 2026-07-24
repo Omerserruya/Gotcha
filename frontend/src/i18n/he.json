@@ -2811,10 +2811,10 @@
     "edit": "ערוך",
     "test": "בדוק",
     "tabs": {
-      "team": "חברי צוות",
-      "playbooks": "תהליכים",
+      "overview": "סקירה",
       "knowledge": "ידע",
-      "skills": "כישורים ואינטגרציות"
+      "processes": "תהליכים",
+      "tools": "כלים ואינטגרציות"
     },
     "stats": {
       "teamMembers": "חברי צוות",

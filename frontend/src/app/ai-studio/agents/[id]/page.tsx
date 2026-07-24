@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useDynamicParam } from "@/lib/useRouteParam";
+import { aiStudioHref, normalizeAiStudioTab } from "@/lib/ai-studio-tabs";
 import { AppLayout } from "@/components/AppLayout";
 import { useI18n } from "@/context/I18nContext";
 import { useAuth } from "@/context/AuthContext";
@@ -357,6 +358,10 @@ function StatusDot({ status }: { status: "synced" | "syncing" | "error" }) {
 export default function AgentEditorPage() {
   const id = useDynamicParam();
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // An employee editor belongs to Overview; explicit ?returnTab= overrides.
+  const _rt = searchParams.get("returnTab");
+  const returnTab = _rt ? normalizeAiStudioTab(_rt) : "overview";
   const { t, locale } = useI18n();
   const { token } = useAuth();
 
@@ -443,7 +448,7 @@ export default function AgentEditorPage() {
         // from operators trying to debug prod.
         const msg = err?.message || err?.error || "Failed to load AI Employee.";
         if (err?.status === 404) {
-          router.push("/ai-studio");
+          router.push(aiStudioHref(returnTab));
         } else {
           setLoadError(typeof msg === "string" ? msg : "Failed to load AI Employee.");
         }
@@ -552,7 +557,7 @@ export default function AgentEditorPage() {
     if (!token || isNew) return;
     try {
       await deleteAIAgent(token, id);
-      router.push("/ai-studio");
+      router.push(aiStudioHref(returnTab));
     } catch (err) {
       console.error("Delete failed:", err);
     }
@@ -660,7 +665,7 @@ export default function AgentEditorPage() {
             <p className="text-sm text-gray-500">{loadError}</p>
             <div className="flex gap-2 justify-center">
               <button
-                onClick={() => router.push("/ai-studio")}
+                onClick={() => router.push(aiStudioHref(returnTab))}
                 className="px-3 py-1.5 rounded-xl border border-gray-200 text-sm text-gray-700 hover:bg-gray-50"
               >
                 Back to AI Studio
@@ -686,7 +691,7 @@ export default function AgentEditorPage() {
   if (isNew) {
     return (
       <AppLayout>
-        <AgentBuilder token={token || ""} onCancel={() => router.push("/ai-studio")} />
+        <AgentBuilder token={token || ""} onCancel={() => router.push(aiStudioHref(returnTab))} />
       </AppLayout>
     );
   }
@@ -700,7 +705,7 @@ export default function AgentEditorPage() {
           token={token || ""}
           resumeAgentId={id}
           resumeStep={resumeStep as "chat" | "kb" | "refine" | "tools"}
-          onCancel={() => router.push("/ai-studio")}
+          onCancel={() => router.push(aiStudioHref(returnTab))}
         />
       </AppLayout>
     );
@@ -711,7 +716,7 @@ export default function AgentEditorPage() {
       <div className="p-3 md:p-6 overflow-y-auto h-screen">
         {/* Back button */}
         <button
-          onClick={() => router.push("/ai-studio")}
+          onClick={() => router.push(aiStudioHref(returnTab))}
           className="flex items-center gap-2 text-gray-400 hover:text-gray-700 text-sm mb-5 transition"
         >
           <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -783,7 +788,7 @@ export default function AgentEditorPage() {
               </p>
               <button
                 type="button"
-                onClick={() => router.push("/ai-studio?tab=playbooks")}
+                onClick={() => router.push(aiStudioHref("processes"))}
                 className="text-xs font-medium px-3 py-1.5 rounded-lg bg-amber-600 text-white hover:bg-amber-700 transition"
               >
                 {t("aiStudio.agents.editor.reachability.cta")}
@@ -1688,7 +1693,7 @@ export default function AgentEditorPage() {
             </button>
             <button
               type="button"
-              onClick={() => router.push("/ai-studio")}
+              onClick={() => router.push(aiStudioHref(returnTab))}
               className="px-4 py-3 text-gray-500 hover:text-gray-700 text-sm transition"
             >
               {t("common.cancel")}
