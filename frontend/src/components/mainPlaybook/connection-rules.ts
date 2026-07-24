@@ -127,6 +127,24 @@ export function validateConnection(
   return { ok: true };
 }
 
+// §7 Node types that are static process entries - they anchor the left edge.
+export const ENTRY_NODE_TYPES = ["channel_entry", "start", "keyword_trigger", "comment_trigger", "schedule_trigger"];
+
+/**
+ * The left boundary X (graph-space) for the editable canvas: leftmost entry
+ * node minus padding (or leftmost node when no entry exists yet). Nodes can't
+ * be dragged, and the viewport can't pan, left of this. Pure + testable.
+ */
+export function leftBoundaryX(
+  nodes: { position: { x: number }; type: string }[],
+  pad = 120,
+): number {
+  const entries = nodes.filter((n) => ENTRY_NODE_TYPES.includes(n.type));
+  const anchor = entries.length ? entries : nodes;
+  if (anchor.length === 0) return -pad;
+  return Math.min(...anchor.map((n) => n.position.x)) - pad;
+}
+
 /** Would adding source→target create a cycle? True if target can already reach source. */
 export function createsCycle(source: string, target: string, edges: GraphEdge[]): boolean {
   const adj = new Map<string, string[]>();

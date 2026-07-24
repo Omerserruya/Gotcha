@@ -5,6 +5,7 @@ import {
   canConnectPorts,
   validateConnection,
   createsCycle,
+  leftBoundaryX,
 } from "../connection-rules";
 
 // Discover representative node types from the REAL registry so the test stays
@@ -73,6 +74,28 @@ describe("§3 validateConnection rejects invalid graph edits", () => {
 
   it("accepts a valid forward connection", () => {
     expect(validateConnection({ source: "e1", target: "s1" }, nodes, []).ok).toBe(true);
+  });
+});
+
+describe("§7 static entry defines the left canvas boundary (graph-space)", () => {
+  it("§21 the leftmost entry node anchors the boundary (minus padding)", () => {
+    const nodes = [
+      { position: { x: 400, y: 0 }, type: "start" },     // entry
+      { position: { x: 900, y: 0 }, type: "send_message_text" },
+    ];
+    expect(leftBoundaryX(nodes, 120)).toBe(280); // 400 - 120
+  });
+  it("§22/§23 rightward nodes never move the boundary left; entries win over other nodes", () => {
+    const nodes = [
+      { position: { x: 500, y: 0 }, type: "channel_entry" }, // entry anchor
+      { position: { x: -300, y: 0 }, type: "send_message_text" }, // a step dragged far left
+    ];
+    // Boundary follows the ENTRY (500-120=380), not the stray step at -300.
+    expect(leftBoundaryX(nodes, 120)).toBe(380);
+  });
+  it("falls back to the leftmost node when no entry exists yet", () => {
+    const nodes = [{ position: { x: 50, y: 0 }, type: "send_message_text" }];
+    expect(leftBoundaryX(nodes, 120)).toBe(-70);
   });
 });
 

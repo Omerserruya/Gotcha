@@ -53,7 +53,7 @@ import { ChannelEntryNode } from "../mainPlaybook/ChannelEntryNode";
 import { SendCommentReplyNode } from "../mainPlaybook/SendCommentReplyNode";
 import { NodeInspector } from "../mainPlaybook/NodeInspector";
 import { NODE_REGISTRY } from "../mainPlaybook/node-registry";
-import { validateConnection, type ConnectionError } from "../mainPlaybook/connection-rules";
+import { validateConnection, leftBoundaryX, type ConnectionError } from "../mainPlaybook/connection-rules";
 import { validateFlow } from "../mainPlaybook/flow-validator";
 
 const nodeTypes: NodeTypes = {
@@ -752,6 +752,14 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
     const n = nodes.find((x) => x.id === nodeId);
     if (n && reactFlowInstance) reactFlowInstance.setCenter(n.position.x + 120, n.position.y + 40, { zoom: 1, duration: 400 });
   };
+
+  // §7 Static entry boundary: entry/trigger nodes anchor the LEFT edge of the
+  // editable graph. Panning stops there and nodes can't be dragged left of it;
+  // rightward expansion + zoom stay free. GRAPH-SPACE (survives zoom + RTL).
+  const leftBound = leftBoundaryX(nodes.map((n) => ({ position: n.position, type: n.type as string })));
+  const FAR = 1_000_000;
+  const translateExtent: [[number, number], [number, number]] = [[leftBound, -FAR], [FAR, FAR]];
+  const nodeExtent: [[number, number], [number, number]] = [[leftBound, -FAR], [FAR, FAR]];
   // Full-screen editing: the editor fills the page (canvas maximised) while
   // keeping its own toolbar (Back + save + Exit) so navigation is never lost.
   const [fullscreen, setFullscreen] = useState(false);
@@ -1227,6 +1235,8 @@ function FlowEditorInner({ flowId, onBack, onCreated, embedded }: Props) {
             }}
             fitView
             fitViewOptions={{ padding: 0.3 }}
+            translateExtent={translateExtent}
+            nodeExtent={nodeExtent}
             snapToGrid
             snapGrid={[15, 15]}
             minZoom={0.2}
