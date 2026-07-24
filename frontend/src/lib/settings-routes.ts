@@ -17,9 +17,12 @@ export const LEGACY_SETTINGS_REDIRECTS: Record<string, string> = {
   // Truth / business-systems home, not a marketplace.
   "/settings/integrations": "/settings/business-systems",
   // Tool + policy configuration lives with the AI employees that use it.
+  // §9: policy is no longer a standalone tab - the business-policy caps live
+  // inside the unified Tool governance surface (view=permissions), next to the
+  // per-tool HITL toggle. Old /settings/policy|business-rules links land there.
   "/settings/tools": "/ai-studio?tab=tools&view=permissions",
-  "/settings/policy": "/ai-studio?tab=tools&view=policies",
-  "/settings/business-rules": "/ai-studio?tab=tools&view=policies",
+  "/settings/policy": "/ai-studio?tab=tools&view=permissions",
+  "/settings/business-rules": "/ai-studio?tab=tools&view=permissions",
   // Voice/phone is a communication channel: the list view now lives in
   // Channels (Voice section). Detail/new wizard routes are still real pages.
   "/settings/voice-channels": "/settings/channels",

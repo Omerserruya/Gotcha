@@ -3329,7 +3329,8 @@
       "noTools": "אין כלים זמינים",
       "enables": "מאפשר",
       "actionsLive": "פעולות לעובד/ת",
-      "wouldEnable": "יאפשר:"
+      "wouldEnable": "יאפשר:",
+      "governanceTab": "הרשאות ומדיניות"
     },
     "workspace": {
       "overview": "סקירה",

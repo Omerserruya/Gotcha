@@ -672,9 +672,19 @@ const AUTH_TYPE_STYLES: Record<string, string> = {
   BASIC_AUTH: "bg-gray-50 text-gray-600 border-gray-200",
 };
 
-type SkillsSubView = "connected" | "marketplace" | "permissions" | "policies";
+type SkillsSubView = "connected" | "marketplace" | "permissions";
 
-const SKILLS_SUB_VIEWS: SkillsSubView[] = ["connected", "marketplace", "permissions", "policies"];
+const SKILLS_SUB_VIEWS: SkillsSubView[] = ["connected", "marketplace", "permissions"];
+
+// §9: "policies" is no longer a standalone sub-view. Business-policy caps now
+// live INSIDE the unified Tool governance surface (the permissions view),
+// alongside the per-tool HITL toggle - one place, not a disconnected tab.
+// The alias keeps old ?view=policies deep-links (and the /settings/policy,
+// /settings/business-rules redirects) landing on the right surface.
+function normalizeSkillsSubView(value: string | null): SkillsSubView | null {
+  if (value === "policies") return "permissions";
+  return isSkillsSubView(value) ? value : null;
+}
 
 function isSkillsSubView(value: string | null): value is SkillsSubView {
   return value !== null && (SKILLS_SUB_VIEWS as string[]).includes(value);
@@ -708,10 +718,11 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
   // refresh/back/forward/share-link keep working the same way ?tab= does above.
   const viewFromUrl = searchParams.get("view");
   const [subView, setSubViewState] = useState<SkillsSubView>(
-    isSkillsSubView(viewFromUrl) ? viewFromUrl : "connected",
+    normalizeSkillsSubView(viewFromUrl) ?? "connected",
   );
   useEffect(() => {
-    if (isSkillsSubView(viewFromUrl) && viewFromUrl !== subView) setSubViewState(viewFromUrl);
+    const normalized = normalizeSkillsSubView(viewFromUrl);
+    if (normalized && normalized !== subView) setSubViewState(normalized);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewFromUrl]);
   const setSubView = useCallback(
@@ -805,23 +816,22 @@ function SkillsTab({ t }: { t: (key: string) => string }) {
             subView === "permissions" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
           )}
         >
-          {t("settings.tools.title")}
-        </button>
-        <button
-          onClick={() => setSubView("policies")}
-          className={clsx(
-            "px-4 py-2 rounded-lg text-sm font-medium transition",
-            subView === "policies" ? "bg-white text-violet-700 shadow-sm" : "text-gray-500 hover:text-gray-700"
-          )}
-        >
-          {t("settings.policy.title")}
+          {t("aiStudio.tools.governanceTab")}
         </button>
       </div>
 
       {subView === "permissions" ? (
-        <ToolPermissionsPanel />
-      ) : subView === "policies" ? (
-        <ActionPoliciesPanel />
+        // §9: ONE canonical Tool governance surface. The per-tool matrix
+        // (enable + HITL/requires-approval, split system vs external) is the
+        // single source of truth for AUTO/HITL; the business-policy spend caps
+        // that bound compensation/refund tools render below it - no separate
+        // "Business Policies" tab to drift out of sync.
+        <div className="space-y-10">
+          <ToolPermissionsPanel />
+          <div className="pt-8 border-t border-gray-200">
+            <ActionPoliciesPanel />
+          </div>
+        </div>
       ) : subView === "connected" ? (
         <>
           {/* Connected tools - derived from real marketplace data */}

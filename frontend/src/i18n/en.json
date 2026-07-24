@@ -3328,7 +3328,8 @@
       "noTools": "No tools available",
       "enables": "Enables",
       "actionsLive": "actions for your employee",
-      "wouldEnable": "Would enable:"
+      "wouldEnable": "Would enable:",
+      "governanceTab": "Permissions & Policies"
     },
     "workspace": {
       "overview": "Overview",
